@@ -192,6 +192,31 @@ function fronds(ctx, ox, oy, rnd, sp) {
   ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y0); ctx.stroke();
 }
 
+/** Flowering shrub: a leafy clump with heads of small blossoms on top. */
+function blossoms(ctx, ox, oy, rnd, sp) {
+  clump(ctx, ox, oy, rnd, sp);
+  const cx = ox + TILE / 2, cy = oy + TILE / 2;
+  for (let h = 0; h < sp.heads; h++) {
+    const a = rnd() * Math.PI * 2, rr = Math.sqrt(rnd()) * TILE * 0.3;
+    const hx = cx + Math.cos(a) * rr, hy = cy + Math.sin(a) * rr;
+    const R = TILE * (0.07 + rnd() * 0.035);
+    const tone = rnd();
+    for (let i = 0; i < 16; i++) {
+      const b = rnd() * Math.PI * 2, d = Math.sqrt(rnd()) * R;
+      const x = hx + Math.cos(b) * d, y = hy + Math.sin(b) * d;
+      const r = TILE * (0.02 + rnd() * 0.012);
+      const c = mix3(sp.petal[0], sp.petal[1], clamp(tone * 0.6 + rnd() * 0.5));
+      // five rounded petals around a darker heart
+      for (let k = 0; k < 5; k++) {
+        const pa = b + (k / 5) * Math.PI * 2;
+        ctx.fillStyle = rgb(c.map((v) => v * (0.86 + 0.14 * (k % 2))));
+        ctx.beginPath(); ctx.ellipse(x + Math.cos(pa) * r * 0.55, y + Math.sin(pa) * r * 0.55, r * 0.62, r * 0.46, pa, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = rgb(sp.heart); ctx.beginPath(); ctx.arc(x, y, r * 0.22, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+}
+
 const OVATE = (w, veins = 4) => ({ shape: 'ovate', w, veins });
 export const LEAF_SPECIES = {
   oak: { draw: clump, count: 105, size: 0.21, spread: 0.62, fill: 0.74, squash: 1, splay: 1.3, twigs: 5, twig: [70, 54, 38], accentRate: 0.1,
@@ -209,6 +234,12 @@ export const LEAF_SPECIES = {
   cypress: { draw: needles, fans: 70, perFan: 26, len: 0.2, splay: 2.6, thick: 4.2, twig: [70, 56, 40], accentRate: 0.1,
     dark: [16, 42, 26], light: [54, 96, 52], accent: [84, 118, 62] },
   palm: { draw: fronds, twig: [120, 136, 60], dark: [40, 84, 30], light: [112, 156, 58] },
+  // garden shrubs: small glossy leaves, packed tight; the second one carries flower heads
+  bush: { draw: clump, count: 210, size: 0.105, spread: 0.52, fill: 0.82, squash: 1, splay: 1.5, twigs: 3, twig: [58, 46, 34], accentRate: 0.1,
+    kind: OVATE(0.38, 2), dark: [22, 50, 24], mid: [46, 88, 38], light: [90, 132, 58], accent: [128, 152, 66] },
+  bloom: { draw: blossoms, count: 170, size: 0.115, spread: 0.52, fill: 0.8, squash: 1, splay: 1.5, twigs: 3, twig: [58, 46, 34], accentRate: 0.08,
+    kind: OVATE(0.4, 3), dark: [26, 56, 26], mid: [52, 96, 40], light: [96, 138, 60], accent: [132, 156, 70],
+    heads: 7, petal: [[232, 132, 170], [252, 214, 228]], heart: [250, 226, 120] },
 };
 
 /** Spread opaque colours into the transparent area so mip-mapping never shows dark halos. */

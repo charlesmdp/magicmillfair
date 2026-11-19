@@ -69,8 +69,10 @@ export function channelLining(b, samples, { groundAt, lip = 0.3, coping = 0.38, 
       const half = s[3] / 2 + extra;
       const ix = s[0] + nx * half * side, iz = s[1] + nz * half * side;
       const ox = s[0] + nx * (half + coping) * side, oz = s[1] + nz * (half + coping) * side;
-      const top = s[2] + lip, bot = s[2] - bed;
-      const g = Math.min(top - 0.05, groundAt(s[0] + nx * (half + coping + 0.4) * side, s[1] + nz * (half + coping + 0.4) * side) - 0.4);
+      const ground = groundAt(s[0] + nx * (half + coping + 0.4) * side, s[1] + nz * (half + coping + 0.4) * side);
+      // lip 'ground': a retaining wall, as tall as the ground it holds back
+      const top = lip === 'ground' ? Math.max(s[2] + 0.3, Math.min(ground + 0.05, s[2] + 3.4)) : s[2] + lip, bot = s[2] - bed;
+      const g = Math.min(top - 0.05, ground - 0.4);
       const cur = { u, i: V(ix, top, iz), ib: V(ix, bot, iz), o: V(ox, top, oz), ob: V(ox, g, oz), top, bot, g };
       if (prev) {
         const len = cur.u - prev.u;

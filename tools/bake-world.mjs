@@ -253,8 +253,10 @@ function streamBed(s) {
     if (d > 10) continue;
     const w = interp(ys, f.pos[q]);
     const half = interp(ws, f.pos[q]) / 2;
-    const u = d / (half + (s.lined ? 0.12 : 0.55));
-    if (s.lined && u >= 1 && d < half + 0.75) { H.d[q] = lerp(H.d[q], w + 0.3, 0.9); detailMask.d[q] = 0; padMask.d[q] = Math.max(padMask.d[q], 0.7); }
+    // walled channels are cut wider than the water: their thick stone walls stand in the cut and hide its sides
+    const u = d / (half + (s.walled ? 0.8 : s.lined ? 0.12 : 0.55));
+    if (s.walled && u >= 1 && d < half + 1.9) { detailMask.d[q] = 0; padMask.d[q] = Math.max(padMask.d[q], 0.7); }
+    else if (s.lined && u >= 1 && d < half + 0.75) { H.d[q] = lerp(H.d[q], w + 0.3, 0.9); detailMask.d[q] = 0; padMask.d[q] = Math.max(padMask.d[q], 0.7); }
     if (u < 1) {
       const prof = s.lined ? 1 : Math.cos(u * Math.PI * 0.5) ** 0.7;
       const i = q % N, j = (q / N) | 0;
@@ -736,6 +738,7 @@ for (let j = 0; j < N; j++) {
       over(q, 3, gardenIn * 0.85);
       over(q, 6, gardenIn * smoothstep(0.1, 0.5, nC) * 0.5);
       gh = lerp(gh, 0.0, gardenIn);
+      mulTint(q, 0.7, 0.67, 0.66, gardenIn); // darker, mulched beds
     }
     for (const id of ['court', 'drive', 'plaza']) {
       const a = 1 - smoothstep(-0.4, 0.8, padSDF[id].d[q]);
@@ -754,13 +757,14 @@ for (let j = 0; j < N; j++) {
     const pa = pathMask.asphalt.d[q], pg = pathMask.gravel.d[q], pd = pathMask.dirt.d[q];
     if (pg > 0) { over(q, 6, pg * (0.9 + 0.2 * nC)); gh *= 1 - pg; }
     if (pd > 0) { over(q, 3, pd * (0.85 + 0.3 * nC)); gh *= 1 - pd; setTint(q, 1.08, 1.0, 0.9, pd * 0.7); }
-    if (pa > 0) { over(q, 6, pa); gh *= 1 - pa; setTint(q, 0.46, 0.47, 0.5, pa); }
+    if (pa > 0) { over(q, 6, pa); gh *= 1 - pa; setTint(q, 0.3, 0.31, 0.33, pa); }
     // worn verge along tracks
     const verge = 1 - smoothstep(0, 1.6, pathClear.d[q] + 1.1);
     if (verge > 0 && pa + pg + pd < 0.5) gh *= 1 - 0.35 * verge;
 
     // --- slopes
-    const dirtS = smoothstep(0.62, 0.95, slope + 0.12 * nB);
+    // grass holds on banks up to about 45 degrees; beyond that the soil shows
+    const dirtS = smoothstep(0.86, 1.2, slope + 0.12 * nB);
     const rockS = smoothstep(1.05, 1.5, slopeWide.d[q] + 0.15 * nB) * smoothstep(0.7, 1.0, slope);
     over(q, 3, dirtS * 0.9);
     over(q, 4, rockS);
@@ -810,8 +814,8 @@ for (let j = 0; j < N; j++) {
 // 12. Trees
 
 log('trees');
-const SPECIES = ['oak', 'beech', 'birch', 'willow', 'pine', 'cypress', 'plane', 'palm'];
-const SPECIES_H = { oak: 17, beech: 20, birch: 14, willow: 12, pine: 22, cypress: 16, plane: 19, palm: 13 };
+const SPECIES = ['oak', 'beech', 'birch', 'willow', 'pine', 'cypress', 'plane', 'palm', 'bush', 'bloom'];
+const SPECIES_H = { oak: 17, beech: 20, birch: 14, willow: 12, pine: 22, cypress: 16, plane: 19, palm: 13, bush: 2.6, bloom: 2.2 };
 const rng = mulberry32(20251119);
 const trees = [];
 {
@@ -915,6 +919,84 @@ const trees = [];
     if (tooClose(x, z, radius)) continue;
     add(x, z, sp, scale, radius);
   }
+
+  // ---- shrubs (same instancing and levels of detail as the trees, at garden scale)
+  const freeGround = (q, pathMargin) => {
+    const wl = waterY.d[q];
+    if (wl > WATER_NONE + 0.5 && H.d[q] < wl + 0.15) return false;
+    return waterNear.d[q] > 1.6 && pathClear.d[q] > pathMargin && buildingSDF.d[q] > 1.7 && padMask.d[q] <= 0
+      && padSDF.court.d[q] > 0.9 && padSDF.drive.d[q] > 1.2 && padSDF.plaza.d[q] > 5 && SLOPE.d[q] < 1.3;
+  };
+  const shrub = (x, z, species, scale, r) => { add(x, z, species, scale, r); trees[trees.length - 1].shadeR = r * 0.55 + 0.4; };
+  const segDist = (x, z, a, b) => {
+    const dx = b[0] - a[0], dz = b[1] - a[1];
+    const t = clamp(((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1), 0, 1);
+    return Math.hypot(x - a[0] - dx * t, z - a[1] - dz * t);
+  };
+  // 1. the rock garden: planted in drifts, bare soil, stone and heather showing between the clumps
+  {
+    const xs = L.ROCK_GARDEN.outline.map((p) => p[0]), zs = L.ROCK_GARDEN.outline.map((p) => p[1]);
+    const wallDist = (x, z) => {
+      let d = 1e9;
+      for (const w of L.TERRACES) for (let k = 0; k + 1 < w.points.length; k++) d = Math.min(d, segDist(x, z, w.points[k], w.points[k + 1]));
+      return d;
+    };
+    for (let z = Math.min(...zs); z < Math.max(...zs); z += 1.7) {
+      for (let x = Math.min(...xs); x < Math.max(...xs); x += 1.7) {
+        const px = x + (rng() - 0.5) * 1.5, pz = z + (rng() - 0.5) * 1.5;
+        const q = idx(Math.round(gi(px)), Math.round(gi(pz)));
+        if (gardenSDF.d[q] > -0.7 || !freeGround(q, 0.55) || wallDist(px, pz) < 0.8) continue;
+        const drift = fbm(px / 7.5, pz / 7.5, { seed: 77, octaves: 2 });
+        if (drift < -0.14 || rng() < 0.18) continue;
+        const r = rng();
+        let sp, scale, rad;
+        if (r < 0.46) { sp = 'bush'; scale = 0.5 + rng() * 0.62; rad = 2.3 * scale; }
+        else if (r < 0.7) { sp = 'bloom'; scale = 0.55 + rng() * 0.45; rad = 2.1 * scale; }
+        else if (r < 0.9) { sp = 'cypress'; scale = 0.1 + rng() * 0.12; rad = 1.3; }
+        else { sp = 'palm'; scale = 0.15 + rng() * 0.07; rad = 1.5; }
+        if (tooClose(px, pz, rad)) continue;
+        shrub(px, pz, sp, scale, rad);
+      }
+    }
+  }
+  // 2. flowering shrubs where the lawns meet the woods
+  for (let z = -HALF + 8; z < HALF - 8; z += 6.5) {
+    for (let x = -HALF + 8; x < HALF - 8; x += 6.5) {
+      const cx = x + (rng() - 0.5) * 5, cz = z + (rng() - 0.5) * 5;
+      const q0 = idx(Math.round(gi(cx)), Math.round(gi(cz)));
+      const c = cover.d[q0];
+      if (parkMask.d[q0] < 0.6 || c < 0.1 || c > 0.62 || rng() > 0.42) continue;
+      const n = 1 + ((rng() * 3) | 0);
+      for (let k = 0; k < n; k++) {
+        const px = cx + (rng() - 0.5) * 3.4, pz = cz + (rng() - 0.5) * 3.4;
+        const q = idx(Math.round(gi(px)), Math.round(gi(pz)));
+        if (!freeGround(q, 1.2) || gardenSDF.d[q] < 1) continue;
+        const sp = rng() < 0.6 ? 'bloom' : 'bush';
+        const scale = 0.6 + rng() * 0.5, rad = 2.2 * scale;
+        if (tooClose(px, pz, rad)) continue;
+        shrub(px, pz, sp, scale, rad);
+      }
+    }
+  }
+  // 3. hedgerows around the fields: the patchwork of the plateau
+  for (const f of L.FIELDS) {
+    const ring = resample([...f.outline, f.outline[0]], 4.4);
+    for (const [hx, hz] of ring) {
+      const px = hx + (rng() - 0.5) * 2.2, pz = hz + (rng() - 0.5) * 2.2;
+      if (Math.abs(px) > HALF - 5 || Math.abs(pz) > HALF - 5) continue;
+      const q = idx(Math.round(gi(px)), Math.round(gi(pz)));
+      if (!freeGround(q, 1.6) || buildingSDF.d[q] < 6 || gardenSDF.d[q] < 2 || coastD.d[q] < 30 || promField.dist[q] < L.PROMENADE.width / 2 + 4) continue;
+      const r = rng();
+      if (r < 0.08) continue; // gaps
+      let sp, scale, rad;
+      if (r < 0.6) { sp = 'bush'; scale = 1.0 + rng() * 0.75; rad = 1.9 * scale; }
+      else if (r < 0.82) { sp = 'oak'; scale = 0.5 + rng() * 0.4; rad = 5.5 * scale; }
+      else if (r < 0.92) { sp = 'birch'; scale = 0.55 + rng() * 0.3; rad = 4 * scale; }
+      else { sp = 'bloom'; scale = 0.9 + rng() * 0.5; rad = 2.0 * scale; }
+      if (tooClose(px, pz, rad)) continue;
+      if (sp === 'oak' || sp === 'birch') add(px, pz, sp, scale, rad); else shrub(px, pz, sp, scale, rad);
+    }
+  }
 }
 log(`  ${trees.length} trees`);
 const treeCount = {};
@@ -924,7 +1006,7 @@ log('  ', JSON.stringify(treeCount));
 // canopy shade map (ambient occlusion under the trees), 0 = fully shaded
 const shade = new Grid(N, N, 0);
 for (const t of trees) {
-  const r = t.r * 0.72 + 1.5;
+  const r = t.shadeR ?? t.r * 0.72 + 1.5;
   for (let j = Math.floor(gi(t.z - r)); j <= Math.ceil(gi(t.z + r)); j++) {
     for (let i = Math.floor(gi(t.x - r)); i <= Math.ceil(gi(t.x + r)); i++) {
       if (i < 0 || j < 0 || i >= N || j >= N) continue;
@@ -1100,7 +1182,7 @@ log('preview');
     }
     buf[q * 3] = clamp(r, 0, 1) * 255; buf[q * 3 + 1] = clamp(g, 0, 1) * 255; buf[q * 3 + 2] = clamp(b, 0, 1) * 255;
   }
-  const treeCols = { oak: [40, 92, 30], beech: [62, 112, 36], birch: [96, 136, 52], willow: [110, 140, 60], pine: [22, 62, 40], cypress: [18, 52, 30], plane: [70, 110, 40], palm: [60, 120, 60] };
+  const treeCols = { oak: [40, 92, 30], beech: [62, 112, 36], birch: [96, 136, 52], willow: [110, 140, 60], pine: [22, 62, 40], cypress: [18, 52, 30], plane: [70, 110, 40], palm: [60, 120, 60], bush: [34, 84, 36], bloom: [186, 110, 140] };
   for (const t of trees) {
     const r = t.r * 0.5;
     const c = treeCols[t.species];

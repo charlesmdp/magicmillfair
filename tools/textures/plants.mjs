@@ -61,13 +61,13 @@ const TILES = [
   // 3 fern frond (grows upwards)
   (ctx, r) => {
     const n = 34;
-    ctx.strokeStyle = rgb([70, 96, 36]); ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(T / 2, T); ctx.lineTo(T / 2, T * 0.03); ctx.stroke();
+    ctx.strokeStyle = rgb([52, 74, 30]); ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(T / 2, T); ctx.lineTo(T / 2, T * 0.03); ctx.stroke();
     for (let i = 0; i < n; i++) {
       const t = i / n;
       const y = T * (0.96 - t * 0.92);
       const len = T * 0.44 * Math.sin(Math.PI * Math.min(1, t * 0.85 + 0.12)) ** 0.8 * (1 - t * 0.45);
       for (const s of [-1, 1]) {
-        const c0 = mix3([44, 84, 28], [62, 110, 36], r()), c1 = mix3([96, 150, 52], [140, 176, 70], r() * (0.4 + t * 0.6));
+        const c0 = mix3([30, 60, 24], [44, 80, 30], r()), c1 = mix3([62, 104, 40], [92, 132, 52], r() * (0.4 + t * 0.6));
         ctx.save(); ctx.translate(T / 2, y); ctx.rotate(s > 0 ? -0.32 : Math.PI + 0.32);
         const g = ctx.createLinearGradient(0, 0, len, 0); g.addColorStop(0, rgb(c0)); g.addColorStop(1, rgb(c1));
         ctx.fillStyle = g;

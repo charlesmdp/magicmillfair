@@ -111,8 +111,9 @@ function forestFloor(seed) {
       });
     }
   }
-  const palette = [[122, 72, 30], [150, 104, 44], [92, 60, 34], [62, 43, 28], [168, 134, 82], [136, 84, 36], [104, 66, 30], [86, 96, 40], [180, 150, 70]];
-  const N = 3400;
+  // last year's leaves: faded browns, a few still tan or olive (a summer wood, not an autumn carpet)
+  const palette = [[92, 66, 40], [108, 82, 50], [76, 56, 36], [58, 44, 30], [124, 104, 70], [100, 72, 42], [84, 62, 38], [74, 82, 42], [128, 110, 68]];
+  const N = 2300;
   for (let i = 0; i < N; i++) {
     const t = i / N;
     const x = rnd() * S, y = rnd() * S, a = rnd() * 7;

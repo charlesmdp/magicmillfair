@@ -14,8 +14,10 @@ vec2 lodFade(vec2 baseXZ) {
   float d = distance(baseXZ, uLodCam.xz);
   float nearT = smoothstep(uLodRange.x - uLodRange.y, uLodRange.x, d);
   float midT = smoothstep(uLodRange.z - uLodRange.w, uLodRange.z, d);
+  // Only the outgoing level dissolves; the incoming one is solid underneath as soon as the band starts.
+  // (Two half-transparent levels would let the sky show through both.)
   if (uLodMode < 0.5) return vec2(1.0 - nearT, 0.0);
-  if (uLodMode < 1.5) return vec2(1.0 - midT, 1.0 - nearT);
+  if (uLodMode < 1.5) return vec2(1.0 - midT, nearT > 0.0 ? 0.0 : 1.0);
   return vec2(1.0, 0.0);
 }
 `;
@@ -150,8 +152,9 @@ ${LOD_DISCARD}
 #else
   alpha = saturate((alpha - cutoff) / max(fwidth(alpha), 1e-4) + 0.5);
   #if BAKE == 0
-  // with multisampling the level-of-detail cross-fade rides on sample coverage (no visible stipple)
-  alpha *= saturate(min(vFade.x, 1.0 - vFade.y) * 1.02) * lens;
+  // With multisampling the cross-fade rides on sample coverage (no visible stipple). Two coverage masks do
+  // not complement each other, so only the outgoing level dissolves: the incoming one is solid underneath.
+  alpha *= saturate(min(vFade.x, vFade.y < 0.999 ? 1.0 : 0.0) * 1.02) * lens;
   #endif
   if (alpha < 0.02) discard;
 #endif
@@ -174,7 +177,8 @@ ${LOD_DISCARD}
   #else
   vec3 N = normalize(vNormal);
   vec3 V = normalize(cameraPosition - vWorld);
-  float shadow = sunShadow(vWorld, N);
+  // leaf cards face the camera, not the sun: look the shadow up a little towards the light (no banding)
+  float shadow = sunShadow(vWorld + uSunDir * (wood ? 0.0 : 0.6), N);
   Surface s;
   s.albedo = albedo; s.N = N; s.Ng = N; s.rough = 0.62; s.ao = vData.x; s.spec = wood ? 0.0 : 0.1; s.sss = wood ? 0.0 : 0.6;
   // foliage self-shadowing is noisy: let ambient occlusion carry part of it
@@ -288,7 +292,9 @@ ${LOD_UNIFORMS}
 ${GLSL_WIND}
 in vec4 iPos;  // base xyz, scale
 in vec4 iData; // atlas column, tint, phase, -
+in vec3 iTone; // foliage tone of this tree (same as its meshes)
 uniform vec4 uImp; // sphere radius, centre height, elevation frames, columns
+out vec3 vTone;
 out vec2 vUvA;
 out vec2 vUvB;
 out float vBlend;
@@ -301,7 +307,8 @@ void main() {
   float scale = iPos.w;
   vec3 center = iPos.xyz + vec3(0.0, uImp.y * scale, 0.0);
   float d = distance(iPos.xz, uLodCam.xz);
-  float w = uLodMode > 1.5 ? 1.0 : smoothstep(uLodRange.z - uLodRange.w, uLodRange.z, d);
+  // solid as soon as the mesh starts to dissolve over it (see lodFade)
+  float w = uLodMode > 1.5 || d > uLodRange.z - uLodRange.w ? 1.0 : 0.0;
   vec3 toCam = cameraPosition - center;
   float dist = length(toCam);
   vec3 f = toCam / dist;
@@ -324,6 +331,7 @@ void main() {
   vWorld = wp;
   vR = r; vU = u; vF = f;
   vInfo = vec3(iData.y, w, dist);
+  vTone = iTone;
   gl_Position = w <= 0.001 ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix * viewMatrix * vec4(wp, 1.0);
 }
 `;
@@ -343,6 +351,7 @@ in vec3 vR;
 in vec3 vU;
 in vec3 vF;
 in vec3 vInfo;
+in vec3 vTone;
 void main() {
   vec4 a = mix(texture(uAtlas, vUvA), texture(uAtlas, vUvB), vBlend);
   float cutoff = mix(0.45, 0.24, smoothstep(120.0, 500.0, vInfo.z));
@@ -355,8 +364,7 @@ void main() {
   vec3 nv = normalize(nt.xyz * 2.0 - 1.0);
   vec3 N = normalize(vR * nv.x + vU * nv.y + vF * nv.z);
   vec3 albedo = a.rgb / max(a.a, 0.25);
-  float t = vInfo.x;
-  albedo *= mix(vec3(0.86, 0.92, 0.9), vec3(1.12, 1.08, 0.82), t);
+  albedo *= vTone;
   vec3 V = vF;
   float shadow = mix(sunShadow(vWorld, N), 1.0, 0.12);
   Surface s;

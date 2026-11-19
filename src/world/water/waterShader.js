@@ -91,6 +91,8 @@ void main() {
   if (!inMap) bed = -8.0;
   else if (abs(hw.y) > 0.6) discard; // another water body (or dry land) owns this spot
   float depth = -bed + vWave;
+  // open sea: the bed sinks out of sight before the edge of the detailed map, so nothing changes there
+  depth += smoothstep(uWorldMap.y - 110.0, uWorldMap.y - 8.0, max(abs(P.x), abs(P.z))) * 32.0;
 #elif defined(STREAM)
   if (abs(hw.y - P.y) > 2.2) discard; // generous: the level changes fast across a cascade
   float depth = P.y - bed + vFlow.w * 0.5;
@@ -151,7 +153,17 @@ void main() {
   float ndv = max(dot(N, V), 0.0);
   float fres = 0.02 + 0.98 * pow(1.0 - ndv, 5.0);
   vec3 R = reflect(-V, N);
+#ifdef SEA
+  // far away the waves are smaller than a pixel: the sea is a rough mirror there, tilted towards higher sky,
+  // never a perfect one (this is what keeps a clear horizon line)
+  float far = smoothstep(90.0, 1100.0, dist);
+  fres = mix(fres, min(fres, 0.4), far);
+  R = normalize(vec3(R.x, max(R.y, 0.3 * far), R.z));
+#endif
   vec3 refl = skyReflection(R);
+#ifdef SEA
+  refl = mix(refl, skyGradient(vec3(R.x, abs(R.y) + 0.02, R.z)), far * 0.75); // distant clouds blur into the swell
+#endif
   if (uReflParams.x > 0.5) {
     // mirror the camera about this surface, follow the mirrored ray a little, look it up in the planar map
     vec3 mirrorCam = vec3(cameraPosition.x, 2.0 * P.y - cameraPosition.y, cameraPosition.z);
@@ -222,7 +234,12 @@ void main() {
   alpha = saturate(alpha + dot(spec, vec3(0.33)));
   // haze applies to the water's own contribution
   vec3 unp = col / max(alpha, 1e-3);
+#ifdef SEA
+  // the sea keeps a little of its own colour through the haze: a soft horizon instead of none
+  unp = mix(unp, applyFog(unp, P, cameraPosition), 1.0 - 0.24 * far);
+#else
   unp = applyFog(unp, P, cameraPosition);
+#endif
   alpha *= edge;
   gl_FragColor = vec4(outputColor(unp) * alpha, alpha);
 }

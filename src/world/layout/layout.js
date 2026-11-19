@@ -172,8 +172,10 @@ export const STREAMS = [
     falls: [],
   },
   {
-    id: 'raceTail', name: 'Le Bief', bedDepth: 0.35, flat: 0.3, slope: 0.9, lined: true,
-    points: [[-115.3, -3.7, 18.05, 1.1], [-113.3, -2.9, 17.9, 1.1], [-110.2, -2.6, 17.6, 1.1], [-107.0, -2.5, 17.3, 1.1], [-103.8, -2.6, 17.02, 1.1], [-101.4, -2.8, 16.83, 1.2], [-99.6, -3.0, 16.8, 1.6]],
+    // `walled`: stone walls hold the ground on both sides (a pit and a trench, not a sloping ditch)
+    id: 'raceTail', name: 'Le Bief', bedDepth: 0.35, flat: 0.3, slope: 9, lined: true, walled: true,
+    // starts as the wheel pit (wider, under the wheel), then runs east to the lower pond
+    points: [[-116.1, -0.72, 18.08, 1.7], [-115.82, -1.55, 18.07, 1.7], [-115.53, -2.38, 18.06, 1.7], [-115.25, -3.2, 18.05, 1.6], [-114.7, -3.75, 18.0, 1.2], [-113.3, -3.1, 17.9, 1.1], [-110.2, -2.6, 17.6, 1.1], [-107.0, -2.5, 17.3, 1.1], [-103.8, -2.6, 17.02, 1.1], [-101.4, -2.8, 16.83, 1.2], [-99.6, -3.0, 16.8, 1.6]],
     falls: [],
   },
   {
@@ -314,6 +316,8 @@ export const PADS = [
 // Land cover hints for the baker.
 
 export const PARK = [
+  // grass verges under the plane trees, along the lane down to the mill
+  [[-96, -146], [-104, -124], [-108, -110], [-110, -92], [-111, -76], [-111, -20], [-119, -22], [-121, -34], [-130, -50], [-134, -62], [-134, -78], [-132, -94], [-128, -112], [-122, -128], [-114, -148]],
   // garden lawns east of the house, around the lower ponds
   [[-121, -72], [-100, -80], [-60, -72], [-15, -70], [46, -68], [50, -40], [44, -16], [2, -6], [-20, 6], [-60, 6], [-86, 23], [-100, 21], [-106, 9], [-114, 2], [-111, -20]],
   // parkland around the big pond

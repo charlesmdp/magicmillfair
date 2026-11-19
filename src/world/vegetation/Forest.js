@@ -11,6 +11,13 @@ import { buildTree, SPECIES, SPECIES_ORDER } from './TreeBuilder.js';
 import { LEAF_VERT, LEAF_FRAG, WOOD_VERT, WOOD_FRAG, IMPOSTOR_VERT, IMPOSTOR_FRAG } from './treeShader.js';
 
 const VARIANTS = 2;
+// species may share a leaf atlas: load each one once
+const leafCache = new Map();
+function leafTexture(name, size) {
+  const key = `${name}_${size}`;
+  if (!leafCache.has(key)) leafCache.set(key, loadTexture(`textures/foliage/leaf_${key}.webp`, { srgb: true, repeat: false }));
+  return leafCache.get(key);
+}
 const ELEV = 4, COLS = 4;
 const CELL = 32; // metres, spatial hash for LOD queries
 
@@ -40,13 +47,14 @@ export class Forest {
     const tier = this.engine.tier;
     const size = tier.quality >= 2 ? 1024 : 512;
     const a2c = !!tier.msaa;
+    this.a2c = a2c;
     const barkNames = [...new Set(SPECIES_ORDER.map((n) => SPECIES[n].bark))];
     const present = new Set();
     const T = this.data.trees;
     for (let i = 0; i < T.length; i += 6) present.add(T[i + 4]);
     present.add(SPECIES_ORDER.indexOf('palm'));
     const [leafTex, barkTex] = await Promise.all([
-      Promise.all(SPECIES_ORDER.map((n, i) => (present.has(i) ? loadTexture(`textures/foliage/leaf_${SPECIES[n].leaf}_${size}.webp`, { srgb: true, repeat: false }) : null))),
+      Promise.all(SPECIES_ORDER.map((n, i) => (present.has(i) ? leafTexture(SPECIES[n].leaf, size) : null))),
       Promise.all(barkNames.map((b) => Promise.all([loadTexture(`textures/foliage/bark_${b}_c.webp`, { srgb: true }), loadTexture(`textures/foliage/bark_${b}_n.webp`)]))),
     ]);
     const bark = Object.fromEntries(barkNames.map((b, i) => [b, { c: barkTex[i][0], n: barkTex[i][1] }]));
@@ -122,14 +130,26 @@ export class Forest {
       const tree = { x, y, z, scale, rot, si, variant, tint, phase: rnd(), col: variant * 2 + look, inMap };
       this.all.push(tree);
       sp.trees.push(tree);
+      // per-tree foliage tone: mostly green, a few warmer crowns
+      const warm = tint * tint;
+      let cr = 0.9 + 0.22 * warm, cg = 0.94 + 0.08 * tint, cb = 0.95 - 0.25 * warm;
+      const garden = sp.sp.shrub || scale < 0.36; // shrubs and dwarf specimens: a gardener's palette
+      if (garden && sp.name !== 'bloom') {
+        const k = rnd();
+        if (sp.name === 'cypress') [cr, cg, cb] = k < 0.45 ? [0.78, 0.98, 1.2] : k < 0.7 ? [1.3, 1.22, 0.62] : [0.92, 1.0, 0.92];
+        else if (sp.name === 'bush') [cr, cg, cb] = k < 0.5 ? [0.86, 0.96, 0.86] : k < 0.66 ? [1.28, 1.16, 0.62] : k < 0.8 ? [1.4, 0.86, 0.74] : k < 0.92 ? [1.12, 1.14, 0.98] : [0.8, 0.94, 1.06];
+      } else if (sp.name === 'bloom') {
+        // flower colour: pink, crimson, lilac-blue, white
+        const k = rnd();
+        [cr, cg, cb] = k < 0.4 ? [1.0, 0.94, 0.98] : k < 0.6 ? [1.08, 0.74, 0.8] : k < 0.82 ? [0.84, 0.9, 1.2] : [1.06, 1.1, 1.06];
+      }
+      tree.rgb = [cr, cg, cb]; // the same tone at every level of detail
       if (!inMap) continue;
       q.setFromAxisAngle(up, rot);
       const sy = scale * (0.94 + rnd() * 0.12);
       m.compose(p.set(x, y, z), q, s.set(scale, sy, scale));
       m.toArray(this.matrices, i * 16);
-      // per-tree foliage tone: mostly green, a few warmer crowns
-      const warm = tint * tint;
-      this.colors[i * 3] = 0.9 + 0.22 * warm; this.colors[i * 3 + 1] = 0.94 + 0.08 * tint; this.colors[i * 3 + 2] = 0.95 - 0.25 * warm;
+      this.colors[i * 3] = cr; this.colors[i * 3 + 1] = cg; this.colors[i * 3 + 2] = cb;
       const model = sp.models[variant];
       this.info.set([x, y, z, Math.max(model.radius, model.height * 0.5) * scale, si, variant], i * 6);
       const key = `${Math.floor(x / CELL)},${Math.floor(z / CELL)}`;
@@ -149,7 +169,8 @@ export class Forest {
       for (let v = 0; v < VARIANTS; v++) {
         const model = sp.models[v];
         const have = perSV.get(sp.si * VARIANTS + v) || 0;
-        const cap0 = Math.max(4, Math.min(have, 160)), cap1 = Math.max(4, Math.min(have, 1400));
+        // shrubs are planted close together: many more of them can be near at once
+        const cap0 = Math.max(4, Math.min(have, sp.sp.shrub ? 420 : 160)), cap1 = Math.max(4, Math.min(have, 1400));
         const mk = (geo, mat, cap, depth, name) => {
           const im = new THREE.InstancedMesh(geo, mat, cap);
           im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -252,16 +273,18 @@ export class Forest {
     for (const sp of this.species) {
       if (!sp || !sp.trees.length) continue;
       const n = sp.trees.length;
-      const pos = new Float32Array(n * 4), dat = new Float32Array(n * 4);
+      const pos = new Float32Array(n * 4), dat = new Float32Array(n * 4), tone = new Float32Array(n * 3);
       sp.trees.forEach((t, i) => {
         pos.set([t.x, t.y, t.z, t.scale], i * 4);
         dat.set([t.col, t.tint, t.phase, 0], i * 4);
+        tone.set(t.rgb, i * 3);
       });
       const geo = new THREE.InstancedBufferGeometry();
       geo.setAttribute('position', new THREE.BufferAttribute(quad, 3));
       geo.setIndex([0, 1, 2, 0, 2, 3]);
       geo.setAttribute('iPos', new THREE.InstancedBufferAttribute(pos, 4));
       geo.setAttribute('iData', new THREE.InstancedBufferAttribute(dat, 4));
+      geo.setAttribute('iTone', new THREE.InstancedBufferAttribute(tone, 3));
       geo.instanceCount = n;
       const mat = makeMaterial({
         uniforms: {
@@ -378,7 +401,8 @@ export class Forest {
       const sp = this.species[this.info[i * 6 + 4]];
       if (!sp) continue;
       const scale = this.data.trees[i * 6 + 2];
-      out.push([this.info[i * 6], this.info[i * 6 + 2], sp.sp.trunk.radius * scale * 1.15 + 0.1]);
+      // a shrub is an obstacle as a whole; a tree only by its trunk
+      out.push([this.info[i * 6], this.info[i * 6 + 2], sp.sp.shrub ? sp.sp.shrub * scale : sp.sp.trunk.radius * scale * 1.15 + 0.1]);
     }
     return out;
   }

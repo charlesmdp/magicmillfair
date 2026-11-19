@@ -19,7 +19,24 @@ export const EMOTES = ['Wave', 'Dance', 'ThumbsUp', 'Yes', 'No', 'Punch'];
 
 const HEIGHT = 1.72;
 
+let blobMaterial = null;
+function blobShadowMaterial() {
+  if (!blobMaterial) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(32, 32, 2, 32, 32, 31);
+    g.addColorStop(0, 'rgba(0,0,0,0.55)'); g.addColorStop(0.55, 'rgba(0,0,0,0.3)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 64);
+    blobMaterial = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+  }
+  return blobMaterial;
+}
+
 export class CharacterFactory {
+  /** @param {{ blobShadow?: boolean }} [options] blobShadow: a soft disc under each avatar (tiers without real-time shadows) */
+  constructor({ blobShadow = false } = {}) { this.blobShadow = blobShadow; }
+
   async load() {
     const gltf = await new GLTFLoader().loadAsync(assetUrl('models/robot.glb'));
     this.template = gltf.scene;
@@ -68,6 +85,13 @@ export class Character {
         o.geometry.morphAttributes = {};
       }
     });
+    if (factory.blobShadow) {
+      const blob = new THREE.Mesh(new THREE.PlaneGeometry(1.25, 1.25), blobShadowMaterial());
+      blob.rotation.x = -Math.PI / 2;
+      blob.position.y = 0.05;
+      blob.renderOrder = 3;
+      this.root.add(blob);
+    }
     this.setColor(colorIndex);
     this.mixer = new THREE.AnimationMixer(this.model);
     this.actions = {};

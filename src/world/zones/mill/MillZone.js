@@ -39,7 +39,7 @@ export class MillZone {
     const fixed = this.group.children.filter((c) => !c.userData.keep);
     this.group.add(mergeStatic(fixed, 'mill'));
     this.group.updateMatrixWorld(true);
-    this._cull = distanceCuller(this.group, [[/^road/, Infinity], [/:glow$/, 260], [/./, 620]]);
+    this._cull = distanceCuller(this.group, [[/^road/, 480], [/:glow$/, 260], [/./, 620]]);
     return this;
   }
 

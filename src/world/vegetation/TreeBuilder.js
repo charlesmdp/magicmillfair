@@ -94,9 +94,28 @@ export const SPECIES = {
     fronds: { count: 17, len: [3.6, 4.6], width: 1.5 },
     cards: { count: 0, size: [1, 1], lod1: 0, lod1Size: 1 }, leafTint: [1, 1, 0.9], sway: 1.2,
   },
+  // garden shrubs: a short stem, a dome of arching branches (planted in the rock garden and along hedges)
+  bush: {
+    height: 2.6, bark: 'smooth', leaf: 'bush', barkColor: [0.2, 0.17, 0.13], shrub: 0.62,
+    trunk: { len: 0.5, radius: 0.1, segs: 2, lean: 0.2, wander: 0.1, taper: 0.25, sides: 5, flare: 0.4 },
+    levels: [
+      { len: [1.1, 1.7], segs: 3, count: [9, 11], angle: [25, 88], span: [0.2, 1.0], up: 0.45, wander: 0.22, taper: 0.75, radius: 0.6, sides: 3, shape: 'mid' },
+      { len: [0.5, 0.9], segs: 2, count: [3, 4], angle: [35, 70], span: [0.35, 1.0], up: 0.2, wander: 0.3, taper: 0.8, radius: 0.5, sides: 0 },
+    ],
+    cards: { count: 84, size: [0.85, 1.2], lod1: 30, lod1Size: 1.5 }, leafTint: [0.74, 0.86, 0.68], sway: 0.45,
+  },
+  bloom: {
+    height: 2.2, bark: 'smooth', leaf: 'bloom', barkColor: [0.2, 0.17, 0.13], shrub: 0.55,
+    trunk: { len: 0.4, radius: 0.09, segs: 2, lean: 0.2, wander: 0.1, taper: 0.25, sides: 5, flare: 0.4 },
+    levels: [
+      { len: [0.9, 1.4], segs: 3, count: [9, 11], angle: [30, 88], span: [0.2, 1.0], up: 0.4, wander: 0.22, taper: 0.75, radius: 0.6, sides: 3, shape: 'mid' },
+      { len: [0.45, 0.8], segs: 2, count: [3, 4], angle: [35, 70], span: [0.35, 1.0], up: 0.2, wander: 0.3, taper: 0.8, radius: 0.5, sides: 0 },
+    ],
+    cards: { count: 76, size: [0.8, 1.1], lod1: 28, lod1Size: 1.5 }, leafTint: [0.86, 0.9, 0.84], sway: 0.45,
+  },
 };
 
-export const SPECIES_ORDER = ['oak', 'beech', 'birch', 'willow', 'pine', 'cypress', 'plane', 'palm'];
+export const SPECIES_ORDER = ['oak', 'beech', 'birch', 'willow', 'pine', 'cypress', 'plane', 'palm', 'bush', 'bloom'];
 
 // ---------------------------------------------------------------------------
 

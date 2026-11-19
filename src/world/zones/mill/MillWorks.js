@@ -5,6 +5,7 @@ import { Parts } from '../../props/MeshBuilder.js';
 import { LAYER } from '../../../render/Shadows.js';
 import { MILL, LEVELS, DAM, TERRACES, frameToWorld } from '../../layout/layout.js';
 import { smoothPath, resample } from '../../layout/spline.js';
+import { fallsRibbon } from '../../water/Falls.js';
 import { wall, channelLining, stairs, footbridge, archBridge, roadRibbon } from '../../props/Structures.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -36,9 +37,11 @@ export class MillWorks {
   _channels(parts) {
     const stone = parts.get('stoneWet'), cap = parts.get('granite');
     stone.tint(0.95, 0.94, 0.92, 1); cap.tint(0.84, 0.83, 0.8, 1);
-    for (const id of ['canal', 'raceHead', 'raceTail', 'spill']) {
+    for (const id of ['canal', 'raceHead', 'spill']) {
       channelLining(stone, this.stream(id), { groundAt: this.ground, cap, coping: id === 'canal' ? 0.32 : 0.4, bed: id === 'spill' ? 0.9 : 0.6 });
     }
+    // the wheel pit and the tail race: thick retaining walls up to the ground they hold
+    channelLining(stone, this.stream('raceTail'), { groundAt: this.ground, cap, coping: 0.85, bed: 0.6, lip: 'ground' });
   }
 
   _dam(parts) {
@@ -275,5 +278,18 @@ export class MillWorks {
     base.rotation.y = fr.yaw;
     base.add(sg);
     this.zone.group.add(base);
+    // white water: the sheet leaving the launder onto the floats, and the boil in the tail race below
+    const foam = this.world.water.shared.uFoam;
+    const tailY = this.stream('raceTail')[0][2] - pivot.position.y + 0.03;
+    const sheet = [[R + 0.95, 0.02], [R + 0.3, 0.0], [R + 0.05, -0.04], [R - 0.08, -0.22], [R - 0.2, -0.6], [R - 0.38, -1.05], [R - 0.62, tailY]].map(([z, y]) => V(0, y, z));
+    const falls = new THREE.Group();
+    falls.position.copy(pivot.position);
+    falls.rotation.y = fr.yaw;
+    falls.userData.keep = true;
+    falls.add(fallsRibbon(sheet, V(1, 0, 0), W * 0.86, foam, (i) => (i === 0 ? 0 : 1)));
+    const boil = [1.5, 0.9, 0.2, -0.6, -1.5, -2.6].map((z) => V(0, tailY, z));
+    falls.add(fallsRibbon(boil, V(1, 0, 0), W * 1.05, foam, (i) => [0, 0.9, 1, 0.8, 0.4, 0][i]));
+    this.zone.group.add(falls);
+    falls.updateMatrixWorld(true);
   }
 }

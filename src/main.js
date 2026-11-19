@@ -35,7 +35,7 @@ const hud = new Hud(ui, { input, isTouch: touch });
 if (SHOT && !params.has('ui')) ui.style.display = 'none';
 
 // The view the welcome screen floats over: a slow arc above the mill and its pond.
-const INTRO = { x: -135, z: 20, radius: 96, angle: -0.8, swing: 0.36, height: 27, lookHeight: 2 };
+const INTRO = { x: -144, z: 8, radius: 75, angle: -0.38, swing: 0.3, height: 23.5, lookHeight: 1 };
 
 async function boot() {
   let engine;
@@ -55,7 +55,7 @@ async function boot() {
 
   // ---------- loading
   const label = (p) => (p < 0.5 ? 'Relief, cartes et textures…' : p < 0.7 ? 'Étangs, rivière et reflets…' : p < 0.9 ? 'Plantation de la forêt…' : 'Construction du moulin et de la jetée…');
-  const factoryLoading = new CharacterFactory().load();
+  const factoryLoading = new CharacterFactory({ blobShadow: !engine.tier.shadowDynamic }).load();
   await world.load((p) => hud.setProgress(p * 0.94, label(p)));
   const factory = await factoryLoading;
   hud.setProgress(0.97, 'Ombres et derniers réglages…');
