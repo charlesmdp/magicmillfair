@@ -1,0 +1,30 @@
+{
+  "name": "magic-mill-fair",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Monde 3D explorable dans le navigateur : un moulin, sa vallée et une grande jetée de fête foraine.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "node server/index.js",
+    "bake": "npm run bake:world && npm run bake:textures",
+    "bake:world": "node tools/bake-world.mjs",
+    "bake:textures": "node tools/bake-textures.mjs",
+    "bench": "node tools/bench.mjs",
+    "shots": "node tools/shots.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "three": "^0.187.0",
+    "ws": "^8.23.0"
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "^1.1.1",
+    "sharp": "^0.35.5",
+    "vite": "^8.3.8"
+  }
+}

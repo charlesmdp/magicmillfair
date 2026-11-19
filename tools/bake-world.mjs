@@ -1,0 +1,1094 @@
+// Offline world baker.
+// Composes the surveyed relief (tools/data) with the authored layout (src/world/layout)
+// into the runtime assets under public/assets/world:
+//   height.png   RG = terrain height (16 bit), B = ambient occlusion
+//   water.png    RG = water surface height (16 bit, 0 = none), B = distance to shore
+//   normal.png   RG = terrain normal xz, B = canopy shade
+//   splat0/1/2   surface layer weights (+ grass height in splat2.B)
+//   tint.png     macro colour variation
+//   backdrop.png low resolution surrounding relief
+//   trees.bin    tree placements, world.json metadata (streams, ponds, paths...)
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { Grid, signedDistance, distanceTo, fillPolygon, clamp, lerp, smoothstep } from './lib/grid.mjs';
+import { fbm, ridged, perlin, hash2, mulberry32 } from './lib/noise.mjs';
+import { savePng, loadImage } from './lib/img.mjs';
+import { smoothPath, resample, arcLengths } from '../src/world/layout/spline.js';
+import * as L from '../src/world/layout/layout.js';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const OUT = path.join(ROOT, 'public/assets/world');
+const PREVIEW = path.join(ROOT, 'tools/preview');
+fs.mkdirSync(OUT, { recursive: true });
+fs.mkdirSync(PREVIEW, { recursive: true });
+
+const N = L.WORLD.size; // cells of 1 m
+const HALF = L.WORLD.half;
+const HMIN = -32, HMAX = 96; // 16-bit height encoding range
+const t0 = Date.now();
+const log = (...a) => console.log(`[${((Date.now() - t0) / 1000).toFixed(1)}s]`, ...a);
+
+const wx = (i) => -HALF + i + 0.5; // cell centre -> world
+const gi = (x) => x + HALF - 0.5; // world -> continuous cell index
+const idx = (i, j) => j * N + i;
+
+// ---------------------------------------------------------------------------
+// Inputs
+
+const demRaw = new Float32Array(fs.readFileSync(path.join(ROOT, 'tools/data/dem_8m.f32')).buffer.slice(0));
+const DEM_N = 257, DEM_STEP = 8, DEM_HALF = 1024;
+const dem = new Grid(DEM_N, DEM_N);
+dem.d.set(demRaw);
+const demAt = (x, z) => dem.sampleCubic((x + DEM_HALF) / DEM_STEP, (z + DEM_HALF) / DEM_STEP) * L.WORLD.verticalScale;
+
+const canopyImg = await loadImage(path.join(ROOT, 'tools/data/canopy_1m.png'), 1);
+const canopy = Grid.from(N, N, (i, j) => canopyImg.data[j * N + i] / 8); // metres
+const canopyWide = await loadImage(path.join(ROOT, 'tools/data/canopy_2m.png'), 1); // 2048 m window, 2 m cells
+
+// ---------------------------------------------------------------------------
+// Geometry helpers
+
+/** Distance field of a polyline: nearest distance, arc position and side for cells within `radius`. */
+function polylineField(pts, radius) {
+  const dist = new Float32Array(N * N).fill(1e9);
+  const pos = new Float32Array(N * N); // fractional sample index along the polyline
+  const side = new Int8Array(N * N); // +1 = left of travel direction
+  for (let k = 0; k + 1 < pts.length; k++) {
+    const ax = pts[k][0], az = pts[k][1], bx = pts[k + 1][0], bz = pts[k + 1][1];
+    const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz;
+    if (l2 < 1e-12) continue;
+    const i0 = Math.max(0, Math.floor(gi(Math.min(ax, bx) - radius))), i1 = Math.min(N - 1, Math.ceil(gi(Math.max(ax, bx) + radius)));
+    const j0 = Math.max(0, Math.floor(gi(Math.min(az, bz) - radius))), j1 = Math.min(N - 1, Math.ceil(gi(Math.max(az, bz) + radius)));
+    for (let j = j0; j <= j1; j++) {
+      const z = wx(j);
+      for (let i = i0; i <= i1; i++) {
+        const x = wx(i);
+        let t = ((x - ax) * dx + (z - az) * dz) / l2;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        const px = ax + dx * t, pz = az + dz * t;
+        const d = Math.hypot(x - px, z - pz);
+        const q = idx(i, j);
+        if (d < dist[q]) {
+          dist[q] = d;
+          pos[q] = k + t;
+          // left of the direction of travel (with +Z pointing "down" on the map, left = -cross)
+          side[q] = dx * (z - az) - dz * (x - ax) < 0 ? 1 : -1;
+        }
+      }
+    }
+  }
+  return { dist, pos, side };
+}
+
+function interp(arr, p) {
+  const k = Math.min(arr.length - 2, Math.max(0, Math.floor(p)));
+  const t = p - k;
+  return arr[k] + (arr[k + 1] - arr[k]) * t;
+}
+
+/** Signed distance grid (metres, negative inside) of a world-space polygon. */
+function polygonSDF(pts) {
+  const mask = new Uint8Array(N * N);
+  fillPolygon(mask, N, N, pts.map((p) => [gi(p[0]), gi(p[1])]));
+  return signedDistance(mask, N, N);
+}
+
+/** Closed outline with optional straight ("hard") runs between control points. */
+function closedOutline(pts, hardEdges = [], step = 1) {
+  const n = pts.length;
+  const isHard = (i) => hardEdges.some(([a, b]) => i >= a && i < b);
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const p1 = pts[i], p2 = pts[(i + 1) % n];
+    const len = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
+    const m = Math.max(1, Math.ceil(len / step));
+    if (isHard(i)) {
+      for (let j = 0; j < m; j++) out.push([lerp(p1[0], p2[0], j / m), lerp(p1[1], p2[1], j / m)]);
+    } else {
+      const p0 = isHard((i - 1 + n) % n) ? p1 : pts[(i - 1 + n) % n];
+      const p3 = isHard((i + 1) % n) ? p2 : pts[(i + 2) % n];
+      for (let j = 0; j < m; j++) {
+        const t = j / m, t2 = t * t, t3 = t2 * t;
+        const c = (a, b, cc, d) => 0.5 * (2 * b + (-a + cc) * t + (2 * a - 5 * b + 4 * cc - d) * t2 + (-a + 3 * b - 3 * cc + d) * t3);
+        out.push([c(p0[0], p1[0], p2[0], p3[0]), c(p0[1], p1[1], p2[1], p3[1])]);
+      }
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// 1. Base relief
+
+log('base relief');
+const H = Grid.from(N, N, (i, j) => demAt(wx(i), wx(j)));
+const detailMask = new Grid(N, N, 1); // where small-scale noise may be added
+
+// ---------------------------------------------------------------------------
+// 2. Coast
+
+log('coast');
+const coastPts = smoothPath(L.COAST.line, { step: 2 });
+const coastField = polylineField(coastPts, 240);
+const seaMask = new Uint8Array(N * N);
+{
+  const poly = coastPts.map((p) => [gi(p[0]), gi(p[1])]);
+  poly.push([gi(900), gi(700)], [gi(900), gi(-700)]);
+  fillPolygon(seaMask, N, N, poly);
+}
+const coastD = new Grid(N, N); // signed: + inland, - offshore
+const beach = new Grid(N, N);
+const coastBeach = coastPts.map((p) => clamp(p[2], 0, 1));
+for (let q = 0; q < N * N; q++) {
+  const d = Math.min(coastField.dist[q], 240);
+  coastD.d[q] = seaMask[q] ? -d : d;
+  beach.d[q] = coastField.dist[q] < 240 ? interp(coastBeach, coastField.pos[q]) : 0;
+}
+beach.d.set(beach.blur(14).d); // avoid seams where the nearest coast vertex changes
+for (let j = 0; j < N; j++) {
+  for (let i = 0; i < N; i++) {
+    const q = idx(i, j);
+    const x = wx(i), z = wx(j);
+    const d0 = coastD.d[q];
+    if (d0 > 235) continue;
+    const b = beach.d[q];
+    const wob = fbm(x / 22, z / 22, { seed: 11, octaves: 3 }) * 5 * (1 - b) + fbm(x / 6, z / 6, { seed: 12, octaves: 2 }) * 1.2 * (1 - b);
+    const d = d0 + wob;
+    const base = H.d[q];
+    let h;
+    if (d >= 0) {
+      // sandy shore: beach face, berm, promenade level, then blend into the relief
+      const sand = d < 26 ? 2.3 * smoothstep(0, 26, d) ** 0.85 : 2.3 + (L.COAST.promenadeY - 2.3) * smoothstep(26, 33, d);
+      const hBeach = lerp(sand, Math.max(base, L.COAST.promenadeY - 0.3), smoothstep(42, 130, d));
+      // rocky shore: keep the relief, drop to the sea over a short distance
+      const top = Math.max(base, 2.5 + 3 * b);
+      const hCliff = lerp(-0.8, top, smoothstep(-1, 12 + top * 0.25, d) ** 0.75);
+      h = lerp(hCliff, hBeach, b);
+    } else {
+      const a = -d;
+      const hBeach = -(3.4 * (1 - Math.exp(-a / 60)) + a * 0.02);
+      const hCliff = -(1.2 + 4.5 * (1 - Math.exp(-a / 10)) + a * 0.02);
+      h = lerp(hCliff, hBeach, b);
+    }
+    H.d[q] = h;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 3. Streams: resolve centrelines, condition the valley floor
+
+log('streams');
+const streams = L.STREAMS.map((s) => {
+  let pts = smoothPath(s.points, { step: 1 });
+  pts = resample(pts, 1);
+  // sharpen cascades and enforce a monotonic water profile
+  const ctrl = s.points;
+  const ctrlS = arcLengths(ctrl);
+  const sLen = arcLengths(pts);
+  const total = sLen[sLen.length - 1];
+  const scale = total / ctrlS[ctrlS.length - 1];
+  const y = new Float64Array(pts.length);
+  for (let k = 0; k < pts.length; k++) {
+    const sc = sLen[k] / scale;
+    let c = 0;
+    while (c + 2 < ctrl.length && ctrlS[c + 1] < sc) c++;
+    const segLen = ctrlS[c + 1] - ctrlS[c];
+    let t = clamp((sc - ctrlS[c]) / segLen, 0, 1);
+    const drop = ctrl[c][2] - ctrl[c + 1][2];
+    if (drop / segLen > 0.07) t = smoothstep(0.3, 0.7, t); // waterfall step
+    y[k] = lerp(ctrl[c][2], ctrl[c + 1][2], t);
+  }
+  for (let k = 1; k < y.length; k++) if (y[k] > y[k - 1]) y[k] = y[k - 1];
+  const width = pts.map((p) => p[3]);
+  const out = pts.map((p, k) => [p[0], p[1], y[k], width[k]]);
+  return { ...s, samples: out };
+});
+
+function smooth1d(arr, sigma) {
+  const out = new Float64Array(arr.length);
+  const r = Math.ceil(sigma * 3);
+  for (let k = 0; k < arr.length; k++) {
+    let s = 0, wsum = 0;
+    for (let m = -r; m <= r; m++) {
+      const kk = clamp(k + m, 0, arr.length - 1);
+      const w = Math.exp(-(m * m) / (2 * sigma * sigma));
+      s += arr[kk] * w; wsum += w;
+    }
+    out[k] = s / wsum;
+  }
+  return out;
+}
+function streamOps(s, { fill = true } = {}) {
+  const R = 150;
+  const f = polylineField(s.samples, R);
+  const ys = smooth1d(s.samples.map((p) => p[2]), s.lined ? 2 : 12);
+  const ws = s.samples.map((p) => p[3]);
+  // bank level field, blurred so that the valley floor has no seams
+  const bank = new Grid(N, N);
+  for (let q = 0; q < N * N; q++) bank.d[q] = f.dist[q] <= R ? interp(ys, f.pos[q]) + 0.28 : H.d[q];
+  const bankS = s.lined ? bank : bank.blur(3.5);
+  const flat = s.flat ?? 6, slope = s.slope ?? 0.3;
+  for (let q = 0; q < N * N; q++) {
+    const d = f.dist[q];
+    if (d > R - 8) continue;
+    const half = interp(ws, f.pos[q]) / 2;
+    const b = bankS.d[q];
+    let h = H.d[q];
+    if (fill) h = Math.max(h, b - Math.max(0, d - 40) * 0.06);
+    const e = Math.max(0, d - (half + flat));
+    h = Math.min(h, b + e * slope * (1 + e * 0.004));
+    H.d[q] = h;
+  }
+  return f;
+}
+function streamBed(s) {
+  const f = polylineField(s.samples, 12);
+  const ys = s.samples.map((p) => p[2]);
+  const ws = s.samples.map((p) => p[3]);
+  for (let q = 0; q < N * N; q++) {
+    const d = f.dist[q];
+    if (d > 10) continue;
+    const w = interp(ys, f.pos[q]);
+    const half = interp(ws, f.pos[q]) / 2;
+    const u = d / (half + 0.55);
+    if (u < 1) {
+      const prof = Math.cos(u * Math.PI * 0.5) ** 0.7;
+      const i = q % N, j = (q / N) | 0;
+      const rough = fbm(wx(i) / 2.3, wx(j) / 2.3, { seed: 51, octaves: 2 }) * 0.1;
+      const bed = w + 0.26 - (s.bedDepth + 0.3) * prof + rough;
+      H.d[q] = Math.min(H.d[q], bed);
+      detailMask.d[q] = 0;
+    } else if (d < half + 2.2) {
+      detailMask.d[q] = Math.min(detailMask.d[q], 0.4);
+    }
+  }
+  return f;
+}
+for (const s of streams) streamOps(s, { fill: s.id !== 'canal' });
+
+// ---------------------------------------------------------------------------
+// 4. Ponds
+
+log('ponds');
+const ponds = L.PONDS.map((p) => {
+  const outline = closedOutline(p.outline, p.hardEdges, 1);
+  const sdf = polygonSDF(outline);
+  // islands: union of ellipses carved out of the water area
+  const island = new Grid(N, N, 1e9);
+  for (const isl of p.islands) {
+    for (let j = Math.floor(gi(isl.z - isl.rz - 12)); j <= Math.ceil(gi(isl.z + isl.rz + 12)); j++) {
+      for (let i = Math.floor(gi(isl.x - isl.rx - 12)); i <= Math.ceil(gi(isl.x + isl.rx + 12)); i++) {
+        if (i < 0 || j < 0 || i >= N || j >= N) continue;
+        const x = wx(i), z = wx(j);
+        const ang = Math.atan2(z - isl.z, x - isl.x);
+        const wob = 1 + 0.16 * Math.sin(ang * 3 + isl.x) + 0.1 * Math.sin(ang * 5 + isl.z);
+        const r = Math.hypot((x - isl.x) / isl.rx, (z - isl.z) / isl.rz) / wob;
+        const d = (r - 1) * Math.min(isl.rx, isl.rz); // approx metres outside the island
+        const q = idx(i, j);
+        if (d < island.d[q]) island.d[q] = d;
+      }
+    }
+  }
+  return { ...p, outlinePts: outline, sdf, island };
+});
+
+// 4a. basin margins: a level strip around each pond, then a gentle cut into the valley sides
+for (const p of ponds) {
+  const flat = p.margin ?? 6, slope = p.cutSlope ?? 0.3;
+  for (let q = 0; q < N * N; q++) {
+    const d = p.sdf.d[q];
+    if (d > 90) continue;
+    const bankTop = p.level + p.bank;
+    let h = H.d[q];
+    h = Math.max(h, bankTop - Math.max(0, d - 2.5) * 0.5);
+    const e = Math.max(0, d - flat);
+    h = Math.min(h, bankTop + 0.02 * Math.min(d, flat) + e * slope * (1 + e * 0.006));
+    H.d[q] = h;
+  }
+}
+// 4b. soften the kinks left by the valley and basin shaping
+{
+  const sm = H.blur(2.2);
+  for (let q = 0; q < N * N; q++) if (coastD.d[q] > 6) H.d[q] = sm.d[q];
+}
+// 4c. precise basins, shores and islands
+for (const p of ponds) {
+  for (let q = 0; q < N * N; q++) {
+    const d = p.sdf.d[q];
+    if (d > 8) continue;
+    const i = q % N, j = (q / N) | 0;
+    const x = wx(i), z = wx(j);
+    let h = H.d[q];
+    if (d <= 0) {
+      const shore = Math.min(-d, p.island.d[q]);
+      const n1 = fbm(x / 7, z / 7, { seed: 21, octaves: 3 });
+      const depth = p.depth * (smoothstep(-0.3, p.shelf, shore) ** 0.8) * (0.85 + 0.25 * n1);
+      h = p.level - 0.02 - depth;
+      if (p.island.d[q] < 0) {
+        const isl = p.islands.reduce((best, c) => (Math.hypot(x - c.x, z - c.z) < Math.hypot(x - best.x, z - best.z) ? c : best), p.islands[0]);
+        h = p.level + isl.top * smoothstep(0, 2.2, -p.island.d[q]) ** 0.7 + 0.1;
+      }
+      detailMask.d[q] = p.island.d[q] < 0 ? 0.5 : 0.15;
+    } else {
+      const bankTop = p.level + p.bank;
+      const tgt = Math.max(Math.min(h, bankTop + 0.42 * Math.max(0, d - 1.2)), bankTop - 0.5 * Math.max(0, d - 2.5));
+      // ease the first metre of bank down to the waterline
+      h = lerp(lerp(p.level + 0.05, tgt, smoothstep(0, 1.3, d)), h, smoothstep(3, 8, d));
+      if (d < 3) detailMask.d[q] = Math.min(detailMask.d[q], 0.3 + 0.2 * d);
+    }
+    H.d[q] = h;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 5. Roads and paths (graded onto a smoothed longitudinal profile)
+
+log('paths');
+const pathMask = { asphalt: new Grid(N, N), gravel: new Grid(N, N), dirt: new Grid(N, N) };
+const pathClear = new Grid(N, N, 1e9); // distance to the nearest path edge (for tree exclusion)
+const paths = L.PATHS.map((p) => {
+  let pts = resample(smoothPath(p.points, { step: 1 }), 1);
+  const inside = (q) => Math.abs(q[0]) < HALF + 30 && Math.abs(q[1]) < HALF + 30;
+  pts = pts.filter(inside);
+  // longitudinal profile from the current terrain, smoothed
+  const prof = new Float64Array(pts.length);
+  for (let k = 0; k < pts.length; k++) prof[k] = H.sample(gi(pts[k][0]), gi(pts[k][1]));
+  const win = p.kind === 'asphalt' ? 16 : 6;
+  const sm = new Float64Array(pts.length);
+  for (let k = 0; k < pts.length; k++) {
+    let s = 0, wsum = 0;
+    for (let m = -win * 2; m <= win * 2; m++) {
+      const kk = clamp(k + m, 0, pts.length - 1);
+      const w = Math.exp(-(m * m) / (2 * win * win));
+      s += prof[kk] * w; wsum += w;
+    }
+    sm[k] = s / wsum;
+  }
+  return { ...p, samples: pts.map((q, k) => [q[0], q[1], sm[k]]) };
+});
+const waterNear = new Grid(N, N, 1e9); // distance to any pond/stream (filled later, used by paths)
+for (const p of paths) {
+  const half = p.width / 2;
+  const shoulder = p.kind === 'asphalt' ? 3.2 : 1.6;
+  const f = polylineField(p.samples, half + shoulder + 4);
+  const ys = p.samples.map((q) => q[2]);
+  for (let q = 0; q < N * N; q++) {
+    const d = f.dist[q];
+    if (d > half + shoulder + 3) continue;
+    const y = interp(ys, f.pos[q]);
+    const w = (1 - smoothstep(half, half + shoulder, d)) * p.cut;
+    H.d[q] = lerp(H.d[q], y, w);
+    const cover = 1 - smoothstep(half - 0.35, half + 0.45, d);
+    const m = pathMask[p.kind];
+    if (cover > m.d[q]) m.d[q] = cover;
+    if (d < half + 1.2) detailMask.d[q] = Math.min(detailMask.d[q], p.kind === 'asphalt' ? 0 : 0.25);
+    const edge = d - half - (p.kind === 'asphalt' ? 2.6 : 1.1);
+    if (edge < pathClear.d[q]) pathClear.d[q] = edge;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 6. Pads, buildings, rock garden
+
+log('pads & garden');
+const padMask = new Grid(N, N); // 1 = authored hard surface (no vegetation)
+function applyPad(outline, y, feather, markMask = 1) {
+  const sdf = polygonSDF(outline);
+  for (let q = 0; q < N * N; q++) {
+    const d = sdf.d[q];
+    if (d > feather + 1) continue;
+    const w = 1 - smoothstep(0, feather, d);
+    H.d[q] = lerp(H.d[q], y, w);
+    if (d < 0.6) { detailMask.d[q] = 0; if (markMask) padMask.d[q] = Math.max(padMask.d[q], markMask); }
+  }
+  return sdf;
+}
+
+// rock garden slope with dry-stone terraces
+{
+  const g = L.ROCK_GARDEN;
+  const sdf = polygonSDF(g.outline);
+  const o = [-128, -4.5];
+  const slopeAt = (x, z) => {
+    const t = clamp(((x - o[0]) * g.up[0] + (z - o[1]) * g.up[1]) / g.run, 0, 1);
+    return g.baseY + (g.topY - g.baseY) * (t * 0.25 + 0.75 * smoothstep(0, 1, t));
+  };
+  const target = new Grid(N, N);
+  for (let q = 0; q < N * N; q++) {
+    if (sdf.d[q] > 8) continue;
+    const i = q % N, j = (q / N) | 0;
+    target.d[q] = slopeAt(wx(i), wx(j));
+  }
+  for (const wall of L.TERRACES) {
+    const pts = resample(smoothPath(wall.points, { step: 0.5 }), 0.5);
+    const f = polylineField(pts, 5);
+    const base = pts.map((p) => slopeAt(p[0], p[1]));
+    for (let q = 0; q < N * N; q++) {
+      const d = f.dist[q];
+      if (d > 4.2 || sdf.d[q] > 6) continue;
+      const pos = f.pos[q];
+      const endFade = smoothstep(0, 3, pos) * smoothstep(0, 3, pts.length - 1 - pos);
+      const sd = d * f.side[q]; // + = uphill
+      const hb = interp(base, pos);
+      const step = sd >= 0 ? wall.h * 0.55 : -wall.h * 0.45;
+      const flat = hb + step + sd * 0.06;
+      const w = (1 - smoothstep(1.6, 4.2, d)) * endFade;
+      target.d[q] = lerp(target.d[q], flat, w);
+    }
+  }
+  for (let q = 0; q < N * N; q++) {
+    const d = sdf.d[q];
+    if (d > 7) continue;
+    const w = 1 - smoothstep(-1.5, 6, d);
+    H.d[q] = lerp(H.d[q], target.d[q], w);
+    if (d < 0) detailMask.d[q] = Math.min(detailMask.d[q], 0.35);
+  }
+}
+const gardenSDF = polygonSDF(L.ROCK_GARDEN.outline);
+
+const padSDF = {};
+for (const pad of L.PADS) padSDF[pad.id] = applyPad(pad.outline, pad.y, pad.feather);
+const buildingSDF = new Grid(N, N, 1e9);
+for (const key of ['house', 'annexA', 'annexB', 'shed']) {
+  const fr = L.MILL[key];
+  const rect = L.frameRect(fr, 0.8);
+  const y = key === 'shed' ? H.sample(gi(fr.x), gi(fr.z)) : L.LEVELS.court;
+  const sdf = applyPad(rect, y, key === 'shed' ? 1.5 : 2.5);
+  for (let q = 0; q < N * N; q++) if (sdf.d[q] < buildingSDF.d[q]) buildingSDF.d[q] = sdf.d[q];
+}
+// garden lawn east of the house: slopes from the facade down to the mill pool
+{
+  const fr = L.MILL.house;
+  const lawn = [L.frameToWorld(fr, 3.7, -9.5), L.frameToWorld(fr, 9.5, -10.5), L.frameToWorld(fr, 10, 9), L.frameToWorld(fr, 3.7, 8.6)];
+  const sdf = polygonSDF(lawn);
+  for (let q = 0; q < N * N; q++) {
+    const d = sdf.d[q];
+    if (d > 5) continue;
+    const i = q % N, j = (q / N) | 0;
+    const x = wx(i), z = wx(j);
+    // distance east of the facade plane
+    const c = Math.cos(fr.yaw), s = Math.sin(fr.yaw);
+    const lx = (x - fr.x) * c - (z - fr.z) * s;
+    const y = lerp(L.LEVELS.court - 0.45, L.LEVELS.court - 1.5, smoothstep(3.7, 10, lx));
+    H.d[q] = lerp(H.d[q], y, (1 - smoothstep(0, 5, d)) * 0.9);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 7. Stream beds, dam, mill race (final carving)
+
+log('channels & dam');
+const streamField = new Grid(N, N, 1e9);
+const streamLevel = new Grid(N, N, -1e9);
+for (const s of streams) {
+  const f = streamBed(s);
+  const ys = s.samples.map((p) => p[2]);
+  const ws = s.samples.map((p) => p[3]);
+  for (let q = 0; q < N * N; q++) {
+    if (f.dist[q] > 11) continue;
+    const e = f.dist[q] - interp(ws, f.pos[q]) / 2; // distance to the water edge
+    if (e < streamField.d[q]) { streamField.d[q] = e; streamLevel.d[q] = interp(ys, f.pos[q]); }
+  }
+}
+{
+  // dam crest (walkable), with a notch at the sluice
+  const crest = resample(L.DAM.crest.map((p) => [p[0], p[1]]), 0.5);
+  const f = polylineField(crest, 6);
+  for (let q = 0; q < N * N; q++) {
+    const d = f.dist[q];
+    if (d > 4) continue;
+    const w = 1 - smoothstep(L.DAM.width / 2, L.DAM.width / 2 + 1.1, d);
+    // only raise on the downstream side and the crest itself; never fill the pond
+    if (ponds[0].sdf.d[q] > -0.3) H.d[q] = lerp(H.d[q], L.DAM.crestY, w);
+    if (w > 0.5) { detailMask.d[q] = 0; padMask.d[q] = Math.max(padMask.d[q], 1); }
+  }
+  // mill race trench
+  for (const [pts, y0, y1, hw] of [[L.DAM.race.head, 19.75, 19.65, 0.55], [L.DAM.race.tail, 17.45, 16.75, 0.6]]) {
+    const line = resample(smoothPath(pts, { step: 0.5 }), 0.5);
+    const f2 = polylineField(line, 4);
+    for (let q = 0; q < N * N; q++) {
+      const d = f2.dist[q];
+      if (d > 3) continue;
+      const y = lerp(y0, y1, f2.pos[q] / (line.length - 1));
+      const w = 1 - smoothstep(hw, hw + 0.9, d);
+      H.d[q] = Math.min(H.d[q], lerp(H.d[q], y - 0.2, w));
+      if (w > 0.3) { detailMask.d[q] = 0; padMask.d[q] = Math.max(padMask.d[q], 0.6); }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 8. Small scale detail
+
+log('detail noise');
+for (let j = 0; j < N; j++) {
+  for (let i = 0; i < N; i++) {
+    const q = idx(i, j);
+    const m = detailMask.d[q];
+    if (m <= 0) continue;
+    const x = wx(i), z = wx(j);
+    const forest = smoothstep(3, 9, canopy.d[q]);
+    const n = fbm(x / 26, z / 26, { seed: 3, octaves: 4 }) * 0.42 + fbm(x / 6.5, z / 6.5, { seed: 4, octaves: 3 }) * (0.07 + 0.1 * forest);
+    H.d[q] += n * m;
+  }
+}
+// rocky relief on steep ground (cliffs)
+{
+  const tmp = H.clone();
+  for (let j = 1; j < N - 1; j++) {
+    for (let i = 1; i < N - 1; i++) {
+      const q = idx(i, j);
+      const sx = (tmp.d[q + 1] - tmp.d[q - 1]) / 2, sz = (tmp.d[q + N] - tmp.d[q - N]) / 2;
+      const slope = Math.hypot(sx, sz);
+      const k = smoothstep(0.55, 1.1, slope) * detailMask.d[q];
+      if (k > 0) {
+        const x = wx(i), z = wx(j);
+        H.d[q] += (ridged(x / 9, z / 9, { seed: 71, octaves: 4 }) - 0.5) * 1.8 * k + (ridged(x / 2.8, z / 2.8, { seed: 72, octaves: 2 }) - 0.5) * 0.45 * k;
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 9. Water level map
+
+log('water map');
+const WATER_NONE = HMIN; // encodes to 0
+const waterY = new Grid(N, N, WATER_NONE);
+const shoreIn = new Grid(N, N, 0); // metres from the shore, inside water (0 on land)
+const waterPri = new Float32Array(N * N).fill(1e9);
+const DIL = 14;
+function offerWater(q, level, dEdge) {
+  // dEdge: signed distance to the water edge (negative inside)
+  if (dEdge > DIL) return;
+  const pri = dEdge;
+  if (pri < waterPri[q]) { waterPri[q] = pri; waterY.d[q] = level; }
+}
+for (let q = 0; q < N * N; q++) {
+  if (coastD.d[q] < 40) offerWater(q, L.LEVELS.sea, H.d[q] < L.LEVELS.sea ? -Math.max(0.01, -coastD.d[q]) : Math.max(0.01, coastD.d[q]) + (H.d[q] - 0) * 3);
+  for (const p of ponds) {
+    if (p.sdf.d[q] > DIL) continue;
+    const dEdge = Math.max(p.sdf.d[q], -p.island.d[q]);
+    offerWater(q, p.level, dEdge);
+  }
+  if (streamField.d[q] < DIL) offerWater(q, streamLevel.d[q], streamField.d[q] + 0.01);
+}
+// shore distance inside water (for foam and depth cues): distance to the nearest dry cell
+{
+  const dry = new Uint8Array(N * N);
+  for (let q = 0; q < N * N; q++) dry[q] = waterY.d[q] <= WATER_NONE + 0.5 || H.d[q] >= waterY.d[q] ? 1 : 0;
+  const dd = distanceTo(dry, N, N);
+  for (let q = 0; q < N * N; q++) shoreIn.d[q] = dry[q] ? 0 : dd.d[q];
+  const wet = new Uint8Array(N * N);
+  for (let q = 0; q < N * N; q++) wet[q] = dry[q] ? 0 : 1;
+  const dw = distanceTo(wet, N, N);
+  for (let q = 0; q < N * N; q++) waterNear.d[q] = dw.d[q];
+}
+
+// ---------------------------------------------------------------------------
+// 10. Normals, ambient occlusion, slope
+
+log('normals & AO');
+const NX = new Grid(N, N), NZ = new Grid(N, N), NY = new Grid(N, N), SLOPE = new Grid(N, N), AO = new Grid(N, N, 1);
+for (let j = 0; j < N; j++) {
+  for (let i = 0; i < N; i++) {
+    const q = idx(i, j);
+    const sx = (H.get(i + 1, j) - H.get(i - 1, j)) / 2, sz = (H.get(i, j + 1) - H.get(i, j - 1)) / 2;
+    const l = Math.hypot(sx, 1, sz);
+    NX.d[q] = -sx / l; NY.d[q] = 1 / l; NZ.d[q] = -sz / l;
+    SLOPE.d[q] = Math.hypot(sx, sz);
+  }
+}
+{
+  const dirs = [];
+  for (let k = 0; k < 8; k++) dirs.push([Math.cos((k / 8) * Math.PI * 2 + 0.3), Math.sin((k / 8) * Math.PI * 2 + 0.3)]);
+  const radii = [1.5, 3, 6, 12, 24];
+  for (let j = 0; j < N; j++) {
+    for (let i = 0; i < N; i++) {
+      const q = idx(i, j);
+      const h = H.d[q];
+      let occ = 0;
+      for (const [dx, dz] of dirs) {
+        let m = 0;
+        for (const r of radii) {
+          const v = (H.get(Math.round(i + dx * r), Math.round(j + dz * r)) - h) / r;
+          if (v > m) m = v;
+        }
+        occ += m / Math.sqrt(1 + m * m);
+      }
+      AO.d[q] = clamp(1 - 0.95 * (occ / 8), 0, 1);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 11. Land cover
+
+log('land cover');
+const cover = canopy.map((v) => smoothstep(2.5, 7, v)).blur(2.2); // tree canopy presence
+const parkMask = new Grid(N, N);
+for (const poly of L.PARK) {
+  const sdf = polygonSDF(poly);
+  for (let q = 0; q < N * N; q++) parkMask.d[q] = Math.max(parkMask.d[q], 1 - smoothstep(-6, 4, sdf.d[q]));
+}
+const fieldSoil = new Grid(N, N), fieldCrop = new Grid(N, N), fieldKind = new Uint8Array(N * N);
+L.FIELDS.forEach((f, k) => {
+  const sdf = polygonSDF(f.outline);
+  for (let q = 0; q < N * N; q++) {
+    const w = 1 - smoothstep(-4, 1, sdf.d[q]);
+    if (w <= 0) continue;
+    if (f.crop === 'soil') fieldSoil.d[q] = Math.max(fieldSoil.d[q], w);
+    else if (w > fieldCrop.d[q]) { fieldCrop.d[q] = w; fieldKind[q] = f.crop === 'wheat' ? 1 : 2; }
+  }
+});
+
+// layers: 0 lawn, 1 meadow, 2 forest floor, 3 dirt, 4 rock, 5 sand, 6 gravel, 7 soil
+const LAYERS = 8;
+const W = Array.from({ length: LAYERS }, () => new Grid(N, N));
+const grassH = new Grid(N, N); // 0..1 blade height factor
+const tint = [new Grid(N, N, 1), new Grid(N, N, 1), new Grid(N, N, 1)];
+const over = (q, layer, a) => {
+  if (a <= 0) return;
+  a = Math.min(1, a);
+  for (let k = 0; k < LAYERS; k++) W[k].d[q] *= 1 - a;
+  W[layer].d[q] += a;
+};
+const mulTint = (q, r, g, b, a = 1) => {
+  tint[0].d[q] = lerp(tint[0].d[q], tint[0].d[q] * r, a);
+  tint[1].d[q] = lerp(tint[1].d[q], tint[1].d[q] * g, a);
+  tint[2].d[q] = lerp(tint[2].d[q], tint[2].d[q] * b, a);
+};
+const setTint = (q, r, g, b, a = 1) => {
+  tint[0].d[q] = lerp(tint[0].d[q], r, a);
+  tint[1].d[q] = lerp(tint[1].d[q], g, a);
+  tint[2].d[q] = lerp(tint[2].d[q], b, a);
+};
+
+for (let j = 0; j < N; j++) {
+  for (let i = 0; i < N; i++) {
+    const q = idx(i, j);
+    const x = wx(i), z = wx(j);
+    const h = H.d[q];
+    const slope = SLOPE.d[q];
+    const wl = waterY.d[q];
+    const above = wl > WATER_NONE + 0.5 ? h - wl : 99;
+    const cov = cover.d[q];
+    const park = parkMask.d[q];
+    const nA = fbm(x / 60, z / 60, { seed: 31, octaves: 4 });
+    const nB = fbm(x / 9, z / 9, { seed: 32, octaves: 3 });
+    const nC = fbm(x / 3.1, z / 3.1, { seed: 33, octaves: 2 });
+
+    // --- base cover
+    W[1].d[q] = 1; // meadow
+    let gh = 0.62 + 0.18 * nB;
+    // macro patchiness of the meadows
+    mulTint(q, 1 + 0.1 * nA + 0.05 * nB, 1 + 0.04 * nA, 1 - 0.1 * nA, 1);
+
+    if (fieldCrop.d[q] > 0) {
+      const a = fieldCrop.d[q];
+      const rows = 0.5 + 0.5 * Math.sin((x * 0.83 + z * 0.56) * 2.4); // drill lines
+      if (fieldKind[q] === 1) { setTint(q, 1.32, 1.12, 0.52, a * 0.95); gh = lerp(gh, 0.95 + 0.05 * rows, a); }
+      else { setTint(q, 0.72, 1.0, 0.62, a * 0.9); gh = lerp(gh, 0.8, a); }
+      mulTint(q, 1 - 0.07 * rows, 1 - 0.05 * rows, 1 - 0.05 * rows, a);
+    }
+    if (fieldSoil.d[q] > 0) {
+      const a = fieldSoil.d[q];
+      over(q, 7, a);
+      gh *= 1 - a;
+      mulTint(q, 1 + 0.08 * nA, 1 + 0.05 * nA, 1 + 0.02 * nA, a);
+    }
+    if (park > 0) {
+      over(q, 0, park * (1 - fieldSoil.d[q]));
+      gh = lerp(gh, 0.2 + 0.05 * nB, park);
+      const stripes = Math.sin((x * 0.94 - z * 0.34) * 1.6);
+      mulTint(q, 1 + 0.03 * stripes, 1 + 0.025 * stripes, 1, park * 0.6);
+    }
+    // forest floor under the canopy (parkland keeps its grass under specimen trees)
+    const forest = cov * lerp(1, 0.3, park);
+    over(q, 2, forest * (0.85 + 0.3 * nB));
+    gh = lerp(gh, 0.3, forest);
+
+    // --- garden, courtyard, hard surfaces
+    const gardenIn = 1 - smoothstep(-1.5, 1.5, gardenSDF.d[q]);
+    if (gardenIn > 0) {
+      over(q, 3, gardenIn * 0.85);
+      over(q, 6, gardenIn * smoothstep(0.1, 0.5, nC) * 0.5);
+      gh = lerp(gh, 0.0, gardenIn);
+    }
+    for (const id of ['court', 'drive', 'plaza']) {
+      const a = 1 - smoothstep(-0.4, 0.8, padSDF[id].d[q]);
+      if (a > 0) {
+        over(q, 6, a);
+        gh *= 1 - a;
+        if (id === 'drive') setTint(q, 0.62, 0.62, 0.64, a);
+        if (id === 'plaza') setTint(q, 1.08, 1.02, 0.94, a);
+      }
+    }
+    if (padMask.d[q] > 0) { over(q, 6, padMask.d[q]); gh *= 1 - padMask.d[q]; }
+    const bd = buildingSDF.d[q];
+    if (bd < 1.6) { const a = 1 - smoothstep(0.6, 1.6, bd); over(q, 6, a * 0.9); gh *= 1 - a; }
+
+    // --- paths
+    const pa = pathMask.asphalt.d[q], pg = pathMask.gravel.d[q], pd = pathMask.dirt.d[q];
+    if (pg > 0) { over(q, 6, pg * (0.9 + 0.2 * nC)); gh *= 1 - pg; }
+    if (pd > 0) { over(q, 3, pd * (0.85 + 0.3 * nC)); gh *= 1 - pd; setTint(q, 1.08, 1.0, 0.9, pd * 0.7); }
+    if (pa > 0) { over(q, 6, pa); gh *= 1 - pa; setTint(q, 0.46, 0.47, 0.5, pa); }
+    // worn verge along tracks
+    const verge = 1 - smoothstep(0, 1.6, pathClear.d[q] + 1.1);
+    if (verge > 0 && pa + pg + pd < 0.5) gh *= 1 - 0.35 * verge;
+
+    // --- slopes
+    const dirtS = smoothstep(0.5, 0.8, slope + 0.12 * nB);
+    const rockS = smoothstep(0.85, 1.3, slope + 0.15 * nB);
+    over(q, 3, dirtS * 0.9);
+    over(q, 4, rockS);
+    gh *= 1 - smoothstep(0.55, 0.95, slope);
+
+    // --- sea shore
+    const b = beach.d[q];
+    const cd = coastD.d[q];
+    if (cd < 150) {
+      const sandy = b * (1 - smoothstep(2.9 + 0.5 * nB, 4.3 + 0.5 * nB, h)) * (1 - smoothstep(60, 110, cd));
+      over(q, 5, sandy);
+      gh = lerp(gh, 0, Math.min(1, sandy * 1.6));
+      // dune grass fringe behind the beach
+      const dune = b * smoothstep(0.2, 0.8, sandy) * smoothstep(2.4, 3.0, h);
+      gh = Math.max(gh, dune * 0.55 * smoothstep(-0.2, 0.3, nB));
+      // rocky shore
+      const rocky = (1 - b) * (1 - smoothstep(1.5, 5, h + 2 * nB)) * (1 - smoothstep(8, 30, Math.abs(cd)));
+      over(q, 4, rocky);
+      if (h < 0.4) { over(q, 5, b); over(q, 4, (1 - b) * smoothstep(-6, -1, h)); over(q, 5, (1 - b) * (1 - smoothstep(-6, -1.5, h)) * 0.8); }
+    }
+
+    // --- banks and beds of fresh water
+    if (above < 1.2 && wl > 0.5) {
+      const isStream = streamField.d[q] < 3 && Math.abs(streamLevel.d[q] - wl) < 0.05;
+      const wet = 1 - smoothstep(-0.05, 0.38, above);
+      if (isStream) {
+        over(q, 6, wet * 0.95);
+        over(q, 4, wet * smoothstep(0.15, 0.6, nC) * 0.6);
+      } else {
+        over(q, 3, wet * 0.9);
+        over(q, 6, wet * smoothstep(0.0, 0.5, nC) * smoothstep(-0.9, -0.1, above) * 0.7);
+        over(q, 4, wet * smoothstep(0.35, 0.7, nB) * 0.35);
+      }
+      gh *= smoothstep(0.05, 0.3, above);
+    }
+    if (above < 0.03) gh = 0;
+    grassH.d[q] = clamp(gh, 0, 1);
+
+    // moisture: slightly richer greens in the valley bottom, drier on the plateaus
+    const wetness = 1 - smoothstep(0, 22, waterNear.d[q]);
+    mulTint(q, 1 - 0.06 * wetness, 1 + 0.02 * wetness, 1 - 0.04 * wetness, 1);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 12. Trees
+
+log('trees');
+const SPECIES = ['oak', 'beech', 'birch', 'willow', 'pine', 'cypress', 'plane', 'palm'];
+const SPECIES_H = { oak: 17, beech: 20, birch: 14, willow: 12, pine: 22, cypress: 16, plane: 19, palm: 13 };
+const rng = mulberry32(20251119);
+const trees = [];
+{
+  const sm = canopy.blur(1.6);
+  const cand = [];
+  // crown tops: local maxima of the canopy height model
+  for (let j = 4; j < N - 4; j++) {
+    for (let i = 4; i < N - 4; i++) {
+      const v = sm.d[idx(i, j)];
+      if (v < 5) continue;
+      let top = true;
+      for (let dj = -3; dj <= 3 && top; dj++) for (let di = -3; di <= 3; di++) {
+        if ((di || dj) && sm.d[idx(i + di, j + dj)] > v) { top = false; break; }
+      }
+      if (top) cand.push([wx(i) + (rng() - 0.5) * 0.8, wx(j) + (rng() - 0.5) * 0.8, v, 1]);
+    }
+  }
+  // fill the closed canopy where the height model is too smooth to show individual crowns
+  for (let z = -HALF + 3; z < HALF - 3; z += 5.2) {
+    for (let x = -HALF + 3; x < HALF - 3; x += 5.2) {
+      const px = x + (rng() - 0.5) * 4.2, pz = z + (rng() - 0.5) * 4.2;
+      const v = sm.sample(gi(px), gi(pz));
+      if (v > 5.5) cand.push([px, pz, v * (0.8 + 0.2 * rng()), 0]);
+    }
+  }
+  cand.sort((a, b) => b[3] - a[3] || b[2] - a[2]);
+
+  const CELL = 8, GN = Math.ceil(N / CELL);
+  const buckets = Array.from({ length: GN * GN }, () => []);
+  const tooClose = (x, z, r) => {
+    const ci = Math.floor((x + HALF) / CELL), cj = Math.floor((z + HALF) / CELL);
+    for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) {
+      const a = ci + di, b = cj + dj;
+      if (a < 0 || b < 0 || a >= GN || b >= GN) continue;
+      for (const t of buckets[b * GN + a]) {
+        const rr = (r + t.r) * 0.5;
+        if ((t.x - x) ** 2 + (t.z - z) ** 2 < rr * rr) return true;
+      }
+    }
+    return false;
+  };
+  const add = (x, z, species, scale, r, hero = 0) => {
+    const t = { x, z, species, scale, r, rot: rng() * Math.PI * 2, hero };
+    trees.push(t);
+    const ci = Math.floor((x + HALF) / CELL), cj = Math.floor((z + HALF) / CELL);
+    if (ci >= 0 && cj >= 0 && ci < GN && cj < GN) buckets[cj * GN + ci].push(t);
+  };
+  for (const [x, z, sp, sc] of L.HERO_TREES) add(x, z, sp, sc, 7 * sc, 1);
+
+  for (const [x, z, hgt] of cand) {
+    if (Math.abs(x) > HALF - 4 || Math.abs(z) > HALF - 4) continue;
+    const i = Math.round(gi(x)), j = Math.round(gi(z));
+    const q = idx(i, j);
+    const h = H.d[q];
+    const wl = waterY.d[q];
+    if (wl > WATER_NONE + 0.5 && h < wl + 0.12) continue; // standing in water
+    if (waterNear.d[q] < 1.1) continue;
+    if (pathClear.d[q] < 0) continue;
+    if (buildingSDF.d[q] < 4.5) continue;
+    if (padMask.d[q] > 0 || gardenSDF.d[q] < 1) continue;
+    if (padSDF.court.d[q] < 2 || padSDF.drive.d[q] < 2 || padSDF.plaza.d[q] < 6) continue;
+    if (coastD.d[q] < 46 && beach.d[q] > 0.3 && h < 4.2) continue;
+    if (coastD.d[q] < 3) continue;
+    if (SLOPE.d[q] > 1.25) continue;
+    if (fieldSoil.d[q] > 0.3 || fieldCrop.d[q] > 0.3) continue;
+    // keep the lawns open: thin the park, clear a ring around the lower ponds
+    const park = parkMask.d[q];
+    if (park > 0.5 && rng() < 0.5) continue;
+    // species by habitat, with low-frequency stands
+    const stand = fbm(x / 70, z / 70, { seed: 91, octaves: 2 });
+    const stand2 = fbm(x / 45 + 40, z / 45, { seed: 92, octaves: 2 });
+    const riparian = waterNear.d[q] < 7 && wl > 0.5;
+    const coastal = coastD.d[q] < 170;
+    const r = rng();
+    let sp;
+    if (riparian) sp = r < 0.32 ? 'willow' : r < 0.58 ? 'birch' : r < 0.82 ? 'oak' : 'beech';
+    else if (coastal) sp = r < 0.5 + 0.3 * stand ? 'pine' : r < 0.8 ? 'oak' : 'birch';
+    else if (stand2 > 0.32) sp = r < 0.6 ? 'pine' : r < 0.85 ? 'birch' : 'oak';
+    else if (stand > 0.18) sp = r < 0.62 ? 'beech' : r < 0.9 ? 'oak' : 'birch';
+    else sp = r < 0.62 ? 'oak' : r < 0.82 ? 'beech' : r < 0.93 ? 'birch' : 'plane';
+    const target = clamp(hgt * 1.12 + 3, 8, 27) * (0.9 + 0.2 * rng());
+    const scale = clamp(target / SPECIES_H[sp], 0.62, 1.38);
+    const radius = (sp === 'pine' || sp === 'birch' || sp === 'cypress' ? 5.0 : 6.6) * scale;
+    if (tooClose(x, z, radius)) continue;
+    add(x, z, sp, scale, radius);
+  }
+}
+log(`  ${trees.length} trees`);
+const treeCount = {};
+for (const t of trees) treeCount[t.species] = (treeCount[t.species] || 0) + 1;
+log('  ', JSON.stringify(treeCount));
+
+// canopy shade map (ambient occlusion under the trees), 0 = fully shaded
+const shade = new Grid(N, N, 0);
+for (const t of trees) {
+  const r = t.r * 0.72 + 1.5;
+  for (let j = Math.floor(gi(t.z - r)); j <= Math.ceil(gi(t.z + r)); j++) {
+    for (let i = Math.floor(gi(t.x - r)); i <= Math.ceil(gi(t.x + r)); i++) {
+      if (i < 0 || j < 0 || i >= N || j >= N) continue;
+      const d = Math.hypot(wx(i) - t.x, wx(j) - t.z) / r;
+      if (d < 1) shade.d[idx(i, j)] = Math.max(shade.d[idx(i, j)], (1 - d * d) ** 0.8);
+    }
+  }
+}
+const shadeBlur = shade.blur(2.5);
+
+// ---------------------------------------------------------------------------
+// 13. Backdrop relief (outside the playable square)
+
+log('backdrop');
+const BN = 257;
+const backdrop = new Grid(BN, BN);
+const backCover = new Grid(BN, BN);
+{
+  const sea = new Uint8Array(BN * BN);
+  const toB = (v) => (v + DEM_HALF) / DEM_STEP;
+  const ext = [[420, -1100], ...L.COAST.line.map((p) => [p[0], p[1]]), [520, 1100], [1200, 1100], [1200, -1100]];
+  fillPolygon(sea, BN, BN, ext.map((p) => [toB(p[0]), toB(p[1])]));
+  const sd = signedDistance(sea, BN, BN); // in 8 m pixels, negative in the sea
+  for (let j = 0; j < BN; j++) {
+    for (let i = 0; i < BN; i++) {
+      const x = -DEM_HALF + i * DEM_STEP, z = -DEM_HALF + j * DEM_STEP;
+      let h = dem.get(i, j) * L.WORLD.verticalScale;
+      const d = sd.get(i, j) * DEM_STEP;
+      if (d < 0) h = -(2 + 6 * (1 - Math.exp(d / 80)) - d * 0.015);
+      else h = lerp(0.5, Math.max(h, 3), smoothstep(0, 60, d));
+      // inside the playable square use the detailed terrain so both meshes agree at the border
+      if (Math.abs(x) <= HALF - 4 && Math.abs(z) <= HALF - 4) h = H.sample(gi(x), gi(z));
+      backdrop.d[j * BN + i] = h;
+      const ci = Math.floor((x + DEM_HALF) / 2), cj = Math.floor((z + DEM_HALF) / 2);
+      let c = 0, n = 0;
+      for (let b = -2; b < 2; b++) for (let a = -2; a < 2; a++) {
+        const u = ci + a, v = cj + b;
+        if (u < 0 || v < 0 || u >= 1024 || v >= 1024) continue;
+        c += canopyWide.data[v * 1024 + u] / 8 > 4 ? 1 : 0; n++;
+      }
+      backCover.d[j * BN + i] = d < 0 ? 0 : n ? c / n : 0;
+    }
+  }
+}
+// distant tree impostors outside the square
+const farTrees = [];
+{
+  const r2 = mulberry32(777);
+  for (let z = -DEM_HALF + 40; z < DEM_HALF - 40; z += 9) {
+    for (let x = -DEM_HALF + 40; x < DEM_HALF - 40; x += 9) {
+      if (Math.abs(x) < HALF - 2 && Math.abs(z) < HALF - 2) continue;
+      const dEdge = Math.max(Math.abs(x), Math.abs(z)) - HALF;
+      if (dEdge > 420) continue;
+      const px = x + (r2() - 0.5) * 8, pz = z + (r2() - 0.5) * 8;
+      const c = backCover.sample((px + DEM_HALF) / DEM_STEP, (pz + DEM_HALF) / DEM_STEP);
+      if (r2() > c * 0.9) continue;
+      const h = backdrop.sample((px + DEM_HALF) / DEM_STEP, (pz + DEM_HALF) / DEM_STEP);
+      if (h < 1.5) continue;
+      const r = r2();
+      farTrees.push({ x: px, z: pz, y: h, species: r < 0.55 ? 'oak' : r < 0.8 ? 'beech' : r < 0.92 ? 'pine' : 'birch', scale: 0.85 + r2() * 0.45, rot: r2() * 6.283 });
+    }
+  }
+}
+log(`  ${farTrees.length} backdrop trees`);
+
+// ---------------------------------------------------------------------------
+// 14. Write assets
+
+log('writing');
+const enc16 = (v) => Math.round(clamp((v - HMIN) / (HMAX - HMIN), 0, 1) * 65535);
+{
+  const buf = new Uint8Array(N * N * 3);
+  for (let q = 0; q < N * N; q++) {
+    const v = enc16(H.d[q]);
+    buf[q * 3] = v >> 8; buf[q * 3 + 1] = v & 255; buf[q * 3 + 2] = Math.round(AO.d[q] * 255);
+  }
+  await savePng(path.join(OUT, 'height.png'), buf, N, N, 3);
+}
+{
+  const buf = new Uint8Array(N * N * 3);
+  for (let q = 0; q < N * N; q++) {
+    const v = waterY.d[q] <= WATER_NONE + 0.5 ? 0 : enc16(waterY.d[q]);
+    buf[q * 3] = v >> 8; buf[q * 3 + 1] = v & 255; buf[q * 3 + 2] = Math.round(clamp(shoreIn.d[q] / 16, 0, 1) * 255);
+  }
+  await savePng(path.join(OUT, 'water.png'), buf, N, N, 3);
+}
+{
+  const buf = new Uint8Array(N * N * 3);
+  for (let q = 0; q < N * N; q++) {
+    buf[q * 3] = Math.round((NX.d[q] * 0.5 + 0.5) * 255);
+    buf[q * 3 + 1] = Math.round((NZ.d[q] * 0.5 + 0.5) * 255);
+    buf[q * 3 + 2] = Math.round(clamp(1 - shadeBlur.d[q], 0, 1) * 255);
+  }
+  await savePng(path.join(OUT, 'normal.png'), buf, N, N, 3);
+}
+for (let m = 0; m < 3; m++) {
+  const buf = new Uint8Array(N * N * 3);
+  for (let q = 0; q < N * N; q++) {
+    let sum = 0;
+    for (let k = 0; k < LAYERS; k++) sum += W[k].d[q];
+    for (let c = 0; c < 3; c++) {
+      const layer = m * 3 + c;
+      buf[q * 3 + c] = layer < LAYERS ? Math.round((W[layer].d[q] / sum) * 255) : Math.round(grassH.d[q] * 255);
+    }
+  }
+  await savePng(path.join(OUT, `splat${m}.png`), buf, N, N, 3);
+}
+{
+  const TN = 512;
+  const buf = new Uint8Array(TN * TN * 3);
+  const tb = tint.map((t) => t.blur(0.8));
+  for (let j = 0; j < TN; j++) for (let i = 0; i < TN; i++) {
+    for (let c = 0; c < 3; c++) {
+      const v = (tb[c].d[idx(i * 2, j * 2)] + tb[c].d[idx(i * 2 + 1, j * 2)] + tb[c].d[idx(i * 2, j * 2 + 1)] + tb[c].d[idx(i * 2 + 1, j * 2 + 1)]) / 4;
+      buf[(j * TN + i) * 3 + c] = Math.round(clamp(v * 0.5, 0, 1) * 255);
+    }
+  }
+  await savePng(path.join(OUT, 'tint.png'), buf, TN, TN, 3);
+}
+{
+  const buf = new Uint8Array(BN * BN * 3);
+  for (let q = 0; q < BN * BN; q++) {
+    const v = enc16(backdrop.d[q]);
+    buf[q * 3] = v >> 8; buf[q * 3 + 1] = v & 255; buf[q * 3 + 2] = Math.round(clamp(backCover.d[q], 0, 1) * 255);
+  }
+  await savePng(path.join(OUT, 'backdrop.png'), buf, BN, BN, 3);
+}
+{
+  // trees: x, z, scale, rot (float32) + species index, flags
+  const all = [...trees, ...farTrees];
+  const buf = new Float32Array(all.length * 6);
+  all.forEach((t, k) => {
+    buf[k * 6] = t.x; buf[k * 6 + 1] = t.z; buf[k * 6 + 2] = t.scale; buf[k * 6 + 3] = t.rot;
+    buf[k * 6 + 4] = SPECIES.indexOf(t.species); buf[k * 6 + 5] = t.y !== undefined ? t.y : -9999;
+  });
+  fs.writeFileSync(path.join(OUT, 'trees.bin'), Buffer.from(buf.buffer));
+}
+const r2 = (v) => Math.round(v * 100) / 100;
+const meta = {
+  size: N,
+  heightRange: [HMIN, HMAX],
+  backdrop: { n: BN, step: DEM_STEP, half: DEM_HALF },
+  species: SPECIES,
+  treeCount: trees.length,
+  farTreeCount: farTrees.length,
+  ponds: ponds.map((p) => ({ id: p.id, name: p.name, level: p.level, outline: p.outlinePts.filter((_, k) => k % 2 === 0).map((q) => [r2(q[0]), r2(q[1])]), islands: p.islands })),
+  streams: streams.map((s) => ({ id: s.id, lined: !!s.lined, falls: s.falls, ctrl: s.points.length, samples: s.samples.map((q) => q.map(r2)) })),
+  paths: paths.map((p) => ({ id: p.id, kind: p.kind, width: p.width, samples: p.samples.filter((_, k) => k % 2 === 0 || k === p.samples.length - 1).map((q) => q.map(r2)) })),
+  coast: coastPts.filter((_, k) => k % 3 === 0).map((q) => q.map(r2)),
+};
+fs.writeFileSync(path.join(OUT, 'world.json'), JSON.stringify(meta));
+
+// ---------------------------------------------------------------------------
+// 15. Preview (top-down, shaded) for visual checks
+
+log('preview');
+{
+  const cols = [[0.36, 0.52, 0.2], [0.45, 0.55, 0.22], [0.26, 0.24, 0.13], [0.36, 0.28, 0.19], [0.45, 0.43, 0.4], [0.86, 0.78, 0.6], [0.66, 0.6, 0.52], [0.42, 0.31, 0.22]];
+  const buf = new Uint8Array(N * N * 3);
+  const sun = [-0.45, 0.72, -0.53];
+  for (let q = 0; q < N * N; q++) {
+    let sum = 0, r = 0, g = 0, b = 0;
+    for (let k = 0; k < LAYERS; k++) { const w = W[k].d[q]; sum += w; r += cols[k][0] * w; g += cols[k][1] * w; b += cols[k][2] * w; }
+    r = (r / sum) * tint[0].d[q]; g = (g / sum) * tint[1].d[q]; b = (b / sum) * tint[2].d[q];
+    const lit = clamp(NX.d[q] * sun[0] + NY.d[q] * sun[1] + NZ.d[q] * sun[2], 0, 1) * 1.15 + 0.25;
+    const ao = AO.d[q] * (0.55 + 0.45 * (1 - shadeBlur.d[q]));
+    r *= lit * ao; g *= lit * ao; b *= lit * ao;
+    const wl = waterY.d[q];
+    if (wl > WATER_NONE + 0.5 && H.d[q] < wl) {
+      const dep = clamp((wl - H.d[q]) / 2.5, 0, 1);
+      r = lerp(r, 0.07, 0.45 + 0.5 * dep); g = lerp(g, 0.28, 0.45 + 0.5 * dep); b = lerp(b, 0.36, 0.45 + 0.5 * dep);
+    }
+    buf[q * 3] = clamp(r, 0, 1) * 255; buf[q * 3 + 1] = clamp(g, 0, 1) * 255; buf[q * 3 + 2] = clamp(b, 0, 1) * 255;
+  }
+  const treeCols = { oak: [40, 92, 30], beech: [62, 112, 36], birch: [96, 136, 52], willow: [110, 140, 60], pine: [22, 62, 40], cypress: [18, 52, 30], plane: [70, 110, 40], palm: [60, 120, 60] };
+  for (const t of trees) {
+    const r = t.r * 0.5;
+    const c = treeCols[t.species];
+    for (let j = Math.floor(gi(t.z - r)); j <= Math.ceil(gi(t.z + r)); j++) for (let i = Math.floor(gi(t.x - r)); i <= Math.ceil(gi(t.x + r)); i++) {
+      if (i < 0 || j < 0 || i >= N || j >= N) continue;
+      const d = Math.hypot(wx(i) - t.x, wx(j) - t.z) / r;
+      if (d > 1) continue;
+      const k = (1 - d * 0.5) * (0.8 + 0.4 * hash2(i, j, 5));
+      const q = idx(i, j) * 3;
+      buf[q] = c[0] * k; buf[q + 1] = c[1] * k; buf[q + 2] = c[2] * k;
+    }
+  }
+  await savePng(path.join(PREVIEW, 'world.png'), buf, N, N, 3);
+  // elevation preview with contours
+  const e = new Uint8Array(N * N * 3);
+  for (let q = 0; q < N * N; q++) {
+    const h = H.d[q];
+    const t = clamp((h + 5) / 60, 0, 1);
+    const lit = clamp(NX.d[q] * sun[0] + NY.d[q] * sun[1] + NZ.d[q] * sun[2], 0, 1) * 0.9 + 0.3;
+    let r = lerp(0.35, 0.95, t) * lit, g = lerp(0.55, 0.9, t) * lit, b = lerp(0.35, 0.7, t) * lit;
+    if (h < 0) { r = 0.2; g = 0.4 + 0.02 * h; b = 0.6 + 0.02 * h; }
+    const i = q % N, j = (q / N) | 0;
+    const c = Math.floor(h / 2) !== Math.floor(H.get(i + 1, j) / 2) || Math.floor(h / 2) !== Math.floor(H.get(i, j + 1) / 2);
+    if (c) { r *= 0.55; g *= 0.55; b *= 0.55; }
+    e[q * 3] = clamp(r, 0, 1) * 255; e[q * 3 + 1] = clamp(g, 0, 1) * 255; e[q * 3 + 2] = clamp(b, 0, 1) * 255;
+  }
+  await savePng(path.join(PREVIEW, 'elevation.png'), e, N, N, 3);
+}
+const [lo, hi] = H.minmax();
+log(`done. height range ${lo.toFixed(1)} .. ${hi.toFixed(1)} m`);
+for (const f of fs.readdirSync(OUT)) log('  ', f, (fs.statSync(path.join(OUT, f)).size / 1024).toFixed(0), 'KB');
