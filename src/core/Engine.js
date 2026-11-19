@@ -22,6 +22,7 @@ export class Engine {
     this.time = 0;
     this.dt = 0.016;
     this.listeners = { resize: new Set(), tier: new Set() };
+    this.postEnabled = false;
     this._createRenderer();
     this.perf = { fps: 60, ms: 16, cpuMs: 0, calls: 0, triangles: 0, samples: [] };
     this._last = performance.now();
@@ -35,7 +36,7 @@ export class Engine {
     const t = this.tier;
     const renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
-      antialias: t.msaa && !t.post,
+      antialias: t.msaa && !(t.post && this.postEnabled),
       alpha: false,
       stencil: false,
       depth: true,

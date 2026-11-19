@@ -14,6 +14,7 @@ window.__mmf = app;
 
 async function boot() {
   await world.load();
+  world.bakeShadows();
   const free = new FreeCamera(engine.camera, input, (x, z) => world.groundAt(x, z));
   app.free = free;
   const cam = (params.get('cam') || '-60,36,-52,215,-18').split(',').map(Number);

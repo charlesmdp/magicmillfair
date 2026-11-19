@@ -193,7 +193,7 @@ vec3 tonemapFilmic(vec3 x) {
   vec3 r = saturate((x * (a * x + b)) / (x * (c * x + d) + e));
   // keep some of the original saturation that the per-channel curve washes out
   float l = dot(r, vec3(0.2126, 0.7152, 0.0722));
-  return mix(vec3(l), r, 1.12);
+  return mix(vec3(l), r, 1.04);
 }
 vec3 linearToSRGB(vec3 c) {
   c = saturate(c);
@@ -244,7 +244,7 @@ vec3 shadeSurface(Surface s, vec3 wp, vec3 V, float shadow) {
   vec3 direct = uSunColor * diff * shadow;
   // light passing through thin leaves when looking towards the sun
   float back = saturate(dot(-V, uSunDir)) ;
-  vec3 trans = uSunColor * s.sss * (0.25 + 0.75 * back * back) * saturate(-ndl * 0.7 + 0.5) * shadow * vec3(1.0, 1.05, 0.55);
+  vec3 trans = uSunColor * s.sss * (0.12 + 0.6 * back * back) * saturate(-ndl * 0.7 + 0.5) * shadow * vec3(0.9, 1.0, 0.5);
   vec3 amb = hemiAmbient(s.N) * s.ao;
   vec3 col = s.albedo * (direct + amb + trans);
   if (s.spec > 0.0) {

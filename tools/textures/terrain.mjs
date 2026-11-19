@@ -248,7 +248,7 @@ function sand(seed) {
     const big = fbm(u * 3, v * 3, { seed: seed + 6, octaves: 3, period: 3 });
     const w = worley(u * 60, v * 60, seed + 9, 60, 1);
     const speck = smoothstep(0.1, 0.03, w.f1) * (w.id > 0.8 ? 1 : 0);
-    let c = mix3([196, 176, 138], [232, 216, 180], clamp(0.5 + ripple * 0.22 + big * 0.5 + grain * 0.3));
+    let c = mix3([178, 158, 122], [214, 196, 160], clamp(0.5 + ripple * 0.22 + big * 0.5 + grain * 0.3));
     c = mix3(c, w.id > 0.93 ? [245, 240, 228] : [120, 104, 84], speck * 0.8);
     colour[i * 3] = c[0]; colour[i * 3 + 1] = c[1]; colour[i * 3 + 2] = c[2];
     height[i] = clamp(0.35 + ripple * 0.4 + grain * 0.08 + big * 0.15 + speck * 0.1);
@@ -280,13 +280,13 @@ export const LAYERS = ['lawn', 'meadow', 'forest', 'dirt', 'rock', 'sand', 'grav
 export async function bakeTerrain(dir, log) {
   const info = {};
   const gens = {
-    lawn: () => blades(101, { count: 52000, len: 26, width: 4.2, deep: [30, 52, 16], mid: [58, 100, 28], top: [104, 150, 46], accent: [150, 170, 64], accentRate: 0.12, bg: [40, 44, 20], curl: 0.35 }),
-    meadow: () => blades(202, { count: 36000, len: 44, width: 4.6, deep: [44, 58, 20], mid: [86, 112, 36], top: [140, 160, 62], accent: [196, 180, 104], accentRate: 0.3, bg: [52, 46, 24], curl: 0.6, bias: 0.6 }),
+    lawn: () => blades(101, { count: 52000, len: 26, width: 4.2, deep: [40, 60, 32], mid: [70, 100, 50], top: [104, 134, 68], accent: [136, 150, 82], accentRate: 0.1, bg: [46, 48, 30], curl: 0.35 }),
+    meadow: () => blades(202, { count: 36000, len: 44, width: 4.6, deep: [50, 62, 34], mid: [86, 106, 54], top: [124, 140, 78], accent: [174, 164, 108], accentRate: 0.26, bg: [56, 52, 34], curl: 0.6, bias: 0.6 }),
     forest: () => forestFloor(303),
     dirt: () => dirt(404),
     rock: () => rock(505),
     sand: () => sand(606),
-    gravel: () => stones(707, { cells: 34, palette: [[196, 180, 150], [156, 150, 142], [182, 158, 126], [118, 112, 106], [218, 210, 196], [170, 162, 148]], gap: [74, 62, 50], gapDepth: 0.6, fine: { cells: 96, palette: [[168, 152, 128], [130, 124, 116], [198, 186, 164]] } }),
+    gravel: () => stones(707, { cells: 44, palette: [[158, 146, 124], [140, 134, 124], [150, 134, 110], [120, 114, 106], [168, 160, 146], [146, 138, 124]], gap: [92, 80, 66], gapDepth: 0.5, fine: { cells: 104, palette: [[150, 136, 114], [118, 112, 104], [170, 160, 140]] } }),
     soil: () => soil(808),
   };
   const strength = { lawn: 3.2, meadow: 3.4, forest: 3.0, dirt: 3.0, rock: 5.0, sand: 1.6, gravel: 4.2, soil: 4.5 };

@@ -166,18 +166,29 @@ export const STREAMS = [
     ],
     falls: [0.5, 8.5, 15.5, 22.5, 29.5],
   },
+  {
+    id: 'raceHead', name: 'Le Bief', bedDepth: 0.4, flat: 0.3, slope: 0.9, lined: true,
+    points: [[-117.9, 9.6, 20.0, 0.9], [-117.3, 6.5, 19.96, 0.9], [-116.5, 2.5, 19.93, 0.9], [-115.9, -0.4, 19.9, 0.9]],
+    falls: [],
+  },
+  {
+    id: 'raceTail', name: 'Le Bief', bedDepth: 0.35, flat: 0.3, slope: 0.9, lined: true,
+    points: [[-115.3, -3.7, 18.05, 1.1], [-113.3, -2.9, 17.9, 1.1], [-110.2, -2.6, 17.6, 1.1], [-107.0, -2.5, 17.3, 1.1], [-103.8, -2.6, 17.02, 1.1], [-101.4, -2.8, 16.83, 1.2], [-99.6, -3.0, 16.8, 1.6]],
+    falls: [],
+  },
+  {
+    id: 'spill', name: 'Le Déversoir', bedDepth: 0.3, flat: 0.3, slope: 0.9, lined: true,
+    points: [[-106.4, 20.8, 20.0, 1.7], [-105.3, 19.6, 20.0, 1.7], [-104.4, 18.6, 19.9, 1.7], [-103.5, 17.6, 17.6, 1.7], [-102.6, 16.5, 16.86, 1.7], [-101.7, 15.4, 16.8, 2.0]],
+    falls: [2.5],
+  },
 ];
 
-// The dam closing the big pond, its spillway and the mill race feeding the wheel.
+// The dam closing the big pond. Water leaves it two ways (both listed in STREAMS):
+// the spillway at its east end and the mill race that drives the wheel.
 export const DAM = {
   crest: [[-118.7, 8.9], [-112.4, 13.1], [-106.1, 17.3]],
   crestY: LEVELS.court,
   width: 2.4,
-  sluice: { x: -104.2, z: 18.6, dirX: 0.62, dirZ: -0.78, width: 1.8 }, // spills towards the tail pond
-  race: { // head race from the pond to the wheel, then tail race to the lower pond
-    head: [[-117.6, 8.2], [-115.6, 4.0], [-114.2, 0.2], [-113.3, -2.4]],
-    tail: [[-113.0, -3.6], [-110.5, -5.6], [-106.5, -6.2], [-101.2, -5.4]],
-  },
   wheel: { lx: 4.55, lz: 5.4, radius: 1.65, width: 0.9 }, // in the house frame
 };
 
@@ -245,7 +256,7 @@ export const PATHS = [
   {
     id: 'pondloop', kind: 'dirt', width: 1.5, cut: 0.5,
     points: [
-      [-103.2, 18.4], [-98.2, 26], [-96.2, 40], [-100.5, 53], [-110, 66.5], [-125, 79.5], [-138, 88], [-147, 93], [-158, 91],
+      [-102.2, 21.4], [-98.2, 27], [-96.2, 40], [-100.5, 53], [-110, 66.5], [-125, 79.5], [-138, 88], [-147, 93], [-158, 91],
       [-170, 96], [-176, 108], [-184, 120.5], [-196, 123.5], [-209, 123], [-221, 117.5], [-229.5, 111.5], [-239, 103],
       [-241, 90], [-238, 77], [-227, 70], [-217, 67.5], [-209, 59], [-198, 51.5], [-190, 44], [-183, 32.5],
       [-170, 28.5], [-157, 18.5], [-146, 13.5], [-140.5, 7.2], [-136.5, 4.6],

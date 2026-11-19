@@ -251,9 +251,10 @@ function streamBed(s) {
     if (d > 10) continue;
     const w = interp(ys, f.pos[q]);
     const half = interp(ws, f.pos[q]) / 2;
-    const u = d / (half + 0.55);
+    const u = d / (half + (s.lined ? 0.12 : 0.55));
+    if (s.lined && u >= 1 && d < half + 0.75) { H.d[q] = lerp(H.d[q], w + 0.3, 0.9); detailMask.d[q] = 0; padMask.d[q] = Math.max(padMask.d[q], 0.7); }
     if (u < 1) {
-      const prof = Math.cos(u * Math.PI * 0.5) ** 0.7;
+      const prof = s.lined ? 1 : Math.cos(u * Math.PI * 0.5) ** 0.7;
       const i = q % N, j = (q / N) | 0;
       const rough = fbm(wx(i) / 2.3, wx(j) / 2.3, { seed: 51, octaves: 2 }) * 0.1;
       const bed = w + 0.26 - (s.bedDepth + 0.3) * prof + rough;
@@ -301,7 +302,7 @@ for (const p of ponds) {
     if (d > 90) continue;
     const bankTop = p.level + p.bank;
     let h = H.d[q];
-    h = Math.max(h, bankTop - Math.max(0, d - 2.5) * 0.5);
+    h = Math.max(h, bankTop - Math.max(0, d - 4.5) * 0.3);
     const e = Math.max(0, d - flat);
     h = Math.min(h, bankTop + 0.02 * Math.min(d, flat) + e * slope * (1 + e * 0.006));
     H.d[q] = h;
@@ -335,6 +336,7 @@ for (const p of ponds) {
       const tgt = Math.max(Math.min(h, bankTop + 0.42 * Math.max(0, d - 1.2)), bankTop - 0.5 * Math.max(0, d - 2.5));
       // ease the first metre of bank down to the waterline
       h = lerp(lerp(p.level + 0.05, tgt, smoothstep(0, 1.3, d)), h, smoothstep(3, 8, d));
+      h = Math.max(h, Math.min(bankTop, p.level + 0.05 + d * 0.3) - Math.max(0, d - 4.5) * 0.3);
       if (d < 3) detailMask.d[q] = Math.min(detailMask.d[q], 0.3 + 0.2 * d);
     }
     H.d[q] = h;
@@ -503,19 +505,6 @@ for (const s of streams) {
     if (ponds[0].sdf.d[q] > -0.3) H.d[q] = lerp(H.d[q], L.DAM.crestY, w);
     if (w > 0.5) { detailMask.d[q] = 0; padMask.d[q] = Math.max(padMask.d[q], 1); }
   }
-  // mill race trench
-  for (const [pts, y0, y1, hw] of [[L.DAM.race.head, 19.75, 19.65, 0.55], [L.DAM.race.tail, 17.45, 16.75, 0.6]]) {
-    const line = resample(smoothPath(pts, { step: 0.5 }), 0.5);
-    const f2 = polylineField(line, 4);
-    for (let q = 0; q < N * N; q++) {
-      const d = f2.dist[q];
-      if (d > 3) continue;
-      const y = lerp(y0, y1, f2.pos[q] / (line.length - 1));
-      const w = 1 - smoothstep(hw, hw + 0.9, d);
-      H.d[q] = Math.min(H.d[q], lerp(H.d[q], y - 0.2, w));
-      if (w > 0.3) { detailMask.d[q] = 0; padMask.d[q] = Math.max(padMask.d[q], 0.6); }
-    }
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -557,32 +546,47 @@ log('water map');
 const WATER_NONE = HMIN; // encodes to 0
 const waterY = new Grid(N, N, WATER_NONE);
 const shoreIn = new Grid(N, N, 0); // metres from the shore, inside water (0 on land)
-const waterPri = new Float32Array(N * N).fill(1e9);
-const DIL = 14;
-function offerWater(q, level, dEdge) {
-  // dEdge: signed distance to the water edge (negative inside)
-  if (dEdge > DIL) return;
-  const pri = dEdge;
-  if (pri < waterPri[q]) { waterPri[q] = pri; waterY.d[q] = level; }
-}
-for (let q = 0; q < N * N; q++) {
-  if (coastD.d[q] < 40) offerWater(q, L.LEVELS.sea, H.d[q] < L.LEVELS.sea ? -Math.max(0.01, -coastD.d[q]) : Math.max(0.01, coastD.d[q]) + (H.d[q] - 0) * 3);
-  for (const p of ponds) {
-    if (p.sdf.d[q] > DIL) continue;
-    const dEdge = Math.max(p.sdf.d[q], -p.island.d[q]);
-    offerWater(q, p.level, dEdge);
-  }
-  if (streamField.d[q] < DIL) offerWater(q, streamLevel.d[q], streamField.d[q] + 0.01);
-}
-// shore distance inside water (for foam and depth cues): distance to the nearest dry cell
+const NEAR = 3.4; // the level stays valid this far outside a water body (shore blending in the shaders)
 {
+  // 1) cells that really are water, 2) a thin ring around them where the level is known but the ground is dry
+  const inside = new Uint8Array(N * N);
+  const ring = new Float32Array(N * N).fill(1e9);
+  const ringLevel = new Float32Array(N * N);
+  for (let q = 0; q < N * N; q++) {
+    let lvl = null;
+    for (const p of ponds) {
+      const d = p.sdf.d[q];
+      if (d > NEAR) continue;
+      const dEdge = Math.max(d, -p.island.d[q]);
+      if (dEdge <= 0) { lvl = p.level; break; }
+      if (dEdge < ring[q]) { ring[q] = dEdge; ringLevel[q] = p.level; }
+    }
+    if (lvl === null && streamField.d[q] < NEAR) {
+      const e = streamField.d[q];
+      if (e <= 0.55) lvl = streamLevel.d[q];
+      else if (e < ring[q]) { ring[q] = e; ringLevel[q] = streamLevel.d[q]; }
+    }
+    if (lvl === null && coastD.d[q] < NEAR + 30) {
+      if (H.d[q] < L.LEVELS.sea && coastD.d[q] < 1.5) lvl = L.LEVELS.sea;
+      else { const e = Math.max(0.01, coastD.d[q]); if (e < ring[q] && e < NEAR + 30) { ring[q] = e; ringLevel[q] = L.LEVELS.sea; } }
+    }
+    if (lvl !== null) { inside[q] = 1; waterY.d[q] = lvl; if (H.d[q] > lvl - 0.02) H.d[q] = lvl - 0.02; }
+  }
+  for (let q = 0; q < N * N; q++) {
+    if (inside[q] || ring[q] > NEAR + 30) continue;
+    const lvl = ringLevel[q];
+    const isSea = lvl === L.LEVELS.sea;
+    if (!isSea && ring[q] > NEAR) continue;
+    waterY.d[q] = lvl;
+    // dry ground next to water never dips below the surface
+    const minH = lvl + Math.min(0.12, 0.03 + ring[q] * 0.05);
+    if (H.d[q] < minH) H.d[q] = minH;
+  }
   const dry = new Uint8Array(N * N);
-  for (let q = 0; q < N * N; q++) dry[q] = waterY.d[q] <= WATER_NONE + 0.5 || H.d[q] >= waterY.d[q] ? 1 : 0;
+  for (let q = 0; q < N * N; q++) dry[q] = inside[q] ? 0 : 1;
   const dd = distanceTo(dry, N, N);
-  for (let q = 0; q < N * N; q++) shoreIn.d[q] = dry[q] ? 0 : dd.d[q];
-  const wet = new Uint8Array(N * N);
-  for (let q = 0; q < N * N; q++) wet[q] = dry[q] ? 0 : 1;
-  const dw = distanceTo(wet, N, N);
+  for (let q = 0; q < N * N; q++) shoreIn.d[q] = inside[q] ? dd.d[q] : 0;
+  const dw = distanceTo(inside, N, N);
   for (let q = 0; q < N * N; q++) waterNear.d[q] = dw.d[q];
 }
 
@@ -644,6 +648,7 @@ L.FIELDS.forEach((f, k) => {
 });
 
 // layers: 0 lawn, 1 meadow, 2 forest floor, 3 dirt, 4 rock, 5 sand, 6 gravel, 7 soil
+const slopeWide = SLOPE.blur(3); // cliffs are steep over a wide area, garden banks are not
 const LAYERS = 8;
 const W = Array.from({ length: LAYERS }, () => new Grid(N, N));
 const grassH = new Grid(N, N); // 0..1 blade height factor
@@ -707,7 +712,8 @@ for (let j = 0; j < N; j++) {
     // forest floor under the canopy (parkland keeps its grass under specimen trees)
     const forest = cov * lerp(1, 0.3, park);
     over(q, 2, forest * (0.85 + 0.3 * nB));
-    gh = lerp(gh, 0.3, forest);
+    // under the trees only a few patches of woodland grass survive
+    gh = lerp(gh, 0.34 * smoothstep(0.15, 0.4, nA + 0.5 * nB), smoothstep(0.25, 0.7, forest));
 
     // --- garden, courtyard, hard surfaces
     const gardenIn = 1 - smoothstep(-1.5, 1.5, gardenSDF.d[q]);
@@ -739,11 +745,11 @@ for (let j = 0; j < N; j++) {
     if (verge > 0 && pa + pg + pd < 0.5) gh *= 1 - 0.35 * verge;
 
     // --- slopes
-    const dirtS = smoothstep(0.5, 0.8, slope + 0.12 * nB);
-    const rockS = smoothstep(0.85, 1.3, slope + 0.15 * nB);
+    const dirtS = smoothstep(0.62, 0.95, slope + 0.12 * nB);
+    const rockS = smoothstep(1.05, 1.5, slopeWide.d[q] + 0.15 * nB) * smoothstep(0.7, 1.0, slope);
     over(q, 3, dirtS * 0.9);
     over(q, 4, rockS);
-    gh *= 1 - smoothstep(0.55, 0.95, slope);
+    gh *= 1 - smoothstep(0.8, 1.2, slope);
 
     // --- sea shore
     const b = beach.d[q];
@@ -762,18 +768,19 @@ for (let j = 0; j < N; j++) {
     }
 
     // --- banks and beds of fresh water
-    if (above < 1.2 && wl > 0.5) {
+    if (wl > 0.5 && (above < 0.05 || waterNear.d[q] < 2.2)) {
       const isStream = streamField.d[q] < 3 && Math.abs(streamLevel.d[q] - wl) < 0.05;
-      const wet = 1 - smoothstep(-0.05, 0.38, above);
+      // a narrow strip of bare, damp ground at the water's edge; everything under water
+      const strip = above < 0.02 ? 1 : (1 - smoothstep(0.25, 1.5 + 0.7 * nB, waterNear.d[q])) * (1 - smoothstep(0.2, 0.6, above));
       if (isStream) {
-        over(q, 6, wet * 0.95);
-        over(q, 4, wet * smoothstep(0.15, 0.6, nC) * 0.6);
+        over(q, 6, strip * 0.95);
+        over(q, 4, strip * smoothstep(0.15, 0.6, nC) * 0.6);
       } else {
-        over(q, 3, wet * 0.9);
-        over(q, 6, wet * smoothstep(0.0, 0.5, nC) * smoothstep(-0.9, -0.1, above) * 0.7);
-        over(q, 4, wet * smoothstep(0.35, 0.7, nB) * 0.35);
+        over(q, 3, strip * 0.92);
+        over(q, 6, strip * smoothstep(0.0, 0.5, nC) * smoothstep(-0.9, -0.1, above) * 0.7);
+        over(q, 4, strip * smoothstep(0.35, 0.7, nB) * 0.35);
       }
-      gh *= smoothstep(0.05, 0.3, above);
+      gh *= 1 - strip;
     }
     if (above < 0.03) gh = 0;
     grassH.d[q] = clamp(gh, 0, 1);

@@ -12,6 +12,7 @@ const VERT = /* glsl */ `
 ${GLSL_COMMON}
 in vec4 iNode; // x, z, size, level
 uniform float uRanges[${LEVELS}];
+uniform vec3 uLodCam; // detail follows the main camera in every pass (shadows, reflections)
 out vec3 vWorld;
 out float vClip;
 #ifdef DEPTH_ONLY
@@ -24,7 +25,7 @@ void main() {
   int level = int(iNode.w);
   vec2 xz = iNode.xy + g * size;
   float h = worldHeightsLod(xz).x;
-  float dist = distance(cameraPosition, vec3(xz.x, h, xz.y));
+  float dist = distance(uLodCam, vec3(xz.x, h, xz.y));
   float range = uRanges[level];
   float morph = smoothstep(range * 0.70, range * 0.95, dist);
   vec2 fr = fract(g * ${(GRID / 2).toFixed(1)}) * ${(2 / GRID).toFixed(8)};
@@ -51,6 +52,7 @@ uniform sampler2D uSplatA;
 uniform sampler2D uSplatB;
 uniform sampler2D uTint;
 uniform sampler2D uCaustics;
+uniform sampler2D uNoiseTex;
 uniform sampler2DArray uLayersA; // rgb albedo, a height
 uniform sampler2DArray uLayersN; // rg normal, b roughness, a cavity
 uniform float uLayerScale[8];
@@ -61,16 +63,12 @@ in vec3 vWorld;
 in float vClip;
 in float vDist;
 
-vec4 layerAlbedo(int i, vec2 xz, float farMix) {
+vec4 layerAlbedo(int i, vec2 xz, float farMix, float macro) {
 #ifdef USE_LAYER_TEX
-  float s = uLayerScale[i];
-  vec4 a = texture(uLayersA, vec3(xz * s, float(i)));
-  #if QUALITY > 0
-  // second, much larger scale hides the repetition at mid distance
-  vec4 b = texture(uLayersA, vec3(xz * s * 0.19 + 0.37, float(i)));
-  a = mix(a, vec4(a.rgb * (b.rgb / max(uLayerColor[i], vec3(0.02))) , a.a), 0.55);
-  a.rgb = mix(a.rgb, b.rgb, farMix);
-  #endif
+  vec4 a = texture(uLayersA, vec3(xz * uLayerScale[i], float(i)));
+  // far away the detail averages out: fade to the layer's mean colour (keeps distant ground calm)
+  a.rgb = mix(a.rgb, uLayerColor[i], farMix * 0.85);
+  a.rgb *= macro;
   return a;
 #else
   return vec4(uLayerColor[i], 0.5);
@@ -90,9 +88,12 @@ void main() {
     if (v > m0) { m1 = m0; i1 = i0; m0 = v; i0 = i; }
     else if (v > m1) { m1 = v; i1 = i; }
   }
-  float farMix = smoothstep(40.0, 160.0, vDist);
-  vec4 a0 = layerAlbedo(i0, vWorld.xz, farMix);
-  vec4 a1 = layerAlbedo(i1, vWorld.xz, farMix);
+  float farMix = smoothstep(30.0, 150.0, vDist);
+  // broad tonal variation breaks the tiling without a second texture lookup per layer
+  vec3 mn = texture(uNoiseTex, vWorld.xz * 0.013).rgb;
+  float macro = 0.86 + 0.28 * (mn.r * 0.6 + mn.b * 0.4);
+  vec4 a0 = layerAlbedo(i0, vWorld.xz, farMix, macro);
+  vec4 a1 = layerAlbedo(i1, vWorld.xz, farMix, macro);
   // height-aware blend: the taller material shows through first
   float b0 = m0 + a0.a * 0.45, b1 = m1 + a1.a * 0.45;
   float bl = smoothstep(-0.18, 0.18, (b1 - b0)) * step(0.004, m1);
@@ -128,7 +129,7 @@ void main() {
 
   vec3 V = normalize(cameraPosition - vWorld);
   float shadow = sunShadow(vWorld, Ng);
-  float canopy = mix(0.42, 1.0, nt.b);
+  float canopy = mix(0.52, 1.0, nt.b);
   Surface s;
   s.albedo = albedo; s.N = N; s.Ng = Ng; s.rough = rough; s.ao = nt.a * cav * canopy; s.spec = 0.25 + 0.5 * wet; s.sss = 0.0;
   vec3 col = shadeSurface(s, vWorld, V, shadow);
@@ -194,12 +195,13 @@ export class Terrain {
     ].map((c) => new THREE.Vector3(...c));
     this.uniforms = {
       uRanges: { value: this.ranges },
+      uLodCam: { value: new THREE.Vector3() },
       uSplatA: { value: data.splatATex },
       uSplatB: { value: data.splatBTex },
       uTint: { value: data.tintTex },
       uLayersA: { value: layers?.albedo ?? null },
       uLayersN: { value: layers?.normal ?? null },
-      uLayerScale: { value: layers?.scales ?? new Float32Array([0.5, 0.42, 0.36, 0.4, 0.22, 0.45, 0.6, 0.38]) },
+      uLayerScale: { value: layers?.scales ?? new Float32Array([0.5, 0.42, 0.36, 0.4, 0.4, 0.45, 0.85, 0.38]) },
       uLayerColor: { value: layers?.colors ?? layerColors },
       uWaterAbsorb: { value: new THREE.Vector3(0.42, 0.11, 0.09) },
       uWaterScatter: { value: new THREE.Vector3(0.02, 0.1, 0.09) },
@@ -210,8 +212,8 @@ export class Terrain {
       vertexShader: VERT,
       fragmentShader: FRAG,
     });
-    this.depthMaterial = makeMaterial({
-      uniforms: { uRanges: this.uniforms.uRanges },
+    this.depthMaterial = this._depth = makeMaterial({
+      uniforms: { uRanges: this.uniforms.uRanges, uLodCam: this.uniforms.uLodCam },
       defines: { DEPTH_ONLY: 1 },
       vertexShader: VERT,
       fragmentShader: DEPTH_FRAG,
@@ -222,6 +224,10 @@ export class Terrain {
     this.mesh.userData.depthMaterial = this.depthMaterial;
     this.mesh.matrixAutoUpdate = false;
     this.mesh.renderOrder = -10;
+    this.depthMaterial.colorWrite = false;
+    this.depthMaterial.polygonOffset = true;
+    this.depthMaterial.polygonOffsetFactor = 1.2;
+    this.depthMaterial.polygonOffsetUnits = 2;
     this._frustum = new THREE.Frustum();
     this._mat = new THREE.Matrix4();
     this._box = new THREE.Box3();
@@ -321,6 +327,7 @@ export class Terrain {
   /** Select the nodes to draw for this camera. `lodCamera` drives the detail, `cullCamera` the frustum. */
   update(lodCamera, cullCamera = lodCamera, cull = true) {
     this._cam = lodCamera.getWorldPosition(this._camPos || (this._camPos = new THREE.Vector3()));
+    this.uniforms.uLodCam.value.copy(this._cam);
     this._mat.multiplyMatrices(cullCamera.projectionMatrix, cullCamera.matrixWorldInverse);
     this._frustum.setFromProjectionMatrix(this._mat, cullCamera.coordinateSystem, cullCamera.reversedDepth);
     this._count = 0;
@@ -337,10 +344,17 @@ export class Terrain {
   /** Fixed uniform detail over the whole map (used when baking the static shadow map). */
   selectUniform(level) {
     const L = this.levels[level];
+    this.uniforms.uLodCam.value.set(0, 1e7, 0); // far away + huge ranges below => no morphing
+    this._savedRanges = Float32Array.from(this.ranges);
+    this.ranges.fill(1e9);
     this._count = 0;
     for (let j = 0; j < L.n; j++) for (let i = 0; i < L.n; i++) this._add(-this.half + 0.5 + i * L.size, -this.half + 0.5 + j * L.size, L.size, level);
     this.geometry.instanceCount = this._count;
     this.nodeAttr.clearUpdateRanges?.();
     this.nodeAttr.needsUpdate = true;
+  }
+
+  restoreRanges() {
+    if (this._savedRanges) { this.ranges.set(this._savedRanges); this._savedRanges = null; }
   }
 }

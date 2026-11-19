@@ -18,6 +18,8 @@ if (want('terrain')) info.terrain = await (await import('./textures/terrain.mjs'
 if (want('building') && fs.existsSync(path.join(ROOT, 'tools/textures/building.mjs'))) info.building = await (await import('./textures/building.mjs')).bakeBuilding(path.join(OUT, 'building'), log);
 if (want('foliage') && fs.existsSync(path.join(ROOT, 'tools/textures/foliage.mjs'))) info.foliage = await (await import('./textures/foliage.mjs')).bakeFoliage(path.join(OUT, 'foliage'), log);
 
+if (want('plants')) await (await import('./textures/plants.mjs')).bakePlants(path.join(OUT, 'foliage'), log);
+
 fs.mkdirSync(OUT, { recursive: true });
 fs.writeFileSync(infoFile, JSON.stringify(info, null, 1));
 log('done');
