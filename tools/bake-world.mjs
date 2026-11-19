@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { Grid, signedDistance, distanceTo, fillPolygon, clamp, lerp, smoothstep } from './lib/grid.mjs';
 import { fbm, ridged, perlin, hash2, mulberry32 } from './lib/noise.mjs';
 import { savePng, loadImage } from './lib/img.mjs';
+import sharp from 'sharp';
 import { smoothPath, resample, arcLengths } from '../src/world/layout/spline.js';
 import * as L from '../src/world/layout/layout.js';
 
@@ -235,7 +236,8 @@ function streamOps(s, { fill = true } = {}) {
     const half = interp(ws, f.pos[q]) / 2;
     const b = bankS.d[q];
     let h = H.d[q];
-    if (fill) h = Math.max(h, b - Math.max(0, d - 40) * 0.06);
+    // (no raised floodplain on the beach: the brook must reach the sea)
+    if (fill) h = Math.max(h, lerp(-50, b - Math.max(0, d - 40) * 0.06, smoothstep(2, 30, coastD.d[q])));
     const e = Math.max(0, d - (half + flat));
     h = Math.min(h, b + e * slope * (1 + e * 0.004));
     H.d[q] = h;
@@ -451,6 +453,19 @@ const gardenSDF = polygonSDF(L.ROCK_GARDEN.outline);
 
 const padSDF = {};
 for (const pad of L.PADS) padSDF[pad.id] = applyPad(pad.outline, pad.y, pad.feather);
+// seafront boardwalk: level strip at the back of the beach
+const promField = polylineField(resample(smoothPath(L.PROMENADE.points, { step: 1 }), 1), 40);
+for (let q = 0; q < N * N; q++) {
+  const d = promField.dist[q];
+  if (d > 30) continue;
+  const half = L.PROMENADE.width / 2;
+  const w = 1 - smoothstep(half + 0.3, half + 9, d);
+  // only ever raise towards the sea side / ease the land side: keep the beach face below
+  const seaSide = coastD.d[q] < 34;
+  const tgt = L.PROMENADE.y;
+  H.d[q] = d <= half + 0.3 ? tgt : lerp(H.d[q], seaSide ? Math.min(H.d[q], tgt) : tgt, w * (seaSide ? 0.35 : 0.9));
+  if (d < half + 0.4) { detailMask.d[q] = 0; padMask.d[q] = Math.max(padMask.d[q], 1); }
+}
 const buildingSDF = new Grid(N, N, 1e9);
 for (const key of ['house', 'annexA', 'annexB', 'shed']) {
   const fr = L.MILL[key];
@@ -845,6 +860,22 @@ const trees = [];
     if (ci >= 0 && cj >= 0 && ci < GN && cj < GN) buckets[cj * GN + ci].push(t);
   };
   for (const [x, z, sp, sc] of L.HERO_TREES) add(x, z, sp, sc, 7 * sc, 1);
+  // palms along the seafront: both sides of the boardwalk and around the plaza
+  {
+    const pts = resample(smoothPath(L.PROMENADE.points, { step: 1 }), 1);
+    for (let k = 6; k < pts.length - 4; k += 13) {
+      const a = pts[k - 1], b = pts[k + 1];
+      let nx = b[1] - a[1], nz = -(b[0] - a[0]);
+      const l = Math.hypot(nx, nz) || 1; nx /= l; nz /= l;
+      for (const s of [-1, 1]) {
+        const x = pts[k][0] + nx * s * (L.PROMENADE.width / 2 + 1.6), z = pts[k][1] + nz * s * (L.PROMENADE.width / 2 + 1.6);
+        if (Math.hypot(x - L.PIER.rootX, z - L.PIER.rootZ) < 16) continue;
+        add(x, z, 'palm', 0.8 + rng() * 0.35, 5, 1);
+      }
+    }
+    const pz = L.PROMENADE.plaza;
+    for (let i = 0; i < 7; i++) { const a = 1.2 + (i / 7) * 3.9; add(pz.x + Math.cos(a) * (pz.r + 2.5), pz.z + Math.sin(a) * (pz.r + 2.5), 'palm', 0.9 + rng() * 0.3, 5, 1); }
+  }
 
   for (const [x, z, hgt] of cand) {
     if (Math.abs(x) > HALF - 4 || Math.abs(z) > HALF - 4) continue;
@@ -858,6 +889,7 @@ const trees = [];
     if (buildingSDF.d[q] < 4.5) continue;
     if (padMask.d[q] > 0 || gardenSDF.d[q] < 1) continue;
     if (padSDF.court.d[q] < 2 || padSDF.drive.d[q] < 2 || padSDF.plaza.d[q] < 6) continue;
+    if (promField.dist[q] < L.PROMENADE.width / 2 + 4) continue;
     if (coastD.d[q] < 46 && beach.d[q] > 0.3 && h < 4.2) continue;
     if (coastD.d[q] < 3) continue;
     if (SLOPE.d[q] > 1.25) continue;
@@ -1042,6 +1074,7 @@ const meta = {
   streams: streams.map((s) => ({ id: s.id, lined: !!s.lined, falls: s.falls, ctrl: s.points.length, samples: s.samples.map((q) => q.map(r2)) })),
   paths: paths.map((p) => ({ id: p.id, kind: p.kind, width: p.width, samples: p.samples.filter((_, k) => k % 2 === 0 || k === p.samples.length - 1).map((q) => q.map(r2)) })),
   coast: coastPts.filter((_, k) => k % 3 === 0).map((q) => q.map(r2)),
+  promenade: resample(smoothPath(L.PROMENADE.points, { step: 1 }), 2).map((q) => q.map(r2)),
 };
 fs.writeFileSync(path.join(OUT, 'world.json'), JSON.stringify(meta));
 
@@ -1081,6 +1114,7 @@ log('preview');
     }
   }
   await savePng(path.join(PREVIEW, 'world.png'), buf, N, N, 3);
+  await sharp(Buffer.from(buf.buffer), { raw: { width: N, height: N, channels: 3 } }).resize(512, 512).jpeg({ quality: 82 }).toFile(path.join(OUT, 'map.jpg'));
   // elevation preview with contours
   const e = new Uint8Array(N * N * 3);
   for (let q = 0; q < N * N; q++) {

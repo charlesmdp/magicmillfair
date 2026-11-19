@@ -178,7 +178,7 @@ export class MillWorks {
     for (const p of this.data.meta.paths) {
       if (p.kind !== 'asphalt') continue;
       const inside = p.samples.filter((s) => Math.abs(s[0]) < 511 && Math.abs(s[1]) < 511);
-      roadRibbon(road, inside, p.width, { groundAt: this.ground, tile: 3 });
+      roadRibbon(road, inside, p.width + 0.8, { groundAt: this.ground, tile: 3, feather: 0.7, endFade: 5 });
     }
   }
 

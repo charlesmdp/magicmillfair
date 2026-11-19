@@ -1,14 +1,14 @@
 // Magic Mill Fair — production server: static files from dist/ plus the multiplayer presence relay on /ws.
-// The server has no authority over the game: every client shares its own avatar state and the server
-// only batches those states to the other members of the room at a fixed tick.
+// The server has no authority over the game: every client shares its own avatar state and the server only
+// batches those states to the other members of the room at a fixed tick.
 //
 // Protocol (JSON text frames)
 //   client → server   {t:'hello',name,color,v:1}   {t:'s',p:[x,y,z,yaw],a,f}   {t:'e',e}   {t:'ping',c}
 //   server → client   {t:'welcome',id,now,tick,peers:[{id,name,color,p,a,f}]}   {t:'join',id,name,color}
 //                     {t:'leave',id}   {t:'u',now,s:[[id,x,y,z,yaw,a,f,age]]}   {t:'e',id,e}
 //                     {t:'pong',c,now}   {t:'full'}
-//   `now` is the server clock (ms since start). `age` (ms) is how long before `now` the state was
-//   received: clients rebuild smooth motion from `now - age`. A `join` for a known id is a rename.
+//   `now` is the server clock (ms since start). `age` (ms) tells how long before `now` a state was received:
+//   clients rebuild smooth motion from `now - age`. A `join` for an id already known is a rename.
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -27,19 +27,17 @@ const DIST = path.resolve(process.env.DIST_DIR || path.join(ROOT, 'dist'));
 const PORT = Math.floor(env('PORT', 8787, 0, 65535));
 const HOST = process.env.HOST || '0.0.0.0';
 const TICK_HZ = env('TICK_HZ', 12, 1, 60);
-const TICK_MS = Math.round(1000 / TICK_HZ);
-const MAX_PLAYERS = Math.floor(env('MAX_PLAYERS', 48, 1, 4096));
+const MAX_PLAYERS = Math.floor(env('MAX_PLAYERS', 48, 1, 4096)); // per room
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim().toLowerCase().replace(/\/+$/, '')).filter(Boolean);
 const MAX_FRAME = 2048; // bytes
-const RATE = 40; // messages per second…
-const BURST = RATE * 2; // …averaged over 2 s (token bucket)
+const RATE = 40, BURST = RATE * 2; // messages per second, averaged over 2 s (token bucket)
 const HEARTBEAT_MS = 15000;
-const HELLO_TIMEOUT_MS = 10000;
 
 const now = () => Math.round(performance.now());
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const round = (v, k) => Math.round(v * k) / k;
 const int = (v, max) => (Number.isInteger(v) && v >= 0 && v <= max ? v : 0);
+const splitUrl = (url) => String(url || '/').split(/\?(.*)/s); // → [path, query]
 
 // ---------------------------------------------------------------------------------------------- static files
 
@@ -52,49 +50,26 @@ const MIME = {
 };
 const TEXTUAL = /^text\/|json|svg/; // worth compressing on the fly
 const ZIP_MAX_FILE = 16 << 20; // larger files are streamed as they are
-const ZIP_CACHE_MAX = 64 << 20; // bytes of compressed output kept in memory
-const IMMUTABLE = 'public, max-age=31536000, immutable';
-const gzip = promisify(zlib.gzip);
-const brotli = promisify(zlib.brotliCompress);
-const zipCache = new Map(); // "encoding|file|mtime|size" → { size, job: Promise<Buffer|null> }
-let zipBytes = 0;
+const gzip = promisify(zlib.gzip), brotli = promisify(zlib.brotliCompress);
+const zipCache = new Map(); // "encoding|file" → { tag: "mtime|size", job: Promise<Buffer|null> }
 
-// Splits a request target into [path, query] without normalising it (absolute-form targets are tolerated).
-function splitUrl(raw) {
-  const s = String(raw || '/').replace(/^[a-z][a-z\d+.-]*:\/\/[^/?#]*/i, '') || '/';
-  const q = s.indexOf('?');
-  return q < 0 ? [s, ''] : [s.slice(0, q), s.slice(q + 1)];
-}
-
-// Content-hashed file names never change: Vite's name-AbCd1234.ext (8 base64url characters, mixed case) or a hex digest.
+// Content-hashed file names never change: Vite's name-AbCd1234.ext (8 base64url characters). Hand-written names
+// hardly ever mix an upper-case letter with lower-case ones or digits there; a miss only costs a revalidation.
 function isHashed(name) {
-  const b64 = /-([\w-]{8})(?:\.[a-z\d]+){1,2}$/i.exec(name);
-  if (b64 && /[a-z]/.test(b64[1]) && /[A-Z]/.test(b64[1])) return true;
-  const hex = /[-.]([a-f\d]{8,40})(?:\.[a-z\d]+){1,2}$/.exec(name);
-  return !!hex && /\d/.test(hex[1]) && /[a-f]/.test(hex[1]);
+  const hash = /-([\w-]{8})(?:\.[a-z\d]+){1,2}$/i.exec(name)?.[1] || '';
+  return /[A-Z]/.test(hash) && /[a-z\d]/.test(hash);
 }
 
-// Compressed copy of a file, computed once per (file, mtime, encoding). Resolves to null when it does not pay off.
+// Compressed copy of a file, computed once per (file, mtime, encoding); null when it would not be smaller.
 function compressed(file, st, encoding) {
-  const key = `${encoding}|${file}|${st.mtimeMs}|${st.size}`;
+  const key = `${encoding}|${file}`, tag = `${st.mtimeMs}|${st.size}`;
   let entry = zipCache.get(key);
-  if (!entry) {
-    entry = { size: 0, job: null };
-    entry.job = fs.promises.readFile(file).then((raw) => (encoding === 'br'
-      ? brotli(raw, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 9, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: raw.length } })
-      : gzip(raw, { level: 9 }))).then((buf) => {
-      if (buf.length >= st.size) return null;
-      entry.size = buf.length;
-      zipBytes += buf.length;
-      for (const [k, e] of zipCache) { // oldest first, which also flushes copies of files that changed since
-        if (zipBytes <= ZIP_CACHE_MAX) break;
-        zipCache.delete(k);
-        zipBytes -= e.size;
-      }
-      return buf;
-    });
-    entry.job.catch(() => zipCache.delete(key));
-    zipCache.set(key, entry);
+  if (!entry || entry.tag !== tag) {
+    const job = fs.promises.readFile(file)
+      .then((raw) => (encoding === 'br' ? brotli(raw, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 9 } }) : gzip(raw, { level: 9 })))
+      .then((buf) => (buf.length < st.size ? buf : null));
+    job.catch(() => zipCache.delete(key));
+    zipCache.set(key, (entry = { tag, job }));
   }
   return entry.job;
 }
@@ -114,22 +89,22 @@ async function serveStatic(req, res, pathname) {
   const st = await fs.promises.stat(file).catch(() => null);
   if (!st || !st.isFile()) {
     const built = await fs.promises.stat(DIST).then((s) => s.isDirectory(), () => false);
-    return built
-      ? reply(req, res, 404, 'Page introuvable.\n')
-      : reply(req, res, 503, 'Le site n’est pas encore construit : lancez « npm run build », puis rechargez la page.\n');
+    if (built) return reply(req, res, 404, 'Page introuvable.\n');
+    return reply(req, res, 503, 'Le site n’est pas encore construit : lancez « npm run build », puis rechargez la page.\n');
   }
   const ext = path.extname(file).slice(1).toLowerCase();
   const type = MIME[ext] || 'application/octet-stream';
   const textual = TEXTUAL.test(type);
+  const immutable = ext !== 'html' && rel.startsWith('/assets/') && isHashed(path.basename(file));
   const headers = {
     'Content-Type': type,
-    'Cache-Control': ext !== 'html' && rel.startsWith('/assets/') && isHashed(path.basename(file)) ? IMMUTABLE : 'no-cache',
+    'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache', // no-cache = revalidate (ETag)
     ETag: `W/"${st.size.toString(36)}-${Math.round(st.mtimeMs).toString(36)}"`,
     'Last-Modified': st.mtime.toUTCString(),
     'X-Content-Type-Options': 'nosniff',
     ...(textual && { Vary: 'Accept-Encoding' }),
   };
-  if (req.headers['if-none-match'] === headers.ETag) { res.writeHead(304, headers); return res.end(); }
+  if (req.headers['if-none-match'] === headers.ETag) return res.writeHead(304, headers).end();
   const accepted = String(req.headers['accept-encoding'] || '');
   const encoding = !textual || st.size > ZIP_MAX_FILE ? '' : /\bbr\b/.test(accepted) ? 'br' : /\bgzip\b/.test(accepted) ? 'gzip' : '';
   const body = encoding ? await compressed(file, st, encoding).catch(() => null) : null;
@@ -164,15 +139,8 @@ function cleanName(name) {
 }
 
 function census() {
-  let active = 0;
-  let players = 0;
-  for (const room of rooms.values()) {
-    let n = 0;
-    for (const p of room.values()) if (p.joined) n++;
-    if (n) active++;
-    players += n;
-  }
-  return { rooms: active, players };
+  const counts = [...rooms.values()].map((room) => [...room.values()].filter((p) => p.joined).length).filter(Boolean);
+  return { rooms: counts.length, players: counts.reduce((sum, n) => sum + n, 0) };
 }
 
 // Browsers always send Origin on a WebSocket handshake; other clients can forge it anyway, so none is fine.
@@ -191,7 +159,6 @@ function send(p, text) {
   if (p.ws.bufferedAmount > 1 << 20) p.ws.terminate(); // hopelessly slow reader
   else p.ws.send(text);
 }
-
 function broadcast(room, text, except) {
   for (const p of room.values()) if (p.joined && p !== except) send(p, text);
 }
@@ -199,20 +166,19 @@ function broadcast(room, text, except) {
 function onConnection(ws, roomId) {
   ws.on('error', () => {}); // e.g. oversized frame: ws closes the socket itself (1009)
   let room = rooms.get(roomId);
-  if (room && room.size >= MAX_PLAYERS) {
-    ws.send('{"t":"full"}');
-    return ws.close(1013, 'full');
-  }
+  if (room && room.size >= MAX_PLAYERS) { ws.send('{"t":"full"}'); return ws.close(1013, 'full'); }
   if (!room) rooms.set(roomId, (room = new Map()));
-  const t = now();
-  const p = { id: nextId++, ws, name: 'Visiteur', color: 0, joined: false, born: t, alive: true, tokens: BURST, stamp: t, state: null, row: '', at: 0, dirty: false, rested: true };
+  const p = {
+    id: nextId++, ws, name: 'Visiteur', color: 0, joined: false, alive: true, tokens: BURST, stamp: now(),
+    state: null, row: '', at: 0, dirty: false, rested: true, // last state, its serialised row, when it came, relay flags
+  };
   room.set(p.id, p);
   ws.on('pong', () => { p.alive = true; });
   ws.on('message', (data, isBinary) => {
     try { onMessage(room, p, data, isBinary); } catch (err) { console.error('[presence]', err); }
   });
   ws.on('close', () => {
-    if (!room.delete(p.id)) return;
+    room.delete(p.id);
     if (p.joined) broadcast(room, `{"t":"leave","id":${p.id}}`);
     if (!room.size && rooms.get(roomId) === room) rooms.delete(roomId);
   });
@@ -236,18 +202,14 @@ function onMessage(room, p, data, isBinary) {
 }
 
 function onHello(room, p, m) {
-  const name = cleanName(m.name);
-  const color = int(m.color, 15);
+  const name = cleanName(m.name), color = int(m.color, 15);
   if (p.joined && name === p.name && color === p.color) return;
-  p.name = name;
-  p.color = color;
+  p.name = name; p.color = color;
   if (!p.joined) {
     p.joined = true;
-    const peers = [];
-    for (const o of room.values()) {
-      if (o.joined && o !== p) peers.push({ id: o.id, name: o.name, color: o.color, ...(o.state && { p: o.state.slice(0, 4), a: o.state[4], f: o.state[5] }) });
-    }
-    send(p, JSON.stringify({ t: 'welcome', id: p.id, now: now(), tick: TICK_MS, peers }));
+    const peers = [...room.values()].filter((o) => o.joined && o !== p)
+      .map((o) => ({ id: o.id, name: o.name, color: o.color, ...(o.state && { p: o.state.slice(0, 4), a: o.state[4], f: o.state[5] }) }));
+    send(p, JSON.stringify({ t: 'welcome', id: p.id, now: now(), tick: Math.round(1000 / TICK_HZ), peers }));
   }
   broadcast(room, JSON.stringify({ t: 'join', id: p.id, name, color }), p);
 }
@@ -260,26 +222,17 @@ function onState(p, m, t) {
     round(Math.atan2(Math.sin(v[3]), Math.cos(v[3])), 1000), int(m.a, 15), int(m.f, 255),
   ];
   const row = `[${p.id},${state.join(',')}`; // closed with its age when the tick sends it
-  if (row !== p.row) {
-    p.row = row; p.state = state; p.at = t; p.dirty = true; p.rested = false;
-  } else if (!p.rested && !p.dirty) {
-    // First repeat after a relayed change: relay it once more so that clients know the player has stopped.
-    p.rested = true; p.at = t; p.dirty = true;
-  }
+  if (row !== p.row) { p.row = row; p.state = state; p.at = t; p.dirty = true; p.rested = false; }
+  // First repeat after a relayed change: relay it once more, so that clients know the player has stopped.
+  else if (!p.rested && !p.dirty) { p.rested = true; p.at = t; p.dirty = true; }
 }
 
 // Sends every room the states that changed since the last tick; nobody gets its own state back.
 function tick() {
   const t = now();
   for (const room of rooms.values()) {
-    const ids = [];
-    const rows = [];
-    for (const p of room.values()) {
-      if (!p.dirty) continue;
-      p.dirty = false;
-      ids.push(p.id);
-      rows.push(`${p.row},${t - p.at}]`);
-    }
+    const ids = [], rows = [];
+    for (const p of room.values()) if (p.dirty) { p.dirty = false; ids.push(p.id); rows.push(`${p.row},${t - p.at}]`); }
     if (!rows.length) continue;
     const head = `{"t":"u","now":${t},"s":[`;
     const all = `${head}${rows.join(',')}]}`;
@@ -292,15 +245,12 @@ function tick() {
   }
 }
 
-// ws-level ping: drops sockets that died silently, and guests that never said hello.
+// ws-level ping: a socket that showed no sign of life since the previous round died silently.
 function heartbeat() {
-  const t = now();
-  for (const room of rooms.values()) {
-    for (const p of room.values()) {
-      if (!p.alive || (!p.joined && t - p.born > HELLO_TIMEOUT_MS)) { p.ws.terminate(); continue; }
-      p.alive = false;
-      p.ws.ping();
-    }
+  for (const room of rooms.values()) for (const p of room.values()) {
+    if (!p.alive) { p.ws.terminate(); continue; }
+    p.alive = false;
+    p.ws.ping();
   }
 }
 
@@ -308,20 +258,16 @@ function heartbeat() {
 
 const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME, perMessageDeflate: false });
 const server = http.createServer((req, res) => {
-  onRequest(req, res).catch((err) => {
-    console.error('[http]', err);
-    if (!res.headersSent) res.writeHead(500);
-    res.end();
-  });
+  onRequest(req, res).catch((err) => { console.error('[http]', err); if (!res.headersSent) res.writeHead(500); res.end(); });
 });
 
 server.on('upgrade', (req, socket, head) => {
   const [pathname, query] = splitUrl(req.url);
-  if (pathname !== '/ws' || !originAllowed(req)) {
-    socket.on('error', () => {});
-    return socket.end(`HTTP/1.1 ${pathname === '/ws' ? '403 Forbidden' : '404 Not Found'}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
+  if (pathname === '/ws' && originAllowed(req)) {
+    return wss.handleUpgrade(req, socket, head, (ws) => onConnection(ws, cleanRoom(new URLSearchParams(query).get('room'))));
   }
-  wss.handleUpgrade(req, socket, head, (ws) => onConnection(ws, cleanRoom(new URLSearchParams(query).get('room'))));
+  socket.on('error', () => {});
+  socket.end(`HTTP/1.1 ${pathname === '/ws' ? '403 Forbidden' : '404 Not Found'}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
 });
 
 server.on('error', (err) => {

@@ -135,16 +135,23 @@ void main() {
   float alpha = tex.a;
   // keep distant crowns full: mip-mapped alpha thins out, so lower the cut with distance
   float cutoff = mix(0.5, 0.22, smoothstep(18.0, 110.0, vData.w));
+#if BAKE == 0 && !defined(DEPTH_ONLY)
+  // leaves brushing the lens dissolve instead of filling the screen
+  float lens = wood ? 1.0 : smoothstep(0.8, 3.0, vData.w);
+#else
+  float lens = 1.0;
+#endif
 #if defined(DEPTH_ONLY) || BAKE == 2 || !defined(USE_A2C)
   if (alpha < cutoff) discard;
   #if BAKE == 0
 ${LOD_DISCARD}
+  if (lens < 0.999 && ign(gl_FragCoord.xy + 17.0) >= lens) discard;
   #endif
 #else
   alpha = saturate((alpha - cutoff) / max(fwidth(alpha), 1e-4) + 0.5);
   #if BAKE == 0
   // with multisampling the level-of-detail cross-fade rides on sample coverage (no visible stipple)
-  alpha *= saturate(min(vFade.x, 1.0 - vFade.y) * 1.02);
+  alpha *= saturate(min(vFade.x, 1.0 - vFade.y) * 1.02) * lens;
   #endif
   if (alpha < 0.02) discard;
 #endif

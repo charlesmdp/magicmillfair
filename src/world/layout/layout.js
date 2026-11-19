@@ -207,16 +207,16 @@ export const COAST = {
   promenadeY: 3.2,
 };
 
-// The big pier: starts at the seafront plaza and heads out to sea.
+// The big pier: leaves the promenade, crosses the beach and heads out to sea.
 export const PIER = {
-  rootX: 287, rootZ: -181,
+  rootX: 257, rootZ: -191,
   heading: 20 * DEG, // 0 = +X (east), positive towards +Z (south)
-  length: 212,
-  width: 18,
-  deckY: 5.2,
-  rampLength: 22,
-  headLength: 62, headWidth: 46, // wide platform carrying the big wheel
-  wheel: { along: 176, radius: 31, hubY: 5.2 + 36 },
+  length: 238,
+  width: 17,
+  deckY: 4.7,
+  rampLength: 18, // the deck climbs from the promenade level over this distance
+  headLength: 64, headWidth: 48, // wide platform carrying the big wheel
+  wheel: { along: 200, radius: 31, hubY: 4.7 + 35.5 },
 };
 
 export function pierToWorld(along, side = 0) {
@@ -233,7 +233,7 @@ export const PATHS = [
     points: [
       [-560, -740], [-400, -597], [-290.4, -499.9], [-233.3, -450.6], [-184.2, -412.9], [-38.6, -304.5], [9.7, -269.7],
       [70.6, -223.5], [89.9, -210], [108, -201], [125.3, -195.2], [141.2, -192.5], [159.3, -191.9], [173.7, -193.7],
-      [189.6, -197.4], [221.4, -203.7], [233.7, -204.2], [245.4, -203.1], [257, -199.5], [266, -194.5],
+      [189.6, -197.4], [210, -201.6], [221.4, -202.2], [229, -197.5],
     ],
   },
   {
@@ -250,7 +250,7 @@ export const PATHS = [
       [-48, -22], [-36, -20.5], [-27, -23], [-21.6, -28.6], [-15.5, -31], [-8, -27], [4, -25.5], [18, -20.5], [30, -16], [42, -14],
       [52, -17.5], [64, -20.5], [76, -16], [86, -14], [96, -9.5], [108, -9.5], [120, -10.5], [128, -14], [140, -12],
       [150, -19.5], [160, -24.5], [170, -19.5], [181, -23.5], [194, -24.8], [205, -29.5], [216, -31], [226, -28.5],
-      [236, -26], [244, -30.5], [252, -35], [261, -41.5], [268, -50], [273.5, -62], [277.5, -78], [280, -96],
+      [236, -26], [244, -30.5], [250, -36.5], [254.5, -44],
     ],
   },
   {
@@ -275,12 +275,12 @@ export const PATHS = [
   },
 ];
 
-// Boardwalk along the beach (built as a mesh; the ground below is graded to it).
+// Boardwalk along the back of the beach (planks laid on graded ground).
 export const PROMENADE = {
   width: 8.5,
   y: COAST.promenadeY,
-  points: [[318, -312], [303, -276], [291.5, -236], [284.5, -196], [281.5, -168], [281.5, -132], [283.5, -100], [287.5, -72], [292.5, -51], [300.5, -27], [311, -3], [324, 20]],
-  plaza: { x: 272.5, z: -187.5, r: 15 },
+  points: [[292, -314], [272, -280], [258.5, -240], [252.5, -196], [251.5, -160], [252, -122], [255.5, -78], [259.5, -48], [262.5, -30], [270, -8], [284, 12]],
+  plaza: { x: 241, z: -193, r: 16 },
 };
 
 // Dry-stone retaining walls of the rock garden (uphill side = left of the direction of travel).
@@ -307,7 +307,7 @@ export const PADS = [
   // driveway in front of the carport
   { id: 'drive', y: 20.9, feather: 3.5, outline: [[-120.5, -30.5], [-110.5, -30.5], [-109, -22], [-112, -18], [-119.5, -19.5]] },
   // seafront plaza at the foot of the pier
-  { id: 'plaza', y: COAST.promenadeY, feather: 9, outline: [[254, -208], [276, -214], [292, -200], [292, -170], [276, -164], [256, -172]] },
+  { id: 'plaza', y: COAST.promenadeY, feather: 8, outline: [[225, -200], [234, -209], [248, -209], [257, -200], [257, -185], [248, -177], [234, -177], [225, -186]] },
 ];
 
 // ---------------------------------------------------------------------------
@@ -369,6 +369,6 @@ export const ZONES = [
   { id: 'mill', name: 'Le Moulin', x: -120, z: -4, r: 70 },
   { id: 'pond', name: 'Le Grand Étang', x: -165, z: 68, r: 85 },
   { id: 'valley', name: 'La Vallée', x: 90, z: -15, r: 120 },
-  { id: 'promenade', name: 'La Promenade', x: 288, z: -150, r: 150 },
-  { id: 'pier', name: 'La Grande Jetée', x: 390, z: -146, r: 110 },
+  { id: 'promenade', name: 'La Promenade', x: 256, z: -150, r: 150 },
+  { id: 'pier', name: 'La Grande Jetée', x: 380, z: -148, r: 130 },
 ];

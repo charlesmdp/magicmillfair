@@ -1,10 +1,9 @@
-// Presence: who else is in the room and where to draw them this frame. Nothing here is authoritative, every
-// client simply shares its own avatar state. Three modes: 'online' (WebSocket server, see server/index.js),
-// 'local' (tabs of the same browser through a BroadcastChannel) and 'offline' (solo).
-//
-// Transport interface (see ./transports): `new T(target, { onopen, onmessage, onclose })`, each handler
-// receiving the transport first; `open()` starts and keeps connecting, `send(msg)` takes a client → server
-// message of the protocol, `close()` stops for good. `onmessage` delivers server → client messages.
+// Presence: who else is in the room and where to draw them this frame. Nothing here is authoritative: every
+// client just shares its own avatar state. Modes: 'online' (WebSocket server, see server/index.js), 'local'
+// (tabs of the same browser, through a BroadcastChannel) or 'offline' (solo).
+// A transport (./transports) is `new T(target, { onopen, onmessage, onclose })`, handlers receiving the transport
+// first: open() starts and keeps connecting, send(msg) takes the client → server messages of the protocol,
+// onmessage delivers the server → client ones, close() stops for good.
 import { Track, wrapAngle } from './interp.js';
 import { BroadcastTransport } from './transports/BroadcastTransport.js';
 import { WebSocketTransport } from './transports/WebSocketTransport.js';
@@ -24,7 +23,7 @@ export function cleanName(name, fallback = 'Visiteur') {
   return [...s].slice(0, 16).join('').trim() || fallback;
 }
 
-/** Room id as the server accepts it: [a-z0-9_-]{1,48}, or '' when nothing usable is left. */
+/** Room id as the server accepts it, [a-z0-9_-]{1,48}; '' when nothing usable is left. */
 export function cleanRoom(room) {
   return String(room ?? '').toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48).replace(/-+$/, '');
 }
@@ -35,10 +34,9 @@ function stored(key) {
 
 // ws(s):// URL of the presence endpoint for a room; `raw` may be relative or http(s). Null when unusable.
 function wsUrl(raw, room) {
-  if (!raw) return null;
   try {
     const url = new URL(raw, typeof location !== 'undefined' ? location.href : undefined);
-    if (url.protocol === 'http:' || url.protocol === 'https:') url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    if (/^https?:$/.test(url.protocol)) url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     url.searchParams.set('room', room);
     return url.href;
   } catch { return null; }
@@ -47,12 +45,11 @@ function wsUrl(raw, room) {
 export class Presence {
   /** @param {{ room?: string, name?: string, color?: number, url?: string }} [options] */
   constructor({ room, name, color, url } = {}) {
-    const page = typeof location !== 'undefined' ? location : { search: '', pathname: '', protocol: '' };
-    this._query = new URLSearchParams(page.search);
-    this._page = page;
+    this._page = typeof location !== 'undefined' ? location : { search: '', pathname: '', protocol: '' };
+    this._query = new URLSearchParams(this._page.search);
     this._url = url;
     this.room = cleanRoom(room) || cleanRoom(this._query.get('room'))
-      || cleanRoom(page.pathname.replace(/\/index\.html?$/i, '').replace(/_/g, '-')) || 'main';
+      || cleanRoom(this._page.pathname.replace(/\/index\.html?$/i, '').replace(/_/g, '-')) || 'main';
     this.name = cleanName(name ?? stored('mmf.name'), '') || `Visiteur ${10 + Math.floor(Math.random() * 90)}`;
     this.color = int(color, 15, int(parseInt(stored('mmf.color'), 10), 15, Math.floor(Math.random() * 16)));
     this._persist();
@@ -71,20 +68,11 @@ export class Presence {
   }
 
   /** Players in the room, self included. */
-  get count() {
-    return this.peers.size + 1;
-  }
+  get count() { return this.peers.size + 1; }
 
   /** Events: 'status' { mode, count }, 'join' peer, 'leave' peer, 'emote' { id, emote }, 'identity' peer (renamed). */
-  on(type, fn) {
-    (this._on[type] ||= new Set()).add(fn);
-    return this;
-  }
-
-  off(type, fn) {
-    this._on[type]?.delete(fn);
-    return this;
-  }
+  on(type, fn) { (this._on[type] ||= new Set()).add(fn); return this; }
+  off(type, fn) { this._on[type]?.delete(fn); return this; }
 
   /** Picks a transport: explicit server, else same-origin server, else other tabs, else solo. Never throws. */
   connect() {
@@ -92,15 +80,13 @@ export class Presence {
     this._started = true;
     try {
       const explicit = this._url || (import.meta.env && import.meta.env.VITE_WS_URL) || this._query.get('ws');
-      const target = wsUrl(explicit || (/^https?:$/.test(this._page.protocol) ? '/ws' : ''), this.room);
+      const target = explicit || /^https?:$/.test(this._page.protocol) ? wsUrl(explicit || '/ws', this.room) : null;
       if (target) {
         this._ws = new WebSocketTransport(target, this._handlers('online'), { probeEvery: explicit ? 0 : PROBE_MS });
         this._ws.open(); // keeps retrying in the background, whatever the fallback does
       }
       this._fallback(target ? FALLBACK_MS : 0);
-    } catch (err) {
-      console.warn('[presence]', err);
-    }
+    } catch (err) { console.warn('[presence]', err); }
     return this;
   }
 
@@ -150,17 +136,10 @@ export class Presence {
       try { fn(arg); } catch (err) { console.error(err); } // a faulty listener must not break networking
     }
   }
-
   _persist() {
-    try {
-      localStorage.setItem('mmf.name', this.name);
-      localStorage.setItem('mmf.color', String(this.color));
-    } catch { /* no storage (private mode, Node…) */ }
+    try { localStorage.setItem('mmf.name', this.name); localStorage.setItem('mmf.color', String(this.color)); } catch { /* no storage */ }
   }
-
-  _hello() {
-    return { t: 'hello', name: this.name, color: this.color, v: 1 };
-  }
+  _hello() { return { t: 'hello', name: this.name, color: this.color, v: 1 }; }
 
   _handlers(mode) {
     return {
@@ -176,7 +155,7 @@ export class Presence {
     };
   }
 
-  // Without a server by `delay` ms: use the BroadcastChannel, or declare the session offline.
+  // Still without a server after `delay` ms: use the BroadcastChannel, or declare the session offline.
   _fallback(delay) {
     clearTimeout(this._timer);
     this._timer = setTimeout(() => {
@@ -186,33 +165,15 @@ export class Presence {
         this._bc.open(); // throws where BroadcastChannel is missing
       } catch {
         this._bc = null;
-        this._enter('offline', null, 0);
-        this._reconcile([], 0);
+        this._welcome(null, 'offline', { id: 0 });
       }
     }, delay);
-  }
-
-  _enter(mode, tr, id) {
-    if (this._bc && tr !== this._bc) {
-      this._bc.close();
-      this._bc = null;
-    }
-    this.mode = mode;
-    this._tr = tr;
-    this.id = id;
-    this._sentKey = ''; // …and share our state right away
-    this._due = 0;
   }
 
   _message(tr, mode, m) {
     if (!m || typeof m !== 'object' || this._disposed) return;
     if (m.t === 'welcome') {
-      if (!Number.isInteger(m.id) || (tr === this._bc && this._tr === this._ws && this._ws)) return;
-      clearTimeout(this._timer);
-      this._enter(mode, tr, m.id);
-      this._interval = Math.max(SEND_MS, Number.isFinite(m.tick) ? m.tick : 0);
-      this._reconcile(Array.isArray(m.peers) ? m.peers : [], m.now);
-      this._flush(now());
+      if (Number.isInteger(m.id)) this._welcome(tr, mode, m);
     } else if (tr !== this._tr) return;
     else if (m.t === 'u') this._states(m);
     else if (m.t === 'join') {
@@ -222,39 +183,39 @@ export class Presence {
     } else if (m.t === 'e' && this.peers.has(m.id) && int(m.e, 31, -1) >= 0) this._emit('emote', { id: m.id, emote: m.e });
   }
 
-  // Makes `peers` match the list of a welcome: newcomers join, the missing leave, the others just carry on.
-  _reconcile(list, base) {
-    const stamp = Number.isFinite(base) ? base : now();
-    const kept = new Set();
-    for (const info of list) if (this._join(info, stamp)) kept.add(info.id);
+  // A transport is ready (or none will be: tr = null): adopt it and make `peers` match its list, so that
+  // newcomers join, the missing leave and the others (kept through a short disconnection) just carry on.
+  _welcome(tr, mode, m) {
+    clearTimeout(this._timer);
+    if (this._bc && tr !== this._bc) { this._bc.close(); this._bc = null; }
+    this._tr = tr; this.mode = mode; this.id = m.id;
+    this._interval = Math.max(SEND_MS, Number.isFinite(m.tick) ? m.tick : 0);
+    const stamp = Number.isFinite(m.now) ? m.now : now(), kept = new Set();
+    for (const info of Array.isArray(m.peers) ? m.peers : []) if (this._join(info, stamp)) kept.add(info.id);
     for (const id of [...this.peers.keys()]) if (!kept.has(id)) this._leave(id);
     this._changed();
+    this._sentKey = ''; this._due = 0; // share our own state right away
+    this._flush(now());
   }
 
   // Adds a peer, or updates the identity of a known one. `stamp` (server time) is only given by a welcome.
   _join(info, stamp) {
     if (!info || !Number.isInteger(info.id) || info.id === this.id) return false;
-    const name = cleanName(info.name);
-    const color = int(info.color, 15);
+    const name = cleanName(info.name), color = int(info.color, 15);
     let peer = this.peers.get(info.id);
     const known = !!peer;
-    if (!known) {
-      peer = { id: info.id, name, color, x: 0, y: 0, z: 0, yaw: 0, anim: 0, flags: 0, speed: 0, visible: false };
-      this.peers.set(peer.id, peer);
-    }
+    if (!known) this.peers.set(info.id, (peer = { id: info.id, name, color, x: 0, y: 0, z: 0, yaw: 0, anim: 0, flags: 0, speed: 0, visible: false }));
     if (!known || stamp !== undefined) {
       // A welcome starts a new timeline (the server clock may have restarted): never reuse an old track.
-      const track = new Track(this._interval);
+      const track = new Track(this._interval), t = now();
       this._tracks.set(peer.id, track);
-      const t = now();
       // The state the server knows is of unknown age: date it one interval back so that live states follow it.
       if (Array.isArray(info.p)) track.push(stamp - this._interval, t, info.p[0], info.p[1], info.p[2], info.p[3], int(info.a, 15), int(info.f, 255));
       track.sample(t, peer);
     }
     if (!known) this._emit('join', peer);
     else if (peer.name !== name || peer.color !== color) {
-      peer.name = name;
-      peer.color = color;
+      peer.name = name; peer.color = color;
       this._emit('identity', peer);
     }
     return true;
@@ -279,8 +240,7 @@ export class Presence {
   // {t:'u', now, s:[[id, x, y, z, yaw, anim, flags, age?], …]}: each state was captured at `now - age`.
   _states(m) {
     if (!Array.isArray(m.s)) return;
-    const t = now();
-    const base = Number.isFinite(m.now) ? m.now : t;
+    const t = now(), base = Number.isFinite(m.now) ? m.now : t;
     for (const r of m.s) {
       const track = Array.isArray(r) ? this._tracks.get(r[0]) : null;
       if (track) track.push(base - (r[7] > 0 ? r[7] : 0), t, r[1], r[2], r[3], r[4], int(r[5], 15), int(r[6], 255));
@@ -291,17 +251,15 @@ export class Presence {
   // others know we stand still instead of extrapolating), then only as a keep-alive.
   _flush(t) {
     const l = this._local;
-    if (t < this._due || !this._tr || !this._hasLocal || !(Number.isFinite(l[0]) && Number.isFinite(l[1]) && Number.isFinite(l[2]) && Number.isFinite(l[3]))) return;
+    if (t < this._due || !this._tr || !this._hasLocal || ![l[0], l[1], l[2], l[3]].every(Number.isFinite)) return;
     this._due = Math.max(this._due + this._interval, t + this._interval / 2);
     const p = [round(l[0], 100), round(l[1], 100), round(l[2], 100), round(wrapAngle(l[3]), 1000)];
-    const a = int(Math.trunc(l[4]), 15);
-    const f = int(Math.trunc(l[5]), 255);
+    const a = int(Math.trunc(l[4]), 15), f = int(Math.trunc(l[5]), 255);
     const key = `${p}|${a}|${f}`;
     if (key !== this._sentKey) this._repeats = 0;
     else if (this._repeats >= 2 && t - this._sentAt < KEEPALIVE_MS) return;
     else this._repeats++;
-    this._sentKey = key;
-    this._sentAt = t;
+    this._sentKey = key; this._sentAt = t;
     this._tr.send({ t: 's', p, a, f });
   }
 }

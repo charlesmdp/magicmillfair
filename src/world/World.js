@@ -13,6 +13,9 @@ import { Scatter } from './vegetation/Scatter.js';
 import { Backdrop } from './terrain/Backdrop.js';
 import { loadMaterials } from './props/Materials.js';
 import { MillZone } from './zones/mill/MillZone.js';
+import { PierZone, deckHeight } from './zones/pier/PierZone.js';
+import { Collision } from './Collision.js';
+import { PIER } from './layout/layout.js';
 
 const LAYER_NAMES = ['lawn', 'meadow', 'forest', 'dirt', 'rock', 'sand', 'gravel', 'soil'];
 
@@ -85,7 +88,69 @@ export class World {
     this.mill = new MillZone(this).build();
     this.scene.add(this.mill.group);
     this.zones.push(this.mill);
+    this.pier = new PierZone(this).build();
+    this.scene.add(this.pier.group);
+    this.zones.push(this.pier);
     return this;
+  }
+
+  /** Gather obstacles and walkable platforms from every system. */
+  buildCollision() {
+    const col = (this.collision = new Collision(this.data));
+    for (const [x, z, r] of this.forest.colliders()) col.addCircle(x, z, r);
+    for (const c of this.mill.colliders) {
+      if (c.type === 'box') col.addBox(c.x, c.z, c.hw, c.hl, c.yaw);
+      else col.addCircle(c.x, c.z, c.r);
+    }
+    for (const p of this.mill.platforms || []) {
+      if (p.type === 'deck') {
+        const ax = p.a.x, az = p.a.z, dx = p.b.x - ax, dz = p.b.z - az, len = Math.hypot(dx, dz);
+        col.addPlatform({
+          clearance: 1.1,
+          heightAt: (x, z) => {
+            const t = ((x - ax) * dx + (z - az) * dz) / (len * len);
+            if (t < -0.02 || t > 1.02) return null;
+            const v = ((x - ax) * dz - (z - az) * dx) / len;
+            if (Math.abs(v) > p.width / 2) return null;
+            const tc = Math.min(1, Math.max(0, t));
+            return p.a.y + (p.b.y - p.a.y) * tc + Math.sin(Math.PI * tc) * p.camber;
+          },
+        });
+      } else if (p.type === 'slab') {
+        const c = Math.cos(p.yaw), s = Math.sin(p.yaw);
+        col.addPlatform({ clearance: 1.0, heightAt: (x, z) => {
+          const lx = (x - p.x) * c - (z - p.z) * s, lz = (x - p.x) * s + (z - p.z) * c;
+          return Math.abs(lx) <= p.hw && Math.abs(lz) <= p.hl ? p.y : null;
+        } });
+      }
+    }
+    // the pier deck, the boarding platform under the wheel, railings and things standing on the deck
+    const pier = this.pier, ph = PIER.heading, pc = Math.cos(ph), ps = Math.sin(ph);
+    const toWorld = (u, v) => [PIER.rootX + u * pc - v * ps, PIER.rootZ + u * ps + v * pc];
+    col.addPlatform({ clearance: 1.5, heightAt: (x, z) => pier.deckAt(x, z) });
+    col.addPlatform({ clearance: 1.0, heightAt: (x, z) => {
+      const dx = x - PIER.rootX, dz = z - PIER.rootZ;
+      const u = dx * pc + dz * ps - PIER.wheel.along, v = -dx * ps + dz * pc;
+      if (Math.abs(v) > 5) return null;
+      if (u >= -5 && u <= 5) return PIER.deckY + 0.9;
+      if (u < -5 && u > -6.6 && Math.abs(v) < 2.2) return PIER.deckY + 0.9 * ((u + 6.6) / 1.6);
+      return null;
+    } });
+    const y0 = PIER.deckY - 0.6, y1 = PIER.deckY + 4;
+    for (const c of pier.colliders) {
+      if (c.type === 'local') { const [x, z] = toWorld(c.x, c.z); col.addCircle(x, z, c.r, deckHeight(c.x) - 0.6, y1); }
+      else col.addCircle(c.x, c.z, c.r);
+    }
+    const W = PIER.width / 2, HW = PIER.headWidth / 2, L = PIER.length, h0 = L - PIER.headLength;
+    const rail = (u0, v0, u1, v1) => {
+      const [x, z] = toWorld((u0 + u1) / 2, (v0 + v1) / 2);
+      const along = Math.abs(u1 - u0) > Math.abs(v1 - v0);
+      // box frame uses layout yaw convention: local x along the pier when yaw = -heading
+      col.addBox(x, z, along ? Math.abs(u1 - u0) / 2 : 0.12, along ? 0.12 : Math.abs(v1 - v0) / 2, -ph, along && u0 < PIER.rampLength ? 2.6 : y0, y1);
+    };
+    rail(2.5, -W, h0, -W); rail(2.5, W, h0, W); rail(h0, -HW, h0, -W); rail(h0, W, h0, HW);
+    rail(h0, -HW, L, -HW); rail(h0, HW, L, HW); rail(L, -HW, L, HW);
+    return col;
   }
 
   /** (Re)render the static shadow map. Call after static geometry changes. */

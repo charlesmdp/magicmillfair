@@ -5,16 +5,19 @@ import { GLSL_SKY } from './Atmosphere.js';
 
 const VERT = /* glsl */ `
 ${GLSL_COMMON}
+#include <skinning_pars_vertex>
 out vec2 vUv;
 out vec3 vWorld;
 out vec3 vNormal;
 out vec4 vColor;
-#ifdef SPIN
-uniform vec4 uSpin; // axis point xyz (object space) is implied at the origin; w = angle
-#endif
 void main() {
-  vec4 p = vec4(position, 1.0);
-  vec3 n = normal;
+  vec3 transformed = position;
+  vec3 objectNormal = normal;
+  #include <skinbase_vertex>
+  #include <skinnormal_vertex>
+  #include <skinning_vertex>
+  vec4 p = vec4(transformed, 1.0);
+  vec3 n = objectNormal;
   #ifdef USE_INSTANCING
   p = instanceMatrix * p;
   n = mat3(instanceMatrix) * n;
@@ -37,6 +40,18 @@ void main() {
 }
 `;
 
+const DEPTH_FRAG = /* glsl */ `void main() { gl_FragColor = vec4(1.0); }`;
+
+let skinnedDepth = null;
+/** Depth-only material that follows skeletal animation (shadow pass for characters). */
+export function skinnedDepthMaterial() {
+  if (!skinnedDepth) {
+    skinnedDepth = makeMaterial({ vertexShader: VERT, fragmentShader: DEPTH_FRAG, side: THREE.DoubleSide });
+    skinnedDepth.colorWrite = false;
+  }
+  return skinnedDepth;
+}
+
 const FRAG = /* glsl */ `
 ${GLSL_COMMON}
 ${GLSL_SHADOW}
@@ -47,6 +62,9 @@ uniform sampler2D uNormalMap;
 uniform vec3 uColor;
 uniform vec4 uParams; // roughness, specular, normal scale, uv scale
 uniform vec3 uEmissive;
+#ifdef USE_FADE
+uniform sampler2D uNoiseTex;
+#endif
 in vec2 vUv;
 in vec3 vWorld;
 in vec3 vNormal;
@@ -79,7 +97,12 @@ void main() {
   vec3 V = normalize(cameraPosition - vWorld);
   float shadow = sunShadow(vWorld, Ng);
   Surface s;
-  s.albedo = albedo * cav; s.N = N; s.Ng = Ng; s.rough = uParams.x; s.ao = vColor.a; s.spec = uParams.y; s.sss = 0.0;
+  s.albedo = albedo * cav; s.N = N; s.Ng = Ng; s.rough = uParams.x; s.spec = uParams.y; s.sss = 0.0;
+  #ifdef USE_FADE
+  s.ao = 1.0;
+  #else
+  s.ao = vColor.a;
+  #endif
   vec3 col = shadeSurface(s, vWorld, V, shadow);
   #ifdef WATERLINE
   {
@@ -99,21 +122,30 @@ void main() {
   #endif
   col += uEmissive * vColor.rgb;
   col = applyFog(col, vWorld, cameraPosition);
+  #ifdef USE_FADE
+  // ground decal (roads): the vertex alpha fades the edges, broken up by noise so the border looks worn
+  float fade = smoothstep(0.0, 1.0, vColor.a * 1.7 - texture(uNoiseTex, vWorld.xz * 0.13).r * 0.7);
+  gl_FragColor = vec4(outputColor(col) * fade, fade);
+  #else
   gl_FragColor = vec4(outputColor(col), 1.0);
+  #endif
 }
 `;
 
 /**
- * @param {object} o map, normalMap (textures), color [r,g,b], rough, spec, normalScale, uvScale, emissive [r,g,b]
+ * @param {object} o map, normalMap (textures), color [r,g,b], rough, spec, normalScale, uvScale, emissive [r,g,b];
+ *   fade: the vertex alpha is an opacity (soft-edged ground decals) instead of ambient occlusion
  */
 export function surfaceMaterial(o = {}) {
   const defines = {};
   if (o.map) defines.USE_MAP = 1;
   if (o.normalMap) defines.USE_NORMAL_MAP = 1;
-  if (o.side === THREE.DoubleSide) defines.DOUBLE_SIDED = 1;
   if (o.waterline) defines.WATERLINE = 1;
+  if (o.fade) defines.USE_FADE = 1;
   const mat = makeMaterial({
+    ...(o.fade ? { transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor } : {}),
     uniforms: {
+      ...(o.fade ? { uNoiseTex: G.uNoiseTex } : {}),
       uMap: { value: o.map || null },
       uNormalMap: { value: o.normalMap || null },
       uColor: { value: new THREE.Vector3(...(o.color || [1, 1, 1])) },
@@ -124,7 +156,7 @@ export function surfaceMaterial(o = {}) {
     vertexShader: VERT,
     fragmentShader: FRAG,
     side: o.side ?? THREE.FrontSide,
-    vertexColors: true,
+    vertexColors: o.vertexColors ?? true,
   });
   if (o.polygonOffset) { mat.polygonOffset = true; mat.polygonOffsetFactor = -o.polygonOffset; mat.polygonOffsetUnits = -o.polygonOffset * 4; }
   mat.name = o.name || 'surface';

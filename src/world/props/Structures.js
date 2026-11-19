@@ -242,34 +242,54 @@ export function railFence(b, pts, { height = 1.0, rails = 2, post = 0.09, spacin
 }
 
 /** Road / path surface draped over the ground. samples: [[x, z, y], ...] */
-export function roadRibbon(b, samples, width, { groundAt, lift = 0.035, tile = 3, edgeFade = true } = {}) {
+export function roadRibbon(b, samples, width, { groundAt, lift = 0.035, tile = 3, edgeFade = true, feather = 0, endFade = 0, step = 1.1 } = {}) {
+  // a section every metre or so and several vertices across, so that the ribbon hugs the ground
+  const dense = [];
+  for (let i = 0; i < samples.length; i++) {
+    const s = samples[i], n = samples[i + 1];
+    dense.push(s);
+    if (!n) break;
+    const d = Math.hypot(n[0] - s[0], n[1] - s[1]), k = step > 0 ? Math.ceil(d / step) : 1;
+    for (let j = 1; j < k; j++) dense.push([s[0] + ((n[0] - s[0]) * j) / k, s[1] + ((n[1] - s[1]) * j) / k]);
+  }
+  samples = dense;
   const pts = samples.map((s) => [s[0], s[1]]);
   const nr = normals2(pts);
   let v = 0;
   const secs = [];
+  const hw = width / 2;
+  // with `feather` the outer band fades to nothing
+  const f = feather > 0 ? Math.min(0.6, feather / hw) : 0.34;
+  const m = (1 - f) * 0.5;
+  const cols = [-1, -(1 - f), -m, 0, m, 1 - f, 1];
+  const lens = [0];
+  for (let i = 1; i < samples.length; i++) lens.push(lens[i - 1] + Math.hypot(samples[i][0] - samples[i - 1][0], samples[i][1] - samples[i - 1][1]));
+  const total = lens[lens.length - 1];
   for (let i = 0; i < samples.length; i++) {
     const s = samples[i];
-    if (i > 0) v += Math.hypot(s[0] - samples[i - 1][0], s[1] - samples[i - 1][1]);
+    v = lens[i];
     const [nx, nz] = nr[i];
-    const hw = width / 2;
-    const cols = 5; // a few vertices across so the ribbon hugs the ground
+    const end = endFade > 0 ? Math.min(1, Math.min(v, total - v) / endFade) : 1;
     const row = [];
-    for (let c = 0; c < cols; c++) {
-      const t = (c / (cols - 1)) * 2 - 1;
+    for (const t of cols) {
       const x = s[0] + nx * hw * t, z = s[1] + nz * hw * t;
-      row.push({ p: V(x, groundAt(x, z) + lift, z), u: (t * hw + hw) / tile, edge: Math.abs(t) === 1 });
+      const edge = Math.abs(t) === 1;
+      row.push({ p: V(x, groundAt(x, z) + lift, z), u: (t * hw + hw) / tile, edge, alpha: feather > 0 ? (edge ? 0 : end * end * (3 - 2 * end)) : 1 });
     }
     secs.push({ v: v / tile, row });
   }
   for (let i = 0; i + 1 < secs.length; i++) {
     const a = secs[i], c = secs[i + 1];
     for (let k = 0; k + 1 < a.row.length; k++) {
-      const col = (e) => (edgeFade && e ? [0.9, 0.88, 0.84, 1] : b.color);
+      const col = (r) => {
+        const base = edgeFade && r.edge ? [0.9, 0.88, 0.84, 1] : b.color;
+        return feather > 0 ? [base[0], base[1], base[2], r.alpha] : base;
+      };
       const up = V(0, 1, 0);
-      const i0 = b.vert(a.row[k].p, up, a.row[k].u, a.v, col(a.row[k].edge));
-      const i1 = b.vert(a.row[k + 1].p, up, a.row[k + 1].u, a.v, col(a.row[k + 1].edge));
-      const i2 = b.vert(c.row[k + 1].p, up, c.row[k + 1].u, c.v, col(c.row[k + 1].edge));
-      const i3 = b.vert(c.row[k].p, up, c.row[k].u, c.v, col(c.row[k].edge));
+      const i0 = b.vert(a.row[k].p, up, a.row[k].u, a.v, col(a.row[k]));
+      const i1 = b.vert(a.row[k + 1].p, up, a.row[k + 1].u, a.v, col(a.row[k + 1]));
+      const i2 = b.vert(c.row[k + 1].p, up, c.row[k + 1].u, c.v, col(c.row[k + 1]));
+      const i3 = b.vert(c.row[k].p, up, c.row[k].u, c.v, col(c.row[k]));
       b.idx.push(i0, i2, i1, i0, i3, i2);
     }
   }

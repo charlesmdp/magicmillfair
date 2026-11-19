@@ -13,7 +13,7 @@ const DEFS = {
   woodDeck: ['wood_deck', { rough: 0.82, spec: 0.14, normalScale: 1.0 }],
   woodPaint: ['wood_paint', { rough: 0.6, spec: 0.25, normalScale: 0.5 }],
   paving: ['paving', { rough: 0.85, spec: 0.14, normalScale: 0.9 }],
-  asphalt: ['asphalt', { rough: 0.9, spec: 0.12, normalScale: 0.8, polygonOffset: 2 }],
+  asphalt: ['asphalt', { rough: 0.9, spec: 0.12, normalScale: 0.8, polygonOffset: 2, fade: true }],
   // plain painted / coloured surfaces share the neutral "metal" texture; colour comes from the vertices
   paint: ['metal', { rough: 0.5, spec: 0.35, normalScale: 0.3 }],
   matte: ['metal', { rough: 0.9, spec: 0.08, normalScale: 0.3 }],

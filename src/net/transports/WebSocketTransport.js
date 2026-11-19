@@ -1,8 +1,7 @@
 // WebSocket transport: speaks the presence protocol with server/index.js and reconnects on its own.
 
 const CONNECT_TIMEOUT = 10000; // ms before giving up on a handshake
-const BACKOFF_MIN = 1000; // reconnection delay: 1 s, doubling…
-const BACKOFF_MAX = 15000; // …up to 15 s, ±25 % of jitter
+const BACKOFF_MIN = 1000, BACKOFF_MAX = 15000; // reconnection delay: 1 s, doubling up to 15 s (±25 % of jitter)
 const STABLE_MS = 5000; // a connection that lasted this long restarts the backoff
 const PING_MS = 5000; // application ping: detects links that died without closing
 
@@ -17,25 +16,18 @@ export class WebSocketTransport {
     this.handlers = handlers;
     this.probeEvery = probeEvery;
     this.ws = null;
-    this.closed = false;
-    this.everOpen = false;
+    this.closed = this.everOpen = false;
     this.openedAt = 0; // 0 while not connected
     this.tries = 0;
-    this.timer = 0; // handshake timeout, then retry delay
-    this.beat = 0;
+    this.timer = this.beat = 0; // handshake timeout or retry delay / ping interval
   }
 
-  open() {
-    if (!this.closed && !this.ws) this._connect();
-  }
+  open() { if (!this.closed && !this.ws) this._connect(); }
 
   /** Sends a protocol message; false when not connected (the message is dropped). */
   send(msg) {
     if (!this.ws || this.ws.readyState !== 1) return false;
-    try {
-      this.ws.send(JSON.stringify(msg));
-      return true;
-    } catch { return false; }
+    try { this.ws.send(JSON.stringify(msg)); return true; } catch { return false; }
   }
 
   close() {
@@ -46,21 +38,23 @@ export class WebSocketTransport {
 
   _connect() {
     clearTimeout(this.timer);
-    let ws;
+    let ws, heard = 0, pinged = 0, checked = 0;
     try { ws = new WebSocket(this.url); } catch { return this._drop(null); } // bad URL, mixed content…
     this.ws = ws;
-    this.timer = setTimeout(() => this._drop(ws), CONNECT_TIMEOUT);
-    let heard = 0;
-    let pinged = 0;
+    // (after a long freeze of the page this timer may run before an `open` that is already queued: one more turn settles it)
+    this.timer = setTimeout(() => { this.timer = setTimeout(() => this._drop(ws), 0); }, CONNECT_TIMEOUT);
     ws.onopen = () => {
       clearTimeout(this.timer);
       this.everOpen = true;
-      this.openedAt = performance.now();
+      this.openedAt = checked = performance.now();
       this.beat = setInterval(() => {
+        const t = performance.now();
+        const late = t - checked > PING_MS * 1.5; // frozen or throttled page: the answer may still be queued, no verdict
+        checked = t;
         // Nothing came back since the previous ping: the link is dead even if the socket has not noticed.
-        if (pinged && heard < pinged) return this._drop(ws);
-        pinged = performance.now();
-        this.send({ t: 'ping', c: Math.round(pinged) });
+        if (pinged && heard < pinged && !late) return this._drop(ws);
+        pinged = t;
+        this.send({ t: 'ping', c: Math.round(t) });
       }, PING_MS);
       this.handlers.onopen?.(this);
     };
@@ -89,7 +83,7 @@ export class WebSocketTransport {
     if (lasted >= 0) this.handlers.onclose?.(this);
     if (this.closed) return;
     if (lasted > STABLE_MS) this.tries = 0;
-    const base = this.probeEvery && !this.everOpen ? this.probeEvery : Math.min(BACKOFF_MAX, BACKOFF_MIN * 2 ** this.tries++);
-    this.timer = setTimeout(() => this._connect(), base * (0.75 + Math.random() * 0.5));
+    const delay = this.probeEvery && !this.everOpen ? this.probeEvery : Math.min(BACKOFF_MAX, BACKOFF_MIN * 2 ** this.tries++);
+    this.timer = setTimeout(() => this._connect(), delay * (0.75 + Math.random() * 0.5));
   }
 }

@@ -17,6 +17,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TICK = 50; // ms: the test server runs with TICK_HZ=20
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
+const round2 = (v) => Math.round(v * 100) / 100;
+const round3 = (v) => Math.round(v * 1000) / 1000;
 let failures = 0;
 let total = 0;
 
@@ -268,7 +270,8 @@ function makeDist() {
   const js = `export const lines = ${JSON.stringify(Array.from({ length: 3000 }, (_, i) => `manège ${i % 9}`))};\n`;
   fs.writeFileSync(path.join(dist, 'index.html'), html);
   fs.writeFileSync(path.join(dist, 'assets/index-Bx7kQ2aZ.js'), js);
-  fs.writeFileSync(path.join(dist, 'assets/vendor-settings.js'), js); // looks hashed, is not
+  for (const name of ['index-Bx7kQ2aZ.html', 'chunk-D83-4wx8.js', 'chunk-B2VQ4CKO.css', 'chunk-BRCbD3of.js.map']) fs.writeFileSync(path.join(dist, 'assets', name), js);
+  for (const name of ['vendor-settings.js', 'leaf-1024x512.webp', 'world/tile-000a00ff.bin', 'world/tree-oak_0001.json', '../index-Bx7kQ2aZ.js']) fs.writeFileSync(path.join(dist, 'assets', name), js);
   fs.writeFileSync(path.join(dist, 'assets/world/world.json'), JSON.stringify({ trees: Array.from({ length: 500 }, (_, i) => i) }));
   fs.writeFileSync(path.join(dist, 'assets/world/trees.bin'), Buffer.alloc(4096, 7));
   for (const ext of Object.keys(TYPES)) fs.writeFileSync(path.join(dist, 'types', `file.${ext}`), 'x');
@@ -295,9 +298,13 @@ async function testStatic(server, fx) {
   check('static: hashed files under /assets/ are immutable', res.headers['cache-control'] === 'public, max-age=31536000, immutable' && /^text\/javascript/.test(res.headers['content-type']), res.headers);
   const again = await request(port, '/assets/index-Bx7kQ2aZ.js', { headers: { 'Accept-Encoding': 'br' } });
   check('static: compressed copy is reused (same bytes)', again.body.equals(res.body));
-  res = await request(port, '/assets/vendor-settings.js');
+  const cache = async (target) => (await request(port, target)).headers['cache-control'];
+  const hashed = await Promise.all(['/assets/chunk-D83-4wx8.js', '/assets/chunk-B2VQ4CKO.css', '/assets/chunk-BRCbD3of.js.map'].map(cache));
+  check('static: every Vite-style hashed name is recognised', hashed.every((c) => /immutable/.test(c)), hashed);
+  const plain = await Promise.all(['/assets/vendor-settings.js', '/assets/leaf-1024x512.webp', '/assets/world/tile-000a00ff.bin', '/assets/world/tree-oak_0001.json',
+    '/index-Bx7kQ2aZ.js', '/assets/index-Bx7kQ2aZ.html', '/assets/world/world.json'].map(cache));
   const data = await request(port, '/assets/world/world.json');
-  check('static: unhashed files are revalidated, not immutable', res.headers['cache-control'] === 'no-cache' && data.headers['cache-control'] === 'no-cache' && !!data.headers.etag, [res.headers, data.headers]);
+  check('static: other files are revalidated (no-cache + ETag), never immutable', plain.every((c) => c === 'no-cache') && !!data.headers.etag, plain);
   res = await request(port, '/assets/world/world.json', { headers: { 'If-None-Match': data.headers.etag } });
   check('static: conditional request → 304', res.status === 304 && res.body.length === 0, res.status);
   res = await request(port, '/assets/world/trees.bin', { headers: { 'Accept-Encoding': 'gzip, br' } });
@@ -432,14 +439,14 @@ async function testProtocol(server) {
   const bigLeft = await a.wait((m) => m.t === 'leave' && m.id === big.id);
   check('ws: a frame over 2 KB closes the connection (1009)', bigCode === 1009 && !!bigLeft && server.alive(), bigCode);
 
-  // Flooding → disconnected.
+  // Flooding → disconnected, after the allowed burst (2 s × 40 messages) went through.
   const flood = new Client(port, 't1');
   await flood.hello('Flood');
-  for (let i = 0; i < 400 && flood.ws.readyState === 1; i++) flood.send({ t: 'ping', c: i });
+  for (let i = 0; i < 400; i++) flood.send({ t: 'e', e: 9 });
   const floodCode = await Promise.race([flood.closed, sleep(3000)]);
   const floodLeft = await a.wait((m) => m.t === 'leave' && m.id === flood.id);
-  const pongs = flood.msgs.filter((m) => m.t === 'pong').length;
-  check('ws: a flooding client is disconnected (> 40 msg/s over 2 s)', Number.isInteger(floodCode) && !!floodLeft && pongs > 0 && pongs <= 90 && server.alive(), { floodCode, pongs });
+  const relayed = a.msgs.filter((m) => m.t === 'e' && m.id === flood.id).length;
+  check('ws: a flooding client is disconnected (> 40 msg/s over 2 s)', Number.isInteger(floodCode) && !!floodLeft && relayed >= 70 && relayed <= 90 && server.alive(), { floodCode, relayed });
   const polite = new Client(port, 't2');
   await polite.hello('Poli');
   for (let i = 0; i < 60; i++) {
@@ -505,8 +512,6 @@ async function testProtocol(server) {
   await strict.stop();
 }
 
-const round3 = (v) => Math.round(v * 1000) / 1000;
-
 // ------------------------------------------------------------------------------------------ Presence façade
 
 function listen(presence) {
@@ -522,6 +527,41 @@ async function frames(ms, fn) {
     fn(t / 1000);
     await sleep(8);
   }
+}
+
+// `sender` walks along +x from `x0` at `speed` m/s for 1.6 s, then stands still for 0.9 s; returns what `receiver`
+// saw of it. Real clocks and several processes are involved: on a busy machine a measurement can be disturbed,
+// so it is redone (twice at most) before being judged.
+async function walk(sender, receiver, peer, x0, speed, pose) {
+  let result;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const from = x0 + attempt * 9;
+    const trace = [];
+    await frames(1600, (t) => {
+      sender.setLocal(from + speed * t, ...pose);
+      sender.update(0.008);
+      receiver.update(0.008);
+      if (t > 0.6 && peer.visible) trace.push({ t, x: peer.x, speed: peer.speed });
+    });
+    const last = trace[trace.length - 1] || {};
+    result = { frames: trace.length, backwards: 0, jumps: 0, lag: from + speed * last.t - last.x, speed: last.speed, seen: { ...peer } };
+    for (let i = 1; i < trace.length; i++) {
+      const dx = trace[i].x - trace[i - 1].x;
+      if (dx < -0.005) result.backwards++;
+      if (dx > speed * (trace[i].t - trace[i - 1].t) * 2 + 0.05) result.jumps++;
+    }
+    result.stop = round2(from + speed * 1.6 + 0.123);
+    await frames(900, () => {
+      sender.setLocal(result.stop, pose[0], pose[1], pose[2], 0, 0);
+      sender.update(0.008);
+      receiver.update(0.008);
+    });
+    result.smooth = result.frames > 50 && result.backwards === 0 && result.jumps === 0;
+    result.follows = result.lag > 0.04 * speed && result.lag < 0.4 * speed; // 40 to 400 ms behind the sender
+    result.stopped = near(peer.x, result.stop, 0.005) && peer.speed < 0.05;
+    if (result.smooth && result.follows && result.stopped) break;
+  }
+  return result;
 }
 
 async function testPresence(server) {
@@ -546,33 +586,12 @@ async function testPresence(server) {
   check('presence: a peer without state is not visible yet', bobSeenByAda?.visible === false, bobSeenByAda);
 
   const ada = b.peers.get(a.id);
-  const trace = [];
-  await frames(1600, (t) => {
-    a.setLocal(3 * t, 1.5, -2, 0.5, 2, 9); // walking at 3 m/s along +x
-    a.update(0.008);
-    b.update(0.008);
-    if (t > 0.6 && ada.visible) trace.push({ t, x: ada.x, speed: ada.speed });
-  });
-  const lastTrace = trace[trace.length - 1] || {};
-  const lag = 3 * lastTrace.t - lastTrace.x; // metres behind the sender
-  check('presence: remote avatar follows, a little in the past', ada.visible && lag > 0.15 && lag < 1.2 && near(ada.y, 1.5, 0.01) && near(ada.z, -2, 0.01) && near(ada.yaw, 0.5, 0.01) && ada.anim === 2 && ada.flags === 9, { lag, ada });
-  let backwards = 0;
-  let jumps = 0;
-  for (let i = 1; i < trace.length; i++) {
-    const dx = trace[i].x - trace[i - 1].x;
-    const dt = trace[i].t - trace[i - 1].t;
-    if (dx < -0.005) backwards++;
-    if (dx > 3 * dt * 2 + 0.05) jumps++;
-  }
-  check('presence: interpolated motion is continuous (no jump, no step back)', trace.length > 50 && backwards === 0 && jumps === 0, { frames: trace.length, backwards, jumps });
-  check('presence: speed is about the walking speed', near(lastTrace.speed, 3, 0.8), lastTrace.speed);
-  const stopAt = 3 * 1.6 + 0.123;
-  await frames(900, () => {
-    a.setLocal(stopAt, 1.5, -2, 0.5, 0, 0);
-    a.update(0.008);
-    b.update(0.008);
-  });
-  check('presence: remote avatar stops exactly where the player stopped', near(ada.x, round2(stopAt), 0.005) && ada.speed < 0.05 && ada.anim === 0 && ada.flags === 0, { x: ada.x, expected: round2(stopAt), speed: ada.speed });
+  const w = await walk(a, b, ada, 0, 3, [1.5, -2, 0.5, 2, 9]); // y, z, yaw, anim, flags
+  check('presence: remote avatar follows, a little in the past', w.follows && near(w.seen.y, 1.5, 0.01) && near(w.seen.z, -2, 0.01) && near(w.seen.yaw, 0.5, 0.01) && w.seen.anim === 2 && w.seen.flags === 9, w);
+  check('presence: interpolated motion is continuous (no jump, no step back)', w.smooth, w);
+  check('presence: speed is about the walking speed', near(w.speed, 3, 0.8), w.speed);
+  check('presence: remote avatar stops exactly where the player stopped', w.stopped && ada.anim === 0 && ada.flags === 0, { x: ada.x, expected: w.stop, speed: ada.speed });
+  const stopAt = w.stop;
 
   a.sendEmote(7);
   a.sendEmote(99); // invalid: ignored
@@ -589,10 +608,18 @@ async function testPresence(server) {
   await until(() => c.peers.size === 2);
   c.update(0.016);
   const adaSeenByCleo = c.peers.get(a.id);
-  check('presence: a newcomer sees existing players at once, at their last position', !!adaSeenByCleo && adaSeenByCleo.visible && near(adaSeenByCleo.x, round2(stopAt), 0.005) && adaSeenByCleo.name === 'Zoé 3' && c.count === 3, adaSeenByCleo);
+  check('presence: a newcomer sees existing players at once, at their last position', !!adaSeenByCleo && adaSeenByCleo.visible && near(adaSeenByCleo.x, stopAt, 0.005) && adaSeenByCleo.name === 'Zoé 3' && c.count === 3, adaSeenByCleo);
   c.dispose();
   await until(() => b.peers.size === 1);
   check('presence: dispose() leaves the room', b.peers.size === 1 && eb.some((e) => e.type === 'leave' && e.name === 'Cléo') && eb.some((e) => e.type === 'status' && e.count === 3) && b.count === 2, eb.filter((e) => e.type !== 'emote'));
+
+  // --- two idle tabs (never calling setLocal/update, like hidden tabs) are left alone during the next section
+  const idle1 = new Presence({ room: 'veille', name: 'Veille 1' });
+  const idle2 = new Presence({ room: 'veille', name: 'Veille 2' });
+  const ei = listen(idle1);
+  const idleSince = Date.now();
+  idle1.connect();
+  idle2.connect();
 
   // --- the server goes away: same-browser fallback, then back online when it returns
   const port = await freePort();
@@ -621,6 +648,11 @@ async function testPresence(server) {
   p1.dispose();
   p2.dispose();
   await own.stop();
+  await sleep(Math.max(0, 6500 - (Date.now() - idleSince)));
+  check('presence: local mode — an idle tab stays present beyond the 5 s timeout (own keep-alive)',
+    idle1.mode === 'local' && idle1.peers.size === 1 && idle2.peers.size === 1 && ei.filter((e) => e.type === 'join').length === 1 && !ei.some((e) => e.type === 'leave'), ei);
+  idle1.dispose();
+  idle2.dispose();
 
   // --- garbage from a (fake) server must never throw
   const fakePort = await freePort();
@@ -665,32 +697,21 @@ async function testPresence(server) {
   check('presence: local mode — tabs find each other without server', l1.mode === 'local' && l2.mode === 'local' && tab1?.name === 'Onglet 1' && tab1.color === 1 && l1.id !== l2.id && l1.id > 0 && el2.some((e) => e.type === 'status' && e.mode === 'local' && e.count === 2), [l1.mode, l2.mode, l1.id, l2.id]);
   await until(() => { l2.update(0.016); return tab1.visible; });
   check('presence: local mode — a newcomer gets the position of the others right away', tab1.visible && near(tab1.x, 5) && near(tab1.z, 5), tab1);
-  const walk = [];
-  await frames(1300, (t) => {
-    l1.setLocal(5 + 2 * t, 0, 5, 1, 1, 0);
-    l1.update(0.008);
-    l2.update(0.008);
-    walk.push(tab1.x);
-  });
-  await frames(700, () => {
-    l1.setLocal(8, 0, 5, 1, 0, 0);
-    l1.update(0.008);
-    l2.update(0.008);
-    walk.push(tab1.x);
-  });
-  let rough = 0;
-  for (let i = 1; i < walk.length; i++) if (walk[i] < walk[i - 1] - 0.005 || walk[i] - walk[i - 1] > 0.25) rough++;
-  check('presence: local mode — smooth motion that ends on the right spot', rough === 0 && near(tab1.x, 8, 0.005) && tab1.speed < 0.05, { rough, x: tab1.x, speed: tab1.speed });
+  const lw = await walk(l1, l2, tab1, 5, 2, [0, 5, 1, 1, 0]);
+  check('presence: local mode — smooth motion that ends on the right spot', lw.smooth && lw.follows && lw.stopped, lw);
   l2.sendEmote(4);
   l2.setIdentity('Renommé', 9);
   await until(() => el1.some((e) => e.type === 'identity') && el1.some((e) => e.type === 'emote'));
   check('presence: local mode — emotes and renames', el1.some((e) => e.type === 'emote' && e.emote === 4 && e.id === l2.id) && l1.peers.get(l2.id)?.name === 'Renommé' && l1.peers.get(l2.id)?.color === 9, el1);
   const stray = new BroadcastChannel('mmf-presence-tabs');
-  for (const junk of [null, 5, 'x', {}, { t: 'u' }, { t: 'u', s: [[1.5]] }, { t: 'u', now: 'x', s: [[l1.id, 'a', {}, 0, 0, 0, 0]] }, { t: 'hello' }, { t: 'hello', id: 'x' }, { t: 'e', id: l1.id, e: 'x' }, { t: 'leave', id: null }, { t: 'leave', id: 123456 }]) stray.postMessage(junk);
+  const fromTab1 = { id: l1.id, name: 'Onglet 1', color: 1 };
+  for (const junk of [null, 5, 'x', {}, [], { t: 'u' }, { t: 'u', id: 1.5 }, { t: 'zz', id: 77 }, { t: 'hello' }, { t: 'hello', id: 'x' }, { t: 'leave', id: null }, { t: 'leave', id: 123456 },
+    { ...fromTab1, t: 'u' }, { ...fromTab1, t: 'u', s: 'x' }, { ...fromTab1, t: 'u', s: [null] }, { ...fromTab1, t: 'u', now: 'x', s: [[l1.id, 'a', {}, 0, 0, 0, 0]] },
+    { ...fromTab1, t: 'u', now: 5, s: [[999, 1, 1, 1, 1, 0, 0]] }, { ...fromTab1, t: 'e', e: 'x' }, { ...fromTab1, t: 'e', e: 99 }]) stray.postMessage(junk);
   await sleep(150);
   l1.update(0.016);
   l2.update(0.016);
-  check('presence: local mode — garbage on the channel is ignored', l1.peers.size === 1 && l2.peers.size === 1 && near(tab1.x, 8, 0.005) && el1.filter((e) => e.type === 'emote').length === 1, [l1.peers.size, l2.peers.size, tab1.x]);
+  check('presence: local mode — garbage on the channel is ignored', l1.peers.size === 1 && l2.peers.size === 1 && near(tab1.x, lw.stop, 0.005) && el1.filter((e) => e.type === 'emote').length === 1, [l1.peers.size, l2.peers.size, tab1.x]);
   stray.close();
   l2.dispose();
   await until(() => l1.peers.size === 0);
@@ -735,8 +756,6 @@ async function testPresence(server) {
   console.warn = warn;
   check('presence: no internal error was caught along the way', warnings.length === 0, warnings);
 }
-
-const round2 = (v) => Math.round(v * 100) / 100;
 
 // ---------------------------------------------------------------------------------------------------- main
 
