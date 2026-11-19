@@ -5,14 +5,20 @@
   "type": "module",
   "description": "Monde 3D explorable dans le navigateur : un moulin, sa vallée et une grande jetée de fête foraine.",
   "scripts": {
-    "dev": "vite",
+    "dev": "node tools/dev.mjs",
+    "dev:vite": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "start": "node server/index.js",
     "bake": "npm run bake:world && npm run bake:textures",
     "bake:world": "node tools/bake-world.mjs",
     "bake:textures": "node tools/bake-textures.mjs",
+    "test": "node tools/net-test.mjs",
+    "test:smoke": "node tools/smoke.mjs",
+    "test:walk": "node tools/walk-test.mjs",
+    "test:duo": "node tools/duo.mjs",
     "bench": "node tools/bench.mjs",
+    "profile": "node tools/profile.mjs",
     "shots": "node tools/shots.mjs"
   },
   "engines": {

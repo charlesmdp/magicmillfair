@@ -77,12 +77,16 @@ export class PlayerController {
       pos.x = p.x; pos.z = p.z;
       return true;
     };
-    const dx = vel.x * dt, dz = vel.z * dt;
-    if (dx || dz) {
-      if (!tryMove(dx, dz)) {
-        if (!tryMove(dx, 0)) vel.x = 0;
-        if (!tryMove(0, dz)) vel.z = 0;
-      }
+    // in short steps, so that a slow frame cannot carry the walker through a thin obstacle (railings, walls)
+    const dist = Math.hypot(vel.x, vel.z) * dt;
+    const steps = Math.max(1, Math.ceil(dist / 0.22));
+    const dx = (vel.x * dt) / steps, dz = (vel.z * dt) / steps;
+    for (let i = 0; i < steps && (dx || dz); i++) {
+      if (tryMove(dx, dz)) continue;
+      const okX = tryMove(dx, 0), okZ = tryMove(0, dz);
+      if (!okX) vel.x = 0;
+      if (!okZ) vel.z = 0;
+      if (!okX && !okZ) break;
     }
 
     // vertical motion
