@@ -122,7 +122,8 @@ export class Scatter {
     this.range = engine.tier.scatterRange;
     this.density = engine.tier.scatterDensity;
     this.cells = new Map();
-    this.capacity = 26000;
+    // room for what a tier can show at once (the nearest cells win when an area is denser than that)
+    this.capacity = Math.round(26000 * Math.max(1, (this.range / 80) ** 2 * this.density));
     this.group = new THREE.Group();
     this.group.name = 'scatter';
     this.stats = { instances: 0, cells: 0 };
@@ -269,8 +270,11 @@ export class Scatter {
     const c0x = Math.floor((cp.x - R) / CELL), c1x = Math.floor((cp.x + R) / CELL);
     const c0z = Math.floor((cp.z - R) / CELL), c1z = Math.floor((cp.z + R) / CELL);
     const key = `${c0x},${c1x},${c0z},${c1z}`;
-    if (key === this._key && !this._pending) return;
+    // when some cells did not fit, the choice is revisited as the viewer moves
+    const moved = this._full && Math.hypot(cp.x - this._bx, cp.z - this._bz) > 12;
+    if (key === this._key && !this._pending && !moved) return;
     this._key = key;
+    this._bx = cp.x; this._bz = cp.z;
     // generate at most a couple of new cells per frame to stay smooth
     let budget = this._first ? 2 : 64;
     this._first = true;
@@ -286,12 +290,17 @@ export class Scatter {
         this.cells.set(k, cell);
       }
       cell.used = this.engine.frame;
+      cell.d = Math.hypot((cx + 0.5) * CELL - cp.x, (cz + 0.5) * CELL - cp.z);
       active.push(cell);
     }
     this._pending = pending;
+    // nearest cells first: if the buffer fills up, only the far ones are left out
+    active.sort((a, b) => a.d - b.d);
     let n = 0;
+    this._full = false;
     for (const cell of active) {
       const len = Math.min(cell.data.length, this.buffer.length - n);
+      if (len < cell.data.length) this._full = true;
       if (len <= 0) break;
       this.buffer.set(len === cell.data.length ? cell.data : cell.data.subarray(0, len), n);
       n += len;

@@ -10,7 +10,8 @@ seul ou à plusieurs.
 | | |
 |---|---|
 | ![L'arrivée par l'allée](docs/allee.jpg) | ![La rocaille](docs/rocaille.jpg) |
-| ![La cour et la roue](docs/cour.jpg) | ![La jetée et la grande roue](docs/jetee.jpg) |
+| ![La cour et la roue](docs/cour.jpg) | ![Le ruisseau](docs/ruisseau.jpg) |
+| ![La jetée et la grande roue](docs/jetee.jpg) | ![La plage](docs/plage.jpg) |
 
 ## Démarrer
 
