@@ -88,17 +88,19 @@ Parcours automatique à travers les deux zones (`?bench=1`), 1280×720 :
 
 | Palier | Appels de dessin (moy. / max) | Triangles (moy. / max) | Temps de script par image |
 |---|---|---|---|
-| Léger | 66 / 123 | 208 000 / 366 000 | 2,8 ms |
-| Équilibré | 108 / 165 | 419 000 / 723 000 | 3,8 ms |
-| Élevé | 133 / 213 | 609 000 / 990 000 | 5,0 ms |
-| Ultra | 149 / 246 | 816 000 / 1 537 000 | 4,7 ms |
+| Léger | 66 / 123 | 208 000 / 366 000 | 2,8 à 3,8 ms |
+| Équilibré | 108 / 165 | 419 000 / 723 000 | 3,8 à 4,8 ms |
+| Élevé | 133 / 213 | 609 000 / 990 000 | 5,0 à 5,5 ms |
+| Ultra | 149 / 246 | 816 000 / 1 537 000 | 4,5 à 4,7 ms |
 
-Avant optimisation, le palier Léger demandait 348 000 triangles en moyenne (564 000 au plus) et 4,4 ms de
-script.
+Les appels de dessin et les triangles sont identiques d'un passage à l'autre ; le temps de script varie (deux
+passages ici) et dépend de la machine. Avant optimisation, le palier Léger demandait 348 000 triangles en
+moyenne et 564 000 au plus.
 
 **Ces chiffres ne sont pas des images par seconde.** L'environnement de développement n'avait pas de carte
 graphique : le rendu y est calculé par logiciel, ce qui ne dit rien de la cadence réelle. Les appels de
-dessin, les triangles et le temps de script, eux, sont exacts. Pour connaître la cadence sur un appareil :
+dessin et les triangles, eux, sont exacts ; le temps de script donne un ordre de grandeur (sur un budget de
+16,7 ms par image à 60 images par seconde). Pour connaître la cadence sur un appareil :
 
 - ouvrir le site avec `?bench=1` : le parcours dure environ 40 secondes et affiche la moyenne, le 1 % des
   images les plus lentes, les appels de dessin et les triangles ;
