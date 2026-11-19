@@ -36,7 +36,7 @@ export class Benchmark {
     this.phase = 'warmup';
     this.u = 0;
     this.samples = [];
-    this.calls = []; this.tris = [];
+    this.calls = []; this.tris = []; this.cpu = [];
     this.done = false;
     this._look = new THREE.Vector3();
     engine.adaptive = false; // fixed resolution: results stay comparable
@@ -72,7 +72,7 @@ export class Benchmark {
     if (this._skip > 0) this._skip--;
     else {
       this.samples.push(eng.rawDt * 1000);
-      this.calls.push(eng.perf.calls); this.tris.push(eng.perf.triangles);
+      this.calls.push(eng.perf.calls); this.tris.push(eng.perf.triangles); this.cpu.push(eng.perf.cpuLast || 0);
     }
     this.u += this.fixedFrames ? 1 / this.fixedFrames : dt / this.duration;
     if (this.u >= 1) { this._finish(); return false; }
@@ -99,6 +99,7 @@ export class Benchmark {
       fpsAvg: +(1000 / ms).toFixed(1),
       msAvg: +ms.toFixed(2), msMedian: +pct(0.5).toFixed(2), ms95: +pct(0.95).toFixed(2), ms99: +pct(0.99).toFixed(2),
       fpsLow1: +(1000 / Math.max(0.01, pct(0.99))).toFixed(1),
+      cpuAvg: +avg(this.cpu).toFixed(2), cpuMax: +Math.max(...this.cpu).toFixed(2),
       callsAvg: Math.round(avg(this.calls)), callsMax: Math.max(...this.calls),
       trisAvg: Math.round(avg(this.tris)), trisMax: Math.max(...this.tris),
     };
@@ -114,6 +115,7 @@ export class Benchmark {
       `Palier ${r.tier} · ${r.width}×${r.height}`,
       `Moyenne ${r.fpsAvg} ips (${r.msAvg} ms)`,
       `1 % les plus lentes : ${r.fpsLow1} ips (${r.ms99} ms)`,
+      `Temps de script : ${r.cpuAvg} ms en moyenne, ${r.cpuMax} ms au plus`,
       `Appels de dessin : ${r.callsAvg} en moyenne, ${r.callsMax} au plus`,
       `Triangles : ${k(r.trisAvg)} en moyenne, ${k(r.trisMax)} au plus`,
       r.gpu ? `GPU : ${r.gpu}` : '',

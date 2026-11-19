@@ -48,10 +48,13 @@ export class World {
     this.terrain.setRangeScale(tier.terrainRange);
     this.terrain.mesh.layers.enable(LAYER.STATIC_CASTER);
     this.terrain.mesh.layers.enable(LAYER.REFLECT);
+    // the ground is drawn after the other opaque things: most of it hides behind them and is rejected early
+    this.terrain.mesh.renderOrder = 5;
     this.scene.add(this.terrain.mesh);
 
     this.backdrop = new Backdrop(this.data, G.uNoiseTex);
-    this.backdrop.mesh.layers.enable(LAYER.REFLECT);
+    if (tier.quality > 0) this.backdrop.mesh.layers.enable(LAYER.REFLECT);
+    this.backdrop.mesh.renderOrder = 6;
     this.scene.add(this.backdrop.mesh);
 
     this.shadows = new Shadows(this.engine);
@@ -69,7 +72,11 @@ export class World {
     this.water = new Water(this.engine, this.data);
     await this.water.load();
     this.scene.add(this.water.group);
-    this.water.reflection.hooks.push({ before: (cam) => this.terrain.update(this.engine.camera, cam) });
+    // the mirrored view is small and rippled: a coarser ground is enough there
+    this.water.reflection.hooks.push({
+      before: (cam) => { this.terrain.setRangeScale(tier.terrainRange * (tier.quality === 0 ? 0.4 : 0.55)); this.terrain.update(this.engine.camera, cam); },
+      after: () => this.terrain.setRangeScale(tier.terrainRange),
+    });
     onProgress(0.7);
 
     this.forest = new Forest(this.engine, this.data);
@@ -163,13 +170,24 @@ export class World {
   groundAt(x, z) { return this.data.heightAt(x, z); }
 
   update(dt, camera) {
+    // `profile` (an object) accumulates the script time of each step, for tools/bench.mjs
+    const prof = this.profile;
+    let t = prof ? performance.now() : 0;
+    const mark = (k) => { if (prof) { const n = performance.now(); prof[k] = (prof[k] || 0) + n - t; t = n; } };
     for (const s of this.systems) s.update?.(dt, camera);
-    for (const z of this.zones) z.update?.(dt, this.engine.time);
+    for (const z of this.zones) z.update?.(dt, this.engine.time, camera);
+    mark('zones');
     this.forest.update(camera);
+    mark('forest');
     this.shadows.updateDynamic(this.scene, camera, this.engine.tier.quality >= 2 ? 1 : 2);
+    mark('shadowPass');
     this.water.update(dt, camera, this.scene);
+    mark('reflectionPass');
     this.terrain.update(camera);
+    mark('terrain');
     this.grass.update(camera, this.playerPos);
+    mark('grass');
     this.scatter.update(camera);
+    mark('scatter');
   }
 }

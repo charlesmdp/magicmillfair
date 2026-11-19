@@ -362,7 +362,8 @@ export const HERO_TREES = [
   [-84, 2, 'oak', 1.15],
 ];
 
-export const SPAWN = { x: -108.5, z: -30.5, yaw: 2.2 };
+// Where visitors arrive: on the lane, facing the mill (yaw is the camera heading).
+export const SPAWN = { x: -121.8, z: -60, yaw: 3.21 };
 
 // Named places (for the HUD and for zone streaming).
 export const ZONES = [

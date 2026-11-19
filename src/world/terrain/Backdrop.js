@@ -60,13 +60,34 @@ export class Backdrop {
       pos[i * 3] = x; pos[i * 3 + 1] = h; pos[i * 3 + 2] = z;
       cover[i] = b.cover[i];
     }
+    // Three square rings, coarser with distance: full resolution only where the backdrop meets the detailed
+    // terrain. (Ring limits are multiples of the coarser step, so cells never straddle two rings.)
+    const RINGS = [[496, 560, 1], [560, 768, 2], [768, b.half, 4]];
+    const at = (k, j) => (j * n + k) * 3 + 1;
+    // where a ring meets a coarser one, the extra vertices are laid on the coarse edge (no cracks)
+    for (let r = 0; r + 1 < RINGS.length; r++) {
+      const d = RINGS[r][1], s = RINGS[r][2], s2 = RINGS[r + 1][2];
+      const lo = Math.round((-d + b.half) / b.step), hi = Math.round((d + b.half) / b.step);
+      for (let t = lo; t <= hi; t += s) {
+        const m = (t - lo) % s2;
+        if (m === 0) continue;
+        const a0 = t - m, a1 = a0 + s2, w = m / s2;
+        for (const e of [lo, hi]) {
+          pos[at(t, e)] = pos[at(a0, e)] * (1 - w) + pos[at(a1, e)] * w;
+          pos[at(e, t)] = pos[at(e, a0)] * (1 - w) + pos[at(e, a1)] * w;
+        }
+      }
+    }
     const idx = new Uint32Array((n - 1) * (n - 1) * 6);
     let q = 0;
-    for (let j = 0; j < n - 1; j++) for (let k = 0; k < n - 1; k++) {
-      const x = -b.half + (k + 0.5) * b.step, z = -b.half + (j + 0.5) * b.step;
-      if (Math.abs(x) < 496 && Math.abs(z) < 496) continue; // hidden under the playable square
-      const a = j * n + k, c = a + n;
-      idx[q++] = a; idx[q++] = c; idx[q++] = a + 1; idx[q++] = a + 1; idx[q++] = c; idx[q++] = c + 1;
+    for (const [inner, outer, s] of RINGS) {
+      for (let j = 0; j + s < n; j += s) for (let k = 0; k + s < n; k += s) {
+        const x = -b.half + (k + s / 2) * b.step, z = -b.half + (j + s / 2) * b.step;
+        const d = Math.max(Math.abs(x), Math.abs(z));
+        if (d < inner || d >= outer) continue;
+        const a = j * n + k, c = a + s * n;
+        idx[q++] = a; idx[q++] = c; idx[q++] = a + s; idx[q++] = a + s; idx[q++] = c; idx[q++] = c + s;
+      }
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));

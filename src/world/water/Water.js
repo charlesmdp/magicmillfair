@@ -135,7 +135,7 @@ export class Water {
       geo.setAttribute('aFlow', new THREE.BufferAttribute(flow, 4));
       geo.setIndex(idx);
       geo.computeBoundingSphere();
-      this._mesh(geo, this.materials.stream, `stream:${s.id}`, 1);
+      this._mesh(geo, this.materials.stream, `stream:${s.id}`, 1).userData.samples = pts;
     }
   }
 
@@ -197,6 +197,33 @@ export class Water {
     this.levelGrid = { n, cell: C, level };
   }
 
+  /** Is any water body inside the view frustum and within `range` metres (the sea counts at any distance)? */
+  _waterInView(camera, range, streams = 0.4) {
+    const fr = this._frustum || (this._frustum = new THREE.Frustum());
+    const pm = this._pm || (this._pm = new THREE.Matrix4());
+    fr.setFromProjectionMatrix(pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse), camera.coordinateSystem, camera.reversedDepth);
+    const cp = camera.position;
+    const v = this._v || (this._v = new THREE.Vector3());
+    for (const m of this.group.children) {
+      if (m === this.sea) continue;
+      const sp = m.geometry.boundingSphere;
+      if (!sp) return true;
+      if (sp.distanceToPoint(cp) > range || !fr.intersectsSphere(sp)) continue;
+      const pts = m.userData.samples;
+      if (!pts) return true;
+      // a stream is long and thin: look at the stretch near the viewer only (reflections are faint on it)
+      if (streams <= 0) continue;
+      const near = (range * streams) ** 2;
+      for (let i = 0; i < pts.length; i += 3) {
+        const q = pts[i];
+        if ((q[0] - cp.x) ** 2 + (q[1] - cp.z) ** 2 < near && fr.containsPoint(v.set(q[0], q[2], q[1]))) return true;
+      }
+    }
+    // open water east of the coast, up to the horizon
+    const sea = this._seaBox || (this._seaBox = new THREE.Box3(new THREE.Vector3(250, -1, -3000), new THREE.Vector3(3200, 1, 3000)));
+    return fr.intersectsBox(sea);
+  }
+
   nearestLevel(x, z) {
     const g = this.levelGrid, half = this.data.half;
     if (x > half - 8) return 0;
@@ -218,8 +245,11 @@ export class Water {
     this.reflection.targetY = this.nearestLevel(cp.x + f.x * ahead, cp.z + f.z * ahead);
     const on = this.reflection.enabled && tier.reflection > 0;
     this.group.visible = false; // never reflect water in water
-    const rendered = on ? this.reflection.update(scene, camera, dt, tier.reflectionEvery) : false;
+    // the mirrored view is only worth a pass when some water can be seen and is close enough to show it
+    const needed = on && this._waterInView(camera, tier.quality === 0 ? 260 : 520, tier.quality === 0 ? 0 : 0.4);
+    const rendered = needed ? this.reflection.update(scene, camera, dt, tier.reflectionEvery) : false;
     this.group.visible = true;
+    this.reflectionActive = needed;
     const rp = this.shared.uReflParams.value;
     rp.x = on && (rendered || this._hasReflection) ? 1 : 0;
     if (rendered) this._hasReflection = true;

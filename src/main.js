@@ -107,9 +107,11 @@ async function boot() {
   const startPresence = () => {
     presence = new Presence({ name, color });
     avatars = new RemoteAvatars({ scene, factory, presence, hud });
-    presence.on('status', ({ mode, count }) => hud.setPresence(mode, count));
-    presence.on('join', (peer) => hud.note(`${peer.name} arrive`));
-    presence.on('leave', (peer) => hud.note(`${peer.name} est parti`));
+    // no toast when the list is merely rebuilt because the connection changed (local <-> online)
+    let shownMode = presence.mode;
+    presence.on('status', ({ mode, count }) => { shownMode = mode; hud.setPresence(mode, count); });
+    presence.on('join', (peer) => { if (presence.mode === shownMode) hud.note(`${peer.name} arrive`); });
+    presence.on('leave', (peer) => { if (presence.mode === shownMode) hud.note(`${peer.name} est parti`); });
     presence.connect();
     Object.assign(app, { presence, avatars });
   };
@@ -125,7 +127,7 @@ async function boot() {
   hud
     .on('camera', toggleCamera)
     .on('emote', emote)
-    .on('color', (i) => { color = i; me.setColor(i); })
+    .on('color', (i) => { color = i; me.setColor(i); presence?.setIdentity(name, color); })
     .on('name', (n) => { if (!n) return; name = n; presence?.setIdentity(name, color); store.set('mmf.name', name); })
     .on('quality', (q) => {
       // a tier changes shaders, textures and shadow maps: simplest and safest is a clean restart at the same spot
@@ -199,7 +201,9 @@ async function boot() {
       avatars.update(dt, camera, engine.width, engine.height);
     }
     world.update(dt, camera);
+    const t0 = world.profile ? performance.now() : 0;
     engine.renderer.render(scene, camera);
+    if (world.profile) { world.profile.mainPass = (world.profile.mainPass || 0) + performance.now() - t0; world.profile.frames = (world.profile.frames || 0) + 1; }
 
     // interface, a few times per second
     slow += dt; zoneTimer += dt;

@@ -1,6 +1,8 @@
 // Magic Mill Fair — production server: static files from dist/ plus the multiplayer presence relay on /ws.
 // The server has no authority over the game: every client shares its own avatar state and the server only
 // batches those states to the other members of the room at a fixed tick.
+// Environment: PORT (8787), HOST (0.0.0.0), TICK_HZ (12), MAX_PLAYERS (48, per room), DIST_DIR (../dist) and
+// ALLOWED_ORIGINS (comma separated origins allowed to open the WebSocket; default: same host and localhost).
 //
 // Protocol (JSON text frames)
 //   client → server   {t:'hello',name,color,v:1}   {t:'s',p:[x,y,z,yaw],a,f}   {t:'e',e}   {t:'ping',c}
@@ -76,7 +78,8 @@ function compressed(file, st, encoding) {
 
 function reply(req, res, status, body, headers = {}) {
   const data = Buffer.from(body);
-  res.writeHead(status, { 'Content-Type': MIME.txt, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers, 'Content-Length': data.length });
+  const base = { 'Content-Type': MIME.txt, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' };
+  res.writeHead(status, { ...base, ...headers, 'Content-Length': data.length });
   res.end(req.method === 'HEAD' ? undefined : data);
 }
 
@@ -222,9 +225,10 @@ function onState(p, m, t) {
     round(Math.atan2(Math.sin(v[3]), Math.cos(v[3])), 1000), int(m.a, 15), int(m.f, 255),
   ];
   const row = `[${p.id},${state.join(',')}`; // closed with its age when the tick sends it
-  if (row !== p.row) { p.row = row; p.state = state; p.at = t; p.dirty = true; p.rested = false; }
+  const at = Math.max(t, p.at + 1); // strictly increasing per player: clients order states by time
+  if (row !== p.row) { p.row = row; p.state = state; p.at = at; p.dirty = true; p.rested = false; }
   // First repeat after a relayed change: relay it once more, so that clients know the player has stopped.
-  else if (!p.rested && !p.dirty) { p.rested = true; p.at = t; p.dirty = true; }
+  else if (!p.rested && !p.dirty) { p.rested = true; p.at = at; p.dirty = true; }
 }
 
 // Sends every room the states that changed since the last tick; nobody gets its own state back.
@@ -232,7 +236,7 @@ function tick() {
   const t = now();
   for (const room of rooms.values()) {
     const ids = [], rows = [];
-    for (const p of room.values()) if (p.dirty) { p.dirty = false; ids.push(p.id); rows.push(`${p.row},${t - p.at}]`); }
+    for (const p of room.values()) if (p.dirty) { p.dirty = false; ids.push(p.id); rows.push(`${p.row},${Math.max(0, t - p.at)}]`); }
     if (!rows.length) continue;
     const head = `{"t":"u","now":${t},"s":[`;
     const all = `${head}${rows.join(',')}]}`;

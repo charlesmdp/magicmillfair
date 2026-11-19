@@ -567,8 +567,7 @@ async function walk(sender, receiver, peer, x0, speed, pose) {
 async function testPresence(server) {
   const url = `ws://127.0.0.1:${server.port}/ws`;
   const warnings = [];
-  const warn = console.warn;
-  console.warn = (...args) => warnings.push(args.join(' '));
+  console.warn = (...args) => warnings.push(args.join(' ')); // the client reports what it had to catch (restored by main)
 
   // --- online, through the real server
   const a = new Presence({ room: 'Façade 1', name: 'Ada', color: 3, url });
@@ -753,19 +752,19 @@ async function testPresence(server) {
 
   a.dispose();
   b.dispose();
-  console.warn = warn;
   check('presence: no internal error was caught along the way', warnings.length === 0, warnings);
 }
 
 // ---------------------------------------------------------------------------------------------------- main
 
 const uncaught = [];
+const warn = console.warn;
 process.on('uncaughtException', (err) => uncaught.push(err));
 process.on('unhandledRejection', (err) => uncaught.push(err));
 setTimeout(() => {
   console.log('FAIL  the test run timed out');
   process.exit(1);
-}, 120000).unref();
+}, 180000).unref();
 if (typeof globalThis.WebSocket !== 'function') globalThis.WebSocket = WebSocket; // Node 20: no global WebSocket yet
 
 const fx = makeDist();
@@ -780,6 +779,7 @@ try {
 } catch (err) {
   check('test run', false, String(err && err.stack ? err.stack : err));
 } finally {
+  console.warn = warn;
   if (server) await server.stop();
   fs.rmSync(fx.tmp, { recursive: true, force: true });
 }

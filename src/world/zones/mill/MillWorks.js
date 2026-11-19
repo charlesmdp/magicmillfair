@@ -24,7 +24,7 @@ export class MillWorks {
     this._dam(parts);
     this._garden(parts);
     this._bridges(parts);
-    this._roads(parts);
+    this._roads();
     this._terrace(parts);
     const g = parts.toMeshes(this.world.materials, { name: 'mill-works', layers: CAST });
     this.zone.group.add(g);
@@ -172,13 +172,29 @@ export class MillWorks {
     zone.platforms.push(archBridge(parts, pa, pb, 3.0, { rise: 1.25, waterY: s[2] }));
   }
 
-  _roads(parts) {
-    const road = parts.get('asphalt');
-    road.tint(1, 1, 1, 1);
+  _roads() {
+    // asphalt ribbons, cut into stretches so that most of them are culled
+    const CHUNK = 160;
     for (const p of this.data.meta.paths) {
       if (p.kind !== 'asphalt') continue;
       const inside = p.samples.filter((s) => Math.abs(s[0]) < 511 && Math.abs(s[1]) < 511);
-      roadRibbon(road, inside, p.width + 0.8, { groundAt: this.ground, tile: 3, feather: 0.7, endFade: 5 });
+      let from = 0, len = 0, total = 0;
+      const lens = [0];
+      for (let i = 1; i < inside.length; i++) lens.push((total += Math.hypot(inside[i][0] - inside[i - 1][0], inside[i][1] - inside[i - 1][1])));
+      for (let i = 1; i < inside.length; i++) {
+        len = lens[i] - lens[from];
+        if (len < CHUNK && i < inside.length - 1) continue;
+        const parts = new Parts();
+        const road = parts.get('asphalt');
+        road.tint(1, 1, 1, 1);
+        roadRibbon(road, inside.slice(from, i + 1), p.width + 0.8, {
+          groundAt: this.ground, tile: 3, feather: 0.7, endFade: 5, fadeStart: from === 0, fadeEnd: i === inside.length - 1, v0: lens[from],
+        });
+        const g = parts.toMeshes(this.world.materials, { name: `road-${p.id}` });
+        g.userData.keep = true;
+        this.zone.group.add(g);
+        from = i;
+      }
     }
   }
 
@@ -239,6 +255,7 @@ export class MillWorks {
     pivot.position.set(wx, fr.floorY - 1.0, wz);
     pivot.rotation.y = fr.yaw;
     pivot.add(g);
+    pivot.userData.keep = true; // it turns: never merged with the static scenery
     for (const m of g.children) m.matrixAutoUpdate = false;
     this.zone.group.add(pivot);
     this.zone.animated.push((dt) => { g.rotation.x += dt * 0.75; g.updateMatrix(); });
@@ -253,6 +270,10 @@ export class MillWorks {
     w2.box(-0.56, -0.05, R + 0.05, -0.5, 0.3, R + 0.95, { tile: 0.8 });
     w2.box(0.5, -0.05, R + 0.05, 0.56, 0.3, R + 0.95, { tile: 0.8 });
     const sg = st.toMeshes(this.world.materials, { name: 'mill-wheel-frame', layers: CAST });
-    pivot.add(sg);
+    const base = new THREE.Group();
+    base.position.copy(pivot.position);
+    base.rotation.y = fr.yaw;
+    base.add(sg);
+    this.zone.group.add(base);
   }
 }

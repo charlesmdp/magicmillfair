@@ -12,7 +12,8 @@ export class Input {
     this.touchRise = 0;
     this._look = { x: 0, y: 0 };
     this._zoom = 0;
-    this._pressed = new Set();
+    this._pressed = new Set(); // keys that went down since the last update()
+    this._frame = new Set(); // the same, as seen by the current frame
     this.handlers = new Map();
     this.sensitivity = 0.0024;
     this.touchSensitivity = 0.0052;
@@ -106,11 +107,16 @@ export class Input {
   }
   exitLock() { if (document.pointerLockElement) document.exitPointerLock(); }
 
-  pressed(code) { return this._pressed.has(code); }
+  /** Did this key go down since the previous frame? (valid after update()) */
+  pressed(code) { return this._frame.has(code); }
 
   /** Call once per frame before reading move/look. */
   update() {
     const k = this.keys;
+    const fresh = this._pressed;
+    this._pressed = this._frame;
+    this._pressed.clear();
+    this._frame = fresh;
     let x = 0, y = 0;
     if (k.has('KeyW') || k.has('ArrowUp')) y += 1;
     if (k.has('KeyS') || k.has('ArrowDown')) y -= 1;
@@ -120,7 +126,7 @@ export class Input {
     if (k.has('Space') || k.has('KeyE')) rise += 1;
     if (k.has('KeyC') || k.has('KeyQ') || k.has('ControlLeft')) rise -= 1;
     let run = k.has('ShiftLeft') || k.has('ShiftRight');
-    this.jump = this._pressed.has('Space') || this._touchJump === true;
+    this.jump = fresh.has('Space') || this._touchJump === true;
     this._touchJump = false;
 
     // gamepad
@@ -142,7 +148,6 @@ export class Input {
     if (l > 1) { x /= l; y /= l; }
     if (!this.enabled) { x = 0; y = 0; rise = 0; this.jump = false; }
     this.move.x = x; this.move.y = y; this.rise = Math.max(-1, Math.min(1, rise)); this.run = run;
-    this._pressed.clear();
   }
 
   touchJump() { this._touchJump = true; }

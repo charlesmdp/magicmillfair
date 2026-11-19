@@ -4,6 +4,7 @@ import { Parts, MeshBuilder } from '../../props/MeshBuilder.js';
 import { LAYER } from '../../../render/Shadows.js';
 import { PIER, PROMENADE, COAST, pierToWorld } from '../../layout/layout.js';
 import { roadRibbon } from '../../props/Structures.js';
+import { distanceCuller } from '../../props/StaticBatch.js';
 import { surfaceMaterial } from '../../../render/SurfaceMaterial.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -54,6 +55,8 @@ export class PierZone {
     this._wheel();
     this._sign();
     this.group.updateMatrixWorld(true);
+    // small things vanish with distance; the pier and its wheel stay as landmarks
+    this._cull = distanceCuller(this.group, [[/big-wheel/, Infinity], [/:glow$/, 340], [/^seafront:(paint|doubleSided|woodDark)$/, 640], [/^pier:(woodPaint|doubleSided)$/, 560], [/pier-sign/, 500]]);
 
     const half = PIER.width / 2, head0 = PIER.length - PIER.headLength;
     this.platforms.push({ type: 'pier', x0: 0, x1: PIER.length, half, head0, headHalf: PIER.headWidth / 2 });
@@ -499,7 +502,8 @@ export class PierZone {
     const mat = this.world.materials.paint;
     const wheel = new THREE.Mesh(b.build(), mat);
     wheel.name = 'big-wheel';
-    wheel.frustumCulled = false;
+    // it spins about its hub: a sphere centred there stays valid at any angle
+    wheel.geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), W.radius + 3);
     for (const l of [LAYER.DYNAMIC_CASTER, LAYER.REFLECT, LAYER.STATIC_CASTER]) wheel.layers.enable(l);
     const pivot = new THREE.Group();
     pivot.position.set(W.along, W.hubY, 0);
@@ -523,7 +527,7 @@ export class PierZone {
     g.box(-1.2, -3.42, -0.9, 1.2, -3.3, 0.9);
     const gondolas = new THREE.InstancedMesh(g.build(), mat, N);
     gondolas.name = 'big-wheel-gondolas';
-    gondolas.frustumCulled = false;
+    gondolas.boundingSphere = new THREE.Sphere(new THREE.Vector3(), W.radius + 6);
     gondolas.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     const col = new THREE.Color();
     for (let i = 0; i < N; i++) { const c = PAL[GONDOLA[i % GONDOLA.length]]; gondolas.setColorAt(i, col.setRGB(c[0], c[1], c[2])); }
@@ -586,7 +590,8 @@ export class PierZone {
     this.frame.add(mesh);
   }
 
-  update(dt, time) {
+  update(dt, time, camera) {
     for (const a of this.animated) a(dt, time);
+    if (camera) this._cull(camera.position);
   }
 }

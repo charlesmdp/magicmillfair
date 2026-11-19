@@ -242,7 +242,7 @@ export function railFence(b, pts, { height = 1.0, rails = 2, post = 0.09, spacin
 }
 
 /** Road / path surface draped over the ground. samples: [[x, z, y], ...] */
-export function roadRibbon(b, samples, width, { groundAt, lift = 0.035, tile = 3, edgeFade = true, feather = 0, endFade = 0, step = 1.1 } = {}) {
+export function roadRibbon(b, samples, width, { groundAt, lift = 0.035, tile = 3, edgeFade = true, feather = 0, endFade = 0, fadeStart = true, fadeEnd = true, v0 = 0, step = 1.1 } = {}) {
   // a section every metre or so and several vertices across, so that the ribbon hugs the ground
   const dense = [];
   for (let i = 0; i < samples.length; i++) {
@@ -269,14 +269,14 @@ export function roadRibbon(b, samples, width, { groundAt, lift = 0.035, tile = 3
     const s = samples[i];
     v = lens[i];
     const [nx, nz] = nr[i];
-    const end = endFade > 0 ? Math.min(1, Math.min(v, total - v) / endFade) : 1;
+    const end = endFade > 0 ? Math.min(1, Math.min(fadeStart ? v : 1e9, fadeEnd ? total - v : 1e9) / endFade) : 1;
     const row = [];
     for (const t of cols) {
       const x = s[0] + nx * hw * t, z = s[1] + nz * hw * t;
       const edge = Math.abs(t) === 1;
       row.push({ p: V(x, groundAt(x, z) + lift, z), u: (t * hw + hw) / tile, edge, alpha: feather > 0 ? (edge ? 0 : end * end * (3 - 2 * end)) : 1 });
     }
-    secs.push({ v: v / tile, row });
+    secs.push({ v: (v0 + v) / tile, row });
   }
   for (let i = 0; i + 1 < secs.length; i++) {
     const a = secs[i], c = secs[i + 1];

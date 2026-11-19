@@ -101,7 +101,8 @@ export class Engine {
     const info = this.renderer.info.render;
     const p = this.perf;
     p.calls = info.calls; p.triangles = info.triangles;
-    p.cpuMs += ((performance.now() - this._cpu0) - p.cpuMs) * 0.1;
+    p.cpuLast = performance.now() - this._cpu0;
+    p.cpuMs += (p.cpuLast - p.cpuMs) * 0.1;
     this._acc += this.rawDt; this._accN++;
     if (this._acc >= 0.5) {
       const ms = (this._acc / this._accN) * 1000;

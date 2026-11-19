@@ -4,6 +4,7 @@ import { Parts } from '../../props/MeshBuilder.js';
 import { LAYER } from '../../../render/Shadows.js';
 import { MILL, LEVELS } from '../../layout/layout.js';
 import { buildMillHouse, buildOutbuilding, HOUSE } from './MillHouse.js';
+import { mergeStatic, distanceCuller } from '../../props/StaticBatch.js';
 import { MillWorks } from './MillWorks.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -34,8 +35,14 @@ export class MillZone {
     this.works = new MillWorks(this);
     this.works.build();
     this.group.updateMatrixWorld(true);
+    // one mesh per material for everything that never moves (the wheel keeps turning on its own)
+    const fixed = this.group.children.filter((c) => !c.userData.keep);
+    this.group.add(mergeStatic(fixed, 'mill'));
+    this.group.updateMatrixWorld(true);
+    this._cull = distanceCuller(this.group, [[/^road/, Infinity], [/:glow$/, 260], [/./, 620]]);
     return this;
   }
+
 
   _house() {
     const parts = new Parts();
@@ -86,7 +93,8 @@ export class MillZone {
     this.colliders.push({ type: 'box', x: B.x, z: B.z, hw: B.length / 2 + 0.1, hl: B.width / 2 + 0.1, yaw: 0 });
   }
 
-  update(dt, time) {
+  update(dt, time, camera) {
     for (const a of this.animated) a(dt, time);
+    if (camera) this._cull(camera.position);
   }
 }
