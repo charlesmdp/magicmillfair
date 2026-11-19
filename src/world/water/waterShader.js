@@ -180,6 +180,10 @@ void main() {
     }
   }
 
+#ifdef STREAM
+  // under the trees the mirrored view is mostly dark foliage: keep some open sky in the ripples
+  refl = mix(refl, skyReflection(R), 0.3);
+#endif
   float shadow = sunShadow(P, vec3(0.0, 1.0, 0.0));
 
   // sun glitter
@@ -217,17 +221,29 @@ void main() {
   vec2 fa = P.xz * 0.9 - vFlow.xy * vFlow.z * fract(t2) * 1.4;
   vec2 fb = P.xz * 0.9 - vFlow.xy * vFlow.z * fract(t2 + 0.5) * 1.4 + 0.5;
   float fl = mix(texture(uFoam, fa).r, texture(uFoam, fb).r, abs(1.0 - 2.0 * fract(t2)));
-  float white = smoothstep(1.0 - foamFlow * 1.05, 1.15 - foamFlow * 0.8, fl + foamFlow * 0.35);
+  // white water keeps its grain: streaks stretched along the current, never a flat white sheet
+  vec2 across = vec2(-vFlow.y, vFlow.x);
+  float streak = texture(uFoam, vec2(dot(P.xz, across) * 0.7, dot(P.xz, vFlow.xy) * 0.16 - uTime * vFlow.z * 0.3)).r;
+  float white = smoothstep(0.95 - foamFlow * 0.6, 1.3 - foamFlow * 0.45, fl * 0.55 + streak * 0.6 + foamFlow * 0.12) * (0.5 + 0.38 * foamFlow);
   // streaks along the banks and behind stones in fast water
   float riffle = smoothstep(0.55, 0.95, fl) * smoothstep(0.6, 1.6, vFlow.z) * (1.0 - smoothstep(0.05, 0.4, depth)) * 0.6;
-  foam = max(foam, max(white, riffle));
+  // thin lines of bubbles carried by the current: they are what makes the flow readable on calm reaches
+  float drift = smoothstep(0.68, 0.9, fl) * (0.14 + 0.26 * smoothstep(0.5, 1.5, vFlow.z));
+  foam = max(foam, max(max(white, riffle), drift));
   #endif
 #endif
   foam = saturate(foam);
 
   // ---- compose (premultiplied alpha over the bed)
+#ifdef STREAM
+  fres = min(1.0, fres * 1.5 + 0.03); // ruffled water catches more sky than a still surface
+#endif
   float alpha = fres + (1.0 - fres) * (1.0 - tavg);
   vec3 col = refl * fres + body * (1.0 - fres) + spec;
+#ifdef STREAM
+  // even ankle-deep and perfectly clear, a stream shows: a faint tint over its bed
+  if (alpha < 0.3) { col += vec3(0.03, 0.135, 0.12) * light * (0.3 - alpha) * 1.5; alpha = 0.3; }
+#endif
   vec3 foamCol = (hemiAmbient(vec3(0.0, 1.0, 0.0)) + uSunColor * (0.2 + 0.8 * shadow) * saturate(uSunDir.y + 0.2)) * 0.82;
   col = mix(col, foamCol, foam);
   alpha = max(alpha, foam);

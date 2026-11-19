@@ -14,6 +14,7 @@ export class Collision {
 
   /** Vertical round obstacle. y0/y1 limit it to a height band (things standing on a deck, for instance). */
   addCircle(x, z, r, y0 = -1e9, y1 = 1e9) {
+    this.bulky = null;
     const i = this.circles.push([x, z, r, y0, y1]) - 1;
     this._insert(x - r, z - r, x + r, z + r, i);
   }
@@ -102,9 +103,27 @@ export class Collision {
     return h;
   }
 
-  /** Does the segment a->b (xz, at height y) cross a building box? Returns the first hit fraction or 1. */
+  /**
+   * Does the segment a->b (xz) cross something that hides the view: a building, or a bulky round obstacle
+   * (hut, kiosk)? Thin things such as tree trunks and posts are ignored. Returns the first hit fraction or 1.
+   */
   segment(ax, az, bx, bz) {
     let best = 1;
+    const sx0 = bx - ax, sz0 = bz - az;
+    const len2 = sx0 * sx0 + sz0 * sz0;
+    if (len2 > 1e-9) {
+      for (const c of this.bulky || (this.bulky = this.circles.filter((q) => q[2] >= 0.9))) {
+        const fx = ax - c[0], fz = az - c[1];
+        const r = c[2] + 0.25;
+        const cc = fx * fx + fz * fz - r * r;
+        if (cc <= 0) continue; // the viewer starts inside: nothing sensible to do
+        const bq = fx * sx0 + fz * sz0;
+        const disc = bq * bq - len2 * cc;
+        if (bq >= 0 || disc < 0) continue;
+        const t = (-bq - Math.sqrt(disc)) / len2;
+        if (t >= 0 && t < best) best = t;
+      }
+    }
     for (const b of this.boxes) {
       if (b[6] > -1e8) continue; // only full-height buildings block the camera
       // slab test in the box frame

@@ -28,6 +28,7 @@ export const G = {
   uClipPlane: { value: new THREE.Vector4(0, 1, 0, 1e9) },
   uCaustics: { value: null },
   uNoiseTex: { value: null },
+  uReflectPass: { value: 0 }, // 1 while the mirrored view for the water is being rendered
 };
 
 /** Defines injected in every material; changing them requires a material recompile. */
@@ -89,6 +90,7 @@ uniform sampler2D uHeightTex;
 uniform sampler2D uNormalTex;
 uniform vec4 uWorldMap;
 uniform vec4 uClipPlane;
+uniform float uReflectPass;
 
 #define PI 3.14159265359
 #define saturate(x) clamp(x, 0.0, 1.0)

@@ -157,6 +157,8 @@ ${LOD_DISCARD}
   alpha *= saturate(min(vFade.x, vFade.y < 0.999 ? 1.0 : 0.0) * 1.02) * lens;
   #endif
   if (alpha < 0.02) discard;
+  // the mirrored view has no multisampling and its alpha means "something is reflected here": cut out, opaque
+  if (uReflectPass > 0.5) { if (alpha < 0.5) discard; alpha = 1.0; }
 #endif
 #ifdef DEPTH_ONLY
   gl_FragColor = vec4(1.0);

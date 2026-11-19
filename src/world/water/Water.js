@@ -129,7 +129,8 @@ export class Water {
         }
       }
       const idx = [];
-      for (let i = 0; i < n - 1; i++) { const a = i * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+      // counter-clockwise seen from above: the surface faces the sky
+      for (let i = 0; i < n - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
       geo.setAttribute('aFlow', new THREE.BufferAttribute(flow, 4));

@@ -98,11 +98,13 @@ export class PlanarReflection {
     const prev = r.getRenderTarget();
     const prevAuto = r.autoClear;
     for (const h of this.hooks) h.before?.(cam);
+    G.uReflectPass.value = 1;
     r.setRenderTarget(this.target);
     r.autoClear = true;
     r.setClearColor(0x000000, 0);
     r.clear();
     r.render(scene, cam);
+    G.uReflectPass.value = 0;
     r.setRenderTarget(prev);
     r.autoClear = prevAuto;
     r.setClearColor(0x9ec3ea, 1);
