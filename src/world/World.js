@@ -17,6 +17,7 @@ import { PierZone, deckHeight } from './zones/pier/PierZone.js';
 import { Collision } from './Collision.js';
 import { Rocks } from './props/Rocks.js';
 import { Birds } from './wildlife/Birds.js';
+import { Ripples } from './water/Ripples.js';
 import { PIER } from './layout/layout.js';
 
 const LAYER_NAMES = ['lawn', 'meadow', 'forest', 'dirt', 'rock', 'sand', 'gravel', 'soil'];
@@ -99,6 +100,10 @@ export class World {
 
     this.materials = await loadMaterials(tier);
     this.zones = [];
+    this.seats = []; // places to sit or lie (see player/PlayerController.js: seatAt)
+    this.seatSources = []; // seats that move: functions (player position) → seat or null
+    this.ripples = new Ripples();
+    this.scene.add(this.ripples.mesh);
     this.mill = new MillZone(this).build();
     this.scene.add(this.mill.group);
     this.zones.push(this.mill);
@@ -209,6 +214,7 @@ export class World {
     for (const s of this.systems) s.update?.(dt, camera);
     for (const z of this.zones) z.update?.(dt, this.engine.time, camera);
     this.birds.update(dt, this.engine.time, this.playerPos);
+    this.ripples.update(this.engine.time);
     mark('zones');
     this.forest.update(camera);
     mark('forest');

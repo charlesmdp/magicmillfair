@@ -5,11 +5,13 @@ import { Input } from './core/Input.js';
 import { isMobile, TIERS } from './core/Quality.js';
 import { World } from './world/World.js';
 import { FreeCamera } from './player/FreeCamera.js';
-import { CharacterFactory, EMOTES } from './player/Character.js';
+import { CharacterFactory, EMOTES, RANK_EMOTES } from './player/Character.js';
 import { PlayerController } from './player/PlayerController.js';
 import { CameraRig } from './player/CameraRig.js';
+import { Interact } from './player/Interact.js';
+import { RankEmotes } from './player/RankEmotes.js';
 import { Hud } from './ui/Hud.js';
-import { Presence } from './net/Presence.js';
+import { Presence, cleanChat } from './net/Presence.js';
 import { RemoteAvatars } from './net/RemoteAvatars.js';
 import { Benchmark } from './app/Benchmark.js';
 import { SPAWN, ZONES } from './world/layout/layout.js';
@@ -79,7 +81,8 @@ async function boot() {
   };
   spawn();
   world.playerPos = player.pos;
-  Object.assign(app, { player, rig, free, me });
+  const rank = new RankEmotes(scene);
+  Object.assign(app, { player, rig, free, me, rank });
 
   const state = { mode: 'intro', time: 0, blend: null };
   const _p = new THREE.Vector3(), _q = new THREE.Quaternion();
@@ -106,7 +109,8 @@ async function boot() {
   let presence = null, avatars = null;
   const startPresence = () => {
     presence = new Presence({ name, color });
-    avatars = new RemoteAvatars({ scene, factory, presence, hud });
+    avatars = new RemoteAvatars({ scene, factory, presence, hud, rank, world });
+    presence.on('chat', ({ id, peer, text }) => { hud.addChat(peer.name, peer.color, text); avatars.say(id, text); });
     // no toast when the list is merely rebuilt because the connection changed (local <-> online)
     let shownMode = presence.mode;
     presence.on('status', ({ mode, count }) => { shownMode = mode; hud.setPresence(mode, count); });
@@ -117,7 +121,24 @@ async function boot() {
   };
 
   // ---------- interface actions
-  const emote = (i) => { if (state.mode !== 'walk') return; me.emote(i); presence?.sendEmote(i); };
+  const emote = (i) => {
+    if (state.mode !== 'walk') return;
+    if (i < EMOTES.length) { if (me.resting) return; me.emote(i); } // seated: only the animals of light
+    else if (i < EMOTES.length + RANK_EMOTES.length) rank.play(RANK_EMOTES[i - EMOTES.length], me.root);
+    else return;
+    presence?.sendEmote(i);
+  };
+  // sitting, lying down, boarding
+  const interact = new Interact({ player, world, hud, peers: () => (avatars ? avatars.list : []) });
+  app.interact = interact;
+  // chat: shown to those who are there, kept nowhere
+  const say = (text) => {
+    if (!cleanChat(text)) return;
+    const sent = presence ? presence.sendChat(text) : cleanChat(text);
+    if (!sent) { hud.note('Not so fast: a line every two seconds'); return; }
+    hud.addChat(name, color, sent, true);
+    hud.say(hud.selfTag, sent);
+  };
   const toggleCamera = () => { if (state.mode === 'walk') setMode('free'); else if (state.mode === 'free') setMode('walk'); };
   const savedQuality = store.get('mmf.quality');
   const qualityChoice = params.get('q') && TIERS[params.get('q')] ? params.get('q') : savedQuality && TIERS[savedQuality] ? savedQuality : 'auto';
@@ -129,6 +150,9 @@ async function boot() {
   hud
     .on('camera', toggleCamera)
     .on('emote', emote)
+    .on('interact', () => interact.press(0))
+    .on('interact2', () => interact.press(1))
+    .on('say', say)
     .on('color', (i) => { color = i; me.setColor(i); presence?.setIdentity(name, color); })
     .on('name', (n) => { if (!n) return; name = n; presence?.setIdentity(name, color); store.set('mmf.name', name); })
     .on('quality', (q) => {
@@ -142,8 +166,9 @@ async function boot() {
   input.on('camera', toggleCamera);
   input.on('perf', () => hud.toggleStats());
   input.on('emote', () => hud.toggleEmotes());
+  input.on('chat', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleChat(true); });
   input.on('respawn', () => { if (state.mode === 'walk') { spawn(); hud.note('Back to the mill'); } });
-  input.on('menu', () => { hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); });
+  input.on('menu', () => { hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); hud.toggleChat(false); });
   input.on('map', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleBigMap(); });
   hud.setMap(data.meta.map, ZONES);
   if (params.has('stats')) hud.setStatsVisible(true);
@@ -182,7 +207,9 @@ async function boot() {
       free.update(dt);
       player.update(dt, rig.heading, false);
     } else if (mode === 'walk') {
-      for (let i = 0; i < EMOTES.length; i++) if (input.pressed(`Digit${i + 1}`)) emote(i);
+      for (let i = 0; i < 10; i++) if (input.pressed(`Digit${(i + 1) % 10}`)) emote(i);
+      if (input.pressed('KeyE')) interact.press(0);
+      if (input.pressed('KeyL')) interact.press(1);
       player.update(dt, rig.heading, true);
       rig.update(dt, player.pos);
       if (state.blend) {
@@ -198,6 +225,22 @@ async function boot() {
       }
     }
     camera.updateMatrixWorld();
+    interact.update(mode === 'walk');
+    rank.update(dt, camera);
+    {
+      // rings on the water around the swimmer, a splash when dropping in
+      const p = player.pos, level = data.waterAt(p.x, p.z);
+      if (player.splashed) { if (level > -500) world.ripples.splash(engine.time, p.x, level, p.z, player.splashed); player.splashed = 0; }
+      if ((player.swimming || player.wading) && level > -500) world.ripples.trail(0, engine.time, dt, p.x, level, p.z, player.speed, player.swimming);
+      // one's own speech bubble
+      const tag = hud.selfTag, saying = tag.classList.contains('saying') && mode === 'walk';
+      if (saying) {
+        _p.set(p.x, p.y + 2.25, p.z).project(camera);
+        const on = _p.z > -1 && _p.z < 1;
+        tag.style.display = on ? '' : 'none';
+        if (on) tag.style.transform = `translate(${((_p.x * 0.5 + 0.5) * engine.width).toFixed(1)}px, ${((-_p.y * 0.5 + 0.5) * engine.height).toFixed(1)}px) translate(-50%, -100%)`;
+      } else if (tag.style.display !== 'none') tag.style.display = 'none';
+    }
 
     if (presence) {
       presence.setLocal(player.pos.x, player.pos.y, player.pos.z, player.yaw, player.anim, mode === 'free' ? 1 : 0);

@@ -1,5 +1,5 @@
 // DOM interface: welcome screen, heads-up display, settings, touch controls, name tags.
-import { AVATAR_COLORS, EMOTES } from '../player/Character.js';
+import { AVATAR_COLORS, EMOTES, RANK_EMOTES } from '../player/Character.js';
 import { TIERS, TIER_ORDER } from '../core/Quality.js';
 import { assetUrl } from '../core/Assets.js';
 
@@ -11,8 +11,12 @@ const ICON = {
   run: '<svg viewBox="0 0 24 24"><path d="M13 5.5a1.6 1.6 0 1 0 0-.01M6 21l3.5-6 3 2 1.5 4M9.5 15l1.5-6 4 2 3 0M11 9l-4 1-1 3"/></svg>',
   up: '<svg viewBox="0 0 24 24"><path d="M6 14l6-6 6 6"/></svg>',
   down: '<svg viewBox="0 0 24 24"><path d="M6 10l6 6 6-6"/></svg>',
+  chat: '<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>',
+  hand: '<svg viewBox="0 0 24 24"><path d="M8 12V6a1.5 1.5 0 0 1 3 0v5V4.5a1.5 1.5 0 0 1 3 0V11V6a1.5 1.5 0 0 1 3 0v8c0 4-2.5 6.5-6 6.5S5.5 18 4 14l-1-2.6a1.4 1.4 0 0 1 2.5-1.2z"/></svg>',
 };
 const EMOTE_LABEL = ['Wave', 'Dance', 'Thumbs up', 'Yes', 'No', 'Punch'];
+const RANK_LABEL = { deer: 'Deer', wolf: 'Wolf', tiger: 'Tiger', dragon: 'Dragon' };
+const hex = (i) => `#${AVATAR_COLORS[((i % 16) + 16) % 16].toString(16).padStart(6, '0')}`;
 
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
 
@@ -86,7 +90,7 @@ export class Hud {
     });
     s.querySelector('.keys').innerHTML = touch
       ? 'Drag on the left to walk, on the right to look around.'
-      : '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / <kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd> or arrows · <kbd>Shift</kbd> run · <kbd>Space</kbd> jump · <kbd>F</kbd> free camera · <kbd>M</kbd> map';
+      : '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / <kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd> or arrows · <kbd>Shift</kbd> run · <kbd>Space</kbd> jump · <kbd>E</kbd> sit, board · <kbd>Enter</kbd> chat · <kbd>T</kbd> emotes · <kbd>F</kbd> free camera · <kbd>M</kbd> map';
     return new Promise((resolve) => {
       const go = () => {
         const n = input.value.trim().slice(0, 16) || name;
@@ -108,6 +112,7 @@ export class Hud {
         <div class="pill players"><span class="dot"></span><span class="count">On your own</span></div>
       </div>
       <div class="top-right">
+        <button class="icon" data-act="chat" title="Chat (Enter)" aria-label="Chat">${ICON.chat}</button>
         <button class="icon" data-act="emote" title="Emotes (T)" aria-label="Emotes">${ICON.smile}</button>
         <button class="icon" data-act="camera" title="Free camera (F)" aria-label="Free camera" aria-pressed="false">${ICON.cam}</button>
         <button class="icon" data-act="settings" title="Settings" aria-label="Settings">${ICON.gear}</button>
@@ -120,7 +125,18 @@ export class Hud {
         <div class="sheet"><canvas></canvas><div class="legend"><b>Map</b><span>Click anywhere to close</span></div></div>
       </div>
       <div class="stats"></div>
-      <div class="emotes">${EMOTES.map((e, i) => `<button data-emote="${i}">${EMOTE_LABEL[i]}</button>`).join('')}</div>
+      <div class="emotes">
+        <div>${EMOTES.map((e, i) => `<button data-emote="${i}">${EMOTE_LABEL[i]}</button>`).join('')}</div>
+        <div class="rank">${RANK_EMOTES.map((e, i) => `<button data-emote="${EMOTES.length + i}">${RANK_LABEL[e]}</button>`).join('')}</div>
+      </div>
+      <div class="prompts">
+        <button class="prompt" type="button" data-prompt="0"><kbd>E</kbd><span></span></button>
+        <button class="prompt" type="button" data-prompt="1"><kbd>L</kbd><span></span></button>
+      </div>
+      <div class="chat">
+        <div class="log" aria-live="polite"></div>
+        <form class="say"><input type="text" maxlength="200" placeholder="Say something…" autocomplete="off" spellcheck="false" enterkeyhint="send" aria-label="Chat message" /></form>
+      </div>
       <div class="panel" role="dialog" aria-label="Settings">
         <h2>Settings</h2>
         <h3>Graphics quality</h3>
@@ -154,9 +170,31 @@ export class Hud {
       const act = b.dataset.act;
       if (act === 'settings') this.panel.classList.toggle('on');
       else if (act === 'emote') this.emotes.classList.toggle('on');
+      else if (act === 'chat') this.toggleChat();
       else this.emit(act);
       b.blur();
     }));
+    // what can be done here (sit, board…): shown when there is something, pressed or tapped
+    this.prompts = [...h.querySelectorAll('.prompt')];
+    this.prompts.forEach((b, i) => {
+      b.onclick = () => { this.emit(i ? 'interact2' : 'interact'); b.blur(); };
+      for (const ev of ['mousedown', 'touchstart']) b.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
+    });
+    // chat
+    this.chatEl = h.querySelector('.chat');
+    this.chatLog = this.chatEl.querySelector('.log');
+    this.chatForm = this.chatEl.querySelector('.say');
+    this.chatInput = this.chatForm.querySelector('input');
+    this.chatForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = this.chatInput.value;
+      this.chatInput.value = '';
+      this.toggleChat(false);
+      if (text.trim()) this.emit('say', text);
+    });
+    this.chatInput.addEventListener('keydown', (e) => { if (e.key === 'Escape') { this.chatInput.value = ''; this.toggleChat(false); } e.stopPropagation(); });
+    this.chatInput.addEventListener('blur', () => { if (!this.chatInput.value) this.toggleChat(false); });
+    for (const ev of ['mousedown', 'touchstart', 'wheel']) this.chatEl.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
     this.cameraBtn = h.querySelector('[data-act="camera"]');
     this.emotes.querySelectorAll('button').forEach((b) => (b.onclick = () => { this.emit('emote', +b.dataset.emote); this.emotes.classList.remove('on'); }));
     h.querySelectorAll('.quality button').forEach((b) => (b.onclick = () => this.emit('quality', b.dataset.q)));
@@ -172,6 +210,53 @@ export class Hud {
     this.nameInput = name;
     // prevent clicks on the interface from reaching the 3D view
     for (const n of [this.panel, this.emotes]) for (const ev of ['mousedown', 'touchstart', 'wheel']) n.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
+    // the visitor's own speech bubble (the others have their name tag)
+    this.selfTag = el('div', 'tag self');
+    this.selfTag.style.display = 'none';
+    this.tagsEl.append(this.selfTag);
+  }
+
+  // ---------- what can be done here
+  /** Up to two actions: setPrompt(0, 'Sit') shows the first button, setPrompt(0, null) hides it. */
+  setPrompt(i, text) {
+    const b = this.prompts[i];
+    if (b._text === text) return;
+    b._text = text;
+    if (text) b.lastElementChild.textContent = text;
+    b.classList.toggle('on', !!text);
+  }
+
+  // ---------- chat
+  get chatOpen() { return this.chatEl.classList.contains('typing'); }
+  toggleChat(open = !this.chatOpen) {
+    this.chatEl.classList.toggle('typing', open);
+    if (open) { this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this.chatInput.focus({ preventScroll: true }); }
+    else if (document.activeElement === this.chatInput) this.chatInput.blur();
+  }
+
+  /** A line in the chat log. Lines fade away after a while; the log shows again whenever one comes in. */
+  addChat(name, color, text, self = false) {
+    const line = el('p', self ? 'self' : '');
+    const who = el('b');
+    who.style.color = hex(color);
+    who.textContent = name;
+    line.append(who, document.createTextNode(` ${text}`));
+    this.chatLog.append(line);
+    while (this.chatLog.childElementCount > 40) this.chatLog.firstElementChild.remove();
+    this.chatLog.scrollTop = this.chatLog.scrollHeight;
+    this.chatEl.classList.add('fresh');
+    clearTimeout(this._tc);
+    this._tc = setTimeout(() => this.chatEl.classList.remove('fresh'), 14000);
+  }
+
+  /** Speech bubble over a name tag (see tag()), for a few seconds. */
+  say(tag, text) {
+    let b = tag.querySelector('.bubble');
+    if (!b) { b = el('div', 'bubble'); tag.append(b); }
+    b.textContent = text;
+    tag.classList.add('saying');
+    clearTimeout(tag._ts);
+    tag._ts = setTimeout(() => tag.classList.remove('saying'), Math.min(9000, 3200 + text.length * 60));
   }
 
   setQuality(choice, tier, scale, detail = 1, phone = false) {
@@ -216,7 +301,7 @@ export class Hud {
   // ---------- name tags
   tag(id, name, color) {
     const t = el('div', 'tag');
-    t.innerHTML = `<i style="background:#${AVATAR_COLORS[color % 16].toString(16).padStart(6, '0')}"></i>`;
+    t.innerHTML = `<i style="background:${hex(color)}"></i>`;
     t.append(document.createTextNode(name));
     this.tagsEl.append(t);
     return t;
@@ -304,10 +389,10 @@ export class Hud {
     const knob = stick.firstChild;
     const pads = el('div', 'pads');
     pads.innerHTML = `
-      <button class="pad walk-only" data-pad="run" aria-label="Courir" aria-pressed="false">${ICON.run}</button>
-      <button class="pad big walk-only" data-pad="jump" aria-label="Sauter">${ICON.jump}</button>
-      <button class="pad free-only" data-pad="down" aria-label="Descendre">${ICON.down}</button>
-      <button class="pad big free-only" data-pad="up" aria-label="Monter">${ICON.up}</button>`;
+      <button class="pad walk-only" data-pad="run" aria-label="Run" aria-pressed="false">${ICON.run}</button>
+      <button class="pad big walk-only" data-pad="jump" aria-label="Jump">${ICON.jump}</button>
+      <button class="pad free-only" data-pad="down" aria-label="Down">${ICON.down}</button>
+      <button class="pad big free-only" data-pad="up" aria-label="Up">${ICON.up}</button>`;
     this.hud.append(zone, pads);
     const inp = this.input;
     let id = null, ox = 0, oy = 0;

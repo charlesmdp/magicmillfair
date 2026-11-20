@@ -62,6 +62,7 @@ uniform sampler2D uNormalMap;
 uniform vec3 uColor;
 uniform vec4 uParams; // roughness, specular, normal scale, uv scale
 uniform vec3 uEmissive;
+uniform float uAmbient; // ambient light reaching this object (1 in the open, less in a cave)
 #ifdef USE_FADE
 uniform sampler2D uNoiseTex;
 #endif
@@ -99,9 +100,9 @@ void main() {
   Surface s;
   s.albedo = albedo * cav; s.N = N; s.Ng = Ng; s.rough = uParams.x; s.spec = uParams.y; s.sss = 0.0;
   #ifdef USE_FADE
-  s.ao = 1.0;
+  s.ao = uAmbient;
   #else
-  s.ao = vColor.a;
+  s.ao = vColor.a * uAmbient;
   #endif
   vec3 col = shadeSurface(s, vWorld, V, shadow);
   #ifdef WATERLINE
@@ -151,6 +152,7 @@ export function surfaceMaterial(o = {}) {
       uColor: { value: new THREE.Vector3(...(o.color || [1, 1, 1])) },
       uParams: { value: new THREE.Vector4(o.rough ?? 0.8, o.spec ?? 0.2, o.normalScale ?? 1, o.uvScale ?? 1) },
       uEmissive: { value: new THREE.Vector3(...(o.emissive || [0, 0, 0])) },
+      uAmbient: { value: 1 },
     },
     defines,
     vertexShader: VERT,

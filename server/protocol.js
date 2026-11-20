@@ -4,10 +4,11 @@
 // other members.
 //
 // Protocol (JSON text frames)
-//   client → server   {t:'hello',name,color,v:1}   {t:'s',p:[x,y,z,yaw],a,f}   {t:'e',e}   {t:'ping',c}
+//   client → server   {t:'hello',name,color,v:1}   {t:'s',p:[x,y,z,yaw],a,f}   {t:'e',e}   {t:'c',m}   {t:'ping',c}
 //   server → client   {t:'welcome',id,now,tick,idle?,peers:[{id,name,color,p,a,f}]}   {t:'join',id,name,color}
-//                     {t:'leave',id}   {t:'u',now,s:[[id,x,y,z,yaw,a,f,age]]}   {t:'e',id,e}
+//                     {t:'leave',id}   {t:'u',now,s:[[id,x,y,z,yaw,a,f,age]]}   {t:'e',id,e}   {t:'c',id,m}
 //                     {t:'pong',c,now}   {t:'full'}
+//   `c` is a chat line: relayed to the others as it comes, never stored, never sent back to its author.
 //   `now` is the relay clock (ms). `age` (ms) tells how long before `now` a state was received: clients rebuild
 //   smooth motion from `now - age`. A `join` for an id already known is a rename. `tick` is the batching period
 //   (clients need not send faster); `idle`, when present, is how often an unchanged state should be repeated
@@ -15,6 +16,8 @@
 
 export const MAX_FRAME = 2048; // bytes
 export const RATE = 40, BURST = RATE * 2; // messages per second, averaged over 2 s (token bucket)
+export const CHAT_MAX = 200; // characters in a chat line
+export const CHAT_BURST = 5, CHAT_EVERY = 2000; // chat lines: five in a row, then one every two seconds
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const round = (v, k) => Math.round(v * k) / k;
@@ -27,6 +30,12 @@ export const cleanRoom = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9_
 export function cleanName(name) {
   const s = typeof name === 'string' ? name.replace(/\s+/g, ' ').replace(/[\p{C}<>]/gu, '').replace(/ {2,}/g, ' ').trim() : '';
   return [...s].slice(0, 16).join('').trim() || 'Visitor';
+}
+
+/** Chat line: one line, no control characters, single spaces, at most CHAT_MAX characters ('' when nothing is left). */
+export function cleanChat(text) {
+  const s = typeof text === 'string' ? text.replace(/\s+/g, ' ').replace(/\p{C}/gu, '').replace(/ {2,}/g, ' ').trim() : '';
+  return [...s].slice(0, CHAT_MAX).join('').trim();
 }
 
 /** Avatar state of an `s` message, bounded and rounded: [x, y, z, yaw, anim, flags], or null when malformed. */
@@ -88,7 +97,7 @@ export class Room {
     if (!known && this.players.size >= this.io.max) return null;
     const p = {
       conn: connection, id: known ? known.id : this.io.id ? this.io.id() : this.nextId, name: 'Visitor', color: 0, joined: false,
-      alive: true, tokens: BURST, stamp: this.io.now(),
+      alive: true, tokens: BURST, stamp: this.io.now(), chat: CHAT_BURST, chatAt: this.io.now(),
       state: null, row: '', at: 0, dirty: false, rested: true, // last state, its serialised row, when it came, relay flags
     };
     if (known) {
@@ -131,6 +140,18 @@ export class Room {
     else if (!p.joined) return;
     else if (m.t === 's') this._state(p, m, t);
     else if (m.t === 'e' && Number.isInteger(m.e) && m.e >= 0 && m.e <= 31) this.broadcast(`{"t":"e","id":${p.id},"e":${m.e}}`, p);
+    else if (m.t === 'c') this._chat(p, m, t);
+  }
+
+  _chat(p, m, t) {
+    // a talkative player is not dropped, only not relayed: five lines in a row, then one every two seconds
+    p.chat = Math.min(CHAT_BURST, p.chat + (t - p.chatAt) / CHAT_EVERY);
+    p.chatAt = t;
+    if (p.chat < 1) return;
+    const text = cleanChat(m.m);
+    if (!text) return;
+    p.chat -= 1;
+    this.broadcast(JSON.stringify({ t: 'c', id: p.id, m: text }), p);
   }
 
   _hello(p, m) {

@@ -23,6 +23,12 @@ export function cleanName(name, fallback = 'Visitor') {
   return [...s].slice(0, 16).join('').trim() || fallback;
 }
 
+/** Chat line as the relay accepts it: one line, no control characters, at most 200 characters. */
+export function cleanChat(text) {
+  const s = typeof text === 'string' ? text.replace(/\s+/g, ' ').replace(/\p{C}/gu, '').replace(/ {2,}/g, ' ').trim() : '';
+  return [...s].slice(0, 200).join('').trim();
+}
+
 /** Room id as the server accepts it, [a-z0-9_-]{1,48}; '' when nothing usable is left. */
 export function cleanRoom(room) {
   return String(room ?? '').toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48).replace(/-+$/, '');
@@ -66,12 +72,13 @@ export class Presence {
     this._hasLocal = this._started = this._disposed = false;
     this._due = this._sentAt = this._repeats = this._timer = 0;
     this._sentKey = this._status = '';
+    this._chat = 5; this._chatAt = now(); // same allowance as the relay: five lines in a row, then one every 2 s
   }
 
   /** Players in the room, self included. */
   get count() { return this.peers.size + 1; }
 
-  /** Events: 'status' { mode, count }, 'join' peer, 'leave' peer, 'emote' { id, emote }, 'identity' peer (renamed). */
+  /** Events: 'status' { mode, count }, 'join' peer, 'leave' peer, 'emote' { id, emote }, 'chat' { id, peer, text }, 'identity' peer (renamed). */
   on(type, fn) { (this._on[type] ||= new Set()).add(fn); return this; }
   off(type, fn) { this._on[type]?.delete(fn); return this; }
 
@@ -103,6 +110,20 @@ export class Presence {
   sendEmote(n) {
     const e = int(Math.trunc(n), 31, -1);
     if (e >= 0 && this._tr) this._tr.send({ t: 'e', e });
+  }
+
+  /**
+   * One chat line for the room. Returns the text as sent ('' when empty, or when lines come too fast: the
+   * relay would not pass them on either). Nothing is stored anywhere: who is not there does not get it.
+   */
+  sendChat(text) {
+    const m = cleanChat(text), t = now();
+    this._chat = Math.min(5, this._chat + (t - this._chatAt) / 2000);
+    this._chatAt = t;
+    if (!m || this._chat < 1) return '';
+    this._chat -= 1;
+    if (this._tr) this._tr.send({ t: 'c', m });
+    return m;
   }
 
   setIdentity(name, color) {
@@ -182,6 +203,10 @@ export class Presence {
     } else if (m.t === 'leave') {
       if (this._leave(m.id)) this._changed();
     } else if (m.t === 'e' && this.peers.has(m.id) && int(m.e, 31, -1) >= 0) this._emit('emote', { id: m.id, emote: m.e });
+    else if (m.t === 'c' && this.peers.has(m.id)) {
+      const text = cleanChat(m.m);
+      if (text) this._emit('chat', { id: m.id, peer: this.peers.get(m.id), text });
+    }
   }
 
   // A transport is ready (or none will be: tr = null): adopt it and make `peers` match its list, so that

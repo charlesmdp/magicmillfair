@@ -1,5 +1,6 @@
 // Draws the other visitors: one avatar and one name tag per peer of the presence layer.
 import * as THREE from 'three';
+import { ANIM, EMOTES, RANK_EMOTES } from '../player/Character.js';
 
 const FAR = 240; // m: avatars further away are not drawn
 const TAG_RANGE = 70; // m: name tags fade out with distance
@@ -10,11 +11,13 @@ export class RemoteAvatars {
    * @param {{ scene: THREE.Scene, factory: import('../player/Character.js').CharacterFactory,
    *           presence: import('./Presence.js').Presence, hud: import('../ui/Hud.js').Hud }} o
    */
-  constructor({ scene, factory, presence, hud }) {
+  constructor({ scene, factory, presence, hud, rank = null, world = null }) {
     this.scene = scene;
     this.factory = factory;
     this.presence = presence;
     this.hud = hud;
+    this.rank = rank; // the animals of light (see RankEmotes)
+    this.world = world;
     this.items = new Map();
     this.frame = 0;
     presence.on('join', (peer) => this._add(peer));
@@ -26,7 +29,12 @@ export class RemoteAvatars {
       it.tag.remove();
       it.tag = this.hud.tag(peer.id, peer.name, peer.color);
     });
-    presence.on('emote', ({ id, emote }) => this.items.get(id)?.character.emote(emote));
+    presence.on('emote', ({ id, emote }) => {
+      const it = this.items.get(id);
+      if (!it) return;
+      if (emote < EMOTES.length) it.character.emote(emote);
+      else if (it.peer.visible) this.rank?.play(RANK_EMOTES[emote - EMOTES.length], it.character.root);
+    });
     for (const peer of presence.peers.values()) this._add(peer);
   }
 
@@ -44,6 +52,12 @@ export class RemoteAvatars {
     it.character.dispose();
     it.tag.remove();
     this.items.delete(id);
+  }
+
+  /** Speech bubble over a visitor. */
+  say(id, text) {
+    const it = this.items.get(id);
+    if (it) this.hud.say(it.tag, text);
   }
 
   /** Positions for the minimap. */
@@ -66,6 +80,10 @@ export class RemoteAvatars {
         // far avatars animate at a third of the frame rate
         if (dist < 90) character.update(dt);
         else if ((this.frame + peer.id) % 3 === 0) character.update(dt * 3);
+        if (peer.anim === ANIM.swim && dist < 120 && this.world) {
+          const level = this.world.data.waterAt(peer.x, peer.z);
+          if (level > -500) this.world.ripples.trail(peer.id, this.world.engine.time, dt, peer.x, level, peer.z, peer.speed, true);
+        }
         if (dist < TAG_RANGE) {
           _v.set(peer.x, peer.y + 2.05, peer.z).project(camera);
           if (_v.z > -1 && _v.z < 1 && Math.abs(_v.x) < 1.1 && Math.abs(_v.y) < 1.1) {
