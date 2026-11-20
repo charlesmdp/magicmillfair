@@ -3,7 +3,7 @@
 // Each place is merged into one mesh per material and hidden when too far to matter.
 import * as THREE from 'three';
 import { Parts } from '../../props/MeshBuilder.js';
-import { staticCaster } from '../../../render/Shadows.js';
+import { staticCaster, LAYER } from '../../../render/Shadows.js';
 import { mergeStatic, distanceCuller } from '../../props/StaticBatch.js';
 import { stairs, wall, footbridge } from '../../props/Structures.js';
 import { buildOutbuilding } from '../mill/MillHouse.js';
@@ -88,6 +88,8 @@ export class PlacesZone {
     this.group.updateMatrixWorld(true);
     for (const [place, roots] of Object.entries(this._roots)) this.group.add(mergeStatic(roots, place));
     this.group.updateMatrixWorld(true);
+    // only the deck itself is worth drawing a second time for the mirror of the pond
+    this.group.traverse((o) => { if (o.isMesh && !/^deck:(woodDeck|woodWet)$/.test(o.name)) o.layers.disable(LAYER.REFLECT); });
     // the village and its stairway are landmarks; furniture and small things go with distance
     const k = this.world.engine.tier.phone ? 0.6 : 1; // furniture goes sooner on a phone
     this._cull = distanceCuller(this.group, [

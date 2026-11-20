@@ -13,7 +13,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'docs');
 fs.mkdirSync(OUT, { recursive: true });
 
-// name: [x, y, z, heading°, pitch°] (free camera), or a function run in the page that returns such a pose
+// name: [x, y, z, heading°, pitch°] (free camera), or a function run in the page that returns such a pose, or
+// { walk: [x, z, heading°, pitch°, distance], turn?: degrees the camera is swung round the avatar, then?: a
+// function run in the page once the avatar is there } for a third-person view (the only way into the caves)
 const VIEWS = {
   valley: [178, 56, -44, 102, -10.5],
   mill: [-75, 34, -20, 112, -17],
@@ -35,6 +37,36 @@ const VIEWS = {
     const d = window.__mmf.world.data;
     return [-62, d.heightAt(-62, 132) + 2.2, 132, 97, 14];
   },
+  island: [96, 21, -58, 294, -3],
+  village: [-340, 122, 44, 92, -13],
+  lookout: [-351.5, 112.2, 34, 268, -13],
+  stairway: [-286, 78, 112, 28, -22],
+  camp: [-188.6, 24.9, -1.5, 50, -15],
+  lounge: [35, 6.6, -85, 316, -14],
+  deck: [-139, 15.5, 28, 126, -13],
+  behindthefall: [-276, 14.5, 128, 60, -2],
+  grotto: { walk: [-295.5, 123.2, 105, -5, 5] },
+  cave: { walk: [-34.5, -189, 10, -5, 4.8] },
+  hammock: {
+    walk: [-190, -8, 0, -18, 4.2], turn: 70,
+    then: () => { const a = window.__mmf, s = a.world.seats.find((q) => q.pose === 6); a.player.teleport(s.x, s.z, 0); a.player.sit(s); a.rig.snap(a.player.pos, s.yaw + 1.2); },
+  },
+  atwork: {
+    walk: [-152.5, 37, 180, -14, 3.4], turn: 150,
+    then: () => { const a = window.__mmf, s = a.world.seats.filter((q) => q.work).at(-1); a.player.teleport(s.x, s.z, 0); s.pose = 7; a.player.sit(s); a.rig.snap(a.player.pos, s.yaw + 0.75); },
+  },
+  tiger: {
+    walk: [0, 4.3, 90, 2, 10.5], turn: 150,
+    then: () => { const a = window.__mmf; a.rank.paused = true; a.rank.play('tiger', a.me.root); a.rank.active[0].time = 3.4; },
+  },
+  dragon: {
+    walk: [0, 4.3, 90, 2, 10.5], turn: 150,
+    then: () => { const a = window.__mmf; a.rank.paused = true; a.rank.play('dragon', a.me.root); a.rank.active[0].time = 3.5; },
+  },
+  stag: {
+    walk: [-378, 40, 200, 3, 10], turn: 160,
+    then: () => { const a = window.__mmf; a.rank.paused = true; a.rank.play('deer', a.me.root); a.rank.active[0].time = 2.8; },
+  },
 };
 
 const names = process.argv.slice(2).filter((a) => !a.startsWith('--'));
@@ -51,9 +83,28 @@ const frames = (n) => page.evaluate((n) => { const app = window.__mmf; const tar
 for (const name of todo) {
   const view = VIEWS[name];
   if (!view) { console.log(`unknown view: ${name}`); continue; }
-  const pose = typeof view === 'function' ? await page.evaluate(view) : view;
-  await page.evaluate((c) => window.__mmf.setCam(...c), pose);
-  await frames(8);
+  if (view.walk) {
+    await page.evaluate(([c, turn]) => {
+      const app = window.__mmf, yaw = (c[2] * Math.PI) / 180;
+      app.setMode('walk', true);
+      app.player.teleport(c[0], c[1], yaw + Math.PI);
+      app.rig.snap(app.player.pos, yaw);
+      app.rig.pitch = (c[3] * Math.PI) / 180;
+      app.rig.distance = app.rig.current = c[4];
+      app.rig.yaw += (turn * Math.PI) / 180;
+    }, [view.walk, view.turn || 0]);
+    if (view.then) {
+      await frames(2);
+      const pitch = view.walk[3], dist = view.walk[4];
+      await page.evaluate(view.then);
+      await page.evaluate(([p, d]) => { const r = window.__mmf.rig; r.pitch = (p * Math.PI) / 180; r.distance = r.current = d; }, [pitch, dist]);
+    }
+    await frames(view.then ? 16 : 8);
+  } else {
+    const pose = typeof view === 'function' ? await page.evaluate(view) : view;
+    await page.evaluate((c) => window.__mmf.setCam(...c), pose);
+    await frames(8);
+  }
   const png = await page.screenshot();
   await sharp(png).resize(1280, 720).jpeg({ quality: 84, mozjpeg: true }).toFile(path.join(OUT, `${name}.jpg`));
   console.log(`docs/${name}.jpg`);

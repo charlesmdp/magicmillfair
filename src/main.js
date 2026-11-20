@@ -287,6 +287,7 @@ async function boot() {
 
   // ---------- welcome
   if (SHOT) {
+    engine.adaptive = false; // screenshots: always at full resolution and detail
     const cam = (params.get('cam') || '-60,46,-52,126,-18').split(',').map(Number);
     app.setCam(...cam);
     input.enabled = true;

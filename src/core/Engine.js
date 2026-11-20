@@ -29,8 +29,9 @@ export class Engine {
     this._last = performance.now();
     this._acc = 0; this._accN = 0; this._worst = 0;
     this.adaptive = true;
-    window.addEventListener('resize', () => this.resize());
-    window.visualViewport?.addEventListener('resize', () => this.resize());
+    // (a resize empties the canvas: it is applied at the start of the next frame, see beginFrame)
+    window.addEventListener('resize', () => { this._resize = true; });
+    window.visualViewport?.addEventListener('resize', () => { this._resize = true; });
   }
 
   _createRenderer() {
@@ -80,11 +81,14 @@ export class Engine {
     s = Math.min(1, Math.max(this.tier.minScale, s));
     if (Math.abs(s - this.scale) < 0.02) return;
     this.scale = s;
-    this.resize();
+    // Resizing the canvas empties it: do it just before the next frame is drawn, never after one has been
+    // (the picture would go blank until the following frame).
+    this._resize = true;
   }
 
   /** Called once per frame by the app before rendering. */
   beginFrame() {
+    if (this._resize) { this._resize = false; this.resize(); }
     const now = performance.now();
     let dt = (now - this._last) / 1000;
     this._last = now;

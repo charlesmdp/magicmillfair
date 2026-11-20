@@ -91,7 +91,7 @@ function deer() {
   const rig = R.build(), I = rig.index;
   rig.animate = (t, P) => {
     const rear = hold(1.5, 2.25, 3.5, 4.3, t), graze = 1 - ss(0.3, 1.3, t), paw = Math.sin(t * 9);
-    P.pos(I.root, 0, RING.y - 2.05 + rear * 0.15, RING.z - 0.75);
+    P.pos(I.root, 0, RING.y - 2.95 + rear * 0.1, RING.z - 0.9);
     P.rot(I.root, -rear * 0.82, 0.62, 0);
     P.rot(I.neck, graze * 1.05 - rear * 0.2 + ss(4.3, 4.9, t) * 0.25, 0, 0);
     P.rot(I.head, graze * 0.25 + rear * 0.45 + Math.sin(t * 2.1) * 0.05, Math.sin(t * 1.4) * 0.22 * (1 - graze), 0);
@@ -106,6 +106,7 @@ function deer() {
     P.rot(I.fuR, -rear * (1.15 - 0.3 * paw) - stamp * 0.5, 0, 0); P.rot(I.flR, rear * (1.55 - 0.35 * paw) + stamp * 0.9, 0, 0);
     return hold(1.9, 2.4, 3.2, 4.0, t); // glow of the ring
   };
+  rig.size = 1.3;
   return rig;
 }
 
@@ -139,7 +140,7 @@ function wolf() {
   const rig = R.build(), I = rig.index;
   rig.animate = (t, P) => {
     const howl = hold(1.7, 2.3, 3.9, 4.5, t), prowl = 1 - ss(1.0, 1.7, t), step = Math.sin(t * 6.5);
-    P.pos(I.root, 0, RING.y - 1.75, RING.z - 0.8);
+    P.pos(I.root, 0, RING.y - 2.3, RING.z - 1.0);
     P.rot(I.root, -howl * 0.34 + prowl * 0.1, 0.6, 0);
     P.rot(I.neck, prowl * 0.55 - howl * 0.75, 0, 0);
     P.rot(I.head, prowl * 0.1 - howl * 0.62, Math.sin(t * 1.7) * 0.2 * (1 - howl), 0);
@@ -153,6 +154,7 @@ function wolf() {
     P.rot(I.huR, step * k + howl * 0.62, 0, 0); P.rot(I.hlR, Math.max(0, -step) * k - howl * 0.95, 0, 0);
     return howl * (0.75 + 0.25 * Math.sin(t * 11));
   };
+  rig.size = 1.4;
   return rig;
 }
 
@@ -186,8 +188,8 @@ function tiger() {
   rig.animate = (t, P) => {
     // crouch in the ring, leap through it, land in front, roar
     const leap = ss(1.55, 2.35, t), air = Math.sin(leap * Math.PI), crouch = hold(0.2, 0.9, 1.5, 1.7, t), land = hold(2.3, 2.45, 2.55, 3.0, t);
-    const roar = hold(2.9, 3.3, 4.3, 4.8, t), y0 = RING.y - 1.2;
-    P.pos(I.root, 0, y0 * (1 - leap) + 0.02 * leap + air * 1.15 - crouch * 0.22 - land * 0.16, RING.z - 0.3 + leap * 5.0);
+    const roar = hold(2.9, 3.3, 4.3, 4.8, t), y0 = RING.y - 1.55;
+    P.pos(I.root, 0.4 * leap, y0 * (1 - leap) + 0.02 * leap + air * 1.3 - crouch * 0.28 - land * 0.2, RING.z - 0.4 + leap * 5.4);
     P.rot(I.root, -air * 0.42 + leap * (1 - leap) * 1.2 * (leap > 0.5 ? 1 : -0.4) + crouch * 0.16 - roar * 0.1, 0.2 * (1 - leap), 0);
     P.rot(I.head, crouch * 0.2 - roar * 0.5 + air * 0.2, Math.sin(t * 9) * 0.1 * roar, Math.sin(t * 13) * 0.05 * roar);
     P.rot(I.jaw, roar * (0.62 + 0.05 * Math.sin(t * 17)) + air * 0.3, 0, 0);
@@ -200,11 +202,12 @@ function tiger() {
     P.rot(I.tail1, -0.25 + air * 0.5, lash * 0.35, 0); P.rot(I.tail2, 0.25, lash * 0.5, 0); P.rot(I.tail3, 0.35, Math.sin(t * 5.2 - 0.9) * 0.6, 0);
     return Math.max(hold(1.5, 1.75, 2.0, 2.5, t), roar * (0.7 + 0.3 * Math.sin(t * 17)));
   };
+  rig.size = 1.3;
   return rig;
 }
 
 function dragon() {
-  const R = new RigBuilder(), SEG = 16, LINK = 0.47; // segments, and the distance between two of them
+  const R = new RigBuilder(), SEG = 13, SIZE = 1.55, LINK = 0.47 * SIZE; // segments, how much bigger than modelled, distance between two
   R.part('head', null, [0, 0, 0], (b, sh) => {
     sh(1); b.cube(0, 0.04, 0.1, 0.5, 0.4, 0.62);
     sh(0.9); b.cube(0, 0.0, 0.58, 0.3, 0.24, 0.5);
@@ -248,12 +251,12 @@ function dragon() {
   });
   const rig = R.build(), I = rig.index;
   // The dragon winds round the ring like a serpent round a hoop: `u` runs along that coil.
-  const TUBE = 0.82, TH = 0.7, PS = 1.9;
+  const TUBE = 0.95, TH = 0.7, PS = 1.55;
   const coil = (u, out) => {
     const th = u * TH + 2.4, ps = u * PS, rr = RING.r + TUBE * Math.cos(ps);
     return out.set(rr * Math.cos(th), RING.y + rr * Math.sin(th), RING.z + TUBE * Math.sin(ps));
   };
-  const p = V(0, 0, 0), q = V(0, 0, 0), up = V(0, 0, 0), x = V(0, 0, 0), y = V(0, 0, 0), zz = V(0, 0, 0), m = new THREE.Matrix4();
+  const p = V(0, 0, 0), q = V(0, 0, 0), up = V(0, 0, 0), x = V(0, 0, 0), y = V(0, 0, 0), zz = V(0, 0, 0), m = new THREE.Matrix4(), big = V(SIZE, SIZE, SIZE);
   /** Frame of the coil at u (z along it, y away from the ring); returns how fast the coil runs there (m per unit of u). */
   const frame = (u, lift = 0) => {
     coil(u, p); coil(u + 0.02, q);
@@ -263,16 +266,16 @@ function dragon() {
     const th = u * TH + 2.4;
     up.set(p.x - RING.r * Math.cos(th), p.y - RING.y - RING.r * Math.sin(th), p.z - RING.z).normalize();
     x.crossVectors(up, zz).normalize(); y.crossVectors(zz, x);
-    m.makeBasis(x, y, zz).setPosition(p.x + y.x * lift, p.y + y.y * lift, p.z + y.z * lift);
+    m.makeBasis(x, y, zz).scale(big).setPosition(p.x + y.x * lift, p.y + y.y * lift, p.z + y.z * lift);
     return speed;
   };
   rig.animate = (t, P) => {
     const roar = hold(3.0, 3.4, 4.2, 4.7, t);
     // quick at first, slower while it roars
-    let u = t * 1.25 - ss(3.0, 4.6, t) * (t - 3.0) * 0.45;
-    let speed = frame(u, 0.05);
+    let u = 1.6 + t * 1.15 - ss(3.0, 4.6, t) * (t - 3.0) * 0.45;
+    let speed = frame(u, 0.08);
     P.direct(I.head, m);
-    u -= 0.52 / speed;
+    u -= (0.52 * SIZE) / speed;
     for (let i = 0; i < SEG; i++) { speed = frame(u); P.direct(I[`s${i}`], m); u -= LINK / speed; }
     P.rot(I.jaw, 0.12 + roar * (0.6 + 0.06 * Math.sin(t * 19)), 0, 0);
     const flap = Math.sin(t * 6.4);
@@ -298,6 +301,8 @@ class Pose {
     this.matrices = new Float32Array(MAX_PARTS * 16);
     this._e = new THREE.Euler(0, 0, 0, 'YXZ');
     this._m = new THREE.Matrix4();
+    this._s = new THREE.Vector3();
+    this.size = 1;
     this.reset();
   }
   reset() {
@@ -316,6 +321,7 @@ class Pose {
       if (this.given[i]) w.copy(this.given[i]);
       else {
         w.makeRotationFromEuler(this._e.set(r[i * 3], r[i * 3 + 1], r[i * 3 + 2]));
+        if (parts[i].parent < 0 && this.size !== 1) w.scale(this._s.setScalar(this.size)); // the whole animal, larger than modelled
         w.setPosition(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]);
       }
       if (parts[i].parent >= 0) w.premultiply(world[parts[i].parent]);
@@ -420,6 +426,7 @@ class Emote {
     this.kind = kind;
     this.rig = rig;
     this.pose = new Pose(rig.parts);
+    this.pose.size = rig.size || 1;
     this.group = new THREE.Group();
     this.uniforms = { uParts: { value: this.pose.matrices }, uShow: { value: 0 }, uGlow: { value: 0 }, uBase: { value: new THREE.Vector3() } };
     this.animal = new THREE.Mesh(rig.geometry, makeMaterial({ uniforms: this.uniforms, vertexShader: ANIMAL_VERT, fragmentShader: ANIMAL_FRAG, vertexColors: true, side: THREE.DoubleSide }));

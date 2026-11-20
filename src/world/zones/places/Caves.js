@@ -181,7 +181,7 @@ export function buildCave(parts, cave, { seats, colliders, ground }) {
       for (let k = 0; k < 5; k++) {
         const a = hash(l.x + k, l.z) * Math.PI * 2, d = 0.12 + 0.3 * hash(l.z, k + l.x), h = 0.45 + 0.75 * hash(k * 3.3, l.x);
         const px = l.x + Math.cos(a) * d, pz = l.z + Math.sin(a) * d;
-        const tone = k % 2 ? [0.3, 0.75, 1.0] : [0.55, 0.45, 1.0];
+        const tone = k % 2 ? [0.1, 0.4, 0.58] : [0.3, 0.2, 0.62]; // (the glow material multiplies this: deep blue-green and violet)
         glow.tint(tone[0], tone[1], tone[2], 1).rod(V(px, l.floor - 0.1, pz), V(px + Math.cos(a) * h * 0.35, l.floor + h, pz + Math.sin(a) * h * 0.35), 0.11, 5, { r1: 0.015, caps: false });
       }
       colliders.push({ type: 'circle', x: l.x, z: l.z, r: 0.45 });
