@@ -38,8 +38,8 @@ function lowTable(parts, x, y, z, r = 0.45) {
 
 /** Lantern on a post (the glass glows). */
 function lantern(parts, x, y, z, h = 2.1) {
-  const p = parts.get('paint'), g = parts.get('glow');
-  p.tint(0.1, 0.11, 0.11, 1).rod(V(x, y - 0.2, z), V(x, y + h, z), 0.035, 6);
+  const p = parts.get('woodDark'), g = parts.get('glow'); // (dark wood rather than iron: one material less to draw)
+  p.tint(0.16, 0.15, 0.14, 1).rod(V(x, y - 0.2, z), V(x, y + h, z), 0.035, 6);
   p.box(x - 0.1, y + h, z - 0.1, x + 0.1, y + h + 0.03, z + 0.1);
   p.box(x - 0.12, y + h + 0.27, z - 0.12, x + 0.12, y + h + 0.31, z + 0.12);
   g.tint(1, 0.82, 0.5, 1).box(x - 0.075, y + h + 0.03, z - 0.075, x + 0.075, y + h + 0.27, z + 0.075);
@@ -89,9 +89,10 @@ export class PlacesZone {
     for (const [place, roots] of Object.entries(this._roots)) this.group.add(mergeStatic(roots, place));
     this.group.updateMatrixWorld(true);
     // the village and its stairway are landmarks; furniture and small things go with distance
+    const k = this.world.engine.tier.phone ? 0.6 : 1; // furniture goes sooner on a phone
     this._cull = distanceCuller(this.group, [
-      [/^village:(stone|slate|granite|drystone)$/, Infinity], [/^stairway:/, Infinity], [/^village:/, 330],
-      [/^cave-\w+:cave$/, 170], [/^cave-/, 90], [/^island:/, 340], [/^camp/, 250], [/^beach:/, 300], [/^deck:(woodDeck|woodWet|woodDark)$/, 520], [/^deck:/, 260],
+      [/^village:(stone|slate)$/, Infinity], [/^stairway:rock$/, Infinity], [/^stairway:/, 420 * k], [/^village:/, 300 * k],
+      [/^cave-\w+:cave$/, 170 * k], [/^cave-/, 80 * k], [/^island:/, 340 * k], [/^camp/, 230 * k], [/^beach:/, 280 * k], [/^deck:(woodDeck|woodWet)$/, 520 * k], [/^deck:/, 240 * k],
     ]);
     return this;
   }
@@ -197,7 +198,7 @@ export class PlacesZone {
     }
     {
       // the lookout: a low dry-stone wall along the edge above the valley, benches facing the view
-      const dry = parts.get('drystone'), cap = parts.get('granite');
+      const dry = parts.get('stone'), cap = parts.get('granite');
       for (const line of [VILLAGE.wall, VILLAGE.wall2]) {
         dry.tint(1, 1, 1, 1); cap.tint(0.84, 0.83, 0.8, 1);
         wall(dry, line.map(([x, z]) => [x, z, y + 0.82]), { thickness: 0.55, groundAt: this.ground, depth: 1.2, tile: 2, cap });
@@ -272,11 +273,11 @@ export class PlacesZone {
         rock.tint(0.84, 0.82, 0.78, 1).place(x, y - 0.3, z, a, 0.06 * (k % 3 - 1), 0).box(-0.3, 0, -0.22, 0.3, 1.25 + 0.3 * (k % 2), 0.22, { tile: 1.6 }).pop();
         this.colliders.push({ type: 'circle', x, z, r: 0.4 });
       }
-      const paint = parts.get('paint'), cloth = parts.get('doubleSided');
-      paint.tint(0.9, 0.9, 0.88, 1).rod(V(ISLAND.x, y - 0.3, ISLAND.z), V(ISLAND.x, y + 7, ISLAND.z), 0.07, 6);
-      cloth.tint(0.75, 0.1, 0.08, 1).tri(V(ISLAND.x, y + 7, ISLAND.z), V(ISLAND.x, y + 5.9, ISLAND.z), V(ISLAND.x + 2.4, y + 6.4, ISLAND.z + 0.3));
+      // a mast and its wooden vane (the way to the beach)
+      wood.tint(1.05, 1.0, 0.92, 1).rod(V(ISLAND.x, y - 0.3, ISLAND.z), V(ISLAND.x, y + 6.4, ISLAND.z), 0.08, 6);
+      wood.tint(0.9, 0.3, 0.2, 1).place(ISLAND.x, y + 5.9, ISLAND.z, 0.3).box(-1.5, -0.14, -0.03, 0.4, 0.14, 0.03, { tile: 1 }).box(-1.9, -0.24, -0.03, -1.5, 0.24, 0.03, { tile: 1 }).pop();
       this.colliders.push({ type: 'circle', x: ISLAND.x, z: ISLAND.z, r: 0.25 });
-      const g = parts.get('granite');
+      const g = rock;
       this._bench(g, ISLAND.x - 3.2, y, ISLAND.z + 1.2, -Math.PI / 2); // facing the beach and the valley
       this._bench(g, ISLAND.x + 1.0, y, ISLAND.z + 3.3, 0);
     }
@@ -293,7 +294,7 @@ export class PlacesZone {
   // The camp: a fire, logs to sit on, hammocks slung between posts, two tents
 
   _hammock(parts, x, z, yaw, color) {
-    const wood = parts.get('woodDark'), cloth = parts.get('doubleSided'), rope = parts.get('matte');
+    const wood = parts.get('woodDark'), cloth = parts.get('doubleSided'), rope = wood;
     const y = this.ground(x, z), ax = Math.sin(yaw), az = Math.cos(yaw), sx = az, sz = -ax;
     const HALF = 2.0, TOP = 1.5, LOW = 0.62, REACH = 1.5;
     const ends = [];
@@ -317,7 +318,7 @@ export class PlacesZone {
         cloth.quad(P(s0, c0), P(s0, c1), P(s1, c1), P(s1, c0), { tile: 1 });
       }
     }
-    rope.tint(0.75, 0.68, 0.52, 1);
+    rope.tint(1.5, 1.35, 1.0, 1);
     for (const [s, e] of [[-1, ends[0]], [1, ends[1]]]) for (const c of [-1, 0, 1]) rope.rod(P(s, c), e, 0.012, 4, { caps: false });
     this.seats.push({ x, y: y + LOW - 0.04, z, yaw, pose: ANIM.lie, label: 'Lie down', exit: [x + sx * 1.15, z + sz * 1.15], reach: 2.0 });
   }
@@ -416,7 +417,10 @@ export class PlacesZone {
         this.colliders.push({ type: 'circle', x: px, z: pz, r: 0.16 });
         return V(px + (x - px) * 0.16, py + h - 0.15, pz + (z - pz) * 0.16);
       });
-      cloth.tint(0.94, 0.9, 0.8, 1).quad(tops[0], tops[1], tops[2], tops[3], { tile: 1 });
+      // (the canvas lets the light through: lit from within rather than dark underneath)
+      const sail = parts.get('glow');
+      sail.tint(0.26, 0.25, 0.2, 1).quad(tops[0], tops[1], tops[2], tops[3], { tile: 1 }).quad(tops[3], tops[2], tops[1], tops[0], { tile: 1 });
+      void cloth;
       for (const [px, py, pz] of [corner(-5.9, 0, 0), corner(6.0, -1.5, 0)]) lantern(parts, px, py, pz, 2.0);
     }
     this._add('beach', parts);
@@ -426,7 +430,7 @@ export class PlacesZone {
     const parts = new Parts();
     const D = POND_DECK, y = D.y, c = Math.cos(D.yaw), s = Math.sin(D.yaw), hw = D.w / 2, hl = D.l / 2;
     const at = (lx, lz) => [D.x + lx * c + lz * s, D.z - lx * s + lz * c];
-    const deck = parts.get('woodDeck'), wet = parts.get('woodWet'), wood = parts.get('woodDark');
+    const deck = parts.get('woodDeck'), wet = parts.get('woodWet'), wood = deck;
     // boards, joists, stilts down to the bed of the pond
     deck.tint(0.96, 0.9, 0.8, 1).place(D.x, y, D.z, D.yaw);
     for (let i = 0; i < 20; i++) {
@@ -447,13 +451,13 @@ export class PlacesZone {
     // the gangway from the bank
     const [gx0, gz0] = D.gangway[0], [gx1, gz1] = D.gangway[1];
     const a = V(gx0, Math.max(this.ground(gx0, gz0), LEVELS.pondBig + 0.25) + 0.05, gz0), b = V(gx1, y, gz1);
-    this.platforms.push(footbridge(parts, a, b, 1.5, { camber: 0, posts: 5, tint: [0.96, 0.9, 0.82] }));
+    this.platforms.push(footbridge(parts, a, b, 1.5, { camber: 0, posts: 5, tint: [0.96, 0.9, 0.82], frameMat: 'woodDeck' }));
     for (const t of [0.3, 0.72]) {
       const px = a.x + (b.x - a.x) * t, pz = a.z + (b.z - a.z) * t;
       for (const sd of [-0.62, 0.62]) wet.cylinder(px + sd, this.ground(px + sd, pz) - 0.5, pz, 0.09, 0.08, a.y + (b.y - a.y) * t - 0.1 - this.ground(px + sd, pz) + 0.5, 6);
     }
     // railing all round, open where the gangway lands
-    wood.tint(0.9, 0.84, 0.76, 1);
+    wood.tint(0.62, 0.52, 0.42, 1);
     const gl = ((gx1 - D.x) * c - (gz1 - D.z) * s); // where the gangway meets the north edge (local x)
     const runs = [[[-hw, -hl], [gl - 0.85, -hl]], [[gl + 0.85, -hl], [hw, -hl]], [[hw, -hl], [hw, hl]], [[hw, hl], [-hw, hl]], [[-hw, hl], [-hw, -hl]]];
     for (const [p0, p1] of runs) {

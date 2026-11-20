@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { Parts, MeshBuilder } from '../../props/MeshBuilder.js';
 import { LAYER, staticCaster } from '../../../render/Shadows.js';
 import { ANIM, SEAT } from '../../../player/Character.js';
-import { PIER, PROMENADE, COAST, pierToWorld } from '../../layout/layout.js';
+import { PIER, PROMENADE, COAST, pierToWorld, BEACH_LOUNGE } from '../../layout/layout.js';
 import { roadRibbon } from '../../props/Structures.js';
 import { distanceCuller, mergeStatic } from '../../props/StaticBatch.js';
 import { surfaceMaterial } from '../../../render/SurfaceMaterial.js';
@@ -185,7 +185,8 @@ export class PierZone {
     const samples = this.data.meta.promenade;
     const hues = [PAL.red, PAL.teal, PAL.yellow, PAL.blue, PAL.pink, PAL.orange, PAL.green];
     const brook = this.data.meta.streams.find((q) => q.id === 'brook').samples;
-    const nearBrook = (x, z, r) => brook.some((q) => (q[0] - x) ** 2 + (q[1] - z) ** 2 < r * r);
+    // (nothing in the brook, nor where the beanbags are)
+    const nearBrook = (x, z, r) => brook.some((q) => (q[0] - x) ** 2 + (q[1] - z) ** 2 < r * r) || (x - BEACH_LOUNGE.x) ** 2 + (z - BEACH_LOUNGE.z) ** 2 < (BEACH_LOUNGE.r + r) ** 2;
     let n = 0;
     for (let i = 3; i < samples.length - 3; i++) {
       const p = samples[i], a = samples[i - 1], b = samples[i + 1];

@@ -168,11 +168,11 @@ export function buildCave(parts, cave, { seats, colliders, ground }) {
     return best;
   };
   const lit = (x, y, z) => { const p = at(x, z), l = lightAt(x, y, z, p.s); return [l[1], l[2], l[3], Math.min(1.9, l[0])]; };
-  const wood = parts.get('woodDark'), glow = parts.get('glow'), iron = parts.get('paint');
+  const wood = parts.get('woodDark'), glow = parts.get('glow'), iron = wood; // (lantern posts in dark wood: one material less)
   for (const l of lights) {
     if (l.kind === 'lantern') {
       const c = lit(l.x, l.floor + 0.8, l.z);
-      iron.tint(0.12 * c[0], 0.12 * c[1], 0.12 * c[2], c[3]).rod(V(l.x, l.floor - 0.2, l.z), V(l.x, l.y - 0.14, l.z), 0.035, 6);
+      iron.tint(0.2 * c[0], 0.19 * c[1], 0.18 * c[2], c[3]).rod(V(l.x, l.floor - 0.2, l.z), V(l.x, l.y - 0.14, l.z), 0.035, 6);
       iron.box(l.x - 0.1, l.y - 0.14, l.z - 0.1, l.x + 0.1, l.y - 0.11, l.z + 0.1).box(l.x - 0.12, l.y + 0.13, l.z - 0.12, l.x + 0.12, l.y + 0.17, l.z + 0.12);
       glow.tint(1, 0.8, 0.45, 1).box(l.x - 0.075, l.y - 0.11, l.z - 0.075, l.x + 0.075, l.y + 0.13, l.z + 0.075);
       colliders.push({ type: 'circle', x: l.x, z: l.z, r: 0.14 });

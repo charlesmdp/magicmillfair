@@ -130,8 +130,9 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border-radius: 
 .emotes.on { display: flex; flex-direction: column; }
 .emotes > div { display: flex; gap: 6px; justify-content: center; }
 .emotes .rank button { background: rgba(242, 193, 78, 0.2); border: 1px solid rgba(242, 193, 78, 0.45) !important; color: #ffe6a6; }
-.touch .emotes { bottom: calc(110px + var(--safe-b)); max-width: 94vw; }
+.touch .emotes { bottom: calc(12px + var(--safe-b)); max-width: calc(100vw - 330px); z-index: 4; }
 .touch .emotes > div { flex-wrap: wrap; }
+.touch .emotes button { padding: 8px 9px; font-size: 12.5px; }
 
 /* what can be done here */
 .prompts { position: absolute; left: 50%; bottom: calc(150px + var(--safe-b)); transform: translateX(-50%); display: flex; gap: 8px; pointer-events: none !important; }
@@ -140,7 +141,8 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border-radius: 
 .prompt kbd { min-width: 24px; padding: 2px 6px; border-radius: 6px; background: var(--accent); color: #2a1d05; font: 700 12px/1.5 system-ui, sans-serif; text-align: center; }
 .touch .prompt kbd { display: none; }
 .touch .prompt { padding: 11px 18px; font-size: 15px; }
-.touch .prompts { bottom: calc(190px + var(--safe-b)); }
+/* on a phone: above the jump and run buttons, under the thumb */
+.touch .prompts { left: auto; right: calc(16px + var(--safe-r)); bottom: calc(108px + var(--safe-b)); transform: none; flex-direction: column; align-items: flex-end; }
 
 /* chat */
 .chat { position: absolute; left: calc(172px + var(--safe-l)); bottom: calc(12px + var(--safe-b)); width: min(380px, 46vw); pointer-events: none !important; }

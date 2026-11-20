@@ -1,4 +1,4 @@
-// Built-in benchmark: a fixed camera tour through both zones, with frame-time statistics.
+// Built-in benchmark: a fixed camera tour of the whole world, with frame-time statistics.
 // Open the page with ?bench=1 (timed tour, about 35 s) or ?bench=<n> (n evenly spaced frames, for slow
 // software renderers). Results are shown on screen and exposed on window.__mmf.bench.
 import * as THREE from 'three';
@@ -17,6 +17,10 @@ const TOUR = [
   [60, 12, 12, 118, 16, 30], // on the pier, the big wheel
   [150, -40, 26, 100, 14, 22], // round the wheel
   [120, 70, 22, 20, 0, 8], // from the sea: the whole valley and its mountains
+  [198, -40, 16, 150, -84, 18], // round the island
+  [-40, -20, 30, -150, 30, 4], // back over the valley
+  [-262, 78, 16, -318, 58, 40], // the stairway
+  [-349, 37, 4, -200, 40, 2], // from the lookout of the village: everything, down to the sea
 ];
 const SEGMENT = 3.2; // seconds per leg in timed mode
 

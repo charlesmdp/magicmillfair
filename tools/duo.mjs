@@ -91,6 +91,24 @@ try {
   const waved = await until(() => bob.page.evaluate(() => [...window.__mmf.avatars.items.values()].some((it) => it.character.emoting === 'Wave')), 20000);
   check('Bob sees Alice wave', !!waved);
   await alice.page.screenshot({ path: path.join(OUT, 'alice.png') });
+  // an animal of light
+  await alice.page.keyboard.press('Digit8');
+  const wolf = await until(() => bob.page.evaluate(() => window.__mmf.rank.active.some((e) => e.kind === 'wolf')), 20000);
+  check('Bob sees the wolf Alice summons', !!wolf);
+  // chat
+  await alice.page.keyboard.press('Enter');
+  await frames(alice, 2);
+  await alice.page.keyboard.type('Hello Bob!');
+  await alice.page.keyboard.press('Enter');
+  const heard = await until(() => bob.page.evaluate(() => { const log = [...document.querySelectorAll('.chat .log p')].map((e) => e.textContent); const tag = [...document.querySelectorAll('.tag')].find((t) => t.firstChild && t.textContent.startsWith('Alice')); return log.some((l) => l === 'Alice Hello Bob!') && tag?.querySelector('.bubble')?.textContent === 'Hello Bob!' ? log : null; }), 20000);
+  check('Bob reads what Alice says, in the chat and over her head', !!heard, JSON.stringify(heard));
+  // sitting down: Alice takes the nearest seat of the world, Bob sees her seated there
+  const seat = await alice.page.evaluate(() => { const a = window.__mmf, s = a.world.seats.find((q) => q.work); a.player.teleport(s.x + 0.6, s.z + 0.8, 0); a.rig.snap(a.player.pos, 0); return { x: s.x, z: s.z }; });
+  await frames(alice, 4);
+  await alice.page.keyboard.press('KeyE');
+  const seated = await until(async () => { const b = await status(bob); const p = b.peers[0]; return p && p.anim === 7 && Math.hypot(p.x - seat.x, p.z - seat.z) < 0.5 ? p : null; }, 30000);
+  const laptop = seated && await until(() => bob.page.evaluate(() => [...window.__mmf.avatars.items.values()].some((it) => it.character.laptop?.visible)), 10000);
+  check('Bob sees Alice sitting at work, laptop on her knees', !!seated && !!laptop, seated ? `pose ${seated.anim}` : 'never seen seated');
   // leaving
   await alice.context.close();
   const alone = await until(async () => { const b = await status(bob); return b.count === 1 ? b : null; }, 20000);

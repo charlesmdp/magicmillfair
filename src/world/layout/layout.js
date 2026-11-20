@@ -540,6 +540,8 @@ export const ZONES = [
   { id: 'stairway', name: 'The Stairway', x: -312, z: 60, r: 40 },
   { id: 'village', name: 'The High Village', x: -380, z: 36, r: 40 },
   { id: 'camp', name: 'The Camp', x: CAMP.x, z: CAMP.z, r: 26 },
+  { id: 'lounge', name: 'The Beach Lounge', x: BEACH_LOUNGE.x, z: BEACH_LOUNGE.z, r: 20 },
+  { id: 'deck', name: 'The Pond Deck', x: POND_DECK.x, z: POND_DECK.z, r: 12 },
   { id: 'grotto', name: 'The Hidden Grotto', x: -303, z: 114, r: 21 },
   { id: 'north', name: 'Echo Cave', x: -34, z: -190, r: 17 },
   { id: 'south', name: 'Hollow of the Old Tree', x: -126, z: 201, r: 16 },
