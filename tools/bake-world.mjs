@@ -384,6 +384,132 @@ for (const p of ponds) {
 }
 
 // ---------------------------------------------------------------------------
+// 4d. Places beyond the valley floor: the island in the cove, the high village and its stairway, the camp
+
+log('island, village, stairway');
+const noTrees = new Grid(N, N); // 1 = nothing is planted here
+const islandMask = new Grid(N, N); // the island: its rock, above the water and just under it
+const islandSand = new Grid(N, N); // its little landing beach
+const stairMask = new Grid(N, N);
+const campMask = new Grid(N, N);
+const disc = (x, z, r, fn) => {
+  for (let j = Math.max(0, Math.floor(gi(z - r))); j <= Math.min(N - 1, Math.ceil(gi(z + r))); j++) {
+    for (let i = Math.max(0, Math.floor(gi(x - r))); i <= Math.min(N - 1, Math.ceil(gi(x + r))); i++) {
+      const d = Math.hypot(wx(i) - x, wx(j) - z);
+      if (d <= r) fn(idx(i, j), d, wx(i), wx(j));
+    }
+  }
+};
+{
+  // --- the island: a cone of rock with the path wound round it as a ledge. Along a ray from the centre the
+  // ground steps up from one turn of the path to the next: ledge, cliff, ledge, cliff… up to the flat top.
+  const IS = L.ISLAND, w2 = IS.width / 2, TAU = Math.PI * 2, top = IS.y1 + 0.2;
+  const wall = (t) => smoothstep(0, 0.62, t) ** 0.75; // a cliff, then a verge level with the path above
+  const hollows = IS.alcoves.map((u) => u * L.ISLAND_LENGTH);
+  disc(IS.x, IS.z, IS.r0 + 24, (q, d, x, z) => {
+    let a = (Math.atan2(z - IS.z, x - IS.x) - IS.start) % TAU;
+    if (a < 0) a += TAU;
+    const turns = []; // the turns crossed by this ray, from the outside in
+    for (let k = 0; ; k++) {
+      const p = L.islandAt(a + TAU * k);
+      if (!p) break;
+      let inner = w2; // wider where a hollow is cut in the rock
+      for (const s0 of hollows) inner = Math.max(inner, w2 + IS.alcove.depth * (1 - smoothstep(IS.alcove.half - 0.9, IS.alcove.half, Math.abs(p.s - s0))));
+      turns.push({ r: p.r, y: p.y, inner });
+    }
+    const t0 = turns[0];
+    let h, ledge = false;
+    if (d >= t0.r + w2) {
+      // the shore: rock dropping into the sea; at the foot of the path, a little beach slopes in instead
+      const e = d - t0.r - w2, run = 4 + t0.y * 0.14;
+      const landing = 1 - smoothstep(0.42, 0.8, a);
+      const jag = (ridged(a * 3.1, 0.5, { seed: 214, octaves: 3 }) - 0.5) * 2.2 * (1 - landing);
+      const cliff = t0.y - (t0.y + 3.2) * smoothstep(0, Math.max(2.5, run + jag), e) - Math.max(0, e - run) * 0.6;
+      const beach = e < 8 ? t0.y - e * 0.21 : t0.y - 1.68 - (e - 8) * 0.45;
+      h = Math.max(H.d[q], lerp(cliff, beach, landing));
+      if (h > -1.5) islandSand.d[q] = landing * (1 - smoothstep(0.5, 2.2, e) * 0) ;
+    } else {
+      h = top;
+      for (let k = 0; k < turns.length; k++) {
+        const t = turns[k], nx = turns[k + 1];
+        const inn = t.r - t.inner;
+        if (d >= inn) { h = t.y; ledge = true; break; }
+        const out = Math.min(nx ? nx.r + w2 : IS.summit, inn - 0.6), y1 = nx ? nx.y : top;
+        if (d > out) {
+          const u = (inn - d) / (inn - out);
+          // buttresses and gullies: the face is pushed in and out, and broken into ledges
+          const rough = (ridged(a * 2.6 + k * 3.1, d / 9, { seed: 211, octaves: 3 }) - 0.5) * 0.34 + (ridged(x / 5, z / 5, { seed: 212, octaves: 2 }) - 0.5) * 0.16;
+          h = lerp(t.y, y1, wall(clamp(u + rough * Math.sin(Math.PI * clamp(u * 1.4, 0, 1)), 0, 1)));
+          h += (ridged(x / 3.4, z / 3.4, { seed: 213, octaves: 2 }) - 0.5) * 1.1 * Math.sin(Math.PI * clamp(u, 0, 1));
+          break;
+        }
+      }
+    }
+    if (h > H.d[q] + 0.01 || d < t0.r + w2) {
+      H.d[q] = h;
+      detailMask.d[q] = ledge || d < IS.summit ? 0 : 1;
+      if (h > -2) islandMask.d[q] = 1;
+    }
+    if (d < IS.r0 + 6) noTrees.d[q] = 1;
+  });
+
+  // --- the village: a shelf levelled on the western mountain. Above it the rock is cut back steeply, below
+  // it the slope falls away.
+  const VL = L.VILLAGE;
+  const sdf = polygonSDF(closedOutline(VL.outline, [], 2));
+  for (let q = 0; q < N * N; q++) {
+    const d = sdf.d[q];
+    if (d > 14) continue;
+    const e = Math.max(0, d);
+    H.d[q] = d <= 0 ? VL.y : clamp(H.d[q], VL.y - e * 1.15, VL.y + e * 1.7);
+    if (d < 1) detailMask.d[q] = 0;
+    if (d < 3.5) noTrees.d[q] = 1;
+  }
+  var villageSDF = sdf;
+
+  // --- the stairway: flights of steps with a level landing at each corner. The rock is cut to them (or
+  // built up under them): steep faces on both sides.
+  const ST = L.STAIRWAY, sw = ST.width / 2;
+  const samples = [];
+  for (let k = 0; k + 1 < ST.points.length; k++) {
+    const [ax, az, ay] = ST.points[k], [bx, bz, by] = ST.points[k + 1];
+    const len = Math.hypot(bx - ax, bz - az), n = Math.ceil(len);
+    for (let m = k === 0 ? 0 : 1; m <= n; m++) {
+      const t = clamp(((m / n) * len - ST.landing) / (len - 2 * ST.landing), 0, 1);
+      samples.push([lerp(ax, bx, m / n), lerp(az, bz, m / n), lerp(ay, by, t)]);
+    }
+  }
+  const sf = polylineField(samples, 18);
+  const ys = samples.map((q) => q[2]);
+  for (let q = 0; q < N * N; q++) {
+    const d = sf.dist[q];
+    if (d > 16) continue;
+    const y = interp(ys, sf.pos[q]) - 0.16; // the ground lies just under the steps
+    const e = d - sw - 0.15;
+    if (e <= 0) { H.d[q] = y; detailMask.d[q] = 0; stairMask.d[q] = 1; }
+    else {
+      H.d[q] = clamp(H.d[q], y - e * 1.5, y + e * 2.8);
+      stairMask.d[q] = Math.max(stairMask.d[q], 1 - smoothstep(0, 1.3, e));
+      if (e < 1) detailMask.d[q] = Math.min(detailMask.d[q], 0.4);
+    }
+    if (d < sw + 3.5) noTrees.d[q] = 1;
+  }
+
+  // --- the camp: a clearing on its wooded rise, gently levelled
+  const C = L.CAMP;
+  let sum = 0, cnt = 0;
+  disc(C.x, C.z, 6, (q) => { sum += H.d[q]; cnt++; });
+  const campY = sum / cnt;
+  disc(C.x, C.z, C.r + 8, (q, d) => {
+    H.d[q] = lerp(H.d[q], campY, (1 - smoothstep(C.r - 4, C.r + 7, d)) * 0.9);
+    campMask.d[q] = 1 - smoothstep(C.r - 5, C.r + 0.5, d);
+    if (d < C.r) noTrees.d[q] = 1;
+  });
+  // --- nothing grows where people lounge
+  disc(L.BEACH_LOUNGE.x, L.BEACH_LOUNGE.z, L.BEACH_LOUNGE.r + 1, (q) => { noTrees.d[q] = 1; });
+}
+
+// ---------------------------------------------------------------------------
 // 5. Roads and paths (graded onto a smoothed longitudinal profile)
 
 log('paths');
@@ -817,6 +943,17 @@ for (let j = 0; j < N; j++) {
       mulTint(q, 1 + 0.16 * alt, 1 + 0.06 * alt, 1 - 0.06 * alt, mount);
     }
 
+    // --- the village (gravel lanes, short grass), the camp (trodden earth under the trees)
+    const vd = villageSDF.d[q];
+    if (vd < 3) {
+      const a = 1 - smoothstep(-1, 3, vd);
+      const lanes = smoothstep(-0.25, 0.2, fbm(x / 13, z / 13, { seed: 61, octaves: 2 }) + 0.25 - Math.hypot(x - L.VILLAGE.square.x, z - L.VILLAGE.square.z) / 60);
+      over(q, 6, a * lanes * 0.9);
+      gh = lerp(gh, 0.2 * (1 - lanes), a);
+      setTint(q, 1.04, 1.0, 0.94, a * lanes * 0.6);
+    }
+    if (campMask.d[q] > 0) { over(q, 3, campMask.d[q] * 0.75); gh *= 1 - campMask.d[q] * 0.9; }
+
     // --- slopes
     // grass holds on banks up to about 45 degrees; beyond that the soil shows (bare rock on the mountains)
     const dirtS = smoothstep(0.86, 1.2, slope + 0.12 * nB);
@@ -840,6 +977,18 @@ for (let j = 0; j < N; j++) {
       over(q, 4, rocky);
       if (h < 0.4) { over(q, 5, b); over(q, 4, (1 - b) * smoothstep(-6, -1, h)); over(q, 5, (1 - b) * (1 - smoothstep(-6, -1.5, h)) * 0.8); }
     }
+
+    // --- the island: rock, short grass on its ledges, sand only where one lands; the steps of the stairway
+    if (islandMask.d[q] > 0) {
+      const sand = islandSand.d[q] * (1 - smoothstep(1.3, 2.4, h));
+      const rock = Math.max(smoothstep(0.55, 1.0, slope + 0.1 * nB), 1 - smoothstep(0.3, 1.6, h)) * (1 - sand);
+      W[5].d[q] *= sand; // (the shore logic above put sand everywhere near the water)
+      over(q, 4, rock);
+      over(q, 5, sand);
+      if (pd > 0) over(q, 3, pd * 0.9 * (1 - sand));
+      gh = h > 1.5 ? 0.3 * (1 - rock) * (1 - pd) : 0;
+    }
+    if (stairMask.d[q] > 0) { over(q, 4, stairMask.d[q]); gh *= 1 - stairMask.d[q]; setTint(q, 1.02, 1.0, 0.97, stairMask.d[q] * 0.8); }
 
     // --- banks and beds of fresh water
     if (wl > 0.5 && (above < 0.05 || waterNear.d[q] < 2.2)) {
@@ -956,7 +1105,7 @@ const trees = [];
     const wl = waterY.d[q];
     if (wl > WATER_NONE + 0.5 && h < wl + 0.12) continue; // standing in water
     if (waterNear.d[q] < 1.1) continue;
-    if (pathClear.d[q] < 0) continue;
+    if (pathClear.d[q] < 0 || noTrees.d[q] > 0) continue;
     if (buildingSDF.d[q] < 4.5) continue;
     if (padMask.d[q] > 0 || gardenSDF.d[q] < 1) continue;
     if (padSDF.court.d[q] < 2 || padSDF.drive.d[q] < 2 || padSDF.plaza.d[q] < 6) continue;
@@ -995,7 +1144,7 @@ const trees = [];
       const q = idx(Math.round(gi(px)), Math.round(gi(pz)));
       if (boundsSDF.d[q] < 1.5 || rng() > cover.d[q] * 0.92) continue;
       const h = H.d[q];
-      if (h < 1.2 || SLOPE.d[q] > 1.36 || waterNear.d[q] < 1.4 || coastD.d[q] < 3 || pathClear.d[q] < 0) continue;
+      if (h < 1.2 || SLOPE.d[q] > 1.36 || waterNear.d[q] < 1.4 || coastD.d[q] < 3 || pathClear.d[q] < 0 || noTrees.d[q] > 0) continue;
       const r = rng();
       const sp = h > 96 ? (r < 0.85 ? 'pine' : 'birch') : h > 48 ? (r < 0.58 ? 'pine' : r < 0.84 ? 'beech' : 'birch') : (r < 0.36 ? 'pine' : r < 0.66 ? 'oak' : r < 0.9 ? 'beech' : 'birch');
       const scale = (0.78 + 0.5 * rng()) * (1 - 0.3 * smoothstep(70, TREE_LINE, h)); // smaller towards the tree line
@@ -1009,7 +1158,7 @@ const trees = [];
   const freeGround = (q, pathMargin) => {
     const wl = waterY.d[q];
     if (wl > WATER_NONE + 0.5 && H.d[q] < wl + 0.15) return false;
-    return waterNear.d[q] > 1.6 && pathClear.d[q] > pathMargin && buildingSDF.d[q] > 1.7 && padMask.d[q] <= 0
+    return waterNear.d[q] > 1.6 && pathClear.d[q] > pathMargin && buildingSDF.d[q] > 1.7 && padMask.d[q] <= 0 && noTrees.d[q] <= 0
       && padSDF.court.d[q] > 0.9 && padSDF.drive.d[q] > 1.2 && padSDF.plaza.d[q] > 5 && SLOPE.d[q] < 1.3;
   };
   const shrub = (x, z, species, scale, r) => { add(x, z, species, scale, r); trees[trees.length - 1].shadeR = r * 0.55 + 0.4; };
@@ -1297,6 +1446,18 @@ log('preview');
     }
   };
   for (const key of ['house', 'annexA', 'annexB', 'shed']) paint(L.frameRect(L.MILL[key], 0.2), [74, 80, 96], 0.12);
+  // the village and its stairway, the deck on the pond
+  for (const hs of [...L.VILLAGE.houses, L.VILLAGE.chapel]) paint(L.frameRect({ x: hs.x, z: hs.z, yaw: hs.yaw, width: hs.w, length: hs.l }, 0.35), [88, 92, 106], 0.12);
+  {
+    const pts = L.STAIRWAY.points, w = L.STAIRWAY.width / 2 + 0.4;
+    for (let k = 0; k + 1 < pts.length; k++) {
+      const [ax, az] = pts[k], [bx, bz] = pts[k + 1], l = Math.hypot(bx - ax, bz - az), nx = (-(bz - az) / l) * w, nz = ((bx - ax) / l) * w;
+      paint([[ax + nx, az + nz], [bx + nx, bz + nz], [bx - nx, bz - nz], [ax - nx, az - nz]], [206, 200, 188], 0.1);
+    }
+    const D = L.POND_DECK, g = D.gangway;
+    paint(L.frameRect({ x: D.x, z: D.z, yaw: D.yaw, width: D.w, length: D.l }), [178, 152, 118], 0.14);
+    paint([[g[0][0] - 0.8, g[0][1]], [g[0][0] + 0.8, g[0][1]], [g[1][0] + 0.8, g[1][1]], [g[1][0] - 0.8, g[1][1]]], [178, 152, 118], 0.14);
+  }
   {
     const P = L.PIER, w = P.width / 2, hw = P.headWidth / 2, h0 = P.length - P.headLength, at = L.pierToWorld;
     paint([at(0, -w), at(h0, -w), at(h0, -hw), at(P.length, -hw), at(P.length, hw), at(h0, hw), at(h0, w), at(0, w)], [178, 152, 118], 0.14);

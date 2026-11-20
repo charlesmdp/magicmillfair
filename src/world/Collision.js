@@ -1,5 +1,6 @@
-// Lightweight collision world: the heightfield, walkable platforms (pier, bridges),
-// and a spatial hash of simple obstacles (tree trunks, buildings, props).
+// Lightweight collision world: the heightfield, walkable platforms (pier, bridges), the playable area (the
+// valley floor plus the places added to it: a stairway, a village, caves), and a spatial hash of simple
+// obstacles (tree trunks, buildings, props).
 const CELL = 8;
 
 export class Collision {
@@ -9,7 +10,9 @@ export class Collision {
     this.boxes = []; // x, z, hw, hl, cos, sin
     this.platforms = [];
     this.grid = new Map();
-    this.confines = [];
+    this.areas = []; // walkable places outside the main bounds (see Areas.js)
+    this.caves = []; // those of them that lie under the ground
+    this._q = { x: 0, z: 0 };
   }
 
   /** Vertical round obstacle. y0/y1 limit it to a height band (things standing on a deck, for instance). */
@@ -27,8 +30,33 @@ export class Collision {
     this._insert(x - ext, z - ezt, x + ext, z + ezt, -1 - i);
   }
 
-  /** The playable area: a closed polygon [[x, z], …]. Nothing confined can leave it. */
+  /** The playable area: a closed polygon [[x, z], …]. Nothing confined can leave it (and the areas added to it). */
   setBounds(points) { this.bounds = points; }
+
+  /** A walkable place reached from the playable area: a Corridor or a Polygon (see Areas.js). */
+  addArea(area) {
+    this.areas.push(area);
+    if (area.cave) this.caves.push(area);
+  }
+
+  /** Can one stand at (x, z)? */
+  walkable(x, z) {
+    const b = this.bounds;
+    if (!b) return true;
+    let inside = false;
+    for (let i = 0, j = b.length - 1; i < b.length; j = i++) {
+      if ((b[j][1] > z) !== (b[i][1] > z) && x < ((b[i][0] - b[j][0]) * (z - b[j][1])) / (b[i][1] - b[j][1]) + b[j][0]) inside = !inside;
+    }
+    if (inside) return true;
+    for (const a of this.areas) if (a.contains(x, z)) return true;
+    return false;
+  }
+
+  /** The cave whose roof is over (x, z), or null: inside one of them and really under the rock. */
+  caveAt(x, z) {
+    for (const c of this.caves) if (c.contains(x, z) && this.data.heightAt(x, z) > c.floorAt(x, z) + 1.2) return c;
+    return null;
+  }
 
   /** Keeps a point inside the playable area, sliding along its edge. Mutates and returns `p` ({x, z}). */
   confine(p) {
@@ -45,7 +73,15 @@ export class Collision {
       const d = (p.x - qx) ** 2 + (p.z - qz) ** 2;
       if (d < best) { best = d; bx = qx; bz = qz; }
     }
-    if (!inside) { p.x = bx; p.z = bz; }
+    if (inside) return p;
+    // outside the valley floor: fine in one of the added places, otherwise back to the nearest edge of them all
+    const q = this._q;
+    for (const a of this.areas) {
+      const d = a.nearest(p.x, p.z, q);
+      if (d === 0) return p;
+      if (d < best) { best = d; bx = q.x; bz = q.z; }
+    }
+    p.x = bx; p.z = bz;
     return p;
   }
 
@@ -117,6 +153,8 @@ export class Collision {
    */
   groundAt(x, z, y) {
     let h = this.data.heightAt(x, z);
+    // in a cave one walks on its floor, under the ground
+    for (const c of this.caves) if (c.contains(x, z)) { const f = c.floorAt(x, z); if (f < h) h = f; }
     for (const p of this.platforms) {
       const ph = p.heightAt(x, z);
       if (ph === null || ph <= h) continue;

@@ -14,6 +14,7 @@ import { Backdrop } from './terrain/Backdrop.js';
 import { loadMaterials } from './props/Materials.js';
 import { MillZone } from './zones/mill/MillZone.js';
 import { PierZone, deckHeight } from './zones/pier/PierZone.js';
+import { PlacesZone } from './zones/places/PlacesZone.js';
 import { Collision } from './Collision.js';
 import { Rocks } from './props/Rocks.js';
 import { Birds } from './wildlife/Birds.js';
@@ -110,6 +111,9 @@ export class World {
     this.pier = new PierZone(this).build();
     this.scene.add(this.pier.group);
     this.zones.push(this.pier);
+    this.places = new PlacesZone(this).build();
+    this.scene.add(this.places.group);
+    this.zones.push(this.places);
     this.detail = 1;
     this.engine.on('detail', (d) => this.applyDetail(d));
     this.rocks = new Rocks(this);
@@ -140,12 +144,15 @@ export class World {
     col.setBounds(this.data.meta.bounds);
     for (const [x, z, r] of this.forest.colliders()) col.addCircle(x, z, r);
     for (const [x, z, r] of this.rocks.colliders) col.addCircle(x, z, r);
-    for (const c of this.mill.colliders) {
-      if (c.type === 'box') col.addBox(c.x, c.z, c.hw, c.hl, c.yaw);
-      else col.addCircle(c.x, c.z, c.r);
+    for (const zone of [this.mill, this.places]) for (const c of zone.colliders) {
+      if (c.type === 'box') col.addBox(c.x, c.z, c.hw, c.hl, c.yaw, c.y0, c.y1);
+      else col.addCircle(c.x, c.z, c.r, c.y0, c.y1);
     }
-    for (const p of this.mill.platforms || []) {
-      if (p.type === 'deck') {
+    for (const a of this.places.areas) col.addArea(a);
+    for (const p of [...(this.mill.platforms || []), ...this.places.platforms]) {
+      if (p.type === 'disc') {
+        col.addPlatform({ clearance: p.clearance ?? 1.0, heightAt: (x, z) => ((x - p.x) ** 2 + (z - p.z) ** 2 <= p.r * p.r ? p.y : null) });
+      } else if (p.type === 'deck') {
         const ax = p.a.x, az = p.a.z, dx = p.b.x - ax, dz = p.b.z - az, len = Math.hypot(dx, dz);
         col.addPlatform({
           clearance: p.clearance ?? 1.1,

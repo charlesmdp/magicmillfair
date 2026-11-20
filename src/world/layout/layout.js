@@ -4,7 +4,8 @@
 //
 // The world in one paragraph: a valley closed by mountains on three sides and open on a cove to the east.
 // The mill, its ponds and its garden sit in the middle; the mill stream runs down to the beach, where the
-// promenade and the pier are. Only the area inside BOUNDS can be walked; the rest is scenery.
+// promenade and the pier are. The area inside BOUNDS can be walked, plus a few places reached from it: a
+// stairway cut in the rock up to a village high above the valley, caves, an island in the cove.
 
 export const WORLD = {
   size: 1024, // detailed terrain: a square centred on the origin (playable area + the mountains around it)
@@ -220,6 +221,54 @@ export function pierToWorld(along, side = 0) {
 }
 
 // ---------------------------------------------------------------------------
+// The island in the cove: a rock about a hundred metres off the beach. A path winds round it up to the top,
+// with hollows in the rock on its inner side and beams over the drop on its outer side.
+
+export const ISLAND = {
+  x: 150, z: -84,
+  start: Math.PI, // direction, from the centre, of the foot of the path: west, facing the beach
+  turns: 2.25,
+  r0: 29, r1: 8, // radius of the path at the foot and at the top
+  y0: 1.0, y1: 34.5, // height of the path at both ends
+  width: 3.8,
+  summit: 6.5, // radius of the flat top
+  alcove: { depth: 2.7, half: 2.0 }, // hollows: how far into the rock, half length along the path
+  alcoves: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9], // where, as fractions of the way up
+  beams: [0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85],
+};
+const ISLAND_THETA = ISLAND.turns * 2 * Math.PI, ISLAND_STEPS = 360;
+const islandRadius = (th) => ISLAND.r0 - (ISLAND.r0 - ISLAND.r1) * (Math.min(Math.max(th, 0), ISLAND_THETA) / ISLAND_THETA) ** 0.9;
+const islandArc = (() => {
+  // length of the path from its foot, tabulated against the angle travelled
+  const t = new Float64Array(ISLAND_STEPS + 1), d = ISLAND_THETA / ISLAND_STEPS;
+  for (let i = 1; i <= ISLAND_STEPS; i++) {
+    const r0 = islandRadius((i - 1) * d), r1 = islandRadius(i * d);
+    t[i] = t[i - 1] + Math.hypot(r1 - r0, ((r0 + r1) / 2) * d);
+  }
+  return t;
+})();
+export const ISLAND_LENGTH = islandArc[ISLAND_STEPS];
+/** The island path after turning `theta` radians from its foot: { r, s (length walked), y }, or null beyond its ends. */
+export function islandAt(theta) {
+  if (theta < 0 || theta > ISLAND_THETA) return null;
+  const f = (theta / ISLAND_THETA) * ISLAND_STEPS, i = Math.min(ISLAND_STEPS - 1, Math.floor(f));
+  const s = islandArc[i] + (islandArc[i + 1] - islandArc[i]) * (f - i);
+  return { r: islandRadius(theta), s, y: ISLAND.y0 + (ISLAND.y1 - ISLAND.y0) * (s / ISLAND_LENGTH) };
+}
+/** The island path at a fraction u (0 foot, 1 top) of its length: position, height, direction from the centre, unit tangent uphill. */
+export function islandPath(u) {
+  const target = Math.min(1, Math.max(0, u)) * ISLAND_LENGTH;
+  let lo = 0, hi = ISLAND_STEPS;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (islandArc[m] <= target) lo = m; else hi = m; }
+  const theta = ((lo + (target - islandArc[lo]) / (islandArc[hi] - islandArc[lo] || 1)) / ISLAND_STEPS) * ISLAND_THETA;
+  const a = ISLAND.start + theta, r = islandRadius(theta), dr = (islandRadius(theta + 0.01) - islandRadius(theta - 0.01)) / 0.02;
+  let tx = dr * Math.cos(a) - r * Math.sin(a), tz = dr * Math.sin(a) + r * Math.cos(a);
+  const l = Math.hypot(tx, tz) || 1;
+  tx /= l; tz /= l;
+  return { x: ISLAND.x + Math.cos(a) * r, z: ISLAND.z + Math.sin(a) * r, y: ISLAND.y0 + (ISLAND.y1 - ISLAND.y0) * (target / ISLAND_LENGTH), r, angle: a, tx, tz, nx: Math.cos(a), nz: Math.sin(a) };
+}
+
+// ---------------------------------------------------------------------------
 // Roads and paths. kind: asphalt | gravel | dirt | boardwalk
 
 export const PATHS = [
@@ -277,7 +326,64 @@ export const PATHS = [
     id: 'shore', kind: 'dirt', width: 1.4, cut: 0.5,
     points: [[-62, 82], [-48, 70], [-32, 60], [-14, 53], [4, 49], [18, 50], [27, 55]],
   },
+  {
+    // From the pond path to the foot of the stairway.
+    id: 'stairs', kind: 'dirt', width: 1.5, cut: 0.5,
+    points: [[-238, 77], [-249, 72.5], [-261, 65.5], [-271.5, 58.8]],
+  },
+  {
+    // From the pond path into the woods, to the camp.
+    id: 'camp', kind: 'dirt', width: 1.3, cut: 0.5,
+    points: [[-176.5, 30.5], [-181, 22], [-186, 12], [-190.5, 3], [-193, -2]],
+  },
+  {
+    // The path that winds round the island.
+    id: 'island', kind: 'dirt', width: 3.0, cut: 0.2,
+    points: Array.from({ length: 96 }, (_, i) => { const p = islandPath(i / 95); return [Math.round(p.x * 100) / 100, Math.round(p.z * 100) / 100]; }),
+  },
 ];
+
+// ---------------------------------------------------------------------------
+// The stairway and the high village. Steps cut in the rock climb the western mountain in five flights, from
+// the end of the pond to a shelf nearly a hundred metres above the valley, where a few houses look out over
+// everything down to the sea.
+
+export const STAIRWAY = {
+  width: 2.6,
+  // corners [x, z, y]: a straight flight between two of them, a landing at each
+  points: [[-273, 58, 22.7], [-300, 74, 35.9], [-316, 48, 52.7], [-336, 68, 74.5], [-350, 46, 94.7], [-356, 30, 108]],
+  landing: 1.7, // radius of the landings
+};
+
+const SQUARE = { x: -378, z: 37 };
+// a house whose front door (local +X) looks at the square, give or take `turn`
+const house = (x, z, w, l, h, turn = 0) => ({ x, z, w, l, h, yaw: Math.round((Math.atan2(-(SQUARE.z - z), SQUARE.x - x) + turn) * 1000) / 1000 });
+export const VILLAGE = {
+  y: 108,
+  outline: [[-353, 18], [-353, 52], [-363, 63], [-389, 65], [-403, 52], [-406, 27], [-394, 11], [-368, 9]],
+  square: SQUARE,
+  // houses: centre, yaw, width (along local X), length, eave height
+  houses: [
+    house(-367.5, 16, 6.0, 8.0, 2.9, 0.12), house(-383, 16.5, 5.6, 7.4, 2.7, -0.08), house(-396.5, 25.5, 6.2, 8.6, 3.1, 0.1),
+    house(-398, 43, 6.4, 9.0, 3.0, -0.06), house(-390, 57, 5.8, 7.8, 2.8, 0.1), house(-374, 58.5, 5.6, 7.2, 2.7, -0.1),
+  ],
+  // the chapel: its door, in the gable (local +Z), looks at the square
+  chapel: { x: -362.5, z: 52.5, w: 5.0, l: 7.5, h: 3.4, yaw: Math.round(Math.atan2(SQUARE.x + 362.5, SQUARE.z - 52.5) * 1000) / 1000 },
+  fountain: { x: -378, z: 37 },
+  // low wall of the lookout, along the edge above the valley (east side)
+  wall: [[-362.4, 62.2], [-353.3, 51.6], [-353.3, 33.4]],
+  wall2: [[-353.3, 26.6], [-353.3, 18.4], [-367.6, 9.3]],
+};
+
+// ---------------------------------------------------------------------------
+// Places to rest
+
+// The camp in the woods north of the pond: hammocks round a fire.
+export const CAMP = { x: -197, z: -9, r: 12.5 };
+// Beanbags at the north end of the beach (the left end, looking out to sea)…
+export const BEACH_LOUNGE = { x: 44.5, z: -93, yaw: 0.35, r: 7 };
+// …and on a deck on stilts over the great pond, reached by a gangway from the north bank.
+export const POND_DECK = { x: -152.5, z: 37, yaw: 0.06, w: 10, l: 8, y: LEVELS.pondBig + 0.85, gangway: [[-151, 22.2], [-151.9, 33]] };
 
 // Boardwalk along the back of the beach (planks laid on graded ground).
 export const PROMENADE = {
@@ -375,6 +481,9 @@ export const HERO_TREES = [
   [4, -92, 'pine', 1.2], // on the lookout
   [-9, -84, 'pine', 0.95],
   [-30, 40, 'willow', 0.95],
+  // on the island: pines holding on to its ledges, a palm by the landing
+  ...[[0.07, 'palm', 0.8, -3.6], [0.2, 'pine', 0.7, 3.3], [0.31, 'cypress', 0.8, 3.2], [0.49, 'pine', 0.85, 3.4], [0.6, 'pine', 0.6, 3.2], [0.7, 'cypress', 0.7, 3.3], [0.8, 'pine', 0.75, 3.3], [0.9, 'pine', 0.55, 3.2]]
+    .map(([u, species, scale, off]) => { const p = islandPath(u); return [Math.round((p.x + p.nx * off) * 10) / 10, Math.round((p.z + p.nz * off) * 10) / 10, species, scale]; }),
 ];
 
 // Where visitors arrive: on the lane, facing the mill (yaw is the camera heading).
@@ -391,6 +500,10 @@ export const ZONES = [
   { id: 'elder', name: 'The Old Tree', x: -110, z: 138, r: 50 },
   { id: 'seafront', name: 'The Seafront', x: 24, z: -6, r: 62 },
   { id: 'pier', name: 'The Grand Pier', x: 96, z: 14, r: 72 },
+  { id: 'island', name: 'The Island', x: ISLAND.x, z: ISLAND.z, r: 44 },
+  { id: 'stairway', name: 'The Stairway', x: -312, z: 60, r: 40 },
+  { id: 'village', name: 'The High Village', x: -380, z: 36, r: 40 },
+  { id: 'camp', name: 'The Camp', x: CAMP.x, z: CAMP.z, r: 26 },
 ];
 
 // The playable area (closed polygon). On land it is the foot of the mountains; at sea, how far one can swim.
@@ -406,4 +519,4 @@ export const BOUNDS = [
 ];
 
 // What the map of the HUD shows.
-export const MAP_VIEW = { x0: -305, z0: -205, x1: 255, z1: 205 };
+export const MAP_VIEW = { x0: -420, z0: -205, x1: 255, z1: 205 };
