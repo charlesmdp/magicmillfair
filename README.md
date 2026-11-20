@@ -37,20 +37,33 @@ Everything is described in the repository (`wrangler.jsonc`): there is nothing t
 1. In the Cloudflare dashboard, open **Workers & Pages**, create an application by **importing a Git
    repository**, authorise GitHub and pick this repository.
 2. Keep the proposed name, `magicmillfair` (it is the one written in `wrangler.jsonc`: both must be the
-   same), and the default deploy command, `npx wrangler deploy`. The build command can stay empty.
+   same), the proposed production branch (the default branch of the repository) and the default deploy
+   command, `npx wrangler deploy`. The build command can stay empty.
 3. Confirm. Cloudflare installs the dependencies, builds the site, then publishes the site, the Worker and the
    multiplayer rooms. The address looks like `https://magicmillfair.<your-account>.workers.dev`; a domain
    name can be attached afterwards from the dashboard.
 
-From then on, every `git push` to the production branch of the repository redeploys by itself.
+From then on, every `git push` to the production branch of the repository redeploys by itself: a couple of
+minutes later a new line appears in the **Deployments** tab of the Worker.
+
+If a push does not show up there:
+
+- on GitHub, look at the mark next to the commit: a red cross means the build ran and failed (its "Details"
+  link opens the log);
+- no mark at all means Cloudflare never started a build: in the Worker, open **Settings**, then the build
+  settings, check that the production branch is the one you push to, then disconnect the repository and
+  connect it again;
+- to start a build without pushing, create a **Deploy Hook** in the same build settings and send a `POST`
+  request to its address (`curl -X POST "<address>"`).
 
 What runs at Cloudflare: the files of the site are served directly; `cloudflare/worker.js` only answers the
 multiplayer. Each room is a *Durable Object* running exactly the same relay as the Node server
 (`server/protocol.js`), and it **goes to sleep as soon as nobody moves**: visitors stay connected, but the
 room no longer consumes anything.
 
-Costs: the rooms are SQLite-backed Durable Objects, the kind the free Cloudflare plan accepted when this
-project was written. Quotas and prices change: check the
+Costs: the rooms are SQLite-backed Durable Objects, the only kind the free Cloudflare plan accepts — up to
+100,000 requests and 13,000 GB-seconds a day when this was written, after which the rooms stop answering
+until the next day (UTC). Quotas and prices change: check the
 [Workers](https://developers.cloudflare.com/workers/platform/pricing/) and
 [Durable Objects](https://developers.cloudflare.com/durable-objects/platform/pricing/) pages. If your plan
 refused Durable Objects, remove the `durable_objects` and `migrations` blocks from `wrangler.jsonc`: the
@@ -307,9 +320,9 @@ Game and multiplayer
 - Multiplayer: presence only (position, name, colour, emotes). No text chat, no saving, no anti-cheat.
   48 visitors per room. Not tested with real latency, nor behind HTTPS or a proxy.
 - Cloudflare: the Cloudflare version was tested in the official runtime locally (protocol, rooms going to
-  sleep, two browsers), and the deployment was validated with a dry run — but **never published to a real
-  account**: the working environment could reach neither Cloudflare nor its documentation. The first real
-  deployment is therefore still to be watched, and the quotas to be checked on their site.
+  sleep, two browsers) and the deployment validated with a dry run. A first deployment from the Git import
+  built and published without error, but **multiplayer on Cloudflare's real network has not been observed
+  yet**, and a push does not always start a build there (see "Putting it online with Cloudflare").
 - The fair itself (stalls, games) is still to be built: only the pier and its big wheel exist.
 
 Privacy
