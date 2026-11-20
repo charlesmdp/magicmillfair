@@ -392,6 +392,7 @@ const islandMask = new Grid(N, N); // the island: its rock, above the water and 
 const islandSand = new Grid(N, N); // its little landing beach
 const stairMask = new Grid(N, N);
 const campMask = new Grid(N, N);
+const caveMouth = new Grid(N, N);
 const disc = (x, z, r, fn) => {
   for (let j = Math.max(0, Math.floor(gi(z - r))); j <= Math.min(N - 1, Math.ceil(gi(z + r))); j++) {
     for (let i = Math.max(0, Math.floor(gi(x - r))); i <= Math.min(N - 1, Math.ceil(gi(x + r))); i++) {
@@ -507,6 +508,22 @@ const disc = (x, z, r, fn) => {
   });
   // --- nothing grows where people lounge
   disc(L.BEACH_LOUNGE.x, L.BEACH_LOUNGE.z, L.BEACH_LOUNGE.r + 1, (q) => { noTrees.d[q] = 1; });
+  // --- cave mouths: level ground in front (not in the pool of the waterfall), nothing planted before or above them
+  for (const c of L.CAVES) {
+    const [mx, mz, mr, floor] = c.nodes[0], [nx, nz] = c.nodes[1];
+    const l = Math.hypot(nx - mx, nz - mz), ax = (nx - mx) / l, az = (nz - mz) / l; // into the rock
+    disc(mx, mz, 9, (q, d, x, z) => {
+      noTrees.d[q] = 1;
+      const along = (x - mx) * ax + (z - mz) * az, across = Math.abs((x - mx) * az - (z - mz) * ax);
+      if (c.id !== 'grotto' && along < 0.5 && along > -5 && across < mr + 2.5) {
+        const w = (1 - smoothstep(mr + 0.5, mr + 2.5, across)) * (1 - smoothstep(-2.5, -5, along));
+        H.d[q] = lerp(H.d[q], floor - 0.04, w);
+        if (w > 0.5) detailMask.d[q] = 0;
+      }
+      // (no grass in the mouth itself, where the ground is cut away)
+      if (along > -1.2 && along < c.open + 5 && across < mr + 1.5) caveMouth.d[q] = 1;
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1005,7 +1022,7 @@ for (let j = 0; j < N; j++) {
       }
       gh *= 1 - strip;
     }
-    if (above < 0.03) gh = 0;
+    if (above < 0.03 || caveMouth.d[q] > 0) gh = 0;
     gh *= 1 - Math.min(1, padMask.d[q]); // nothing grows through paving and planks
     grassH.d[q] = clamp(gh, 0, 1);
 

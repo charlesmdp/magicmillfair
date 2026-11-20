@@ -138,9 +138,20 @@ export class Water {
       }
       const idx = [];
       // counter-clockwise seen from above: the surface faces the sky. Sheer drops are left to the waterfalls.
+      const sheer = [];
+      for (let i = 0; i < n - 1; i++) sheer.push(pts[i][2] - pts[i + 1][2] > (along[i + 1] - along[i]) * 1.6);
+      // a tall fall takes the steep steps at its head and foot with it: that water is in the air too
       for (let i = 0; i < n - 1; i++) {
-        const drop = pts[i][2] - pts[i + 1][2], run = along[i + 1] - along[i];
-        if (drop > run * 1.6) { this._fall(s, i, along); continue; }
+        if (!sheer[i] || sheer[i - 1]) continue;
+        let j = i, drop = 0;
+        while (sheer[j]) { drop += pts[j][2] - pts[j + 1][2]; j++; }
+        if (drop < 3) continue;
+        const steep = (k) => k >= 0 && k < n - 1 && pts[k][2] - pts[k + 1][2] > (along[k + 1] - along[k]) * 0.25;
+        for (let k = i - 1; steep(k) && k > i - 4; k--) sheer[k] = true;
+        for (let k = j; steep(k) && k < j + 4; k++) sheer[k] = true;
+      }
+      for (let i = 0; i < n - 1; i++) {
+        if (sheer[i]) { this._fall(s, i, along); continue; }
         const a = i * 2;
         idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
       }
@@ -174,7 +185,7 @@ export class Water {
       const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
       const side = new THREE.Vector3(-dz, 0, dx);
       const start = new THREE.Vector3(pts[f.from][0], pts[f.from][2] + 0.03, pts[f.from][1]);
-      const v0 = 1.5 + height * 0.06; // m/s over the lip
+      const v0 = 1.9 + height * 0.085; // m/s over the lip: a tall fall shoots clear of the rock (one can walk behind it)
       const T = Math.sqrt((2 * height) / 9.81);
       const sheet = [new THREE.Vector3(start.x - dx * 1.6, start.y + 0.02, start.z - dz * 1.6)];
       const steps = Math.max(6, Math.round(height * 1.3));
@@ -189,8 +200,8 @@ export class Water {
       // the boil: a patch of foam on the pool, drifting downstream
       const land = sheet[sheet.length - 1];
       const boil = [];
-      for (let k = -1; k <= 6; k++) boil.push(new THREE.Vector3(land.x + dx * k * 1.1, foot[2] + 0.04, land.z + dz * k * 1.1));
-      const foam = fallsRibbon(boil, side, wLip * 1.9, this.shared.uFoam, (k) => [0, 1, 1, 0.9, 0.7, 0.45, 0.2, 0][k], true);
+      for (let k = -1; k <= 6; k++) boil.push(new THREE.Vector3(land.x + dx * k * 0.95, foot[2] + 0.04, land.z + dz * k * 0.95));
+      const foam = fallsRibbon(boil, side, wLip * 1.5, this.shared.uFoam, (k) => [0, 0.85, 0.9, 0.75, 0.55, 0.35, 0.15, 0][k], true);
       foam.name = `falls:${f.stream.id}:boil`;
       this.group.add(foam);
     }

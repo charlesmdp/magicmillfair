@@ -109,8 +109,10 @@ export class PlayerController {
     const sin = Math.sin(camYaw), cos = Math.cos(camYaw);
     let wx = -sin * f + cos * s, wz = -cos * f - sin * s;
     const wl = Math.hypot(wx, wz);
-    const terrain = this.data.heightAt(pos.x, pos.z);
-    const water = this.data.waterAt(pos.x, pos.z);
+    // under the ground (a cave) the water of the surface above does not count
+    this.cave = this.collision.caveAt(pos.x, pos.z);
+    const terrain = this.cave ? this.cave.floorAt(pos.x, pos.z) : this.data.heightAt(pos.x, pos.z);
+    const water = this.cave ? -1000 : this.data.waterAt(pos.x, pos.z);
     const depth = water > -500 ? water - terrain : -1;
     // deep enough and low enough: float
     this.swimming = depth > 1.2 && pos.y < water - 0.55;

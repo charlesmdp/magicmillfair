@@ -48,8 +48,17 @@ export class CameraRig {
     // buildings in the way: come closer
     const hit = this.collision.segment(f.x, f.z, f.x + dx * dist, f.z + dz * dist);
     if (hit < 1) dist = Math.max(0.8, dist * hit - 0.35);
+    // underground: the camera stays in the gallery (or looks in from the open, through its mouth)
+    const under = !!this.collision.caveAt(f.x, f.z);
+    if (under) {
+      for (let i = 1; i <= 12; i++) {
+        const t = (i / 12) * dist;
+        if (!this.collision.walkable(f.x + dx * t, f.z + dz * t)) { dist = Math.max(0.5, t - dist / 12 - 0.3); break; }
+      }
+    }
     // The ground in the way (looking downhill, a bank, a deck): lift the camera over it rather than closing in.
-    const floor = (x, z) => Math.max(this.collision.groundAt(x, z, f.y), this.data.waterAt(x, z));
+    // (from inside a cave, the water running over the ground above is not in the way)
+    const floor = (x, z) => (under && this.collision.caveAt(x, z) ? this.collision.groundAt(x, z, f.y) : Math.max(this.collision.groundAt(x, z, f.y), this.data.waterAt(x, z)));
     let lift = 0;
     for (let i = 1; i <= 6; i++) {
       const t = (i / 6) * dist;
@@ -71,6 +80,9 @@ export class CameraRig {
     c.position.x = q.x; c.position.z = q.z;
     const g = floor(c.position.x, c.position.z) + 0.3;
     if (c.position.y < g) c.position.y = g;
+    // …and under its roof
+    const cave = this.collision.caveAt(c.position.x, c.position.z);
+    if (cave) c.position.y = Math.min(c.position.y, Math.max(g, cave.ceilingAt(c.position.x, c.position.z) - 0.35));
     c.lookAt(f.x, f.y + 0.1, f.z);
   }
 }

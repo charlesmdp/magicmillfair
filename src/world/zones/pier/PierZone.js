@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { Parts, MeshBuilder } from '../../props/MeshBuilder.js';
 import { LAYER, staticCaster } from '../../../render/Shadows.js';
+import { ANIM, SEAT } from '../../../player/Character.js';
 import { PIER, PROMENADE, COAST, pierToWorld } from '../../layout/layout.js';
 import { roadRibbon } from '../../props/Structures.js';
 import { distanceCuller, mergeStatic } from '../../props/StaticBatch.js';
@@ -520,19 +521,30 @@ export class PierZone {
     pivot.add(wheel);
     this.frame.add(pivot);
 
-    // gondola: cabin hung under its pivot bar
+    // gondola: an open car hung under its pivot bar — a tub with two benches facing each other, a roof on posts
     const g = new MeshBuilder();
+    const TUB = { x: 1.36, z: 1.06, floor: -3.3, rim: -2.48, t: 0.08 }, BENCH = TUB.floor + 0.44;
     g.tint(1, 1, 1, 1);
     g.rod(V(-1.5, 0, 0), V(1.5, 0, 0), 0.07, 6);
     for (const x of [-1.25, 1.25]) g.beam(V(x, 0, 0), V(x, -1.25, 0), 0.07, 0.07);
-    // roof, body with a window band, floor
-    g.tint(1, 1, 1, 1);
     g.box(-1.42, -1.42, -1.12, 1.42, -1.25, 1.12);
-    g.tint(0.1, 0.13, 0.16, 1);
-    g.box(-1.3, -2.3, -1.0, 1.3, -1.42, 1.0, { faces: 'xXzZ' });
-    g.tint(1, 1, 1, 1);
-    for (const [px, pz] of [[-1.3, -1.0], [1.3, -1.0], [1.3, 1.0], [-1.3, 1.0]]) g.box(px - 0.06, -2.3, pz - 0.06, px + 0.06, -1.42, pz + 0.06);
-    g.box(-1.36, -3.3, -1.06, 1.36, -2.3, 1.06);
+    for (const [px, pz] of [[-1.3, -1.0], [1.3, -1.0], [1.3, 1.0], [-1.3, 1.0]]) g.box(px - 0.06, TUB.rim, pz - 0.06, px + 0.06, -1.42, pz + 0.06);
+    g.box(-TUB.x, TUB.floor, -TUB.z, TUB.x, TUB.rim, TUB.z, { faces: 'xXzZy' });
+    {
+      // the inside of the tub (darker), its rim, the benches
+      const xi = TUB.x - TUB.t, zi = TUB.z - TUB.t, y0 = TUB.floor + 0.06, y1 = TUB.rim;
+      g.tint(0.5, 0.5, 0.5, 0.8);
+      g.quad(V(-xi, y0, zi), V(-xi, y0, -zi), V(-xi, y1, -zi), V(-xi, y1, zi));
+      g.quad(V(xi, y0, -zi), V(xi, y0, zi), V(xi, y1, zi), V(xi, y1, -zi));
+      g.quad(V(xi, y0, zi), V(-xi, y0, zi), V(-xi, y1, zi), V(xi, y1, zi));
+      g.quad(V(-xi, y0, -zi), V(xi, y0, -zi), V(xi, y1, -zi), V(-xi, y1, -zi));
+      g.quad(V(-xi, y0, zi), V(xi, y0, zi), V(xi, y0, -zi), V(-xi, y0, -zi));
+      g.tint(0.9, 0.9, 0.9, 1);
+      g.box(-TUB.x, y1, -TUB.z, TUB.x, y1 + 0.03, -zi); g.box(-TUB.x, y1, zi, TUB.x, y1 + 0.03, TUB.z);
+      g.box(-TUB.x, y1, -zi, -xi, y1 + 0.03, zi); g.box(xi, y1, -zi, TUB.x, y1 + 0.03, zi);
+      g.tint(0.72, 0.6, 0.45, 1);
+      for (const sx of [-1, 1]) g.box(sx > 0 ? xi - 0.5 : -xi, y0, -zi, sx > 0 ? xi : -xi + 0.5, BENCH, zi);
+    }
     g.tint(0.85, 0.85, 0.85, 1);
     g.box(-1.2, -3.42, -0.9, 1.2, -3.3, 0.9);
     const gondolas = new THREE.InstancedMesh(g.build(), mat, N);
@@ -544,7 +556,10 @@ export class PierZone {
     for (const l of [LAYER.DYNAMIC_CASTER, LAYER.REFLECT]) gondolas.layers.enable(l);
     pivot.add(gondolas);
     const m = new THREE.Matrix4();
-    let angle = 0;
+    // The wheel follows the clock rather than the frames: everybody sees the same car at the same place.
+    const SPEED = 0.055, TAU = Math.PI * 2;
+    const clock = () => ((Date.now() / 1000) * SPEED) % TAU;
+    let angle = clock();
     const place = () => {
       for (let i = 0; i < N; i++) {
         const a = angle + (i / N) * Math.PI * 2;
@@ -556,12 +571,54 @@ export class PierZone {
       gondolas.instanceMatrix.needsUpdate = true;
     };
     place();
-    this.animated.push((dt) => {
-      angle += dt * 0.055;
+    this.animated.push(() => {
+      angle = clock();
       wheel.rotation.x = -angle;
       place();
     });
     this.wheelPivot = pivot;
+
+    // --- riding: two seats per car, boarded from the platform while the car passes over it
+    this.group.updateMatrixWorld(true);
+    const h = PIER.heading, WINDOW = 0.15; // how far from the lowest point a car can be boarded or left (radians)
+    const low = (i) => { let d = (angle + (i / N) * TAU - 1.5 * Math.PI) % TAU; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU; return d; };
+    const _v = new THREE.Vector3();
+    const seats = [];
+    for (let i = 0; i < N; i++) {
+      for (const sx of [-1, 1]) {
+        const bx = sx * (TUB.x - TUB.t - 0.25); // middle of the bench, facing the other one
+        const fx = -sx * Math.cos(h), fz = -sx * Math.sin(h); // world direction faced
+        seats.push({
+          car: i, pose: ANIM.sit, locked: true, label: 'Board the wheel', leaving: false,
+          yaw: Math.atan2(fx, fz),
+          at: (out) => {
+            const a = angle + (i / N) * TAU;
+            _v.set(bx - sx * SEAT.back, Math.sin(a) * R + BENCH - SEAT.under, Math.cos(a) * R);
+            pivot.localToWorld(_v);
+            out.x = _v.x; out.y = _v.y; out.z = _v.z; out.yaw = Math.atan2(fx, fz);
+            return out;
+          },
+          canLeave: () => Math.abs(low(i)) < WINDOW,
+          // back on the platform, on the land side of the cars
+          exit: () => { _v.set(-2.8, 0, Math.max(-3.5, Math.min(3.5, Math.cos(angle + (i / N) * TAU) * R))); pivot.localToWorld(_v); return [_v.x, _v.z]; },
+        });
+      }
+    }
+    const at = { x: 0, y: 0, z: 0, yaw: 0 };
+    /** The seat that can be boarded from where the player stands, if any (a moving seat: see Interact). */
+    this.boarding = (pos) => {
+      const dx = pos.x - PIER.rootX, dz = pos.z - PIER.rootZ;
+      const u = dx * Math.cos(h) + dz * Math.sin(h) - W.along, v = -dx * Math.sin(h) + dz * Math.cos(h);
+      if (Math.abs(u) > 5.2 || Math.abs(v) > 5.2 || Math.abs(pos.y - (PIER.deckY + 0.9)) > 0.6) return null;
+      let best = null, bestD = 3.6 * 3.6;
+      for (const s of seats) {
+        if (Math.abs(low(s.car)) > WINDOW) continue;
+        s.at(at);
+        const d = (at.x - pos.x) ** 2 + (at.z - pos.z) ** 2;
+        if (d < bestD) { best = s; bestD = d; }
+      }
+      return best;
+    };
   }
 
   /** Painted sign over the entrance, drawn with canvas text. */

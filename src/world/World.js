@@ -111,9 +111,11 @@ export class World {
     this.pier = new PierZone(this).build();
     this.scene.add(this.pier.group);
     this.zones.push(this.pier);
+    this.seatSources.push((pos) => this.pier.boarding(pos)); // the cars of the big wheel
     this.places = new PlacesZone(this).build();
     this.scene.add(this.places.group);
     this.zones.push(this.places);
+    this.terrain.setHoles(this.places.holes);
     this.detail = 1;
     this.engine.on('detail', (d) => this.applyDetail(d));
     this.rocks = new Rocks(this);

@@ -376,6 +376,41 @@ export const VILLAGE = {
 };
 
 // ---------------------------------------------------------------------------
+// Caves: galleries and chambers under the mountains. Each node is [x, z, half width, floor, height of the roof];
+// the first one is the mouth, a flat end at the foot of the rock face, and the gallery runs on from there.
+// `open` is how many metres the mouth cuts through the face before the rock closes over it.
+
+export const CAVES = [
+  {
+    // behind the waterfall: a chamber under the torrent, then a narrow passage to a second, hidden room
+    id: 'grotto', name: 'The Hidden Grotto', open: 3.6,
+    nodes: [
+      [-286.1, 122.5, 2.7, 12.0, 3.6], [-290.6, 122.8, 4.3, 12.05, 4.6], [-297.5, 123.5, 7.2, 12.1, 6.2], [-303.0, 121.0, 4.6, 12.2, 4.7],
+      [-307.0, 115.5, 2.1, 12.6, 3.1], [-311.0, 109.2, 2.3, 13.2, 3.3], [-316.0, 103.0, 5.9, 13.6, 5.6], [-319.6, 99.2, 2.6, 13.6, 3.0],
+    ],
+    lights: [[-299.5, 126.5, 'crystal'], [-294.5, 119.0, 'lantern'], [-318.5, 104.5, 'crystal'], [-313.5, 100.5, 'crystal'], [-309.2, 112.0, 'crystal']],
+    chairs: [[-299.5, 121.2, 0.9], [-297.0, 119.6, -0.3], [-300.6, 118.4, 2.1], [-314.5, 104.8, 2.4], [-317.6, 101.8, 0.6]],
+    table: [-298.9, 119.6],
+  },
+  {
+    // at the foot of the northern mountains, behind the fields
+    id: 'north', name: 'Echo Cave', open: 4.6,
+    nodes: [[-32, -170.4, 2.3, 8.3, 3.4], [-32.3, -177, 2.3, 8.4, 3.4], [-33.5, -184.5, 2.6, 8.6, 3.6], [-35.5, -193.5, 7.0, 8.8, 6.0], [-37, -200, 3.4, 8.8, 3.8]],
+    lights: [[-31.0, -191.0, 'lantern'], [-39.8, -195.6, 'lantern'], [-33.2, -180, 'lantern']],
+    chairs: [[-36.9, -191.2, 1.9], [-34.0, -191.6, -1.4], [-35.2, -195.4, 3.3], [-37.9, -194.2, 2.6]],
+    table: [-35.6, -193.2],
+  },
+  {
+    // under the southern slopes, a few steps from the old tree
+    id: 'south', name: 'Hollow of the Old Tree', open: 3.6,
+    nodes: [[-124, 184.0, 2.2, 35.75, 3.3], [-124.5, 190, 2.2, 35.85, 3.3], [-126.3, 197.5, 2.5, 36.0, 3.5], [-127, 206.5, 6.6, 36.2, 5.8], [-126, 213, 3.2, 36.2, 3.8]],
+    lights: [[-131.2, 204.5, 'lantern'], [-123.2, 208.8, 'crystal'], [-125.4, 194, 'lantern']],
+    chairs: [[-128.6, 208.6, 0.4], [-125.6, 208.4, -0.5], [-127.2, 204.2, 3.14]],
+    table: [-127.1, 206.6],
+  },
+];
+
+// ---------------------------------------------------------------------------
 // Places to rest
 
 // The camp in the woods north of the pond: hammocks round a fire.
@@ -504,6 +539,9 @@ export const ZONES = [
   { id: 'stairway', name: 'The Stairway', x: -312, z: 60, r: 40 },
   { id: 'village', name: 'The High Village', x: -380, z: 36, r: 40 },
   { id: 'camp', name: 'The Camp', x: CAMP.x, z: CAMP.z, r: 26 },
+  { id: 'grotto', name: 'The Hidden Grotto', x: -303, z: 114, r: 21 },
+  { id: 'north', name: 'Echo Cave', x: -34, z: -190, r: 17 },
+  { id: 'south', name: 'Hollow of the Old Tree', x: -126, z: 201, r: 16 },
 ];
 
 // The playable area (closed polygon). On land it is the foot of the mountains; at sea, how far one can swim.

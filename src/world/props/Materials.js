@@ -10,6 +10,8 @@ const DEFS = {
   granite: ['granite', { rough: 0.82, spec: 0.16, normalScale: 0.8 }],
   // natural rock (boulders): the granite texture, larger grain, greyer, standing in water where needed
   rock: ['granite', { rough: 0.9, spec: 0.1, normalScale: 1.5, uvScale: 0.45, color: [0.62, 0.6, 0.56], waterline: true }],
+  // the walls of the caves: the same stone again, darker (their light comes from the vertices)
+  cave: ['granite', { rough: 0.94, spec: 0.06, normalScale: 1.7, uvScale: 0.5, color: [0.6, 0.55, 0.5] }],
   slate: ['slate', { rough: 0.55, spec: 0.5, normalScale: 1.2 }],
   woodDark: ['wood_dark', { rough: 0.8, spec: 0.15, normalScale: 1.0 }],
   woodDeck: ['wood_deck', { rough: 0.82, spec: 0.14, normalScale: 1.0 }],

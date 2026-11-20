@@ -8,9 +8,10 @@ import { mergeStatic, distanceCuller } from '../../props/StaticBatch.js';
 import { stairs, wall, footbridge } from '../../props/Structures.js';
 import { buildOutbuilding } from '../mill/MillHouse.js';
 import { Corridor, Polygon } from '../../Areas.js';
+import { buildCave } from './Caves.js';
 import { seatAt } from '../../../player/PlayerController.js';
 import { ANIM } from '../../../player/Character.js';
-import { STAIRWAY, VILLAGE, ISLAND, islandPath, CAMP, BEACH_LOUNGE, POND_DECK, LEVELS } from '../../layout/layout.js';
+import { STAIRWAY, VILLAGE, ISLAND, islandPath, CAMP, BEACH_LOUNGE, POND_DECK, LEVELS, CAVES } from '../../layout/layout.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 // beanbag colours (linear-ish albedo): no two neighbours alike
@@ -54,6 +55,7 @@ export class PlacesZone {
     this.colliders = [];
     this.platforms = [];
     this.areas = [];
+    this.holes = []; // openings to cut in the terrain (cave mouths)
     this.animated = [];
     this.seats = world.seats;
     this.ground = (x, z) => this.data.heightAt(x, z);
@@ -61,8 +63,8 @@ export class PlacesZone {
   }
 
   /** Turn a Parts set into meshes belonging to `place` (optionally placed at a frame). */
-  _add(place, parts, frame = null, y = 0) {
-    const g = parts.toMeshes(this.world.materials, { name: place, layers: this.cast });
+  _add(place, parts, frame = null, y = 0, layers = this.cast) {
+    const g = parts.toMeshes(this.world.materials, { name: place, layers });
     if (frame) { g.position.set(frame.x, y, frame.z); g.rotation.y = frame.yaw || 0; }
     g.updateMatrixWorld(true);
     (this._roots[place] ||= []).push(g);
@@ -76,13 +78,20 @@ export class PlacesZone {
     this._camp();
     this._beach();
     this._deck();
+    for (const cave of CAVES) {
+      const parts = new Parts();
+      const { corridor, hole } = buildCave(parts, cave, this);
+      this.areas.push(corridor);
+      this.holes.push(hole);
+      this._add(`cave-${cave.id}`, parts, null, 0, []); // (underground: no shadow to cast, nothing to mirror)
+    }
     this.group.updateMatrixWorld(true);
     for (const [place, roots] of Object.entries(this._roots)) this.group.add(mergeStatic(roots, place));
     this.group.updateMatrixWorld(true);
     // the village and its stairway are landmarks; furniture and small things go with distance
     this._cull = distanceCuller(this.group, [
       [/^village:(stone|slate|granite|drystone)$/, Infinity], [/^stairway:/, Infinity], [/^village:/, 330],
-      [/^island:/, 340], [/^camp/, 250], [/^beach:/, 300], [/^deck:(woodDeck|woodWet|woodDark)$/, 520], [/^deck:/, 260],
+      [/^cave-\w+:cave$/, 170], [/^cave-/, 90], [/^island:/, 340], [/^camp/, 250], [/^beach:/, 300], [/^deck:(woodDeck|woodWet|woodDark)$/, 520], [/^deck:/, 260],
     ]);
     return this;
   }

@@ -59,11 +59,11 @@ export class Corridor {
   /** Floor of a cave at (x, z) (call for a point inside). */
   floorAt(x, z) { this._probe(x, z); return this._lerp(3); }
 
-  /** Its roof there: highest along the axis, lower towards the walls. */
+  /** Its roof there: highest along the axis, lower towards the walls (the vault of Caves.js). */
   ceilingAt(x, z) {
     this._probe(x, z);
-    const u = Math.min(1, this._d / (this._r || 1));
-    return this._lerp(3) + this._lerp(4) * (0.5 + 0.5 * Math.sqrt(1 - u * u));
+    const u = Math.min(0.97, this._d / ((this._r || 1) + 0.3));
+    return this._lerp(3) + this._lerp(4) * (1 - u * u) ** 0.275;
   }
 
   /** How far inside (m from the mouth, along the corridor). */

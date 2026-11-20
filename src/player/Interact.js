@@ -34,7 +34,7 @@ export class Interact {
     }
     for (const source of this.world.seatSources) {
       const s = source(pos);
-      if (s) return s; // a ride takes precedence
+      if (s && !this._taken(s)) return s; // a ride takes precedence
     }
     return best && !this._taken(best) ? best : null;
   }
@@ -46,6 +46,8 @@ export class Interact {
     if (!active) { this.target = null; hud.setPrompt(0, null); hud.setPrompt(1, null); return; }
     if (seat) {
       this.target = null;
+      // a ride is left where it can be: at the bottom
+      if (seat.locked && seat.leaving && (!seat.canLeave || seat.canLeave())) { seat.leaving = false; player.stand(); return; }
       hud.setPrompt(0, seat.locked ? (seat.leaving ? 'Getting off at the bottom…' : 'Get off') : 'Stand up');
       hud.setPrompt(1, seat.work ? (seat.pose === ANIM.work ? 'Close the laptop' : 'Open the laptop') : null);
       return;

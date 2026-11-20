@@ -62,6 +62,11 @@ uniform vec3 uWaterScatter;
 in vec3 vWorld;
 in float vClip;
 in float vDist;
+#ifdef HOLES
+uniform vec4 uHoleA[HOLES]; // mouth of a cave: x, z, direction into the rock
+uniform vec4 uHoleB[HOLES]; // half width, depth, floor, height of the vault
+uniform float uHoleShape;
+#endif
 
 vec4 layerAlbedo(int i, vec2 xz, float farMix, float macro) {
 #ifdef USE_LAYER_TEX
@@ -77,6 +82,17 @@ vec4 layerAlbedo(int i, vec2 xz, float farMix, float macro) {
 
 void main() {
   if (vClip < 0.0) discard;
+#ifdef HOLES
+  // cave mouths: the rock face is cut away inside the vault of the gallery (which has its own walls)
+  for (int i = 0; i < HOLES; i++) {
+    vec2 d = vWorld.xz - uHoleA[i].xy;
+    float along = dot(d, uHoleA[i].zw);
+    if (along < 0.0 || along > uHoleB[i].y) continue;
+    float u = (d.x * uHoleA[i].w - d.y * uHoleA[i].z) / uHoleB[i].x;
+    if (abs(u) >= 1.0) continue;
+    if (vWorld.y > uHoleB[i].z + 0.1 && vWorld.y < uHoleB[i].z + uHoleB[i].w * pow(1.0 - u * u, uHoleShape)) discard;
+  }
+#endif
   vec2 uv = worldUV(vWorld.xz);
   vec4 wa = texture(uSplatA, uv);
   vec4 wb = texture(uSplatB, uv);
@@ -262,6 +278,18 @@ export class Terrain {
     if (layers.colors) this.uniforms.uLayerColor.value = layers.colors;
     this.material.userData.baseDefines.USE_LAYER_TEX = 1;
     this.material.defines.USE_LAYER_TEX = 1;
+    this.material.needsUpdate = true;
+  }
+
+  /** Openings in the ground: [{ x, z, dx, dz (into the rock), half, depth, floor, height, shape }] (cave mouths). */
+  setHoles(holes) {
+    if (!holes.length) return;
+    this.uniforms.uHoleA = { value: holes.map((h) => new THREE.Vector4(h.x, h.z, h.dx, h.dz)) };
+    this.uniforms.uHoleB = { value: holes.map((h) => new THREE.Vector4(h.half, h.depth, h.floor, h.height)) };
+    this.uniforms.uHoleShape = { value: holes[0].shape };
+    Object.assign(this.material.uniforms, { uHoleA: this.uniforms.uHoleA, uHoleB: this.uniforms.uHoleB, uHoleShape: this.uniforms.uHoleShape });
+    this.material.userData.baseDefines.HOLES = holes.length;
+    this.material.defines.HOLES = holes.length;
     this.material.needsUpdate = true;
   }
 

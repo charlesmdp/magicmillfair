@@ -227,6 +227,7 @@ async function boot() {
     camera.updateMatrixWorld();
     interact.update(mode === 'walk');
     rank.update(dt, camera);
+    me.setAmbient(player.cave ? player.cave.light(player.pos.x, player.pos.z) : 1); // dim in the caves
     {
       // rings on the water around the swimmer, a splash when dropping in
       const p = player.pos, level = data.waterAt(p.x, p.z);
