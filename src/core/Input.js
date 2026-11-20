@@ -38,7 +38,8 @@ export class Input {
       this.keys.add(e.code);
       this._pressed.add(e.code);
       if (actions[e.code]) this.emit(actions[e.code]);
-      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+      // (Enter opens the chat: without this, the same key press would go on to submit the empty field it has just focused)
+      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.code)) e.preventDefault();
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());

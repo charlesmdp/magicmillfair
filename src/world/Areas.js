@@ -90,7 +90,9 @@ export class Polygon {
     return inside;
   }
 
+  /** Nearest point of the polygon to (x, z), written to `out`; returns the squared distance to it (0 inside). */
   nearest(x, z, out) {
+    if (this.contains(x, z)) { out.x = x; out.z = z; return 0; }
     const p = this.points;
     let best = Infinity;
     for (let i = 0, j = p.length - 1; i < p.length; j = i++) {

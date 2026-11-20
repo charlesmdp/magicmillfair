@@ -351,7 +351,8 @@ export const PATHS = [
 export const STAIRWAY = {
   width: 2.6,
   // corners [x, z, y]: a straight flight between two of them, a landing at each
-  points: [[-273, 58, 22.7], [-300, 74, 35.9], [-316, 48, 52.7], [-336, 68, 74.5], [-350, 46, 94.7], [-356, 30, 108]],
+  // (the last flight arrives square on to the edge of the village, between the two walls of its lookout)
+  points: [[-273, 58, 22.7], [-300, 74, 35.9], [-316, 48, 52.7], [-336, 68, 74.5], [-339, 31, 94.7], [-356, 30, 108]],
   landing: 1.7, // radius of the landings
 };
 

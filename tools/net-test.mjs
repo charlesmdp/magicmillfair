@@ -366,6 +366,27 @@ async function testProtocol(server) {
   await c.wait((m) => m.t === 'e');
   await sleep(TICK);
   check('ws: emotes are relayed to the room only', JSON.stringify(emote) === JSON.stringify({ t: 'e', id: b.id, e: 7 }) && c.msgs.some((m) => m.t === 'e') && ![b, d].some((x) => x.msgs.some((m) => m.t === 'e')), emote);
+  // Chat: relayed as it comes to the others in the room, cleaned and bounded, never sent back, never stored.
+  b.send({ t: 'c', m: '  Hello\u0000  there,\n<b>friends</b>  ' });
+  const said = await a.wait((m) => m.t === 'c');
+  await c.wait((m) => m.t === 'c');
+  await sleep(TICK);
+  check('ws: chat lines are relayed to the room only, cleaned, not echoed', JSON.stringify(said) === JSON.stringify({ t: 'c', id: b.id, m: 'Hello there, <b>friends</b>' }) && c.msgs.some((m) => m.t === 'c') && ![b, d].some((x) => x.msgs.some((m) => m.t === 'c')), said);
+  b.send({ t: 'c', m: 'é'.repeat(500) });
+  const long = await a.wait((m) => m.t === 'c' && m.m.startsWith('é'));
+  check('ws: a chat line is cut at 200 characters', !!long && [...long.m].length === 200, long && long.m.length);
+  for (const bad of [{ t: 'c' }, { t: 'c', m: 42 }, { t: 'c', m: '   \n ' }, { t: 'c', m: ['x'] }]) b.send(bad);
+  const chatBefore = a.msgs.filter((m) => m.t === 'c').length;
+  for (let i = 0; i < 12; i++) b.send({ t: 'c', m: `line ${i}` });
+  await sleep(350);
+  const chatGot = a.msgs.filter((m) => m.t === 'c').length - chatBefore;
+  check('ws: empty or malformed lines are dropped; a talkative player is slowed down, not disconnected (5 in a row, then 1 every 2 s)', chatGot >= 2 && chatGot <= 4 && b.code === null && server.alive(), { chatGot, code: b.code });
+  const late = new Client(port, 't1');
+  const wl = await late.hello('Late');
+  await sleep(TICK * 2);
+  check('ws: nothing is kept for those who arrive later', !!wl && !late.msgs.some((m) => m.t === 'c') && !JSON.stringify(wl).includes('friends'), late.msgs.filter((m) => m.t === 'c'));
+  await late.close();
+  await a.wait((m) => m.t === 'leave' && m.id === late.id);
   a.send({ t: 'ping', c: 42 });
   const pong = await a.wait((m) => m.t === 'pong');
   check('ws: ping → pong with the server clock', !!pong && pong.c === 42 && Number.isFinite(pong.now), pong);
@@ -391,8 +412,8 @@ async function testProtocol(server) {
 
   // Leaving.
   await c.close();
-  const left = await a.wait((m) => m.t === 'leave');
-  await b.wait((m) => m.t === 'leave');
+  const left = await a.wait((m) => m.t === 'leave' && m.id === c.id);
+  await b.wait((m) => m.t === 'leave' && m.id === c.id);
   check('ws: closing sends a leave to the room', JSON.stringify(left) === JSON.stringify({ t: 'leave', id: c.id }) && !d.msgs.some((m) => m.t === 'leave'), left);
 
   // Oversized frame → that connection is closed, the others are told.
@@ -486,6 +507,7 @@ async function testProtocol(server) {
 function listen(presence) {
   const events = [];
   for (const type of ['status', 'join', 'leave', 'emote', 'identity']) presence.on(type, (arg) => events.push({ type, ...arg }));
+  presence.on('chat', ({ id, text }) => events.push({ type: 'chat', id, text }));
   return events;
 }
 
@@ -566,6 +588,14 @@ async function testPresence(server) {
   await until(() => eb.some((e) => e.type === 'emote'));
   await sleep(100);
   check('presence: emotes', JSON.stringify(eb.filter((e) => e.type === 'emote')) === JSON.stringify([{ type: 'emote', id: a.id, emote: 7 }]) && !ea.some((e) => e.type === 'emote'), eb.filter((e) => e.type === 'emote'));
+  const line = a.sendChat('  Bonjour   tout\tle monde  ');
+  const none = a.sendChat('   ');
+  await until(() => eb.some((e) => e.type === 'chat'));
+  await sleep(60);
+  check('presence: chat lines reach the others, cleaned; the sender gets back what was sent', line === 'Bonjour tout le monde' && none === ''
+    && JSON.stringify(eb.filter((e) => e.type === 'chat')) === JSON.stringify([{ type: 'chat', id: a.id, text: 'Bonjour tout le monde' }]) && !ea.some((e) => e.type === 'chat'), eb.filter((e) => e.type === 'chat'));
+  const burst = Array.from({ length: 8 }, (_, i) => a.sendChat(`fast ${i}`)).filter(Boolean).length;
+  check('presence: the client itself holds back a flood of lines', burst >= 3 && burst <= 4, burst);
   a.setIdentity('  Zoé <3 ', 12);
   await until(() => eb.some((e) => e.type === 'identity'));
   check('presence: setIdentity renames for the others, without a second join', ada.name === 'Zoé 3' && ada.color === 12 && a.name === 'Zoé 3' && eb.filter((e) => e.type === 'join').length === 1 && b.peers.size === 1, [ada.name, ada.color]);
@@ -675,6 +705,9 @@ async function testPresence(server) {
   const lw = await walk(l1, l2, tab1, 5, 2, [0, 5, 1, 1, 0]);
   check('presence: local mode — smooth motion that ends on the right spot', lw.smooth && lw.follows && lw.stopped, lw);
   l2.sendEmote(4);
+  l2.sendChat('salut');
+  await until(() => el1.some((e) => e.type === 'chat'));
+  check('presence: local mode — chat between tabs', el1.some((e) => e.type === 'chat' && e.text === 'salut' && e.id === l2.id) && !el2.some((e) => e.type === 'chat'), el1.filter((e) => e.type === 'chat'));
   l2.setIdentity('Renommé', 9);
   await until(() => el1.some((e) => e.type === 'identity') && el1.some((e) => e.type === 'emote'));
   check('presence: local mode — emotes and renames', el1.some((e) => e.type === 'emote' && e.emote === 4 && e.id === l2.id) && l1.peers.get(l2.id)?.name === 'Renommé' && l1.peers.get(l2.id)?.color === 9, el1);

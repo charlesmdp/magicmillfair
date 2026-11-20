@@ -1,6 +1,7 @@
 // Dev tool: gameplay checks in headless Chromium — walking onto the pier, crossing a footbridge, climbing the
-// garden steps, being stopped by the mountains and by a wall, swimming, changing the quality tier (page reload
-// at the same spot) — and the download size.
+// garden steps, being stopped by the mountains and by a wall, swimming, the stairway and the village, the
+// island, sitting and lying down, the big wheel, the caves, chat and emotes, changing the quality tier (page
+// reload at the same spot) — and the download size.
 // usage: node tools/walk-test.mjs [--q=low]
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
@@ -144,6 +145,124 @@ try {
   const lx = (w1.x - house.x) * Math.cos(house.yaw) - (w1.z - house.z) * Math.sin(house.yaw);
   const lz = (w1.x - house.x) * Math.sin(house.yaw) + (w1.z - house.z) * Math.cos(house.yaw);
   check('the house walls stop the walker', !(Math.abs(lx) < house.width / 2 && Math.abs(lz) < house.length / 2), `position in the house frame ${lx.toFixed(1)}, ${lz.toFixed(1)}`);
+
+  // --- the stairway: a flight climbed on its steps, then the village and its lookout wall
+  const places = await page.evaluate(async () => {
+    const L = await import('/src/world/layout/layout.js');
+    return { stairs: L.STAIRWAY.points, village: L.VILLAGE, beam: L.islandPath(L.ISLAND.beams[2]), islandY: L.ISLAND.y1, caves: L.CAVES.map((c) => ({ id: c.id, nodes: c.nodes })), wheel: L.pierToWorld(L.PIER.wheel.along - 2.8, 0.5) };
+  });
+  const prompt = () => page.evaluate(() => [...document.querySelectorAll('.prompt.on span')].map((e) => e.textContent));
+  const toward = (ax, az, bx, bz) => ((Math.atan2(-(bx - ax), -(bz - az)) * 180) / Math.PI + 360) % 360; // camera heading to walk from a to b
+  {
+    const [a, b2] = places.stairs;
+    await place(a[0], a[1], toward(a[0], a[1], b2[0], b2[1]));
+    await frames(3);
+    const y0 = (await state()).y;
+    await walk(46, true);
+    const s1 = await state();
+    check('climbs a flight of the stairway', Math.abs(y0 - a[2]) < 0.3 && Math.abs(s1.y - b2[2]) < 0.4 && Math.hypot(s1.x - b2[0], s1.z - b2[1]) < 2.5, `from ${y0.toFixed(1)} to ${s1.y.toFixed(1)} (corner at ${b2[2]})`);
+    const top = places.stairs.at(-1), V = places.village;
+    await place(top[0], top[1], 90); // from the top of the steps, west into the village
+    await frames(3);
+    await walk(24, true);
+    const v1 = await state();
+    await place(-357.5, 42, 270); // then east, into the wall of the lookout
+    await frames(3);
+    await walk(30, true);
+    const v2 = await state();
+    check('reaches the village; the wall of the lookout holds', Math.abs(v1.y - V.y) < 0.3 && v1.x < top[0] - 8 && v2.x < -353.6 && Math.abs(v2.y - V.y) < 0.3, `walked to x ${v1.x.toFixed(1)} at ${v1.y.toFixed(1)} m; stopped at x ${v2.x.toFixed(1)}`);
+  }
+
+  // --- the island: on its path, then out on a beam over the drop
+  {
+    const b2 = places.beam;
+    await place(b2.x, b2.z, 0);
+    await frames(3);
+    const i0 = await state();
+    const beamAt = await page.evaluate(() => { const p = window.__mmf.world.places.platforms.filter((q) => q.type === 'slab' && q.hw === 1.75)[2]; return { x: p.x, z: p.z, y: p.y }; });
+    await place(beamAt.x, beamAt.z, 0);
+    await frames(3);
+    const i1 = await state();
+    check('walks the island path and stands on a beam over the drop', Math.abs(i0.y - b2.y) < 0.25 && Math.abs(i1.y - beamAt.y) < 0.1 && i1.grounded, `path at ${i0.y.toFixed(2)} (${b2.y.toFixed(2)}), beam at ${i1.y.toFixed(2)}`);
+  }
+
+  // --- sitting down to work on a beanbag, lying in a hammock
+  {
+    const spot = await page.evaluate(() => { const w = window.__mmf.world, s = w.seats.find((q) => q.work), h = w.seats.find((q) => q.pose === 6); return { s: [s.x, s.z], h: [h.x, h.z] }; });
+    await place(spot.s[0] + 0.5, spot.s[1] + 0.9, 0);
+    await frames(3);
+    const offered = await prompt();
+    await page.keyboard.press('KeyE');
+    await frames(10);
+    const sat = await page.evaluate(() => { const a = window.__mmf; return { anim: a.player.anim, seat: !!a.player.seat, laptop: !!a.me.laptop?.visible }; });
+    await page.keyboard.press('KeyL');
+    await frames(4);
+    const closed = await page.evaluate(() => ({ anim: window.__mmf.player.anim, laptop: !!window.__mmf.me.laptop?.visible }));
+    await page.keyboard.press('KeyE');
+    await frames(6);
+    const up = await page.evaluate(() => !!window.__mmf.player.seat);
+    check('sits on a beanbag with a laptop, closes it, gets up', offered.includes('Sit down') && sat.seat && sat.anim === 7 && sat.laptop && closed.anim === 5 && !closed.laptop && !up, `${JSON.stringify(offered)} → ${JSON.stringify(sat)} → ${JSON.stringify(closed)}`);
+    await place(spot.h[0] + 1.1, spot.h[1] + 0.3, 0);
+    await frames(3);
+    const offer2 = await prompt();
+    await page.keyboard.press('KeyE');
+    await frames(10);
+    const lying = await page.evaluate(() => window.__mmf.player.anim);
+    await page.keyboard.press('Space');
+    await frames(6);
+    check('lies down in a hammock, jumps out of it', offer2.includes('Lie down') && lying === 6 && !(await page.evaluate(() => !!window.__mmf.player.seat)), `${JSON.stringify(offer2)}, pose ${lying}`);
+  }
+
+  // --- the big wheel: boarded from the platform when a car comes by
+  {
+    await place(places.wheel[0], places.wheel[1], 270);
+    await frames(3);
+    let offer = await prompt();
+    for (let i = 0; i < 80 && !offer.includes('Board the wheel'); i++) { await frames(2); offer = await prompt(); }
+    const yBefore = (await state()).y;
+    await page.keyboard.press('KeyE');
+    await frames(40);
+    const ride = await page.evaluate(() => { const a = window.__mmf; return { seat: !!a.player.seat, y: a.player.pos.y, anim: a.player.anim }; });
+    check('boards a car of the big wheel and goes up with it', offer.includes('Board the wheel') && ride.seat && ride.anim === 5 && ride.y > yBefore + 0.3, `from ${yBefore.toFixed(2)} to ${ride.y.toFixed(2)} m`);
+    await page.evaluate(() => window.__mmf.player.teleport(0, 4.3, 0)); // (down again)
+  }
+
+  // --- caves: into one of them from the field, stopped by its wall; through the waterfall into the grotto
+  {
+    await place(-32, -164, 0);
+    await frames(3);
+    await walk(46, true);
+    const c1 = await page.evaluate(() => { const p = window.__mmf.player; return { x: p.pos.x, y: p.pos.y, z: p.pos.z, cave: p.cave?.name || null, cam: window.__mmf.engine.camera.position.y }; });
+    await page.evaluate(() => { window.__mmf.rig.yaw += Math.PI / 2; });
+    await walk(34, true);
+    const c2 = await state();
+    const north = places.caves.find((c) => c.id === 'north').nodes;
+    const room = north[3];
+    check('walks into a cave; its walls and its roof hold', c1.cave === 'north' && c1.z < -186 && Math.abs(c1.y - room[3]) < 0.4 && c1.cam < room[3] + room[4] + 0.2 && Math.hypot(c2.x - room[0], c2.z - room[1]) < room[2] + 0.6, `at z ${c1.z.toFixed(1)}, floor ${c1.y.toFixed(2)}, camera ${c1.cam.toFixed(1)}; ${Math.hypot(c2.x - room[0], c2.z - room[1]).toFixed(1)} m from the middle of a ${room[2]} m room`);
+    await place(-280.5, 122.4, 90);
+    await frames(3);
+    await walk(40, false);
+    const g = await page.evaluate(() => { const p = window.__mmf.player; return { x: p.pos.x, y: p.pos.y, cave: p.cave?.name || null, wading: !!p.wading, swimming: p.swimming }; });
+    check('walks through the waterfall into the grotto', g.cave === 'grotto' && g.x < -292 && !g.wading && !g.swimming, `x ${g.x.toFixed(1)}, y ${g.y.toFixed(2)}`);
+  }
+
+  // --- chat and the animals of light
+  {
+    await place(0, 4.3, 90);
+    await frames(3);
+    await page.keyboard.press('Enter');
+    await frames(3);
+    const typing = await page.evaluate(() => document.activeElement === document.querySelector('.chat input'));
+    await page.keyboard.type('Hello valley');
+    await page.keyboard.press('Enter');
+    await frames(4);
+    const said = await page.evaluate(() => ({ log: [...document.querySelectorAll('.chat .log p')].map((e) => e.textContent), bubble: document.querySelector('.tag.self .bubble')?.textContent, focus: document.activeElement === document.querySelector('.chat input') }));
+    check('Enter opens the chat, the line shows in the log and over the avatar', typing && said.log.some((l) => l.endsWith('Hello valley')) && said.bubble === 'Hello valley' && !said.focus, JSON.stringify(said));
+    await page.keyboard.press('Digit9');
+    await frames(4);
+    const emote = await page.evaluate(() => { const r = window.__mmf.rank; return { active: r.active.length, kind: r.active[0]?.kind, calls: 0 }; });
+    check('an animal of light is summoned', emote.active === 1 && emote.kind === 'tiger', JSON.stringify(emote));
+  }
 
   // --- quality change: the page reloads and resumes where we were
   await place(-121.8, -40, 184);

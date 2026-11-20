@@ -236,7 +236,7 @@ async function boot() {
       // one's own speech bubble
       const tag = hud.selfTag, saying = tag.classList.contains('saying') && mode === 'walk';
       if (saying) {
-        _p.set(p.x, p.y + 2.25, p.z).project(camera);
+        _p.set(p.x, p.y + 2.0, p.z).project(camera);
         const on = _p.z > -1 && _p.z < 1;
         tag.style.display = on ? '' : 'none';
         if (on) tag.style.transform = `translate(${((_p.x * 0.5 + 0.5) * engine.width).toFixed(1)}px, ${((-_p.y * 0.5 + 0.5) * engine.height).toFixed(1)}px) translate(-50%, -100%)`;
