@@ -53,7 +53,9 @@ Everything is described in the repository (`wrangler.jsonc`): there is nothing t
    name can be attached afterwards from the dashboard.
 
 From then on, every `git push` to the production branch of the repository redeploys by itself: a couple of
-minutes later a new line appears in the **Deployments** tab of the Worker.
+minutes later a new line appears in the **Deployments** tab of the Worker. To know which version is online,
+look at the bottom of the welcome screen or of the settings: it shows the commit the site was built from and
+when (`Version 1a2b3c4 · built 2026-11-20 19:43 UTC`).
 
 If a push does not show up there:
 

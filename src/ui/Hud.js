@@ -18,6 +18,10 @@ const EMOTE_LABEL = ['Wave', 'Dance', 'Thumbs up', 'Yes', 'No', 'Punch'];
 const RANK_LABEL = { deer: 'Deer', wolf: 'Wolf', tiger: 'Tiger', dragon: 'Dragon' };
 const hex = (i) => `#${AVATAR_COLORS[((i % 16) + 16) % 16].toString(16).padStart(6, '0')}`;
 
+// the version of this build (see vite.config.js)
+const BUILD = typeof __BUILD__ !== 'undefined' ? __BUILD__ : { commit: '', date: '' };
+export const VERSION = `Version ${BUILD.commit || 'local'}${BUILD.date ? ` · built ${BUILD.date} UTC` : ''}`;
+
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
 
 export class Hud {
@@ -54,6 +58,7 @@ export class Hud {
           <button class="go" type="button">Explore</button>
           <div class="keys"></div>
         </div>
+        <div class="version">${VERSION}</div>
       </div>`;
     this.root.append(s);
     this.bar = s.querySelector('.bar i');
@@ -148,6 +153,7 @@ export class Hud {
         <h3>Your name</h3>
         <input type="text" maxlength="16" class="name" autocomplete="off" spellcheck="false" />
         <p class="net-info"></p>
+        <p class="version">${VERSION}</p>
       </div>`;
     this.root.append(h);
     this.zoneEl = h.querySelector('.zone');

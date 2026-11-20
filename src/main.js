@@ -10,7 +10,7 @@ import { PlayerController } from './player/PlayerController.js';
 import { CameraRig } from './player/CameraRig.js';
 import { Interact } from './player/Interact.js';
 import { RankEmotes } from './player/RankEmotes.js';
-import { Hud } from './ui/Hud.js';
+import { Hud, VERSION } from './ui/Hud.js';
 import { Presence, cleanChat } from './net/Presence.js';
 import { RemoteAvatars } from './net/RemoteAvatars.js';
 import { Benchmark } from './app/Benchmark.js';
@@ -28,7 +28,7 @@ const store = {
 const canvas = document.getElementById('view');
 const ui = document.getElementById('ui');
 const touch = isMobile() || (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches);
-const app = { ready: false, frames: 0, THREE };
+const app = { ready: false, frames: 0, THREE, version: VERSION };
 window.__mmf = app;
 
 const input = new Input(canvas);
