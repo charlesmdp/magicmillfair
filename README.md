@@ -57,15 +57,18 @@ minutes later a new line appears in the **Deployments** tab of the Worker. To kn
 look at the bottom of the welcome screen or of the settings: it shows the commit the site was built from and
 when (`Version 1a2b3c4 · built 2026-11-20 19:43 UTC`).
 
-If a push does not show up there:
+**If pushes do not show up there** (Cloudflare's push trigger does not always fire, and reconnecting the
+repository does not always cure it), the repository carries its own trigger: `.github/workflows/deploy.yml`
+asks Cloudflare to build after every push to the production branch. It needs one secret, once:
 
-- on GitHub, look at the mark next to the commit: a red cross means the build ran and failed (its "Details"
-  link opens the log);
-- no mark at all means Cloudflare never started a build: in the Worker, open **Settings**, then the build
-  settings, check that the production branch is the one you push to, then disconnect the repository and
-  connect it again;
-- to start a build without pushing, create a **Deploy Hook** in the same build settings and send a `POST`
-  request to its address (`curl -X POST "<address>"`).
+1. Cloudflare dashboard → the Worker → **Settings** → **Builds** → **Deploy Hooks**: create a hook for the
+   production branch and copy its address.
+2. GitHub → the repository → **Settings** → **Secrets and variables** → **Actions** → **New repository
+   secret**: name `CLOUDFLARE_DEPLOY_HOOK`, value: the address.
+
+From then on each push starts the workflow (GitHub, **Actions** tab), which starts the build at Cloudflare.
+The same tab has a **Run workflow** button to deploy the current state without pushing. The address is a
+password of sorts — anyone who has it can start builds: keep it in the secret, never in a file.
 
 What runs at Cloudflare: the files of the site are served directly; `cloudflare/worker.js` only answers the
 multiplayer. Each room is a *Durable Object* running exactly the same relay as the Node server
@@ -267,6 +270,7 @@ server/index.js            Node production server: static files + presence relay
 server/protocol.js         the relay itself (protocol, validation, batching), shared by both hostings
 cloudflare/worker.js       Cloudflare version: Worker + one Durable Object per room
 wrangler.jsonc             Cloudflare deployment settings (build included)
+.github/workflows/deploy.yml   asks Cloudflare to build after every push (see "Putting it online with Cloudflare")
 tools/                     world and texture bakers, tests, measurements (see below)
 public/assets/             world maps, textures, avatar model
 ```
@@ -393,7 +397,8 @@ Game and multiplayer
 - Cloudflare: the Cloudflare version was tested in the official runtime locally (protocol, rooms going to
   sleep, two browsers) and the deployment validated with a dry run. A first deployment from the Git import
   built and published without error, but **multiplayer on Cloudflare's real network has not been observed
-  yet**, and a push does not always start a build there (see "Putting it online with Cloudflare").
+  yet**. Cloudflare's own push trigger never fired for this repository: deployment relies on the workflow
+  and its Deploy Hook (see "Putting it online with Cloudflare").
 - The fair itself (stalls, games) is still to be built: the pier, its big wheel and the places listed above
   are its setting.
 

@@ -1,0 +1,37 @@
+# Asks Cloudflare to build and publish the site after every push.
+#
+# Cloudflare is meant to do this by itself once the repository is connected to the Worker, but its push
+# trigger does not always fire. This workflow calls the Worker's Deploy Hook instead: a private address
+# (Cloudflare dashboard → the Worker → Settings → Builds → Deploy Hooks) kept in the repository secret
+# CLOUDFLARE_DEPLOY_HOOK. Cloudflare then builds the latest commit of the hook's branch, as usual.
+# Without the secret, the workflow does nothing.
+name: Deploy to Cloudflare
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: cloudflare-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # pushes to the production branch (the default branch of the repository), or a manual run
+    if: github.event_name == 'workflow_dispatch' || github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ask Cloudflare to build the latest commit
+        env:
+          HOOK: ${{ secrets.CLOUDFLARE_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::warning::The secret CLOUDFLARE_DEPLOY_HOOK is not set: nothing was asked of Cloudflare. See the README, \"Putting it online with Cloudflare\"."
+            exit 0
+          fi
+          curl --fail-with-body --silent --show-error --retry 3 --retry-delay 5 --max-time 30 -X POST "$HOOK"
+          echo
+          echo "Cloudflare has been asked to build commit ${GITHUB_SHA::7}. The site is updated a minute or two later."
