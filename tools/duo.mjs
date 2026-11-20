@@ -1,6 +1,8 @@
 // Dev tool: end-to-end multiplayer check. Builds the site, starts the production server (static files +
 // presence relay), opens two browsers on the same URL and verifies that each visitor sees the other one move.
-// usage: node tools/duo.mjs [--q=low] [--steps=10]      Screenshots: tools/preview/duo/
+// usage: node tools/duo.mjs [--q=low] [--steps=10] [--cloudflare]      Screenshots: tools/preview/duo/
+// --cloudflare: the production server is the Cloudflare version (wrangler.jsonc as it is deployed, run by
+// `wrangler dev` in the local Workers runtime) instead of the Node one.
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -17,12 +19,21 @@ const opt = Object.fromEntries(process.argv.slice(2).filter((a) => a.startsWith(
 const steps = +(opt.steps || 10);
 const PORT = 8791;
 
-await build({ root: ROOT, logLevel: 'error' });
-const server = spawn(process.execPath, [path.join(ROOT, 'server/index.js')], { env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1' }, stdio: ['ignore', 'pipe', 'pipe'] });
+const CF = !!opt.cloudflare;
+let server;
+if (CF) {
+  // wrangler builds the site itself (build.command of wrangler.jsonc), exactly as a deployment does
+  server = spawn(process.execPath, [path.join(ROOT, 'node_modules/wrangler/bin/wrangler.js'), 'dev', '--port', String(PORT), '--ip', '127.0.0.1', '--inspector-port', String(PORT + 1), '--show-interactive-dev-session=false'],
+    { cwd: ROOT, env: { ...process.env, WRANGLER_SEND_METRICS: 'false' }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+} else {
+  await build({ root: ROOT, logLevel: 'error' });
+  server = spawn(process.execPath, [path.join(ROOT, 'server/index.js')], { env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1' }, stdio: ['ignore', 'pipe', 'pipe'] });
+}
 let serverLog = '';
 server.stdout.on('data', (d) => { serverLog += d; });
 server.stderr.on('data', (d) => { serverLog += d; });
-for (let i = 0; i < 50; i++) {
+const stopServer = () => { try { if (CF) process.kill(-server.pid, 'SIGTERM'); else server.kill(); } catch { /* gone */ } };
+for (let i = 0; i < 900; i++) {
   try { if ((await fetch(`http://127.0.0.1:${PORT}/healthz`)).ok) break; } catch { /* not up yet */ }
   await new Promise((r) => setTimeout(r, 100));
 }
@@ -57,7 +68,7 @@ try {
   const both = await until(async () => { const a = await status(alice), b = await status(bob); return a && b && a.count === 2 && b.count === 2 ? [a, b] : null; });
   check('both visitors are connected and see each other', !!both, both ? `mode ${both[0].mode}/${both[1].mode}` : 'timeout');
   if (both) {
-    check('presence goes through the server (online mode)', both[0].mode === 'online' && both[1].mode === 'online');
+    check(`presence goes through the ${CF ? 'Cloudflare Worker' : 'Node server'} (online mode)`, both[0].mode === 'online' && both[1].mode === 'online');
     check('names and colours are shared', both[0].peers[0].name === 'Bob' && both[1].peers[0].name === 'Alice' && both[1].peers[0].color === 1, JSON.stringify(both[1].peers[0].name));
   }
   // Alice walks straight ahead; Bob stays and watches
@@ -84,14 +95,14 @@ try {
   await alice.context.close();
   const alone = await until(async () => { const b = await status(bob); return b.count === 1 ? b : null; }, 20000);
   check('Bob is told when Alice leaves', !!alone);
-  const info = await (await fetch(`http://127.0.0.1:${PORT}/api/presence`)).json().catch(() => null);
-  check('the server reports its rooms', !!info, JSON.stringify(info));
+  const info = await (await fetch(`http://127.0.0.1:${PORT}/api/presence?room=main`)).json().catch(() => null);
+  check('the server counts who is left in the room', !!info && info.room === 'main' && info.players === 1, JSON.stringify(info));
 } catch (err) {
   check('scenario ran to the end', false, err.message);
 }
 if (logs.length) console.log([...new Set(logs)].slice(0, 20).join('\n'));
 await browser.close();
-server.kill();
+stopServer();
 if (results.includes(false) && serverLog) console.log('server output:\n' + serverLog.slice(-2000));
 const ok = !results.includes(false) && !logs.length;
 console.log(ok ? `duo test passed (${results.length} checks)` : 'duo test FAILED');

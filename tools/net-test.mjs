@@ -1,6 +1,9 @@
 // Automated check of the multiplayer presence layer: server protocol and hygiene, static file serving,
 // interpolation maths and the Presence façade (run under Node with its WebSocket / BroadcastChannel globals).
 // usage: node tools/net-test.mjs      → one PASS/FAIL line per check, exit code 1 when anything fails
+//        node tools/net-test.mjs --cloudflare   → the same protocol checks against the Cloudflare version
+//        (cloudflare/worker.js run by `wrangler dev` in the local Workers runtime), plus what is specific to
+//        it: static assets and their headers, pings answered at the edge, hibernation, ghost connections.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -12,10 +15,11 @@ import { fileURLToPath } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
 import { Track, wrapAngle } from '../src/net/interp.js';
 import { Presence, cleanName, cleanRoom } from '../src/net/Presence.js';
+import { sleep, until, freePort, request, Client } from './lib/net.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const CF = process.argv.includes('--cloudflare');
 const TICK = 50; // ms: the test server runs with TICK_HZ=20
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 const round2 = (v) => Math.round(v * 100) / 100;
 const round3 = (v) => Math.round(v * 1000) / 1000;
@@ -29,36 +33,7 @@ function check(name, ok, detail) {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${more}`);
 }
 
-async function until(cond, ms = 3000) {
-  for (const end = Date.now() + ms; Date.now() < end; await sleep(10)) if (cond()) return true;
-  return !!cond();
-}
-
 // ------------------------------------------------------------------------------------------------- helpers
-
-function freePort() {
-  return new Promise((resolve, reject) => {
-    const probe = net.createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address();
-      probe.close(() => resolve(port));
-    });
-  });
-}
-
-function request(port, target, { method = 'GET', headers = {} } = {}) {
-  return new Promise((resolve, reject) => {
-    const req = http.request({ host: '127.0.0.1', port, path: target, method, headers, agent: false }, (res) => {
-      const chunks = [];
-      res.on('data', (chunk) => chunks.push(chunk));
-      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) }));
-    });
-    req.setTimeout(5000, () => req.destroy(new Error('timeout')));
-    req.on('error', reject);
-    req.end();
-  });
-}
 
 async function startServer(env = {}, port = 0) {
   port = port || (await freePort());
@@ -83,64 +58,49 @@ async function startServer(env = {}, port = 0) {
   throw new Error(`the server did not start:\n${server.log}`);
 }
 
-// Raw protocol client: records every message it receives.
-class Client {
-  constructor(port, room, options = {}) {
-    this.msgs = [];
-    this.waiters = [];
-    this.id = 0;
-    this.code = null; // close code once closed
-    this.ws = new WebSocket(`ws://127.0.0.1:${port}/ws${room ? `?room=${encodeURIComponent(room)}` : ''}`, options);
-    this.opened = new Promise((resolve) => {
-      this.ws.once('open', () => resolve(true));
-      this.ws.once('error', () => resolve(false));
-      this.ws.once('unexpected-response', (req, res) => {
-        this.status = res.statusCode;
-        req.destroy();
-        resolve(false);
-      });
-    });
-    this.closed = new Promise((resolve) => this.ws.once('close', (code) => resolve((this.code = code))));
-    this.ws.on('error', () => {});
-    this.ws.on('message', (data) => {
-      let m;
-      try { m = JSON.parse(data.toString()); } catch { m = { t: '?', raw: data.toString() }; }
-      this.msgs.push(m);
-      this.waiters = this.waiters.filter((w) => !w(m));
-    });
+// The Cloudflare target: the real Worker and its Durable Object, in the local Workers runtime. The settings come
+// from wrangler.jsonc itself (minus the build step), so what is tested is what gets deployed.
+async function startWorker(env = {}, port = 0) {
+  port = port || (await freePort());
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mmf-cf-test-'));
+  const jsonc = fs.readFileSync(path.join(ROOT, 'wrangler.jsonc'), 'utf8');
+  // strip // comments (outside strings) to get plain JSON
+  const config = JSON.parse(jsonc.replace(/("(?:[^"\\]|\\.)*")|\/\/[^\n]*/g, (m, str) => str || ''));
+  delete config.build;
+  delete config.$schema;
+  config.main = path.join(ROOT, config.main);
+  config.assets.directory = env.DIST_DIR;
+  config.vars = { ...config.vars, TICK_MS: String(TICK), ALLOWED_ORIGINS: env.ALLOWED_ORIGINS || '', DEBUG: '1' };
+  if (env.MAX_PLAYERS) config.vars.MAX_PLAYERS = env.MAX_PLAYERS;
+  if (env.STALE_MS) config.vars.STALE_MS = env.STALE_MS;
+  fs.writeFileSync(path.join(dir, 'wrangler.json'), JSON.stringify(config));
+  const proc = spawn(process.execPath, [
+    path.join(ROOT, 'node_modules/wrangler/bin/wrangler.js'), 'dev', '--config', path.join(dir, 'wrangler.json'),
+    '--port', String(port), '--ip', '127.0.0.1', '--inspector-port', String(await freePort()),
+    '--persist-to', path.join(dir, 'state'), '--show-interactive-dev-session=false',
+  ], { env: { ...process.env, WRANGLER_SEND_METRICS: 'false' }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+  const server = { port, proc, log: '', alive: () => proc.exitCode === null && proc.signalCode === null };
+  proc.stdout.on('data', (d) => { server.log += d; });
+  proc.stderr.on('data', (d) => { server.log += d; });
+  const exited = new Promise((resolve) => proc.once('exit', resolve));
+  const kill = (signal) => { try { process.kill(-proc.pid, signal); } catch { /* gone */ } }; // wrangler and its runtime
+  server.stop = async () => {
+    if (server.alive()) kill('SIGTERM');
+    await Promise.race([exited, sleep(4000).then(() => kill('SIGKILL'))]);
+    fs.rmSync(dir, { recursive: true, force: true });
+  };
+  for (let i = 0; i < 400 && server.alive(); i++) {
+    const res = await request(port, '/healthz').catch(() => null);
+    if (res && res.status === 200) return server;
+    await sleep(100);
   }
-
-  send(msg) {
-    this.ws.send(typeof msg === 'string' || Buffer.isBuffer(msg) ? msg : JSON.stringify(msg));
-  }
-
-  // First message matching `pred` (already received or yet to come); null after `ms`.
-  wait(pred, ms = 2000) {
-    const hit = this.msgs.find(pred);
-    if (hit) return Promise.resolve(hit);
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => resolve(null), ms);
-      this.waiters.push((m) => pred(m) && (clearTimeout(timer), resolve(m), true));
-    });
-  }
-
-  async hello(name, color = 0) {
-    await this.opened;
-    this.send({ t: 'hello', name, color, v: 1 });
-    const welcome = await this.wait((m) => m.t === 'welcome');
-    this.id = welcome ? welcome.id : 0;
-    return welcome;
-  }
-
-  rows(id) {
-    return this.msgs.filter((m) => m.t === 'u').flatMap((m) => m.s).filter((r) => id === undefined || r[0] === id);
-  }
-
-  close() {
-    this.ws.close();
-    return this.closed;
-  }
+  kill('SIGKILL');
+  throw new Error(`the Worker did not start:\n${server.log}`);
 }
+
+const start = (env, port) => (CF ? startWorker(env, port) : startServer(env, port));
+// Players who said hello in one room (both relays answer /api/presence?room=…).
+const headCount = async (port, room) => JSON.parse((await request(port, `/api/presence?room=${room}`)).body.toString()).players;
 
 async function section(name, fn) {
   try { await fn(); } catch (err) { check(`${name}: no unexpected error`, false, String(err && err.stack ? err.stack : err)); }
@@ -361,10 +321,14 @@ async function testProtocol(server) {
   const wc = await c.hello('Cléo', 15);
   const d = new Client(port, 't2');
   const wd = await d.hello('Dan', 1);
-  check('ws: third player sees both, ids are unique', !!wc && wc.peers.map((p) => p.id).sort().join() === [a.id, b.id].sort().join() && new Set([a.id, b.id, c.id, d.id]).size === 4, wc);
+  // (ids are unique per room on Cloudflare, where every room is its own object; across the server under Node)
+  check('ws: third player sees both, ids are unique', !!wc && wc.peers.map((p) => p.id).sort().join() === [a.id, b.id].sort().join() && new Set(CF ? [a.id, b.id, c.id] : [a.id, b.id, c.id, d.id]).size === (CF ? 3 : 4), wc);
   check('ws: another room starts empty', !!wd && wd.peers.length === 0, wd);
   let res = await request(port, '/api/presence');
-  check('http: /api/presence counts rooms and players', res.body.toString() === '{"rooms":2,"players":4}', res.body.toString());
+  if (!CF) check('http: /api/presence counts rooms and players', res.body.toString() === '{"rooms":2,"players":4}', res.body.toString());
+  res = await request(port, '/api/presence?room=T1');
+  const census1 = JSON.parse(res.body.toString());
+  check('http: /api/presence?room= counts one room', census1.room === 't1' && census1.players === 3 && (await headCount(port, 't2')) === 1 && (await headCount(port, 'nobody')) === 0, res.body.toString());
 
   // States: batched to the others, rounded, clamped, never echoed.
   a.send({ t: 's', p: [10.004, 20.006, 99999, 7.5], a: 3, f: 200 });
@@ -495,14 +459,19 @@ async function testProtocol(server) {
   check('ws: upgrades outside /ws are refused (404)', otherStatus === 404, otherStatus);
 
   await Promise.all([a, b, d, e, polite, retry, weird, same, dflt, main, local, sameHost].map((x) => x.close()));
-  let census = '';
-  for (let i = 0; i < 40 && census !== '{"rooms":0,"players":0}'; i++) {
-    await sleep(50);
-    census = (await request(port, '/api/presence')).body.toString();
+  if (!CF) {
+    let census = '';
+    for (let i = 0; i < 40 && census !== '{"rooms":0,"players":0}'; i++) {
+      await sleep(50);
+      census = (await request(port, '/api/presence')).body.toString();
+    }
+    check('ws: empty rooms are removed', census === '{"rooms":0,"players":0}', census);
+  } else {
+    await until(() => false, 300);
+    check('ws: rooms are empty once everybody left', (await headCount(port, 't1')) === 0 && (await headCount(port, 't2')) === 0 && (await headCount(port, 'main')) === 0);
   }
-  check('ws: empty rooms are removed', census === '{"rooms":0,"players":0}', census);
 
-  const strict = await startServer({ ALLOWED_ORIGINS: 'https://fair.example, https://autre.example/' });
+  const strict = await start({ ALLOWED_ORIGINS: 'https://fair.example, https://autre.example/', DIST_DIR: server.dist });
   const ok = new Client(strict.port, 'r', { origin: 'https://autre.example' });
   const ko = new Client(strict.port, 'r', { origin: `http://127.0.0.1:${strict.port}` });
   const cli = new Client(strict.port, 'r');
@@ -611,6 +580,13 @@ async function testPresence(server) {
   c.dispose();
   await until(() => b.peers.size === 1);
   check('presence: dispose() leaves the room', b.peers.size === 1 && eb.some((e) => e.type === 'leave' && e.name === 'Cléo') && eb.some((e) => e.type === 'status' && e.count === 3) && b.count === 2, eb.filter((e) => e.type !== 'emote'));
+
+  if (CF) {
+    a.dispose();
+    b.dispose();
+    check('presence: no internal error was caught along the way', warnings.length === 0, warnings);
+    return;
+  }
 
   // --- two idle tabs (never calling setLocal/update, like hidden tabs) are left alone during the next section
   const idle1 = new Presence({ room: 'veille', name: 'Veille 1' });
@@ -755,6 +731,90 @@ async function testPresence(server) {
   check('presence: no internal error was caught along the way', warnings.length === 0, warnings);
 }
 
+// ----------------------------------------------------------------------------------------- Cloudflare only
+
+async function testCloudflare(server, fx) {
+  const { port } = server;
+  // --- the site: files served by the platform, with the headers of public/_headers
+  let res = await request(port, '/');
+  check('cf: / serves the page', res.status === 200 && /text\/html/.test(res.headers['content-type']) && res.body.toString() === fx.html, [res.status, res.headers['content-type']]);
+  res = await request(port, '/assets/index-Bx7kQ2aZ.js');
+  check('cf: the hashed bundle may be cached for good', res.status === 200 && /immutable/.test(res.headers['cache-control']) && /max-age=31536000/.test(res.headers['cache-control']), res.headers['cache-control']);
+  res = await request(port, '/assets/world/world.json');
+  const etag = res.headers.etag;
+  check('cf: world files are revalidated on each visit', res.status === 200 && !/immutable/.test(res.headers['cache-control'] || '') && /max-age=0|no-cache/.test(res.headers['cache-control'] || '') && !!etag, [res.headers['cache-control'], etag]);
+  res = await request(port, '/assets/world/world.json', { headers: { 'If-None-Match': etag } });
+  check('cf: …and cost nothing when unchanged (304)', res.status === 304 && res.body.length === 0, res.status);
+  res = await request(port, '/missing.png');
+  const health = await request(port, '/healthz');
+  const plain = await request(port, '/ws');
+  check('cf: unknown paths → 404, /healthz → ok, /ws without upgrade → 426', res.status === 404 && health.status === 200 && health.body.toString() === 'ok' && plain.status === 426, [res.status, health.status, plain.status]);
+  res = await request(port, '/_headers');
+  check('cf: the headers file itself is not published', res.status === 404, res.status);
+
+  // --- pings: the fixed text is answered by the platform (the relay's own pong carries a clock)
+  const p1 = new Client(port, 'edge');
+  await p1.hello('Ping');
+  p1.send('{"t":"ping"}');
+  const auto = await p1.wait((m) => m.t === 'pong');
+  check('cf: the client ping is answered without waking the room', JSON.stringify(auto) === '{"t":"pong"}', auto);
+  await p1.close();
+
+  // --- no keep-alive: once a visitor stands still the client goes quiet, so that the room can sleep
+  const quiet = new Presence({ room: 'calme', name: 'Calme', url: `ws://127.0.0.1:${port}/ws` });
+  const watcher = new Client(port, 'calme');
+  await watcher.hello('Témoin');
+  quiet.connect();
+  await until(() => quiet.mode === 'online');
+  const sent = [];
+  const transport = quiet._tr, raw = transport.send.bind(transport);
+  transport.send = (m) => { sent.push({ ...m, at: Date.now() }); return raw(m); };
+  for (let i = 0; i < 12; i++) { quiet.setLocal(i * 0.3, 0, 0, 0, 1, 0); quiet.update(0.016); await sleep(60); }
+  const stopped = Date.now();
+  for (let i = 0; i < 70; i++) { quiet.setLocal(3.3, 0, 0, 0, 0, 0); quiet.update(0.016); await sleep(60); }
+  const late = sent.filter((m) => m.t === 's' && m.at > stopped + 1500);
+  check('cf: welcome asks for no keep-alive (idle: 0) and the client obeys', watcher.rows().some((r) => r[1] === 3.3) && late.length === 0 && sent.some((m) => m.t === 's'), { late: late.length, sent: sent.length });
+  quiet.dispose();
+  await watcher.close();
+
+  // --- hibernation: an idle room is unloaded, its connections and what it knew survive
+  const h1 = new Client(port, 'sleepy');
+  await h1.hello('Un', 2);
+  const h2 = new Client(port, 'sleepy');
+  await h2.hello('Deux', 3);
+  h1.send({ t: 's', p: [12.5, 3, -7.25, 1], a: 1, f: 4 });
+  await h2.wait((m) => m.t === 'u' && m.s.some((r) => r[0] === h1.id && r[1] === 12.5));
+  const quietSince = Date.now();
+  for (let i = 0; i < 8; i++) { await sleep(2000); h1.send('{"t":"ping"}'); h2.send('{"t":"ping"}'); } // answered at the edge
+  const info = JSON.parse((await request(port, '/api/presence?room=sleepy')).body.toString());
+  check('cf: an idle room is unloaded (hibernation) while its visitors stay connected',
+    info.players === 2 && info.up < Date.now() - quietSince - 4000 && h1.code === null && h2.code === null && h1.msgs.filter((m) => m.t === 'pong').length === 8, { info, idle: Date.now() - quietSince });
+  const h3 = new Client(port, 'sleepy');
+  const w3 = await h3.hello('Trois', 5);
+  check('cf: after waking up, a newcomer still learns who is there and where',
+    !!w3 && JSON.stringify(w3.peers) === JSON.stringify([{ id: h1.id, name: 'Un', color: 2, p: [12.5, 3, -7.25, 1], a: 1, f: 4 }, { id: h2.id, name: 'Deux', color: 3 }]) && new Set([h1.id, h2.id, h3.id]).size === 3, w3);
+  h2.send({ t: 's', p: [1, 2, 3, 0], a: 0, f: 0 });
+  const woke1 = await h1.wait((m) => m.t === 'u' && m.s.some((r) => r[0] === h2.id && r[1] === 1));
+  const woke3 = await h3.wait((m) => m.t === 'u' && m.s.some((r) => r[0] === h2.id && r[1] === 1));
+  check('cf: …and states flow again between old and new connections', !!woke1 && !!woke3 && !!(await h1.wait((m) => m.t === 'join' && m.id === h3.id)), [woke1, woke3]);
+  await h1.close();
+  const gone = await h3.wait((m) => m.t === 'leave' && m.id === h1.id);
+  check('cf: …and departures are still announced', !!gone && (await headCount(port, 'sleepy')) === 2, gone);
+  await Promise.all([h2.close(), h3.close()]);
+
+  // --- ghosts: a connection that stays silent for too long is closed (here after 2 s instead of 150 s)
+  const strict = await startWorker({ STALE_MS: '2000', DIST_DIR: fx.dist });
+  const ghost = new Client(strict.port, 'ghosts');
+  await ghost.hello('Fantôme');
+  const live = new Client(strict.port, 'ghosts');
+  await live.hello('Vivant');
+  for (let i = 0; i < 80 && ghost.code === null; i++) { live.send({ t: 's', p: [i, 0, 0, 0], a: 1, f: 0 }); await sleep(70); }
+  const left = await live.wait((m) => m.t === 'leave' && m.id === ghost.id, 500);
+  check('cf: a silent connection is closed as a ghost, active ones stay', ghost.code === 1001 && !!left && live.code === null, { ghost: ghost.code, live: live.code });
+  await live.close();
+  await strict.stop();
+}
+
 // ---------------------------------------------------------------------------------------------------- main
 
 const uncaught = [];
@@ -770,12 +830,25 @@ if (typeof globalThis.WebSocket !== 'function') globalThis.WebSocket = WebSocket
 const fx = makeDist();
 let server = null;
 try {
-  await section('interp', async () => testInterpolation());
-  server = await startServer({ DIST_DIR: fx.dist, MAX_PLAYERS: '4' });
-  await section('static', () => testStatic(server, fx));
-  await section('protocol', () => testProtocol(server));
-  await section('presence', () => testPresence(server));
-  check('server: still running at the end, nothing on stderr', server.alive() && !/error|exception/i.test(server.log), server.log);
+  if (CF) {
+    fs.copyFileSync(path.join(ROOT, 'public/_headers'), path.join(fx.dist, '_headers'));
+    server = await startWorker({ DIST_DIR: fx.dist, MAX_PLAYERS: '4' });
+    server.dist = fx.dist;
+    await section('protocol', () => testProtocol(server));
+    await section('presence', () => testPresence(server));
+    await section('cloudflare', () => testCloudflare(server, fx));
+    if (process.env.NET_TEST_LOG) fs.writeFileSync(process.env.NET_TEST_LOG, server.log);
+    // (the local tool also logs its own failed attempts to reach Cloudflare when offline: not the Worker's)
+    const trouble = server.log.split('\n').filter((line) => /\[wrangler:error\]|\[ERROR\]|Uncaught/.test(line));
+    check('worker: still running at the end, no exception logged', server.alive() && !trouble.length, { alive: server.alive(), trouble: trouble.slice(0, 6) });
+  } else {
+    await section('interp', async () => testInterpolation());
+    server = await startServer({ DIST_DIR: fx.dist, MAX_PLAYERS: '4' });
+    await section('static', () => testStatic(server, fx));
+    await section('protocol', () => testProtocol(server));
+    await section('presence', () => testPresence(server));
+    check('server: still running at the end, nothing on stderr', server.alive() && !/error|exception/i.test(server.log), server.log);
+  }
 } catch (err) {
   check('test run', false, String(err && err.stack ? err.stack : err));
 } finally {

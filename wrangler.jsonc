@@ -1,0 +1,30 @@
+// Cloudflare deployment. Connect this repository in the Cloudflare dashboard (Workers & Pages → import a
+// repository) and keep the default deploy command, `npx wrangler deploy`: it builds the site, then publishes
+// the site, the Worker and the multiplayer rooms. Every push redeploys.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Must be the name of the Worker in the dashboard (which proposes the repository name).
+  "name": "magicmillfair",
+  "main": "cloudflare/worker.js",
+  "compatibility_date": "2026-11-01",
+  // Runs before every deploy: produces dist/.
+  "build": { "command": "npm run build" },
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    // Only these paths run the Worker; the files of the site are served directly.
+    "run_worker_first": ["/ws", "/api/*", "/healthz"]
+  },
+  // One Durable Object per multiplayer room (see cloudflare/worker.js).
+  "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+  "vars": {
+    "MAX_PLAYERS": "48",
+    "TICK_MS": "100",
+    // Comma separated origins allowed to open the multiplayer socket. Empty: the site's own address only.
+    "ALLOWED_ORIGINS": ""
+  },
+  "observability": { "enabled": true },
+  // No usage statistics sent to Cloudflare by the tool itself.
+  "send_metrics": false
+}

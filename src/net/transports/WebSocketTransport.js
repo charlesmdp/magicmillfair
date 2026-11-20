@@ -1,4 +1,5 @@
-// WebSocket transport: speaks the presence protocol with server/index.js and reconnects on its own.
+// WebSocket transport: speaks the presence protocol with the relay (server/index.js under Node,
+// cloudflare/worker.js on Cloudflare) and reconnects on its own.
 
 const CONNECT_TIMEOUT = 10000; // ms before giving up on a handshake
 const BACKOFF_MIN = 1000, BACKOFF_MAX = 15000; // reconnection delay: 1 s, doubling up to 15 s (±25 % of jitter)
@@ -54,7 +55,8 @@ export class WebSocketTransport {
         // Nothing came back since the previous ping: the link is dead even if the socket has not noticed.
         if (pinged && heard < pinged && !late) return this._drop(ws);
         pinged = t;
-        this.send({ t: 'ping', c: Math.round(t) });
+        // Always this exact text: on Cloudflare it is answered at the edge, without waking the room up.
+        this.send({ t: 'ping' });
       }, PING_MS);
       this.handlers.onopen?.(this);
     };

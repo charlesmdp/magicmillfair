@@ -1,0 +1,6 @@
+# Response headers for Cloudflare (Netlify reads the same file).
+# The bundle carries a content hash in its name: browsers may keep it for good. Everything else (world maps,
+# textures, models) keeps the default behaviour, revalidated on each visit, so that a new version of the
+# world is never mixed with files of the previous one.
+/assets/index-*
+  Cache-Control: public, max-age=31536000, immutable

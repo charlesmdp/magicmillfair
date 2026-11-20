@@ -1,5 +1,6 @@
 node_modules
 dist
 tools/preview
+.wrangler
 *.log
 .DS_Store

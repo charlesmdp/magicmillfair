@@ -10,10 +10,13 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "node server/index.js",
+    "deploy": "wrangler deploy",
+    "cf:dev": "wrangler dev",
     "bake": "npm run bake:world && npm run bake:textures",
     "bake:world": "node tools/bake-world.mjs",
     "bake:textures": "node tools/bake-textures.mjs",
     "test": "node tools/net-test.mjs",
+    "test:cf": "node tools/net-test.mjs --cloudflare",
     "test:smoke": "node tools/smoke.mjs",
     "test:walk": "node tools/walk-test.mjs",
     "test:duo": "node tools/duo.mjs",
@@ -22,15 +25,18 @@
     "shots": "node tools/shots.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12"
   },
   "dependencies": {
     "three": "^0.187.0",
     "ws": "^8.23.0"
   },
   "devDependencies": {
+    "vite": "^8.3.8",
+    "wrangler": "^4.165.0"
+  },
+  "optionalDependencies": {
     "@napi-rs/canvas": "^1.1.1",
-    "sharp": "^0.35.5",
-    "vite": "^8.3.8"
+    "sharp": "^0.35.5"
   }
 }

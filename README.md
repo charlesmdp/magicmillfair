@@ -15,7 +15,7 @@ seul ou à plusieurs.
 
 ## Démarrer
 
-Node.js 20 ou plus récent.
+Node.js 22 ou plus récent.
 
 ```bash
 npm install
@@ -28,7 +28,46 @@ npm run dev
 Ouvre `http://localhost:5173`. Cette commande lance le site **et** le relais multijoueur : ouvre l'adresse
 dans deux onglets (ou sur un téléphone du même réseau, avec l'adresse « Network » affichée) pour vous voir.
 
-### Mettre en ligne
+### Mettre en ligne sur Cloudflare (automatique)
+
+Tout est décrit dans le dépôt (`wrangler.jsonc`) : il n'y a aucun réglage à faire.
+
+1. Dans le tableau de bord Cloudflare, ouvrir **Workers & Pages**, créer une application en **important un
+   dépôt Git**, autoriser GitHub et choisir ce dépôt.
+2. Garder le nom proposé, `magicmillfair` (c'est celui inscrit dans `wrangler.jsonc` : les deux doivent être
+   identiques), et la commande de déploiement par défaut, `npx wrangler deploy`. La commande de build peut
+   rester vide.
+3. Valider. Cloudflare installe les dépendances, construit le site puis publie le site, le Worker et les
+   salons multijoueurs. L'adresse est de la forme `https://magicmillfair.<votre-compte>.workers.dev` ; un
+   nom de domaine se branche ensuite depuis le tableau de bord.
+
+Ensuite, chaque `git push` sur la branche de production du dépôt redéploie tout seul.
+
+Ce qui tourne chez Cloudflare : les fichiers du site sont servis directement ; `cloudflare/worker.js` ne
+répond qu'au multijoueur. Chaque salon est un *Durable Object* qui exécute exactement le même relais que le
+serveur Node (`server/protocol.js`) et qui **s'endort dès que plus personne ne bouge** : les visiteurs restent
+connectés, mais le salon ne consomme plus rien.
+
+Coûts : les salons sont des Durable Objects à stockage SQLite, le type que l'offre gratuite de Cloudflare
+acceptait quand ce projet a été écrit. Les quotas et tarifs changent : à vérifier sur les pages
+[Workers](https://developers.cloudflare.com/workers/platform/pricing/) et
+[Durable Objects](https://developers.cloudflare.com/durable-objects/platform/pricing/). Si votre offre
+refusait les Durable Objects, retirez les blocs `durable_objects` et `migrations` de `wrangler.jsonc` : le
+site se déploie quand même, sans multijoueur entre appareils.
+
+Sans passer par Git, depuis un poste (demande une connexion à votre compte Cloudflare) :
+
+```bash
+npx wrangler login
+```
+
+```bash
+npm run deploy
+```
+
+Pour essayer la version Cloudflare en local, dans le même moteur d'exécution : `npm run cf:dev`.
+
+### Mettre en ligne ailleurs (Node)
 
 ```bash
 npm run build
@@ -41,7 +80,8 @@ npm start
 `npm start` sert le dossier `dist/` et la présence multijoueur (WebSocket sur `/ws`) depuis **un seul
 processus**, sur le port `PORT` (8787 par défaut). Derrière un proxy (nginx, Caddy, un PaaS…), il suffit de
 laisser passer l'upgrade WebSocket. Variables utiles : `PORT`, `HOST`, `TICK_HZ` (12), `MAX_PLAYERS` (48 par
-salon), `ALLOWED_ORIGINS` (liste d'origines autorisées, vide = toutes).
+salon), `ALLOWED_ORIGINS` (origines autorisées à ouvrir le multijoueur ; vide = le site lui-même).
+Sur un serveur, `npm ci --omit=dev --omit=optional` suffit (les outils de cuisson ne sont pas nécessaires).
 
 Hébergement 100 % statique (GitHub Pages, Netlify, un simple dossier) : `dist/` fonctionne tel quel depuis
 n'importe quel sous-chemin. Sans serveur de présence, seuls les onglets d'un même navigateur se voient.
@@ -127,7 +167,10 @@ src/
   net/                     présence multijoueur (transport WebSocket ou entre onglets, interpolation)
   ui/                      accueil, mini-carte, réglages, commandes tactiles
   app/Benchmark.js         parcours de mesure
-server/index.js            serveur de production : fichiers statiques + relais de présence
+server/index.js            serveur de production Node : fichiers statiques + relais de présence
+server/protocol.js         le relais lui-même (protocole, validation, envois groupés), commun aux deux hébergements
+cloudflare/worker.js       version Cloudflare : Worker + un Durable Object par salon
+wrangler.jsonc             configuration du déploiement Cloudflare (construction comprise)
 tools/                     cuisson du monde et des textures, tests, mesures (voir plus bas)
 public/assets/             cartes du monde, textures, modèle de l'avatar
 ```
@@ -154,25 +197,27 @@ les décors fixes à être fusionnés (`mergeStatic`) et les petits objets masqu
 ### Multijoueur
 
 Le serveur ne décide de rien : chaque visiteur envoie l'état de son avatar (position, orientation,
-animation) douze fois par seconde, le relais le redistribue par salon, et chaque client reconstruit un
+animation) dix à douze fois par seconde, le relais le redistribue par salon, et chaque client reconstruit un
 mouvement fluide par interpolation. Sans relais joignable, la même interface fonctionne entre les onglets
-d'un navigateur. Le protocole est décrit en tête de `server/index.js`, l'interface cliente dans
-`src/net/Presence.js`.
+d'un navigateur. Le protocole est décrit en tête de `server/protocol.js`, l'interface cliente dans
+`src/net/Presence.js`. Le même relais tourne sous Node (`server/index.js`) et sur Cloudflare
+(`cloudflare/worker.js`).
 
 ## Outils
 
 | Commande | Rôle |
 |---|---|
 | `npm run bake` | recuit le monde et les textures |
-| `npm test` | 99 vérifications du serveur, du protocole et de l'interpolation |
+| `npm test` | 100 vérifications du serveur Node, du protocole et de l'interpolation |
+| `npm run test:cf` | les mêmes vérifications de protocole sur la version Cloudflare (dans son moteur local), plus les siennes : fichiers et en-têtes, mise en sommeil des salons, connexions fantômes (59 en tout) |
 | `npm run test:smoke` | pilote le vrai site : accueil, marche, caméra libre, réglages (`-- --mobile` pour la mise en page tactile) |
 | `npm run test:walk` | le personnage monte sur la jetée, bute sur le garde-corps, traverse un pont, nage, change de palier |
-| `npm run test:duo` | deux visiteurs sur le serveur de production : ils doivent se voir bouger |
+| `npm run test:duo` | deux visiteurs sur le serveur de production : ils doivent se voir bouger (`-- --cloudflare` pour la version Cloudflare) |
 | `npm run bench` | parcours de mesure pour chaque palier |
 | `npm run profile` | coût de chaque système (script, appels de dessin, triangles) en sept points de vue |
 | `npm run shots -- nom=x,y,z,cap,inclinaison` | captures d'écran depuis un point de vue |
 
-Tous sauf les deux premiers pilotent Chromium avec Playwright, qui n'est pas installé par défaut :
+À partir de `test:smoke`, ils pilotent Chromium avec Playwright, qui n'est pas installé par défaut :
 
 ```bash
 npm install --no-save playwright
@@ -218,8 +263,12 @@ Jeu et multijoueur
 - L'avatar est un robot libre de droits, en attendant un personnage sur mesure. La grande roue tourne mais on
   ne peut pas y monter. Les collisions sont simples (cylindres, boîtes, plateformes).
 - Multijoueur : présence seulement (position, nom, couleur, émotes). Pas de discussion écrite, pas de
-  sauvegarde, pas de contrôle anti-triche. Un seul processus en mémoire, 48 visiteurs par salon. Non testé
-  avec une vraie latence, ni derrière HTTPS ou un proxy.
+  sauvegarde, pas de contrôle anti-triche. 48 visiteurs par salon. Non testé avec une vraie latence, ni
+  derrière HTTPS ou un proxy.
+- Cloudflare : la version Cloudflare a été testée dans le moteur d'exécution officiel en local (protocole,
+  mise en sommeil, deux navigateurs), et le déploiement a été validé à blanc — mais **jamais publié sur un
+  vrai compte** : l'environnement de travail n'avait accès ni à Cloudflare ni à sa documentation. Le premier
+  déploiement réel reste donc à observer, et les quotas à vérifier sur leur site.
 - La fête foraine elle-même (stands, jeux) reste à faire : seule la jetée et sa grande roue existent.
 
 Confidentialité

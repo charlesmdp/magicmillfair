@@ -3,14 +3,7 @@
 // batches those states to the other members of the room at a fixed tick.
 // Environment: PORT (8787), HOST (0.0.0.0), TICK_HZ (12), MAX_PLAYERS (48, per room), DIST_DIR (../dist) and
 // ALLOWED_ORIGINS (comma separated origins allowed to open the WebSocket; default: same host and localhost).
-//
-// Protocol (JSON text frames)
-//   client → server   {t:'hello',name,color,v:1}   {t:'s',p:[x,y,z,yaw],a,f}   {t:'e',e}   {t:'ping',c}
-//   server → client   {t:'welcome',id,now,tick,peers:[{id,name,color,p,a,f}]}   {t:'join',id,name,color}
-//                     {t:'leave',id}   {t:'u',now,s:[[id,x,y,z,yaw,a,f,age]]}   {t:'e',id,e}
-//                     {t:'pong',c,now}   {t:'full'}
-//   `now` is the server clock (ms since start). `age` (ms) tells how long before `now` a state was received:
-//   clients rebuild smooth motion from `now - age`. A `join` for an id already known is a rename.
+// The relay itself (protocol, validation, batching) is in ./protocol.js, shared with the Cloudflare version.
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -19,6 +12,7 @@ import { pipeline } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { WebSocketServer } from 'ws';
+import { Room, MAX_FRAME, cleanRoom, originAllowed, parseOrigins } from './protocol.js';
 
 const env = (name, def, min, max) => {
   const n = Number(process.env[name]);
@@ -30,15 +24,10 @@ const PORT = Math.floor(env('PORT', 8787, 0, 65535));
 const HOST = process.env.HOST || '0.0.0.0';
 const TICK_HZ = env('TICK_HZ', 12, 1, 60);
 const MAX_PLAYERS = Math.floor(env('MAX_PLAYERS', 48, 1, 4096)); // per room
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim().toLowerCase().replace(/\/+$/, '')).filter(Boolean);
-const MAX_FRAME = 2048; // bytes
-const RATE = 40, BURST = RATE * 2; // messages per second, averaged over 2 s (token bucket)
+const ALLOWED_ORIGINS = parseOrigins(process.env.ALLOWED_ORIGINS);
 const HEARTBEAT_MS = 15000;
 
 const now = () => Math.round(performance.now());
-const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-const round = (v, k) => Math.round(v * k) / k;
-const int = (v, max) => (Number.isInteger(v) && v >= 0 && v <= max ? v : 0);
 const splitUrl = (url) => String(url || '/').split(/\?(.*)/s); // → [path, query]
 
 // ---------------------------------------------------------------------------------------------- static files
@@ -120,141 +109,71 @@ async function serveStatic(req, res, pathname) {
 }
 
 async function onRequest(req, res) {
-  const [pathname] = splitUrl(req.url);
+  const [pathname, query] = splitUrl(req.url);
   if (req.method !== 'GET' && req.method !== 'HEAD') return reply(req, res, 405, 'Méthode non autorisée.\n', { Allow: 'GET, HEAD' });
   if (pathname === '/healthz') return reply(req, res, 200, 'ok');
-  if (pathname === '/api/presence') return reply(req, res, 200, JSON.stringify(census()), { 'Content-Type': MIME.json });
+  if (pathname === '/api/presence') {
+    // ?room=x: head count of one room (the only form the Cloudflare version offers); otherwise the whole server
+    const room = new URLSearchParams(query).get('room');
+    const body = room === null ? census() : { room: cleanRoom(room), players: rooms.get(cleanRoom(room))?.joined || 0 };
+    return reply(req, res, 200, JSON.stringify(body), { 'Content-Type': MIME.json });
+  }
   if (pathname === '/ws') return reply(req, res, 426, 'Point d’entrée WebSocket.\n', { Upgrade: 'websocket' });
   return serveStatic(req, res, pathname);
 }
 
 // ------------------------------------------------------------------------------------------------- presence
 
-const rooms = new Map(); // room id → Map(player id → player)
+const rooms = new Map(); // room id → Room
 let nextId = 1;
 
-const cleanRoom = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 48) || 'main';
-
-// Display name: no control characters or angle brackets, single spaces, at most 16 characters.
-function cleanName(name) {
-  const s = typeof name === 'string' ? name.replace(/\s+/g, ' ').replace(/[\p{C}<>]/gu, '').replace(/ {2,}/g, ' ').trim() : '';
-  return [...s].slice(0, 16).join('').trim() || 'Visiteur';
-}
+// What a Room needs from this host (see ./protocol.js). Connections are `ws` sockets.
+const io = {
+  max: MAX_PLAYERS,
+  tick: Math.round(1000 / TICK_HZ),
+  now,
+  id: () => nextId++,
+  send(ws, text) {
+    if (ws.readyState !== 1) return;
+    if (ws.bufferedAmount > 1 << 20) ws.terminate(); // hopelessly slow reader
+    else ws.send(text);
+  },
+  drop: (ws) => ws.terminate(), // flooding; the close event then removes the player
+  busy: (ws) => ws.bufferedAmount > 1 << 16,
+};
 
 function census() {
-  const counts = [...rooms.values()].map((room) => [...room.values()].filter((p) => p.joined).length).filter(Boolean);
+  const counts = [...rooms.values()].map((room) => room.joined).filter(Boolean);
   return { rooms: counts.length, players: counts.reduce((sum, n) => sum + n, 0) };
-}
-
-// Browsers always send Origin on a WebSocket handshake; other clients can forge it anyway, so none is fine.
-function originAllowed(req) {
-  const origin = String(req.headers.origin || '').toLowerCase().replace(/\/+$/, '');
-  if (!origin) return true;
-  if (ALLOWED_ORIGINS.length) return ALLOWED_ORIGINS.includes('*') || ALLOWED_ORIGINS.includes(origin);
-  let url;
-  try { url = new URL(origin); } catch { return false; }
-  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim().toLowerCase();
-  return url.host === host || ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
-}
-
-function send(p, text) {
-  if (p.ws.readyState !== 1) return;
-  if (p.ws.bufferedAmount > 1 << 20) p.ws.terminate(); // hopelessly slow reader
-  else p.ws.send(text);
-}
-function broadcast(room, text, except) {
-  for (const p of room.values()) if (p.joined && p !== except) send(p, text);
 }
 
 function onConnection(ws, roomId) {
   ws.on('error', () => {}); // e.g. oversized frame: ws closes the socket itself (1009)
   let room = rooms.get(roomId);
-  if (room && room.size >= MAX_PLAYERS) { ws.send('{"t":"full"}'); return ws.close(1013, 'full'); }
-  if (!room) rooms.set(roomId, (room = new Map()));
-  const p = {
-    id: nextId++, ws, name: 'Visiteur', color: 0, joined: false, alive: true, tokens: BURST, stamp: now(),
-    state: null, row: '', at: 0, dirty: false, rested: true, // last state, its serialised row, when it came, relay flags
-  };
-  room.set(p.id, p);
+  if (!room) rooms.set(roomId, (room = new Room(io)));
+  const p = room.add(ws);
+  if (!p) { ws.send('{"t":"full"}'); return ws.close(1013, 'full'); }
   ws.on('pong', () => { p.alive = true; });
   ws.on('message', (data, isBinary) => {
-    try { onMessage(room, p, data, isBinary); } catch (err) { console.error('[presence]', err); }
+    try { room.receive(ws, isBinary ? null : data.toString()); } catch (err) { console.error('[presence]', err); }
   });
   ws.on('close', () => {
-    room.delete(p.id);
-    if (p.joined) broadcast(room, `{"t":"leave","id":${p.id}}`);
+    room.remove(ws);
     if (!room.size && rooms.get(roomId) === room) rooms.delete(roomId);
   });
 }
 
-function onMessage(room, p, data, isBinary) {
-  const t = now();
-  p.alive = true;
-  p.tokens = Math.min(BURST, p.tokens + ((t - p.stamp) * RATE) / 1000) - 1;
-  p.stamp = t;
-  if (p.tokens < 0) return p.ws.terminate(); // flooding
-  if (isBinary) return;
-  let m;
-  try { m = JSON.parse(data.toString()); } catch { return; }
-  if (!m || typeof m !== 'object') return;
-  if (m.t === 'hello') onHello(room, p, m);
-  else if (m.t === 'ping') send(p, `{"t":"pong","c":${Number.isFinite(m.c) ? m.c : 0},"now":${t}}`);
-  else if (!p.joined) return;
-  else if (m.t === 's') onState(p, m, t);
-  else if (m.t === 'e' && Number.isInteger(m.e) && m.e >= 0 && m.e <= 31) broadcast(room, `{"t":"e","id":${p.id},"e":${m.e}}`, p);
-}
-
-function onHello(room, p, m) {
-  const name = cleanName(m.name), color = int(m.color, 15);
-  if (p.joined && name === p.name && color === p.color) return;
-  p.name = name; p.color = color;
-  if (!p.joined) {
-    p.joined = true;
-    const peers = [...room.values()].filter((o) => o.joined && o !== p)
-      .map((o) => ({ id: o.id, name: o.name, color: o.color, ...(o.state && { p: o.state.slice(0, 4), a: o.state[4], f: o.state[5] }) }));
-    send(p, JSON.stringify({ t: 'welcome', id: p.id, now: now(), tick: Math.round(1000 / TICK_HZ), peers }));
-  }
-  broadcast(room, JSON.stringify({ t: 'join', id: p.id, name, color }), p);
-}
-
-function onState(p, m, t) {
-  const v = m.p;
-  if (!Array.isArray(v) || v.length < 4 || !v.slice(0, 4).every(Number.isFinite)) return;
-  const state = [
-    round(clamp(v[0], -2000, 2000), 100), round(clamp(v[1], -100, 500), 100), round(clamp(v[2], -2000, 2000), 100),
-    round(Math.atan2(Math.sin(v[3]), Math.cos(v[3])), 1000), int(m.a, 15), int(m.f, 255),
-  ];
-  const row = `[${p.id},${state.join(',')}`; // closed with its age when the tick sends it
-  const at = Math.max(t, p.at + 1); // strictly increasing per player: clients order states by time
-  if (row !== p.row) { p.row = row; p.state = state; p.at = at; p.dirty = true; p.rested = false; }
-  // First repeat after a relayed change: relay it once more, so that clients know the player has stopped.
-  else if (!p.rested && !p.dirty) { p.rested = true; p.at = at; p.dirty = true; }
-}
-
-// Sends every room the states that changed since the last tick; nobody gets its own state back.
+// Sends every room the states that changed since the last tick.
 function tick() {
-  const t = now();
-  for (const room of rooms.values()) {
-    const ids = [], rows = [];
-    for (const p of room.values()) if (p.dirty) { p.dirty = false; ids.push(p.id); rows.push(`${p.row},${Math.max(0, t - p.at)}]`); }
-    if (!rows.length) continue;
-    const head = `{"t":"u","now":${t},"s":[`;
-    const all = `${head}${rows.join(',')}]}`;
-    for (const p of room.values()) {
-      if (!p.joined || p.ws.bufferedAmount > 1 << 16) continue; // states are disposable: skip slow readers
-      const own = ids.indexOf(p.id);
-      if (own < 0) send(p, all);
-      else if (rows.length > 1) send(p, `${head}${rows.filter((_, i) => i !== own).join(',')}]}`);
-    }
-  }
+  for (const room of rooms.values()) room.flush();
 }
 
 // ws-level ping: a socket that showed no sign of life since the previous round died silently.
 function heartbeat() {
-  for (const room of rooms.values()) for (const p of room.values()) {
-    if (!p.alive) { p.ws.terminate(); continue; }
+  for (const room of rooms.values()) for (const p of room.players.values()) {
+    if (!p.alive) { p.conn.terminate(); continue; }
     p.alive = false;
-    p.ws.ping();
+    p.conn.ping();
   }
 }
 
@@ -267,7 +186,8 @@ const server = http.createServer((req, res) => {
 
 server.on('upgrade', (req, socket, head) => {
   const [pathname, query] = splitUrl(req.url);
-  if (pathname === '/ws' && originAllowed(req)) {
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
+  if (pathname === '/ws' && originAllowed(req.headers.origin, host, ALLOWED_ORIGINS)) {
     return wss.handleUpgrade(req, socket, head, (ws) => onConnection(ws, cleanRoom(new URLSearchParams(query).get('room'))));
   }
   socket.on('error', () => {});

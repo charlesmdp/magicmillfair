@@ -9,7 +9,7 @@ import { BroadcastTransport } from './transports/BroadcastTransport.js';
 import { WebSocketTransport } from './transports/WebSocketTransport.js';
 
 const SEND_MS = 1000 / 12; // own state goes out at ~12 Hz…
-const KEEPALIVE_MS = 2000; // …or every 2 s while nothing changes
+const KEEPALIVE_MS = 2000; // …or every 2 s while nothing changes (unless the relay asks for another period, or none)
 const FALLBACK_MS = 2500; // no server after that long: same-browser presence takes over
 const PROBE_MS = 30000; // then the same-origin server is probed again at this period
 
@@ -61,6 +61,7 @@ export class Presence {
     this._on = {}; // event type → Set of listeners
     this._ws = this._bc = this._tr = null; // WebSocket transport, BroadcastChannel transport, the one in use
     this._interval = SEND_MS;
+    this._keepalive = KEEPALIVE_MS;
     this._local = [0, 0, 0, 0, 0, 0]; // x, y, z, yaw, anim, flags
     this._hasLocal = this._started = this._disposed = false;
     this._due = this._sentAt = this._repeats = this._timer = 0;
@@ -190,6 +191,9 @@ export class Presence {
     if (this._bc && tr !== this._bc) { this._bc.close(); this._bc = null; }
     this._tr = tr; this.mode = mode; this.id = m.id;
     this._interval = Math.max(SEND_MS, Number.isFinite(m.tick) ? m.tick : 0);
+    // `idle`: how often to repeat an unchanged state. 0 = never (a relay that keeps the last state of everyone
+    // and sleeps while its room is quiet); absent = our default (tabs talking to each other need it).
+    this._keepalive = Number.isFinite(m.idle) && m.idle >= 0 ? m.idle : KEEPALIVE_MS;
     const stamp = Number.isFinite(m.now) ? m.now : now(), kept = new Set();
     for (const info of Array.isArray(m.peers) ? m.peers : []) if (this._join(info, stamp)) kept.add(info.id);
     for (const id of [...this.peers.keys()]) if (!kept.has(id)) this._leave(id);
@@ -248,7 +252,7 @@ export class Presence {
   }
 
   // Sends the local state when its slot is due: at ~12 Hz while it changes, twice more once it stops (so the
-  // others know we stand still instead of extrapolating), then only as a keep-alive.
+  // others know we stand still instead of extrapolating), then only as a keep-alive, if the relay wants one.
   _flush(t) {
     const l = this._local;
     if (t < this._due || !this._tr || !this._hasLocal || ![l[0], l[1], l[2], l[3]].every(Number.isFinite)) return;
@@ -257,7 +261,7 @@ export class Presence {
     const a = int(Math.trunc(l[4]), 15), f = int(Math.trunc(l[5]), 255);
     const key = `${p}|${a}|${f}`;
     if (key !== this._sentKey) this._repeats = 0;
-    else if (this._repeats >= 2 && t - this._sentAt < KEEPALIVE_MS) return;
+    else if (this._repeats >= 2 && (!this._keepalive || t - this._sentAt < this._keepalive)) return;
     else this._repeats++;
     this._sentKey = key; this._sentAt = t;
     this._tr.send({ t: 's', p, a, f });
