@@ -27,7 +27,7 @@ export class Engine {
     this._createRenderer();
     this.perf = { fps: 60, ms: 16, cpuMs: 0, calls: 0, triangles: 0, samples: [] };
     this._last = performance.now();
-    this._acc = 0; this._accN = 0;
+    this._acc = 0; this._accN = 0; this._worst = 0;
     this.adaptive = true;
     window.addEventListener('resize', () => this.resize());
     window.visualViewport?.addEventListener('resize', () => this.resize());
@@ -105,11 +105,15 @@ export class Engine {
     p.cpuLast = performance.now() - this._cpu0;
     p.cpuMs += (p.cpuLast - p.cpuMs) * 0.1;
     this._acc += this.rawDt; this._accN++;
+    if (this.rawDt > this._worst) this._worst = this.rawDt;
     if (this._acc >= 0.5) {
       const ms = (this._acc / this._accN) * 1000;
       p.ms = ms; p.fps = 1000 / ms;
-      this._acc = 0; this._accN = 0;
-      if (this.adaptive && this.frame > 90) this._adapt(ms);
+      // What quality settings can act on: the frame time without the worst frame of the window. A pause of the
+      // garbage collector, a shader being compiled or a tab coming back is not shortened by drawing less.
+      const typical = this._accN > 3 ? ((this._acc - this._worst) / (this._accN - 1)) * 1000 : ms;
+      this._acc = 0; this._accN = 0; this._worst = 0;
+      if (this.adaptive && this.frame > 30) this._adapt(typical);
     }
   }
 
@@ -144,9 +148,13 @@ export class Engine {
       // try (up to two minutes), so that the picture does not keep switching back and forth.
       if (now - (this._raised ?? -1e9) < 8) this._patience = Math.min(240, (this._patience || 4) * 2);
       this._dropped = now;
-      if (this.scale > 0.8) this.setScale(this.scale - 0.07);
-      else if (this.detail > 0.5) this.setDetail(this.detail - 0.1);
-      else this.setScale(this.scale - 0.07);
+      // one step down — two below about 23 frames a second, so that a weak device is not left struggling for
+      // long (a single missed frame per frame, 60 -> 30, must stay a single step: see the patience above)
+      for (let step = ms > target * 2.5 ? 2 : 1; step > 0; step--) {
+        if (this.scale > 0.8) this.setScale(this.scale - 0.07);
+        else if (this.detail > 0.5) this.setDetail(this.detail - 0.1);
+        else this.setScale(this.scale - 0.07);
+      }
     } else {
       this._episode = null;
       if (ms < target * 1.04 && (this.scale < 1 || this.detail < 1)) {

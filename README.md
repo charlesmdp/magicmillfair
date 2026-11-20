@@ -139,7 +139,9 @@ changeable in the settings (or `?q=low|medium|high|ultra`).
   the real-time shadow pass is kept for what moves (everything else is in the shadow map baked at load).
 - On every device the game **adapts by itself** while you play: when frames take too long it first lowers the
   resolution, then the detail (how far trees, grass and flowers are drawn in full, how often shadows and
-  reflections are refreshed), and gives both back when there is room again. A tier is a starting point.
+  reflections are refreshed), and gives both back when there is room again. It starts doing so within the
+  first second, drops faster when the frame rate is very low, and ignores isolated pauses that drawing less
+  would not shorten. A tier is a starting point.
 
 Techniques:
 
