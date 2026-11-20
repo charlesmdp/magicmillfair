@@ -24,7 +24,7 @@ export function mergeStatic(roots, name = 'static') {
   group.name = name;
   for (const b of buckets.values()) {
     const geo = b.geos.length === 1 ? b.geos[0] : mergeGeometries(b.geos, false);
-    if (!geo) throw new Error(`Fusion impossible : ${name}:${b.label}`);
+    if (!geo) throw new Error(`Cannot merge ${name}:${b.label}`);
     geo.computeBoundingSphere();
     const mesh = new THREE.Mesh(geo, b.material);
     mesh.name = `${name}:${b.label}`;

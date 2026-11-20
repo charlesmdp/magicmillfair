@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Monde 3D explorable dans le navigateur : un moulin, sa vallée et une grande jetée de fête foraine.",
+  "description": "An explorable 3D world in the browser: an old mill, its valley between the mountains and a grand pier by the sea.",
   "scripts": {
     "dev": "node tools/dev.mjs",
     "dev:vite": "vite",

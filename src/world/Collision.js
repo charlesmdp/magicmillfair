@@ -27,6 +27,28 @@ export class Collision {
     this._insert(x - ext, z - ezt, x + ext, z + ezt, -1 - i);
   }
 
+  /** The playable area: a closed polygon [[x, z], …]. Nothing confined can leave it. */
+  setBounds(points) { this.bounds = points; }
+
+  /** Keeps a point inside the playable area, sliding along its edge. Mutates and returns `p` ({x, z}). */
+  confine(p) {
+    const b = this.bounds;
+    if (!b) return p;
+    let inside = false, best = Infinity, bx = p.x, bz = p.z;
+    for (let i = 0, j = b.length - 1; i < b.length; j = i++) {
+      const ax = b[j][0], az = b[j][1], cx = b[i][0], cz = b[i][1];
+      if ((az > p.z) !== (cz > p.z) && p.x < ((cx - ax) * (p.z - az)) / (cz - az) + ax) inside = !inside;
+      const dx = cx - ax, dz = cz - az;
+      let t = ((p.x - ax) * dx + (p.z - az) * dz) / (dx * dx + dz * dz || 1);
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const qx = ax + dx * t, qz = az + dz * t;
+      const d = (p.x - qx) ** 2 + (p.z - qz) ** 2;
+      if (d < best) { best = d; bx = qx; bz = qz; }
+    }
+    if (!inside) { p.x = bx; p.z = bz; }
+    return p;
+  }
+
   /** platform: { heightAt(x, z) -> number | null, clearance } */
   addPlatform(p) { this.platforms.push(p); }
 

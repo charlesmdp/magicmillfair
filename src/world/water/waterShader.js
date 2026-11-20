@@ -9,6 +9,10 @@ uniform vec3 uCenter;
 out vec3 vWorld;
 out vec4 vFlow;
 out float vWave;
+#ifdef STREAM
+in float aFade; // 0 where the stream dissolves into still water
+out float vFade;
+#endif
 
 #ifdef SEA
 // sum of a few trochoidal waves; amplitude fades out in the shallows
@@ -25,6 +29,9 @@ void main() {
   vec3 p = position + uCenter;
   vFlow = aFlow;
   vWave = 0.0;
+#ifdef STREAM
+  vFade = aFade;
+#endif
 #ifdef SEA
   float bed = worldHeightsLod(p.xz).x;
   float inMap = step(abs(p.x), uWorldMap.y) * step(abs(p.z), uWorldMap.y);
@@ -63,6 +70,9 @@ uniform vec4 uRippleParams; // scale1, scale2, strength, speed
 in vec3 vWorld;
 in vec4 vFlow;
 in float vWave;
+#ifdef STREAM
+in float vFade;
+#endif
 
 vec3 srgbToLinear(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c)); }
 vec3 invTonemap(vec3 y) {
@@ -257,6 +267,9 @@ void main() {
   unp = applyFog(unp, P, cameraPosition);
 #endif
   alpha *= edge;
+#ifdef STREAM
+  alpha *= vFade;
+#endif
   gl_FragColor = vec4(outputColor(unp) * alpha, alpha);
 }
 `;

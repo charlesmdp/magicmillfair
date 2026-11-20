@@ -26,7 +26,7 @@ export const cleanRoom = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9_
 /** Display name: no control characters or angle brackets, single spaces, at most 16 characters. */
 export function cleanName(name) {
   const s = typeof name === 'string' ? name.replace(/\s+/g, ' ').replace(/[\p{C}<>]/gu, '').replace(/ {2,}/g, ' ').trim() : '';
-  return [...s].slice(0, 16).join('').trim() || 'Visiteur';
+  return [...s].slice(0, 16).join('').trim() || 'Visitor';
 }
 
 /** Avatar state of an `s` message, bounded and rounded: [x, y, z, yaw, anim, flags], or null when malformed. */
@@ -87,7 +87,7 @@ export class Room {
   add(connection, known) {
     if (!known && this.players.size >= this.io.max) return null;
     const p = {
-      conn: connection, id: known ? known.id : this.io.id ? this.io.id() : this.nextId, name: 'Visiteur', color: 0, joined: false,
+      conn: connection, id: known ? known.id : this.io.id ? this.io.id() : this.nextId, name: 'Visitor', color: 0, joined: false,
       alive: true, tokens: BURST, stamp: this.io.now(),
       state: null, row: '', at: 0, dirty: false, rested: true, // last state, its serialised row, when it came, relay flags
     };

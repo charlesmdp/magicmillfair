@@ -74,15 +74,15 @@ function reply(req, res, status, body, headers = {}) {
 
 async function serveStatic(req, res, pathname) {
   let rel;
-  try { rel = decodeURIComponent(pathname); } catch { return reply(req, res, 400, 'Requête invalide.\n'); }
+  try { rel = decodeURIComponent(pathname); } catch { return reply(req, res, 400, 'Bad request.\n'); }
   if (rel.endsWith('/')) rel += 'index.html';
   const file = path.join(DIST, rel);
-  if (rel.includes('\0') || !file.startsWith(DIST + path.sep)) return reply(req, res, 403, 'Accès refusé.\n'); // path traversal
+  if (rel.includes('\0') || !file.startsWith(DIST + path.sep)) return reply(req, res, 403, 'Forbidden.\n'); // path traversal
   const st = await fs.promises.stat(file).catch(() => null);
   if (!st || !st.isFile()) {
     const built = await fs.promises.stat(DIST).then((s) => s.isDirectory(), () => false);
     if (built) return reply(req, res, 404, 'Page introuvable.\n');
-    return reply(req, res, 503, 'Le site n’est pas encore construit : lancez « npm run build », puis rechargez la page.\n');
+    return reply(req, res, 503, 'The site has not been built yet: run "npm run build", then reload this page.\n');
   }
   const ext = path.extname(file).slice(1).toLowerCase();
   const type = MIME[ext] || 'application/octet-stream';
@@ -110,7 +110,7 @@ async function serveStatic(req, res, pathname) {
 
 async function onRequest(req, res) {
   const [pathname, query] = splitUrl(req.url);
-  if (req.method !== 'GET' && req.method !== 'HEAD') return reply(req, res, 405, 'Méthode non autorisée.\n', { Allow: 'GET, HEAD' });
+  if (req.method !== 'GET' && req.method !== 'HEAD') return reply(req, res, 405, 'Method not allowed.\n', { Allow: 'GET, HEAD' });
   if (pathname === '/healthz') return reply(req, res, 200, 'ok');
   if (pathname === '/api/presence') {
     // ?room=x: head count of one room (the only form the Cloudflare version offers); otherwise the whole server
@@ -118,7 +118,7 @@ async function onRequest(req, res) {
     const body = room === null ? census() : { room: cleanRoom(room), players: rooms.get(cleanRoom(room))?.joined || 0 };
     return reply(req, res, 200, JSON.stringify(body), { 'Content-Type': MIME.json });
   }
-  if (pathname === '/ws') return reply(req, res, 426, 'Point d’entrée WebSocket.\n', { Upgrade: 'websocket' });
+  if (pathname === '/ws') return reply(req, res, 426, 'WebSocket endpoint.\n', { Upgrade: 'websocket' });
   return serveStatic(req, res, pathname);
 }
 
@@ -195,7 +195,7 @@ server.on('upgrade', (req, socket, head) => {
 });
 
 server.on('error', (err) => {
-  console.error(err.code === 'EADDRINUSE' ? `Le port ${PORT} est déjà utilisé (changez PORT).` : err);
+  console.error(err.code === 'EADDRINUSE' ? `Port ${PORT} is already in use (set PORT to another one).` : err);
   process.exit(1);
 });
 
@@ -212,5 +212,5 @@ process.on('SIGINT', shutdown);
 
 server.listen(PORT, HOST, () => {
   const { port } = server.address();
-  console.log(`Magic Mill Fair — http://localhost:${port} (présence : ws://localhost:${port}/ws, ${TICK_HZ} Hz, ${MAX_PLAYERS} joueurs max par salon)`);
+  console.log(`Magic Mill Fair — http://localhost:${port} (presence: ws://localhost:${port}/ws, ${TICK_HZ} Hz, up to ${MAX_PLAYERS} players per room)`);
 });

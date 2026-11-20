@@ -23,7 +23,6 @@ export class PlayerController {
     this.anim = ANIM.idle;
     this.speed = 0;
     this._p = { x: 0, z: 0 };
-    this.limit = data.half - 6;
   }
 
   teleport(x, z, yaw = 0) {
@@ -69,8 +68,7 @@ export class PlayerController {
       const p = this._p;
       p.x = pos.x + dx; p.z = pos.z + dz;
       this.collision.resolve(p, RADIUS, pos.y);
-      const lim = this.limit;
-      p.x = Math.max(-lim, Math.min(lim, p.x)); p.z = Math.max(-lim, Math.min(lim, p.z));
+      this.collision.confine(p); // the mountains and the open sea
       const g = this.collision.groundAt(p.x, p.z, pos.y + 0.3);
       if ((this.grounded || this.swimming) && g - pos.y > STEP && !(this.swimming && g < water + 0.4)) return false;
       if (!this.grounded && !this.swimming && g > pos.y + 0.25) return false;

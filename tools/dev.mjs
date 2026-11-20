@@ -11,7 +11,7 @@ const relay = spawn(process.execPath, [path.join(ROOT, 'server/index.js')], {
   env: { ...process.env, PORT: RELAY_PORT, HOST: '127.0.0.1' },
   stdio: ['ignore', 'ignore', 'inherit'], // its banner would point at the wrong port: keep errors only
 });
-relay.on('exit', (code) => { if (code) console.error(`Le relais de présence s'est arrêté (code ${code}).`); });
+relay.on('exit', (code) => { if (code) console.error(`The presence relay stopped (code ${code}).`); });
 
 const server = await createServer({
   root: ROOT,
@@ -19,7 +19,7 @@ const server = await createServer({
 });
 await server.listen();
 server.printUrls();
-console.log('  ➜  Présence multijoueur : active (relais local)\n');
+console.log('  ➜  Multiplayer presence: on (local relay)\n');
 
 const stop = () => { relay.kill(); server.close().finally(() => process.exit(0)); };
 process.on('SIGINT', stop);

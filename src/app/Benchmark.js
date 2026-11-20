@@ -5,18 +5,18 @@ import * as THREE from 'three';
 
 // x, z, height above the ground (or the water), then the point looked at: x, z, height above the ground
 const TOUR = [
-  [-48, -62, 20, -120, -6, 4],
-  [-84, -36, 6, -122, -6, 4],
-  [-104, 16, 8, -150, 50, 1],
-  [-150, 104, 12, -186, 66, 0],
-  [-66, 44, 24, 24, -8, 6],
-  [44, -18, 15, 140, -62, 5],
-  [150, -84, 15, 246, -182, 4],
-  [224, -172, 7, 300, -178, 9],
-  [302, -176, 10, 444, -123, 30],
-  [398, -164, 17, 445, -123, 34],
-  [470, -62, 30, 430, -128, 25],
-  [498, -150, 22, 380, -140, 10],
+  [-70, -52, 22, -122, -6, 4], // the mill from the north-east
+  [-96, -30, 6, -122, -8, 4], // into the courtyard
+  [-106, 14, 8, -150, 50, 1], // over the dam, the great pond
+  [-170, 96, 10, -215, 100, 1], // the willow island
+  [-240, 104, 9, -285, 123, 14], // the waterfall
+  [-160, 112, 16, -110, 138, 18], // the old tree
+  [-60, 60, 20, -20, 0, 4], // over the hillside, towards the sea
+  [-40, -30, 10, 10, -8, 4], // iris pond and the seafront
+  [-6, 4, 6, 60, 10, 10], // the plaza, the pier ahead
+  [60, 12, 12, 118, 16, 30], // on the pier, the big wheel
+  [150, -40, 26, 100, 14, 22], // round the wheel
+  [120, 70, 22, 20, 0, 8], // from the sea: the whole valley and its mountains
 ];
 const SEGMENT = 3.2; // seconds per leg in timed mode
 
@@ -106,19 +106,19 @@ export class Benchmark {
     console.log('[bench]', JSON.stringify(this.result));
   }
 
-  /** Human-readable summary (French). */
+  /** Human-readable summary. */
   report() {
     const r = this.result;
     if (!r) return '';
     const k = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)} M` : `${Math.round(n / 1000)} k`);
     return [
-      `Palier ${r.tier} · ${r.width}×${r.height}`,
-      `Moyenne ${r.fpsAvg} ips (${r.msAvg} ms)`,
-      `1 % les plus lentes : ${r.fpsLow1} ips (${r.ms99} ms)`,
-      `Temps de script : ${r.cpuAvg} ms en moyenne, ${r.cpuMax} ms au plus`,
-      `Appels de dessin : ${r.callsAvg} en moyenne, ${r.callsMax} au plus`,
-      `Triangles : ${k(r.trisAvg)} en moyenne, ${k(r.trisMax)} au plus`,
-      r.gpu ? `GPU : ${r.gpu}` : '',
+      `${r.tier} · ${r.width}×${r.height}`,
+      `Average ${r.fpsAvg} fps (${r.msAvg} ms)`,
+      `Slowest 1 %: ${r.fpsLow1} fps (${r.ms99} ms)`,
+      `Script time: ${r.cpuAvg} ms on average, ${r.cpuMax} ms at most`,
+      `Draw calls: ${r.callsAvg} on average, ${r.callsMax} at most`,
+      `Triangles: ${k(r.trisAvg)} on average, ${k(r.trisMax)} at most`,
+      r.gpu ? `GPU: ${r.gpu}` : '',
     ].filter(Boolean).join('\n');
   }
 }

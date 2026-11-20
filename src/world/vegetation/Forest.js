@@ -36,18 +36,31 @@ export class Forest {
     this._frustum = new THREE.Frustum();
     this._m = new THREE.Matrix4();
     this._sphere = new THREE.Sphere();
-    this.setTier(engine.tier);
+    this.scaled = new Map(); // landmark species keep their detail further away: lodScale → their own ranges
+    this.maxScale = 1;
+    this.setDetail(1);
   }
 
-  setTier(t) {
-    this.lod.uLodRange.value.set(t.treeNear, t.treeFade, t.treeMid, t.treeFade * 1.4);
+  /** Level-of-detail uniforms of a species (shared, unless the species has its own distances). */
+  _lodOf(sp) {
+    const k = sp.lodScale || 1;
+    if (k === 1) return this.lod;
+    if (!this.scaled.has(k)) {
+      this.scaled.set(k, { uLodCam: this.lod.uLodCam, uLodRange: { value: this.lod.uLodRange.value.clone() } });
+      this.maxScale = Math.max(this.maxScale, k);
+      this.setDetail(this.detail);
+    }
+    return this.scaled.get(k);
   }
 
   async load(onProgress = () => {}) {
     const tier = this.engine.tier;
-    const size = tier.quality >= 2 ? 1024 : 512;
+    const size = tier.layerSize;
     const a2c = !!tier.msaa;
     this.a2c = a2c;
+    // Phones: one shape per species (half as many draw calls) and trees are left out of the real-time shadow
+    // pass: their shadows come from the map baked at load, like everything that does not move.
+    this.oneShape = !!tier.phone;
     const barkNames = [...new Set(SPECIES_ORDER.map((n) => SPECIES[n].bark))];
     const present = new Set();
     const T = this.data.trees;
@@ -62,13 +75,13 @@ export class Forest {
 
     // ---- materials and models
     const woodMats = {};
-    const mkWood = (b, defines = {}) => makeMaterial({
-      uniforms: { ...this.lod, uLodMode: { value: 0 }, uSway: { value: 1 }, uBarkTex: { value: bark[b].c }, uBarkNrm: { value: bark[b].n } },
+    const mkWood = (b, defines = {}, lod = this.lod) => makeMaterial({
+      uniforms: { ...lod, uLodMode: { value: 0 }, uSway: { value: 1 }, uBarkTex: { value: bark[b].c }, uBarkNrm: { value: bark[b].n } },
       defines: { BAKE: 0, ...defines }, vertexShader: WOOD_VERT, fragmentShader: WOOD_FRAG,
     });
     const mkLeaf = (sp, tex, mode, defines = {}, opts = {}) => makeMaterial({
       uniforms: {
-        ...this.lod, uLodMode: { value: mode }, uSway: { value: sp.sway }, uLeafTex: { value: tex },
+        ...this._lodOf(sp), uLodMode: { value: mode }, uSway: { value: sp.sway }, uLeafTex: { value: tex },
         uLeafTint: { value: new THREE.Vector3(...sp.leafTint) }, uBarkColor: { value: new THREE.Vector3(...sp.barkColor) },
       },
       defines: { BAKE: 0, ...defines }, vertexShader: LEAF_VERT, fragmentShader: LEAF_FRAG, side: THREE.DoubleSide, ...opts,
@@ -78,10 +91,11 @@ export class Forest {
     const order = SPECIES_ORDER.map((name, si) => ({ name, si })).filter((s) => present.has(s.si));
     for (const { name, si } of order) {
       const sp = SPECIES[name];
-      if (!woodMats[sp.bark]) {
-        const m = mkWood(sp.bark);
-        const d = mkWood(sp.bark, { DEPTH_ONLY: 1 }); d.colorWrite = false;
-        woodMats[sp.bark] = { m, d };
+      const woodKey = `${sp.bark}:${sp.lodScale || 1}`; // bark materials are shared by the species that can share them
+      if (!woodMats[woodKey]) {
+        const m = mkWood(sp.bark, {}, this._lodOf(sp));
+        const d = mkWood(sp.bark, { DEPTH_ONLY: 1 }, this._lodOf(sp)); d.colorWrite = false;
+        woodMats[woodKey] = { m, d };
       }
       const tex = leafTex[si];
       const leaf0 = mkLeaf(sp, tex, 0, a2c ? { USE_A2C: 1 } : {}, { alphaToCoverage: a2c });
@@ -90,7 +104,7 @@ export class Forest {
       const depth1 = mkLeaf(sp, tex, 1, { DEPTH_ONLY: 1 }); depth1.colorWrite = false;
       const models = [];
       for (let v = 0; v < VARIANTS; v++) models.push(buildTree(name, 1337 + si * 101 + v * 17));
-      this.species[si] = { name, sp, si, tex, models, mats: { wood: woodMats[sp.bark], leaf0, leaf1, depth0, depth1 }, trees: [], variants: [] };
+      this.species[si] = { name, sp, si, tex, models, mats: { wood: woodMats[woodKey], leaf0, leaf1, depth0, depth1 }, trees: [], variants: [], range: sp.lodScale ? this._lodOf(sp).uLodRange.value : null };
     }
     onProgress(0.5);
 
@@ -124,7 +138,7 @@ export class Forest {
       if (!sp) continue;
       const inMap = i < count;
       const y = (inMap ? d.heightAt(x, z) : T[i * 6 + 5]) - 0.12;
-      const variant = (rnd() * VARIANTS) | 0;
+      const variant = this.oneShape ? 0 : (rnd() * VARIANTS) | 0;
       const tint = rnd();
       const look = (rnd() * 2) | 0;
       const tree = { x, y, z, scale, rot, si, variant, tint, phase: rnd(), col: variant * 2 + look, inMap };
@@ -181,8 +195,8 @@ export class Forest {
           im.matrixAutoUpdate = false;
           im.name = name;
           im.userData.depthMaterial = depth;
-          im.layers.enable(LAYER.DYNAMIC_CASTER);
-          im.layers.enable(LAYER.REFLECT);
+          // (not mirrored in the water: impostors stand in for them there)
+          if (!this.oneShape) im.layers.enable(LAYER.DYNAMIC_CASTER);
           this.group.add(im);
           return { mesh: im, cap, sum: -1 };
         };
@@ -199,7 +213,7 @@ export class Forest {
   _bakeImpostors() {
     const renderer = this.engine.renderer;
     const tier = this.engine.tier;
-    const cell = tier.quality >= 2 ? 192 : tier.quality === 1 ? 160 : 128;
+    const cell = tier.phone ? 128 : tier.quality >= 2 ? 192 : tier.quality === 1 ? 160 : 128;
     const W = COLS * cell, H = ELEV * cell;
     const scene = new THREE.Scene();
     const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
@@ -288,7 +302,7 @@ export class Forest {
       geo.instanceCount = n;
       const mat = makeMaterial({
         uniforms: {
-          ...this.lod, uLodMode: { value: 1 }, uAtlas: { value: sp.imp.rtA.texture }, uAtlasN: { value: sp.imp.rtN.texture },
+          ...this._lodOf(sp.sp), uLodMode: { value: 1 }, uAtlas: { value: sp.imp.rtA.texture }, uAtlasN: { value: sp.imp.rtN.texture },
           uImp: { value: new THREE.Vector4(sp.imp.R, sp.imp.cy, ELEV, COLS) },
         },
         vertexShader: IMPOSTOR_VERT, fragmentShader: IMPOSTOR_FRAG,
@@ -302,6 +316,20 @@ export class Forest {
       sp.impostor = mesh;
       this.group.add(mesh);
     }
+  }
+
+  /** While the mirrored view of the water is rendered, every tree is drawn as an impostor: two triangles each. */
+  setReflectionPass(on) {
+    for (const sp of this.species) if (sp && sp.impostor) sp.impostor.material.uniforms.uLodMode.value = on ? 2 : 1;
+  }
+
+  /** Detail factor (0.5..1): how far trees are drawn as full meshes before simpler versions take over. */
+  setDetail(d) {
+    const t = this.engine.tier;
+    this.detail = d;
+    const near = Math.max(12, t.treeNear * d), mid = Math.max(30, t.treeMid * d);
+    this.lod.uLodRange.value.set(near, t.treeFade, mid, t.treeFade * 1.4);
+    for (const [k, u] of this.scaled) u.uLodRange.value.set(near * k, t.treeFade * 2, Math.max(mid * k, near * k + 40), t.treeFade * 2.8);
   }
 
   /** Temporarily add every tree as a mid-detail shadow caster (for the static shadow bake). */
@@ -341,8 +369,9 @@ export class Forest {
     this._frustum.setFromProjectionMatrix(this._m, camera.coordinateSystem, camera.reversedDepth);
     const shadowR = 62; // trees this close may cast shadows into view even when off-screen
     for (const sp of this.species) if (sp) for (const v of sp.variants) { v.list0.length = 0; v.list1.length = 0; }
-    const c0x = Math.floor((cp.x - mid) / CELL), c1x = Math.floor((cp.x + mid) / CELL);
-    const c0z = Math.floor((cp.z - mid) / CELL), c1z = Math.floor((cp.z + mid) / CELL);
+    const reach = Math.max(mid, ...[...this.scaled.values()].map((u) => u.uLodRange.value.z));
+    const c0x = Math.floor((cp.x - reach) / CELL), c1x = Math.floor((cp.x + reach) / CELL);
+    const c0z = Math.floor((cp.z - reach) / CELL), c1z = Math.floor((cp.z + reach) / CELL);
     const info = this.info, sph = this._sphere;
     let nNear = 0, nMid = 0;
     for (let cz = c0z; cz <= c1z; cz++) for (let cx = c0x; cx <= c1x; cx++) {
@@ -352,16 +381,19 @@ export class Forest {
         const i = list[k], o = i * 6;
         const dx = info[o] - cp.x, dz = info[o + 2] - cp.z;
         const d2 = dx * dx + dz * dz;
-        if (d2 > mid * mid) continue;
+        const species = this.species[info[o + 4]];
+        const own = species.range; // landmark species: their own distances
+        const tMid = own ? own.z : mid, tNear = own ? own.x : near, tFade = own ? own.y : nearF;
+        if (d2 > tMid * tMid) continue;
         const d = Math.sqrt(d2);
         if (d > shadowR) {
           const r = info[o + 3];
           sph.center.set(info[o], info[o + 1] + r * 0.8, info[o + 2]); sph.radius = r * 1.25;
           if (!this._frustum.intersectsSphere(sph)) continue;
         }
-        const v = this.species[info[o + 4]].variants[info[o + 5]];
-        if (d < near) { v.list0.push(i); nNear++; }
-        if (d > near - nearF) { v.list1.push(i); nMid++; }
+        const v = species.variants[info[o + 5]];
+        if (d < tNear) { v.list0.push(i); nNear++; }
+        if (d > tNear - tFade) { v.list1.push(i); nMid++; }
       }
     }
     this.stats.near = nNear; this.stats.mid = nMid;

@@ -1,27 +1,27 @@
 // The mill: house, outbuilding, courtyard, dam and garden structures.
 import * as THREE from 'three';
 import { Parts } from '../../props/MeshBuilder.js';
-import { LAYER } from '../../../render/Shadows.js';
+import { LAYER, staticCaster } from '../../../render/Shadows.js';
 import { MILL, LEVELS } from '../../layout/layout.js';
 import { buildMillHouse, buildOutbuilding, HOUSE } from './MillHouse.js';
 import { mergeStatic, distanceCuller } from '../../props/StaticBatch.js';
 import { MillWorks } from './MillWorks.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
-const CAST = [LAYER.STATIC_CASTER, LAYER.DYNAMIC_CASTER, LAYER.REFLECT];
 
 export class MillZone {
   constructor(world) {
     this.world = world;
     this.group = new THREE.Group();
     this.group.name = 'zone:mill';
+    this.cast = staticCaster(world.engine.tier);
     this.colliders = [];
     this.animated = [];
   }
 
   /** Place a Parts set at a layout frame (x, z, yaw) and floor height. */
   _place(parts, frame, y, name, extraYaw = 0) {
-    const g = parts.toMeshes(this.world.materials, { name, layers: CAST });
+    const g = parts.toMeshes(this.world.materials, { name, layers: this.cast });
     g.position.set(frame.x, y, frame.z);
     g.rotation.y = (frame.yaw || 0) + extraYaw;
     g.updateMatrixWorld(true);

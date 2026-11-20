@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { makeMaterial, GLSL_COMMON, GLSL_SHADOW, GLSL_LIGHTING, GLSL_WIND } from '../../render/globals.js';
 import { loadTexture } from '../../core/Assets.js';
-import { ROCK_GARDEN, MILL, frameToWorld, LEVELS } from '../layout/layout.js';
+import { PONDS, ROCK_GARDEN, MILL, frameToWorld, LEVELS } from '../layout/layout.js';
 import { pointInPolygon } from '../layout/spline.js';
 
 const CELL = 32;
@@ -12,6 +12,7 @@ const STRIDE = 12;
 const T = { reed: 0, cattail: 1, iris: 2, fern: 3, daisy: 4, poppy: 5, buttercup: 6, cornflower: 7, foxglove: 8, heather: 9, agapanthus: 10, pad: 11, lily: 12, dune: 13, leaves: 14, lavender: 15 };
 // shapes: 0 two crossed quads, 1 three crossed quads, 2 rosette of six fronds, 3 flat on the water
 const CROSS2 = 0, CROSS3 = 1, ROSETTE = 2, FLAT = 3;
+const STILL = PONDS.map((p) => p.level); // water lilies float on the ponds, not on running water
 
 const VERT = /* glsl */ `
 ${GLSL_COMMON}
@@ -66,7 +67,7 @@ void main() {
   float shadow = sunShadow(iA.xyz + vec3(0.0, 0.25, 0.0), vec3(0.0, 1.0, 0.0));
   vec3 V = normalize(cameraPosition - wp);
   float back = pow(saturate(dot(-V, uSunDir)), 3.0);
-  float canopy = mix(0.55, 1.0, nt.b);
+  float canopy = mix(0.8, 1.0, nt.b);
   float ao = mix(0.6, 1.0, shape > 2.5 ? 1.0 : aQuad.y) * canopy;
   vLight = uSunColor * (0.62 + 0.38 * back) * shadow * saturate(uSunDir.y + 0.25) + hemiAmbient(vec3(0.0, 1.0, 0.0)) * ao;
   vTint = iC.rgb;
@@ -133,7 +134,7 @@ export class Scatter {
 
   async load() {
     const tier = this.engine.tier;
-    const atlas = await loadTexture(`textures/foliage/plants_${tier.quality >= 2 ? 1024 : 512}.webp`, { srgb: true, repeat: false });
+    const atlas = await loadTexture(`textures/foliage/plants_${tier.layerSize}.webp`, { srgb: true, repeat: false });
     const a2c = !!tier.msaa;
     this.uniforms = { uAtlas: { value: atlas }, uScatter: { value: new THREE.Vector4(this.range, 0, 0, 0) } };
     this.material = makeMaterial({ uniforms: this.uniforms, defines: a2c ? { USE_A2C: 1 } : {}, vertexShader: VERT, fragmentShader: FRAG, side: THREE.DoubleSide, alphaToCoverage: a2c });
@@ -204,7 +205,7 @@ export class Scatter {
             }
             // floating lilies on the calm shallows
             const shore = d.aux[d.index(x, z) * 4 + 1] / 255 * 16;
-            if (depth > 0.45 && depth < 1.9 && shore < 9 && valueNoise(x * 0.11, z * 0.11, 23) > 0.6 && k < 0.5 && wl > 12) {
+            if (depth > 0.45 && depth < 1.9 && shore < 9 && valueNoise(x * 0.11, z * 0.11, 23) > 0.6 && k < 0.5 && STILL.some((lvl) => Math.abs(lvl - wl) < 0.03)) {
               push(x, wl, z, 0.55 + r1 * 0.5, 1, r2 < 0.22 ? T.lily : T.pad, FLAT, [1, 1, 1], r2);
               continue;
             }
@@ -262,6 +263,13 @@ export class Scatter {
       if (x >= x0 && x < x0 + CELL && z >= z0 && z < z0 + CELL) push(x, LEVELS.court + 0.5, z + 0.35, 0.7, 0.6, i % 2 ? T.lavender : T.heather, CROSS3, [1, 1, 1], hash(i, 3, 5));
     }
     return new Float32Array(out);
+  }
+
+  /** How far small plants are drawn (m). */
+  setRange(r) {
+    this.range = r;
+    this.material.uniforms.uScatter.value.x = r;
+    this._key = '';
   }
 
   update(camera) {

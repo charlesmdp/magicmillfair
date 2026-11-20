@@ -1,21 +1,23 @@
 # Magic Mill Fair
 
-Un monde 3D à explorer dans le navigateur : un vieux moulin, sa vallée, ses étangs, son bief et sa roue,
-puis, au bout du ruisseau, un bord de mer imaginaire avec une grande jetée et sa grande roue.
-Réalisme stylisé, ambiance de jeu d'aventure « cosy », jouable au clavier, à la manette ou au doigt,
-seul ou à plusieurs.
+A 3D world to explore in the browser: an old mill with its ponds, its mill race and its water wheel, in a
+valley closed by mountains — and, a short walk down the valley, a cove with a promenade, a grand pier and
+its big wheel. Stylised realism, a cosy adventure-game mood, playable with a keyboard, a gamepad or a
+finger, alone or together.
 
-![Le moulin et son étang](docs/moulin.jpg)
+![The valley from above the pier](docs/valley.jpg)
 
 | | |
 |---|---|
-| ![L'arrivée par l'allée](docs/allee.jpg) | ![La rocaille](docs/rocaille.jpg) |
-| ![La cour et la roue](docs/cour.jpg) | ![Le ruisseau](docs/ruisseau.jpg) |
-| ![La jetée et la grande roue](docs/jetee.jpg) | ![La plage](docs/plage.jpg) |
+| ![The mill and the great pond](docs/mill.jpg) | ![The rock garden](docs/garden.jpg) |
+| ![The courtyard, the dam and the wheel](docs/courtyard.jpg) | ![Swans on the great pond](docs/swans.jpg) |
+| ![The waterfall](docs/waterfall.jpg) | ![The old tree](docs/oldtree.jpg) |
+| ![The great pond](docs/pond.jpg) | ![Looking back at the valley from the pier](docs/seafront.jpg) |
+| ![The entrance of the pier](docs/pier.jpg) | ![The beach and the pier](docs/beach.jpg) |
 
-## Démarrer
+## Getting started
 
-Node.js 22 ou plus récent.
+Node.js 22 or newer.
 
 ```bash
 npm install
@@ -25,37 +27,36 @@ npm install
 npm run dev
 ```
 
-Ouvre `http://localhost:5173`. Cette commande lance le site **et** le relais multijoueur : ouvre l'adresse
-dans deux onglets (ou sur un téléphone du même réseau, avec l'adresse « Network » affichée) pour vous voir.
+Open `http://localhost:5173`. This command starts the site **and** the multiplayer relay: open the address
+in two tabs (or on a phone on the same network, with the "Network" address that is printed) to see each other.
 
-### Mettre en ligne sur Cloudflare (automatique)
+### Putting it online with Cloudflare (automatic)
 
-Tout est décrit dans le dépôt (`wrangler.jsonc`) : il n'y a aucun réglage à faire.
+Everything is described in the repository (`wrangler.jsonc`): there is nothing to configure.
 
-1. Dans le tableau de bord Cloudflare, ouvrir **Workers & Pages**, créer une application en **important un
-   dépôt Git**, autoriser GitHub et choisir ce dépôt.
-2. Garder le nom proposé, `magicmillfair` (c'est celui inscrit dans `wrangler.jsonc` : les deux doivent être
-   identiques), et la commande de déploiement par défaut, `npx wrangler deploy`. La commande de build peut
-   rester vide.
-3. Valider. Cloudflare installe les dépendances, construit le site puis publie le site, le Worker et les
-   salons multijoueurs. L'adresse est de la forme `https://magicmillfair.<votre-compte>.workers.dev` ; un
-   nom de domaine se branche ensuite depuis le tableau de bord.
+1. In the Cloudflare dashboard, open **Workers & Pages**, create an application by **importing a Git
+   repository**, authorise GitHub and pick this repository.
+2. Keep the proposed name, `magicmillfair` (it is the one written in `wrangler.jsonc`: both must be the
+   same), and the default deploy command, `npx wrangler deploy`. The build command can stay empty.
+3. Confirm. Cloudflare installs the dependencies, builds the site, then publishes the site, the Worker and the
+   multiplayer rooms. The address looks like `https://magicmillfair.<your-account>.workers.dev`; a domain
+   name can be attached afterwards from the dashboard.
 
-Ensuite, chaque `git push` sur la branche de production du dépôt redéploie tout seul.
+From then on, every `git push` to the production branch of the repository redeploys by itself.
 
-Ce qui tourne chez Cloudflare : les fichiers du site sont servis directement ; `cloudflare/worker.js` ne
-répond qu'au multijoueur. Chaque salon est un *Durable Object* qui exécute exactement le même relais que le
-serveur Node (`server/protocol.js`) et qui **s'endort dès que plus personne ne bouge** : les visiteurs restent
-connectés, mais le salon ne consomme plus rien.
+What runs at Cloudflare: the files of the site are served directly; `cloudflare/worker.js` only answers the
+multiplayer. Each room is a *Durable Object* running exactly the same relay as the Node server
+(`server/protocol.js`), and it **goes to sleep as soon as nobody moves**: visitors stay connected, but the
+room no longer consumes anything.
 
-Coûts : les salons sont des Durable Objects à stockage SQLite, le type que l'offre gratuite de Cloudflare
-acceptait quand ce projet a été écrit. Les quotas et tarifs changent : à vérifier sur les pages
-[Workers](https://developers.cloudflare.com/workers/platform/pricing/) et
-[Durable Objects](https://developers.cloudflare.com/durable-objects/platform/pricing/). Si votre offre
-refusait les Durable Objects, retirez les blocs `durable_objects` et `migrations` de `wrangler.jsonc` : le
-site se déploie quand même, sans multijoueur entre appareils.
+Costs: the rooms are SQLite-backed Durable Objects, the kind the free Cloudflare plan accepted when this
+project was written. Quotas and prices change: check the
+[Workers](https://developers.cloudflare.com/workers/platform/pricing/) and
+[Durable Objects](https://developers.cloudflare.com/durable-objects/platform/pricing/) pages. If your plan
+refused Durable Objects, remove the `durable_objects` and `migrations` blocks from `wrangler.jsonc`: the
+site still deploys, without multiplayer between devices.
 
-Sans passer par Git, depuis un poste (demande une connexion à votre compte Cloudflare) :
+Without Git, from a computer (this asks you to sign in to your Cloudflare account):
 
 ```bash
 npx wrangler login
@@ -65,9 +66,9 @@ npx wrangler login
 npm run deploy
 ```
 
-Pour essayer la version Cloudflare en local, dans le même moteur d'exécution : `npm run cf:dev`.
+To try the Cloudflare version locally, in the same runtime: `npm run cf:dev`.
 
-### Mettre en ligne ailleurs (Node)
+### Putting it online elsewhere (Node)
 
 ```bash
 npm run build
@@ -77,147 +78,182 @@ npm run build
 npm start
 ```
 
-`npm start` sert le dossier `dist/` et la présence multijoueur (WebSocket sur `/ws`) depuis **un seul
-processus**, sur le port `PORT` (8787 par défaut). Derrière un proxy (nginx, Caddy, un PaaS…), il suffit de
-laisser passer l'upgrade WebSocket. Variables utiles : `PORT`, `HOST`, `TICK_HZ` (12), `MAX_PLAYERS` (48 par
-salon), `ALLOWED_ORIGINS` (origines autorisées à ouvrir le multijoueur ; vide = le site lui-même).
-Sur un serveur, `npm ci --omit=dev --omit=optional` suffit (les outils de cuisson ne sont pas nécessaires).
+`npm start` serves the `dist/` folder and the multiplayer presence (WebSocket on `/ws`) from **a single
+process**, on port `PORT` (8787 by default). Behind a proxy (nginx, Caddy, a PaaS…), it is enough to let the
+WebSocket upgrade through. Useful variables: `PORT`, `HOST`, `TICK_HZ` (12), `MAX_PLAYERS` (48 per room),
+`ALLOWED_ORIGINS` (origins allowed to open the multiplayer socket; empty = the site itself).
+On a server, `npm ci --omit=dev --omit=optional` is enough (the baking tools are not needed).
 
-Hébergement 100 % statique (GitHub Pages, Netlify, un simple dossier) : `dist/` fonctionne tel quel depuis
-n'importe quel sous-chemin. Sans serveur de présence, seuls les onglets d'un même navigateur se voient.
-Pour brancher un relais hébergé ailleurs : construire avec `VITE_WS_URL=wss://exemple.org/ws`, ou ajouter
-`?ws=wss://exemple.org/ws` à l'adresse, et déclarer l'origine du site dans `ALLOWED_ORIGINS` côté relais.
+Fully static hosting (GitHub Pages, Netlify, a plain folder): `dist/` works as it is from any sub-path.
+Without a presence server, only the tabs of one browser see each other. To plug in a relay hosted
+elsewhere: build with `VITE_WS_URL=wss://example.org/ws`, or add `?ws=wss://example.org/ws` to the address,
+and declare the origin of the site in `ALLOWED_ORIGINS` on the relay.
 
-Les personnes qui ouvrent **la même adresse** partagent le même salon. `?room=nom` crée un salon privé.
+People who open **the same address** share the same room. `?room=name` makes a private room.
 
-## Commandes
+## Controls
 
-| | Clavier / souris | Tactile | Manette |
+| | Keyboard / mouse | Touch | Gamepad |
 |---|---|---|---|
-| Se déplacer | ZQSD ou flèches (positions physiques : WASD fonctionne aussi) | manette virtuelle à gauche | stick gauche |
-| Regarder | glisser la souris ; double-clic pour capturer le pointeur | glisser à droite | stick droit |
-| Courir / sauter | Maj / Espace | boutons à droite | gâchette, bouton A |
-| Zoom | molette | pincer | |
-| Caméra libre | F (Espace / C pour monter et descendre, Maj pour accélérer) | bouton appareil photo | |
-| Émotes | T, ou 1 à 6 | bouton sourire | |
-| Mesures | P | Réglages → Mesures de performance | |
-| Revenir au départ | R | | |
+| Move | WASD, ZQSD or arrows (physical key positions) | virtual stick on the left | left stick |
+| Look around | drag the mouse; double-click to capture the pointer | drag on the right | right stick |
+| Run / jump | Shift / Space | buttons on the right | trigger, A button |
+| Zoom | wheel | pinch | |
+| Free camera | F (Space / C to go up and down, Shift to go faster) | camera button | |
+| Map | M, or click the minimap (click again or Escape to close) | tap the minimap | |
+| Emotes | T, or 1 to 6 | smiley button | |
+| Performance figures | P | Settings → Performance figures | |
+| Back to the mill | R | | |
 
-Le personnage marche, court, saute, nage dans les étangs et la mer, monte sur les ponts et la jetée.
+The character walks, runs, jumps, swims in the ponds and in the sea, and walks on the bridges, the garden
+steps and the pier.
 
-## Qualité et performances
+## The world
 
-Quatre paliers (**Léger**, **Équilibré**, **Élevé**, **Ultra**) choisis automatiquement d'après l'appareil,
-modifiables dans les réglages (ou `?q=low|medium|high|ultra`). En plus, la résolution de rendu s'ajuste en
-continu pour tenir la cadence. Ce que chaque palier règle : résolution maximale, ombres dynamiques,
-résolution des reflets, portée des arbres détaillés, densité de l'herbe et des fleurs, taille des textures.
+The playable area is about 530 m by 360 m, the cove included — some 15 hectares (the terrain itself is
+1 km², most of it mountains that are only scenery).
 
-Techniques employées :
+- **The mill**: the house, its outbuilding, the courtyard, the rock garden in terraces with its steps, the
+  head race, the wheel in its pit, the tail race, the dam with its sluice and its spillway, and footbridges
+  over each of them.
+- **Water**: the great pond with its two islands, the mill pool, the iris pond, the stepped cascade between
+  them, the brook down to the beach, and a mountain torrent that drops over the crags as a waterfall.
+- **Around**: wheat fields, a lookout hill, the old tree alone in its clearing, woods and meadows, hedges,
+  paths linking everything (the entrance of the pier is about 130 m from the mill: half a minute's walk).
+- **The seafront**: the beach of the cove, the promenade with its palms and beach huts, the grand pier on
+  piles with its kiosks and the big wheel.
+- **The edges**: mountains on three sides (crags, wooded slopes, rocky peaks) that cannot be climbed, the sea
+  on the fourth. The lane ends at the estate gate.
+- **Life**: swans with cygnets, geese, mallards with ducklings, a cormorant that dives and another drying its
+  wings, herons fishing in the shallows; gulls over the cove, swifts over the valley, buzzards above the
+  mountains. Water birds swim away when you come close.
 
-- **Terrain** : un seul maillage instancié (CDLOD), niveaux de détail continus sans coutures.
-- **Arbres** : 3 871 arbres et arbustes en trois niveaux de détail (maillage complet, maillage simplifié,
-  imposteurs rééclairés cuits au chargement), tous instanciés, fondus sans à-coups.
-- **Herbe et fleurs** : placées sur la carte graphique, générées par tuiles autour du joueur.
-- **Ombres** : une carte d'ombres statique du monde entier cuite une fois (le soleil est fixe) et une cascade
-  dynamique autour de la caméra.
-- **Eau** : reflet planaire à résolution réduite, rendu seulement quand de l'eau est visible.
-- **Décors** : maillages fusionnés par matériau, petits objets masqués avec la distance.
+## Quality and performance
 
-### Mesures
+Four tiers (**Light**, **Balanced**, **High**, **Ultra**), chosen automatically from the device and
+changeable in the settings (or `?q=low|medium|high|ultra`).
 
-Parcours automatique à travers les deux zones (`?bench=1`), 1280×720 :
+- **Computers** start on Balanced or High according to their graphics card.
+- **Phones start on Ultra**, in a phone-sized form: every effect stays on (shadows, reflections, long views),
+  but textures and the shadow map are half-size, the resolution is capped, detail distances are shorter and
+  the real-time shadow pass is kept for what moves (everything else is in the shadow map baked at load).
+- On every device the game **adapts by itself** while you play: when frames take too long it first lowers the
+  resolution, then the detail (how far trees, grass and flowers are drawn in full, how often shadows and
+  reflections are refreshed), and gives both back when there is room again. A tier is a starting point.
 
-| Palier | Appels de dessin (moy. / max) | Triangles (moy. / max) | Temps de script par image |
+Techniques:
+
+- **Terrain**: a single instanced mesh (CDLOD), continuous levels of detail without seams; steep ground turns
+  to rock textured from the side.
+- **Trees**: about 2,400 trees and shrubs in three levels of detail (full mesh, simplified mesh, impostors
+  relit from atlases baked at load), all instanced, cross-faded. The old tree keeps its detail three times
+  further.
+- **Grass and flowers**: placed on the graphics card, generated by tiles around the player.
+- **Shadows**: a static shadow map of the valley baked once (the sun is fixed) and a dynamic cascade around
+  the camera.
+- **Water**: a planar reflection at reduced resolution, rendered only when water is in view, in which trees
+  are drawn as impostors.
+- **Scenery**: meshes merged per material, small things hidden with distance, boulders instanced and culled
+  by map square. All the birds are one draw call.
+
+### Measurements
+
+Automatic tour through the whole valley (`?bench=1`):
+
+| Tier | Draw calls (avg / max) | Triangles (avg / max) | Script time per frame |
 |---|---|---|---|
-| Léger | 66 / 123 | 208 000 / 366 000 | 2,8 à 3,8 ms |
-| Équilibré | 108 / 165 | 419 000 / 723 000 | 3,8 à 4,8 ms |
-| Élevé | 133 / 213 | 609 000 / 990 000 | 5,0 à 5,5 ms |
-| Ultra | 149 / 246 | 816 000 / 1 537 000 | 4,5 à 4,7 ms |
+| Light | 67 / 100 | 266,000 / 385,000 | 4.7 ms |
+| Balanced | 103 / 153 | 505,000 / 703,000 | 5.3 ms |
+| High | 133 / 179 | 690,000 / 919,000 | 5.8 ms |
+| Ultra | 146 / 203 | 911,000 / 1,182,000 | 6.5 ms |
+| **Ultra on a phone** | 75 / 125 | 423,000 / 664,000 | 4.8 ms |
+| Light on a phone | 59 / 108 | 228,000 / 313,000 | 2.7 ms |
 
-Les appels de dessin et les triangles sont identiques d'un passage à l'autre ; le temps de script varie (deux
-passages ici) et dépend de la machine. Avant optimisation, le palier Léger demandait 348 000 triangles en
-moyenne et 564 000 au plus.
+(Computer rows at 1280×720, phone rows at 844×390.) Before this round of optimisation, Ultra on a phone took
+119 draw calls and 874,000 triangles on average, 182 and 1,290,000 at most.
 
-**Ces chiffres ne sont pas des images par seconde.** L'environnement de développement n'avait pas de carte
-graphique : le rendu y est calculé par logiciel, ce qui ne dit rien de la cadence réelle. Les appels de
-dessin et les triangles, eux, sont exacts ; le temps de script donne un ordre de grandeur (sur un budget de
-16,7 ms par image à 60 images par seconde). Pour connaître la cadence sur un appareil :
+**These are not frames per second.** The development environment had no graphics card: rendering is computed
+in software there, which says nothing about real frame rates. Draw calls and triangles are exact; script time
+is an order of magnitude (out of a budget of 16.7 ms per frame at 60 frames per second) and varies from run
+to run. To know the frame rate on a device:
 
-- ouvrir le site avec `?bench=1` : le parcours dure environ 40 secondes et affiche la moyenne, le 1 % des
-  images les plus lentes, les appels de dessin et les triangles ;
-- ou afficher les mesures en direct (touche P).
+- open the site with `?bench=1`: the tour takes about 40 seconds and shows the average, the slowest 1 % of
+  frames, draw calls and triangles;
+- or show the live figures (P key).
 
-## Organisation du projet
+## How the project is organised
 
 ```
 index.html
 src/
-  main.js                  démarrage, boucle de jeu, modes (accueil, marche, caméra libre, mesure)
-  core/                    moteur (rendu, résolution adaptative), paliers de qualité, entrées, chargement
-  render/                  uniformes et éclairage partagés, ciel et brume, ombres, matériau de surface
+  main.js                  start-up, game loop, modes (welcome, walking, free camera, benchmark)
+  core/                    engine (rendering, adaptive resolution and detail), quality tiers, input, loading
+  render/                  shared uniforms and lighting, sky and haze, shadows, surface material
   world/
-    layout/layout.js       LE plan du monde : niveaux d'eau, étangs, ruisseaux, chemins, bâtiments, jetée…
-    World.js               assemble les systèmes, collisions, cuisson des ombres
-    WorldData.js           cartes cuites (hauteur, eau, normales, sols) lues côté processeur et carte graphique
-    terrain/  water/  vegetation/        terrain, eau, forêt, herbe, petites plantes
-    props/                 constructeur de géométrie, matériaux, murs, ponts, fusion et masquage par distance
-    zones/mill/            la maison, la dépendance, le bief, la roue, la rocaille
-    zones/pier/            la promenade, la jetée, la grande roue
-  player/                  avatar animé, contrôleur (marche, nage, saut), caméras
-  net/                     présence multijoueur (transport WebSocket ou entre onglets, interpolation)
-  ui/                      accueil, mini-carte, réglages, commandes tactiles
-  app/Benchmark.js         parcours de mesure
-server/index.js            serveur de production Node : fichiers statiques + relais de présence
-server/protocol.js         le relais lui-même (protocole, validation, envois groupés), commun aux deux hébergements
-cloudflare/worker.js       version Cloudflare : Worker + un Durable Object par salon
-wrangler.jsonc             configuration du déploiement Cloudflare (construction comprise)
-tools/                     cuisson du monde et des textures, tests, mesures (voir plus bas)
-public/assets/             cartes du monde, textures, modèle de l'avatar
+    layout/layout.js       THE plan of the world: water levels, ponds, streams, paths, buildings, pier, bounds…
+    World.js               assembles the systems, collisions, shadow bake
+    WorldData.js           baked maps (height, water, normals, ground cover) read on the CPU and the GPU
+    terrain/  water/  vegetation/        terrain, water and waterfalls, forest, grass, small plants
+    wildlife/Birds.js      every bird
+    props/                 geometry builder, materials, walls, bridges, stairs, rocks, merging and culling
+    zones/mill/            the house, the outbuilding, the races, the wheel, the garden, the bridges
+    zones/pier/            the promenade, the pier, the big wheel
+  player/                  animated avatar, controller (walk, swim, jump), cameras
+  net/                     multiplayer presence (WebSocket or between-tabs transport, interpolation)
+  ui/                      welcome screen, minimap and large map, settings, touch controls
+  app/Benchmark.js         benchmark tour
+server/index.js            Node production server: static files + presence relay
+server/protocol.js         the relay itself (protocol, validation, batching), shared by both hostings
+cloudflare/worker.js       Cloudflare version: Worker + one Durable Object per room
+wrangler.jsonc             Cloudflare deployment settings (build included)
+tools/                     world and texture bakers, tests, measurements (see below)
+public/assets/             world maps, textures, avatar model
 ```
 
-### Le monde est cuit à l'avance
+### The world is baked ahead of time
 
-`src/world/layout/layout.js` décrit le monde (en mètres, dans un repère local). `npm run bake:world` en tire
-les cartes de 1024 × 1024 m lues par le jeu : relief, niveaux d'eau, normales, nature des sols, position des
-arbres. `npm run bake:textures` génère toutes les textures (sols, pierres, écorces, feuillages, fleurs) : il
-n'y a aucune photo dans le projet, tout est procédural.
+`src/world/layout/layout.js` describes the world (in metres, in a local frame). `npm run bake:world` turns
+it into the 1024 × 1024 m maps the game reads: relief, water levels, normals, ground cover, tree positions,
+and the map shown in the game. `npm run bake:textures` generates every texture (ground, stone, bark,
+foliage, flowers): there is not a single photograph in the project, everything is procedural.
 
-Pour modifier le monde : changer `layout.js`, relancer `npm run bake:world`, recharger la page.
+To change the world: edit `layout.js`, run `npm run bake:world` again, reload the page.
 
-### Ajouter une zone (la suite : la fête foraine)
+### Adding a zone (next: the fair itself)
 
-1. Décrire son emprise dans `layout.js` (plateformes `PADS`, chemins `PATHS`, entrée dans `ZONES`) et recuire.
-2. Créer `src/world/zones/<nom>/<Nom>Zone.js` sur le modèle de `PierZone.js` : construire la géométrie avec
-   `Parts` / `MeshBuilder`, exposer `group`, `colliders`, `update(dt, time, camera)`.
-3. L'enregistrer dans `World.load()` et ses obstacles dans `World.buildCollision()`.
+1. Describe its footprint in `layout.js` (level areas in `PADS`, paths in `PATHS`, an entry in `ZONES`;
+   widen `BOUNDS` if it lies outside the playable area) and bake again.
+2. Create `src/world/zones/<name>/<Name>Zone.js` on the model of `PierZone.js`: build the geometry with
+   `Parts` / `MeshBuilder`, expose `group`, `colliders`, `update(dt, time, camera)`.
+3. Register it in `World.load()` and its obstacles in `World.buildCollision()`.
 
-Les stands répétés gagnent à être instanciés (`THREE.InstancedMesh`, comme les nacelles de la grande roue),
-les décors fixes à être fusionnés (`mergeStatic`) et les petits objets masqués au loin (`distanceCuller`).
+Repeated stalls are best instanced (`THREE.InstancedMesh`, like the gondolas of the big wheel), fixed
+scenery merged (`mergeStatic`) and small things hidden far away (`distanceCuller`).
 
-### Multijoueur
+### Multiplayer
 
-Le serveur ne décide de rien : chaque visiteur envoie l'état de son avatar (position, orientation,
-animation) dix à douze fois par seconde, le relais le redistribue par salon, et chaque client reconstruit un
-mouvement fluide par interpolation. Sans relais joignable, la même interface fonctionne entre les onglets
-d'un navigateur. Le protocole est décrit en tête de `server/protocol.js`, l'interface cliente dans
-`src/net/Presence.js`. Le même relais tourne sous Node (`server/index.js`) et sur Cloudflare
-(`cloudflare/worker.js`).
+The server decides nothing: each visitor sends the state of their avatar (position, heading, animation) ten
+to twelve times a second, the relay hands it on per room, and each client rebuilds a smooth motion by
+interpolation. Without a reachable relay, the same interface works between the tabs of one browser. The
+protocol is described at the top of `server/protocol.js`, the client interface in `src/net/Presence.js`.
+The same relay runs under Node (`server/index.js`) and on Cloudflare (`cloudflare/worker.js`).
 
-## Outils
+## Tools
 
-| Commande | Rôle |
+| Command | What it does |
 |---|---|
-| `npm run bake` | recuit le monde et les textures |
-| `npm test` | 100 vérifications du serveur Node, du protocole et de l'interpolation |
-| `npm run test:cf` | les mêmes vérifications de protocole sur la version Cloudflare (dans son moteur local), plus les siennes : fichiers et en-têtes, mise en sommeil des salons, connexions fantômes (59 en tout) |
-| `npm run test:smoke` | pilote le vrai site : accueil, marche, caméra libre, réglages (`-- --mobile` pour la mise en page tactile) |
-| `npm run test:walk` | le personnage monte sur la jetée, bute sur le garde-corps, traverse un pont, nage, change de palier |
-| `npm run test:duo` | deux visiteurs sur le serveur de production : ils doivent se voir bouger (`-- --cloudflare` pour la version Cloudflare) |
-| `npm run bench` | parcours de mesure pour chaque palier |
-| `npm run profile` | coût de chaque système (script, appels de dessin, triangles) en sept points de vue |
-| `npm run shots -- nom=x,y,z,cap,inclinaison` | captures d'écran depuis un point de vue |
+| `npm run bake` | bakes the world and the textures again |
+| `npm test` | 100 checks of the Node server, the protocol and the interpolation |
+| `npm run test:cf` | the same protocol checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (59 in all) |
+| `npm run test:smoke` | drives the real site: welcome screen, walking, free camera, settings, large map (`-- --mobile` for the touch layout) |
+| `npm run test:walk` | the character walks onto the pier, is stopped by its railing, crosses a footbridge, climbs the garden steps, cannot cross the mountains, swims, changes tier |
+| `npm run test:duo` | two visitors on the production server: they must see each other move (`-- --cloudflare` for the Cloudflare version) |
+| `npm run bench` | benchmark tour for each tier (`-- --mobile` for the phone profile) |
+| `npm run profile` | cost of each system (script, draw calls, triangles) at seven viewpoints |
+| `npm run shots -- name=x,y,z,heading,pitch` | screenshots from a viewpoint |
+| `node tools/docs.mjs` | renders the screenshots of this page again |
 
-À partir de `test:smoke`, ils pilotent Chromium avec Playwright, qui n'est pas installé par défaut :
+From `test:smoke` on, they drive Chromium with Playwright, which is not installed by default:
 
 ```bash
 npm install --no-save playwright
@@ -227,60 +263,64 @@ npm install --no-save playwright
 npx playwright install chromium
 ```
 
-## Limites connues
+## Known limits
 
-Fidélité au lieu
+Likeness to the place
 
-- **Relief** : il vient d'un modèle de terrain ouvert d'environ 25 à 30 m de résolution, pas d'un relevé au
-  mètre (la source plus fine n'était pas accessible depuis l'environnement de travail). Le vallonnement
-  d'ensemble est juste ; les berges, talus, terrasses et canaux sont dessinés à la main par-dessus.
-- **Ressemblance, pas copie** : implantation, volumes, matériaux et grands arbres suivent les photos et la vue
-  aérienne ; les dimensions exactes des bâtiments, le détail du jardin et la position de chaque arbre sont
-  estimés. Les intérieurs ne sont pas modélisés.
-- **Le bord de mer est inventé**, comme demandé : la côte, la plage, la jetée et la grande roue n'existent pas.
+- **Relief**: it comes from an open terrain model of about 25 to 30 m resolution, not from a survey at one
+  metre (the finer source could not be reached from the working environment). The valley floor around the
+  mill follows that data; banks, terraces and channels are drawn by hand on top.
+- **The surroundings are invented**, as asked: the mountains, the cove, the beach, the pier and the big wheel
+  do not exist, and the estate has been set lower than it really is so that the valley reaches the sea.
+- **A likeness, not a copy**: layout, volumes, materials and the big trees follow the photographs and the
+  aerial view; exact dimensions of the buildings, the detail of the garden and the position of each tree are
+  estimated. Interiors are not modelled.
 
-Performances
+Performance
 
-- **Aucune cadence mesurée sur une vraie carte graphique**, ni sur un vrai téléphone (voir « Mesures »).
-  Le palier Léger est conçu pour les téléphones, mais c'est à vérifier sur les appareils visés.
-- Testé uniquement dans Chromium (bureau et écran de téléphone simulé). Firefox et Safari ne l'ont pas été.
-- Le monde est chargé d'un bloc au démarrage : environ 9 Mo aux paliers Léger et Équilibré, 14 Mo aux paliers
-  Élevé et Ultra (plus 1 Mo de code). Les textures ne sont pas en format compressé pour carte graphique. Sur
-  un téléphone d'entrée de gamme, le chargement et la mémoire peuvent être justes.
-- Changer de palier recharge la page (au même endroit).
+- **No frame rate was measured on a real graphics card**, nor on a real phone (see "Measurements"). Phones
+  start on Ultra as requested and the game adapts downwards by itself, but how far it has to adapt on a given
+  phone is unknown until it is tried there. If a phone struggles, the settings offer the lighter tiers.
+- Tested in Chromium only (desktop and a simulated phone screen). Firefox and Safari have not been tried.
+- The world is loaded in one go at start-up: about 10 MB on a phone and on the Light and Balanced tiers,
+  15.5 MB on High and Ultra on a computer (plus 1 MB of code). Textures are not in a GPU-compressed format. On an
+  entry-level phone, loading time and memory may be tight.
+- Changing tier reloads the page (at the same spot).
 
-Rendu
+Rendering
 
-- Un seul plan de reflet à la fois : quand deux plans d'eau à des hauteurs différentes sont visibles, le
-  second reflète le ciel seulement. Pas de vue sous l'eau : la caméra reste au-dessus de la surface.
-- Pas de post-traitement (halo lumineux, profondeur de champ). Soleil fixe : ni météo ni cycle jour-nuit,
-  comme prévu pour cette version.
-- Quelques transitions de niveau de détail restent visibles sur les arbres proches, surtout au palier Léger.
-- Pas de son.
+- One reflection plane at a time: when two bodies of water at different heights are in view, the second
+  one reflects the sky only. No underwater view: the camera stays above the surface.
+- No post-processing (bloom, depth of field). The sun is fixed: no weather, no day-night cycle, as planned
+  for this version.
+- Some level-of-detail transitions remain visible on nearby trees, mostly on the Light tier and on phones
+  (where trees are drawn in full less far).
+- Birds are low-polygon models with simple motion (no walking, no take-off).
+- No sound.
 
-Jeu et multijoueur
+Game and multiplayer
 
-- L'avatar est un robot libre de droits, en attendant un personnage sur mesure. La grande roue tourne mais on
-  ne peut pas y monter. Les collisions sont simples (cylindres, boîtes, plateformes).
-- Multijoueur : présence seulement (position, nom, couleur, émotes). Pas de discussion écrite, pas de
-  sauvegarde, pas de contrôle anti-triche. 48 visiteurs par salon. Non testé avec une vraie latence, ni
-  derrière HTTPS ou un proxy.
-- Cloudflare : la version Cloudflare a été testée dans le moteur d'exécution officiel en local (protocole,
-  mise en sommeil, deux navigateurs), et le déploiement a été validé à blanc — mais **jamais publié sur un
-  vrai compte** : l'environnement de travail n'avait accès ni à Cloudflare ni à sa documentation. Le premier
-  déploiement réel reste donc à observer, et les quotas à vérifier sur leur site.
-- La fête foraine elle-même (stands, jeux) reste à faire : seule la jetée et sa grande roue existent.
+- The avatar is a free-licence robot, until a made-to-measure character exists. The big wheel turns but
+  cannot be boarded. Collisions are simple (cylinders, boxes, platforms).
+- Multiplayer: presence only (position, name, colour, emotes). No text chat, no saving, no anti-cheat.
+  48 visitors per room. Not tested with real latency, nor behind HTTPS or a proxy.
+- Cloudflare: the Cloudflare version was tested in the official runtime locally (protocol, rooms going to
+  sleep, two browsers), and the deployment was validated with a dry run — but **never published to a real
+  account**: the working environment could reach neither Cloudflare nor its documentation. The first real
+  deployment is therefore still to be watched, and the quotas to be checked on their site.
+- The fair itself (stalls, games) is still to be built: only the pier and its big wheel exist.
 
-Confidentialité
+Privacy
 
-- Le dépôt ne contient ni nom de lieu, ni coordonnées géographiques, ni métadonnées d'image : tout est exprimé
-  dans un repère local, avec des altitudes relatives. Le relief et la carte des arbres restent néanmoins tirés
-  de données réelles : en théorie, quelqu'un de très déterminé pourrait les rapprocher de données publiques.
-  Si ce risque compte, on peut retourner ou déformer la carte avant de recuire.
+- The repository contains no place name, no geographic coordinates and no image metadata: everything is
+  expressed in a local frame, with relative heights. The relief of the valley floor and the map of its trees
+  are nevertheless derived from real data: in theory, someone very determined could match them against
+  public data. If that risk matters, the map can be mirrored or warped before baking.
 
-## Crédits
+## Credits
 
-- [three.js](https://threejs.org) (licence MIT).
-- Avatar : « RobotExpressive » de Tomás Laulhé, modifié par Don McCurdy, domaine public (CC0), issu des
-  exemples de three.js.
-- Tout le reste (relief retravaillé, textures, bâtiments, végétation, eau) est généré par le code du projet.
+- [three.js](https://threejs.org) (MIT licence).
+- Avatar: "RobotExpressive" by Tomás Laulhé, modified by Don McCurdy, public domain (CC0), from the three.js
+  examples.
+- Everything else (reworked relief, textures, buildings, vegetation, water, birds) is generated by the code of
+  this project.

@@ -8,6 +8,8 @@ const DEFS = {
   stone: ['wall_schist', { rough: 0.9, spec: 0.12, normalScale: 1.4 }],
   drystone: ['wall_dry', { rough: 0.92, spec: 0.1, normalScale: 1.6 }],
   granite: ['granite', { rough: 0.82, spec: 0.16, normalScale: 0.8 }],
+  // natural rock (boulders): the granite texture, larger grain, greyer, standing in water where needed
+  rock: ['granite', { rough: 0.9, spec: 0.1, normalScale: 1.5, uvScale: 0.45, color: [0.62, 0.6, 0.56], waterline: true }],
   slate: ['slate', { rough: 0.55, spec: 0.5, normalScale: 1.2 }],
   woodDark: ['wood_dark', { rough: 0.8, spec: 0.15, normalScale: 1.0 }],
   woodDeck: ['wood_deck', { rough: 0.82, spec: 0.14, normalScale: 1.0 }],
@@ -23,7 +25,7 @@ const DEFS = {
 };
 
 export async function loadMaterials(tier) {
-  const size = tier.quality >= 2 ? 1024 : 512;
+  const size = tier.layerSize;
   const names = [...new Set(Object.values(DEFS).map((d) => d[0]))];
   const tex = {};
   await Promise.all(names.map(async (n) => {

@@ -1,5 +1,6 @@
-// Dev tool: gameplay checks in headless Chromium — walking onto the pier, crossing a footbridge, swimming,
-// colliding with a wall, changing the quality tier (page reload at the same spot) — and the download size.
+// Dev tool: gameplay checks in headless Chromium — walking onto the pier, crossing a footbridge, climbing the
+// garden steps, being stopped by the mountains and by a wall, swimming, changing the quality tier (page reload
+// at the same spot) — and the download size.
 // usage: node tools/walk-test.mjs [--q=low]
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
@@ -55,7 +56,8 @@ try {
   const layout = await page.evaluate(async () => {
     const L = await import('/src/world/layout/layout.js');
     const w = window.__mmf.world;
-    return { pier: L.PIER, decks: (w.mill.platforms || []).filter((p) => p.type === 'deck').map((p) => ({ a: p.a, b: p.b, width: p.width })), pondBig: L.LEVELS.pondBig };
+    const decks = (w.mill.platforms || []).filter((p) => p.type === 'deck').map((p) => ({ a: p.a, b: p.b, width: p.width, camber: p.camber }));
+    return { pier: L.PIER, decks: decks.filter((p) => p.camber > 0), stairs: decks.filter((p) => p.camber === 0), pondBig: L.LEVELS.pondBig, bounds: w.data.meta.bounds };
   });
 
   // --- the pier: from the plaza, run along its axis
@@ -93,6 +95,36 @@ try {
     check('crosses a footbridge on its deck', t > 0.9 && top > Math.min(d.a.y, d.b.y) - 0.1, `progress ${(t * 100).toFixed(0)} %, highest point ${top.toFixed(2)} (deck ends ${d.a.y.toFixed(2)} / ${d.b.y.toFixed(2)})`);
     await page.screenshot({ path: path.join(OUT, 'bridge.png') });
   }
+
+  // --- garden steps: climbed on their treads, from the foot to the upper terrace
+  if (layout.stairs.length) {
+    const d = layout.stairs[0];
+    const dx = d.b.x - d.a.x, dz = d.b.z - d.a.z, len = Math.hypot(dx, dz);
+    const h = ((Math.atan2(-dx / len, -dz / len) * 180) / Math.PI + 360) % 360;
+    await place(d.a.x - (dx / len) * 1.2, d.a.z - (dz / len) * 1.2, h);
+    await frames(3);
+    const y0 = (await state()).y;
+    let mid = null;
+    await page.keyboard.down('KeyW');
+    for (let i = 0; i < 12; i++) { await frames(2); const st = await state(); const t = ((st.x - d.a.x) * dx + (st.z - d.a.z) * dz) / (len * len); if (t > 0.35 && t < 0.65 && !mid) mid = { t, y: st.y }; }
+    await page.keyboard.up('KeyW');
+    const st = await state();
+    const expected = mid ? d.a.y + (d.b.y - d.a.y) * mid.t : 0;
+    check('climbs the garden steps on their treads', st.y > d.b.y - 0.25 && !!mid && Math.abs(mid.y - expected) < 0.3, `from ${y0.toFixed(2)} to ${st.y.toFixed(2)} (top ${d.b.y.toFixed(2)})${mid ? `, half way ${mid.y.toFixed(2)} for ${expected.toFixed(2)}` : ''}`);
+  }
+
+  // --- the mountains: the valley cannot be left
+  const inside = (x, z) => { let inn = false; const b = layout.bounds; for (let i = 0, j = b.length - 1; i < b.length; j = i++) { if ((b[j][1] > z) !== (b[i][1] > z) && x < ((b[i][0] - b[j][0]) * (z - b[j][1])) / (b[i][1] - b[j][1]) + b[j][0]) inn = !inn; } return inn; };
+  await place(-88, -168, 0); // on the lane, facing the mountains to the north
+  await frames(3);
+  await walk(50, true);
+  const m1 = await state();
+  await place(-262, 20, 90); // at the foot of the western crags, facing them
+  await frames(3);
+  await walk(50, true);
+  const m2 = await state();
+  const near = (x, z) => inside(x, z) || [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, c]) => inside(x + a * 0.6, z + c * 0.6));
+  check('the mountains cannot be crossed', near(m1.x, m1.z) && near(m2.x, m2.z) && m1.z > -186 && m2.x > -292, `north: ${m1.x.toFixed(1)}, ${m1.z.toFixed(1)} · west: ${m2.x.toFixed(1)}, ${m2.z.toFixed(1)}`);
 
   // --- swimming in the big pond
   await place(-170, 62, 200);

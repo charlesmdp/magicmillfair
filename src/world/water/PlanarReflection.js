@@ -55,7 +55,8 @@ export class PlanarReflection {
     // glide towards the new plane when the active water body changes
     const d = this.targetY - this.planeY;
     this.planeY += Math.abs(d) > 6 ? d : d * Math.min(1, dt * 5);
-    if (every > 1 && this.frame % every !== 0) return false;
+    // (on the frames the real-time shadows skip, so that no frame carries both extra passes)
+    if (every > 1 && this.frame % every !== 1) return false;
     const y = this.planeY;
     const cam = this.camera;
     const n = this._n;

@@ -15,6 +15,8 @@ import { loadMaterials } from './props/Materials.js';
 import { MillZone } from './zones/mill/MillZone.js';
 import { PierZone, deckHeight } from './zones/pier/PierZone.js';
 import { Collision } from './Collision.js';
+import { Rocks } from './props/Rocks.js';
+import { Birds } from './wildlife/Birds.js';
 import { PIER } from './layout/layout.js';
 
 const LAYER_NAMES = ['lawn', 'meadow', 'forest', 'dirt', 'rock', 'sand', 'gravel', 'soil'];
@@ -73,9 +75,14 @@ export class World {
     await this.water.load();
     this.scene.add(this.water.group);
     // the mirrored view is small and rippled: a coarser ground is enough there
+    this.terrainRange = tier.terrainRange;
     this.water.reflection.hooks.push({
-      before: (cam) => { this.terrain.setRangeScale(tier.terrainRange * (tier.quality === 0 ? 0.4 : 0.55)); this.terrain.update(this.engine.camera, cam); },
-      after: () => this.terrain.setRangeScale(tier.terrainRange),
+      before: (cam) => {
+        this.terrain.setRangeScale(this.terrainRange * (tier.quality === 0 ? 0.4 : 0.55));
+        this.terrain.update(this.engine.camera, cam);
+        this.forest.setReflectionPass(true); // trees as impostors
+      },
+      after: () => { this.terrain.setRangeScale(this.terrainRange); this.forest.setReflectionPass(false); },
     });
     onProgress(0.7);
 
@@ -98,13 +105,36 @@ export class World {
     this.pier = new PierZone(this).build();
     this.scene.add(this.pier.group);
     this.zones.push(this.pier);
+    this.detail = 1;
+    this.engine.on('detail', (d) => this.applyDetail(d));
+    this.rocks = new Rocks(this);
+    this.scene.add(this.rocks.group);
+    this.birds = new Birds(this);
+    this.scene.add(this.birds.mesh);
     return this;
+  }
+
+  /**
+   * Detail factor from the engine (1 = the tier as designed, 0.5 = the least): vegetation is drawn in full less
+   * far, shadows and reflections are refreshed less often. Applied live, nothing is rebuilt.
+   */
+  applyDetail(d) {
+    const t = this.engine.tier;
+    this.detail = d;
+    this.forest.setDetail(d);
+    this.grass.setRange(t.grassRange * (0.5 + 0.5 * d));
+    this.scatter.setRange(t.scatterRange * (0.55 + 0.45 * d));
+    this.terrainRange = t.terrainRange * (0.78 + 0.22 * d);
+    this.terrain.setRangeScale(this.terrainRange);
+    this.water.every = d < 0.8 ? Math.max(2, t.reflectionEvery) : t.reflectionEvery;
   }
 
   /** Gather obstacles and walkable platforms from every system. */
   buildCollision() {
     const col = (this.collision = new Collision(this.data));
+    col.setBounds(this.data.meta.bounds);
     for (const [x, z, r] of this.forest.colliders()) col.addCircle(x, z, r);
+    for (const [x, z, r] of this.rocks.colliders) col.addCircle(x, z, r);
     for (const c of this.mill.colliders) {
       if (c.type === 'box') col.addBox(c.x, c.z, c.hw, c.hl, c.yaw);
       else col.addCircle(c.x, c.z, c.r);
@@ -113,7 +143,7 @@ export class World {
       if (p.type === 'deck') {
         const ax = p.a.x, az = p.a.z, dx = p.b.x - ax, dz = p.b.z - az, len = Math.hypot(dx, dz);
         col.addPlatform({
-          clearance: 1.1,
+          clearance: p.clearance ?? 1.1,
           heightAt: (x, z) => {
             const t = ((x - ax) * dx + (z - az) * dz) / (len * len);
             if (t < -0.02 || t > 1.02) return null;
@@ -162,7 +192,9 @@ export class World {
 
   /** (Re)render the static shadow map. Call after static geometry changes. */
   bakeShadows() {
-    const bounds = new THREE.Box3(new THREE.Vector3(-512, -14, -512), new THREE.Vector3(512, 100, 512));
+    // the playable valley and the slopes that can cast a shadow into it (not the whole terrain: sharper shadows)
+    const b = this.data.meta.map;
+    const bounds = new THREE.Box3(new THREE.Vector3(b.x0 - 45, -14, b.z0 - 80), new THREE.Vector3(b.x1 + 15, 215, b.z1 + 80));
     this.shadows.bakeStatic(this.scene, bounds, () => this.forest.prepareShadowBake());
   }
 
@@ -176,10 +208,13 @@ export class World {
     const mark = (k) => { if (prof) { const n = performance.now(); prof[k] = (prof[k] || 0) + n - t; t = n; } };
     for (const s of this.systems) s.update?.(dt, camera);
     for (const z of this.zones) z.update?.(dt, this.engine.time, camera);
+    this.birds.update(dt, this.engine.time, this.playerPos);
     mark('zones');
     this.forest.update(camera);
     mark('forest');
-    this.shadows.updateDynamic(this.scene, camera, this.engine.tier.quality >= 2 ? 1 : 2);
+    // real-time shadows every frame on capable computers, every other frame elsewhere (the water's mirrored
+    // view then takes the frames in between), every third when detail has been shed
+    this.shadows.updateDynamic(this.scene, camera, this.detail < 0.7 ? 3 : this.engine.tier.quality >= 2 && this.detail > 0.9 && !this.engine.tier.phone ? 1 : 2);
     mark('shadowPass');
     this.water.update(dt, camera, this.scene);
     mark('reflectionPass');

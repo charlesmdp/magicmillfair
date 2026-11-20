@@ -3,17 +3,17 @@
 import * as THREE from 'three';
 import { Parts } from '../../props/MeshBuilder.js';
 import { LAYER } from '../../../render/Shadows.js';
-import { MILL, LEVELS, DAM, TERRACES, frameToWorld } from '../../layout/layout.js';
-import { smoothPath, resample } from '../../layout/spline.js';
+import { PROMENADE, MILL, LEVELS, DAM, TERRACES, frameToWorld } from '../../layout/layout.js';
+import { smoothPath, resample, pointInPolygon } from '../../layout/spline.js';
 import { fallsRibbon } from '../../water/Falls.js';
 import { wall, channelLining, stairs, footbridge, archBridge, roadRibbon } from '../../props/Structures.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
-const CAST = [LAYER.STATIC_CASTER, LAYER.DYNAMIC_CASTER, LAYER.REFLECT];
 
 export class MillWorks {
   constructor(zone) {
     this.zone = zone;
+    this.cast = zone.cast;
     this.world = zone.world;
     this.data = zone.world.data;
     this.ground = (x, z) => this.data.heightAt(x, z);
@@ -25,9 +25,10 @@ export class MillWorks {
     this._dam(parts);
     this._garden(parts);
     this._bridges(parts);
+    this._gate(parts);
     this._roads();
     this._terrace(parts);
-    const g = parts.toMeshes(this.world.materials, { name: 'mill-works', layers: CAST });
+    const g = parts.toMeshes(this.world.materials, { name: 'mill-works', layers: this.cast });
     this.zone.group.add(g);
     this._wheel();
   }
@@ -59,12 +60,14 @@ export class MillWorks {
     const len = Math.hypot(dir[0], dir[1]); dir[0] /= len; dir[1] /= len;
     const up = [-dir[1], dir[0]]; // towards the pond (south-west)
     const line = (off, a = 0, b = 1) => [0, 0.5, 1].map((t) => { const u = a + (b - a) * t; return [crest[0][0] + dir[0] * len * u + up[0] * off, crest[0][1] + dir[1] * len * u + up[1] * off]; });
-    wall(stone, line(1.0, -0.04, 0.9).map(([x, z]) => [x, z, Y + 0.02]), { thickness: 0.6, groundAt: () => LEVELS.pondBig - 1.8, depth: 0, cap, tile: 2 });
-    wall(stone, line(-1.15, 0.05, 1.02).map(([x, z]) => [x, z, Y + 0.02]), { thickness: 0.6, groundAt: this.ground, depth: 0.8, cap, tile: 2 });
+    // (the dam proper starts after the head race, which leaves the pond at its western end: see _bridges)
+    const T0 = 0.19;
+    wall(stone, line(1.0, T0, 0.9).map(([x, z]) => [x, z, Y + 0.02]), { thickness: 0.6, groundAt: () => LEVELS.pondBig - 1.8, depth: 0, cap, tile: 2 });
+    wall(stone, line(-1.15, T0, 1.02).map(([x, z]) => [x, z, Y + 0.02]), { thickness: 0.6, groundAt: this.ground, depth: 0.8, cap, tile: 2 });
     // paved crest
     const pave = parts.get('paving');
     pave.tint(0.82, 0.8, 0.76, 1);
-    const A = line(0.75, -0.02, 0.92), B = line(-0.9, -0.02, 0.92);
+    const A = line(0.75, T0, 0.92), B = line(-0.9, T0, 0.92);
     pave.quad(V(A[0][0], Y + 0.03, A[0][1]), V(B[0][0], Y + 0.03, B[0][1]), V(B[2][0], Y + 0.03, B[2][1]), V(A[2][0], Y + 0.03, A[2][1]), { tile: 2 });
 
     // sluice: two granite piers, a timber gate frame and its winding gear, a slab to walk across
@@ -97,40 +100,64 @@ export class MillWorks {
     iron.lathe([[0.3, -0.03], [0.34, 0], [0.3, 0.03]], 14);
     for (let i = 0; i < 4; i++) { const a = (i / 4) * Math.PI; iron.beam(V(Math.cos(a) * 0.32, 0, Math.sin(a) * 0.32), V(-Math.cos(a) * 0.32, 0, -Math.sin(a) * 0.32), 0.03, 0.03); }
     iron.pop();
-    // slab bridge on the downstream side of the gate
-    g.tint(0.8, 0.79, 0.76, 1);
-    const bc = c.clone().addScaledVector(fd, 0.95);
-    g.place(bc.x, Y - 0.14, bc.z, Math.atan2(fd.x, fd.z));
-    g.box(-2.0, 0, -0.65, 2.0, 0.18, 0.65, { tile: 1 });
-    g.pop();
-    this.zone.platforms = this.zone.platforms || [];
-    this.zone.platforms.push({ type: 'slab', x: bc.x, z: bc.z, y: Y + 0.04, hw: 2.0, hl: 0.65, yaw: Math.atan2(fd.x, fd.z) });
+    this.sluice = { c, fd, side };
   }
 
   _garden(parts) {
     const stone = parts.get('drystone'), g = parts.get('granite');
     stone.tint(1, 0.98, 0.95, 1);
-    // dry-stone retaining walls along the terraces (top follows the upper ground)
-    TERRACES.forEach((t, k) => {
-      const pts = resample(smoothPath(t.points, { step: 0.5 }), 1.0);
+    this.zone.platforms = this.zone.platforms || [];
+    // Dry-stone retaining walls along the terraces (top follows the upper ground). Where the garden path
+    // crosses one, the wall opens and a flight of stone steps climbs through the opening.
+    const path = this.data.meta.paths.find((q) => q.id === 'garden').samples;
+    const cross = (a, b, c, d) => { // segment a-b with segment c-d → point, or null
+      const rx = b[0] - a[0], rz = b[1] - a[1], sx = d[0] - c[0], sz = d[1] - c[1];
+      const den = rx * sz - rz * sx;
+      if (Math.abs(den) < 1e-9) return null;
+      const t = ((c[0] - a[0]) * sz - (c[1] - a[1]) * sx) / den, u = ((c[0] - a[0]) * rz - (c[1] - a[1]) * rx) / den;
+      return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? [a[0] + rx * t, a[1] + rz * t, rx, rz] : null;
+    };
+    const GAP = 1.05; // half width of an opening
+    g.tint(0.78, 0.76, 0.72, 1);
+    for (const t of TERRACES) {
+      const pts = resample(smoothPath(t.points, { step: 0.5 }), 0.5);
+      let hit = null;
+      for (let i = 0; i + 1 < path.length && !hit; i++) for (let k = 0; k + 1 < pts.length && !hit; k++) hit = cross(path[i], path[i + 1], pts[k], pts[k + 1]);
       const line = pts.map(([x, z], i) => {
         const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
         let nx = b[1] - a[1], nz = -(b[0] - a[0]);
         const l = Math.hypot(nx, nz) || 1; nx /= l; nz /= l; // left = uphill
         const upY = this.ground(x + nx * 1.1, z + nz * 1.1);
-        const ends = Math.min(1, i / 2, (pts.length - 1 - i) / 2);
+        const ends = Math.min(1, i / 4, (pts.length - 1 - i) / 4);
         return [x - nx * 0.1, z - nz * 0.1, upY + 0.12 * ends - (1 - ends) * 0.5];
       });
-      wall(stone, line, { thickness: 0.55, groundAt: this.ground, depth: 0.6, tile: 2 });
-      void k;
-    });
-    // stone steps climbing through the terraces along the garden path
-    g.tint(0.78, 0.76, 0.72, 1);
-    const path = [[-128.5, -5.6], [-128.2, -9.4], [-127.9, -13.8], [-128.3, -18.6], [-128.9, -24], [-129.1, -29.4]];
-    for (let i = 0; i + 1 < path.length; i++) {
-      const a = path[i], b = path[i + 1];
-      const ya = this.ground(a[0], a[1]), yb = this.ground(b[0], b[1]);
-      if (yb - ya > 0.4) stairs(g, V(a[0], ya - 0.02, a[1]), V(b[0], yb + 0.02, b[1]), 1.25, { tile: 1 });
+      const runs = hit ? [line.filter((q, i) => Math.hypot(pts[i][0] - hit[0], pts[i][1] - hit[1]) > GAP && pts.findIndex((r) => Math.hypot(r[0] - hit[0], r[1] - hit[1]) <= GAP) > i),
+        line.filter((q, i) => Math.hypot(pts[i][0] - hit[0], pts[i][1] - hit[1]) > GAP && pts.findIndex((r) => Math.hypot(r[0] - hit[0], r[1] - hit[1]) <= GAP) < i)] : [line];
+      for (const run of runs) if (run.length > 1) wall(stone, run, { thickness: 0.55, groundAt: this.ground, depth: 0.6, tile: 2 });
+      if (!hit) continue;
+      // the flight: its top is flush with the upper terrace at the wall line, its foot on the lower one
+      let dx = hit[2], dz = hit[3];
+      const dl = Math.hypot(dx, dz); dx /= dl; dz /= dl; // uphill, along the path
+      const top = V(hit[0], this.ground(hit[0] + dx * 1.5, hit[1] + dz * 1.5) + 0.02, hit[1]);
+      let run = t.h * 1.9, foot = null;
+      for (let it = 0; it < 3; it++) { // (the lower ground slopes a little: settle the length on the real rise)
+        foot = V(hit[0] - dx * run, 0, hit[1] - dz * run);
+        foot.y = this.ground(foot.x - dx * 0.4, foot.z - dz * 0.4) - 0.02;
+        run = Math.max(1.2, ((top.y - foot.y) / 0.165) * 0.31);
+      }
+      this.zone.platforms.push(stairs(g, foot, top, 1.5, { tile: 1 }));
+      // landing: a slab over the brow of the terrace, to the top of the wall line and a little beyond
+      g.place(hit[0], top.y, hit[1], Math.atan2(dx, dz));
+      g.box(-0.75, -0.7, -0.02, 0.75, 0.0, 1.25, { tile: 1 });
+      g.pop();
+      this.zone.platforms.push({ type: 'slab', x: hit[0] + dx * 0.6, z: hit[1] + dz * 0.6, y: top.y, hw: 0.75, hl: 0.65, yaw: Math.atan2(dx, dz) });
+      // cheeks closing the wall on both sides of the steps
+      for (const sgn of [-1, 1]) {
+        const cx = hit[0] - dz * sgn * (GAP - 0.14), cz = hit[1] + dx * sgn * (GAP - 0.14);
+        stone.place(cx, 0, cz, Math.atan2(dx, dz));
+        stone.box(-0.3, foot.y - 0.6, -0.5, 0.3, top.y + 0.16, 0.45, { tile: 2 });
+        stone.pop();
+      }
     }
     // a stone bench at the top of the garden
     const bx = -140, bz = -40.5, by = this.ground(bx, bz);
@@ -143,36 +170,125 @@ export class MillWorks {
     g.pop();
   }
 
+  /**
+   * A footbridge over the water at (x, z), running along (dx, dz): each end is carried on to dry ground, where
+   * the bank stands at least `above` over the water, so that no bridge ever starts or ends in the water.
+   */
+  _bridgeOver(parts, x, z, dx, dz, level, width, { above = 0.3, onto = 0.9, reach = 6, ...options } = {}) {
+    const l = Math.hypot(dx, dz); dx /= l; dz /= l;
+    const land = (sgn) => {
+      let dry = null; // first dry point, in case the bank never rises `above` the water (ground falling away)
+      for (let t = 0; t < reach; t += 0.2) {
+        const px = x + dx * t * sgn, pz = z + dz * t * sgn;
+        if (this.data.depthAt(px, pz) > 0) continue;
+        if (dry === null) dry = t;
+        if (this.ground(px, pz) >= level + above) return V(px + dx * onto * sgn, 0, pz + dz * onto * sgn);
+      }
+      const t = (dry ?? reach) + 0.4;
+      return V(x + dx * (t + onto) * sgn, 0, z + dz * (t + onto) * sgn);
+    };
+    const a = land(-1), b = land(1);
+    a.y = Math.max(this.ground(a.x, a.z), level + above) + 0.06;
+    b.y = Math.max(this.ground(b.x, b.z), level + above) + 0.06;
+    const platform = footbridge(parts, a, b, width, options);
+    this.zone.platforms.push(platform);
+    return platform;
+  }
+
   _bridges(parts) {
     const zone = this.zone;
     zone.platforms = zone.platforms || [];
-    // little plank bridge where the path crosses the stepped canal
+    const across = (samples, i) => { // unit vector across a stream at sample i
+      const p = samples[Math.max(0, i - 1)], n = samples[Math.min(samples.length - 1, i + 1)];
+      const l = Math.hypot(n[0] - p[0], n[1] - p[1]) || 1;
+      return [-(n[1] - p[1]) / l, (n[0] - p[0]) / l];
+    };
+    // little plank bridge where the path crosses the stepped cascade
     const canal = this.stream('canal');
-    const c = canal[Math.round(canal.length * 0.42)];
-    const cn = canal[Math.round(canal.length * 0.42) + 1];
-    let dx = cn[0] - c[0], dz = cn[1] - c[1];
-    const l = Math.hypot(dx, dz); dx /= l; dz /= l;
-    const y = c[2] + 0.55;
-    const a = V(c[0] - dz * 2.0, Math.max(y, this.ground(c[0] - dz * 2.0, c[1] + dx * 2.0)) + 0.05, c[1] + dx * 2.0);
-    const b = V(c[0] + dz * 2.0, Math.max(y, this.ground(c[0] + dz * 2.0, c[1] - dx * 2.0)) + 0.05, c[1] - dx * 2.0);
-    zone.platforms.push(footbridge(parts, a, b, 1.7, { camber: 0.12, posts: 3 }));
-    // arched footbridge to the willow island
-    const isl = V(-202, 0, 102);
-    const from = V(-212.5, 0, 108.6), to = V(-208.2, 0, 105.6);
-    from.y = this.ground(from.x, from.z) + 0.08; to.y = this.ground(to.x, to.z) + 0.08;
-    zone.platforms.push(footbridge(parts, from, to, 1.5, { camber: 0.55, posts: 4, tint: [1.0, 0.94, 0.9] }));
-    void isl;
-    // stone arch over the brook, half way down the valley
+    const ci = Math.round(canal.length * 0.42);
+    let [ax, az] = across(canal, ci);
+    this._bridgeOver(parts, canal[ci][0], canal[ci][1], ax, az, canal[ci][2], 1.7, { camber: 0.12, posts: 3, above: 0.3, reach: 3.5 });
+    // arched footbridge to the willow island (from the mainland bank to the island's shore)
+    const isl = this.data.meta.ponds[0].islands.find((q) => q.id === 'willow');
+    const sx = -217.5 - isl.x, sz = 112.5 - isl.z, sl = Math.hypot(sx, sz); // towards the nearest bank
+    this._bridgeOver(parts, isl.x + (sx / sl) * (isl.rx + 3.2), isl.z + (sz / sl) * (isl.rz + 3.2), sx, sz, LEVELS.pondBig, 1.5, { camber: 0.7, posts: 6, tint: [1.0, 0.94, 0.9], onto: 1.2, reach: 40 });
+    // over the head race, where it leaves the pond: the way from the courtyard on to the dam
+    const head = this.stream('raceHead');
+    const hi = 2;
+    [ax, az] = across(head, hi);
+    this._bridgeOver(parts, head[hi][0], head[hi][1], ax, az, head[hi][2], 1.9, { camber: 0.06, posts: 2, above: 0.4, onto: 1.3, tint: [0.96, 0.9, 0.84] });
+    // over the sluice: from the dam to the path around the pond, just upstream of the gate (both banks are
+    // at pond level there; downstream the ground falls away to the mill pool)
+    const { c, fd, side } = this.sluice;
+    this._bridgeOver(parts, c.x - fd.x * 1.05, c.z - fd.z * 1.05, side.x, side.z, LEVELS.pondBig, 1.6, { camber: 0.1, posts: 3, above: 0.3, onto: 1.4, reach: 5, tint: [0.96, 0.9, 0.84] });
+    // over the tail race, between the lawn and the mill pool
+    const tail = this.stream('raceTail');
+    const ti = tail.findIndex((q) => q[0] > -107.2);
+    [ax, az] = across(tail, ti);
+    this._bridgeOver(parts, tail[ti][0], tail[ti][1], ax, az, tail[ti][2], 1.5, { camber: 0.15, posts: 3, above: 1.0, onto: 1.1 });
+    // stone bridge carrying the promenade over the brook
     const brook = this.stream('brook');
-    const k = brook.findIndex((s) => s[0] > 134);
-    const s = brook[k], sn = brook[k + 2];
-    let tx = sn[0] - s[0], tz = sn[1] - s[1];
+    const prom = this.data.meta.promenade;
+    let best = null;
+    for (let i = 0; i < brook.length; i++) for (let j = 0; j < prom.length; j++) {
+      const d = Math.hypot(brook[i][0] - prom[j][0], brook[i][1] - prom[j][1]);
+      if (!best || d < best.d) best = { d, i, j };
+    }
+    const s = brook[best.i], pj = prom[Math.max(1, Math.min(prom.length - 2, best.j))];
+    const pn = prom[Math.min(prom.length - 1, best.j + 1)], pp = prom[Math.max(0, best.j - 1)];
+    let tx = pn[0] - pp[0], tz = pn[1] - pp[1];
     const tl = Math.hypot(tx, tz); tx /= tl; tz /= tl;
-    const span = 5.2;
-    const pa = V(s[0] - tz * span, 0, s[1] + tx * span), pb = V(s[0] + tz * span, 0, s[1] - tx * span);
-    const deckY = Math.max(this.ground(pa.x, pa.z), this.ground(pb.x, pb.z), s[2] + 1.5) + 0.05;
-    pa.y = deckY; pb.y = deckY;
-    zone.platforms.push(archBridge(parts, pa, pb, 3.0, { rise: 1.25, waterY: s[2] }));
+    const span = 6.5;
+    const pa = V(pj[0] - tx * span, PROMENADE.y + 0.02, pj[1] - tz * span), pb = V(pj[0] + tx * span, PROMENADE.y + 0.02, pj[1] + tz * span);
+    zone.platforms.push(archBridge(parts, pa, pb, PROMENADE.width + 0.6, { rise: 1.1, waterY: s[2], camber: 0 }));
+  }
+
+  // The lane leaves the valley through a pass in the mountains: the estate gate closes it (the playable area
+  // ends there, and a closed gate says so better than an invisible wall).
+  _gate(parts) {
+    const lane = this.data.meta.paths.find((q) => q.id === 'lane').samples, bounds = this.data.meta.bounds;
+    let k = lane.length - 1; // the lane is listed from the pass down to the mill
+    while (k > 0 && pointInPolygon(bounds, lane[k][0], lane[k][1])) k--;
+    const i = Math.min(lane.length - 1, k + 2), p = lane[i], q = lane[Math.max(0, i - 2)];
+    let dx = q[0] - p[0], dz = q[1] - p[1];
+    const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l; // towards the pass
+    const yaw = Math.atan2(dx, dz), y = this.ground(p[0], p[1]);
+    const g = parts.get('granite'), wood = parts.get('woodDark'), iron = parts.get('paint'), stone = parts.get('drystone');
+    g.tint(0.86, 0.85, 0.82, 1);
+    g.place(p[0], y, p[1], yaw);
+    for (const sgn of [-1, 1]) {
+      g.box(sgn * 2.4 - 0.4, -0.6, -0.4, sgn * 2.4 + 0.4, 3.0, 0.4, { tile: 1 });
+      g.box(sgn * 2.4 - 0.5, 3.0, -0.5, sgn * 2.4 + 0.5, 3.18, 0.5, { tile: 1 });
+      g.box(sgn * 2.4 - 0.24, 3.18, -0.24, sgn * 2.4 + 0.24, 3.62, 0.24, { tile: 1 });
+    }
+    g.pop();
+    wood.place(p[0], y, p[1], yaw);
+    for (const sgn of [-1, 1]) {
+      const x0 = sgn > 0 ? 0.03 : -1.98, x1 = sgn > 0 ? 1.98 : -0.03;
+      wood.tint(0.5, 0.43, 0.35, 1);
+      wood.box(x0, 0.14, -0.04, x1, 2.5, 0.04, { tile: 0.8 });
+      wood.tint(0.62, 0.52, 0.42, 1);
+      for (const [y0, y1] of [[0.14, 0.34], [1.2, 1.36], [2.32, 2.52]]) wood.box(x0, y0, -0.085, x1, y1, 0.085, { tile: 0.8 });
+      wood.box(sgn > 0 ? x1 - 0.16 : x0, 0.14, -0.085, sgn > 0 ? x1 : x0 + 0.16, 2.52, 0.085, { tile: 0.8 });
+      wood.box(sgn > 0 ? x0 : x1 - 0.16, 0.14, -0.085, sgn > 0 ? x0 + 0.16 : x1, 2.52, 0.085, { tile: 0.8 });
+    }
+    wood.pop();
+    iron.tint(0.08, 0.08, 0.08, 1);
+    iron.place(p[0], y, p[1], yaw);
+    for (const sgn of [-1, 1]) for (const hy of [0.5, 2.1]) iron.box(sgn * 1.98, hy, -0.11, sgn * 1.2, hy + 0.07, 0.11); // strap hinges
+    iron.box(-0.3, 1.25, -0.12, 0.3, 1.33, 0.12); // the bar that keeps it shut
+    iron.pop();
+    // dry-stone walls from the pillars to the rock on both sides
+    stone.tint(1, 0.98, 0.95, 1);
+    for (const sgn of [-1, 1]) {
+      const line = [];
+      for (let t = 2.8; t <= 12; t += 1.3) {
+        const x = p[0] + dz * sgn * t, z = p[1] - dx * sgn * t;
+        line.push([x, z, this.ground(x, z) + 1.7]);
+      }
+      wall(stone, line, { thickness: 0.6, groundAt: this.ground, depth: 0.6, tile: 2 });
+    }
+    this.zone.colliders.push({ type: 'box', x: p[0], z: p[1], hw: 2.9, hl: 0.35, yaw });
   }
 
   _roads() {
@@ -272,7 +388,7 @@ export class MillWorks {
     w2.box(-0.5, -0.05, R + 0.05, 0.5, 0.0, R + 0.95, { tile: 0.8 });
     w2.box(-0.56, -0.05, R + 0.05, -0.5, 0.3, R + 0.95, { tile: 0.8 });
     w2.box(0.5, -0.05, R + 0.05, 0.56, 0.3, R + 0.95, { tile: 0.8 });
-    const sg = st.toMeshes(this.world.materials, { name: 'mill-wheel-frame', layers: CAST });
+    const sg = st.toMeshes(this.world.materials, { name: 'mill-wheel-frame', layers: this.cast });
     const base = new THREE.Group();
     base.position.copy(pivot.position);
     base.rotation.y = fr.yaw;
@@ -288,7 +404,7 @@ export class MillWorks {
     falls.userData.keep = true;
     falls.add(fallsRibbon(sheet, V(1, 0, 0), W * 0.86, foam, (i) => (i === 0 ? 0 : 1)));
     const boil = [1.5, 0.9, 0.2, -0.6, -1.5, -2.6].map((z) => V(0, tailY, z));
-    falls.add(fallsRibbon(boil, V(1, 0, 0), W * 1.05, foam, (i) => [0, 0.9, 1, 0.8, 0.4, 0][i]));
+    falls.add(fallsRibbon(boil, V(1, 0, 0), W * 1.05, foam, (i) => [0, 0.9, 1, 0.8, 0.4, 0][i], true));
     this.zone.group.add(falls);
     falls.updateMatrixWorld(true);
   }

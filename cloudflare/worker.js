@@ -113,9 +113,9 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/ws') {
-      if (!env.ROOMS) return new Response('Présence multijoueur non configurée.\n', { status: 501 });
+      if (!env.ROOMS) return new Response('Multiplayer presence is not configured.\n', { status: 501 });
       if ((request.headers.get('Upgrade') || '').toLowerCase() !== 'websocket') {
-        return new Response('Point d’entrée WebSocket.\n', { status: 426, headers: { Upgrade: 'websocket' } });
+        return new Response('WebSocket endpoint.\n', { status: 426, headers: { Upgrade: 'websocket' } });
       }
       if (!originAllowed(request.headers.get('Origin'), url.host, parseOrigins(env.ALLOWED_ORIGINS))) return new Response(null, { status: 403 });
       const room = cleanRoom(url.searchParams.get('room'));
@@ -129,6 +129,6 @@ export default {
       return Response.json({ room, ...(await count.json()) }, { headers: { 'Cache-Control': 'no-store' } });
     }
     // Anything else that is not a file of the site (the files themselves never reach this script).
-    return env.ASSETS ? env.ASSETS.fetch(request) : new Response('Introuvable.\n', { status: 404 });
+    return env.ASSETS ? env.ASSETS.fetch(request) : new Response('Not found.\n', { status: 404 });
   },
 };

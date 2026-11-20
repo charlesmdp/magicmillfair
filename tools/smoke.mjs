@@ -30,11 +30,11 @@ page.on('console', (m) => { if (m.type() === 'error') logs.push(`[error] ${m.tex
 page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
 const frames = (n) => page.evaluate((n) => { const app = window.__mmf; const target = app.frames + n; return new Promise((res) => { const tick = () => (app.frames >= target ? res() : requestAnimationFrame(tick)); tick(); }); }, n);
 const shot = (name) => page.screenshot({ path: path.join(OUT, `${tag}-${name}.png`) });
-const where = () => page.evaluate(() => { const a = window.__mmf, p = a.player.pos; return { x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), anim: a.player.anim, calls: a.engine.perf.calls, tris: a.engine.perf.triangles, tier: a.engine.tierId }; });
+const where = () => page.evaluate(() => { const a = window.__mmf, p = a.player.pos; return { x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), anim: a.player.anim, calls: a.engine.perf.calls, tris: a.engine.perf.triangles, tier: a.engine.tierId, phone: a.engine.tier.phone }; });
 
 let failed = false;
 try {
-  await page.goto(`http://127.0.0.1:${port}/?q=${opt.q || 'low'}`);
+  await page.goto(`http://127.0.0.1:${port}/${opt.q === 'auto' ? '' : `?q=${opt.q || 'low'}`}`);
   await page.waitForSelector('.card.ready', { timeout: 240000 });
   await frames(3);
   await shot('1-welcome');
@@ -76,6 +76,16 @@ try {
   await page.click('[data-act="camera"]');
   await frames(4);
   await shot('6-back');
+  // the minimap opens the large map; a click closes it
+  await page.click('.minimap');
+  await frames(3);
+  await shot('7-map');
+  const open = await page.evaluate(() => document.querySelector('.bigmap').classList.contains('on'));
+  await page.click('.bigmap');
+  await frames(2);
+  const closed = await page.evaluate(() => !document.querySelector('.bigmap').classList.contains('on'));
+  console.log(`large map: opened ${open}, closed ${closed}`);
+  if (!open || !closed) { failed = true; console.log('FAIL: the large map did not open and close'); }
 } catch (err) {
   failed = true;
   console.log('FAIL:', err.message);

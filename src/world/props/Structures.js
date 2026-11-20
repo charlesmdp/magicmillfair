@@ -114,6 +114,8 @@ export function stairs(b, a, c, width, { steps = null, tile = 1, sideWalls = tru
       b.quad(p0.clone().sub(side).setY(low), p1.clone().sub(side).setY(low), p1.clone().sub(side).setY(y1), p0.clone().sub(side).setY(y1), { tile });
     }
   }
+  // walkable: a ramp from a to c (it always counts, so that it cannot be walked through from the side)
+  return { type: 'deck', a: V(a.x, a.y, a.z), b: V(c.x, c.y, c.z), width, camber: 0, clearance: 4 };
 }
 
 /**
@@ -174,7 +176,7 @@ export function footbridge(parts, a, c, width, { camber = 0.25, rails = true, po
 }
 
 /** Stone arch bridge spanning between a and c (same height), with parapets. */
-export function archBridge(parts, a, c, width, { rise = 1.3, thickness = 0.5, parapet = 0.7, stoneMat = 'drystone', capMat = 'granite', waterY = 0 } = {}) {
+export function archBridge(parts, a, c, width, { rise = 1.3, thickness = 0.5, parapet = 0.7, stoneMat = 'drystone', capMat = 'granite', waterY = 0, camber = 0.35 } = {}) {
   const stone = parts.get(stoneMat), cap = parts.get(capMat);
   stone.tint(1, 1, 1, 1); cap.tint(0.9, 0.88, 0.85, 1);
   const dir = V(c.x - a.x, 0, c.z - a.z);
@@ -182,7 +184,7 @@ export function archBridge(parts, a, c, width, { rise = 1.3, thickness = 0.5, pa
   dir.normalize();
   const side = V(-dir.z, 0, dir.x);
   const N = 14;
-  const yDeck = (t) => a.y + Math.sin(Math.PI * t) * 0.35;
+  const yDeck = (t) => a.y + Math.sin(Math.PI * t) * camber;
   const yArch = (t) => {
     // semi-elliptical opening over the middle 70 % of the span
     const k = (t - 0.5) / 0.36;
@@ -214,7 +216,7 @@ export function archBridge(parts, a, c, width, { rise = 1.3, thickness = 0.5, pa
     stone.quad(P(t1, -hw, Math.max(yArch(t1), waterY - 0.8)), P(t1, hw, Math.max(yArch(t1), waterY - 0.8)), P(t0, hw, Math.max(yArch(t0), waterY - 0.8)), P(t0, -hw, Math.max(yArch(t0), waterY - 0.8)), { tile: 2 });
     stone.tint(1, 1, 1, 1);
   }
-  return { type: 'deck', a: a.clone(), b: c.clone(), width: width - 0.6, camber: 0.35 };
+  return { type: 'deck', a: a.clone(), b: c.clone(), width: width - 0.6, camber };
 }
 
 /** Post-and-rail fence along a polyline of Vector3 (already on the ground). */

@@ -7,6 +7,13 @@ import { G, makeMaterial, globalDefines, refreshGlobalDefines } from './globals.
 
 export const LAYER = { MAIN: 0, STATIC_CASTER: 1, REFLECT: 2, DYNAMIC_CASTER: 3 };
 
+/**
+ * Layers of something that never moves and casts a shadow. Its shadow is in the map baked at load; it is also
+ * drawn in the real-time shadow pass (sharper near the camera), except on phones, where that pass is kept
+ * for what moves.
+ */
+export const staticCaster = (tier) => (tier.phone ? [LAYER.STATIC_CASTER, LAYER.REFLECT] : [LAYER.STATIC_CASTER, LAYER.DYNAMIC_CASTER, LAYER.REFLECT]);
+
 const DEPTH_VERT = /* glsl */ `
 void main() {
   vec4 p = vec4(position, 1.0);

@@ -15,6 +15,7 @@ export class CameraRig {
     this._focus = new THREE.Vector3();
     this._first = true;
     this._q = { x: 0, z: 0 };
+    this.lift = 0;
   }
 
   /** Camera heading used to interpret movement input. */
@@ -24,6 +25,7 @@ export class CameraRig {
     this.yaw = yaw;
     this._focus.copy(target).setY(target.y + 1.45);
     this._first = true;
+    this._snapped = true;
   }
 
   update(dt, target) {
@@ -46,22 +48,28 @@ export class CameraRig {
     // buildings in the way: come closer
     const hit = this.collision.segment(f.x, f.z, f.x + dx * dist, f.z + dz * dist);
     if (hit < 1) dist = Math.max(0.8, dist * hit - 0.35);
-    // keep above the terrain and the water along the boom
-    for (let i = 1; i <= 5; i++) {
-      const t = (i / 5) * dist;
-      const x = f.x + dx * t, z = f.z + dz * t, y = f.y + dy * t;
-      const g = Math.max(this.data.heightAt(x, z), this.data.waterAt(x, z)) + 0.35;
-      if (y < g) { dist = Math.max(0.8, t * (f.y - g > 0.05 ? Math.min(1, (f.y - g) / (f.y - y + 1e-3)) : 0.5)); break; }
+    // The ground in the way (looking downhill, a bank, a deck): lift the camera over it rather than closing in.
+    const floor = (x, z) => Math.max(this.collision.groundAt(x, z, f.y), this.data.waterAt(x, z));
+    let lift = 0;
+    for (let i = 1; i <= 6; i++) {
+      const t = (i / 6) * dist;
+      const g = floor(f.x + dx * t, f.z + dz * t) + 0.45;
+      const y = f.y + dy * t;
+      if (y < g) lift = Math.max(lift, ((g - y) * dist) / t);
     }
+    const maxLift = dist * 0.9;
+    if (lift > maxLift) { dist = Math.max(0.8, dist * Math.max(0.3, maxLift / lift)); lift = maxLift; } // a wall of ground: come closer too
+    this.lift += (lift - this.lift) * (1 - Math.exp(-dt * (lift > this.lift ? 14 : 4)));
+    if (this._snapped) { this.lift = lift; this.current = dist; this._snapped = false; }
     this.current += (dist - this.current) * (dist < this.current ? 1 : 1 - Math.exp(-dt * 5));
     const c = this.camera;
-    c.position.set(f.x + dx * this.current, f.y + dy * this.current, f.z + dz * this.current);
+    c.position.set(f.x + dx * this.current, f.y + dy * this.current + this.lift * Math.min(1, this.current / dist), f.z + dz * this.current);
     // never sit inside a trunk, a post or a wall
     const q = this._q;
     q.x = c.position.x; q.z = c.position.z;
     this.collision.resolve(q, 0.45, c.position.y - 1.1);
     c.position.x = q.x; c.position.z = q.z;
-    const g = Math.max(this.data.heightAt(c.position.x, c.position.z), this.data.waterAt(c.position.x, c.position.z)) + 0.3;
+    const g = floor(c.position.x, c.position.z) + 0.3;
     if (c.position.y < g) c.position.y = g;
     c.lookAt(f.x, f.y + 0.1, f.z);
   }

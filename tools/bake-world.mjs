@@ -26,7 +26,7 @@ fs.mkdirSync(PREVIEW, { recursive: true });
 
 const N = L.WORLD.size; // cells of 1 m
 const HALF = L.WORLD.half;
-const HMIN = -32, HMAX = 96; // 16-bit height encoding range
+const HMIN = -32, HMAX = 352; // 16-bit height encoding range (6 mm steps)
 const t0 = Date.now();
 const log = (...a) => console.log(`[${((Date.now() - t0) / 1000).toFixed(1)}s]`, ...a);
 
@@ -41,7 +41,7 @@ const demRaw = new Float32Array(fs.readFileSync(path.join(ROOT, 'tools/data/dem_
 const DEM_N = 257, DEM_STEP = 8, DEM_HALF = 1024;
 const dem = new Grid(DEM_N, DEM_N);
 dem.d.set(demRaw);
-const demAt = (x, z) => dem.sampleCubic((x + DEM_HALF) / DEM_STEP, (z + DEM_HALF) / DEM_STEP) * L.WORLD.verticalScale;
+const demAt = (x, z) => dem.sampleCubic((x + DEM_HALF) / DEM_STEP, (z + DEM_HALF) / DEM_STEP) * L.WORLD.verticalScale + L.DATUM;
 
 const canopyImg = await loadImage(path.join(ROOT, 'tools/data/canopy_1m.png'), 1);
 const canopy = Grid.from(N, N, (i, j) => canopyImg.data[j * N + i] / 8); // metres
@@ -126,11 +126,47 @@ log('base relief');
 const H = Grid.from(N, N, (i, j) => demAt(wx(i), wx(j)));
 const detailMask = new Grid(N, N, 1); // where small-scale noise may be added
 
+// 1b. Hills, and the mountains that close the valley: outside the playable area the ground rises, first as a
+// band of crags (the visible reason why one cannot go further), then as long slopes cut by ridges and gullies.
+const boundsPts = closedOutline(L.BOUNDS, [], 2);
+const boundsSDF = polygonSDF(boundsPts); // metres, negative inside the playable area
+function mountain(x, z, d) {
+  if (d <= 0) return 0;
+  const south = smoothstep(40, 150, z); // the sun is in the south: lower crags and gentler slopes there
+  // the crags: a rock face of uneven height, broken into ledges
+  const n1 = fbm(x / 64, z / 64, { seed: 201, octaves: 3 });
+  const crag = lerp(16, 8.5, south) * (1 + 0.55 * n1);
+  const band = crag * 0.45 + 1.5;
+  // (the foot of the face wanders: buttresses and recesses instead of a wall)
+  const dc = Math.max(0, d + fbm(x / 11, z / 11, { seed: 205, octaves: 3 }) * 4.2 - 1.2);
+  const t = smoothstep(0, band, dc);
+  let h = crag * lerp(t, Math.floor(t * 3 + 0.5) / 3, 0.34) + (ridged(x / 6, z / 6, { seed: 204, octaves: 3 }) - 0.35) * 2.6 * t;
+  // the slopes above, steep at first, cut by ridges and gullies that grow with the distance
+  const e = Math.max(0, d - band);
+  h += e * lerp(0.64, 0.4, south) * (1 - 0.28 * smoothstep(120, 520, e));
+  const amp = Math.min(64, e * 0.3);
+  h += (ridged(x / 170, z / 170, { seed: 202, octaves: 4 }) - 0.5) * amp * 1.5;
+  h += (ridged(x / 56, z / 56, { seed: 203, octaves: 3 }) - 0.5) * amp * 0.5;
+  return Math.max(0, h);
+}
+for (let q = 0; q < N * N; q++) canopy.d[q] *= 1 - smoothstep(-2, 6, boundsSDF.d[q]); // the surveyed woods stop at the mountains
+for (let j = 0; j < N; j++) {
+  for (let i = 0; i < N; i++) {
+    const q = idx(i, j), x = wx(i), z = wx(j);
+    for (const [hx, hz, r, hh] of L.HILLS) {
+      const dd = ((x - hx) ** 2 + (z - hz) ** 2) / (r * r);
+      if (dd < 9) H.d[q] += hh * Math.exp(-dd * 2.2);
+    }
+    if (boundsSDF.d[q] > 0) H.d[q] += mountain(x, z, boundsSDF.d[q]);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // 2. Coast
 
 log('coast');
 const coastPts = smoothPath(L.COAST.line, { step: 2 });
+const BW = L.COAST.beachWidth;
 const coastField = polylineField(coastPts, 240);
 const seaMask = new Uint8Array(N * N);
 {
@@ -160,8 +196,8 @@ for (let j = 0; j < N; j++) {
     let h;
     if (d >= 0) {
       // sandy shore: beach face, berm, promenade level, then blend into the relief
-      const sand = d < 26 ? 2.3 * smoothstep(0, 26, d) ** 0.85 : 2.3 + (L.COAST.promenadeY - 2.3) * smoothstep(26, 33, d);
-      const hBeach = lerp(sand, Math.max(base, L.COAST.promenadeY - 0.3), smoothstep(42, 130, d));
+      const sand = d < BW ? 2.3 * smoothstep(0, BW, d) ** 0.85 : 2.3 + (L.COAST.promenadeY - 2.3) * smoothstep(BW, BW + 6, d);
+      const hBeach = lerp(sand, Math.max(base, L.COAST.promenadeY - 0.3), smoothstep(BW + 12, BW + 62, d));
       // rocky shore: keep the relief, drop to the sea over a short distance
       const top = Math.max(base, 2.5 + 3 * b);
       const hCliff = lerp(-0.8, top, smoothstep(-1, 12 + top * 0.25, d) ** 0.75);
@@ -223,12 +259,12 @@ function smooth1d(arr, sigma) {
 function streamOps(s, { fill = true } = {}) {
   const R = 150;
   const f = polylineField(s.samples, R);
-  const ys = smooth1d(s.samples.map((p) => p[2]), s.lined ? 2 : 12);
+  const ys = smooth1d(s.samples.map((p) => p[2]), s.smooth ?? (s.lined ? 2 : 12));
   const ws = s.samples.map((p) => p[3]);
   // bank level field, blurred so that the valley floor has no seams
   const bank = new Grid(N, N);
   for (let q = 0; q < N * N; q++) bank.d[q] = f.dist[q] <= R ? interp(ys, f.pos[q]) + 0.28 : H.d[q];
-  const bankS = s.lined ? bank : bank.blur(3.5);
+  const bankS = s.lined || s.smooth !== undefined ? bank : bank.blur(3.5);
   const flat = s.flat ?? 6, slope = s.slope ?? 0.3;
   for (let q = 0; q < N * N; q++) {
     const d = f.dist[q];
@@ -270,7 +306,7 @@ function streamBed(s) {
   }
   return f;
 }
-for (const s of streams) streamOps(s, { fill: s.id !== 'canal' });
+for (const s of streams) streamOps(s, { fill: s.id !== 'canal' && s.fill !== false });
 
 // ---------------------------------------------------------------------------
 // 4. Ponds
@@ -463,7 +499,7 @@ for (let q = 0; q < N * N; q++) {
   const half = L.PROMENADE.width / 2;
   const w = 1 - smoothstep(half + 0.3, half + 9, d);
   // only ever raise towards the sea side / ease the land side: keep the beach face below
-  const seaSide = coastD.d[q] < 34;
+  const seaSide = coastD.d[q] < BW + 8;
   const tgt = L.PROMENADE.y;
   H.d[q] = d <= half + 0.3 ? tgt : lerp(H.d[q], seaSide ? Math.min(H.d[q], tgt) : tgt, w * (seaSide ? 0.35 : 0.9));
   if (d < half + 0.4) { detailMask.d[q] = 0; padMask.d[q] = Math.max(padMask.d[q], 1); }
@@ -648,11 +684,22 @@ for (let j = 0; j < N; j++) {
 
 log('land cover');
 const cover = canopy.map((v) => smoothstep(2.5, 7, v)).blur(2.2); // tree canopy presence
+// On the mountains the woods are invented: broad stands, thinning out with altitude, absent from crags.
+const TREE_LINE = 112;
+const woods = (x, z, h, slope) => smoothstep(-0.2, 0.22, fbm(x / 95, z / 95, { seed: 301, octaves: 3 }) + 0.42 - Math.max(0, h - 60) / 150)
+  * (1 - smoothstep(1.0, 1.4, slope)) * (1 - smoothstep(TREE_LINE - 30, TREE_LINE, h));
+for (let q = 0; q < N * N; q++) {
+  const d = boundsSDF.d[q];
+  if (d <= 0) continue;
+  const i = q % N, j = (q / N) | 0;
+  cover.d[q] = lerp(cover.d[q], woods(wx(i), wx(j), H.d[q], SLOPE.d[q]) * (H.d[q] > 0.8 ? 1 : 0), smoothstep(0, 12, d));
+}
 const parkMask = new Grid(N, N);
 for (const poly of L.PARK) {
   const sdf = polygonSDF(poly);
   for (let q = 0; q < N * N; q++) parkMask.d[q] = Math.max(parkMask.d[q], 1 - smoothstep(-6, 4, sdf.d[q]));
 }
+for (let q = 0; q < N * N; q++) parkMask.d[q] *= 1 - smoothstep(-4, 4, boundsSDF.d[q]);
 const fieldSoil = new Grid(N, N), fieldCrop = new Grid(N, N), fieldKind = new Uint8Array(N * N);
 L.FIELDS.forEach((f, k) => {
   const sdf = polygonSDF(f.outline);
@@ -762,19 +809,27 @@ for (let j = 0; j < N; j++) {
     const verge = 1 - smoothstep(0, 1.6, pathClear.d[q] + 1.1);
     if (verge > 0 && pa + pg + pd < 0.5) gh *= 1 - 0.35 * verge;
 
+    // --- mountains: the grass gets shorter and paler with altitude
+    const mount = boundsSDF.d[q] > 0 ? smoothstep(0, 30, boundsSDF.d[q]) : 0;
+    if (mount > 0) {
+      const alt = smoothstep(50, 150, h);
+      gh = lerp(gh, 0.34 - 0.12 * alt, mount);
+      mulTint(q, 1 + 0.16 * alt, 1 + 0.06 * alt, 1 - 0.06 * alt, mount);
+    }
+
     // --- slopes
-    // grass holds on banks up to about 45 degrees; beyond that the soil shows
+    // grass holds on banks up to about 45 degrees; beyond that the soil shows (bare rock on the mountains)
     const dirtS = smoothstep(0.86, 1.2, slope + 0.12 * nB);
     const rockS = smoothstep(1.05, 1.5, slopeWide.d[q] + 0.15 * nB) * smoothstep(0.7, 1.0, slope);
-    over(q, 3, dirtS * 0.9);
-    over(q, 4, rockS);
+    over(q, 3, dirtS * 0.9 * (1 - 0.7 * mount));
+    over(q, 4, Math.max(rockS, mount * Math.max(smoothstep(0.8, 1.15, slope + 0.12 * nB), smoothstep(TREE_LINE + 20, TREE_LINE + 90, h + 30 * nA) * 0.75)));
     gh *= 1 - smoothstep(0.8, 1.2, slope);
 
     // --- sea shore
     const b = beach.d[q];
     const cd = coastD.d[q];
     if (cd < 150) {
-      const sandy = b * (1 - smoothstep(2.9 + 0.5 * nB, 4.3 + 0.5 * nB, h)) * (1 - smoothstep(60, 110, cd));
+      const sandy = b * (1 - smoothstep(2.9 + 0.5 * nB, 4.3 + 0.5 * nB, h)) * (1 - smoothstep(BW + 5, BW + 14, cd)) * (1 - Math.min(1, padMask.d[q]));
       over(q, 5, sandy);
       gh = lerp(gh, 0, Math.min(1, sandy * 1.6));
       // dune grass fringe behind the beach
@@ -802,6 +857,7 @@ for (let j = 0; j < N; j++) {
       gh *= 1 - strip;
     }
     if (above < 0.03) gh = 0;
+    gh *= 1 - Math.min(1, padMask.d[q]); // nothing grows through paving and planks
     grassH.d[q] = clamp(gh, 0, 1);
 
     // moisture: slightly richer greens in the valley bottom, drier on the plateaus
@@ -814,8 +870,8 @@ for (let j = 0; j < N; j++) {
 // 12. Trees
 
 log('trees');
-const SPECIES = ['oak', 'beech', 'birch', 'willow', 'pine', 'cypress', 'plane', 'palm', 'bush', 'bloom'];
-const SPECIES_H = { oak: 17, beech: 20, birch: 14, willow: 12, pine: 22, cypress: 16, plane: 19, palm: 13, bush: 2.6, bloom: 2.2 };
+const SPECIES = ['oak', 'beech', 'birch', 'willow', 'pine', 'cypress', 'plane', 'palm', 'bush', 'bloom', 'elder'];
+const SPECIES_H = { oak: 17, beech: 20, birch: 14, willow: 12, pine: 22, cypress: 16, plane: 19, palm: 13, bush: 2.6, bloom: 2.2, elder: 38 };
 const rng = mulberry32(20251119);
 const trees = [];
 {
@@ -845,7 +901,9 @@ const trees = [];
 
   const CELL = 8, GN = Math.ceil(N / CELL);
   const buckets = Array.from({ length: GN * GN }, () => []);
+  const giants = []; // trees that keep a clearing wider than the neighbourhood searched below
   const tooClose = (x, z, r) => {
+    for (const t of giants) { const rr = (r + t.r) * 0.5; if ((t.x - x) ** 2 + (t.z - z) ** 2 < rr * rr) return true; }
     const ci = Math.floor((x + HALF) / CELL), cj = Math.floor((z + HALF) / CELL);
     for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) {
       const a = ci + di, b = cj + dj;
@@ -860,11 +918,17 @@ const trees = [];
   const add = (x, z, species, scale, r, hero = 0) => {
     const t = { x, z, species, scale, r, rot: rng() * Math.PI * 2, hero };
     trees.push(t);
+    if (r > 30) giants.push(t);
     const ci = Math.floor((x + HALF) / CELL), cj = Math.floor((z + HALF) / CELL);
     if (ci >= 0 && cj >= 0 && ci < GN && cj < GN) buckets[cj * GN + ci].push(t);
   };
-  for (const [x, z, sp, sc] of L.HERO_TREES) add(x, z, sp, sc, 7 * sc, 1);
-  // palms along the seafront: both sides of the boardwalk and around the plaza
+  for (const [x, z, sp, sc] of L.HERO_TREES) add(x, z, sp, sc, sp === 'elder' ? 92 : 7 * sc, 1); // the old tree keeps its clearing
+  for (const t of trees) if (t.species === 'elder') t.shadeR = 19 * t.scale; // (the shade on the ground is the crown's, not the clearing's)
+  // palms along the seafront: both sides of the boardwalk and around the plaza (never in a path or in the brook)
+  const palmSpot = (x, z) => {
+    const q = idx(Math.round(gi(x)), Math.round(gi(z)));
+    return pathClear.d[q] > 0.6 && waterNear.d[q] > 3 && padSDF.plaza.d[q] > 1.2 && boundsSDF.d[q] < -2;
+  };
   {
     const pts = resample(smoothPath(L.PROMENADE.points, { step: 1 }), 1);
     for (let k = 6; k < pts.length - 4; k += 13) {
@@ -873,12 +937,15 @@ const trees = [];
       const l = Math.hypot(nx, nz) || 1; nx /= l; nz /= l;
       for (const s of [-1, 1]) {
         const x = pts[k][0] + nx * s * (L.PROMENADE.width / 2 + 1.6), z = pts[k][1] + nz * s * (L.PROMENADE.width / 2 + 1.6);
-        if (Math.hypot(x - L.PIER.rootX, z - L.PIER.rootZ) < 16) continue;
+        if (Math.hypot(x - L.PIER.rootX, z - L.PIER.rootZ) < 16 || !palmSpot(x, z)) continue;
         add(x, z, 'palm', 0.8 + rng() * 0.35, 5, 1);
       }
     }
     const pz = L.PROMENADE.plaza;
-    for (let i = 0; i < 7; i++) { const a = 1.2 + (i / 7) * 3.9; add(pz.x + Math.cos(a) * (pz.r + 2.5), pz.z + Math.sin(a) * (pz.r + 2.5), 'palm', 0.9 + rng() * 0.3, 5, 1); }
+    for (let i = 0; i < 9; i++) {
+      const a = 1.2 + (i / 9) * 3.9, x = pz.x + Math.cos(a) * (pz.r + 3), z = pz.z + Math.sin(a) * (pz.r + 3);
+      if (palmSpot(x, z)) add(x, z, 'palm', 0.9 + rng() * 0.3, 5, 1);
+    }
   }
 
   for (const [x, z, hgt] of cand) {
@@ -894,7 +961,8 @@ const trees = [];
     if (padMask.d[q] > 0 || gardenSDF.d[q] < 1) continue;
     if (padSDF.court.d[q] < 2 || padSDF.drive.d[q] < 2 || padSDF.plaza.d[q] < 6) continue;
     if (promField.dist[q] < L.PROMENADE.width / 2 + 4) continue;
-    if (coastD.d[q] < 46 && beach.d[q] > 0.3 && h < 4.2) continue;
+    if (boundsSDF.d[q] > 0) continue; // the mountains are planted below
+    if (coastD.d[q] < BW + 12 && beach.d[q] > 0.3 && h < 4.2) continue;
     if (coastD.d[q] < 3) continue;
     if (SLOPE.d[q] > 1.25) continue;
     if (fieldSoil.d[q] > 0.3 || fieldCrop.d[q] > 0.3) continue;
@@ -918,6 +986,23 @@ const trees = [];
     const radius = (sp === 'pine' || sp === 'birch' || sp === 'cypress' ? 5.0 : 6.6) * scale;
     if (tooClose(x, z, radius)) continue;
     add(x, z, sp, scale, radius);
+  }
+
+  // ---- the woods of the mountains
+  for (let z = -HALF + 4; z < HALF - 4; z += 6.4) {
+    for (let x = -HALF + 4; x < HALF - 4; x += 6.4) {
+      const px = x + (rng() - 0.5) * 5.6, pz = z + (rng() - 0.5) * 5.6;
+      const q = idx(Math.round(gi(px)), Math.round(gi(pz)));
+      if (boundsSDF.d[q] < 1.5 || rng() > cover.d[q] * 0.92) continue;
+      const h = H.d[q];
+      if (h < 1.2 || SLOPE.d[q] > 1.36 || waterNear.d[q] < 1.4 || coastD.d[q] < 3 || pathClear.d[q] < 0) continue;
+      const r = rng();
+      const sp = h > 96 ? (r < 0.85 ? 'pine' : 'birch') : h > 48 ? (r < 0.58 ? 'pine' : r < 0.84 ? 'beech' : 'birch') : (r < 0.36 ? 'pine' : r < 0.66 ? 'oak' : r < 0.9 ? 'beech' : 'birch');
+      const scale = (0.78 + 0.5 * rng()) * (1 - 0.3 * smoothstep(70, TREE_LINE, h)); // smaller towards the tree line
+      const radius = (sp === 'pine' || sp === 'birch' ? 5.0 : 6.6) * scale;
+      if (tooClose(px, pz, radius)) continue;
+      add(px, pz, sp, scale, radius);
+    }
   }
 
   // ---- shrubs (same instancing and levels of detail as the trees, at garden scale)
@@ -1027,27 +1112,32 @@ const backCover = new Grid(BN, BN);
 {
   const sea = new Uint8Array(BN * BN);
   const toB = (v) => (v + DEM_HALF) / DEM_STEP;
-  const ext = [[420, -1100], ...L.COAST.line.map((p) => [p[0], p[1]]), [520, 1100], [1200, 1100], [1200, -1100]];
+  const ext = [[330, -1100], ...L.COAST.line.map((p) => [p[0], p[1]]), [360, 1100], [1200, 1100], [1200, -1100]];
   fillPolygon(sea, BN, BN, ext.map((p) => [toB(p[0]), toB(p[1])]));
   const sd = signedDistance(sea, BN, BN); // in 8 m pixels, negative in the sea
+  // distance outside the playable area, for points beyond the detailed terrain
+  const outside = (x, z) => {
+    let best = 1e9;
+    for (let k = 0; k < boundsPts.length; k += 2) {
+      const a = boundsPts[k], b = boundsPts[(k + 2) % boundsPts.length];
+      const dx = b[0] - a[0], dz = b[1] - a[1];
+      const t = clamp(((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1), 0, 1);
+      best = Math.min(best, Math.hypot(x - a[0] - dx * t, z - a[1] - dz * t));
+    }
+    return best;
+  };
   for (let j = 0; j < BN; j++) {
     for (let i = 0; i < BN; i++) {
       const x = -DEM_HALF + i * DEM_STEP, z = -DEM_HALF + j * DEM_STEP;
-      let h = dem.get(i, j) * L.WORLD.verticalScale;
+      const inner = Math.abs(x) <= HALF - 4 && Math.abs(z) <= HALF - 4;
+      let h = dem.get(i, j) * L.WORLD.verticalScale + L.DATUM;
       const d = sd.get(i, j) * DEM_STEP;
       if (d < 0) h = -(2 + 6 * (1 - Math.exp(d / 80)) - d * 0.015);
-      else h = lerp(0.5, Math.max(h, 3), smoothstep(0, 60, d));
+      else if (!inner) h = lerp(0.5, Math.max(h, 3) + mountain(x, z, outside(x, z)), smoothstep(0, 60, d));
       // inside the playable square use the detailed terrain so both meshes agree at the border
-      if (Math.abs(x) <= HALF - 4 && Math.abs(z) <= HALF - 4) h = H.sample(gi(x), gi(z));
+      if (inner) h = H.sample(gi(x), gi(z));
       backdrop.d[j * BN + i] = h;
-      const ci = Math.floor((x + DEM_HALF) / 2), cj = Math.floor((z + DEM_HALF) / 2);
-      let c = 0, n = 0;
-      for (let b = -2; b < 2; b++) for (let a = -2; a < 2; a++) {
-        const u = ci + a, v = cj + b;
-        if (u < 0 || v < 0 || u >= 1024 || v >= 1024) continue;
-        c += canopyWide.data[v * 1024 + u] / 8 > 4 ? 1 : 0; n++;
-      }
-      backCover.d[j * BN + i] = d < 0 ? 0 : n ? c / n : 0;
+      backCover.d[j * BN + i] = d < 0 ? 0 : woods(x, z, h, 0.4);
     }
   }
 }
@@ -1066,7 +1156,7 @@ const farTrees = [];
       const h = backdrop.sample((px + DEM_HALF) / DEM_STEP, (pz + DEM_HALF) / DEM_STEP);
       if (h < 1.5) continue;
       const r = r2();
-      farTrees.push({ x: px, z: pz, y: h, species: r < 0.55 ? 'oak' : r < 0.8 ? 'beech' : r < 0.92 ? 'pine' : 'birch', scale: 0.85 + r2() * 0.45, rot: r2() * 6.283 });
+      farTrees.push({ x: px, z: pz, y: h, species: h > 90 ? (r < 0.85 ? 'pine' : 'birch') : r < 0.45 ? 'pine' : r < 0.72 ? 'oak' : r < 0.92 ? 'beech' : 'birch', scale: 0.85 + r2() * 0.45, rot: r2() * 6.283 });
     }
   }
 }
@@ -1157,6 +1247,8 @@ const meta = {
   paths: paths.map((p) => ({ id: p.id, kind: p.kind, width: p.width, samples: p.samples.filter((_, k) => k % 2 === 0 || k === p.samples.length - 1).map((q) => q.map(r2)) })),
   coast: coastPts.filter((_, k) => k % 3 === 0).map((q) => q.map(r2)),
   promenade: resample(smoothPath(L.PROMENADE.points, { step: 1 }), 2).map((q) => q.map(r2)),
+  bounds: boundsPts.filter((_, k) => k % 2 === 0).map((q) => [r2(q[0]), r2(q[1])]),
+  map: L.MAP_VIEW,
 };
 fs.writeFileSync(path.join(OUT, 'world.json'), JSON.stringify(meta));
 
@@ -1182,7 +1274,7 @@ log('preview');
     }
     buf[q * 3] = clamp(r, 0, 1) * 255; buf[q * 3 + 1] = clamp(g, 0, 1) * 255; buf[q * 3 + 2] = clamp(b, 0, 1) * 255;
   }
-  const treeCols = { oak: [40, 92, 30], beech: [62, 112, 36], birch: [96, 136, 52], willow: [110, 140, 60], pine: [22, 62, 40], cypress: [18, 52, 30], plane: [70, 110, 40], palm: [60, 120, 60], bush: [34, 84, 36], bloom: [186, 110, 140] };
+  const treeCols = { oak: [40, 92, 30], beech: [62, 112, 36], birch: [96, 136, 52], willow: [110, 140, 60], pine: [22, 62, 40], cypress: [18, 52, 30], plane: [70, 110, 40], palm: [60, 120, 60], bush: [34, 84, 36], bloom: [186, 110, 140], elder: [30, 78, 26] };
   for (const t of trees) {
     const r = t.r * 0.5;
     const c = treeCols[t.species];
@@ -1196,7 +1288,12 @@ log('preview');
     }
   }
   await savePng(path.join(PREVIEW, 'world.png'), buf, N, N, 3);
-  await sharp(Buffer.from(buf.buffer), { raw: { width: N, height: N, channels: 3 } }).resize(512, 512).jpeg({ quality: 82 }).toFile(path.join(OUT, 'map.jpg'));
+  // the map of the HUD: the playable area and a little around it, 2 pixels per metre
+  const mv = L.MAP_VIEW;
+  await sharp(Buffer.from(buf.buffer), { raw: { width: N, height: N, channels: 3 } })
+    .extract({ left: Math.round(gi(mv.x0) + 0.5), top: Math.round(gi(mv.z0) + 0.5), width: Math.round(mv.x1 - mv.x0), height: Math.round(mv.z1 - mv.z0) })
+    .resize(Math.round((mv.x1 - mv.x0) * 2), Math.round((mv.z1 - mv.z0) * 2), { kernel: 'cubic' })
+    .jpeg({ quality: 84, mozjpeg: true }).toFile(path.join(OUT, 'map.jpg'));
   // elevation preview with contours
   const e = new Uint8Array(N * N * 3);
   for (let q = 0; q < N * N; q++) {

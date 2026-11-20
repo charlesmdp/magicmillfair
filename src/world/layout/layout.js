@@ -1,21 +1,31 @@
 // World layout: the single source of truth shared by the offline bakers (tools/)
 // and the runtime. Coordinates are in metres: +X = east, +Z = south, Y = up.
 // Y = 0 is the sea level. Everything here is plain data (no three.js imports).
+//
+// The world in one paragraph: a valley closed by mountains on three sides and open on a cove to the east.
+// The mill, its ponds and its garden sit in the middle; the mill stream runs down to the beach, where the
+// promenade and the pier are. Only the area inside BOUNDS can be walked; the rest is scenery.
 
 export const WORLD = {
-  size: 1024, // playable square, centred on the origin
+  size: 1024, // detailed terrain: a square centred on the origin (playable area + the mountains around it)
   half: 512,
   verticalScale: 1.3, // gentle exaggeration of the surveyed relief
   backdrop: 2048, // extent of the low-resolution surrounding terrain
 };
 
+// The surveyed valley is set this much lower than surveyed, so that its lower end is flooded by the sea.
+export const DATUM = -9.8;
+const D = DATUM;
+/** Stream control points given with surveyed heights. */
+const lowered = (points) => points.map(([x, z, y, w]) => [x, z, Math.round((y + D) * 100) / 100, w]);
+
+const m2 = (v) => Math.round(v * 100) / 100;
 export const LEVELS = {
   sea: 0,
-  pondBig: 20.0,
-  court: 20.6,
-  pondTail: 16.8,
-  pondBean: 13.6,
-  pondFar: 10.9,
+  pondBig: m2(20.0 + D),
+  court: m2(20.6 + D),
+  pondTail: m2(16.8 + D),
+  pondBean: m2(13.6 + D),
 };
 
 const DEG = Math.PI / 180;
@@ -50,7 +60,7 @@ export function frameRect(frame, margin = 0, w = frame.width, l = frame.length) 
 export const PONDS = [
   {
     id: 'big',
-    name: 'Le Grand Étang',
+    name: 'The Great Pond',
     level: LEVELS.pondBig,
     depth: 2.6,
     bank: 0.45,
@@ -72,7 +82,7 @@ export const PONDS = [
   },
   {
     id: 'tail',
-    name: 'Le Bassin du Moulin',
+    name: 'Mill Pool',
     level: LEVELS.pondTail,
     depth: 1.1,
     bank: 0.35,
@@ -86,7 +96,7 @@ export const PONDS = [
   },
   {
     id: 'bean',
-    name: "L'Étang aux Iris",
+    name: 'Iris Pond',
     level: LEVELS.pondBean,
     depth: 1.6,
     bank: 0.35,
@@ -99,20 +109,6 @@ export const PONDS = [
     ],
     islands: [],
   },
-  {
-    id: 'far',
-    name: 'La Mare aux Libellules',
-    level: LEVELS.pondFar,
-    depth: 1.3,
-    bank: 0.3,
-    shelf: 3.5,
-    margin: 5, cutSlope: 0.28,
-    outline: [
-      [8.3, -55.1], [6.1, -53.1], [3.6, -48.4], [4.6, -40.4], [7.3, -32.3], [14.4, -29.2], [25.8, -24.5], [31.4, -23],
-      [38.1, -24], [39.3, -27.5], [38.6, -36.1], [38.1, -47.1], [32.3, -54.3], [26.7, -57.4], [16.2, -57.2],
-    ],
-    islands: [],
-  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -121,66 +117,62 @@ export const PONDS = [
 
 export const STREAMS = [
   {
-    id: 'upper',
-    name: 'Le Ruisseau',
+    // Mountain torrent: tumbles down the western slopes, drops over the cliff as a waterfall and feeds the
+    // great pond. Only its last stretch, from the plunge pool on, is inside the playable area.
+    id: 'torrent',
+    name: 'The Torrent',
     bedDepth: 0.45,
-    flat: 15, slope: 0.24, // valley floor half-width and side slope carved around the stream
+    flat: 2.2, slope: 0.62, // ravine floor half-width and side slope carved around the stream
+    fill: false, smooth: 1.2, // no levelled flood plain, and keep the steps of the bed sharp
     points: [
-      [-455, 530, 23.7, 2.6], [-457, 504, 23.55, 2.6], [-455, 480, 23.4, 2.8], [-447, 458, 23.25, 2.6], [-444, 436, 23.1, 2.6],
-      [-458, 420, 22.95, 2.8], [-474, 408, 22.8, 2.6], [-478, 392, 22.7, 2.6], [-488, 378, 22.6, 2.8], [-485, 360, 22.5, 2.6],
-      [-482, 340, 22.4, 2.6], [-494, 318, 22.3, 2.8], [-492, 296, 22.2, 2.6], [-488, 274, 22.1, 2.6], [-499, 255, 22.0, 2.8],
-      [-490, 246, 21.95, 2.6], [-474, 250, 21.85, 2.6], [-456, 254, 21.75, 2.8], [-450, 240, 21.65, 2.6], [-449, 227, 21.55, 2.6],
-      [-441, 217, 21.45, 2.8], [-438, 202, 21.35, 2.6], [-425, 191, 21.25, 2.8], [-411, 184, 21.15, 2.8], [-393, 182, 21.0, 3.0],
-      [-376, 179, 20.9, 3.0], [-363, 181, 20.8, 2.8], [-355, 172, 20.7, 2.8], [-337, 166, 20.6, 3.0], [-322, 158, 20.5, 3.0],
-      [-303, 151, 20.4, 3.2], [-287, 146.5, 20.32, 3.2], [-276, 138, 20.25, 3.0], [-263, 134.5, 20.2, 3.2], [-250, 131, 20.14, 3.4],
-      [-244, 122, 20.08, 3.4], [-236, 115, 20.03, 3.8], [-229, 108, 20.0, 4.5], [-223, 101, 20.0, 6],
+      [-356, 152, 66, 2.0], [-340, 144, 54, 2.0], [-324, 138, 43.5, 2.2], [-310, 132.5, 34, 2.2], [-298, 128, 27.4, 2.4],
+      [-289.5, 124.6, 26.4, 2.8], [-285, 123, 11.75, 5.0], [-277, 120.5, 11.6, 4.4], [-266, 118.5, 11.2, 3.2], [-254, 117, 10.85, 3.2],
+      [-244, 116, 10.55, 3.4], [-236, 114, 10.3, 3.8], [-229, 108, 10.2, 4.5], [-223, 101, 10.2, 6],
     ],
-    falls: [],
+    falls: [0.5, 1.5, 2.5, 3.5, 5.5],
+    // the big drop, drawn as a sheet of white water: [from sample of the lip, to the plunge pool]
+    waterfall: { lip: [-289.5, 124.6], pool: [-285, 123] },
   },
   {
     id: 'canal',
-    name: 'Le Bief',
+    name: 'The Cascade',
     bedDepth: 0.35,
     flat: 0.8, slope: 0.55,
     lined: true, // stone-edged channel
-    points: [
+    points: lowered([
       [-90.5, -22.5, 16.8, 1.5], [-88.4, -26, 16.74, 1.3], [-86.6, -28.8, 15.95, 1.3], [-84.8, -31.4, 15.15, 1.3], [-83, -34, 14.4, 1.3],
       [-81.2, -36.6, 13.66, 1.4], [-79.6, -38.4, 13.62, 1.8], [-77.6, -39.8, 13.6, 2.4],
-    ],
+    ]),
     falls: [1.5, 2.5, 3.5, 4.5],
   },
   {
+    // From the last pond to the beach, under the promenade.
     id: 'brook',
-    name: 'Le Ruisseau',
+    name: 'The Brook',
     bedDepth: 0.4,
-    flat: 7, slope: 0.3,
+    flat: 5, slope: 0.3,
     points: [
-      [-23.5, -32.5, 13.6, 2.6], [-20, -29.5, 12.3, 2.4], [-14, -25, 11.75, 2.4], [-5, -20, 11.45, 2.6], [6, -18, 11.2, 2.4],
-      [14, -13.5, 10.95, 2.6], [25, -9.5, 10.35, 2.8], [36, -8, 9.8, 2.6], [45, -7.5, 9.5, 2.4], [50, -8.2, 8.9, 2.8],
-      [56, -10, 8.8, 2.8], [65, -13.5, 8.55, 2.6], [74, -9, 8.3, 2.8], [84, -7, 8.1, 2.6], [91, -1, 7.95, 2.8],
-      [97, 3.2, 7.8, 2.4], [101.5, 0.6, 7.1, 3.0], [106, -2.2, 7.0, 2.8], [116, -2, 6.7, 2.8], [126, -7, 6.3, 2.6],
-      [133, -3, 6.1, 2.8], [144, -5, 5.7, 2.8], [152, -11, 5.3, 2.4], [156.5, -15.2, 4.55, 3.2], [161, -17.5, 4.4, 3.0],
-      [169, -12, 4.15, 2.8], [178, -8, 3.9, 3.0], [182, -16, 3.6, 2.8], [193, -17.5, 3.1, 3.0], [203, -21.5, 2.5, 2.6],
-      [208.5, -23.6, 1.85, 3.4], [215, -24, 1.75, 3.2], [224, -21.5, 1.5, 3.2], [234, -18, 1.25, 3.4], [242, -23, 1.0, 3.4],
-      [251, -27, 0.75, 3.6], [262, -33, 0.5, 4.0], [273, -41, 0.28, 4.6], [284, -48, 0.1, 6], [296, -52, 0.0, 9],
+      [-23.5, -32.5, 3.8, 2.6], [-20, -29.5, 3.42, 2.4], [-14, -25.6, 3.3, 2.4], [-5.5, -22.8, 3.14, 2.6], [3.5, -21.4, 2.55, 2.6],
+      [12, -20.4, 2.36, 2.8], [19, -19.8, 1.62, 3.0], [26, -19.5, 1.36, 3.0], [33, -19.2, 1.2, 3.0], [41, -18.8, 0.62, 3.6],
+      [50, -18.2, 0.22, 4.6], [60, -17.6, 0.0, 8],
     ],
-    falls: [0.5, 8.5, 15.5, 22.5, 29.5],
+    falls: [0.5, 3.5, 5.5, 8.5],
   },
   {
-    id: 'raceHead', name: 'Le Bief', bedDepth: 0.4, flat: 0.3, slope: 0.9, lined: true,
-    points: [[-117.9, 9.6, 20.0, 0.9], [-117.3, 6.5, 19.96, 0.9], [-116.5, 2.5, 19.93, 0.9], [-115.9, -0.4, 19.9, 0.9]],
+    id: 'raceHead', name: 'The Mill Race', bedDepth: 0.4, flat: 0.3, slope: 0.9, lined: true,
+    points: lowered([[-117.9, 9.6, 20.0, 0.9], [-117.3, 6.5, 19.96, 0.9], [-116.5, 2.5, 19.93, 0.9], [-115.9, -0.4, 19.9, 0.9]]),
     falls: [],
   },
   {
     // `walled`: stone walls hold the ground on both sides (a pit and a trench, not a sloping ditch)
-    id: 'raceTail', name: 'Le Bief', bedDepth: 0.35, flat: 0.3, slope: 9, lined: true, walled: true,
+    id: 'raceTail', name: 'The Mill Race', bedDepth: 0.35, flat: 0.3, slope: 9, lined: true, walled: true,
     // starts as the wheel pit (wider, under the wheel), then runs east to the lower pond
-    points: [[-116.1, -0.72, 18.08, 1.7], [-115.82, -1.55, 18.07, 1.7], [-115.53, -2.38, 18.06, 1.7], [-115.25, -3.2, 18.05, 1.6], [-114.7, -3.75, 18.0, 1.2], [-113.3, -3.1, 17.9, 1.1], [-110.2, -2.6, 17.6, 1.1], [-107.0, -2.5, 17.3, 1.1], [-103.8, -2.6, 17.02, 1.1], [-101.4, -2.8, 16.83, 1.2], [-99.6, -3.0, 16.8, 1.6]],
+    points: lowered([[-116.1, -0.72, 18.08, 1.7], [-115.82, -1.55, 18.07, 1.7], [-115.53, -2.38, 18.06, 1.7], [-115.25, -3.2, 18.05, 1.6], [-114.7, -3.75, 18.0, 1.2], [-113.3, -3.1, 17.9, 1.1], [-110.2, -2.6, 17.6, 1.1], [-107.0, -2.5, 17.3, 1.1], [-103.8, -2.6, 17.02, 1.1], [-101.4, -2.8, 16.83, 1.2], [-99.6, -3.0, 16.8, 1.6]]),
     falls: [],
   },
   {
-    id: 'spill', name: 'Le Déversoir', bedDepth: 0.3, flat: 0.3, slope: 0.9, lined: true,
-    points: [[-106.4, 20.8, 20.0, 1.7], [-105.3, 19.6, 20.0, 1.7], [-104.4, 18.6, 19.9, 1.7], [-103.5, 17.6, 17.6, 1.7], [-102.6, 16.5, 16.86, 1.7], [-101.7, 15.4, 16.8, 2.0]],
+    id: 'spill', name: 'The Spillway', bedDepth: 0.3, flat: 0.3, slope: 0.9, lined: true,
+    points: lowered([[-106.4, 20.8, 20.0, 1.7], [-105.3, 19.6, 20.0, 1.7], [-104.4, 18.6, 19.9, 1.7], [-103.5, 17.6, 17.6, 1.7], [-102.6, 16.5, 16.86, 1.7], [-101.7, 15.4, 16.8, 2.0]]),
     falls: [2.5],
   },
 ];
@@ -197,28 +189,29 @@ export const DAM = {
 // ---------------------------------------------------------------------------
 // Sea and coast. The coastline runs north -> south with the land on the west side.
 // `beach` in [0,1] says how sandy/gentle the shore is at that vertex (0 = rocky cliff).
+// The cove lies between two rocky capes where the mountains reach the sea.
 
 export const COAST = {
   line: [
-    [372, -540, 0.2], [356, -486, 0.1], [342, -452, 0.0], [338, -412, 0.0], [350, -378, 0.0], [356, -352, 0.0],
-    [336, -338, 0.3], [318, -318, 0.9], [301, -284, 1.0], [291, -240, 1.0], [286, -182, 1.0], [286.5, -120, 1.0],
-    [291, -70, 1.0], [297, -40, 1.0], [308, -4, 1.0], [322, 26, 0.9], [340, 48, 0.4], [366, 62, 0.0], [400, 72, 0.0],
-    [432, 94, 0.0], [452, 128, 0.0], [456, 174, 0.0], [442, 224, 0.0], [433, 280, 0.0], [445, 340, 0.0],
-    [461, 400, 0.0], [470, 460, 0.0], [480, 540, 0.0],
+    [300, -540, 0], [282, -470, 0], [262, -400, 0], [238, -330, 0], [208, -270, 0], [176, -222, 0], [146, -186, 0], [116, -160, 0.15],
+    [88, -138, 0.5], [66, -112, 0.9], [51, -82, 1.0], [43, -50, 1.0], [40, -18, 1.0], [41, 14, 1.0], [47, 44, 1.0], [58, 70, 0.85],
+    [76, 92, 0.45], [102, 108, 0.1], [134, 120, 0], [172, 136, 0], [210, 160, 0], [246, 196, 0], [276, 246, 0], [298, 310, 0],
+    [314, 390, 0], [326, 470, 0], [334, 540, 0],
   ],
+  beachWidth: 20, // dry sand between the waterline and the promenade
   promenadeY: 3.2,
 };
 
 // The big pier: leaves the promenade, crosses the beach and heads out to sea.
 export const PIER = {
-  rootX: 257, rootZ: -191,
-  heading: 20 * DEG, // 0 = +X (east), positive towards +Z (south)
-  length: 238,
+  rootX: 16, rootZ: 6,
+  heading: 6 * DEG, // 0 = +X (east), positive towards +Z (south)
+  length: 132,
   width: 17,
   deckY: 4.7,
-  rampLength: 18, // the deck climbs from the promenade level over this distance
-  headLength: 64, headWidth: 48, // wide platform carrying the big wheel
-  wheel: { along: 200, radius: 31, hubY: 4.7 + 35.5 },
+  rampLength: 16, // the deck climbs from the promenade level over this distance
+  headLength: 60, headWidth: 48, // wide platform carrying the big wheel
+  wheel: { along: 101, radius: 31, hubY: 4.7 + 35.5 },
 };
 
 export function pierToWorld(along, side = 0) {
@@ -231,28 +224,19 @@ export function pierToWorld(along, side = 0) {
 
 export const PATHS = [
   {
-    id: 'road', kind: 'asphalt', width: 5.6, cut: 1,
-    points: [
-      [-560, -740], [-400, -597], [-290.4, -499.9], [-233.3, -450.6], [-184.2, -412.9], [-38.6, -304.5], [9.7, -269.7],
-      [70.6, -223.5], [89.9, -210], [108, -201], [125.3, -195.2], [141.2, -192.5], [159.3, -191.9], [173.7, -193.7],
-      [189.6, -197.4], [210, -201.6], [221.4, -202.2], [229, -197.5],
-    ],
-  },
-  {
+    // The only road into the valley: it comes out of a tunnel under the northern mountains.
     id: 'lane', kind: 'asphalt', width: 3.3, cut: 1,
     points: [
-      [-38.6, -304.5], [-60, -254], [-81.2, -205.2], [-105.7, -144.1], [-113.5, -124.1], [-117.1, -110.2], [-120.7, -91.7],
+      [-80, -190], [-86, -176], [-95, -160], [-105.7, -144.1], [-113.5, -124.1], [-117.1, -110.2], [-120.7, -91.7],
       [-122.4, -74.2], [-122.2, -58], [-120.6, -44], [-118.6, -35], [-116.2, -29.5], [-113.6, -26.2],
     ],
   },
   {
-    id: 'valley', kind: 'gravel', width: 1.9, cut: 0.6,
+    // From the mill down the valley to the seafront: the way to the pier.
+    id: 'valley', kind: 'gravel', width: 2.2, cut: 0.6,
     points: [
       [-111.5, -27.5], [-105, -31.5], [-97, -32.5], [-89.5, -30.2], [-84.6, -31.4], [-80, -28.5], [-74, -25.5], [-62, -22.5],
-      [-48, -22], [-36, -20.5], [-27, -23], [-21.6, -28.6], [-15.5, -31], [-8, -27], [4, -25.5], [18, -20.5], [30, -16], [42, -14],
-      [52, -17.5], [64, -20.5], [76, -16], [86, -14], [96, -9.5], [108, -9.5], [120, -10.5], [128, -14], [140, -12],
-      [150, -19.5], [160, -24.5], [170, -19.5], [181, -23.5], [194, -24.8], [205, -29.5], [216, -31], [226, -28.5],
-      [236, -26], [244, -30.5], [250, -36.5], [254.5, -44],
+      [-48, -22], [-36, -20.5], [-27, -16.5], [-20, -9], [-16, -1], [-15, 5],
     ],
   },
   {
@@ -265,15 +249,33 @@ export const PATHS = [
     ],
   },
   {
+    // Spur of the pond path to the foot of the waterfall.
+    id: 'falls', kind: 'dirt', width: 1.3, cut: 0.5,
+    points: [[-239, 103], [-247, 109.5], [-257, 112.5], [-267, 113.6], [-275, 115.4]],
+  },
+  {
     id: 'garden', kind: 'gravel', width: 1.2, cut: 0.3,
     points: [[-128.6, -5.2], [-128.2, -9.5], [-127.8, -14.5], [-128.4, -20], [-129, -25.5], [-129.2, -31], [-131, -36.5], [-136, -40.5], [-144, -42]],
   },
   {
-    id: 'cliff', kind: 'dirt', width: 1.4, cut: 0.5,
+    // From the lane through the wheat fields, over the lookout hill, down to the north end of the beach.
+    id: 'fields', kind: 'dirt', width: 1.4, cut: 0.5,
     points: [
-      [134, -6.5], [137, 4], [146, 14], [160, 22], [178, 28], [200, 30], [222, 31], [246, 36], [270, 44], [296, 52],
-      [318, 58], [342, 70], [366, 82], [392, 92], [416, 108], [434, 130],
+      [-120.5, -102], [-108, -99], [-92, -96], [-76, -93], [-60, -90.5], [-44, -89], [-30, -89.5], [-16, -92], [-4, -93], [8, -90],
+      [18, -86], [27, -86.5],
     ],
+  },
+  {
+    // From the dam up the southern hillside to the old tree.
+    id: 'hill', kind: 'dirt', width: 1.4, cut: 0.5,
+    points: [
+      [-100.5, 53], [-88, 60], [-74, 70], [-62, 82], [-54, 96], [-52, 110], [-58, 122], [-70, 130], [-84, 135], [-96, 137.5],
+    ],
+  },
+  {
+    // …and from the hillside down to the south end of the beach.
+    id: 'shore', kind: 'dirt', width: 1.4, cut: 0.5,
+    points: [[-62, 82], [-48, 70], [-32, 60], [-14, 53], [4, 49], [18, 50], [27, 55]],
   },
 ];
 
@@ -281,8 +283,8 @@ export const PATHS = [
 export const PROMENADE = {
   width: 8.5,
   y: COAST.promenadeY,
-  points: [[292, -314], [272, -280], [258.5, -240], [252.5, -196], [251.5, -160], [252, -122], [255.5, -78], [259.5, -48], [262.5, -30], [270, -8], [284, 12]],
-  plaza: { x: 241, z: -193, r: 16 },
+  points: [[41, -106], [28, -88], [19, -54], [15.5, -18], [16.5, 16], [23.5, 51], [37, 82]],
+  plaza: { x: 0, z: 4.3, r: 15 },
 };
 
 // Dry-stone retaining walls of the rock garden (uphill side = left of the direction of travel).
@@ -296,7 +298,7 @@ export const TERRACES = [
 export const ROCK_GARDEN = {
   outline: [[-158, -6], [-134.5, -6.2], [-124.8, -3.4], [-120.2, -17], [-120.8, -31], [-125, -40.5], [-136, -45], [-150, -45.5], [-161, -34], [-163, -18]],
   baseY: LEVELS.court,
-  topY: 27.4,
+  topY: Math.round((27.4 + D) * 100) / 100,
   // steepest ascent direction (unit vector, pointing uphill)
   up: [-0.42, -0.91],
   run: 40,
@@ -307,9 +309,9 @@ export const PADS = [
   // courtyard between the house, the outbuilding and the pond wall
   { id: 'court', y: LEVELS.court, feather: 2.2, outline: [[-135.5, -5.8], [-124.4, -3.2], [-116.6, -0.4], [-114.4, 4.5], [-117.4, 8.3], [-125, 8.1], [-133, 7.9], [-141, 4.4], [-150.4, 4.2], [-150.6, -5.6]] },
   // driveway in front of the carport
-  { id: 'drive', y: 20.9, feather: 3.5, outline: [[-120.5, -30.5], [-110.5, -30.5], [-109, -22], [-112, -18], [-119.5, -19.5]] },
+  { id: 'drive', y: Math.round((20.9 + D) * 100) / 100, feather: 3.5, outline: [[-120.5, -30.5], [-110.5, -30.5], [-109, -22], [-112, -18], [-119.5, -19.5]] },
   // seafront plaza at the foot of the pier
-  { id: 'plaza', y: COAST.promenadeY, feather: 8, outline: [[225, -200], [234, -209], [248, -209], [257, -200], [257, -185], [248, -177], [234, -177], [225, -186]] },
+  { id: 'plaza', y: COAST.promenadeY, feather: 7, outline: [[-16, -3], [-7, -12], [7, -12], [12, -7], [12, 16], [7, 20.5], [-7, 20.5], [-16, 11.5]] },
 ];
 
 // ---------------------------------------------------------------------------
@@ -318,25 +320,32 @@ export const PADS = [
 export const PARK = [
   // grass verges under the plane trees, along the lane down to the mill
   [[-96, -146], [-104, -124], [-108, -110], [-110, -92], [-111, -76], [-111, -20], [-119, -22], [-121, -34], [-130, -50], [-134, -62], [-134, -78], [-132, -94], [-128, -112], [-122, -128], [-114, -148]],
-  // garden lawns east of the house, around the lower ponds
-  [[-121, -72], [-100, -80], [-60, -72], [-15, -70], [46, -68], [50, -40], [44, -16], [2, -6], [-20, 6], [-60, 6], [-86, 23], [-100, 21], [-106, 9], [-114, 2], [-111, -20]],
+  // garden lawns east of the house, around the lower ponds, down to the seafront
+  [[-121, -72], [-100, -80], [-60, -72], [-15, -68], [6, -64], [10, -40], [9, -24], [2, 26], [-10, 36], [-34, 30], [-60, 12], [-86, 23], [-100, 21], [-106, 9], [-114, 2], [-111, -20]],
   // parkland around the big pond
-  [[-140, 4], [-170, 16], [-204, 28], [-252, 40], [-300, 62], [-302, 132], [-250, 142], [-204, 132], [-180, 126], [-150, 102], [-134, 92], [-99, 62], [-93, 30], [-99, 10]],
+  [[-140, 4], [-170, 16], [-204, 28], [-252, 40], [-272, 62], [-280, 126], [-250, 142], [-204, 132], [-180, 126], [-150, 102], [-134, 92], [-99, 62], [-93, 30], [-99, 10]],
+  // the clearing of the old tree
+  [[-61, 138], [-73, 163], [-108, 177], [-143, 167], [-161, 139], [-147, 110], [-112, 97], [-77, 107]],
+  // the lookout hill
+  [[-22, -104], [-4, -108], [14, -102], [20, -88], [10, -76], [-8, -74], [-22, -84]],
 ];
 
 export const FIELDS = [
-  { crop: 'soil', outline: [[-560, -560], [-300, -560], [-332, -300], [-353, -160], [-244, -84], [-300, -30], [-429, 90], [-560, 215]] },
-  { crop: 'cereal', outline: [[-345, -165], [-322, -300], [-190, -408], [-62, -308], [-104, -162], [-128, -100], [-238, -88]] },
-  { crop: 'soil', outline: [[-92, -152], [-48, -288], [62, -238], [150, -200], [124, -112], [42, -96], [-40, -94]] },
-  { crop: 'wheat', outline: [[-262, 205], [-42, 200], [-30, 342], [-272, 348]] },
-  { crop: 'soil', outline: [[64, 110], [196, 92], [258, 198], [240, 332], [72, 332]] },
-  { crop: 'wheat', outline: [[-250, 372], [-20, 368], [-10, 560], [-262, 560]] },
-  { crop: 'cereal', outline: [[30, 366], [250, 360], [300, 560], [20, 560]] },
-  { crop: 'wheat', outline: [[-170, -440], [-30, -330], [70, -250], [160, -230], [230, -330], [150, -560], [-140, -560]] },
+  { crop: 'wheat', outline: [[-102, -150], [-56, -150], [-46, -128], [-52, -104], [-100, -110]] },
+  { crop: 'cereal', outline: [[-42, -150], [6, -144], [16, -124], [-2, -112], [-36, -110]] },
+  { crop: 'wheat', outline: [[-36, 70], [-12, 60], [10, 57], [26, 66], [30, 98], [6, 114], [-30, 108]] },
+];
+
+// Gentle hills added to the surveyed relief: [x, z, radius, height]
+export const HILLS = [
+  [-2, -90, 34, 8.5], // the lookout, between the fields and the sea
+  [-110, 138, 50, 5], // the knoll of the old tree
+  [-212, -62, 44, 5], // wooded rise north-west of the pond
 ];
 
 // Hand-placed specimen trees: [x, z, species, scale]
 export const HERO_TREES = [
+  [-110, 138, 'elder', 1.05], // the old tree in its clearing
   [-133.4, 30.7, 'birch', 1.0],
   [-131.6, 33.2, 'birch', 0.7],
   [-202.5, 102, 'willow', 1.1],
@@ -362,18 +371,39 @@ export const HERO_TREES = [
   [-93, 22, 'oak', 1.2],
   [-70, -62, 'beech', 1.2],
   [-12, -64, 'oak', 1.25],
-  [46, -30, 'willow', 0.95],
   [-84, 2, 'oak', 1.15],
+  [4, -92, 'pine', 1.2], // on the lookout
+  [-9, -84, 'pine', 0.95],
+  [-30, 40, 'willow', 0.95],
 ];
 
 // Where visitors arrive: on the lane, facing the mill (yaw is the camera heading).
 export const SPAWN = { x: -121.8, z: -60, yaw: 3.21 };
 
-// Named places (for the HUD and for zone streaming).
+// Named places (for the HUD and the map).
 export const ZONES = [
-  { id: 'mill', name: 'Le Moulin', x: -120, z: -4, r: 70 },
-  { id: 'pond', name: 'Le Grand Étang', x: -165, z: 68, r: 85 },
-  { id: 'valley', name: 'La Vallée', x: 90, z: -15, r: 120 },
-  { id: 'promenade', name: 'La Promenade', x: 256, z: -150, r: 150 },
-  { id: 'pier', name: 'La Grande Jetée', x: 380, z: -148, r: 130 },
+  { id: 'mill', name: 'The Mill', x: -122, z: -6, r: 52 },
+  { id: 'pond', name: 'The Great Pond', x: -168, z: 70, r: 78 },
+  { id: 'falls', name: 'The Waterfall', x: -268, z: 116, r: 34 },
+  { id: 'iris', name: 'Iris Pond', x: -52, z: -40, r: 40 },
+  { id: 'fields', name: 'The Wheat Fields', x: -62, z: -124, r: 52 },
+  { id: 'lookout', name: 'Lookout Hill', x: -2, z: -90, r: 30 },
+  { id: 'elder', name: 'The Old Tree', x: -110, z: 138, r: 50 },
+  { id: 'seafront', name: 'The Seafront', x: 24, z: -6, r: 62 },
+  { id: 'pier', name: 'The Grand Pier', x: 96, z: 14, r: 72 },
 ];
+
+// The playable area (closed polygon). On land it is the foot of the mountains; at sea, how far one can swim.
+export const BOUNDS = [
+  // west side, north to south is listed last; start in the north-west corner and go clockwise
+  [-272, -30], [-270, -66], [-254, -104], [-224, -136], [-184, -158], [-136, -170], [-98, -176], [-74, -176], [-48, -172], [-8, -164],
+  [28, -154], [60, -146], [84, -143],
+  // the cove
+  [122, -150], [172, -148], [222, -116], [246, -40], [244, 50], [214, 100], [170, 114], [130, 106],
+  // south side, east to west
+  [92, 113], [60, 126], [22, 146], [-22, 166], [-70, 178], [-124, 184], [-176, 180], [-222, 166], [-256, 146], [-279, 131],
+  [-284, 121], [-281, 108], [-276, 66], [-270, 20],
+];
+
+// What the map of the HUD shows.
+export const MAP_VIEW = { x0: -305, z0: -205, x1: 255, z1: 205 };

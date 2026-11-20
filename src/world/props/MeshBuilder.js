@@ -252,7 +252,7 @@ export class Parts {
     for (const [key, b] of this.map) {
       if (b.empty) continue;
       const mat = materials[key];
-      if (!mat) throw new Error(`Matériau inconnu : ${key}`);
+      if (!mat) throw new Error(`Unknown material: ${key}`);
       const mesh = new THREE.Mesh(b.build(), mat);
       mesh.name = `${name}:${key}`;
       mesh.matrixAutoUpdate = false;

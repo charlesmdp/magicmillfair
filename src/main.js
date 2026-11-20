@@ -35,14 +35,14 @@ const hud = new Hud(ui, { input, isTouch: touch });
 if (SHOT && !params.has('ui')) ui.style.display = 'none';
 
 // The view the welcome screen floats over: a slow arc above the mill and its pond.
-const INTRO = { x: -144, z: 8, radius: 75, angle: -0.38, swing: 0.3, height: 23.5, lookHeight: 1 };
+const INTRO = { x: -140, z: 10, radius: 80, angle: -0.42, swing: 0.3, height: 24, lookHeight: 1 };
 
 async function boot() {
   let engine;
   try {
     engine = new Engine(canvas);
   } catch (err) {
-    hud.fail('Ce navigateur ne peut pas afficher le monde en 3D (WebGL 2 requis).');
+    hud.fail('This browser cannot display the 3D world (WebGL 2 is required).');
     throw err;
   }
   const world = new World(engine);
@@ -50,15 +50,15 @@ async function boot() {
   Object.assign(app, { engine, world, input, hud });
   canvas.addEventListener('webglcontextlost', (e) => {
     e.preventDefault();
-    hud.note('Le contexte graphique a été perdu. Rechargez la page (qualité « Léger » conseillée).', 1e8);
+    hud.note('The graphics context was lost. Reload the page (the “Light” quality is advised).', 1e8);
   });
 
   // ---------- loading
-  const label = (p) => (p < 0.5 ? 'Relief, cartes et textures…' : p < 0.7 ? 'Étangs, rivière et reflets…' : p < 0.9 ? 'Plantation de la forêt…' : 'Construction du moulin et de la jetée…');
+  const label = (p) => (p < 0.5 ? 'Mountains, maps and textures…' : p < 0.7 ? 'Ponds, streams and reflections…' : p < 0.9 ? 'Planting the forest…' : 'Building the mill and the pier…');
   const factoryLoading = new CharacterFactory({ blobShadow: !engine.tier.shadowDynamic }).load();
   await world.load((p) => hud.setProgress(p * 0.94, label(p)));
   const factory = await factoryLoading;
-  hud.setProgress(0.97, 'Ombres et derniers réglages…');
+  hud.setProgress(0.97, 'Shadows and finishing touches…');
   await new Promise((r) => requestAnimationFrame(r));
   world.buildCollision();
   world.bakeShadows();
@@ -67,7 +67,7 @@ async function boot() {
   const floorAt = (x, z) => Math.max(data.heightAt(x, z), data.waterAt(x, z));
   let color = parseInt(store.get('mmf.color'), 10);
   if (!(color >= 0 && color < 16)) color = Math.floor(Math.random() * 16);
-  let name = (store.get('mmf.name') || '').trim() || `Visiteur ${10 + Math.floor(Math.random() * 90)}`;
+  let name = (store.get('mmf.name') || '').trim() || `Visitor ${10 + Math.floor(Math.random() * 90)}`;
   const me = factory.create(color);
   scene.add(me.root);
   const player = new PlayerController(me, world.collision, data, input);
@@ -89,7 +89,7 @@ async function boot() {
     if (mode === 'free') {
       free.syncFromCamera();
       free.vel.set(0, 0, 0);
-      hud.note(touch ? 'Caméra libre : flèches pour monter et descendre' : 'Caméra libre · Espace / C : monter, descendre · Maj : accélérer · F : revenir');
+      hud.note(touch ? 'Free camera: use the arrows to go up and down' : 'Free camera · Space / C: up, down · Shift: faster · F: back to your character');
     } else if (mode === 'walk') {
       if (state.mode === 'free') rig.yaw = free.yaw;
       const far = camera.position.distanceTo(player.pos);
@@ -110,8 +110,8 @@ async function boot() {
     // no toast when the list is merely rebuilt because the connection changed (local <-> online)
     let shownMode = presence.mode;
     presence.on('status', ({ mode, count }) => { shownMode = mode; hud.setPresence(mode, count); });
-    presence.on('join', (peer) => { if (presence.mode === shownMode) hud.note(`${peer.name} arrive`); });
-    presence.on('leave', (peer) => { if (presence.mode === shownMode) hud.note(`${peer.name} est parti`); });
+    presence.on('join', (peer) => { if (presence.mode === shownMode) hud.note(`${peer.name} joined`); });
+    presence.on('leave', (peer) => { if (presence.mode === shownMode) hud.note(`${peer.name} left`); });
     presence.connect();
     Object.assign(app, { presence, avatars });
   };
@@ -121,7 +121,9 @@ async function boot() {
   const toggleCamera = () => { if (state.mode === 'walk') setMode('free'); else if (state.mode === 'free') setMode('walk'); };
   const savedQuality = store.get('mmf.quality');
   const qualityChoice = params.get('q') && TIERS[params.get('q')] ? params.get('q') : savedQuality && TIERS[savedQuality] ? savedQuality : 'auto';
-  hud.setQuality(qualityChoice, engine.tierId, engine.scale);
+  const showQuality = () => hud.setQuality(qualityChoice, engine.tierId, engine.scale, engine.detail, engine.tier.phone);
+  showQuality();
+  engine.on('detail', showQuality);
   hud.setName(name);
   hud.setPresence('offline', 1);
   hud
@@ -140,8 +142,10 @@ async function boot() {
   input.on('camera', toggleCamera);
   input.on('perf', () => hud.toggleStats());
   input.on('emote', () => hud.toggleEmotes());
-  input.on('respawn', () => { if (state.mode === 'walk') { spawn(); hud.note('Retour au moulin'); } });
-  input.on('menu', () => { hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); });
+  input.on('respawn', () => { if (state.mode === 'walk') { spawn(); hud.note('Back to the mill'); } });
+  input.on('menu', () => { hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); });
+  input.on('map', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleBigMap(); });
+  hud.setMap(data.meta.map, ZONES);
   if (params.has('stats')) hud.setStatsVisible(true);
 
   // ---------- benchmark
@@ -171,9 +175,9 @@ async function boot() {
       if (!bench.update(dt, camera)) {
         app.bench = bench.result;
         hud.setStatsVisible(true);
-        hud.statsEl.textContent = `Mesure terminée\n${bench.report()}`;
+        hud.statsEl.textContent = `Benchmark done\n${bench.report()}`;
         state.mode = 'done';
-      } else if (app.frames % 10 === 0) hud.statsEl.textContent = `Mesure des performances… ${Math.round(bench.progress * 100)} %`;
+      } else if (app.frames % 10 === 0) hud.statsEl.textContent = `Benchmark running… ${Math.round(bench.progress * 100)} %`;
     } else if (mode === 'free') {
       free.update(dt);
       player.update(dt, rig.heading, false);
@@ -216,20 +220,22 @@ async function boot() {
     }
     if (mode === 'walk' || mode === 'free') {
       const p = mode === 'walk' ? player.pos : camera.position;
-      if (app.frames % 3 === 0) hud.drawMap(p.x, p.z, mode === 'walk' ? rig.yaw : free.yaw, avatars ? avatars.list : []);
+      const heading = mode === 'walk' ? rig.yaw : free.yaw, others = avatars ? avatars.list : [];
+      if (hud.bigMapOpen) hud.drawBigMap(p.x, p.z, heading, others);
+      else if (app.frames % 3 === 0) hud.drawMap(p.x, p.z, heading, others);
     }
     if (slow > 0.5) {
       slow = 0;
       const pf = engine.perf;
       if (hud.statsOn && state.mode !== 'done') {
         hud.setStats(
-          `${pf.fps.toFixed(0)} ips · ${pf.ms.toFixed(1)} ms (CPU ${pf.cpuMs.toFixed(1)})\n` +
-          `Appels ${pf.calls} · Triangles ${fmt(pf.triangles)}\n` +
-          `${Math.round(engine.width * engine.pixelRatio)}×${Math.round(engine.height * engine.pixelRatio)} · échelle ${Math.round(engine.scale * 100)} %\n` +
-          `Palier ${TIERS[engine.tierId].label}${gpuName ? `\n${gpuName}` : ''}`,
+          `${pf.fps.toFixed(0)} fps · ${pf.ms.toFixed(1)} ms (script ${pf.cpuMs.toFixed(1)})\n` +
+          `Draw calls ${pf.calls} · Triangles ${fmt(pf.triangles)}\n` +
+          `${Math.round(engine.width * engine.pixelRatio)}×${Math.round(engine.height * engine.pixelRatio)} · resolution ${Math.round(engine.scale * 100)} % · detail ${Math.round(engine.detail * 100)} %\n` +
+          `${TIERS[engine.tierId].label}${engine.tier.phone ? ' (phone)' : ''}${gpuName ? `\n${gpuName}` : ''}`,
         );
       }
-      if (engine.scale !== lastScale) { lastScale = engine.scale; hud.setQuality(qualityChoice, engine.tierId, engine.scale); }
+      if (engine.scale !== lastScale) { lastScale = engine.scale; showQuality(); }
     }
     app.frames++;
     app.ready = true;
@@ -275,11 +281,11 @@ async function boot() {
   hud.setCameraMode(false);
   startPresence();
   canvas.focus();
-  setTimeout(() => hud.note(touch ? 'Glissez à gauche pour marcher, à droite pour regarder' : 'Glissez la souris pour regarder · double-clic : capturer la souris', 5200), 2600);
+  setTimeout(() => hud.note(touch ? 'Drag on the left to walk, on the right to look around' : 'Drag the mouse to look around · double-click to capture it', 5200), 2600);
 }
 
 boot().catch((err) => {
   console.error(err);
   app.error = String(err?.stack || err);
-  hud.fail(`Le monde n’a pas pu être chargé. ${err?.message || ''}`);
+  hud.fail(`The world could not be loaded. ${err?.message || ''}`);
 });

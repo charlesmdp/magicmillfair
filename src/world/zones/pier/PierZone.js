@@ -1,14 +1,13 @@
 // The seafront: boardwalk promenade, the great pier on its timber piles, and the big wheel.
 import * as THREE from 'three';
 import { Parts, MeshBuilder } from '../../props/MeshBuilder.js';
-import { LAYER } from '../../../render/Shadows.js';
+import { LAYER, staticCaster } from '../../../render/Shadows.js';
 import { PIER, PROMENADE, COAST, pierToWorld } from '../../layout/layout.js';
 import { roadRibbon } from '../../props/Structures.js';
-import { distanceCuller } from '../../props/StaticBatch.js';
+import { distanceCuller, mergeStatic } from '../../props/StaticBatch.js';
 import { surfaceMaterial } from '../../../render/SurfaceMaterial.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
-const CAST = [LAYER.STATIC_CASTER, LAYER.DYNAMIC_CASTER, LAYER.REFLECT];
 const lerp = (a, b, t) => a + (b - a) * t;
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
@@ -26,6 +25,7 @@ export class PierZone {
     this.data = world.data;
     this.group = new THREE.Group();
     this.group.name = 'zone:pier';
+    this.cast = staticCaster(world.engine.tier);
     this.platforms = [];
     this.colliders = [];
     this.animated = [];
@@ -42,7 +42,8 @@ export class PierZone {
     const world = new Parts();
     this._promenade(world);
     this._beach(world);
-    this.group.add(world.toMeshes(this.world.materials, { name: 'seafront', layers: CAST }));
+    const shore = world.toMeshes(this.world.materials, { name: 'seafront', layers: this.cast });
+    this.group.add(shore);
 
     const pier = new Parts();
     this._deck(pier);
@@ -51,12 +52,16 @@ export class PierZone {
     this._arch(pier);
     this._kiosks(pier);
     this._wheelFrame(pier);
-    this.frame.add(pier.toMeshes(this.world.materials, { name: 'pier', layers: CAST }));
+    const deck = pier.toMeshes(this.world.materials, { name: 'pier', layers: this.cast });
+    this.frame.add(deck);
+    this.group.updateMatrixWorld(true);
+    // one mesh per material for everything that stands still (promenade and pier together)
+    this.group.add(mergeStatic([shore, deck], 'seafront'));
     this._wheel();
     this._sign();
     this.group.updateMatrixWorld(true);
     // small things vanish with distance; the pier and its wheel stay as landmarks
-    this._cull = distanceCuller(this.group, [[/big-wheel/, Infinity], [/:glow$/, 340], [/^seafront:(paint|doubleSided|woodDark)$/, 640], [/^pier:(woodPaint|doubleSided)$/, 560], [/pier-sign/, 500]]);
+    this._cull = distanceCuller(this.group, [[/big-wheel/, Infinity], [/:glow$/, 300], [/^seafront:doubleSided$/, 420], [/pier-sign/, 420]]);
 
     const half = PIER.width / 2, head0 = PIER.length - PIER.headLength;
     this.platforms.push({ type: 'pier', x0: 0, x1: PIER.length, half, head0, headHalf: PIER.headWidth / 2 });
@@ -183,7 +188,7 @@ export class PierZone {
       const l = Math.hypot(nx, nz); nx /= l; nz /= l;
       const dPier = Math.hypot(p[0] - PIER.rootX, p[1] - PIER.rootZ);
       // huts: two rows of twelve on either side of the pier
-      if (p[1] < -60 && p[1] > -300 && dPier > 22 && i % 2 === 0 && (dPier < 74 || (p[1] > -150 && p[1] < -100))) {
+      if (dPier > 22 && dPier < 78 && i % 2 === 0 && this.data.waterAt(p[0], p[1]) < -500) { // (not on the brook)
         const hx = p[0] - nx * (PROMENADE.width / 2 + 4.2), hz = p[1] - nz * (PROMENADE.width / 2 + 4.2);
         const gy = this.ground(hx, hz);
         const col = hues[n++ % hues.length];
@@ -215,7 +220,7 @@ export class PierZone {
       // parasols and towels scattered on the dry sand
       if (i % 3 === 0 && p[1] < -40 && p[1] > -305 && dPier > 16) {
         const h = Math.sin(i * 12.9898) * 43758.5453; const r = h - Math.floor(h);
-        const off = PROMENADE.width / 2 + 10 + r * 12;
+        const off = PROMENADE.width / 2 + 6.5 + r * 8;
         const px = p[0] - nx * off, pz = p[1] - nz * off;
         const gy = this.ground(px, pz);
         if (gy < 0.7) continue;
@@ -390,7 +395,7 @@ export class PierZone {
     const spots = [
       [head0 + 9, -HW + 5, 0, PAL.red], [head0 + 9, HW - 5, Math.PI, PAL.teal],
       [PIER.length - 9, -HW + 6, 0, PAL.yellow], [PIER.length - 9, HW - 6, Math.PI, PAL.blue],
-      [96, -PIER.width / 2 + 3.2, 0, PAL.orange], [138, PIER.width / 2 - 3.2, Math.PI, PAL.pink],
+      [head0 * 0.52, -PIER.width / 2 + 3.2, 0, PAL.orange], [head0 * 0.82, PIER.width / 2 - 3.2, Math.PI, PAL.pink],
     ];
     for (const [x, z, yaw, col] of spots) {
       const y = PIER.deckY;
@@ -570,23 +575,27 @@ export class PierZone {
     const tex = new THREE.CanvasTexture(cv);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 4;
-    const mat = surfaceMaterial({ map: tex, rough: 0.6, spec: 0.2, side: THREE.DoubleSide, name: 'sign' });
+    const mat = surfaceMaterial({ map: tex, rough: 0.6, spec: 0.2, name: 'sign' });
     const b = new MeshBuilder();
     const W = PIER.width / 2 - 0.9, x = 3.2, y = deckHeight(x) + 5.4, n = 12;
-    // gentle arch between the two towers
-    for (let i = 0; i < n; i++) {
-      const t0 = i / n, t1 = (i + 1) / n;
-      const z0 = lerp(-W, W, t0), z1 = lerp(-W, W, t1);
-      const h0 = Math.sin(Math.PI * t0) * 1.3, h1 = Math.sin(Math.PI * t1) * 1.3;
-      const a = V(x - 0.12, y + h0, z1 * 0 + z0), c = V(x - 0.12, y + h1, z1);
-      // uv set by hand so the text runs left to right when arriving from the land
-      const i0 = b.vert(a, V(-1, 0, 0), 1 - t0, 0), i1 = b.vert(c, V(-1, 0, 0), 1 - t1, 0);
-      const i2 = b.vert(c.clone().setY(c.y + 2.3), V(-1, 0, 0), 1 - t1, 1), i3 = b.vert(a.clone().setY(a.y + 2.3), V(-1, 0, 0), 1 - t0, 1);
-      b.idx.push(i0, i1, i2, i0, i2, i3);
+    // gentle arch between the two towers: one face towards the land, one towards the sea, each reading
+    // left to right for whoever walks towards it (arriving from the land, the viewer's left is -z)
+    for (const land of [true, false]) {
+      const fx = x - (land ? 0.16 : 0.08);
+      for (let i = 0; i < n; i++) {
+        const t0 = i / n, t1 = (i + 1) / n;
+        const z0 = lerp(-W, W, t0), z1 = lerp(-W, W, t1);
+        const h0 = Math.sin(Math.PI * t0) * 1.3, h1 = Math.sin(Math.PI * t1) * 1.3;
+        const a = V(fx, y + h0, z0), c = V(fx, y + h1, z1);
+        const u0 = land ? t0 : 1 - t0, u1 = land ? t1 : 1 - t1, nrm = V(land ? -1 : 1, 0, 0);
+        const i0 = b.vert(a, nrm, u0, 0), i1 = b.vert(c, nrm, u1, 0);
+        const i2 = b.vert(c.clone().setY(c.y + 2.3), nrm, u1, 1), i3 = b.vert(a.clone().setY(a.y + 2.3), nrm, u0, 1);
+        if (land) b.idx.push(i0, i1, i2, i0, i2, i3); else b.idx.push(i0, i2, i1, i0, i3, i2);
+      }
     }
     const mesh = new THREE.Mesh(b.build(), mat);
     mesh.name = 'pier-sign';
-    for (const l of CAST) mesh.layers.enable(l);
+    for (const l of this.cast) mesh.layers.enable(l);
     this.frame.add(mesh);
   }
 

@@ -18,7 +18,7 @@ const round = (v, k) => Math.round(v * k) / k;
 const int = (v, max, def = 0) => (Number.isInteger(v) && v >= 0 && v <= max ? v : def);
 
 /** Display name: no control characters or angle brackets, single spaces, at most 16 characters. */
-export function cleanName(name, fallback = 'Visiteur') {
+export function cleanName(name, fallback = 'Visitor') {
   const s = typeof name === 'string' ? name.replace(/\s+/g, ' ').replace(/[\p{C}<>]/gu, '').replace(/ {2,}/g, ' ').trim() : '';
   return [...s].slice(0, 16).join('').trim() || fallback;
 }
@@ -50,7 +50,7 @@ export class Presence {
     this._url = url;
     this.room = cleanRoom(room) || cleanRoom(this._query.get('room'))
       || cleanRoom(this._page.pathname.replace(/\/index\.html?$/i, '').replace(/_/g, '-')) || 'main';
-    this.name = cleanName(name ?? stored('mmf.name'), '') || `Visiteur ${10 + Math.floor(Math.random() * 90)}`;
+    this.name = cleanName(name ?? stored('mmf.name'), '') || `Visitor ${10 + Math.floor(Math.random() * 90)}`;
     this.color = int(color, 15, int(parseInt(stored('mmf.color'), 10), 15, Math.floor(Math.random() * 16)));
     this._persist();
     this.id = 0; // own id in the room (0 until connected)

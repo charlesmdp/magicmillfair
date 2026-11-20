@@ -100,15 +100,33 @@ void main() {
   bl = mix(bl, m1 / max(m0 + m1, 1e-4), smoothstep(30.0, 90.0, vDist));
   vec3 albedo = mix(a0.rgb, a1.rgb, bl);
   vec3 tint = texture(uTint, uv).rgb * 2.0;
-  albedo *= tint;
 
   vec4 nt = texture(uNormalTex, uv);
   vec2 nxz = nt.rg * 2.0 - 1.0;
   vec3 Ng = normalize(vec3(nxz.x, sqrt(max(1.0 - dot(nxz, nxz), 0.0)), nxz.y));
   vec3 N = Ng;
+  // Steep ground is bare rock, textured from the side so that it does not stretch, with tilted strata.
+  float steep = smoothstep(0.34, 0.5, 1.0 - Ng.y);
+  if (steep > 0.01) {
+    vec3 rock = uLayerColor[4];
+#ifdef USE_LAYER_TEX
+    vec2 w2 = abs(Ng.xz) / max(abs(Ng.x) + abs(Ng.z), 1e-4);
+    float sc = uLayerScale[4] * 0.6;
+    rock = texture(uLayersA, vec3(vWorld.zy * sc, 4.0)).rgb * w2.x + texture(uLayersA, vec3(vWorld.xy * sc, 4.0)).rgb * w2.y;
+    rock = mix(rock, uLayerColor[4], farMix * 0.7);
+#endif
+    // strata, and darker streaks running down the face (water stains, cracks)
+    float beds = sin(vWorld.y * 1.7 + (vWorld.x * 0.8 + vWorld.z) * 0.11 + mn.g * 6.0);
+    vec2 wf = abs(Ng.xz) / max(abs(Ng.x) + abs(Ng.z), 1e-4);
+    float streak = texture(uNoiseTex, vec2(vWorld.z * 0.045, vWorld.y * 0.006)).r * wf.x + texture(uNoiseTex, vec2(vWorld.x * 0.045, vWorld.y * 0.006)).r * wf.y;
+    rock *= (0.84 + 0.2 * beds * (0.4 + 0.6 * mn.b)) * macro * mix(1.0, 0.6, smoothstep(0.5, 0.72, streak));
+    albedo = mix(albedo, rock, steep);
+    tint = mix(tint, vec3(1.0), steep * 0.7);
+  }
+  albedo *= tint;
   float rough = 0.9, cav = 1.0;
 #if defined(USE_LAYER_TEX) && QUALITY > 0
-  float nearK = 1.0 - smoothstep(45.0, 110.0, vDist);
+  float nearK = (1.0 - smoothstep(45.0, 110.0, vDist)) * (1.0 - steep);
   if (nearK > 0.01) {
     vec4 n0 = texture(uLayersN, vec3(vWorld.xz * uLayerScale[i0], float(i0)));
     vec4 n1 = texture(uLayersN, vec3(vWorld.xz * uLayerScale[i1], float(i1)));
@@ -129,7 +147,9 @@ void main() {
 
   vec3 V = normalize(cameraPosition - vWorld);
   float shadow = sunShadow(vWorld, Ng);
-  float canopy = mix(0.52, 1.0, nt.b);
+  // under water the light is scattered: shadows soften with depth
+  if (hasWater && depth > 0.0) shadow = mix(shadow, 1.0, 0.4 * saturate(depth));
+  float canopy = mix(0.76, 1.0, nt.b);
   Surface s;
   s.albedo = albedo; s.N = N; s.Ng = Ng; s.rough = rough; s.ao = nt.a * cav * canopy; s.spec = 0.25 + 0.5 * wet; s.sss = 0.0;
   vec3 col = shadeSurface(s, vWorld, V, shadow);

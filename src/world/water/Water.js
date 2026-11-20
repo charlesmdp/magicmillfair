@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { makeMaterial, G } from '../../render/globals.js';
 import { WATER_VERT, WATER_FRAG } from './waterShader.js';
+import { fallsRibbon } from './Falls.js';
 import { PlanarReflection } from './PlanarReflection.js';
 import { loadTexture } from '../../core/Assets.js';
 
@@ -68,6 +69,7 @@ export class Water {
       uAbsorb: { value: new THREE.Vector3(0.3, 0.075, 0.055) }, uScatter: { value: new THREE.Vector3(0.012, 0.115, 0.17) },
       uRippleParams: { value: new THREE.Vector4(0.11, 0.028, 0.34, 0.06) },
     });
+    this.falls = [];
     this._buildPonds();
     this._buildStreams();
     this._buildSea();
@@ -112,7 +114,10 @@ export class Water {
     for (const s of this.data.meta.streams) {
       const pts = s.samples;
       const n = pts.length;
-      const pos = new Float32Array(n * 2 * 3), flow = new Float32Array(n * 2 * 4);
+      const pos = new Float32Array(n * 2 * 3), flow = new Float32Array(n * 2 * 4), fade = new Float32Array(n * 2);
+      const along = [0];
+      for (let i = 1; i < n; i++) along.push(along[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+      const total = along[n - 1];
       for (let i = 0; i < n; i++) {
         const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
         let tx = b[0] - a[0], tz = b[1] - a[1];
@@ -122,21 +127,72 @@ export class Water {
         const white = Math.min(1, Math.max(0, (slope - 0.1) * 4.5));
         const half = pts[i][3] / 2 + 1.1;
         const nx = -tz, nz = tx;
+        // A stream starts and ends in still water (pond, sea): it dissolves into it instead of ending on an edge.
+        const f = Math.min(1, along[i] / 2.5, (total - along[i]) / Math.min(7, total * 0.3));
         for (let k = 0; k < 2; k++) {
           const sgn = k ? 1 : -1, o = (i * 2 + k);
           pos[o * 3] = pts[i][0] + nx * half * sgn; pos[o * 3 + 1] = pts[i][2]; pos[o * 3 + 2] = pts[i][1] + nz * half * sgn;
           flow[o * 4] = tx; flow[o * 4 + 1] = tz; flow[o * 4 + 2] = speed; flow[o * 4 + 3] = white;
+          fade[o] = f * f * (3 - 2 * f);
         }
       }
       const idx = [];
-      // counter-clockwise seen from above: the surface faces the sky
-      for (let i = 0; i < n - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+      // counter-clockwise seen from above: the surface faces the sky. Sheer drops are left to the waterfalls.
+      for (let i = 0; i < n - 1; i++) {
+        const drop = pts[i][2] - pts[i + 1][2], run = along[i + 1] - along[i];
+        if (drop > run * 1.6) { this._fall(s, i, along); continue; }
+        const a = i * 2;
+        idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+      }
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
       geo.setAttribute('aFlow', new THREE.BufferAttribute(flow, 4));
+      geo.setAttribute('aFade', new THREE.BufferAttribute(fade, 1));
       geo.setIndex(idx);
       geo.computeBoundingSphere();
       this._mesh(geo, this.materials.stream, `stream:${s.id}`, 1).userData.samples = pts;
+    }
+    this._buildFalls();
+  }
+
+  // A run of sheer samples (i → i+1 is one step of it): remembered once per drop.
+  _fall(stream, i) {
+    const last = this.falls[this.falls.length - 1];
+    if (last && last.stream === stream && last.to === i) { last.to = i + 1; return; }
+    this.falls.push({ stream, from: i, to: i + 1 });
+  }
+
+  // Waterfalls: a sheet of white water leaving the lip on a parabola, and the boil where it lands.
+  _buildFalls() {
+    for (const f of this.falls) {
+      const pts = f.stream.samples;
+      const lip = pts[Math.max(0, f.from - 1)], foot = pts[Math.min(pts.length - 1, f.to + 1)];
+      const height = lip[2] - foot[2];
+      if (height < 1.5) continue; // weirs and steps are drawn by the stream itself
+      const up = pts[Math.max(0, f.from - 3)];
+      let dx = pts[f.to][0] - up[0], dz = pts[f.to][1] - up[1];
+      const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+      const side = new THREE.Vector3(-dz, 0, dx);
+      const start = new THREE.Vector3(pts[f.from][0], pts[f.from][2] + 0.03, pts[f.from][1]);
+      const v0 = 1.5 + height * 0.06; // m/s over the lip
+      const T = Math.sqrt((2 * height) / 9.81);
+      const sheet = [new THREE.Vector3(start.x - dx * 1.6, start.y + 0.02, start.z - dz * 1.6)];
+      const steps = Math.max(6, Math.round(height * 1.3));
+      for (let k = 0; k <= steps; k++) {
+        const t = (k / steps) * T;
+        sheet.push(new THREE.Vector3(start.x + dx * v0 * t, start.y - 4.905 * t * t, start.z + dz * v0 * t));
+      }
+      const wLip = pts[f.from][3] * 0.82;
+      const mesh = fallsRibbon(sheet, side, wLip, this.shared.uFoam, (k) => (k === 0 ? 0 : 1));
+      mesh.name = `falls:${f.stream.id}`;
+      this.group.add(mesh);
+      // the boil: a patch of foam on the pool, drifting downstream
+      const land = sheet[sheet.length - 1];
+      const boil = [];
+      for (let k = -1; k <= 6; k++) boil.push(new THREE.Vector3(land.x + dx * k * 1.1, foot[2] + 0.04, land.z + dz * k * 1.1));
+      const foam = fallsRibbon(boil, side, wLip * 1.9, this.shared.uFoam, (k) => [0, 1, 1, 0.9, 0.7, 0.45, 0.2, 0][k], true);
+      foam.name = `falls:${f.stream.id}:boil`;
+      this.group.add(foam);
     }
   }
 
@@ -248,7 +304,7 @@ export class Water {
     this.group.visible = false; // never reflect water in water
     // the mirrored view is only worth a pass when some water can be seen and is close enough to show it
     const needed = on && this._waterInView(camera, tier.quality === 0 ? 260 : 520, tier.quality === 0 ? 0 : 0.4);
-    const rendered = needed ? this.reflection.update(scene, camera, dt, tier.reflectionEvery) : false;
+    const rendered = needed ? this.reflection.update(scene, camera, dt, this.every || tier.reflectionEvery) : false;
     this.group.visible = true;
     this.reflectionActive = needed;
     const rp = this.shared.uReflParams.value;

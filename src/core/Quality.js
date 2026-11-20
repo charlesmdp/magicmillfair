@@ -4,7 +4,7 @@
 
 export const TIERS = {
   low: {
-    id: 'low', label: 'Léger', quality: 0,
+    id: 'low', label: 'Light', quality: 0,
     maxPixelRatio: 1.25, minScale: 0.55,
     post: false, msaa: false,
     shadowStatic: 2048, shadowDynamic: 0, shadowSoft: false,
@@ -16,7 +16,7 @@ export const TIERS = {
     particles: 0.4, layerSize: 512,
   },
   medium: {
-    id: 'medium', label: 'Équilibré', quality: 1,
+    id: 'medium', label: 'Balanced', quality: 1,
     maxPixelRatio: 1.5, minScale: 0.6,
     post: false, msaa: true,
     shadowStatic: 4096, shadowDynamic: 1024, shadowSoft: true,
@@ -28,7 +28,7 @@ export const TIERS = {
     particles: 0.7, layerSize: 512,
   },
   high: {
-    id: 'high', label: 'Élevé', quality: 2,
+    id: 'high', label: 'High', quality: 2,
     maxPixelRatio: 1.75, minScale: 0.65,
     post: true, msaa: true,
     shadowStatic: 4096, shadowDynamic: 2048, shadowSoft: true,
@@ -61,11 +61,40 @@ export function isMobile() {
   return /Android|iPhone|iPad|iPod|Mobile|Silk/i.test(ua) || (coarse && Math.min(screen.width, screen.height) < 900);
 }
 
+// On a phone every tier keeps its effects (shadows, reflections, view distance) but is fitted to a small,
+// dense screen and to little memory: half-size textures and shadow map, no multisampling (the pixels are already
+// tiny), a capped resolution, somewhat shorter detail distances. The game also sheds detail by itself when the
+// device cannot keep up (Engine._adapt), so a tier is a starting point, never a promise the phone must hold.
+const PHONE = {
+  msaa: false,
+  layerSize: 512,
+  shadowStatic: 2048,
+  maxPixelRatio: (v) => Math.min(v, 1.6),
+  minScale: (v) => Math.min(v, 0.5),
+  shadowDynamic: (v) => Math.min(v, 1024),
+  reflection: (v) => Math.min(v, 0.4),
+  terrainRange: (v) => Math.min(v, 0.9),
+  reflectionEvery: 2,
+  treeNear: (v) => Math.round(v * 0.5),
+  treeMid: (v) => Math.round(v * 0.48),
+  grassRange: (v) => Math.round(v * 0.72),
+  grassDensity: (v) => v * 0.75,
+  scatterRange: (v) => Math.round(v * 0.7),
+};
+
+/** The settings of a tier on this device. */
+export function resolveTier(id, phone = isMobile()) {
+  const t = { ...TIERS[id], phone };
+  if (phone) for (const [k, v] of Object.entries(PHONE)) t[k] = typeof v === 'function' ? v(t[k]) : v;
+  return t;
+}
+
 /** Pick a starting tier from what the browser tells us about the device. */
 export function detectTier(gl) {
   const forced = new URLSearchParams(location.search).get('q');
   if (forced && TIERS[forced]) return forced;
-  const saved = localStorage.getItem('mmf.quality');
+  let saved = null;
+  try { saved = localStorage.getItem('mmf.quality'); } catch { /* private mode */ }
   if (saved && saved !== 'auto' && TIERS[saved]) return saved;
   let gpu = '';
   try {
@@ -75,11 +104,7 @@ export function detectTier(gl) {
   const g = gpu.toLowerCase();
   const software = /swiftshader|llvmpipe|software|basic render/.test(g);
   if (software) return 'low';
-  if (isMobile()) {
-    // recent flagship GPUs can afford the balanced tier
-    if (/apple a1[5-9]|apple m\d|adreno \(tm\) 7[3-9]\d|adreno \(tm\) 8\d\d|mali-g7[1-9]\d|immortalis|xclipse/.test(g)) return 'medium';
-    return 'low';
-  }
+  if (isMobile()) return 'ultra'; // phones start at the top (in its phone-sized form) and adapt downwards
   if (/rtx|radeon rx|radeon pro|geforce gtx 1[0-9]{3}|gtx 9[78]0|arc\(tm\) a|apple m[1-9]|quadro|amd radeon\(tm\) rx/.test(g)) return 'high';
   if (/intel|iris|uhd|hd graphics|radeon\(tm\) graphics|vega/.test(g)) return 'medium';
   const cores = navigator.hardwareConcurrency || 4;

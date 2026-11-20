@@ -208,7 +208,7 @@ function testInterpolation() {
   tr.push(1000, 0, 1, 1, 1, 1);
   check('interp: malformed and stale snapshots are rejected', bad.every((r) => r === false) && tr.push(999, 5, 9, 9, 9, 9) === false && tr.buf.length === 1);
   check('names: control characters and angle brackets stripped, 16 characters max',
-    cleanName('<b>Zo\u0007é\n  la   fée</b> des manèges') === 'bZoé la fée/b de' && cleanName('  ') === 'Visiteur' && cleanName({}) === 'Visiteur' && [...cleanName('🎡'.repeat(40))].length === 16,
+    cleanName('<b>Zo\u0007é\n  la   fée</b> des manèges') === 'bZoé la fée/b de' && cleanName('  ') === 'Visitor' && cleanName({}) === 'Visitor' && [...cleanName('🎡'.repeat(40))].length === 16,
     cleanName('<b>Zo\u0007é\n  la   fée</b> des manèges'));
   check('rooms: ids are reduced to [a-z0-9_-]{1,48}', cleanRoom(' La Grande/Roue! ') === 'la-grande-roue' && cleanRoom('x'.repeat(80)).length === 48 && cleanRoom('***') === '' && cleanRoom('a_b-c') === 'a_b-c');
 }
@@ -375,7 +375,7 @@ async function testProtocol(server) {
   const e = new Client(port, 't2');
   const we = await e.hello(undefined, 'x');
   const anonymous = await d.wait((m) => m.t === 'join' && m.id === e.id);
-  check('ws: default name and colour', !!we && we.peers.length === 1 && anonymous?.name === 'Visiteur' && anonymous.color === 0, anonymous);
+  check('ws: default name and colour', !!we && we.peers.length === 1 && anonymous?.name === 'Visitor' && anonymous.color === 0, anonymous);
 
   // Garbage must be ignored without closing the connection nor crashing the server.
   const junk = ['', 'not json', '{', 'null', '[]', '42', '"s"', '{"t":"s"}', '{"t":"s","p":"x"}', '{"t":"s","p":[1,2,3]}', '{"t":"s","p":[1e999,0,0,0]}',
@@ -653,7 +653,7 @@ async function testPresence(server) {
   const seven = g.peers.get(7);
   const eight = g.peers.get(8);
   check('presence: malformed server messages are ignored, valid ones still apply',
-    g.mode === 'online' && g.id === 5 && g.peers.size === 2 && seven?.name === 'Visiteur' && seven.color === 0 && seven.visible === false && eight?.name === 'Huit' && eight.color === 2 && eight.visible && eight.x >= 4 && eight.x <= 5.5 && eight.y === 5 && eight.anim === 3 && eight.flags === 0
+    g.mode === 'online' && g.id === 5 && g.peers.size === 2 && seven?.name === 'Visitor' && seven.color === 0 && seven.visible === false && eight?.name === 'Huit' && eight.color === 2 && eight.visible && eight.x >= 4 && eight.x <= 5.5 && eight.y === 5 && eight.anim === 3 && eight.flags === 0
     && eg.filter((e) => e.type === 'emote').length === 1, { mode: g.mode, id: g.id, peers: [...g.peers.values()] });
   g.dispose();
   await new Promise((resolve) => { for (const ws of fake.clients) ws.terminate(); fake.close(resolve); });
@@ -724,7 +724,7 @@ async function testPresence(server) {
   globalThis.BroadcastChannel = BC;
   check('presence: no server and no BroadcastChannel → offline, nothing throws', error === null && JSON.stringify(es) === JSON.stringify([{ type: 'status', mode: 'offline', count: 1 }]) && solo.name === 'Seul' && solo.color === 3, { error: String(error), es });
   const anon = new Presence();
-  check('presence: default identity and room', /^Visiteur \d\d$/.test(anon.name) && Number.isInteger(anon.color) && anon.color >= 0 && anon.color <= 15 && anon.room === 'main', [anon.name, anon.color, anon.room]);
+  check('presence: default identity and room', /^Visitor \d\d$/.test(anon.name) && Number.isInteger(anon.color) && anon.color >= 0 && anon.color <= 15 && anon.room === 'main', [anon.name, anon.color, anon.room]);
 
   a.dispose();
   b.dispose();

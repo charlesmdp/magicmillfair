@@ -65,7 +65,7 @@ void main() {
   float ndl = saturate(dot(N, uSunDir));
   vec3 V = normalize(cameraPosition - p);
   float back = pow(saturate(dot(-V, uSunDir)), 3.0);
-  float canopy = mix(0.55, 1.0, nt.b);
+  float canopy = mix(0.78, 1.0, nt.b);
   // root dark and cool, tip light and warm; dry straw tips in the tall meadows
   float tall = smoothstep(0.3, 0.75, cover);
   vec3 base = mix(vec3(0.07, 0.13, 0.04), vec3(0.058, 0.095, 0.034), tall);
@@ -174,6 +174,13 @@ export class Grass {
       has[j * n + i] = any; lo[j * n + i] = mn; hi[j * n + i] = mx;
     }
     this.cover = { n, has, lo, hi };
+  }
+
+  /** How far grass is drawn (m). */
+  setRange(r) {
+    this.range = r;
+    this.nearRange = Math.min(20, r * 0.45);
+    this.uniforms.uGrass.value.x = r;
   }
 
   update(camera, playerPos) {

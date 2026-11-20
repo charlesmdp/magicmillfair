@@ -26,38 +26,52 @@ in vec2 vUv;   // x: 0..1 across the sheet, y: metres along the flow
 in vec3 vWorld;
 in float vFade;
 void main() {
+#ifdef BOIL
+  // churning foam where the water lands: cells drifting downstream
   float a1 = texture(uFoam, vec2(vUv.x * 0.9, vUv.y * 0.3 - uTime * 0.9)).r;
   float a2 = texture(uFoam, vec2(vUv.x * 1.9 + 0.37, vUv.y * 0.55 - uTime * 1.5)).r;
   float streak = smoothstep(0.3, 0.9, a1 * 0.62 + a2 * 0.5);
   float sides = smoothstep(0.0, 0.16, vUv.x) * smoothstep(1.0, 0.84, vUv.x);
   float alpha = sides * mix(0.5, 0.96, streak) * vFade;
+  vec3 tone = mix(vec3(0.3, 0.5, 0.52), vec3(0.95), streak);
+#else
+  // falling water: long streaks stretched along the fall, two layers at different speeds
+  float a1 = texture(uFoam, vec2(vUv.x * 2.3, vUv.y * 0.06 - uTime * 0.55)).r;
+  float a2 = texture(uFoam, vec2(vUv.x * 4.1 + 0.37, vUv.y * 0.11 - uTime * 0.85)).r;
+  float streak = smoothstep(0.25, 0.85, a1 * 0.6 + a2 * 0.55);
+  float sides = smoothstep(0.0, 0.24, vUv.x) * smoothstep(1.0, 0.76, vUv.x);
+  float alpha = sides * mix(0.6, 1.0, streak) * vFade;
+  vec3 tone = mix(vec3(0.64, 0.79, 0.82), vec3(1.0), streak);
+#endif
   if (alpha < 0.01) discard;
   float shadow = sunShadow(vWorld, vec3(0.0, 1.0, 0.0));
   vec3 light = hemiAmbient(vec3(0.0, 1.0, 0.0)) + uSunColor * (0.25 + 0.75 * shadow) * 0.8;
-  vec3 col = mix(vec3(0.3, 0.5, 0.52), vec3(0.95), streak) * light * 0.9;
+  vec3 col = tone * light * 0.9;
   col = applyFog(col, vWorld, cameraPosition);
   gl_FragColor = vec4(outputColor(col) * alpha, alpha);
 }
 `;
 
-let material = null;
-/** Shared material; `foam` is the uniform holding the tiling foam texture of the water system. */
-export function fallsMaterial(foam) {
-  if (!material) {
-    material = makeMaterial({
-      uniforms: { uFoam: foam }, vertexShader: VERT, fragmentShader: FRAG, side: THREE.DoubleSide,
+const materials = {};
+/** Shared materials; `foam` is the uniform holding the tiling foam texture of the water system. */
+export function fallsMaterial(foam, boil = false) {
+  const key = boil ? 'boil' : 'fall';
+  if (!materials[key]) {
+    materials[key] = makeMaterial({
+      uniforms: { uFoam: foam }, defines: boil ? { BOIL: 1 } : {}, vertexShader: VERT, fragmentShader: FRAG, side: THREE.DoubleSide,
       transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
     });
-    material.name = 'falls';
+    materials[key].name = `falls:${key}`;
   }
-  return material;
+  return materials[key];
 }
 
 /**
  * Ribbon along `points` (THREE.Vector3, in flow order), `width` metres wide along `side` (unit vector).
- * `fade(i)` gives the opacity at each point (default 1).
+ * `fade(i)` gives the opacity at each point (default 1). `boil`: churning foam lying on the water instead of
+ * a falling sheet.
  */
-export function fallsRibbon(points, side, width, foam, fade = () => 1) {
+export function fallsRibbon(points, side, width, foam, fade = () => 1, boil = false) {
   const n = points.length;
   const pos = new Float32Array(n * 6), uv = new Float32Array(n * 4), fd = new Float32Array(n * 2);
   let v = 0;
@@ -78,7 +92,7 @@ export function fallsRibbon(points, side, width, foam, fade = () => 1) {
   geo.setAttribute('aFade', new THREE.BufferAttribute(fd, 1));
   geo.setIndex(idx);
   geo.computeBoundingSphere();
-  const mesh = new THREE.Mesh(geo, fallsMaterial(foam));
+  const mesh = new THREE.Mesh(geo, fallsMaterial(foam, boil));
   mesh.name = 'falls';
   mesh.renderOrder = 12; // after the water surfaces
   mesh.matrixAutoUpdate = false;

@@ -1,6 +1,6 @@
 // Renderer, frame loop, resolution scaling and performance bookkeeping.
 import * as THREE from 'three';
-import { TIERS, detectTier } from './Quality.js';
+import { detectTier, resolveTier } from './Quality.js';
 import { G, globalDefines, refreshGlobalDefines } from '../render/globals.js';
 import { setMaxAnisotropy } from './Assets.js';
 
@@ -11,17 +11,18 @@ export class Engine {
     const probe = document.createElement('canvas').getContext('webgl2');
     this.tierId = detectTier(probe);
     probe?.getExtension('WEBGL_lose_context')?.loseContext();
-    this.tier = TIERS[this.tierId];
+    this.tier = resolveTier(this.tierId);
 
     this.scene = new THREE.Scene();
     this.scene.matrixWorldAutoUpdate = true;
     this.camera = new THREE.PerspectiveCamera(55, 1, 0.35, 3200);
     this.camera.position.set(-70, 32, -40);
     this.scale = 1; // dynamic resolution factor (within the tier limits)
+    this.detail = 1; // dynamic detail factor: view distances of vegetation, refresh rate of shadows and reflections
     this.frame = 0;
     this.time = 0;
     this.dt = 0.016;
-    this.listeners = { resize: new Set(), tier: new Set() };
+    this.listeners = { resize: new Set(), tier: new Set(), detail: new Set() };
     this.postEnabled = false;
     this._createRenderer();
     this.perf = { fps: 60, ms: 16, cpuMs: 0, calls: 0, triangles: 0, samples: [] };
@@ -112,14 +113,54 @@ export class Engine {
     }
   }
 
-  /** Dynamic resolution: trade pixels for frame rate, slowly and with hysteresis. */
+  setDetail(d) {
+    d = Math.round(Math.min(1, Math.max(0.5, d)) * 100) / 100;
+    if (d === this.detail) return;
+    this.detail = d;
+    this.listeners.detail.forEach((fn) => fn(d));
+  }
+
+  /**
+   * Keeps the game smooth: when frames take too long, pixels go first (resolution scale), then detail (how far
+   * trees, grass and flowers are drawn in full, how often shadows and reflections are refreshed). Both come
+   * back, slowly, when there is room again.
+   */
   _adapt(ms) {
-    const target = 1000 / 58;
-    if (ms > target * 1.22) this.setScale(this.scale - 0.07);
-    else if (ms < target * 1.04 && this.scale < 1) {
-      this._calm = (this._calm || 0) + 1;
-      if (this._calm >= 4) { this._calm = 0; this.setScale(this.scale + 0.05); }
-    } else this._calm = 0;
+    // The frame time to aim for: 58 frames a second — or, once shedding everything has been tried and bought
+    // nothing, the frame time this device is held at anyway (a browser capped at 30 frames a second in
+    // low-power mode, a slow processor): quality then comes back, since lowering it does not help.
+    if (this._floor && ms < this._floor * 0.9) this._floor = 0; // it can do better after all
+    const target = Math.max(1000 / 58, this._floor || 0);
+    const now = this.time;
+    if (ms > target * 1.12) {
+      this._calm = 0;
+      const episode = this._episode || (this._episode = { ms });
+      const atMin = this.scale <= this.tier.minScale + 0.01 && this.detail <= 0.5;
+      if (atMin) {
+        if (ms > episode.ms * 0.9) this._floor = ms; // all the way down for nothing: the limit is elsewhere
+        return;
+      }
+      // Dropping again right after a raise means that level cannot be held: wait twice as long before the next
+      // try (up to two minutes), so that the picture does not keep switching back and forth.
+      if (now - (this._raised ?? -1e9) < 8) this._patience = Math.min(240, (this._patience || 4) * 2);
+      this._dropped = now;
+      if (this.scale > 0.8) this.setScale(this.scale - 0.07);
+      else if (this.detail > 0.5) this.setDetail(this.detail - 0.1);
+      else this.setScale(this.scale - 0.07);
+    } else {
+      this._episode = null;
+      if (ms < target * 1.04 && (this.scale < 1 || this.detail < 1)) {
+        this._calm = (this._calm || 0) + 1;
+        if (this._calm >= (this._patience || 4)) {
+          this._calm = 0;
+          // the previous raise held (nothing was shed since): conditions are improving, try sooner next time
+          if (this._raised !== undefined && (this._dropped ?? -1e9) < this._raised) this._patience = Math.max(4, (this._patience || 4) / 2);
+          this._raised = now;
+          if (this.detail < 1 && this.scale >= 0.79) this.setDetail(this.detail + 0.1);
+          else this.setScale(this.scale + 0.05);
+        }
+      } else this._calm = 0;
+    }
   }
 
   start(fn) {

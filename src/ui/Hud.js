@@ -12,7 +12,7 @@ const ICON = {
   up: '<svg viewBox="0 0 24 24"><path d="M6 14l6-6 6 6"/></svg>',
   down: '<svg viewBox="0 0 24 24"><path d="M6 10l6 6 6-6"/></svg>',
 };
-const EMOTE_LABEL = ['Saluer', 'Danser', 'Bravo', 'Oui', 'Non', 'Hop !'];
+const EMOTE_LABEL = ['Wave', 'Dance', 'Thumbs up', 'Yes', 'No', 'Punch'];
 
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
 
@@ -39,15 +39,15 @@ export class Hud {
         <svg class="wheel" viewBox="0 0 64 64" aria-hidden="true"><g fill="none" stroke="#f2c14e" stroke-width="2.4"><circle cx="32" cy="32" r="26"/><circle cx="32" cy="32" r="5" fill="#f2c14e"/>
           ${Array.from({ length: 8 }, (_, i) => { const a = (i / 8) * Math.PI * 2; return `<path d="M32 32L${(32 + Math.cos(a) * 26).toFixed(1)} ${(32 + Math.sin(a) * 26).toFixed(1)}"/><circle cx="${(32 + Math.cos(a) * 26).toFixed(1)}" cy="${(32 + Math.sin(a) * 26).toFixed(1)}" r="3.4" fill="#e8795a" stroke="none"/>`; }).join('')}</g></svg>
         <h1 class="title">Magic <em>Mill</em> Fair</h1>
-        <p class="subtitle">Un moulin, sa vallée, ses étangs… et au bout du ruisseau, une grande jetée de fête foraine.</p>
+        <p class="subtitle">An old mill, its ponds and its valley between the mountains… and down by the sea, a grand pier with its big wheel.</p>
         <div class="bar"><i></i></div>
-        <div class="hint load">Préparation du monde…</div>
+        <div class="hint load">Getting the world ready…</div>
         <div class="form">
-          <label for="mmf-name">Votre nom</label>
+          <label for="mmf-name">Your name</label>
           <input id="mmf-name" type="text" maxlength="16" autocomplete="off" spellcheck="false" />
-          <label>Couleur</label>
+          <label>Colour</label>
           <div class="swatches"></div>
-          <button class="go" type="button">Explorer</button>
+          <button class="go" type="button">Explore</button>
           <div class="keys"></div>
         </div>
       </div>`;
@@ -66,7 +66,7 @@ export class Hud {
     this.loadHint.style.color = '#ffb4a2';
   }
 
-  /** Show name / colour form; resolves when the visitor presses "Explorer". */
+  /** Show name / colour form; resolves when the visitor presses "Explore". */
   welcome({ name, color, touch }) {
     const s = this.splash;
     s.classList.add('glass');
@@ -79,14 +79,14 @@ export class Hud {
       const b = el('button');
       b.type = 'button';
       b.style.background = `#${c.toString(16).padStart(6, '0')}`;
-      b.setAttribute('aria-label', `Couleur ${i + 1}`);
+      b.setAttribute('aria-label', `Colour ${i + 1}`);
       b.setAttribute('aria-pressed', String(i === chosen));
       b.onclick = () => { chosen = i; sw.querySelectorAll('button').forEach((x, k) => x.setAttribute('aria-pressed', String(k === i))); this.emit('color', i); };
       sw.append(b);
     });
     s.querySelector('.keys').innerHTML = touch
-      ? 'Glissez à gauche pour marcher, à droite pour regarder.'
-      : '<kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd> ou flèches · <kbd>Maj</kbd> courir · <kbd>Espace</kbd> sauter · <kbd>F</kbd> caméra libre';
+      ? 'Drag on the left to walk, on the right to look around.'
+      : '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / <kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd> or arrows · <kbd>Shift</kbd> run · <kbd>Space</kbd> jump · <kbd>F</kbd> free camera · <kbd>M</kbd> map';
     return new Promise((resolve) => {
       const go = () => {
         const n = input.value.trim().slice(0, 16) || name;
@@ -104,29 +104,32 @@ export class Hud {
     const h = (this.hud = el('div', 'hud'));
     h.innerHTML = `
       <div class="top-left">
-        <div class="pill zone">Le Moulin</div>
-        <div class="pill players"><span class="dot"></span><span class="count">Seul</span></div>
+        <div class="pill zone">The Mill</div>
+        <div class="pill players"><span class="dot"></span><span class="count">On your own</span></div>
       </div>
       <div class="top-right">
-        <button class="icon" data-act="emote" title="Émotes (T)" aria-label="Émotes">${ICON.smile}</button>
-        <button class="icon" data-act="camera" title="Caméra libre (F)" aria-label="Caméra libre" aria-pressed="false">${ICON.cam}</button>
-        <button class="icon" data-act="settings" title="Réglages" aria-label="Réglages">${ICON.gear}</button>
+        <button class="icon" data-act="emote" title="Emotes (T)" aria-label="Emotes">${ICON.smile}</button>
+        <button class="icon" data-act="camera" title="Free camera (F)" aria-label="Free camera" aria-pressed="false">${ICON.cam}</button>
+        <button class="icon" data-act="settings" title="Settings" aria-label="Settings">${ICON.gear}</button>
       </div>
-      <div class="toast"><small>Vous entrez dans</small><span></span></div>
+      <div class="toast"><small>Now entering</small><span></span></div>
       <div class="pill note"></div>
       <div class="tags"></div>
-      <div class="minimap"><canvas width="192" height="192"></canvas></div>
+      <button class="minimap" type="button" title="Open the map (M)" aria-label="Open the map"><canvas width="192" height="192"></canvas></button>
+      <div class="bigmap" role="dialog" aria-label="Map">
+        <div class="sheet"><canvas></canvas><div class="legend"><b>Map</b><span>Click anywhere to close</span></div></div>
+      </div>
       <div class="stats"></div>
       <div class="emotes">${EMOTES.map((e, i) => `<button data-emote="${i}">${EMOTE_LABEL[i]}</button>`).join('')}</div>
-      <div class="panel" role="dialog" aria-label="Réglages">
-        <h2>Réglages</h2>
-        <h3>Qualité graphique</h3>
+      <div class="panel" role="dialog" aria-label="Settings">
+        <h2>Settings</h2>
+        <h3>Graphics quality</h3>
         <div class="seg quality"><button data-q="auto">Auto</button>${TIER_ORDER.map((q) => `<button data-q="${q}">${TIERS[q].label}</button>`).join('')}</div>
         <p class="q-info"></p>
-        <h3>Affichage</h3>
-        <div class="row"><span>Mini-carte</span><button class="switch" data-sw="map" aria-pressed="true" aria-label="Mini-carte"></button></div>
-        <div class="row"><span>Mesures de performance</span><button class="switch" data-sw="stats" aria-pressed="false" aria-label="Mesures"></button></div>
-        <h3>Votre nom</h3>
+        <h3>Display</h3>
+        <div class="row"><span>Minimap</span><button class="switch" data-sw="map" aria-pressed="true" aria-label="Minimap"></button></div>
+        <div class="row"><span>Performance figures</span><button class="switch" data-sw="stats" aria-pressed="false" aria-label="Performance figures"></button></div>
+        <h3>Your name</h3>
         <input type="text" maxlength="16" class="name" autocomplete="off" spellcheck="false" />
         <p class="net-info"></p>
       </div>`;
@@ -140,6 +143,11 @@ export class Hud {
     this.emotes = h.querySelector('.emotes');
     this.mapEl = h.querySelector('.minimap');
     this.mapCtx = this.mapEl.querySelector('canvas').getContext('2d');
+    this.bigEl = h.querySelector('.bigmap');
+    this.bigCanvas = this.bigEl.querySelector('canvas');
+    this.mapEl.onclick = () => { this.toggleBigMap(true); this.mapEl.blur(); };
+    this.bigEl.onclick = () => this.toggleBigMap(false);
+    for (const ev of ['mousedown', 'touchstart', 'wheel']) this.bigEl.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
     this.mapImg = new Image();
     this.mapImg.src = assetUrl('world/map.jpg');
     h.querySelectorAll('[data-act]').forEach((b) => (b.onclick = () => {
@@ -166,9 +174,9 @@ export class Hud {
     for (const n of [this.panel, this.emotes]) for (const ev of ['mousedown', 'touchstart', 'wheel']) n.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
   }
 
-  setQuality(choice, tier, scale) {
+  setQuality(choice, tier, scale, detail = 1, phone = false) {
     this.hud.querySelectorAll('.quality button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.q === choice)));
-    this.hud.querySelector('.q-info').textContent = `Palier actif : ${TIERS[tier].label} · résolution ${Math.round(scale * 100)} %. Le mode Auto ajuste la résolution pour rester fluide.`;
+    this.hud.querySelector('.q-info').textContent = `Running: ${TIERS[tier].label}${phone ? ' (phone profile)' : ''} · resolution ${Math.round(scale * 100)} % · detail ${Math.round(detail * 100)} %. The game lowers resolution and detail by itself whenever needed to stay smooth.`;
   }
   setName(n) { this.nameInput.value = n; }
   setCameraMode(free) { this.cameraBtn.setAttribute('aria-pressed', String(free)); this.root.classList.toggle('free', free); }
@@ -197,12 +205,12 @@ export class Hud {
   setPresence(mode, count) {
     const dot = this.hud.querySelector('.players .dot');
     dot.className = `dot ${mode === 'online' ? 'online' : mode === 'local' ? 'local' : ''}`;
-    this.hud.querySelector('.players .count').textContent = count <= 1 ? (mode === 'online' ? 'En ligne · seul' : 'Seul') : `${count} visiteurs`;
+    this.hud.querySelector('.players .count').textContent = count <= 1 ? (mode === 'online' ? 'Online · on your own' : 'On your own') : `${count} visitors`;
     this.hud.querySelector('.net-info').textContent = mode === 'online'
-      ? 'Connecté : les visiteurs de cette adresse se voient.'
+      ? 'Connected: everyone who opens this address sees each other.'
       : mode === 'local'
-        ? 'Mode local : seuls les onglets de ce navigateur se voient (aucun serveur de présence détecté).'
-        : 'Hors ligne.';
+        ? 'Local mode: only the tabs of this browser see each other (no presence server found).'
+        : 'Offline.';
   }
 
   // ---------- name tags
@@ -214,27 +222,78 @@ export class Hud {
     return t;
   }
 
-  // ---------- minimap (north up, centred on the viewer)
-  drawMap(x, z, heading, others, half = 512) {
-    if (this.mapEl.style.display === 'none' || !this.mapImg.complete) return;
-    const ctx = this.mapCtx, S = 192, view = 150; // metres across
-    const k = S / view;
+  // ---------- maps (north up). `view` is the window of the world drawn in map.jpg: { x0, z0, x1, z1 }.
+  setMap(view, zones) { this.mapView = view; this.zones = zones; }
+
+  _marker(ctx, px, pz, heading, size) {
+    ctx.save();
+    ctx.translate(px, pz);
+    ctx.rotate(-heading);
+    ctx.beginPath(); ctx.moveTo(0, -size); ctx.lineTo(size * 0.72, size * 0.78); ctx.lineTo(0, size * 0.4); ctx.lineTo(-size * 0.72, size * 0.78); ctx.closePath();
+    ctx.fillStyle = '#f2c14e'; ctx.fill(); ctx.lineWidth = Math.max(1.5, size * 0.16); ctx.strokeStyle = '#1b2a22'; ctx.stroke();
+    ctx.restore();
+  }
+
+  /** The round minimap, centred on the viewer. */
+  drawMap(x, z, heading, others) {
+    const v = this.mapView, img = this.mapImg;
+    if (!v || this.mapEl.style.display === 'none' || !img.complete || !img.width) return;
+    const ctx = this.mapCtx, S = 192, view = 130; // metres across
+    const k = S / view, ppm = img.width / (v.x1 - v.x0);
     ctx.clearRect(0, 0, S, S);
-    const img = this.mapImg, ppm = img.width / (half * 2);
-    ctx.drawImage(img, (x + half - view / 2) * ppm, (z + half - view / 2) * ppm, view * ppm, view * ppm, 0, 0, S, S);
-    ctx.fillStyle = '#fff';
+    ctx.drawImage(img, (x - view / 2 - v.x0) * ppm, (z - view / 2 - v.z0) * ppm, view * ppm, view * ppm, 0, 0, S, S);
     for (const o of others) {
       const px = S / 2 + (o.x - x) * k, pz = S / 2 + (o.z - z) * k;
       if (px < 0 || pz < 0 || px > S || pz > S) continue;
       ctx.beginPath(); ctx.arc(px, pz, 4, 0, 7); ctx.fillStyle = `#${AVATAR_COLORS[o.color % 16].toString(16).padStart(6, '0')}`; ctx.fill();
       ctx.lineWidth = 1.5; ctx.strokeStyle = '#fff'; ctx.stroke();
     }
-    ctx.save();
-    ctx.translate(S / 2, S / 2);
-    ctx.rotate(-heading);
-    ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(6.5, 7); ctx.lineTo(0, 3.5); ctx.lineTo(-6.5, 7); ctx.closePath();
-    ctx.fillStyle = '#f2c14e'; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = '#1b2a22'; ctx.stroke();
-    ctx.restore();
+    this._marker(ctx, S / 2, S / 2, heading, 9);
+  }
+
+  get bigMapOpen() { return this.bigEl.classList.contains('on'); }
+  toggleBigMap(open = !this.bigMapOpen) {
+    this.bigEl.classList.toggle('on', open);
+    if (open) { this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this._bigSize = ''; }
+  }
+
+  /** The whole valley, with the places, the other visitors and oneself. */
+  drawBigMap(x, z, heading, others) {
+    const v = this.mapView, img = this.mapImg;
+    if (!v || !this.bigMapOpen || !img.complete || !img.width) return;
+    const cv = this.bigCanvas;
+    // as large as the window allows, at the density of the screen
+    const aspect = (v.x1 - v.x0) / (v.z1 - v.z0);
+    const w = Math.round(Math.min(window.innerWidth * 0.94, (window.innerHeight * 0.84 - 34) * aspect, 1180)), h = Math.round(w / aspect);
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    if (this._bigSize !== `${w}x${h}`) { this._bigSize = `${w}x${h}`; cv.width = w * dpr; cv.height = h * dpr; cv.style.width = `${w}px`; cv.style.height = `${h}px`; }
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.drawImage(img, 0, 0, w, h);
+    const k = w / (v.x1 - v.x0), X = (wx) => (wx - v.x0) * k, Z = (wz) => (wz - v.z0) * k;
+    // place names
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `600 ${Math.max(11, Math.round(w / 62))}px Georgia, 'Times New Roman', serif`;
+    ctx.lineJoin = 'round';
+    for (const zone of this.zones || []) {
+      const half = ctx.measureText(zone.name).width / 2 + 6;
+      const tx = Math.min(w - half, Math.max(half, X(zone.x))), tz = Z(zone.z); // never cut by the edge
+      ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(14, 22, 17, 0.8)'; ctx.strokeText(zone.name, tx, tz);
+      ctx.fillStyle = '#f6f1e4'; ctx.fillText(zone.name, tx, tz);
+    }
+    // the others, with their names
+    ctx.font = `600 ${Math.max(10, Math.round(w / 80))}px system-ui, sans-serif`;
+    for (const o of others) {
+      const px = X(o.x), pz = Z(o.z);
+      ctx.beginPath(); ctx.arc(px, pz, 5.5, 0, 7); ctx.fillStyle = `#${AVATAR_COLORS[o.color % 16].toString(16).padStart(6, '0')}`; ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke();
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(14, 22, 17, 0.8)'; ctx.strokeText(o.name, px, pz - 14);
+      ctx.fillStyle = '#fff'; ctx.fillText(o.name, px, pz - 14);
+    }
+    // oneself: a pulsing ring so that the arrow is found at once
+    const px = X(x), pz = Z(z), pulse = (performance.now() / 1400) % 1;
+    ctx.beginPath(); ctx.arc(px, pz, 10 + pulse * 16, 0, 7); ctx.lineWidth = 2; ctx.strokeStyle = `rgba(242, 193, 78, ${(1 - pulse) * 0.9})`; ctx.stroke();
+    this._marker(ctx, px, pz, heading, 12);
   }
 
   // ---------- touch controls

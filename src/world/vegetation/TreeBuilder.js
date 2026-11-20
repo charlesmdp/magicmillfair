@@ -113,9 +113,22 @@ export const SPECIES = {
     ],
     cards: { count: 76, size: [0.8, 1.1], lod1: 28, lod1Size: 1.5 }, leafTint: [0.86, 0.9, 0.84], sway: 0.45,
   },
+  // The old tree: an oak several centuries old, twice the height of the others, alone in its clearing.
+  elder: {
+    height: 38, bark: 'oak', leaf: 'oak', barkColor: [0.17, 0.145, 0.12],
+    trunk: { len: 11.5, radius: 1.55, segs: 8, lean: 0.03, wander: 0.045, taper: 0.22, sides: 14, flare: 1.25 },
+    levels: [
+      { len: [17, 21], segs: 9, count: [7, 8], angle: [30, 64], span: [0.5, 1.0], up: 0.42, wander: 0.2, taper: 0.7, radius: 0.5, sides: 8, shape: 'flat' },
+      { len: [7.5, 10.5], segs: 5, count: [7, 9], angle: [42, 72], span: [0.25, 1.0], up: 0.22, wander: 0.24, taper: 0.8, radius: 0.5, sides: 5, shape: 'mid' },
+      { len: [3.2, 4.6], segs: 3, count: [5, 6], angle: [35, 68], span: [0.25, 1.0], up: 0.16, wander: 0.3, taper: 0.8, radius: 0.5, sides: 3 },
+      { len: [1.4, 2.2], segs: 2, count: [3, 4], angle: [35, 65], span: [0.3, 1.0], up: 0.15, wander: 0.3, taper: 0.8, radius: 0.5, sides: 0 },
+    ],
+    cards: { count: 1500, size: [2.0, 2.9], lod1: 420, lod1Size: 1.7 }, leafTint: [0.7, 0.84, 0.68], sway: 0.5,
+    lodScale: 3, // a landmark: drawn in full three times further than the other trees
+  },
 };
 
-export const SPECIES_ORDER = ['oak', 'beech', 'birch', 'willow', 'pine', 'cypress', 'plane', 'palm', 'bush', 'bloom'];
+export const SPECIES_ORDER = ['oak', 'beech', 'birch', 'willow', 'pine', 'cypress', 'plane', 'palm', 'bush', 'bloom', 'elder'];
 
 // ---------------------------------------------------------------------------
 
