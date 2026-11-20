@@ -220,7 +220,7 @@ export class MillWorks {
     // over the sluice: from the dam to the path around the pond, just upstream of the gate (both banks are
     // at pond level there; downstream the ground falls away to the mill pool)
     const { c, fd, side } = this.sluice;
-    this._bridgeOver(parts, c.x - fd.x * 1.05, c.z - fd.z * 1.05, side.x, side.z, LEVELS.pondBig, 1.6, { camber: 0.1, posts: 3, above: 0.3, onto: 1.4, reach: 5, tint: [0.96, 0.9, 0.84] });
+    this._bridgeOver(parts, c.x - fd.x * 1.4, c.z - fd.z * 1.4, side.x, side.z, LEVELS.pondBig, 1.6, { camber: 0.1, posts: 3, above: 0.3, onto: 1.4, reach: 5, tint: [0.96, 0.9, 0.84] });
     // over the tail race, between the lawn and the mill pool
     const tail = this.stream('raceTail');
     const ti = tail.findIndex((q) => q[0] > -107.2);

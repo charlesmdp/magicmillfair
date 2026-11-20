@@ -30,6 +30,7 @@ export class PierZone {
     this.colliders = [];
     this.animated = [];
     this.ground = (x, z) => this.data.heightAt(x, z);
+    this._surf = new Float32Array(8);
   }
 
   build() {
@@ -177,10 +178,13 @@ export class PierZone {
   }
 
   _beach(parts) {
-    // beach huts in a row below the boardwalk, parasols and towels on the sand
+    // On the sand, seaward of the boardwalk: beach huts in a row, facing the sea, then parasols and towels.
+    // (n below points from the boardwalk towards the sea: the promenade is listed from north to south.)
     const paint = parts.get('paint'), cloth = parts.get('doubleSided');
     const samples = this.data.meta.promenade;
     const hues = [PAL.red, PAL.teal, PAL.yellow, PAL.blue, PAL.pink, PAL.orange, PAL.green];
+    const brook = this.data.meta.streams.find((q) => q.id === 'brook').samples;
+    const nearBrook = (x, z, r) => brook.some((q) => (q[0] - x) ** 2 + (q[1] - z) ** 2 < r * r);
     let n = 0;
     for (let i = 3; i < samples.length - 3; i++) {
       const p = samples[i], a = samples[i - 1], b = samples[i + 1];
@@ -188,11 +192,11 @@ export class PierZone {
       const l = Math.hypot(nx, nz); nx /= l; nz /= l;
       const dPier = Math.hypot(p[0] - PIER.rootX, p[1] - PIER.rootZ);
       // huts: two rows of twelve on either side of the pier
-      if (dPier > 22 && dPier < 78 && i % 2 === 0 && this.data.waterAt(p[0], p[1]) < -500) { // (not on the brook)
-        const hx = p[0] - nx * (PROMENADE.width / 2 + 4.2), hz = p[1] - nz * (PROMENADE.width / 2 + 4.2);
+      const hx = p[0] + nx * (PROMENADE.width / 2 + 3.4), hz = p[1] + nz * (PROMENADE.width / 2 + 3.4);
+      if (dPier > 22 && dPier < 78 && i % 2 === 0 && !nearBrook(hx, hz, 7)) {
         const gy = this.ground(hx, hz);
         const col = hues[n++ % hues.length];
-        const yaw = Math.atan2(-nx, -nz);
+        const yaw = Math.atan2(nx, nz);
         paint.place(hx, gy + 0.25, hz, yaw);
         // stilts, striped body, little gable roof, door
         paint.tint(0.9, 0.88, 0.84, 1);
@@ -218,12 +222,13 @@ export class PierZone {
         this.colliders.push({ type: 'circle', x: hx, z: hz, r: 1.25 });
       }
       // parasols and towels scattered on the dry sand
-      if (i % 3 === 0 && p[1] < -40 && p[1] > -305 && dPier > 16) {
+      if (i % 2 === 1 && dPier > 14) {
         const h = Math.sin(i * 12.9898) * 43758.5453; const r = h - Math.floor(h);
-        const off = PROMENADE.width / 2 + 6.5 + r * 8;
-        const px = p[0] - nx * off, pz = p[1] - nz * off;
+        const off = PROMENADE.width / 2 + 7.5 + r * 8.5;
+        const px = p[0] + nx * off, pz = p[1] + nz * off;
         const gy = this.ground(px, pz);
-        if (gy < 0.7) continue;
+        // dry sand only: above the swash, away from the brook's mouth
+        if (gy < 0.9 || nearBrook(px, pz, 6) || this.data.surfaceAt(px, pz, this._surf)[5] < 0.5) continue;
         const col = hues[(i * 5) % hues.length];
         cloth.place(px, gy, pz, r * 6.28, 0.12 * (r - 0.5));
         paint.place(px, gy, pz, r * 6.28, 0.12 * (r - 0.5));

@@ -1276,7 +1276,7 @@ log('preview');
   }
   const treeCols = { oak: [40, 92, 30], beech: [62, 112, 36], birch: [96, 136, 52], willow: [110, 140, 60], pine: [22, 62, 40], cypress: [18, 52, 30], plane: [70, 110, 40], palm: [60, 120, 60], bush: [34, 84, 36], bloom: [186, 110, 140], elder: [30, 78, 26] };
   for (const t of trees) {
-    const r = t.r * 0.5;
+    const r = t.species === 'elder' ? 19 * t.scale : t.r * 0.5; // (its crown, not the clearing it keeps)
     const c = treeCols[t.species];
     for (let j = Math.floor(gi(t.z - r)); j <= Math.ceil(gi(t.z + r)); j++) for (let i = Math.floor(gi(t.x - r)); i <= Math.ceil(gi(t.x + r)); i++) {
       if (i < 0 || j < 0 || i >= N || j >= N) continue;
@@ -1286,6 +1286,23 @@ log('preview');
       const q = idx(i, j) * 3;
       buf[q] = c[0] * k; buf[q + 1] = c[1] * k; buf[q + 2] = c[2] * k;
     }
+  }
+  // what is built: roofs, the pier and its big wheel (seen from above: a line across the pier)
+  const paint = (poly, rgb, shade = 0) => {
+    const mask = new Uint8Array(N * N);
+    fillPolygon(mask, N, N, poly.map((p) => [gi(p[0]), gi(p[1])]));
+    for (let q = 0; q < N * N; q++) if (mask[q]) {
+      const k = 1 - shade * hash2(q % N, (q / N) | 0, 9);
+      buf[q * 3] = rgb[0] * k; buf[q * 3 + 1] = rgb[1] * k; buf[q * 3 + 2] = rgb[2] * k;
+    }
+  };
+  for (const key of ['house', 'annexA', 'annexB', 'shed']) paint(L.frameRect(L.MILL[key], 0.2), [74, 80, 96], 0.12);
+  {
+    const P = L.PIER, w = P.width / 2, hw = P.headWidth / 2, h0 = P.length - P.headLength, at = L.pierToWorld;
+    paint([at(0, -w), at(h0, -w), at(h0, -hw), at(P.length, -hw), at(P.length, hw), at(h0, hw), at(h0, w), at(0, w)], [178, 152, 118], 0.14);
+    const a = P.wheel.along, r = P.wheel.radius;
+    paint([at(a - 1.4, -r), at(a + 1.4, -r), at(a + 1.4, r), at(a - 1.4, r)], [240, 238, 232]);
+    paint([at(a - 2.6, -2.6), at(a + 2.6, -2.6), at(a + 2.6, 2.6), at(a - 2.6, 2.6)], [214, 60, 46]);
   }
   await savePng(path.join(PREVIEW, 'world.png'), buf, N, N, 3);
   // the map of the HUD: the playable area and a little around it, 2 pixels per metre
