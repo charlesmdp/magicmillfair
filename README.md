@@ -2,8 +2,10 @@
 
 A 3D world to explore in the browser: an old mill with its ponds, its mill race and its water wheel, in a
 valley closed by mountains — and, a short walk down the valley, a cove with a promenade, a grand pier and
-its big wheel. Stylised realism, a cosy adventure-game mood, playable with a keyboard, a gamepad or a
-finger, alone or together.
+its big wheel. Around it: a stairway cut in the rock up to a village high above everything, caves (one of
+them behind the waterfall), an island with a path winding to its top, a camp with hammocks, places to sit
+down and work. Stylised realism, a cosy adventure-game mood, playable with a keyboard, a gamepad or a
+finger, alone or together — with a chat, and emotes that summon animals of light.
 
 ![The valley from above the pier](docs/valley.jpg)
 
@@ -14,6 +16,13 @@ finger, alone or together.
 | ![The waterfall](docs/waterfall.jpg) | ![The old tree](docs/oldtree.jpg) |
 | ![The great pond](docs/pond.jpg) | ![Looking back at the valley from the pier](docs/seafront.jpg) |
 | ![The entrance of the pier](docs/pier.jpg) | ![The beach and the pier](docs/beach.jpg) |
+| ![The valley from the lookout of the village](docs/lookout.jpg) | ![The high village](docs/village.jpg) |
+| ![The island](docs/island.jpg) | ![The stairway cut in the rock](docs/stairway.jpg) |
+| ![Behind the waterfall](docs/behindthefall.jpg) | ![The hidden grotto](docs/grotto.jpg) |
+| ![The camp and its hammocks](docs/camp.jpg) | ![In a hammock](docs/hammock.jpg) |
+| ![The deck on the pond](docs/deck.jpg) | ![At work on a beanbag](docs/atwork.jpg) |
+| ![The beanbags of the beach](docs/lounge.jpg) | ![A cave under the mountains](docs/cave.jpg) |
+| ![The stag](docs/stag.jpg) | ![The tiger](docs/tiger.jpg) |
 
 ## Getting started
 
@@ -114,17 +123,32 @@ People who open **the same address** share the same room. `?room=name` makes a p
 | Zoom | wheel | pinch | |
 | Free camera | F (Space / C to go up and down, Shift to go faster) | camera button | |
 | Map | M, or click the minimap (click again or Escape to close) | tap the minimap | |
-| Emotes | T, or 1 to 6 | smiley button | |
+| Sit, lie down, board, get up | E when the action is offered (walking away or jumping gets up too) | tap the action shown above the jump button | |
+| Open or close the laptop | L, once seated on a beanbag | tap the second action | |
+| Chat | Enter, type, Enter (Escape to cancel) | speech-bubble button | |
+| Emotes | T, or 1 to 6; 7 to 0 for the stag, the wolf, the tiger and the dragon | smiley button | |
 | Performance figures | P | Settings → Performance figures | |
 | Back to the mill | R | | |
 
-The character walks, runs, jumps, swims in the ponds and in the sea, and walks on the bridges, the garden
-steps and the pier.
+The character walks, runs, jumps, and walks on the bridges, the steps and the pier. It swims in the ponds
+and in the sea (Shift for a sprint), sits on benches, logs, chairs and beanbags, lies in hammocks, and rides
+the big wheel: stand on the platform under it, board a car when one comes by, ask to get off and you are
+put down at the bottom.
+
+**Chat**: what you say appears in a log and in a bubble over your head, for those who are in the room at
+that moment. Nothing is stored anywhere: no database, no history — a line is relayed and forgotten (200
+characters at most, five in a row then one every two seconds). What the game keeps is on your own device:
+your name, your colour, the quality tier.
+
+**Animals of light**: four emotes open a sun-coloured ring above you in which a mechanical animal appears
+for five to six seconds — a stag that rears, a wolf that howls, a tiger that leaps through the ring, a dragon
+that coils round it. Everybody around sees them.
 
 ## The world
 
-The playable area is about 530 m by 360 m, the cove included — some 15 hectares (the terrain itself is
-1 km², most of it mountains that are only scenery).
+The valley floor is about 530 m by 360 m, the cove included — some 15 hectares (the terrain itself is
+1 km², most of it mountains that are only scenery). A few places are reached from it: up the western
+mountain, under the rock, out at sea.
 
 - **The mill**: the house, its outbuilding, the courtyard, the rock garden in terraces with its steps, the
   head race, the wheel in its pit, the tail race, the dam with its sluice and its spillway, and footbridges
@@ -135,8 +159,23 @@ The playable area is about 530 m by 360 m, the cove included — some 15 hectare
   paths linking everything (the entrance of the pier is about 130 m from the mill: half a minute's walk).
 - **The seafront**: the beach of the cove, the promenade with its palms and beach huts, the grand pier on
   piles with its kiosks and the big wheel.
-- **The edges**: mountains on three sides (crags, wooded slopes, rocky peaks) that cannot be climbed, the sea
-  on the fourth. The lane ends at the estate gate.
+- **The stairway and the high village**: at the far end of the great pond, some 450 steps cut in the rock
+  climb the western mountain in five flights, with a landing at each turn, to a shelf 85 m above the valley:
+  six stone houses and a chapel round a fountain, and a lookout with benches from which everything is seen,
+  down to the pier and the island.
+- **Caves**: the waterfall shoots clear of the rock — walk through its pool, behind the falling water, into
+  a grotto lit by crystals; a narrow passage leads on to a second, hidden room. Two more caves open at the
+  foot of the northern mountains (behind the fields) and of the southern ones (near the old tree). All have
+  chairs and a table; they are otherwise empty, ready to receive things.
+- **The island**: a rock 35 m high, about 80 m off the beach (swim across from the north end of the cove).
+  A path winds two and a quarter times round it up to a flat top with a ring of standing stones. Along the
+  way: nine hollows cut in the rock on the inner side, eight beams out over the drop on the outer side —
+  ready for the game of the rolling ball.
+- **Places to rest**: a camp in the woods north of the great pond (six hammocks, logs round a fire, two
+  tents); beanbags of all colours under a sail at the north end of the beach, and on a deck on stilts over
+  the great pond. Sitting on a beanbag brings a laptop onto your knees.
+- **The edges**: mountains on three sides (crags, wooded slopes, rocky peaks) that cannot be climbed except
+  by the stairway, the sea on the fourth. The lane ends at the estate gate.
 - **Life**: swans with cygnets, geese, mallards with ducklings, a cormorant that dives and another drying its
   wings, herons fishing in the shallows; gulls over the cove, swifts over the valley, buzzards above the
   mountains. Water birds swim away when you come close.
@@ -173,19 +212,20 @@ Techniques:
 
 ### Measurements
 
-Automatic tour through the whole valley (`?bench=1`):
+Automatic tour through the whole world, the island, the stairway and the village included (`?bench=1`):
 
 | Tier | Draw calls (avg / max) | Triangles (avg / max) | Script time per frame |
 |---|---|---|---|
-| Light | 67 / 100 | 266,000 / 385,000 | 4.7 ms |
-| Balanced | 103 / 153 | 505,000 / 703,000 | 5.3 ms |
-| High | 133 / 179 | 690,000 / 919,000 | 5.8 ms |
-| Ultra | 146 / 203 | 911,000 / 1,182,000 | 6.5 ms |
-| **Ultra on a phone** | 75 / 125 | 423,000 / 664,000 | 4.8 ms |
-| Light on a phone | 59 / 108 | 228,000 / 313,000 | 2.7 ms |
+| Light | 79 / 136 | 280,000 / 436,000 | 3.8 ms |
+| Balanced | 116 / 189 | 509,000 / 760,000 | 4.7 ms |
+| High | 147 / 223 | 696,000 / 950,000 | 5.9 ms |
+| Ultra | 159 / 241 | 894,000 / 1,220,000 | 4.8 ms |
+| **Ultra on a phone** | 86 / 126 | 422,000 / 568,000 | 4.2 ms |
+| Light on a phone | 71 / 121 | 238,000 / 357,000 | 3.4 ms |
 
-(Computer rows at 1280×720, phone rows at 844×390.) Before this round of optimisation, Ultra on a phone took
-119 draw calls and 874,000 triangles on average, 182 and 1,290,000 at most.
+(Computer rows at 1280×720, phone rows at 844×390.) The new places cost about 12 draw calls on average and
+next to no triangles: each is merged into one mesh per material and hidden with distance; a cave is three
+draw calls, an animal of light two, all the rings on the water one.
 
 **These are not frames per second.** The development environment had no graphics card: rendering is computed
 in software there, which says nothing about real frame rates. Draw calls and triangles are exact; script time
@@ -207,15 +247,19 @@ src/
   world/
     layout/layout.js       THE plan of the world: water levels, ponds, streams, paths, buildings, pier, bounds…
     World.js               assembles the systems, collisions, shadow bake
+    Collision.js  Areas.js heightfield, obstacles, platforms; places added to the playable area (corridors, polygons)
     WorldData.js           baked maps (height, water, normals, ground cover) read on the CPU and the GPU
-    terrain/  water/  vegetation/        terrain, water and waterfalls, forest, grass, small plants
+    terrain/  water/  vegetation/        terrain (and the openings of the caves), water, waterfalls and
+                           ripples, forest, grass, small plants
     wildlife/Birds.js      every bird
     props/                 geometry builder, materials, walls, bridges, stairs, rocks, merging and culling
     zones/mill/            the house, the outbuilding, the races, the wheel, the garden, the bridges
-    zones/pier/            the promenade, the pier, the big wheel
-  player/                  animated avatar, controller (walk, swim, jump), cameras
-  net/                     multiplayer presence (WebSocket or between-tabs transport, interpolation)
-  ui/                      welcome screen, minimap and large map, settings, touch controls
+    zones/pier/            the promenade, the pier, the big wheel and its cars
+    zones/places/          the stairway, the village, the island, the camp, the beanbags; Caves.js builds a cave
+  player/                  animated avatar and its poses, controller (walk, swim, jump, sit), cameras,
+                           Interact.js (what can be done here), RankEmotes.js (the animals of light)
+  net/                     multiplayer presence and chat (WebSocket or between-tabs transport, interpolation)
+  ui/                      welcome screen, minimap and large map, chat, action prompts, settings, touch controls
   app/Benchmark.js         benchmark tour
 server/index.js            Node production server: static files + presence relay
 server/protocol.js         the relay itself (protocol, validation, batching), shared by both hostings
@@ -245,11 +289,24 @@ To change the world: edit `layout.js`, run `npm run bake:world` again, reload th
 Repeated stalls are best instanced (`THREE.InstancedMesh`, like the gondolas of the big wheel), fixed
 scenery merged (`mergeStatic`) and small things hidden far away (`distanceCuller`).
 
+Building blocks added with the places around the valley (`zones/places/PlacesZone.js` shows each in use):
+
+- **A seat**: `world.seats.push(seatAt(x, y, z, yaw, { pose, label, work }))` — `ANIM.sit`, `ANIM.lie` or
+  `ANIM.work` (laptop). A seat that moves has an `at(out)` function instead of a fixed place (the cars of
+  the wheel, in `PierZone.js`).
+- **A walkable place outside the valley floor**: `areas.push(new Corridor(nodes))` or `new Polygon(points)`.
+- **A cave**: one entry in `CAVES` (`layout.js`): the line of its galleries and chambers, its lights, chairs
+  and table; mouth, walls, lighting, collision and the opening in the terrain follow.
+- **Things on the island**: `islandPath(u)` gives the position, height and directions of the path at a
+  fraction `u` of the way up; `ISLAND.alcoves` and `ISLAND.beams` are the hollows and beams already there.
+
 ### Multiplayer
 
-The server decides nothing: each visitor sends the state of their avatar (position, heading, animation) ten
-to twelve times a second, the relay hands it on per room, and each client rebuilds a smooth motion by
-interpolation. Without a reachable relay, the same interface works between the tabs of one browser. The
+The server decides nothing: each visitor sends the state of their avatar (position, heading, animation —
+which includes sitting, lying and working) ten to twelve times a second, the relay hands it on per room, and
+each client rebuilds a smooth motion by interpolation. Emotes and chat lines are relayed as they come.
+**Nothing is stored**: the relay keeps the last state of those who are connected, in memory, and forgets
+them when they leave (on Cloudflare, a room that everybody has left is deleted). Without a reachable relay, the same interface works between the tabs of one browser. The
 protocol is described at the top of `server/protocol.js`, the client interface in `src/net/Presence.js`.
 The same relay runs under Node (`server/index.js`) and on Cloudflare (`cloudflare/worker.js`).
 
@@ -258,11 +315,11 @@ The same relay runs under Node (`server/index.js`) and on Cloudflare (`cloudflar
 | Command | What it does |
 |---|---|
 | `npm run bake` | bakes the world and the textures again |
-| `npm test` | 100 checks of the Node server, the protocol and the interpolation |
-| `npm run test:cf` | the same protocol checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (59 in all) |
+| `npm test` | 107 checks of the Node server, the protocol (chat included) and the interpolation |
+| `npm run test:cf` | the same protocol checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (65 in all) |
 | `npm run test:smoke` | drives the real site: welcome screen, walking, free camera, settings, large map (`-- --mobile` for the touch layout) |
-| `npm run test:walk` | the character walks onto the pier, is stopped by its railing, crosses a footbridge, climbs the garden steps, cannot cross the mountains, swims, changes tier |
-| `npm run test:duo` | two visitors on the production server: they must see each other move (`-- --cloudflare` for the Cloudflare version) |
+| `npm run test:walk` | 18 checks in the real game: pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the village and its wall, a beam of the island, beanbag and laptop, hammock, big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, change of tier |
+| `npm run test:duo` | two visitors on the production server: they must see each other move, wave, summon an animal, chat and sit down (`-- --cloudflare` for the Cloudflare version) |
 | `npm run bench` | benchmark tour for each tier (`-- --mobile` for the phone profile) |
 | `npm run profile` | cost of each system (script, draw calls, triangles) at seven viewpoints |
 | `npm run shots -- name=x,y,z,heading,pitch` | screenshots from a viewpoint |
@@ -315,15 +372,28 @@ Rendering
 
 Game and multiplayer
 
-- The avatar is a free-licence robot, until a made-to-measure character exists. The big wheel turns but
-  cannot be boarded. Collisions are simple (cylinders, boxes, platforms).
-- Multiplayer: presence only (position, name, colour, emotes). No text chat, no saving, no anti-cheat.
-  48 visitors per room. Not tested with real latency, nor behind HTTPS or a proxy.
+- The avatar is a free-licence robot, until a made-to-measure character exists. Its sitting pose comes from
+  its own animations; lying down and typing are that pose and its idle one tilted and bent by hand, and the
+  swimming stroke is its running cycle laid flat with the arms brought round: readable, not refined.
+- Collisions are simple (cylinders, boxes, platforms, and corridors for the caves). In a cave the camera
+  stays inside the gallery, so it comes close in narrow passages.
+- Caves are lit by colours painted in their walls, not by real lamps: the avatar is simply dimmed inside,
+  and casts no shadow there. Their mouths are plain arches of rock. From some angles outside, the edge of the
+  cut in the rock face can be seen next to the porch.
+- The island is reached by swimming: no boat yet. Its ball game is not built — only the path, the hollows
+  and the beams it will need.
+- The village houses cannot be entered. On the big wheel one cannot stand up or walk in the car.
+- Seats are taken on a first-come basis decided by each client: two people pressing at the same instant can
+  end up on the same seat.
+- Multiplayer: presence, emotes and chat. The chat is not moderated (no filter, no mute, no report) and not
+  stored; there are no accounts, no saving, no anti-cheat. 48 visitors per room. Not tested with real
+  latency, nor behind HTTPS or a proxy.
 - Cloudflare: the Cloudflare version was tested in the official runtime locally (protocol, rooms going to
   sleep, two browsers) and the deployment validated with a dry run. A first deployment from the Git import
   built and published without error, but **multiplayer on Cloudflare's real network has not been observed
   yet**, and a push does not always start a build there (see "Putting it online with Cloudflare").
-- The fair itself (stalls, games) is still to be built: only the pier and its big wheel exist.
+- The fair itself (stalls, games) is still to be built: the pier, its big wheel and the places listed above
+  are its setting.
 
 Privacy
 
