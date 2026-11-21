@@ -2,6 +2,7 @@
 // cloudflare/worker.js (the storage of a Durable Object) both go through this (see routes.js).
 //
 //   GET    /api/scores?board=sky                    → { board, tops: { day, week, month, all }, top }
+//   GET    /api/scores?board=all                    → { boards: { sky: { tops, top }, race: … } }
 //   POST   /api/run     { board }                   → { run }      a signed note of when the run started
 //   POST   /api/scores  { board, name, score, run } → { board, tops, top, rank, best }
 //   DELETE /api/scores?board=sky&name=Somebody      → { removed }  (the administrator only)
@@ -22,7 +23,7 @@ import { cleanName } from './protocol.js';
  */
 export const BOARDS = {
   sky: { order: 'asc', min: 100_000, max: 6 * 3600_000 }, // the climb: a bot that never misses needs about 150 s
-  race: { order: 'asc', min: 40_000, max: 3600_000 }, // three laps on a quad
+  race: { order: 'asc', min: 30_000, max: 3600_000 }, // three laps on a quad: a bot that takes every pad needs about 45 s
   shoot: { order: 'desc', min: 1, max: 9999, length: 45_000 }, // the shooting gallery
   mole: { order: 'desc', min: 1, max: 9999, length: 45_000 }, // whack-a-mole
   milk: { order: 'desc', min: 1, max: 9999, length: 45_000 }, // milk for the clown

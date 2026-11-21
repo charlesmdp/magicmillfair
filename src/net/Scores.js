@@ -40,6 +40,13 @@ export class Scores {
     return { day: [], week: [], month: [], all: (body.top || []).map((e) => ({ name: e.name, score: e.score ?? e.ms })) }; // (an older server)
   }
 
+  /** The lists of every board, asked for in one go: { sky: { day, week, month, all }, race: … }. */
+  static async every() {
+    const body = await callApi('api/scores?board=all'), out = {};
+    for (const id of Object.keys(BOARDS)) out[id] = body && body.boards && body.boards[id] ? Scores._tops(body.boards[id]) : new Scores(id)._local();
+    return out;
+  }
+
   /** The four lists: { day, week, month, all }. */
   async tops() {
     const body = await callApi(`api/scores?board=${this.board}`);

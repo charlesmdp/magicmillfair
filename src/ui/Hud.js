@@ -138,6 +138,8 @@ export class Hud {
         <div class="held"><button data-drop>Put the bouquet down (B)</button></div>
       </div>
       <div class="wasted" aria-live="assertive"><div class="band"><b>WASTED</b><span></span></div></div>
+      <div class="sight" aria-hidden="true"></div>
+      <div class="gauge" aria-hidden="true"><i></i><b></b></div>
       <div class="prompts">
         <button class="prompt" type="button" data-prompt="0"><kbd>E</kbd><span></span></button>
         <button class="prompt" type="button" data-prompt="1"><kbd>L</kbd><span></span></button>
@@ -270,6 +272,8 @@ export class Hud {
     this.rosterEl.querySelector('.close').onclick = () => this.closeRoster();
     this.rosterEl.onclick = (e) => { if (e.target === this.rosterEl) this.closeRoster(); };
     this.bannerEl = h.querySelector('.banner');
+    this.sightEl = h.querySelector('.sight');
+    this.gaugeEl = h.querySelector('.gauge');
     // prevent clicks on the interface from reaching the 3D view
     for (const n of [this.panel, this.emotes, h.querySelector('.chooser'), this.rosterEl, h.querySelector('.players')]) for (const ev of ['mousedown', 'touchstart', 'wheel']) n.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
     // the visitor's own speech bubble (the others have their name tag)
@@ -507,6 +511,20 @@ export class Hud {
   }
 
   /** The line of a game in progress (a clock, a score), under the place name; null takes it away. */
+  /** The sight of the games one aims in: at (x, y) on the page, or hidden (null). */
+  setSight(x, y) {
+    const on = x !== null && x !== undefined;
+    if (on !== this._sight) { this._sight = on; this.sightEl.classList.toggle('on', on); }
+    if (on) this.sightEl.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+  }
+
+  /** The gauge of the high striker: its needle at `v` (0 at the bottom, 1 at the top), or hidden (null). */
+  setGauge(v) {
+    const on = v !== null && v !== undefined;
+    if (on !== this._gauge) { this._gauge = on; this.gaugeEl.classList.toggle('on', on); }
+    if (on) this.gaugeEl.lastElementChild.style.bottom = `${(v * 100).toFixed(1)}%`;
+  }
+
   setRun(text) {
     if (text === this._run) return;
     this._run = text;

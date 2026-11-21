@@ -20,7 +20,7 @@ import { callApi } from './net/api.js';
 import { formatTime } from './world/zones/games/course.js';
 import { RemoteAvatars } from './net/RemoteAvatars.js';
 import { Benchmark } from './app/Benchmark.js';
-import { SPAWN, ZONES, CLIMB } from './world/layout/layout.js';
+import { SPAWN, ZONES, CLIMB, RACE } from './world/layout/layout.js';
 import { VILLAGE_PERKS, money } from './world/layout/sponsors.js';
 import { FEATURES } from './app/config.js';
 import { Soundscape } from './audio/Soundscape.js';
@@ -288,7 +288,96 @@ async function boot() {
   // the climb: a clock while climbing, the board of the best times at the gate
   const skyScores = new Scores('sky');
   const lists = (tops) => Object.fromEntries(Object.entries(tops).map(([k, v]) => [k, v])); // (already { name, score })
-  skyScores.tops().then((tops) => world.games.setScores(lists(tops)));
+  // the fair: the four booths of the pier and the quad race, each with its board. While one of them is being
+  // played (`fair.session`), it has the pointer, the camera and the clock of the screen.
+  const fair = { boards: { race: new Scores('race') }, session: null, kind: null, fov: null, after: 0, stands: { race: world.games.race.board } };
+  for (const b of world.games.booths.list) { fair.boards[b.id] = new Scores(b.id); fair.stands[b.id] = b.board; }
+  Scores.every().then((all) => { world.games.setScores(lists(all.sky)); for (const id in fair.stands) fair.stands[id].setScores(all[id]); });
+  const _aim = { origin: new THREE.Vector3(), dir: new THREE.Vector3(), clicks: 0, down: false };
+  const fairIo = {
+    play: (sound, options) => audio.play(sound, options), note: (text) => hud.note(text, 3000),
+    strike: () => emote(emoteIndex('punch')), go: () => fair.boards.race.start(),
+  };
+  const endGame = () => {
+    const s = fair.session;
+    if (!s) return;
+    s.close();
+    fair.session = null; fair.fov = null;
+    if (fair.kind === 'race') { player.driver = null; player.riding = false; player.vel.set(0, 0, 0); }
+    me.root.visible = true;
+    document.body.classList.remove('playing');
+    hud.setRun(null); hud.setSight(null); hud.setGauge(null);
+    rig.snap(player.pos, player.yaw + Math.PI);
+    startBlend(0.5);
+  };
+  /** The game is over: its score goes on the board (a time for the race, points for a booth). */
+  const scoreGame = (id, title, score, text) => {
+    fair.boards[id].submit(name, score).then(({ tops, rank: place, best, shared }) => {
+      fair.stands[id].setScores(tops);
+      const where = place ? `#${place} of all time` : 'not on the board this time';
+      hud.note(`${text} — ${best ? where : 'your best stands'}${shared ? '' : ' (kept in this browser only)'}`, 8000);
+      if (place && place <= 10 && best) hud.addChat('✦', 5, `${title}: ${name} — ${text} (#${place})`, true);
+    });
+  };
+  const playBooth = (booth) => {
+    if (fair.session || player.dead) return;
+    fair.boards[booth.id].start();
+    fair.session = world.games.booths.open(booth, fairIo); fair.kind = 'booth'; fair.after = 0;
+    player.riding = false;
+    player.teleport(booth.stand[0], booth.stand[1], booth.stand[2]);
+    me.root.visible = !fair.session.firstPerson;
+    if (fair.session.crosshair) document.body.classList.add('playing');
+    input.consumeClicks();
+    hud.note(booth.how, 6500);
+    startBlend(0.6);
+  };
+  const playRace = () => {
+    if (fair.session || player.dead) return;
+    if (player.cheat || timers.moon || timers.turbo) { hud.note('Not with a cheat on.'); return; }
+    fair.session = world.games.race.open(player, fairIo); fair.kind = 'race'; fair.after = 0;
+    player.driver = fair.session;
+    hud.note(touch ? 'Three laps! The stick steers; hold Run to drift, Jump to hop.' : 'Three laps! Arrows or WASD · Shift: drift (a boost when you let go) · Space: hop · E: give up', 7000);
+    startBlend(0.6);
+  };
+  world.actionSources.push((p) => {
+    const booth = world.games.booths.near(p.pos.x, p.pos.z);
+    if (booth) return { label: `Play ${booth.name}`, run: () => playBooth(booth) };
+    return world.games.race.near(p.pos.x, p.pos.z) ? { label: `Race: ${RACE.laps} laps on a quad`, run: playRace } : null;
+  });
+  // one frame of the game being played
+  const fairStep = (dt) => {
+    const s = fair.session;
+    if (player.dead) { endGame(); return; }
+    if (fair.kind === 'booth') {
+      const P = input.pointer, view = s.view, tall = engine.width < engine.height;
+      camera.position.copy(view.pos); camera.lookAt(view.look);
+      fair.fov = Math.min(96, view.fov * (tall ? 1.5 : 1));
+      camera.updateMatrixWorld();
+      _aim.dir.set((P.x / window.innerWidth) * 2 - 1, -(P.y / window.innerHeight) * 2 + 1, 0.5).unproject(camera).sub(camera.position).normalize();
+      _aim.origin.copy(camera.position);
+      _aim.clicks = input.consumeClicks() + (input.pressed('Space') ? 1 : 0);
+      _aim.down = P.down || input.keys.has('Space');
+      s.step(dt, state.time, _aim);
+      player.update(dt, rig.heading, false);
+      hud.setRun(s.line);
+      hud.setSight(s.crosshair && !s.over ? P.x : null, P.y);
+      hud.setGauge(s.gauge);
+      if (s.over && fair.after === 0) {
+        fair.after = 0.01;
+        audio.play(s.score > 0 ? 'victory' : 'fail');
+        if (s.score > 0) scoreGame(s.booth.id, s.booth.name, s.score, `${s.score} ${s.booth.seconds ? 'points' : 'on the scale'}`); else hud.note('Nothing this time. Have another go!', 4000);
+      }
+      if (fair.after > 0 && (fair.after += dt) > 1.6) endGame();
+    } else {
+      player.update(dt, rig.heading, true);
+      fair.fov = s.camera(camera, dt);
+      hud.setRun(s.line);
+      if (s.over && fair.after === 0) { fair.after = 0.01; scoreGame('race', RACE.name, s.time, formatTime(s.time)); }
+      if (fair.after > 0 && (fair.after += dt) > 3) endGame();
+    }
+    if (fair.session && input.pressed('KeyE') && !(s.over)) { endGame(); hud.note(fair.kind === 'race' ? 'Race abandoned.' : 'Game left.'); }
+  };
+  Object.assign(app, { fair, playBooth, playRace, endGame, fairStep });
   world.games.events = {
     note: (text) => hud.note(text, 4200),
     run: (text) => hud.setRun(text),
@@ -383,7 +472,7 @@ async function boot() {
   hud
     .on('camera', toggleCamera)
     .on('emote', emote)
-    .on('interact', () => interact.press(0))
+    .on('interact', () => { if (fair.session) { if (!fair.session.over) { endGame(); hud.note('Game left.'); } } else interact.press(0); })
     .on('interact2', () => interact.press(1))
     .on('say', say)
     .on('roster', () => { showRoster(); refreshRoster(); })
@@ -419,8 +508,8 @@ async function boot() {
   input.on('emote', () => hud.toggleEmotes());
   input.on('drop', () => { if (look.bouquet) { look.bouquet = false; look.kinds = undefined; } });
   input.on('chat', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleChat(true, talking ? talking.brain.ask || `Say something to ${talking.name}…` : undefined); });
-  input.on('respawn', () => { if (state.mode === 'walk') { spawn(); hud.note('Back to the mill'); } });
-  input.on('menu', () => { hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); hud.toggleChat(false); hud.closeChoice(); hud.closeRoster(); });
+  input.on('respawn', () => { if (state.mode === 'walk') { endGame(); spawn(); hud.note('Back to the mill'); } });
+  input.on('menu', () => { if (fair.session && !fair.session.over) { endGame(); hud.note('Game left.'); } hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); hud.toggleChat(false); hud.closeChoice(); hud.closeRoster(); });
   input.on('map', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleBigMap(); });
   hud.setMap(data.meta.map, ZONES);
   hud.setVillages(world.sky.villages, data.meta.size, (v) => (v.forHire ? money(v.price) : v.name));
@@ -461,26 +550,29 @@ async function boot() {
     } else if (mode === 'free') {
       free.update(dt);
       player.update(dt, rig.heading, false);
+    } else if (mode === 'walk' && fair.session) {
+      fairStep(dt);
     } else if (mode === 'walk') {
       for (let i = 0; i < 10; i++) if (input.pressed(`Digit${(i + 1) % 10}`)) emote(hud.quickEmote(i));
       if (input.pressed('KeyE')) interact.press(0);
       if (input.pressed('KeyL')) interact.press(1);
       player.update(dt, rig.heading, true);
       rig.update(dt, player.pos, player);
-      if (state.blend) {
-        const b = state.blend;
-        b.t += dt / b.duration;
-        if (b.t >= 1) state.blend = null;
-        else {
-          const k = b.t * b.t * (3 - 2 * b.t);
-          _p.copy(camera.position); _q.copy(camera.quaternion);
-          camera.position.copy(b.pos).lerp(_p, k);
-          camera.quaternion.copy(b.quat).slerp(_q, k);
-        }
+    }
+    if (mode === 'walk' && state.blend) {
+      const b = state.blend;
+      b.t += dt / b.duration;
+      if (b.t >= 1) state.blend = null;
+      else {
+        const k = b.t * b.t * (3 - 2 * b.t);
+        _p.copy(camera.position); _q.copy(camera.quaternion);
+        camera.position.copy(b.pos).lerp(_p, k);
+        camera.quaternion.copy(b.quat).slerp(_q, k);
       }
     }
     camera.updateMatrixWorld();
-    interact.update(mode === 'walk');
+    interact.update(mode === 'walk' && !fair.session);
+    if (fair.session && mode === 'walk') hud.setPrompt(0, fair.session.over ? null : fair.kind === 'race' ? 'Give up the race' : 'Leave the game');
     // the name of the characters one can talk to floats over them; walking away ends the conversation
     for (const n of npcs) {
       const d2 = (n.x - player.pos.x) ** 2 + (n.z - player.pos.z) ** 2;
@@ -501,7 +593,7 @@ async function boot() {
       player.grip = timers.skate ? 0.09 : 1;
       player.cheat = !!(timers.moon || timers.turbo || timers.spring || timers.skate || timers.rocket);
       me.size = timers.tiny ? 0.45 : timers.giant ? 2.3 : 1;
-      const fov = timers.fisheye ? 104 : engine.width < engine.height ? 68 : 55;
+      const fov = fair.fov ?? (timers.fisheye ? 104 : engine.width < engine.height ? 68 : 55);
       if (Math.abs(camera.fov - fov) > 0.05) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 5); camera.updateProjectionMatrix(); }
       if (timers.disco) me.setColor(Math.floor(state.time * 6) % 16); else if (me.colorIndex !== color) me.setColor(color);
       look.bighead = !!timers.bighead;
@@ -544,6 +636,7 @@ async function boot() {
         else { data.surfaceAt(p.x, p.z, sound.surf); const w = sound.surf; ear.surface = w[5] > 0.45 ? 'sand' : w[4] + w[6] > 0.5 ? 'stone' : 'grass'; }
       }
       ear.climb = run.state === 'running' ? Math.min(1, Math.max(0, (p.y - CLIMB.y) / CLIMB.height)) : null;
+      ear.game = fair.session ? fair.kind : null;
       // leaving the ground, coming back to it, lighting the jetpack
       if (mode === 'walk' && !player.dead && !player.seat) {
         if (sound.grounded && !player.grounded && !player.swimming && player.vel.y > 2) audio.play('jump');

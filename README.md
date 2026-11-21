@@ -5,8 +5,9 @@ valley closed by mountains — and, a short walk down the valley, a cove with a 
 its big wheel. Around it: a stairway cut in the rock up to a temple lost on its mountain, terraces and pools
 above the great waterfall, caves (one of them behind the fall), sea cliffs with a fall that drops straight
 into the sea, a secret cove, an island with a boulder rolling down its path, a camp with hammocks, beanbag
-chairs to work from, and fifty little temples perched on the peaks. The first game of the fair is open —
-the Sky Stones, ninety metres of floating stones to climb against the clock. Stylised realism, a cosy
+chairs to work from, and fifty little temples perched on the peaks. The fair has six games, each with its board
+of best scores: ninety metres of floating stones to climb against the clock, four booths on the pier (a
+shooting gallery, whack-a-mole, a clown to feed, a high striker) and a quad race of three laps. Stylised realism, a cosy
 adventure-game mood, playable with a keyboard, a gamepad or a finger, alone or together — with a chat,
 emotes that summon animals of light, hats, a jetpack, and a few ways to end up WASTED.
 
@@ -165,6 +166,8 @@ room; `?village=name` arrives straight in a sky village.
 | Hat | Settings → Hat | Settings → Hat | |
 | Chat | Enter, type, Enter (Escape to cancel) | speech-bubble button | |
 | Emotes | T; 1 to 6 for the gestures, 7 to 0 to cheer, clap, jump for joy, rage; or by name in the chat: `/wave`, `/cheer`, `/bow`… | smiley button | |
+| The booths of the pier | E at the counter; then the mouse aims and its button fires (Space fires too); E or Escape leaves | tap or hold where you aim | |
+| The quad race | E in the paddock; arrows or WASD steer; Shift drifts; Space hops; E gives up | the stick steers; Run drifts; Jump hops | left stick, trigger, A |
 | Stuck somewhere | `/kill` in the chat: WASTED, then back at the mill | the same | |
 | Performance figures | P | Settings → Performance figures | |
 | Back to the mill | R | | |
@@ -204,6 +207,24 @@ round the ring (50). The emote panel shows where you stand; the administrator ha
   all time are on the board by the gate, under the panel of the game's sponsor ("your brand here" until
   someone takes it). The course was checked by a bot that makes every jump: a perfect climb takes about two
   and a half minutes.
+- **The booths of the pier**: four striped booths stand at the corners of the pier head, round the big
+  wheel. Step up to a counter and press E; the game takes the pointer (the mouse, or a finger) for
+  forty-five seconds, and E or Escape leaves it.
+  - *Bullseye Alley*: three rows of targets travel across — the small ones at the back are worth more — and
+    they all speed up, then start bobbing; a golden one flashes past now and then (100 points). A row of hits
+    pays a little more each time. Its backdrop is a sponsor's tarp.
+  - *Whack-a-Mole*: nine holes. Moles come up for less and less time; golden ones are worth three; hitting a
+    rabbit costs twenty points.
+  - *Feed the Clown*: hold the button down and keep the jet of milk in his mouth. The jet takes a moment to
+    follow the hand, and he slides about faster and faster, bobs, then starts changing his mind.
+  - *Ring the Bell*: the high striker. A needle sweeps the gauge, quicker at each of three blows; strike
+    when it is at the top. The best blow counts (1,000 is the top of the scale; the bell rings from 950).
+- **Quadmania**: a gravel track loops round the wheat fields, north of the mill. In the paddock by the
+  striped arch, press E: you are put on a quad behind the line — three, two, one — for three laps against
+  the clock, seen from low behind the quad. Hold the drift button in a bend to slide through it (let go
+  after a good slide and the quad leaps forward), hop with the jump button, take the three pads of light
+  (a second of extra speed each) and the ramp, or go round it. Leaving the track for the grass is slow;
+  cutting across the fields does not count. A bot that never drifts needs about forty-five seconds.
 - **The Grandstand**: the striped tower behind the lawn. Its stair winds round it for twelve turns, with a
   landing on each that faces the climb, up to a deck 84 m above the lawn: the place to watch friends climb
   and cheer them on (Cheer, Clap, Jump for joy, Go! Go!). Nobody gets from the tower into the game.
@@ -398,7 +419,8 @@ src/
     zones/pier/            the promenade, the pier, the big wheel and its cars
     zones/places/          stairways, the temple (Temple.js), the terraces, the island, the camp, the beanbags,
                            the secret cove, the fall into the sea; Caves.js builds a cave
-    zones/games/           the Sky Stones (course.js works out the stones), the boulder, the acid pond, the shark
+    zones/games/           the Sky Stones (course.js works out the stones), the boulder, the acid pond, the shark;
+                           Booths.js: the four booths of the pier; Race.js: the quad race; Boards.js: score boards and sponsor panels
     zones/sky/             the fifty sky villages and the Sky Gate
   player/                  animated avatar and its poses, controller (walk, swim, jump, sit, fly, die), cameras,
                            Interact.js (what can be done here), RankEmotes.js (the animals of light),
@@ -544,7 +566,7 @@ that is the last point. Going further means a referee: the server replaying the 
 | `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (74 in all) |
 | `npm run test:smoke` | drives the real site: welcome screen, walking, free camera, settings, large map (`-- --mobile` for the touch layout) |
 | `npm run test:audio` | Listens to the sound engine without ears: in headless Chromium it renders a dozen listener scenarios (beach, cliffs, pier, woods, mill, waterfall, cave, sky village, the climb…) and every one-shot effect through an offline audio context, measures level, spectrum, how the loudness moves and how tonal it is, fails on silence or clipping, and times `update()` (about 0.01 ms a frame) |
-| `npm run test:walk` | 36 checks in the real game: pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the fifty sky villages (prices, places to sit, the board of one for hire), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the acid pond, the shark, change of tier |
+| `npm run test:walk` | 39 checks in the real game: pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the fifty sky villages (prices, places to sit, the board of one for hire), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the four booths (a bot plays each through the pointer; boards), the quad race (a bot drives three laps), the acid pond, the shark, change of tier |
 | `npm run test:duo` | two visitors on the production server: they must see each other move, wave, summon an animal, chat and sit down (`-- --cloudflare` for the Cloudflare version) |
 | `npm run bench` | benchmark tour for each tier (`-- --mobile` for the phone profile) |
 | `npm run profile` | cost of each system (script, draw calls, triangles) at seven viewpoints |

@@ -670,6 +670,9 @@ async function testApi({ port }) {
   const limited = res.status;
   res = await request(port, '/api/scores?board=sky');
   check('api: a ninth POST within the minute is turned away; the board is unchanged', limited === 429 && json(res)?.tops.all.length === 2 && json(res).tops.all[0].name === 'Bob', [limited, res.body.toString().slice(0, 160)]);
+  res = await request(port, '/api/scores?board=all');
+  const every = json(res)?.boards || {};
+  check('api: every board in one request (the four booths, the race, the climb)', res.status === 200 && ['sky', 'race', 'shoot', 'mole', 'milk', 'bell'].every((id) => every[id] && ['day', 'week', 'month', 'all'].every((p) => Array.isArray(every[id].tops[p]))) && every.sky.tops.all[0].name === 'Bob' && every.shoot.tops.all[0].score === 120 && !every.race.tops.all.length, [res.status, res.body.toString().slice(0, 200)]);
   res = await request(port, '/api/scores?board=nope');
   const put = await request(port, '/api/scores', { method: 'PUT' });
   check('api: unknown board → 404, other methods → 405', res.status === 404 && put.status === 405, [res.status, put.status]);

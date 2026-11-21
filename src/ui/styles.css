@@ -203,6 +203,16 @@ button.pill.players:hover { border-color: rgba(242, 193, 78, 0.7); }
 .minimap { padding: 0; cursor: zoom-in; }
 .minimap:hover { border-color: var(--accent); }
 
+/* the games of the fair: a sight that follows the pointer, the gauge of the high striker */
+.sight { position: absolute; left: 0; top: 0; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; border: 2.5px solid #fff; box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.55), inset 0 0 0 1.5px rgba(0, 0, 0, 0.55); display: none; pointer-events: none !important; z-index: 6; }
+.sight::after { content: ''; position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; border-radius: 50%; background: #f2c14e; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6); }
+.sight.on { display: block; }
+.gauge { position: absolute; right: calc(26px + var(--safe-r)); top: 50%; width: 30px; height: min(46vh, 320px); transform: translateY(-50%); border-radius: 15px; border: 2px solid rgba(255, 255, 255, 0.9); background: linear-gradient(to top, #2f7d3a 0%, #2f7d3a 55%, #e0a020 55%, #e0a020 88%, #d0261c 88%, #d0261c 100%); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45); display: none; pointer-events: none !important; z-index: 6; overflow: hidden; }
+.gauge.on { display: block; }
+.gauge b { position: absolute; left: -2px; right: -2px; height: 6px; margin-bottom: -3px; background: #fff; box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.7); }
+.gauge i { position: absolute; left: 0; right: 0; top: 0; height: 5%; background: repeating-linear-gradient(45deg, #fff 0 4px, #d0261c 4px 8px); opacity: 0.85; }
+body.playing canvas { cursor: none; }
+
 /* the large map, opened from the minimap */
 .bigmap { position: absolute; inset: 0; display: none; place-items: center; background: rgba(8, 14, 10, 0.72); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 15; cursor: zoom-out; padding: 10px; }
 .bigmap.on { display: grid; }

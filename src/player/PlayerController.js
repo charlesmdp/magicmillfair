@@ -49,6 +49,9 @@ export class PlayerController {
     this.splashed = 0; // set to the entry speed when the player has just dropped into water (read and cleared by the effects)
     this.dead = null; // { t, cause, respawn: [x, z, yaw] } while lying there
     this.riding = false; // on the quad
+    /** While set, this moves the player instead of the keys: { step(dt, player, control) } (the quad of the race). */
+    this.driver = null;
+    this.pitch = 0; this.roll = 0; // how what is ridden leans (the race)
     this.jet = 0; // seconds of jetpack burn left
     this.fuel = JET.time;
     this.gravity = 1; // (cheats)
@@ -170,7 +173,22 @@ export class PlayerController {
   _sync() {
     const r = this.character.root;
     r.position.copy(this.pos);
-    r.rotation.y = this.yaw;
+    if (this.pitch || this.roll || r.rotation.x || r.rotation.z) { r.rotation.order = 'YXZ'; r.rotation.set(this.pitch, this.yaw, this.roll); } else r.rotation.y = this.yaw;
+  }
+
+  // In a race: the quad is driven by the game of the race, which reads the keys itself
+  _driven(dt, control) {
+    this.driver.step(dt, this, control);
+    this.vel.set(0, 0, 0);
+    this.swimming = this.wading = this.sliding = this.diving = false;
+    this.cave = null;
+    this.riding = true;
+    this.jet = 0;
+    this._peak = this.pos.y;
+    this.anim = ANIM.sit;
+    this.character.setAnim(this.anim, this.speed);
+    this.character.update(dt);
+    this._sync();
   }
 
   /** Slope of the bare ground at (x, z): its gradient goes to `out`, its steepness (metres per metre) is returned. */
@@ -188,6 +206,7 @@ export class PlayerController {
   update(dt, camYaw, control = true) {
     if (this.dead) return this._dying(dt);
     if (this.seat) return this._seated(dt, control);
+    if (this.driver) return this._driven(dt, control);
     const inp = this.input;
     const pos = this.pos, vel = this.vel;
     // desired horizontal velocity, relative to where the camera looks

@@ -404,9 +404,9 @@ export class PierZone {
   _kiosks(parts) {
     const paint = parts.get('paint'), cloth = parts.get('doubleSided'), wood = parts.get('woodDark');
     const head0 = PIER.length - PIER.headLength, HW = PIER.headWidth / 2;
+    // (two kiosks along the way; the four corners of the pier head belong to the booths of the fair: see
+    // zones/games/Booths.js)
     const spots = [
-      [head0 + 9, -HW + 5, 0, PAL.red], [head0 + 9, HW - 5, Math.PI, PAL.teal],
-      [PIER.length - 9, -HW + 6, 0, PAL.yellow], [PIER.length - 9, HW - 6, Math.PI, PAL.blue],
       [head0 * 0.52, -PIER.width / 2 + 3.2, 0, PAL.orange], [head0 * 0.82, PIER.width / 2 - 3.2, Math.PI, PAL.pink],
     ];
     for (const [x, z, yaw, col] of spots) {

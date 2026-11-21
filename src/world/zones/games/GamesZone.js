@@ -7,6 +7,8 @@ import { LAYER, staticCaster } from '../../../render/Shadows.js';
 import { mergeStatic, distanceCuller } from '../../props/StaticBatch.js';
 import { makeMaterial, GLSL_COMMON, GLSL_LIGHTING } from '../../../render/globals.js';
 import { cosmeticMaterial } from '../../../player/Cosmetics.js';
+import { Booths } from './Booths.js';
+import { Race } from './Race.js';
 import { CLIMB, ACID, BOULDER, ISLAND, islandPath, islandAt, ISLAND_LENGTH, SEA_REACH } from '../../layout/layout.js';
 import { climbCourse, stoneDepth, formatTime } from './course.js';
 import { canvasBoard, drawScores, drawSponsor } from './Boards.js';
@@ -63,6 +65,10 @@ export class GamesZone {
     this._acid();
     this._boulder();
     this._shark();
+    // the fair: four booths on the pier head, a race round the wheat fields
+    this.booths = new Booths(this).build();
+    this.group.add(this.booths.group);
+    this.race = new Race(this).build();
     this.group.updateMatrixWorld(true);
     return this;
   }
@@ -161,13 +167,14 @@ export class GamesZone {
    * its entrance. Returns { board, panel, setScores(lists), setSponsor(sponsor) }; the place is added to
    * world.sponsorSlots under `board:<id>` (walk up to it to sponsor the game).
    */
-  scoreStand(id, x, z, yaw, { title, sub, format, what = 'this game', width = 3.4 }) {
-    const y = this.ground(x, z), k = width / 3.4;
+  scoreStand(id, x, z, yaw, { title, sub, format, what = 'this game', width = 3.4, y = this.ground(x, z), pixels = 1 }) {
+    const k = width / 3.4;
     const state = { lists: null, sponsor: null };
-    const board = canvasBoard(1024, 904, (ctx, w, h) => drawScores(ctx, w, h, { title, sub, lists: state.lists, format }), width, 3.0 * k);
+    // (`pixels`: a smaller board is drawn on a smaller sheet — the same drawing, scaled)
+    const board = canvasBoard(Math.round(1024 * pixels), Math.round(904 * pixels), (ctx) => { ctx.save(); ctx.scale(pixels, pixels); drawScores(ctx, 1024, 904, { title, sub, lists: state.lists, format }); ctx.restore(); }, width, 3.0 * k);
     board.mesh.position.set(x, y + 0.75 + 1.5 * k, z);
     board.mesh.rotation.y = yaw;
-    const panel = canvasBoard(1024, 316, (ctx, w, h) => drawSponsor(ctx, w, h, state.sponsor, { what }), width, 1.05 * k);
+    const panel = canvasBoard(Math.round(1024 * pixels), Math.round(316 * pixels), (ctx) => { ctx.save(); ctx.scale(pixels, pixels); drawSponsor(ctx, 1024, 316, state.sponsor, { what }); ctx.restore(); }, width, 1.05 * k);
     panel.mesh.position.set(x, y + 0.75 + 3.0 * k + 0.08 + 0.525 * k, z);
     panel.mesh.rotation.y = yaw;
     this.group.add(board.mesh, panel.mesh);
@@ -579,6 +586,7 @@ export class GamesZone {
       this._tickShark(dt, time, player);
       const a = this.acid, p = player.pos;
       if (!player.dead && (p.x - a.x) ** 2 + (p.z - a.z) ** 2 < a.r * a.r && p.y < a.y + 0.1) player.die('Dissolved in acid', [a.x + a.r + 7, a.z + 3, -Math.PI / 2], 0.4);
+      this.booths.update(dt, time, p, camera);
     }
     if (camera) this._cull(camera.position);
   }

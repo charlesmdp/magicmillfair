@@ -12,6 +12,10 @@ export class Input {
     this.touchRise = 0;
     this._look = { x: 0, y: 0 };
     this._zoom = 0;
+    // where the pointer is on the page (the mouse; a finger while it is down; a point moved by the mouse while
+    // it is locked) and whether its button is held: for the games one aims in (see consumeClicks())
+    this.pointer = { x: window.innerWidth / 2, y: window.innerHeight / 2, down: false };
+    this._clicks = 0;
     this._pressed = new Set(); // keys that went down since the last update()
     this._frame = new Set(); // the same, as seen by the current frame
     this.handlers = new Map();
@@ -49,16 +53,19 @@ export class Input {
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.code)) e.preventDefault();
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => this.keys.clear());
+    window.addEventListener('blur', () => { this.keys.clear(); this.pointer.down = false; });
 
     // mouse look: pointer lock when available, otherwise drag
     let dragging = false, lastX = 0, lastY = 0, moved = 0;
+    const P = this.pointer;
     t.addEventListener('mousedown', (e) => {
       if (e.button !== 0 && e.button !== 2) return;
       dragging = true; lastX = e.clientX; lastY = e.clientY; moved = 0;
+      if (e.button === 0) { if (!this.locked) { P.x = e.clientX; P.y = e.clientY; } P.down = true; this._clicks++; }
     });
-    window.addEventListener('mouseup', () => { dragging = false; });
+    window.addEventListener('mouseup', (e) => { dragging = false; if (e.button === 0) P.down = false; });
     window.addEventListener('mousemove', (e) => {
+      if (this.locked) { P.x = Math.min(window.innerWidth, Math.max(0, P.x + e.movementX)); P.y = Math.min(window.innerHeight, Math.max(0, P.y + e.movementY)); } else { P.x = e.clientX; P.y = e.clientY; }
       if (!this.enabled) return;
       if (this.locked) {
         this._look.x += e.movementX * this.sensitivity;
@@ -84,6 +91,7 @@ export class Input {
     t.addEventListener('touchstart', (e) => {
       this.isTouch = true;
       for (const c of e.changedTouches) looks.set(c.identifier, { x: c.clientX, y: c.clientY });
+      { const c = e.changedTouches[0]; P.x = c.clientX; P.y = c.clientY; P.down = true; this._clicks++; }
       if (looks.size === 2) { const [a, b] = [...looks.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); }
       e.preventDefault();
     }, { passive: false });
@@ -96,6 +104,7 @@ export class Input {
           this._look.y += (c.clientY - p.y) * this.touchSensitivity;
         }
         p.x = c.clientX; p.y = c.clientY;
+        P.x = c.clientX; P.y = c.clientY;
       }
       if (looks.size === 2) {
         const [a, b] = [...looks.values()];
@@ -105,7 +114,7 @@ export class Input {
       }
       e.preventDefault();
     }, { passive: false });
-    const end = (e) => { for (const c of e.changedTouches) looks.delete(c.identifier); };
+    const end = (e) => { for (const c of e.changedTouches) looks.delete(c.identifier); if (!looks.size) P.down = false; };
     t.addEventListener('touchend', end);
     t.addEventListener('touchcancel', end);
   }
@@ -166,4 +175,6 @@ export class Input {
     return this.enabled ? l : { x: 0, y: 0 };
   }
   consumeZoom() { const z = this._zoom; this._zoom = 0; return z; }
+  /** How many times the pointer was pressed (a click, a tap) since the last call. */
+  consumeClicks() { const n = this._clicks; this._clicks = 0; return n; }
 }

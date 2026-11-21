@@ -1,0 +1,480 @@
+// The four booths of the pier head, on either side of the big wheel. Each is a game of some forty-five seconds
+// played from its counter, with a pointer (the mouse, a finger): Bullseye Alley (a shooting gallery whose
+// targets speed up), Whack-a-Mole, Feed the Clown (a jet of milk to keep in a mouth that will not stay still)
+// and Ring the Bell (the high striker). Each has its board of scores and its sponsor's panel; the backdrop of
+// the shooting gallery is a sponsor's tarp too.
+//
+// Nothing here knows about the keyboard, the camera or the network: the game (main.js) opens a session, gives
+// it every frame where the pointer aims (a ray) and whether it is pressed, and reads its score at the end.
+import * as THREE from 'three';
+import { Parts } from '../../props/MeshBuilder.js';
+import { distanceCuller } from '../../props/StaticBatch.js';
+import { PIER, pierToWorld } from '../../layout/layout.js';
+import { canvasBoard, drawSponsor } from './Boards.js';
+
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const lerp = (a, b, t) => a + (b - a) * t, clamp01 = (t) => Math.min(1, Math.max(0, t));
+const HALF = 3, BACK = -4, FRONT = 1.0; // of a booth, in its own frame: half its width, its back wall, the front of its counter
+const WHITE = [0.97, 0.95, 0.9], WOOD = [0.9, 0.8, 0.66];
+
+/** id (also the board of its scores), name, where it stands on the pier (along, side), its colour, how long a game lasts. */
+export const BOOTHS = [
+  { id: 'shoot', name: 'Bullseye Alley', along: 81, side: -19, color: [0.85, 0.18, 0.14], seconds: 45, how: 'Click the targets: the small ones at the back are worth more, and they all speed up.' },
+  { id: 'mole', name: 'Whack-a-Mole', along: 81, side: 19, color: [0.1, 0.6, 0.62], seconds: 45, how: 'Click the moles as they come up. Golden ones are worth three. Leave the rabbits alone!' },
+  { id: 'milk', name: 'Feed the Clown', along: 123, side: -18, color: [0.95, 0.66, 0.08], seconds: 45, how: 'Hold the button down and keep the jet of milk in his mouth. He will not stay still.' },
+  { id: 'bell', name: 'Ring the Bell', along: 123, side: 18, color: [0.2, 0.42, 0.85], seconds: 0, how: 'Three blows. Strike when the needle is at the top; the best one counts.' },
+];
+
+/** A disc facing +Z, of radius 1, in rings of colour (from the rim to the middle). */
+function disc(b, rings, sides = 14) {
+  rings.forEach(([r, c], k) => {
+    const pts = [];
+    for (let i = 0; i < sides; i++) { const a = (i / sides) * Math.PI * 2; pts.push(V(Math.cos(a) * r, Math.sin(a) * r, k * 0.012)); }
+    b.tint(c[0], c[1], c[2], 1).poly(pts);
+  });
+}
+const geometry = (fill, material = 'paint') => { const parts = new Parts(); fill(parts.get(material), parts); return parts.get(material).build(); };
+
+export class Booths {
+  /** @param zone the games zone (its world, its group, its colliders, its score stands) */
+  constructor(zone) {
+    this.zone = zone;
+    this.world = zone.world;
+    this.group = new THREE.Group();
+    this.group.name = 'booths';
+    this.list = [];
+    this.session = null;
+    this._m = new THREE.Matrix4();
+    this._o = new THREE.Vector3();
+    this._d = new THREE.Vector3();
+  }
+
+  build() {
+    const mats = this.world.materials, y = PIER.deckY;
+    for (const def of BOOTHS) {
+      const [ox, oz] = pierToWorld(def.along, def.side), yaw = -PIER.heading + (def.side > 0 ? Math.PI : 0);
+      const g = new THREE.Group();
+      g.position.set(ox, y, oz);
+      g.rotation.y = yaw;
+      const parts = new Parts();
+      this._shell(parts, def);
+      const booth = { ...def, x: ox, y, z: oz, yaw, group: g, dyn: new THREE.Group(), game: null };
+      g.add(booth.dyn);
+      booth.game = this[`_${def.id}`](parts, booth);
+      const shell = parts.toMeshes(mats, { name: `booth-${def.id}`, layers: this.zone.cast });
+      g.add(shell);
+      // its name, over the counter
+      const sign = canvasBoard(512, 96, (ctx, w, h) => {
+        ctx.fillStyle = '#7a1420'; ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 6; ctx.strokeRect(5, 5, w - 10, h - 10);
+        ctx.fillStyle = '#f6e7b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = "700 58px Georgia, 'Times New Roman', serif";
+        ctx.fillText(def.name.toUpperCase(), w / 2, h / 2 + 3, w - 30);
+      }, 4.6, 0.86);
+      // (the striker has no roof to carry it: its name is on the back wall, beside the tower)
+      if (def.id === 'bell') { sign.mesh.scale.set(0.76, 0.76, 1); sign.mesh.position.set(1.0, 3.48, BACK + 0.03); } else sign.mesh.position.set(0, 3.42, FRONT + 0.77);
+      sign.mesh.name = `booth-${def.id}:sign`;
+      g.add(sign.mesh);
+      this.group.add(g);
+      g.updateMatrixWorld(true);
+      booth.inverse = new THREE.Matrix4().copy(g.matrixWorld).invert();
+      const world = (lx, lz) => { const v = V(lx, 0, lz).applyMatrix4(g.matrixWorld); return [v.x, v.z]; };
+      booth.stand = [...world(0, FRONT + 1.0), yaw + Math.PI]; // where one plays from, looking in
+      // nobody walks into a booth
+      const [cx, cz] = world(0, (BACK + FRONT + 0.15) / 2);
+      this.zone.colliders.push({ type: 'box', x: cx, z: cz, hw: HALF + 0.12, hl: (FRONT + 0.15 - BACK) / 2 + 0.1, yaw });
+      // its board of scores, beside it, and the panel of its sponsor
+      const [bx, bz] = world((def.side < 0 ? 1 : -1) * (HALF + 2.1), FRONT - 0.2); // (on the side of the end of the pier)
+      booth.board = this.zone.scoreStand(def.id, bx, bz, yaw, { title: def.name.toUpperCase(), sub: def.seconds ? `Most points in ${def.seconds} seconds` : 'The hardest blow of three', format: (s) => String(s), width: 2.7, y, pixels: 0.75 });
+      this.list.push(booth);
+    }
+    this.group.updateMatrixWorld(true);
+    this._cull = distanceCuller(this.group, [[/:sign$/, 220], [/^booth-\w+:(glow|doubleSided)$/, 300], [/^booth-/, 480]]);
+    return this;
+  }
+
+  // The shell of a booth: a counter with a striped front, side walls, a back wall, a striped roof
+  _shell(parts, def) {
+    const paint = parts.get('paint'), cloth = parts.get('doubleSided'), wood = parts.get('woodDark'), c = def.color;
+    wood.tint(WOOD[0], WOOD[1], WOOD[2], 1).box(-HALF, 1.0, FRONT - 0.5, HALF, 1.07, FRONT + 0.15, { tile: 1 });
+    for (let s = 0; s < 12; s++) { const k = s % 2 ? WHITE : c; paint.tint(k[0], k[1], k[2], 1).box(-HALF + s * 0.5, 0, FRONT - 0.06, -HALF + (s + 1) * 0.5, 1.0, FRONT, { faces: 'Z' }); }
+    paint.tint(c[0] * 0.55, c[1] * 0.55, c[2] * 0.55, 1);
+    for (const g of [-1, 1]) paint.box(g * HALF - 0.05, 0, BACK, g * HALF + 0.05, 2.95, FRONT, { faces: 'xXZ' });
+    paint.box(-HALF, 0, BACK - 0.08, HALF, 3.1, BACK, { faces: 'zZ' });
+    paint.box(-HALF, 0, FRONT - 0.45, HALF, 1.0, FRONT - 0.06, { faces: 'zY' });
+    paint.tint(WHITE[0], WHITE[1], WHITE[2], 1);
+    for (const [px, pz] of [[-HALF, FRONT], [HALF, FRONT]]) paint.box(px - 0.07, 1.07, pz - 0.07, px + 0.07, 2.95, pz + 0.07);
+    wood.tint(WOOD[0], WOOD[1], WOOD[2], 1).box(-HALF - 0.1, 2.93, FRONT - 0.07, HALF + 0.1, 3.05, FRONT + 0.07, { tile: 1 });
+    if (def.id === 'bell') return;
+    // the roof: stripes from the eaves in front up to the ridge and down to the back, a scalloped valance
+    const N = 14, x0 = -HALF - 0.35, step = (HALF * 2 + 0.7) / N;
+    for (let s = 0; s < N; s++) {
+      const k = s % 2 ? WHITE : c, a = x0 + s * step, b = a + step;
+      cloth.tint(k[0] * 1.1, k[1] * 1.1, k[2] * 1.1, 1);
+      cloth.quad(V(a, 2.9, FRONT + 0.75), V(b, 2.9, FRONT + 0.75), V(b, 3.85, -1.3), V(a, 3.85, -1.3));
+      cloth.quad(V(b, 3.1, BACK - 0.15), V(a, 3.1, BACK - 0.15), V(a, 3.85, -1.3), V(b, 3.85, -1.3));
+      cloth.tri(V(a, 2.9, FRONT + 0.75), V((a + b) / 2, 2.62, FRONT + 0.75), V(b, 2.9, FRONT + 0.75));
+    }
+    cloth.tint(c[0], c[1], c[2], 1);
+    for (const g of [-1, 1]) cloth.tri(V(g * (HALF + 0.35), 2.9, FRONT + 0.75), V(g * (HALF + 0.35), 3.1, BACK - 0.15), V(g * (HALF + 0.35), 3.85, -1.3));
+  }
+
+  /** Something that moves in a booth (its targets, its moles…): kept apart from what stands still. */
+  _mesh(booth, geo, name, material = 'paint') {
+    const m = new THREE.Mesh(geo, this.world.materials[material]);
+    m.name = `moving-${booth.id}:${name}`;
+    booth.dyn.add(m);
+    return m;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Bullseye Alley: three rows of targets that travel across, faster and faster; a golden one now and then
+
+  _shoot(parts, booth) {
+    const paint = parts.get('paint'), wood = parts.get('woodDark');
+    const ROWS = [{ y: 1.32, z: -2.3, r: 0.25, pts: 10, dir: 1, speed: 0.85 }, { y: 1.9, z: -2.95, r: 0.2, pts: 20, dir: -1, speed: 1.15 }, { y: 2.46, z: -3.55, r: 0.155, pts: 30, dir: 1, speed: 1.45 }];
+    // the rails the targets ride on, the shelf under them
+    for (const r of ROWS) wood.tint(0.5, 0.42, 0.34, 1).box(-HALF, r.y - r.r - 0.1, r.z - 0.06, HALF, r.y - r.r - 0.04, r.z + 0.06, { tile: 1 });
+    paint.tint(0.16, 0.2, 0.3, 1).box(-HALF, 0, BACK, HALF, 1.0, -1.9, { faces: 'ZY' });
+    // the backdrop: a sponsor's tarp
+    const state = { sponsor: null };
+    const tarp = canvasBoard(1024, 400, (ctx, w, h) => drawSponsor(ctx, w, h, state.sponsor, { what: 'this backdrop' }), 5.7, 2.2);
+    tarp.mesh.position.set(0, 2.0, BACK + 0.03);
+    tarp.mesh.name = 'booth-shoot:tarp';
+    booth.group.add(tarp.mesh);
+    const [sx, sz] = pierToWorld(booth.along, booth.side + 2.6);
+    (this.world.sponsorSlots ||= []).push({ id: 'tarp:shoot', what: 'the backdrop of the shooting gallery', x: sx, y: booth.y, z: sz, reach: 3, set: (sp) => { state.sponsor = sp; tarp.redraw(); } });
+
+    const RED = [0.85, 0.12, 0.1];
+    const geo = geometry((b) => { disc(b, [[1, RED], [0.68, WHITE], [0.36, RED]]); b.tint(0.2, 0.18, 0.16, 1).box(-0.05, -1.6, -0.03, 0.05, -0.9, 0); });
+    const targets = [];
+    ROWS.forEach((row, k) => { for (let i = 0; i < 4; i++) targets.push({ row, x: -HALF + 0.75 + i * 1.6 + k * 0.5, down: 0, tip: 0, phase: i * 1.7 + k }); });
+    const mesh = new THREE.InstancedMesh(geo, this.world.materials.paint, targets.length);
+    mesh.name = 'moving-shoot:targets';
+    mesh.frustumCulled = false;
+    booth.dyn.add(mesh);
+    const gold = this._mesh(booth, geometry((b) => disc(b, [[1, [1.5, 1.05, 0.2]], [0.55, [1.7, 1.4, 0.5]]], 10)), 'gold');
+    gold.scale.setScalar(0.12);
+    const G = { x: 9, dir: 1, wait: 6, y: 2.05, z: -3.25 };
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s3 = new THREE.Vector3(), p3 = new THREE.Vector3();
+    const game = {
+      view: { pos: [0, 1.72, 2.5], look: [0, 1.75, -3], fov: 58 }, firstPerson: true, crosshair: true,
+      reset() { game.score = 0; game.streak = 0; game.reload = 0; for (const t of targets) { t.down = 0; } G.x = 9; G.wait = 20; },
+      /** t: seconds played (-1 while nobody plays: the targets idle along), time: the clock of the world */
+      step(dt, t, time, aim, io) {
+        const k = t < 0 ? 0.45 : 1 + 1.35 * (t / 45), bob = t > 14 ? 0.13 * clamp01((t - 14) / 5) : 0;
+        targets.forEach((tg, i) => {
+          tg.x += tg.row.dir * tg.row.speed * k * dt;
+          if (tg.x > HALF + 0.4) tg.x -= HALF * 2 + 0.8; else if (tg.x < -HALF - 0.4) tg.x += HALF * 2 + 0.8;
+          if (tg.down > 0) tg.down -= dt;
+          tg.tip += ((tg.down > 0 ? 1 : 0) - tg.tip) * Math.min(1, dt * 14);
+          tg.y = tg.row.y + bob * Math.sin(time * 3.1 + tg.phase);
+          mesh.setMatrixAt(i, m4.compose(p3.set(tg.x, tg.y, tg.row.z), q.setFromEuler(e.set(-1.5 * tg.tip, 0, 0)), s3.setScalar(tg.row.r)));
+        });
+        mesh.instanceMatrix.needsUpdate = true;
+        if (Math.abs(G.x) <= HALF + 0.3) G.x += G.dir * 3.3 * k * dt;
+        else if (t > 0 && (G.wait -= dt) <= 0) { G.dir = Math.random() < 0.5 ? 1 : -1; G.x = -G.dir * (HALF + 0.29); G.wait = 4 + Math.random() * 4; }
+        gold.visible = Math.abs(G.x) <= HALF + 0.3;
+        gold.position.set(G.x, G.y + 0.1 * Math.sin(time * 5), G.z);
+        if (t < 0 || !aim) return;
+        game.reload -= dt;
+        if (aim.clicks && game.reload <= 0) {
+          game.reload = 0.26;
+          io.play('shot', { volume: 0.7 });
+          const at = (z) => { const u = (z - aim.o.z) / aim.d.z; return [aim.o.x + aim.d.x * u, aim.o.y + aim.d.y * u]; };
+          let hit = null, pts = 0;
+          for (const tg of targets) { if (tg.down > 0) continue; const [hx, hy] = at(tg.row.z); if (Math.hypot(hx - tg.x, hy - tg.y) < tg.row.r * 1.12 && (!hit || tg.row.z > hit.row.z)) hit = tg; }
+          if (gold.visible) { const [hx, hy] = at(G.z); if (Math.hypot(hx - G.x, hy - gold.position.y) < 0.17) { pts = 100; G.x = 9; hit = null; } }
+          if (hit) { pts = hit.row.pts; hit.down = Math.max(0.7, 1.4 - 0.6 * (t / 45)); }
+          // (a row of hits pays a little more each time)
+          if (pts) { game.score += pts + Math.min(15, game.streak * 3); game.streak++; io.play(pts === 100 ? 'score' : 'hit'); } else { game.streak = 0; io.play('miss', { volume: 0.4 }); }
+        }
+      },
+    };
+    game.reset();
+    return game;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Whack-a-Mole: nine holes in a sloping table
+
+  _mole(parts, booth) {
+    const paint = parts.get('paint'), wood = parts.get('woodDark');
+    const top = (z) => 0.98 - z * 0.2; // the table rises towards the back
+    const holes = [];
+    for (const z of [-0.45, -1.4, -2.35]) for (const x of [-1.55, 0, 1.55]) holes.push({ x, z, y: top(z), up: 0, state: 0, kind: 0, timer: 0, squash: 0 });
+    // the table: green baize, dark rings where the holes are, a wooden rim
+    paint.tint(0.14, 0.5, 0.22, 1).quad(V(-HALF, top(0.45), 0.45), V(HALF, top(0.45), 0.45), V(HALF, top(-3.2), -3.2), V(-HALF, top(-3.2), -3.2));
+    paint.tint(0.1, 0.36, 0.16, 1).quad(V(-HALF, 0, 0.5), V(HALF, 0, 0.5), V(HALF, top(0.45), 0.45), V(-HALF, top(0.45), 0.45));
+    for (const h of holes) {
+      const pts = [];
+      for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; pts.push(V(h.x + Math.cos(a) * 0.36, top(h.z - Math.sin(a) * 0.36) + 0.012, h.z - Math.sin(a) * 0.36)); }
+      paint.tint(0.04, 0.03, 0.03, 1).poly(pts);
+    }
+    wood.tint(0.6, 0.45, 0.3, 1).box(-HALF, top(-3.2), -3.3, HALF, top(-3.2) + 0.5, -3.2, { tile: 1 });
+    paint.tint(0.3, 0.6, 0.85, 1).box(-HALF, 0, BACK, HALF, 3.0, BACK + 0.04, { faces: 'Z' }); // a painted sky behind
+    paint.tint(0.2, 0.55, 0.2, 1).box(-HALF, 0, BACK + 0.04, HALF, 2.1, BACK + 0.07, { faces: 'Z' });
+    // the creatures: a body with a face on its front; brown for a mole, golden, or white with long ears
+    const creature = (body, ears) => geometry((b) => {
+      b.tint(body[0], body[1], body[2], 1).lathe([[0.27, -0.5], [0.29, 0.1], [0.24, 0.3], [0.12, 0.42], [0.0, 0.45]], 9);
+      b.tint(0.02, 0.02, 0.02, 1).box(-0.13, 0.2, 0.22, -0.07, 0.27, 0.27).box(0.07, 0.2, 0.22, 0.13, 0.27, 0.27);
+      b.tint(1.0, 0.5, 0.55, 1).box(-0.045, 0.1, 0.27, 0.045, 0.17, 0.31);
+      b.tint(0.97, 0.97, 0.94, 1).box(-0.05, 0.02, 0.26, 0.05, 0.09, 0.29);
+      if (ears) for (const g of [-1, 1]) b.tint(body[0], body[1], body[2], 1).box(g * 0.12 - 0.05, 0.38, -0.03, g * 0.12 + 0.05, 0.86, 0.03);
+    });
+    const KINDS = [creature([0.42, 0.27, 0.16]), creature([1.5, 1.05, 0.2]), creature([1.25, 1.22, 1.18], true)];
+    for (const h of holes) { h.mesh = this._mesh(booth, KINDS[0], 'mole'); h.mesh.visible = false; }
+    const mallet = this._mesh(booth, geometry((b) => {
+      b.tint(0.7, 0.55, 0.36, 1).box(-0.035, 0, -0.035, 0.035, 0.75, 0.035);
+      b.tint(0.8, 0.14, 0.12, 1).box(-0.2, 0.75, -0.12, 0.2, 0.99, 0.12);
+    }), 'mallet');
+    mallet.visible = false;
+    let next = 0.6, swing = 0, swingAt = null;
+    const game = {
+      view: { pos: [0, 2.55, 2.15], look: [0, 1.05, -1.35], fov: 56 }, firstPerson: true, crosshair: true,
+      reset() { game.score = 0; next = 0.5; for (const h of holes) { h.state = 0; h.up = 0; } },
+      step(dt, t, time, aim, io) {
+        const p = t < 0 ? 0 : clamp01(t / 45);
+        if ((next -= dt) <= 0) {
+          next = t < 0 ? 1.6 + Math.random() * 2 : lerp(0.95, 0.36, p) * (0.75 + 0.5 * Math.random());
+          const free = holes.filter((h) => h.state === 0);
+          if (free.length) {
+            const h = free[Math.floor(Math.random() * free.length)], r = Math.random();
+            h.kind = t > 8 && r < 0.16 ? 2 : t > 10 && r < 0.28 ? 1 : 0;
+            h.state = 1; h.timer = t < 0 ? 1.2 : lerp(1.5, 0.62, p); h.squash = 0;
+            h.mesh.geometry = KINDS[h.kind];
+          }
+        }
+        for (const h of holes) {
+          if (h.state === 1) { h.up = Math.min(1, h.up + dt * 7); if ((h.timer -= dt) <= 0) h.state = 2; } // up, then down again
+          else if (h.state === 2) { h.up -= dt * 5; if (h.up <= 0) { h.up = 0; h.state = 0; } }
+          else if (h.state === 3) { h.squash = Math.min(1, h.squash + dt * 12); h.up -= dt * 3.2; if (h.up <= 0) { h.up = 0; h.state = 0; } } // whacked
+          h.mesh.visible = h.up > 0.01;
+          h.mesh.position.set(h.x, h.y - 0.5 + h.up * 0.56, h.z);
+          h.mesh.scale.set(1 + 0.25 * h.squash, 1 - 0.45 * h.squash, 1 + 0.25 * h.squash);
+        }
+        if (swing > 0) {
+          swing -= dt;
+          const u = clamp01(swing / 0.22); // 1 → 0
+          mallet.visible = true;
+          mallet.position.set(swingAt.x + 0.55, swingAt.y + 0.25 + 0.5 * u, swingAt.z + 0.2);
+          mallet.rotation.set(0, 0, 1.2 + 0.9 * u);
+        } else mallet.visible = false;
+        if (t < 0 || !aim || !aim.clicks) return;
+        // which hole is under the pointer? (the plane of the table, a hand above it)
+        const n = 0.2, d = aim.d.y + n * aim.d.z;
+        if (Math.abs(d) < 1e-5) return;
+        const u = (1.2 - aim.o.y - n * aim.o.z) / d, hx = aim.o.x + aim.d.x * u, hz = aim.o.z + aim.d.z * u;
+        let best = null, bd = 0.52;
+        for (const h of holes) { const dd = Math.hypot(h.x - hx, (h.z - hz) * 0.8); if (dd < bd) { bd = dd; best = h; } }
+        if (!best) return;
+        swing = 0.22; swingAt = best;
+        if ((best.state === 1 || best.state === 2) && best.up > 0.35) {
+          const pts = best.kind === 2 ? -20 : best.kind === 1 ? 30 : 10 + Math.round(5 * clamp01(best.timer));
+          game.score = Math.max(0, game.score + pts);
+          best.state = 3;
+          io.play(best.kind === 2 ? 'fail' : 'whack', { volume: 0.8 });
+          if (best.kind === 2) io.note('Not the rabbit! −20');
+        } else io.play('miss', { volume: 0.5 });
+      },
+    };
+    game.reset();
+    return game;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Feed the Clown: a jet of milk, a mouth that slides about
+
+  _milk(parts, booth) {
+    const paint = parts.get('paint'), wood = parts.get('woodDark'), Z = -3.2;
+    // a striped wall behind, the rail the clown rides on, the churn and its nozzle on the counter
+    for (let s = 0; s < 12; s++) { const k = s % 2 ? WHITE : [0.85, 0.16, 0.14]; paint.tint(k[0], k[1], k[2], 1).box(-HALF + s * 0.5, 0, BACK, -HALF + (s + 1) * 0.5, 3.05, BACK + 0.04, { faces: 'Z' }); }
+    wood.tint(0.45, 0.36, 0.28, 1).box(-HALF, 1.02, Z - 0.3, HALF, 1.1, Z - 0.18, { tile: 1 });
+    paint.tint(0.75, 0.78, 0.82, 1).place(0, 1.07, FRONT - 0.2).lathe([[0.2, 0.0], [0.22, 0.3], [0.14, 0.42], [0.14, 0.5], [0.0, 0.5]], 10).pop();
+    paint.tint(0.3, 0.3, 0.34, 1).box(-0.04, 1.3, FRONT - 0.5, 0.04, 1.38, FRONT - 0.2);
+    // the clown: a white face, a red nose, hair on both sides, a little hat, and a mouth wide open
+    const clown = this._mesh(booth, geometry((b) => {
+      disc(b, [[0.62, [1.3, 1.26, 1.2]]], 16);
+      for (const g of [-1, 1]) {
+        b.tint(1.3, 0.45, 0.1, 1).place(g * 0.62, 0.12, 0.0).lathe([[0.0, -0.26], [0.24, -0.1], [0.26, 0.1], [0.0, 0.28]], 7).pop(); // hair
+        disc(b.place(g * 0.24, 0.2, 0.02), [[0.13, [0.2, 0.5, 1.2]], [0.06, [0.03, 0.03, 0.05]]], 10); b.pop(); // eyes
+        disc(b.place(g * 0.36, -0.1, 0.02), [[0.12, [1.5, 0.55, 0.6]]], 8); b.pop(); // cheeks
+      }
+      b.tint(1.5, 0.12, 0.1, 1).place(0, 0.06, 0.06).lathe([[0.0, -0.13], [0.12, -0.06], [0.13, 0.04], [0.0, 0.13]], 8).pop(); // nose
+      disc(b.place(0, -0.3, 0.03), [[0.27, [1.3, 0.14, 0.12]], [0.215, [0.03, 0.01, 0.01]]], 14); b.pop(); // lips, mouth
+      b.tint(0.2, 0.42, 1.2, 1).place(0.12, 0.58, 0.0, 0, 0, -0.3).lathe([[0.3, 0.0], [0.3, 0.04], [0.15, 0.06], [0.11, 0.42], [0.0, 0.44]], 8).pop(); // hat
+    }), 'clown');
+    const MOUTH = -0.3, R = 0.215;
+    // the milk: drops along the arc from the nozzle to where it lands
+    const DROPS = 12, drops = new THREE.InstancedMesh(geometry((b) => b.tint(1, 1, 0.96, 1).lathe([[0.0, -0.05], [0.05, 0.0], [0.0, 0.05]], 5), 'glow'), this.world.materials.glow, DROPS);
+    drops.name = 'moving-milk:drops';
+    drops.frustumCulled = false;
+    drops.visible = false;
+    booth.dyn.add(drops);
+    const NOZZLE = V(0, 1.34, FRONT - 0.52), land = V(0, 1.6, Z), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s3 = new THREE.Vector3(), p3 = new THREE.Vector3();
+    const C = { x: 0, y: 1.95, v: 0.9, turn: 2 };
+    let flow = 0, gulp = 0, hiss = 0, full = 0;
+    const game = {
+      view: { pos: [0, 1.75, 2.45], look: [0, 1.8, -3.2], fov: 58 }, firstPerson: true, crosshair: true,
+      reset() { game.score = 0; full = 0; C.x = 0; C.v = 0.9; C.turn = 2; },
+      step(dt, t, time, aim, io) {
+        const p = t < 0 ? 0 : clamp01(t / 45), speed = t < 0 ? 0.5 : lerp(0.9, 3.3, p);
+        C.x += Math.sign(C.v || 1) * speed * dt;
+        if (C.x > 2.05) { C.x = 2.05; C.v = -1; } else if (C.x < -2.05) { C.x = -2.05; C.v = 1; }
+        if (t > 28 && (C.turn -= dt) <= 0) { C.v = -C.v; C.turn = 0.5 + Math.random() * 1.1; } // he starts changing his mind
+        C.y = 1.95 + (t > 14 ? 0.3 * clamp01((t - 14) / 6) * Math.sin(time * 2.7) : 0);
+        const on = t >= 0 && aim && aim.down;
+        let fed = false;
+        if (on) {
+          const u = (Z - aim.o.z) / aim.d.z, ax = Math.min(HALF - 0.2, Math.max(-HALF + 0.2, aim.o.x + aim.d.x * u)), ay = Math.min(2.9, Math.max(1.15, aim.o.y + aim.d.y * u));
+          const k = 1 - Math.exp(-dt * 6.5); // the jet takes a moment to follow the hand
+          land.x += (ax - land.x) * k; land.y += (ay - land.y) * k;
+          fed = Math.hypot(land.x - C.x, land.y - (C.y + MOUTH)) < R;
+          if (fed) { full += 50 * dt; game.score = Math.floor(full); if ((gulp -= dt) <= 0) { gulp = 0.42; io.play('gulp', { volume: 0.7 }); } }
+          if ((hiss -= dt) <= 0) { hiss = 0.3; io.play('squirt', { volume: 0.35 }); }
+          flow = (flow + dt * 2.4) % 1;
+          for (let i = 0; i < DROPS; i++) {
+            const w = (i + flow) / DROPS;
+            p3.copy(NOZZLE).lerp(land, w); p3.y += 0.55 * 4 * w * (1 - w);
+            drops.setMatrixAt(i, m4.compose(p3, q, s3.setScalar(0.75 + 0.25 * ((i * 7) % 3))));
+          }
+          drops.instanceMatrix.needsUpdate = true;
+        }
+        drops.visible = !!on;
+        const puff = fed ? 1 + 0.06 * Math.sin(time * 30) : 1;
+        clown.position.set(C.x, C.y, Z);
+        clown.scale.set(puff, puff, 1);
+        clown.rotation.z = 0.12 * Math.sin(time * 1.7);
+      },
+    };
+    game.reset();
+    return game;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Ring the Bell: the high striker. A needle sweeps a gauge; the blow is as hard as the needle is high.
+
+  _bell(parts, booth) {
+    const paint = parts.get('paint'), wood = parts.get('woodDark');
+    const TX = -1.9, TZ = -1.6, H = 5.6, BASE = 0.5; // the tower: where it stands, how high the puck can go
+    // (this booth has no roof: its tower rises well above the others)
+    wood.tint(0.75, 0.6, 0.42, 1).box(TX - 0.45, 0, TZ - 0.12, TX + 0.45, BASE + H + 0.5, TZ, { tile: 1 });
+    paint.tint(0.95, 0.93, 0.86, 1).box(TX - 0.3, BASE, TZ, TX + 0.3, BASE + H, TZ + 0.02, { faces: 'Z' });
+    for (let k = 0; k <= 10; k++) {
+      const y = BASE + (k / 10) * H, c = k >= 9 ? [1.5, 0.2, 0.15] : k >= 6 ? [1.5, 0.9, 0.15] : [0.2, 0.5, 0.25];
+      paint.tint(c[0], c[1], c[2], 1).box(TX - 0.3, y - 0.03, TZ + 0.02, TX + 0.3, y + 0.03, TZ + 0.035, { faces: 'Z' });
+    }
+    paint.tint(0.2, 0.2, 0.24, 1).box(TX - 0.03, BASE, TZ + 0.035, TX + 0.03, BASE + H, TZ + 0.06, { faces: 'xXZ' }); // the rail
+    // the bell at the top, the pad one strikes at the bottom
+    paint.tint(1.5, 1.05, 0.25, 1).place(TX, BASE + H + 0.1, TZ + 0.2).lathe([[0.3, 0.0], [0.26, 0.06], [0.2, 0.3], [0.08, 0.42], [0.0, 0.44]], 10).pop();
+    paint.tint(0.5, 0.1, 0.1, 1).box(TX - 0.5, 0, TZ + 0.5, TX + 0.5, 0.24, TZ + 1.5);
+    paint.tint(0.9, 0.2, 0.16, 1).place(TX, 0.24, TZ + 1.0).lathe([[0.36, 0.0], [0.36, 0.08], [0.3, 0.12], [0.0, 0.12]], 12).pop();
+    // (lights round the top, lit when the bell rings)
+    const lamp = this._mesh(booth, geometry((b) => { for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2; b.tint(1, 0.85, 0.3, 1).box(TX + Math.cos(a) * 0.62 - 0.06, BASE + H + 0.25 + Math.sin(a) * 0.5 - 0.06, TZ + 0.05, TX + Math.cos(a) * 0.62 + 0.06, BASE + H + 0.25 + Math.sin(a) * 0.5 + 0.06, TZ + 0.12); } }, 'glow'), 'lamps', 'glow');
+    lamp.visible = false;
+    const puck = this._mesh(booth, geometry((b) => b.tint(1.4, 0.3, 0.2, 1).box(-0.16, -0.07, 0, 0.16, 0.07, 0.14)), 'puck');
+    let blows = 3, phase = 0, power = 0, rise = 0, speed = 1.1, flash = 0, clock = 0, start = 0;
+    const game = {
+      view: { pos: [1.5, 2.0, 5.7], look: [-0.9, 3.15, -1.6], fov: 62 }, firstPerson: false, crosshair: false, blows: 3,
+      reset() { game.score = 0; blows = 3; phase = 0; rise = 0; speed = 1.1; clock = 0; start = Math.random() * 2; game.gauge = 0; game.left = 3; game.over = false; },
+      step(dt, t, time, aim, io) {
+        clock += dt;
+        if (flash > 0) flash -= dt;
+        lamp.visible = flash > 0 && Math.floor(flash * 10) % 2 === 0;
+        if (t < 0) { puck.position.set(TX, BASE + 0.07, TZ + 0.035); game.gauge = null; return; }
+        if (phase === 0) {
+          // the needle: up and down, quicker at each blow
+          const u = (start + clock * speed) % 2;
+          game.gauge = u < 1 ? u : 2 - u;
+          if (aim && aim.clicks) { power = game.gauge; phase = 1; rise = 0; io.play('whack'); io.strike?.(); }
+          puck.position.set(TX, BASE + 0.07, TZ + 0.035);
+        } else {
+          // the puck flies up as far as the blow was hard, then drops back
+          rise += dt;
+          const up = Math.min(1, rise / 0.55), fall = clamp01((rise - 0.75) / 0.5), k = (1 - (1 - up) ** 2) * (1 - fall * fall);
+          puck.position.set(TX, BASE + 0.07 + power * (H - 0.14) * k, TZ + 0.035);
+          if (phase === 1 && up >= 1) {
+            phase = 2;
+            const pts = Math.round(power * 1000);
+            if (pts >= 950) { io.play('bell'); flash = 1.6; io.note(`DING! ${pts}`); } else io.note(`${pts}`);
+            if (pts > game.score) game.score = pts;
+          }
+          if (rise > 1.3) {
+            blows--; game.left = blows;
+            if (blows <= 0) { game.over = true; game.gauge = null; } else { phase = 0; speed *= 1.38; clock = 0; start = Math.random() * 2; }
+          }
+        }
+      },
+    };
+    game.reset();
+    return game;
+  }
+
+  // ---------------------------------------------------------------------------
+
+  /** The booth at whose counter (x, z) stands, or null. */
+  near(x, z) {
+    for (const b of this.list) {
+      const dx = x - b.stand[0], dz = z - b.stand[1];
+      if (dx * dx + dz * dz < 2.4 * 2.4) return b;
+    }
+    return null;
+  }
+
+  /**
+   * A game starts at a booth. `io`: { play(sound, options), note(text), strike() }. Returns the session:
+   * { booth, view: { pos, look, fov } (in the world), firstPerson, crosshair, step(dt, time, aim), over, score,
+   *   line (what the clock of the screen says), gauge (0 to 1, or null), close() }.
+   * `aim`: { origin, dir (in the world), clicks, down }.
+   */
+  open(booth, io) {
+    const game = booth.game, g = booth.group, o = this._o, d = this._d, local = { o, d, clicks: 0, down: false };
+    game.reset();
+    const session = {
+      booth, firstPerson: game.firstPerson, crosshair: game.crosshair, over: false, score: 0, gauge: null, line: '',
+      view: { pos: V(...game.view.pos).applyMatrix4(g.matrixWorld), look: V(...game.view.look).applyMatrix4(g.matrixWorld), fov: game.view.fov },
+      t: -3, // the count before the game (the striker needs none)
+      step: (dt, time, aim) => {
+        if (session.over) return;
+        const was = session.t;
+        session.t += dt;
+        if (booth.seconds && session.t < 0) {
+          if (Math.ceil(-session.t) !== Math.ceil(-was) || was === -3) io.play('tick');
+          session.line = `${booth.name} · ${Math.ceil(-session.t)}…`;
+          game.step(dt, -1, time, null, io);
+          return;
+        }
+        if (was < 0) { session.t = 0; io.play('start'); }
+        o.copy(aim.origin).applyMatrix4(booth.inverse);
+        d.copy(aim.dir).transformDirection(booth.inverse);
+        local.clicks = aim.clicks; local.down = aim.down;
+        game.step(dt, session.t, time, local, io);
+        session.score = game.score;
+        session.gauge = game.gauge ?? null;
+        if (booth.seconds) {
+          const left = Math.max(0, booth.seconds - session.t);
+          session.line = `${booth.name} · ${game.score} pts · ${Math.ceil(left)} s`;
+          if (left <= 5 && Math.ceil(left) !== Math.ceil(booth.seconds - was) && left > 0) io.play('tick', { volume: 0.6 });
+          if (left <= 0) session.over = true;
+        } else {
+          session.line = `${booth.name} · best ${game.score} · ${game.left} blow${game.left === 1 ? '' : 's'} left`;
+          if (game.over) session.over = true;
+        }
+      },
+      close: () => { if (this.session === session) this.session = null; game.reset(); },
+    };
+    if (!booth.seconds) session.t = 0;
+    this.session = session;
+    return session;
+  }
+
+  /** Every frame: the booths nobody plays at idle along, when somebody is near enough to see. */
+  update(dt, time, pos, camera) {
+    if (camera) this._cull(camera.position);
+    for (const b of this.list) {
+      const d2 = (pos.x - b.x) ** 2 + (pos.z - b.z) ** 2;
+      b.dyn.visible = d2 < 70 * 70;
+      if ((this.session && this.session.booth === b) || d2 > 45 * 45) continue;
+      b.game.step(dt, -1, time, null, null);
+    }
+  }
+}

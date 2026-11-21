@@ -466,7 +466,9 @@ export const ACID = { x: -236, z: -82, r: 4.2 };
 // The race: three laps of the track round the wheat fields (the path 'race'), on a quad, against the clock.
 // `start`: where the line is, as a share of the lap from the first point of the path (one drives the way the
 // path is listed); `boosts` and `jump`: where the pads and the ramp are, the same way.
-export const RACE = { name: 'Quadmania', laps: 3, width: 7.5, start: 0.012, boosts: [0.2, 0.52, 0.86], jump: 0.66 };
+// `paddock`: on which side of the line one asks to race, and the board stands (1: on the right of the way
+// the track is listed turned a quarter… in short: the side of the valley).
+export const RACE = { name: 'Quadmania', laps: 3, width: 7.5, start: 0.012, boosts: [0.18, 0.4, 0.84], jump: 0.52, paddock: 1 };
 // The boulder of the island: it rolls down the whole path, again and again (seconds; metres per second).
 export const BOULDER = { radius: 1.55, speed: 7.2, period: 52 };
 

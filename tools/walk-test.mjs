@@ -612,6 +612,81 @@ try {
     check('swimming out to where the sea ends brings the shark', shark.swimming && shark.far < 30 && /fin/.test(shark.warned || '') && shark.cause === 'Eaten by the shark' && shark.t < 15 && !!shark.respawn && shark.respawn.walkable && shark.respawn.y > 0.2 && shark.alive, JSON.stringify(shark));
   }
 
+  // --- the fair: the four booths of the pier, played by a bot through the pointer; the race, driven by a bot
+  {
+    await place(98, 0, 0);
+    await frames(3);
+    const offered = await page.evaluate(() => { const m = window.__mmf, b = m.world.games.booths.list[0]; m.player.teleport(b.stand[0], b.stand[1], b.stand[2]); return b.name; });
+    await frames(6);
+    const ask = await prompt();
+    const fair = await page.evaluate(() => {
+      const app = window.__mmf, { input, world, engine } = app, cam = engine.camera, T = app.THREE, g = world.games, out = {};
+      const v = new T.Vector3(), m = new T.Matrix4(), dt = 1 / 30;
+      const point = (w) => { v.copy(w).project(cam); input.pointer.x = (v.x * 0.5 + 0.5) * window.innerWidth; input.pointer.y = (-v.y * 0.5 + 0.5) * window.innerHeight; };
+      for (const booth of g.booths.list) {
+        app.playBooth(booth);
+        const s = app.fair.session, dyn = booth.dyn;
+        let n = 0, sight = false, hidden = false;
+        for (; n < 30 * 70 && app.fair.session === s && !s.over; n++) {
+          input.pointer.down = false;
+          if (s.t >= 0) {
+            if (booth.id === 'shoot') {
+              const mesh = dyn.children.find((c) => c.isInstancedMesh);
+              let best = null, bd = 9; // a target that stands, the nearest to the middle
+              for (let i = 0; i < mesh.count; i++) { mesh.getMatrixAt(i, m); const e = m.elements; if (Math.abs(e[9]) > 0.3 * Math.hypot(e[8], e[9], e[10])) continue; if (Math.abs(e[12]) < bd) { bd = Math.abs(e[12]); best = new T.Vector3(e[12], e[13], e[14]); } }
+              if (best && n % 12 === 0) { point(best.applyMatrix4(booth.group.matrixWorld)); input._clicks++; }
+            } else if (booth.id === 'mole') {
+              const t = dyn.children.find((c) => c.name.endsWith(':mole') && c.visible && c.scale.y > 0.99 && c.geometry.attributes.position.count < 150); // (not a rabbit: its ears make it a bigger mesh)
+              if (t && n % 8 === 0) { point(new T.Vector3(t.position.x, t.position.y + 0.35, t.position.z).applyMatrix4(booth.group.matrixWorld)); input._clicks++; }
+            } else if (booth.id === 'milk') {
+              const clown = dyn.children.find((c) => c.name.endsWith(':clown'));
+              point(new T.Vector3(clown.position.x, clown.position.y - 0.3, clown.position.z).applyMatrix4(booth.group.matrixWorld));
+              input.pointer.down = true;
+            } else if (s.gauge !== null && s.gauge > 0.9) input._clicks++;
+          }
+          app.fairStep(dt);
+          if (n === 150) { sight = document.querySelector('.sight').classList.contains('on'); hidden = !app.me.root.visible; }
+        }
+        const line = s.line, score = s.score, over = s.over;
+        for (let k = 0; k < 80 && app.fair.session; k++) app.fairStep(dt);
+        out[booth.id] = { score, over, line, sight, hidden, seconds: n * dt, closed: !app.fair.session, shown: app.me.root.visible };
+      }
+      input.pointer.down = false;
+      return out;
+    });
+    await frames(20);
+    const boards = await page.evaluate(() => Object.fromEntries(Object.entries(window.__mmf.fair.boards).map(([k, b]) => [k, b._local().all[0]?.score || 0])));
+    check('the four booths of the pier are offered at their counters and played with the pointer: targets, moles, the clown, the bell', ask.includes(`Play ${offered}`) && fair.shoot.score > 300 && fair.mole.score > 100 && fair.milk.score > 150 && fair.bell.score >= 900 && ['shoot', 'mole', 'milk'].every((id) => fair[id].over && fair[id].sight && fair[id].hidden && fair[id].seconds > 47 && fair[id].closed && fair[id].shown) && fair.bell.over && !fair.bell.sight && fair.bell.closed, JSON.stringify(fair));
+    check('each score goes on the board of its booth', ['shoot', 'mole', 'milk', 'bell'].every((id) => boards[id] === fair[id].score), JSON.stringify(boards));
+    // the race
+    const race = await page.evaluate(() => {
+      const app = window.__mmf, { input, world, player } = app, r = world.games.race, dt = 1 / 60;
+      player.teleport(r.paddock.x, r.paddock.z, 0);
+      return new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(() => {
+        const ask = [...document.querySelectorAll('.prompt.on span')].map((e) => e.textContent);
+        app.playRace();
+        const s = app.fair.session, S = s.state, laps = [];
+        let n = 0, air = 0, boost = 0, top = 0, still = 0;
+        for (; n < 60 * 150 && app.fair.session === s && !s.over; n++) {
+          const ahead = r.at(S.s + 7 + Math.hypot(S.vx, S.vz) * 0.45), want = Math.atan2(ahead.x - S.x, ahead.z - S.z), err = Math.atan2(Math.sin(want - S.yaw), Math.cos(want - S.yaw));
+          input.move.x = Math.max(-1, Math.min(1, err * 2.4)); input.move.y = Math.abs(err) > 0.9 ? 0.3 : 1; input.run = false; input.jump = false;
+          app.fairStep(dt);
+          if (S.count > 0 && Math.hypot(S.vx, S.vz) < 0.01) still++;
+          if (!S.grounded) air++; if (S.boost > 0) boost++; top = Math.max(top, Math.hypot(S.vx, S.vz));
+          if (s.laps !== laps.length) laps.push(+S.clock.toFixed(2));
+        }
+        input.move.x = 0; input.move.y = 0;
+        const out = { ask, over: s.over, time: s.time, laps, air, boost, top, still, riding: player.riding, quad: !!player.driver };
+        for (let k = 0; k < 60 * 4 && app.fair.session; k++) app.fairStep(dt);
+        out.after = { closed: !app.fair.session, riding: player.riding, driver: !!player.driver, d: Math.hypot(player.pos.x - r.start.x, player.pos.z - r.start.z) };
+        res(out);
+      })));
+    });
+    await frames(20);
+    const best = await page.evaluate(() => window.__mmf.fair.boards.race._local().all[0]?.score || 0);
+    check('the quad race: asked for in the paddock, three laps against the clock, the pads and the ramp on the way, the time on the board', race.ask.some((t) => t.startsWith('Race:')) && race.over && race.laps.length === 3 && race.time > 35000 && race.time < 90000 && race.still > 150 && race.air > 30 && race.boost > 100 && race.top > 24 && race.riding && race.quad && race.after.closed && !race.after.riding && !race.after.driver && best === race.time, JSON.stringify(race));
+  }
+
   // --- quality change: the page reloads and resumes where we were
   await place(-121.8, -40, 184);
   await frames(3);

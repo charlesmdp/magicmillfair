@@ -117,6 +117,12 @@ export async function route(req, ctx) {
   if (path === '/api/scores') {
     if (method === 'GET' || method === 'HEAD') {
       const board = query.get('board') || 'sky';
+      if (board === 'all') {
+        // every board at once (the game asks for them all when it starts)
+        const boards = {};
+        for (const id of Object.keys(BOARDS)) boards[id] = topsOf(await ctx.store.get(`board:${id}`), now);
+        return out(200, { boards });
+      }
       if (!Object.hasOwn(BOARDS, board)) return out(404, { error: 'Unknown board.' });
       return out(200, { board, ...topsOf(await ctx.store.get(`board:${board}`), now) });
     }
