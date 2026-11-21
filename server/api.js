@@ -3,6 +3,9 @@
 import { originAllowed } from './protocol.js';
 
 export const BODY_MAX = 4096; // bytes of JSON a POST may carry
+/** …except these two: what a sponsor sends (a picture with it) and what Stripe sends. */
+export const BIG_BODY = { '/api/sponsor': 180_000, '/api/sponsors': 180_000, '/api/stripe/webhook': 262_144 };
+export const bodyMax = (path) => BIG_BODY[path] || BODY_MAX;
 
 /** Counts what each client does: allow(key, max, windowMs) is true while `key` stays under `max` per window. */
 export class Limiter {
@@ -24,6 +27,8 @@ export const LIMITS = {
   scores: [[8, 60_000], [90, 3600_000]], // a climb takes minutes, a game at a booth less than one
   run: [[30, 60_000], [400, 3600_000]], // a note for each start (the start plate of the climb is left often)
   visit: [[10, 60_000], [60, 3600_000]],
+  checkout: [[6, 60_000], [40, 3600_000]], // a payment page asked for
+  sponsor: [[6, 60_000], [30, 3600_000]], // what a sponsor wants shown (a picture each time)
   npc: [[10, 60_000], [120, 3600_000]],
   npcDay: [3000, 24 * 3600_000], // everyone together: a ceiling on what the key can spend in a day
 };
@@ -34,8 +39,8 @@ export function allowed(limiter, route, client, now) {
 }
 
 /** JSON text → object, or null (too long, not JSON, not an object). */
-export function parseBody(text) {
-  if (typeof text !== 'string' || text.length > BODY_MAX) return null;
+export function parseBody(text, max = BODY_MAX) {
+  if (typeof text !== 'string' || text.length > max) return null;
   try { const v = JSON.parse(text); return v && typeof v === 'object' ? v : null; } catch { return null; }
 }
 

@@ -18,11 +18,31 @@ import { Presence, cleanName, cleanRoom } from '../src/net/Presence.js';
 import { sleep, until, freePort, request, Client } from './lib/net.mjs';
 import { sign, verify, randomId } from '../server/token.js';
 import { addScore, topsOf, periodKeys, runFits } from '../server/scores.js';
+import { signWebhook } from '../server/stripe.js';
+import { cleanLogo, cleanText, cleanUrl } from '../server/shop.js';
 import { visit, localDay } from '../server/routes.js';
 import { cleanTalk, oneSentence } from '../server/npc.js';
 
 // what the test servers are given: the secret that signs the notes of the runs, the administrator's key
 const SCORE_SECRET = 'test-score-secret', ADMIN_KEY = 'test-admin-key';
+const STRIPE_KEY = 'sk_test_magicmillfairtests', STRIPE_HOOK = 'whsec_magicmillfairtests';
+// A stand-in for Stripe: it hands out payment pages and remembers what it was asked.
+const stripe = { asked: [], port: 0, server: null };
+async function startStripe() {
+  stripe.port = await freePort();
+  stripe.server = http.createServer((req, res) => {
+    let text = '';
+    req.on('data', (d) => { text += d; });
+    req.on('end', () => {
+      const form = new URLSearchParams(text), ok = req.headers.authorization === `Bearer ${STRIPE_KEY}` && req.url === '/v1/checkout/sessions';
+      stripe.asked.push({ url: req.url, auth: req.headers.authorization, form });
+      res.writeHead(ok ? 200 : 401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(ok ? { id: `cs_test_${stripe.asked.length}`, url: `https://checkout.stripe.test/pay/cs_test_${stripe.asked.length}` } : { error: { message: 'Invalid API Key' } }));
+    });
+  });
+  await new Promise((resolve) => stripe.server.listen(stripe.port, '127.0.0.1', resolve));
+}
+const shopEnv = () => ({ STRIPE_SECRET_KEY: STRIPE_KEY, STRIPE_WEBHOOK_SECRET: STRIPE_HOOK, STRIPE_API: `http://127.0.0.1:${stripe.port}` });
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CF = process.argv.includes('--cloudflare');
@@ -45,7 +65,7 @@ function check(name, ok, detail) {
 async function startServer(env = {}, port = 0) {
   port = port || (await freePort());
   const proc = spawn(process.execPath, [path.join(ROOT, 'server/index.js')], {
-    env: { ...process.env, ALLOWED_ORIGINS: '', MAX_PLAYERS: '', DIST_DIR: '', HOST: '127.0.0.1', TICK_HZ: '20', ANTHROPIC_API_KEY: '', NPC_MODEL: '', SCORE_SECRET, ADMIN_KEY, ...env, PORT: String(port) },
+    env: { ...process.env, ALLOWED_ORIGINS: '', MAX_PLAYERS: '', DIST_DIR: '', HOST: '127.0.0.1', TICK_HZ: '20', ANTHROPIC_API_KEY: '', NPC_MODEL: '', SCORE_SECRET, ADMIN_KEY, ...shopEnv(), ...env, PORT: String(port) },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   const server = { port, proc, log: '', alive: () => proc.exitCode === null && proc.signalCode === null };
@@ -77,7 +97,7 @@ async function startWorker(env = {}, port = 0) {
   delete config.$schema;
   config.main = path.join(ROOT, config.main);
   config.assets.directory = env.DIST_DIR;
-  config.vars = { ...config.vars, TICK_MS: String(TICK), ALLOWED_ORIGINS: env.ALLOWED_ORIGINS || '', DEBUG: '1', SCORE_SECRET, ADMIN_KEY };
+  config.vars = { ...config.vars, TICK_MS: String(TICK), ALLOWED_ORIGINS: env.ALLOWED_ORIGINS || '', DEBUG: '1', SCORE_SECRET, ADMIN_KEY, ...shopEnv() };
   if (env.MAX_PLAYERS) config.vars.MAX_PLAYERS = env.MAX_PLAYERS;
   if (env.STALE_MS) config.vars.STALE_MS = env.STALE_MS;
   if (env.NEAR) config.vars.NEAR = env.NEAR;
@@ -634,7 +654,7 @@ async function testApi({ port }) {
   // the note of a run that started `ago` ms ago, as the server would have signed it
   const note = (board, ago) => sign(SCORE_SECRET, { b: board, t: Date.now() - ago, n: randomId(9) });
   let res = await request(port, '/api/status');
-  check('api: /api/status says what is switched on, and no secret', res.status === 200 && json(res)?.ok === true && json(res).npc === false && json(res).admin === true && json(res).shop === 'off' && !/test-/.test(res.body.toString()), res.body.toString().slice(0, 160));
+  check('api: /api/status says what is switched on, and no secret', res.status === 200 && json(res)?.ok === true && json(res).npc === false && json(res).admin === true && json(res).shop === 'test' && !/test-|sk_|whsec_/.test(res.body.toString()), res.body.toString().slice(0, 160));
   res = await request(port, '/api/scores');
   const empty = json(res);
   check('api: GET /api/scores → the four lists of the climb, empty at first', res.status === 200 && empty?.board === 'sky' && ['day', 'week', 'month', 'all'].every((p) => Array.isArray(empty.tops[p]) && !empty.tops[p].length) && Array.isArray(empty.top) && /json/.test(res.headers['content-type']), [res.status, res.body.toString().slice(0, 160)]);
@@ -696,7 +716,82 @@ async function testApi({ port }) {
 
 // What the API is made of, checked without a server: the lists by period, the notes, the visits, the guard
 // rails of the characters.
+// ------------------------------------------------------------------- the shop: payments, sponsors, pictures
+
+// the smallest pictures that are what they say: a PNG and a JPEG of 2 × 2
+const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR4nGP8z8DwnwEImBigAAwAFiQCAnlmBxsAAAAASUVORK5CYII=';
+const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]), Buffer.from('JFIF\0\x01\x01\0\0\x01\0\x01\0\0', 'latin1'), Buffer.from([0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x02, 0x00, 0x02, 0x01, 0x01, 0x11, 0x00]), Buffer.alloc(24), Buffer.from([0xff, 0xd9])]).toString('base64');
+
+async function testShop({ port }) {
+  const json = (res) => { try { return JSON.parse(res.body.toString()); } catch { return null; } };
+  const post = (target, body, headers = {}) => request(port, target, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
+  const admin = { authorization: `Bearer ${ADMIN_KEY}` };
+  const hook = async (event, secret = STRIPE_HOOK, at = Date.now()) => { const raw = JSON.stringify(event); return post('/api/stripe/webhook', raw, { 'stripe-signature': await signWebhook(secret, raw, at) }); };
+  const paid = (item, device, sub) => ({ type: 'checkout.session.completed', data: { object: { id: 'cs_test_x', payment_status: 'paid', subscription: sub || null, metadata: { item, device } } } });
+  const ann = randomId(16), bob = randomId(16);
+  // what is sold, and that it is a test shop
+  let res = await request(port, `/api/shop?device=${ann}`);
+  const shop = json(res), status = json(await request(port, '/api/status'));
+  check('shop: open in test mode; the prices come from the server; nothing owned, nothing sponsored yet', res.status === 200 && shop?.mode === 'test' && status?.shop === 'test' && shop.prices.hat === 999 && shop.prices.jetpack === 3000 && shop.prices.village.join() === '1900,4900,9900,19900,49900,99900,199900,399900,799900,999900' && !shop.owned.length && !Object.keys(shop.slots).length && !JSON.stringify([shop, status]).includes(STRIPE_KEY), [res.status, res.body.toString().slice(0, 200)]);
+  // a payment page: asked of Stripe with the server's price, whatever the browser says
+  stripe.asked.length = 0;
+  res = await post('/api/checkout', { item: 'hat:crown', device: ann, amount: 1, price: 1 });
+  const asked = stripe.asked[0]?.form;
+  check('shop: a payment page is asked of Stripe at the price of the catalogue, for this visitor', res.status === 200 && /^https:\/\/checkout\.stripe\.test\//.test(json(res)?.url || '') && asked?.get('mode') === 'payment' && asked.get('line_items[0][price_data][unit_amount]') === '999' && asked.get('line_items[0][price_data][currency]') === 'usd' && asked.get('metadata[item]') === 'hat:crown' && asked.get('metadata[device]') === ann && asked.get('client_reference_id') === ann && asked.get('success_url').endsWith('/?paid=hat%3Acrown'), [res.status, res.body.toString().slice(0, 160), asked?.toString().slice(0, 300)]);
+  res = await post('/api/checkout', { item: 'village:eagle-rest', device: bob });
+  const sub = stripe.asked[1]?.form;
+  const nothing = await post('/api/checkout', { item: 'hat:invisible', device: ann }), nobody = await post('/api/checkout', { item: 'jetpack', device: 'x' });
+  check('shop: a village is a subscription by the month, at the price of its height; what is not sold is refused', res.status === 200 && sub?.get('mode') === 'subscription' && sub.get('line_items[0][price_data][recurring][interval]') === 'month' && Number(sub.get('line_items[0][price_data][unit_amount]')) >= 1900 && sub.get('subscription_data[metadata][item]') === 'village:eagle-rest' && nothing.status === 400 && nobody.status === 400, [res.status, sub?.toString().slice(0, 200), nothing.status, nobody.status]);
+  // only Stripe's word counts
+  const forged = await hook(paid('jetpack', ann), 'whsec_somebody_else'), stale = await hook(paid('jetpack', ann), STRIPE_HOOK, Date.now() - 3600_000);
+  const unsigned = await post('/api/stripe/webhook', JSON.stringify(paid('jetpack', ann)));
+  const still = json(await request(port, `/api/shop?device=${ann}`));
+  check('shop: a webhook that Stripe did not sign, or an old one, gives nothing', forged.status === 400 && stale.status === 400 && unsigned.status === 400 && !still.owned.length, [forged.status, stale.status, unsigned.status, still.owned]);
+  const ok1 = await hook(paid('hat:crown', ann)), ok2 = await hook(paid('hat:crown', ann)), ok3 = await hook(paid('jetpack', ann));
+  const mine = json(await request(port, `/api/shop?device=${ann}`)), theirs = json(await request(port, `/api/shop?device=${bob}`));
+  const again = await post('/api/checkout', { item: 'hat:crown', device: ann });
+  check('shop: what Stripe says was paid is theirs — once, and theirs only; it is not sold to them twice', ok1.status === 200 && ok2.status === 200 && ok3.status === 200 && mine.owned.join() === 'hat:crown,jetpack' && !theirs.owned.length && again.status === 409, [mine.owned, theirs.owned, again.status]);
+  // a place to sponsor: paid, then filled in by its holder, then approved by the administrator
+  await hook(paid('board:shoot', bob, 'sub_test_1'));
+  const taken = await post('/api/checkout', { item: 'board:shoot', device: ann });
+  const seen = json(await request(port, `/api/shop?device=${ann}`)), held = json(await request(port, `/api/shop?device=${bob}`));
+  check('shop: a sponsored place is held by who paid; others only see that it is taken', taken.status === 409 && seen.slots['board:shoot']?.state === 'taken' && !seen.slots['board:shoot'].mine && held.slots['board:shoot']?.mine === true, [taken.status, seen.slots, held.slots]);
+  const intruder = await post('/api/sponsor', { slot: 'board:shoot', device: ann, title: 'Mine now' });
+  const html = await post('/api/sponsor', { slot: 'board:shoot', device: bob, title: '<script>alert(1)</script> Acme   Robotics & Sons of the North Pole', subtitle: 'Friendly\nmachines <b>since</b> 1999', url: 'javascript:alert(1)', logo: PNG });
+  const svg = await post('/api/sponsor', { slot: 'board:shoot', device: bob, title: 'Acme', logo: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><script>alert(1)</script></svg>'.padEnd(64)).toString('base64') });
+  const page = await post('/api/sponsor', { slot: 'board:shoot', device: bob, title: 'Acme', logo: Buffer.from('<!doctype html><html><script>alert(1)</script></html>'.padEnd(64)).toString('base64') });
+  const liar = await post('/api/sponsor', { slot: 'board:shoot', device: bob, title: 'Acme', logo: Buffer.concat([Buffer.from(PNG, 'base64').subarray(0, 8), Buffer.from('<script>alert(1)</script>'.padEnd(60))]).toString('base64') });
+  const fine = await post('/api/sponsor', { slot: 'board:shoot', device: bob, title: '<script>alert(1)</script> Acme   Robotics & Sons of the North Pole', subtitle: 'Friendly\nmachines <b>since</b> 1999', url: 'https://acme.example/robots?x=1', logo: PNG });
+  const notYet = json(await request(port, `/api/shop?device=${ann}`)).slots['board:shoot'], noLogo = await request(port, '/api/logo?slot=board:shoot');
+  check('shop: only the holder fills a place in; a link must be https; what is not a picture is refused', intruder.status === 403 && html.status === 400 && svg.status === 400 && page.status === 400 && liar.status === 400 && fine.status === 200 && json(fine)?.state === 'pending', [intruder.status, html.status, svg.status, page.status, liar.status, fine.status]);
+  check('shop: nothing a sponsor sends is shown before it is approved', notYet.state === 'taken' && !notYet.title && noLogo.status === 404, [notYet, noLogo.status]);
+  const noAdmin = await request(port, '/api/sponsors'), list = json(await request(port, '/api/sponsors', { headers: admin }));
+  const draft = list?.slots?.['board:shoot']?.draft;
+  const peek = await request(port, draft?.logo || '/nowhere'), look = await request(port, draft?.logo || '/nowhere', { headers: admin });
+  check('shop: the administrator sees what awaits approval — text made harmless, the picture for their eyes only', noAdmin.status === 403 && draft && !/[<>]/.test(draft.title + draft.subtitle) && draft.title.length <= 28 && draft.subtitle === 'Friendly machines b since /b 1999' && draft.url === 'https://acme.example/robots?x=1' && peek.status === 404 && look.status === 200 && look.headers['content-type'] === 'image/png', [noAdmin.status, draft, peek.status, look.status, look.headers['content-type']]);
+  const approve = await post('/api/sponsors', { slot: 'board:shoot', approve: true }, admin), sneaky = await post('/api/sponsors', { slot: 'board:shoot', approve: true });
+  const live = json(await request(port, `/api/shop?device=${ann}`)).slots['board:shoot'];
+  const logo = await request(port, live?.logo || '/nowhere');
+  check('shop: once approved it is shown to everyone; the picture is served as a picture and nothing else', approve.status === 200 && sneaky.status === 403 && live.state === 'live' && live.url === 'https://acme.example/robots?x=1' && logo.status === 200 && logo.headers['content-type'] === 'image/png' && logo.headers['x-content-type-options'] === 'nosniff' && /sandbox/.test(logo.headers['content-security-policy'] || '') && logo.body.equals(Buffer.from(PNG, 'base64')), [approve.status, sneaky.status, live, logo.status, logo.headers]);
+  // the administrator fills a place by hand; a subscription that ends frees its place
+  const byHand = await post('/api/sponsors', { slot: 'gondola:7', set: { title: 'Seven Seas Ice Cream', subtitle: 'on the pier since ever', url: 'https://ice.example', logo: JPEG } }, admin);
+  const g7 = json(await request(port, '/api/shop')).slots['gondola:7'], g7logo = await request(port, g7?.logo || '/nowhere');
+  const ended = await hook({ type: 'customer.subscription.deleted', data: { object: { id: 'sub_test_1' } } });
+  const after = json(await request(port, `/api/shop?device=${bob}`)), gone = await request(port, live?.logo || '/nowhere');
+  const freed = await request(port, '/api/sponsors?slot=gondola:7', { method: 'DELETE', headers: admin });
+  check('shop: the administrator can fill a place by hand and free it; a subscription that ends frees its place and its picture', byHand.status === 200 && g7?.state === 'live' && g7.title === 'Seven Seas Ice Cream' && g7logo.status === 200 && g7logo.headers['content-type'] === 'image/jpeg' && ended.status === 200 && !after.slots['board:shoot'] && gone.status === 404 && freed.status === 200 && !json(freed).slots['gondola:7'], [byHand.status, g7, g7logo.status, ended.status, Object.keys(after.slots), gone.status, freed.status]);
+}
+
+function testShopLogic() {
+  const b64 = (text) => Buffer.from(text.padEnd(64)).toString('base64');
+  check('shop logic: text is one short line without markup; links are https and carry no name or password',
+    cleanText('  <b>Hello</b>\n\tworld\u0000 ', 20) === 'b Hello /b world' && cleanText('x'.repeat(99), 28).length === 28 && cleanUrl('https://example.com/a?b=1') === 'https://example.com/a?b=1' && ['http://example.com', 'javascript:alert(1)', 'data:text/html,x', 'https://user:pw@example.com', 'https://localhost', 'ftp://example.com', ''].every((u) => cleanUrl(u) === ''), [cleanText('  <b>Hello</b>\n\tworld\u0000 ', 20)]);
+  check('shop logic: a picture is told by its bytes — PNG, JPEG, WebP; never SVG, HTML, GIF, or something too large',
+    cleanLogo(PNG)?.type === 'image/png' && cleanLogo(JPEG)?.type === 'image/jpeg' && cleanLogo(b64('<svg xmlns="http://www.w3.org/2000/svg"></svg>')) === null && cleanLogo(b64('<html>')) === null && cleanLogo(b64('GIF89a')) === null && cleanLogo('not base64 !') === null && cleanLogo(Buffer.alloc(100_000, 1).toString('base64')) === null && cleanLogo(Buffer.concat([Buffer.from(PNG, 'base64').subarray(0, 16), Buffer.from([0, 0, 0x10, 0, 0, 0, 0x10, 0]), Buffer.alloc(40)]).toString('base64')) === null, [cleanLogo(PNG), cleanLogo(JPEG)]);
+}
+
 async function testApiLogic() {
+  testShopLogic();
   const D = Date.UTC(2026, 10, 21, 12); // a Saturday
   check('scores: the day, the ISO week and the month of a date', JSON.stringify(periodKeys(D)) === '{"day":"2026-11-21","week":"2026-W47","month":"2026-11","all":"all"}' && periodKeys(Date.UTC(2027, 0, 1)).week === '2026-W53' && periodKeys(Date.UTC(2024, 11, 30)).week === '2025-W01', periodKeys(D));
   let st = addScore(undefined, 'sky', { name: 'A', score: 200000 }, D).state;
@@ -1097,11 +1192,12 @@ process.on('unhandledRejection', (err) => uncaught.push(err));
 setTimeout(() => {
   console.log('FAIL  the test run timed out');
   process.exit(1);
-}, 180000).unref();
+}, 240000).unref();
 if (typeof globalThis.WebSocket !== 'function') globalThis.WebSocket = WebSocket; // Node 20: no global WebSocket yet
 
 const fx = makeDist();
 let server = null;
+await startStripe();
 try {
   if (CF) {
     fs.copyFileSync(path.join(ROOT, 'public/_headers'), path.join(fx.dist, '_headers'));
@@ -1110,6 +1206,7 @@ try {
     await section('protocol', () => testProtocol(server));
     await section('presence', () => testPresence(server));
     await section('api', () => testApi(server));
+    await section('shop', () => testShop(server));
     await section('cloudflare', () => testCloudflare(server, fx));
     await section('crowd', () => testCrowd(startWorker, fx.dist));
     await section('moderation', () => testModeration(startWorker, fx.dist));
@@ -1125,6 +1222,7 @@ try {
     await section('protocol', () => testProtocol(server));
     await section('presence', () => testPresence(server));
     await section('api', () => testApi(server));
+    await section('shop', () => testShop(server));
     await section('crowd', () => testCrowd(startServer, fx.dist));
     await section('moderation', () => testModeration(startServer, fx.dist));
     const kept = (() => { try { return JSON.parse(fs.readFileSync(path.join(fx.tmp, 'scores.json'), 'utf8')); } catch { return null; } })();

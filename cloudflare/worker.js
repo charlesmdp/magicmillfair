@@ -17,7 +17,8 @@
 // of the game runs; drawn and kept by the notebook otherwise); for tests only: STALE_MS, DEBUG.
 import { DurableObject } from 'cloudflare:workers';
 import { Room as Relay, MAX_FRAME, NEAR, RANGE, cleanRoom, originAllowed, parseOrigins } from '../server/protocol.js';
-import { Limiter, LIMITS, BODY_MAX, allowed, parseBody, mayPost } from '../server/api.js';
+import { Limiter, LIMITS, BODY_MAX, allowed, parseBody, mayPost, bodyMax } from '../server/api.js';
+import { stripeConfig } from '../server/stripe.js';
 import { route, banned, addBan } from '../server/routes.js';
 import { randomId, sameSecret } from '../server/token.js';
 import { NPC_MODEL, cleanTalk, npcReply } from '../server/npc.js';
@@ -82,16 +83,16 @@ export class Room extends DurableObject {
     if (url.pathname === '/banned') return Response.json({ banned: await banned({ store, now: () => Date.now() }, url.searchParams.get('ip') || '', url.searchParams.get('dev') || '') });
     if (url.pathname === '/ban') return Response.json({ added: await addBan({ store, now: () => Date.now() }, (await request.json().catch(() => null)) || {}) });
     const reading = request.method === 'GET' || request.method === 'HEAD';
-    let body = null;
+    let body = null, raw = null;
     if (!reading) {
-      const text = await request.text();
-      body = text.length <= BODY_MAX ? parseBody(text) : null;
+      const max = bodyMax(url.pathname), text = await request.text();
+      if (text.length <= max) { raw = text; body = parseBody(text, max); }
     }
-    const env = this.env, storage = this.ctx.storage;
+    const env = this.env, storage = this.ctx.storage, stripe = (this.stripe ||= stripeConfig(env));
     const ctx = (this.apiCtx ||= {
       limiter, now: () => Date.now(),
-      store,
-      flags: { npc: !!env.ANTHROPIC_API_KEY, admin: !!env.ADMIN_KEY, shop: 'off' },
+      store, stripe,
+      flags: { npc: !!env.ANTHROPIC_API_KEY, admin: !!env.ADMIN_KEY, shop: stripe.mode || 'off' },
       // the secret that signs the notes of the runs: given, or drawn once and kept here
       secret: async () => {
         if (!this.signing) {
@@ -102,7 +103,11 @@ export class Room extends DurableObject {
       },
     });
     const bearer = /^Bearer (.+)$/.exec(request.headers.get('Authorization') || '')?.[1] || '';
-    const out = await route({ method: request.method, path: url.pathname, query: url.searchParams, body, client, admin: sameSecret(bearer, env.ADMIN_KEY || '') }, ctx);
+    const out = await route({
+      method: request.method, path: url.pathname, query: url.searchParams, body, client, admin: sameSecret(bearer, env.ADMIN_KEY || ''),
+      raw, signature: request.headers.get('Stripe-Signature') || '', site: url.origin,
+    }, ctx);
+    if (out.bytes) return new Response(out.bytes, { status: out.status, headers: out.headers });
     return Response.json(out.body, { status: out.status, headers: { 'Cache-Control': 'no-store', ...out.headers } });
   }
 
@@ -211,7 +216,8 @@ export default {
     if (url.pathname.startsWith('/api/')) {
       const json = (status, body, headers = {}) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store', ...headers } });
       const post = request.method === 'POST', reading = request.method === 'GET' || request.method === 'HEAD';
-      if (!reading && !mayPost(request.headers.get('Origin'), url.host, parseOrigins(env.ALLOWED_ORIGINS))) return json(403, { error: 'Forbidden.' });
+      // (Stripe is no browser: what it sends is told by its signature, not by where it comes from)
+      if (!reading && url.pathname !== '/api/stripe/webhook' && !mayPost(request.headers.get('Origin'), url.host, parseOrigins(env.ALLOWED_ORIGINS))) return json(403, { error: 'Forbidden.' });
       if (!env.ROOMS) return json(501, { error: 'Not configured.' });
       const notebook = env.ROOMS.get(env.ROOMS.idFromName(NOTEBOOK));
       const client = request.headers.get('CF-Connecting-IP') || '';

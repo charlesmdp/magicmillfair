@@ -9,13 +9,19 @@
 //   GET  /api/admin                           → { ok }   (with the administrator's key: Authorization: Bearer …)
 //   GET | POST | DELETE /api/bans             the administrator's list of who is kept out (see below)
 //
-// req: { method, path, query (URLSearchParams), body (object | null), client (address), admin (boolean) }
+//   the shop and the sponsors: /api/shop, /api/checkout, /api/stripe/webhook, /api/sponsor(s), /api/logo (see shop.js)
+//
+// req: { method, path, query (URLSearchParams), body (object | null), client (address), admin (boolean),
+//        raw (the body as text, for the paths that need it), signature (Stripe's), site (https://the.game) }
 // ctx: { store: { get(key), put(key, value), delete(key) } (may be asynchronous), limiter (api.js),
-//        secret(): the signing secret of this deployment, flags: { npc, admin, shop }, now(): ms }
+//        secret(): the signing secret of this deployment, flags: { npc, admin, shop }, now(): ms,
+//        stripe: what is configured for payments (stripe.js) }
+// An answer is { status, body, headers }, or { status, bytes, headers } for a picture.
 import { allowed } from './api.js';
 import { BOARDS, addScore, cleanScore, removeScore, runFits, topsOf } from './scores.js';
 import { randomId, sign, verify } from './token.js';
 import { cleanName } from './protocol.js';
+import { shopRoute } from './shop.js';
 
 const out = (status, body, headers = {}) => ({ status, body, headers });
 const DAY = 86400_000;
@@ -146,6 +152,10 @@ export async function route(req, ctx) {
     await ctx.store.put(`board:${score.board}`, state);
     return out(200, { board: score.board, ...topsOf(state, now), rank, best });
   }
+
+  // the shop, the sponsors (shop.js)
+  const shop = await shopRoute(req, ctx);
+  if (shop) return shop;
 
   return out(404, { error: 'Not found.' });
 }

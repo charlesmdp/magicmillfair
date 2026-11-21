@@ -16,7 +16,8 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { WebSocketServer } from 'ws';
 import { Room, MAX_FRAME, NEAR, RANGE, cleanRoom, originAllowed, parseOrigins } from './protocol.js';
-import { Limiter, LIMITS, BODY_MAX, allowed, parseBody, mayPost } from './api.js';
+import { Limiter, LIMITS, BODY_MAX, allowed, parseBody, mayPost, bodyMax } from './api.js';
+import { stripeConfig } from './stripe.js';
 import { route, banned, addBan } from './routes.js';
 import { randomId, sameSecret } from './token.js';
 import { NPC_MODEL, cleanTalk, npcReply } from './npc.js';
@@ -149,9 +150,10 @@ const store = {
 };
 const limiter = new Limiter();
 const LIMIT_DAY = LIMITS.npcDay;
+const STRIPE = stripeConfig(process.env);
 const api = {
-  store, limiter, now: () => Date.now(),
-  flags: { npc: !!NPC.apiKey, admin: !!ADMIN_KEY, shop: 'off' },
+  store, limiter, now: () => Date.now(), stripe: STRIPE,
+  flags: { npc: !!NPC.apiKey, admin: !!ADMIN_KEY, shop: STRIPE.mode || 'off' },
   // the secret that signs the notes of the runs: given (SCORE_SECRET), or drawn once and kept with the rest
   async secret() {
     if (!this._secret) {
@@ -163,13 +165,13 @@ const api = {
 };
 
 // The text of a small request body (null when it is too long).
-function readBody(req) {
+function readBody(req, max = BODY_MAX) {
   return new Promise((resolve) => {
     let size = 0;
     const chunks = [];
     // (what comes after the limit is read and dropped, so that the answer can still be sent; far too much: hang up)
-    req.on('data', (c) => { size += c.length; if (size > BODY_MAX * 64) req.destroy(); else if (size <= BODY_MAX) chunks.push(c); });
-    req.on('end', () => resolve(size > BODY_MAX ? null : Buffer.concat(chunks).toString('utf8')));
+    req.on('data', (c) => { size += c.length; if (size > Math.max(max * 4, BODY_MAX * 64)) req.destroy(); else if (size <= max) chunks.push(c); });
+    req.on('end', () => resolve(size > max ? null : Buffer.concat(chunks).toString('utf8')));
     req.on('error', () => resolve(null));
   });
 }
@@ -179,7 +181,8 @@ async function onApi(req, res, pathname, query) {
   const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
   const client = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '';
   const reading = req.method === 'GET' || req.method === 'HEAD';
-  if (!reading && !mayPost(req.headers.origin, host, ALLOWED_ORIGINS)) return json(403, { error: 'Forbidden.' });
+  // (Stripe is no browser: what it sends is told by its signature, not by where it comes from)
+  if (!reading && pathname !== '/api/stripe/webhook' && !mayPost(req.headers.origin, host, ALLOWED_ORIGINS)) return json(403, { error: 'Forbidden.' });
   if (pathname === '/api/npc') {
     if (req.method !== 'POST') return json(405, { error: 'Method not allowed.' }, { Allow: 'POST' });
     if (!NPC.apiKey) return json(501, { reply: null, error: 'No model is configured for the characters.' });
@@ -189,10 +192,14 @@ async function onApi(req, res, pathname, query) {
     return json(200, { reply: await npcReply(NPC, talk) });
   }
   const bearer = /^Bearer (.+)$/.exec(String(req.headers.authorization || ''))?.[1] || '';
+  const max = bodyMax(pathname), raw = reading ? null : await readBody(req, max);
+  const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() || (req.socket.encrypted ? 'https' : 'http');
   const out = await route({
     method: req.method, path: pathname, query: new URLSearchParams(query), client,
-    body: reading ? null : parseBody(await readBody(req)), admin: sameSecret(bearer, ADMIN_KEY),
+    body: reading ? null : parseBody(raw, max), admin: sameSecret(bearer, ADMIN_KEY),
+    raw, signature: String(req.headers['stripe-signature'] || ''), site: `${proto}://${host}`,
   }, api);
+  if (out.bytes) return reply(req, res, out.status, out.bytes, out.headers);
   return json(out.status, out.body, out.headers);
 }
 

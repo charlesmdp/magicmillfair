@@ -1622,6 +1622,13 @@ const meta = {
   map: L.MAP_VIEW,
 };
 fs.writeFileSync(path.join(OUT, 'world.json'), JSON.stringify(meta));
+{
+  // the price tier of each sky village, for the server (the game works it out the same way: ten prices, as many
+  // villages at each, from the lowest shelf to the highest — see layout/sponsors.js)
+  const ys = meta.sky.map((v) => v.y), order = ys.map((_, i) => i).sort((i, j) => ys[i] - ys[j] || i - j), tiers = [];
+  order.forEach((i, rank) => { tiers[i] = Math.min(9, Math.floor((rank * 10) / ys.length)); });
+  fs.writeFileSync(path.join(ROOT, 'server/sky-tiers.js'), `// Written by tools/bake-world.mjs: do not edit by hand.\n// The price tier (0 to 9) of each sky village, in the order of the \`sky\` list of world.json.\nexport const SKY_TIERS = ${JSON.stringify(tiers)};\n`);
+}
 
 // ---------------------------------------------------------------------------
 // 15. Preview (top-down, shaded) for visual checks
