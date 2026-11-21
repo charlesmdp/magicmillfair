@@ -305,8 +305,8 @@ export class SkyZone {
     canvas.width = COLS * CW; canvas.height = ROWS * CH;
     const ctx = canvas.getContext('2d');
     const n = this._signs.length, pos = new Float32Array(n * 12), uv = new Float32Array(n * 8), idx = [];
-    this._signs.forEach((sg, k) => {
-      const v = this.villages[sg.i], cx = (k % COLS) * CW, cy = Math.floor(k / COLS) * CH;
+    const paint = (k) => {
+      const sg = this._signs[k], v = this.villages[sg.i], cx = (k % COLS) * CW, cy = Math.floor(k / COLS) * CH;
       const rgb = v.color.map((q) => Math.round(Math.min(1, q * 1.15) * 255));
       ctx.fillStyle = '#f6f1e4'; ctx.fillRect(cx, cy, CW, CH);
       ctx.fillStyle = `rgb(${rgb})`; ctx.fillRect(cx, cy, CW, 30); ctx.fillRect(cx, cy + CH - 12, CW, 12);
@@ -319,6 +319,10 @@ export class SkyZone {
         do { ctx.font = `500 ${size}px system-ui, sans-serif`; size -= 1; } while (ctx.measureText(v.motto).width > CW - 30 && size > 12);
         ctx.fillStyle = '#5a5140'; ctx.fillText(v.motto, cx + CW / 2, cy + 150);
       }
+    };
+    this._signs.forEach((sg, k) => {
+      const cx = (k % COLS) * CW, cy = Math.floor(k / COLS) * CH;
+      paint(k);
       const up = V(0, 1, 0);
       [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([a, b], q) => {
         const p = sg.centre.clone().addScaledVector(sg.right, (a * sg.w) / 2).addScaledVector(up, (b * sg.h) / 2);
@@ -330,6 +334,7 @@ export class SkyZone {
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 4;
+    this._paintSign = (index) => { const k = this._signs.findIndex((sg) => sg.i === index); if (k >= 0) { paint(k); tex.needsUpdate = true; } };
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
@@ -338,6 +343,19 @@ export class SkyZone {
     mesh.name = 'sky-signs';
     mesh.frustumCulled = false;
     this.group.add(mesh);
+  }
+
+  /**
+   * A village is taken (or its holder changed what it says): its sign is painted again, the board that offered
+   * it goes. `who`: { name, motto, url }.
+   */
+  setSponsor(index, who) {
+    const v = this.villages[index];
+    if (!v || !who || !who.name) return;
+    Object.assign(v, { name: String(who.name).slice(0, 22), motto: String(who.motto || '').slice(0, 34), url: /^https:\/\//.test(who.url || '') ? who.url : null, forHire: false });
+    this._paintSign?.(index);
+    const perks = this.group.getObjectByName('sky-perks'), k = this._perks.findIndex((p) => p.i === index);
+    if (perks && k >= 0) { const pos = perks.geometry.attributes.position; for (let q = 0; q < 4; q++) pos.setXYZ(k * 4 + q, 0, -1000, 0); pos.needsUpdate = true; }
   }
 
   // The boards of the villages for hire: the same face for all (one small sheet, one mesh)

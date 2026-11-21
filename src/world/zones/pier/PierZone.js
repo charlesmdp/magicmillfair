@@ -4,6 +4,7 @@ import { Parts, MeshBuilder } from '../../props/MeshBuilder.js';
 import { LAYER, staticCaster } from '../../../render/Shadows.js';
 import { ANIM, SEAT } from '../../../player/Character.js';
 import { seatAt } from '../../../player/PlayerController.js';
+import { drawSponsor, canvasBoard } from '../games/Boards.js';
 import { PIER, PROMENADE, COAST, pierToWorld, BEACH_LOUNGE } from '../../layout/layout.js';
 import { roadRibbon } from '../../props/Structures.js';
 import { distanceCuller, mergeStatic } from '../../props/StaticBatch.js';
@@ -408,6 +409,7 @@ export class PierZone {
     // zones/games/Booths.js)
     const spots = [
       [head0 * 0.52, -PIER.width / 2 + 3.2, 0, PAL.orange], [head0 * 0.82, PIER.width / 2 - 3.2, Math.PI, PAL.pink],
+      [PIER.wheel.along - 10, -7.5, -Math.PI / 2, PAL.red], // (where the gondolas of the wheel find their sponsors)
     ];
     for (const [x, z, yaw, col] of spots) {
       const y = PIER.deckY;
@@ -553,6 +555,49 @@ export class PierZone {
     }
     g.tint(0.85, 0.85, 0.85, 1);
     g.box(-1.2, -3.42, -0.9, 1.2, -3.3, 0.9);
+    // A banner on both ends of each tub: its sponsor's, or an invitation to be it. One sheet for the 24, one
+    // mesh whose corners follow the cars.
+    const banners = (() => {
+      const COLS = 6, CW = 256, CH = 96, ROWS = Math.ceil(N / COLS), canvas = document.createElement('canvas');
+      canvas.width = COLS * CW; canvas.height = ROWS * CH;
+      const ctx = canvas.getContext('2d'), tex = new THREE.CanvasTexture(canvas), state = new Array(N).fill(null);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const paint = (i) => {
+        ctx.save();
+        ctx.translate((i % COLS) * CW, Math.floor(i / COLS) * CH);
+        ctx.beginPath(); ctx.rect(0, 0, CW, CH); ctx.clip();
+        ctx.clearRect(0, 0, CW, CH);
+        drawSponsor(ctx, CW, CH, state[i], { what: `gondola ${i + 1}` });
+        ctx.restore();
+        tex.needsUpdate = true;
+      };
+      for (let i = 0; i < N; i++) paint(i);
+      const pos = new Float32Array(N * 24), uv = new Float32Array(N * 16), idx = [];
+      for (let i = 0; i < N; i++) for (let side = 0; side < 2; side++) {
+        const q = i * 2 + side, u0 = (i % COLS) / COLS, u1 = u0 + 1 / COLS, v1 = 1 - Math.floor(i / COLS) / ROWS, v0 = v1 - 1 / ROWS;
+        uv.set([u0, v0, u1, v0, u1, v1, u0, v1], q * 8);
+        idx.push(q * 4, q * 4 + 1, q * 4 + 2, q * 4, q * 4 + 2, q * 4 + 3);
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
+      geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      geo.setIndex(idx);
+      geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), W.radius + 6);
+      const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
+      mesh.name = 'big-wheel-banners';
+      pivot.add(mesh);
+      const X = TUB.x + 0.012, Z = TUB.z - 0.04, Y0 = TUB.floor + 0.06, Y1 = TUB.rim - 0.03;
+      /** The banners of car `i`, hung at (0, y, z) in the frame of the wheel. */
+      const move = (i, y, z) => {
+        // (seen from the shore, then from the end of the pier: each reads from left to right)
+        pos.set([-X, y + Y0, z + Z, -X, y + Y0, z - Z, -X, y + Y1, z - Z, -X, y + Y1, z + Z], i * 24);
+        pos.set([X, y + Y0, z - Z, X, y + Y0, z + Z, X, y + Y1, z + Z, X, y + Y1, z - Z], i * 24 + 12);
+      };
+      return { mesh, move, flush: () => { geo.attributes.position.needsUpdate = true; }, set: (i, sponsor) => { if (i >= 0 && i < N) { state[i] = sponsor || null; paint(i); } } };
+    })();
+    /** Gondola `n` (1 to 24) shows its sponsor ({ title, subtitle, logo }), or is free again (null). */
+    this.setGondola = (n, sponsor) => banners.set(n - 1, sponsor);
+    this.gondolas = N;
     const gondolas = new THREE.InstancedMesh(g.build(), mat, N);
     gondolas.name = 'big-wheel-gondolas';
     gondolas.boundingSphere = new THREE.Sphere(new THREE.Vector3(), W.radius + 6);
@@ -573,8 +618,10 @@ export class PierZone {
         m.makeRotationX(Math.sin(a * 2 + i) * 0.035);
         m.setPosition(0, Math.sin(a) * R, Math.cos(a) * R);
         gondolas.setMatrixAt(i, m);
+        banners.move(i, Math.sin(a) * R, Math.cos(a) * R);
       }
       gondolas.instanceMatrix.needsUpdate = true;
+      banners.flush();
     };
     place();
     this.animated.push(() => {
@@ -583,6 +630,21 @@ export class PierZone {
       place();
     });
     this.wheelPivot = pivot;
+    {
+      // the stand where a gondola is sponsored (the kiosk by the steps): its sign, and where one asks
+      const sign = canvasBoard(512, 128, (ctx, w, hh) => {
+        ctx.fillStyle = '#7a1420'; ctx.fillRect(0, 0, w, hh);
+        ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 6; ctx.strokeRect(5, 5, w - 10, hh - 10);
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#f6e7b8'; ctx.font = "700 46px Georgia, 'Times New Roman', serif"; ctx.fillText('SPONSOR A GONDOLA', w / 2, 48, w - 30);
+        ctx.fillStyle = '#f2c14e'; ctx.font = '600 24px system-ui, sans-serif'; ctx.fillText('your name goes round with the wheel', w / 2, 96, w - 30);
+      }, 3.6, 0.9);
+      sign.mesh.position.set(W.along - 10 - 1.45, PIER.deckY + 2.0, -7.5);
+      sign.mesh.rotation.y = -Math.PI / 2;
+      sign.mesh.name = 'pier-sign-sponsors';
+      this.frame.add(sign.mesh);
+      this.sponsorBooth = pierToWorld(W.along - 10 - 2.6, -7.5);
+    }
 
     // --- riding: two seats per car, boarded from the platform while the car passes over it
     this.group.updateMatrixWorld(true);

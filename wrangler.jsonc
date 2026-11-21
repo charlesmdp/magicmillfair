@@ -30,6 +30,7 @@
     //   ANTHROPIC_API_KEY  Billy the alligator then answers through Claude (NPC_MODEL, a variable, picks the model)
     //   ADMIN_KEY          the administrator's key: a long password of your own (`/admin <key>` in the chat)
     //   SCORE_SECRET       optional: signs the notes of the game runs (drawn and kept by the Worker otherwise)
+    //   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET   open the shop (sk_test_… to try, sk_live_… to sell): see the README, "The shop"
     // https://<the site>/api/status tells which of them the Worker sees (true / false, never their value).
   },
   "observability": { "enabled": true },

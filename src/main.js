@@ -6,7 +6,8 @@ import { isMobile, TIERS } from './core/Quality.js';
 import { World } from './world/World.js';
 import { FreeCamera } from './player/FreeCamera.js';
 import { CharacterFactory, EMOTE_LIST, emoteIndex, packLook } from './player/Character.js';
-import { HATS, owns } from './player/Cosmetics.js';
+import { HATS } from './player/Cosmetics.js';
+import { Shop, price, logoData, loadImage } from './net/Shop.js';
 import { PlayerController } from './player/PlayerController.js';
 import { CameraRig } from './player/CameraRig.js';
 import { Interact } from './player/Interact.js';
@@ -101,6 +102,9 @@ async function boot() {
   world.playerPos = player.pos;
   world.player = player; // (the games and the dangers of the valley watch the player)
   // what the avatar wears and holds (see Cosmetics.js); the hat is remembered from one visit to the next
+  // the shop: closed (and everything free) until the server says otherwise
+  const shop = new Shop();
+  const owns = (id) => id !== undefined && (id === 'none' || shop.owns(id === 'jetpack' ? 'jetpack' : `hat:${id}`));
   const savedHat = parseInt(store.get('mmf.hat'), 10);
   const look = { hat: savedHat > 0 && savedHat < HATS.length && owns(HATS[savedHat].id) ? savedHat : 0, jet: false, bouquet: false, kinds: undefined, quad: false, bighead: false };
   const timers = {}; // cheats that wear off: name → seconds left
@@ -378,6 +382,7 @@ async function boot() {
     if (fair.session && input.pressed('KeyE') && !(s.over)) { endGame(); hud.note(fair.kind === 'race' ? 'Race abandoned.' : 'Game left.'); }
   };
   Object.assign(app, { fair, playBooth, playRace, endGame, fairStep });
+  queueMicrotask(() => Object.assign(app, { shop, refreshShop, adminKey }));
   world.games.events = {
     note: (text) => hud.note(text, 4200),
     run: (text) => hud.setRun(text),
@@ -411,12 +416,92 @@ async function boot() {
       .then((i) => { if (i !== null && state.mode === 'walk' && !player.dead) travel(list[i], `Welcome to ${list[i].name}`); });
   };
   const near = (p, q, r) => (p.pos.x - q[0]) ** 2 + (p.pos.z - q[1]) ** 2 < r * r;
-  // (the shop is not open yet: asking to buy says so)
-  const shop = { buy: () => hud.note('Hiring opens soon. Come back shortly!', 5200) };
+  // ---------- the shop and the sponsors
+  /** Offers something for sale; on yes, off to the payment page. */
+  const offer = (item, title, lead, cents, monthly) => {
+    if (!shop.open) { hud.note('The shop is not open yet. Come back soon!', 5200); return; }
+    hud.choose(title, lead, [{ label: `${monthly ? 'Take it' : 'Buy it'} · ${price(cents)}${monthly ? ' a month' : ''}`, note: shop.mode === 'test' ? 'Test mode: no real money' : 'Paid on Stripe', color: [0.9, 0.7, 0.2] }, { label: 'Not now', note: 'Keep looking round' }])
+      .then(async (i) => { if (i !== 0) return; hud.note('Opening the payment page…', 8000); const wrong = await shop.buy(item); if (wrong) hud.note(wrong, 7000); });
+  };
+  // every place that can be sponsored: id → { what, cents, limits, set(sponsor | null) }
+  const places = new Map();
+  for (const sl of world.sponsorSlots || []) places.set(sl.id, { what: sl.what, spot: sl, set: sl.set });
+  for (let n = 1; n <= (world.pier.gondolas || 0); n++) places.set(`gondola:${n}`, { what: `gondola ${n} of the big wheel`, set: (sp) => world.pier.setGondola(n, sp) });
+  for (const v of sky.villages) places.set(`village:${v.id}`, { what: `the sky village ${v.name}`, village: v, set: (sp) => { if (sp) sky.setSponsor(v.index, { name: sp.title, motto: sp.subtitle, url: sp.url }); } });
+  const shown = new Map(); // what is painted where: id → the address of its picture + its words
+  const applySponsors = async () => {
+    for (const [id, place] of places) {
+      const view = shop.slots[id], live = view && view.state === 'live', key = live ? `${view.title}|${view.subtitle}|${view.logo}` : '';
+      if ((shown.get(id) || '') === key) continue;
+      shown.set(id, key);
+      place.set(live ? { title: view.title, subtitle: view.subtitle, url: view.url, logo: await loadImage(view.logo) } : null);
+    }
+    hud.setVillages(sky.villages, data.meta.size, (v) => (v.forHire ? money(v.price) : v.name));
+  };
+  const refreshShop = async () => {
+    await shop.load();
+    shop.everything = who.admin;
+    if (look.hat && !owns(HATS[look.hat].id)) { look.hat = 0; hud.setHat(0); }
+    hud.setShop((id) => (owns(id) ? '' : price(shop.prices.hat)), shop.open ? (owns('jetpack') ? 'Jetpack: yours' : `Jetpack · ${price(shop.prices.jetpack)}`) : null);
+    await applySponsors();
+  };
+  /** The holder of a place (or the administrator) says what to show there. */
+  const fillPlace = async (id) => {
+    const place = places.get(id), view = shop.slots[id] || {}, was = view.draft || view, isVillage = !!place.village;
+    const got = await hud.form(isVillage ? 'Your village' : 'Your panel', 'It is shown once the fair has looked at it. Keep it short: it is painted on a sign.', [
+      { key: 'title', label: isVillage ? 'Its name (22 letters at most)' : 'Your name (28 letters at most)', value: was.title || '', max: isVillage ? 22 : 28 },
+      { key: 'subtitle', label: isVillage ? 'A line under it (34 letters at most)' : 'A line under it (40 letters at most)', value: was.subtitle || '', max: isVillage ? 34 : 40 },
+      { key: 'url', label: 'Your website (https://…)', value: was.url || '', max: 200, hint: 'https://' },
+      ...(isVillage ? [] : [{ key: 'logo', label: 'Your logo (PNG, JPEG or WebP) — leave empty to keep the one you sent', type: 'file' }]),
+    ], 'Send it');
+    if (!got) return;
+    if (!got.title) { hud.note('A name is needed.', 4000); return; }
+    let logo = null;
+    if (got.logo) { logo = await logoData(got.logo); if (!logo) { hud.note('That picture cannot be used: a PNG, a JPEG or a WebP, please.', 6000); return; } }
+    const byHand = who.admin && !view.mine; // (the administrator fills a place in for a sponsor: shown at once)
+    const wrong = byHand ? await shop.set(id, { title: got.title, subtitle: got.subtitle, url: got.url, logo }, who.key) : await shop.fill(id, { title: got.title, subtitle: got.subtitle, url: got.url, logo });
+    hud.note(wrong || (byHand ? 'Done: it is shown to everyone.' : 'Sent. It will be shown as soon as it is approved.'), 7000);
+    if (!wrong) { await refreshShop(); if (who.admin) pending = (await shop.all(who.key)) || {}; }
+  };
+  let pending = {}; // the administrator: every place as the server keeps it (drafts included)
+  /** What can be done about the place `id`, for who stands by it: [{ label, run }] */
+  const placeActions = (id) => {
+    const place = places.get(id), view = shop.slots[id], out = [];
+    const cents = shop.cost(id, place.village?.tier);
+    if (who.admin && pending[id]?.draft) {
+      const d = pending[id].draft;
+      out.push({ label: `Approve "${d.title}"`, run: async () => { await shop.decide(id, true, who.key); pending = (await shop.all(who.key)) || {}; await refreshShop(); hud.note('Approved: it is shown to everyone.', 5000); } });
+      out.push({ label: 'Refuse it', run: async () => { await shop.decide(id, false, who.key); pending = (await shop.all(who.key)) || {}; hud.note('Refused.', 4000); } });
+      return out;
+    }
+    if (view?.mine || (who.admin && shop.open)) out.push({ label: view?.mine ? (view.draft ? 'Change what you sent' : 'Set up your panel') : 'Fill this place in (administrator)', run: () => fillPlace(id) });
+    if (view?.state === 'live' && view.url) out.push({ label: `Visit ${view.title}`, run: () => window.open(view.url, '_blank', 'noopener,noreferrer') });
+    if (!view && shop.open && !out.length) out.push({ label: `Sponsor ${place.what} · ${price(cents)} a month`, run: () => offer(id, `Sponsor ${place.what}`, `${price(cents)} a month, for as long as you like: your name, a line under it, your logo and a link, shown to every visitor. It appears once the fair has approved it.`, cents, true) });
+    return out;
+  };
+  world.actionSources.push((p) => {
+    for (const sl of world.sponsorSlots || []) if (Math.abs(p.pos.y - sl.y) < 2.5 && near(p, [sl.x, sl.z], sl.reach)) return placeActions(sl.id)[0] || null;
+    return null;
+  });
+  world.actionSources.push((p) => {
+    for (const sl of world.sponsorSlots || []) if (Math.abs(p.pos.y - sl.y) < 2.5 && near(p, [sl.x, sl.z], sl.reach)) return placeActions(sl.id)[1] || null;
+    return null;
+  });
+  // the stand of the wheel: its gondolas, who sponsors them, which are free
+  world.actionSources.push((p) => {
+    if (!world.pier.sponsorBooth || !near(p, world.pier.sponsorBooth, 2.6)) return null;
+    return { label: 'The gondolas and their sponsors', run: () => {
+      const ids = Array.from({ length: world.pier.gondolas }, (_, k) => `gondola:${k + 1}`);
+      const say = (id) => { const v = shop.slots[id], d = who.admin && pending[id]?.draft; return d ? `Awaiting approval: ${d.title}` : v?.mine ? 'Yours: set it up' : v?.state === 'live' ? v.title : v ? 'Taken' : shop.open ? `Free · ${price(shop.prices.gondola)} a month` : 'Free'; };
+      hud.choose('The gondolas of the big wheel', 'Twenty-four gondolas, a banner on each: its sponsor goes round with the wheel, in sight of the whole bay.', ids.map((id, k) => ({ label: `Gondola ${k + 1}`, note: say(id), color: shop.slots[id]?.state === 'live' ? [0.9, 0.7, 0.2] : [0.5, 0.55, 0.6] })))
+        .then((i) => { if (i === null) return; const acts = placeActions(ids[i]); if (acts.length) acts[0].run(); else hud.note(shop.open ? 'That one is taken.' : 'The shop is not open yet. Come back soon!', 4000); });
+    } };
+  });
   // a village for hire: what it brings, what it costs, and the way to take it
   const hireVillage = (v) => {
+    if (!shop.open) { hud.note('Hiring opens soon. Come back shortly!', 5200); return; }
     hud.choose(`Hire ${v.name}`, `${money(v.price)} a month, for as long as you like. ${VILLAGE_PERKS.join(' · ')}.`, [{ label: `Hire it · ${money(v.price)} a month`, note: 'Your name, your colours, your link', color: v.color }, { label: 'Not now', note: 'Keep looking round' }])
-      .then((i) => { if (i === 0) shop.buy(`village:${v.id}`, v.name); });
+      .then(async (i) => { if (i !== 0) return; hud.note('Opening the payment page…', 8000); const wrong = await shop.buy(`village:${v.id}`); if (wrong) hud.note(wrong, 7000); });
   };
   world.actionSources.push((p) => {
     if (near(p, [sky.gate.x, sky.gate.z], 3.6)) return { label: 'Travel to a sky village', run: chooseVillage };
@@ -427,7 +512,12 @@ async function boot() {
     const v = sky.villageAt(p.pos.x, p.pos.z);
     if (!v) return null;
     if (near(p, v.ring, 3.2)) return { label: 'Another village', run: chooseVillage };
-    if (v.forHire && (near(p, v.board, 3.0) || near(p, v.sign, 3.0))) return { label: `Hire ${v.name} · ${money(v.price)} a month`, run: () => hireVillage(v) };
+    if (near(p, v.board, 3.0) || near(p, v.sign, 3.0)) {
+      // (its holder sets it up there; the administrator approves there; anybody else may hire it while it is free)
+      const id = `village:${v.id}`, view = shop.slots[id];
+      if (view?.mine || (who.admin && (pending[id]?.draft || view))) { const acts = placeActions(id); if (acts.length) return acts[0]; }
+      if (v.forHire && !view) return { label: `Hire ${v.name} · ${money(v.price)} a month`, run: () => hireVillage(v) };
+    }
     return v.url && near(p, v.sign, 3.4) ? { label: `Visit ${v.name}`, run: () => window.open(v.url, '_blank', 'noopener,noreferrer') } : null;
   });
   Object.assign(app, { travel, sky });
@@ -439,6 +529,23 @@ async function boot() {
   engine.on('detail', showQuality);
   hud.setName(name);
   hud.setHat(look.hat);
+  // where the shop stands. Back from the payment page, what was bought may take a few seconds to arrive
+  // (the server only believes what Stripe tells it).
+  refreshShop().then(() => {
+    const paid = params.get('paid');
+    if (paid === null) return;
+    params.delete('paid');
+    history.replaceState(null, '', location.pathname + (params.toString() ? `?${params}` : '') + location.hash);
+    if (!paid) { hud.note('Nothing was paid.', 4000); return; }
+    hud.note('Thank you! It will be here in a moment…', 6000);
+    let tries = 0;
+    const again = async () => {
+      await refreshShop();
+      if (shop.owned.has(paid) || shop.slots[paid]?.mine) { audio.play('victory'); hud.note(shop.slots[paid]?.mine ? 'It is yours. Go to it to set it up: your name, your link, your logo.' : 'It is yours. Thank you!', 9000); }
+      else if (++tries < 8) setTimeout(again, 2500);
+    };
+    again();
+  });
   hud.setSettings(settings);
   hud.setVolume(volume);
   showEmotes();
@@ -458,7 +565,9 @@ async function boot() {
     }
     if (!who.admin) who.key = '';
     presence?.setAdminKey(who.key);
-    hud.addChat('✦', 5, who.admin ? 'Administrator: on.' : key ? 'That key was not recognised.' : 'Administrator: off.', true);
+    pending = who.admin ? (await shop.all(who.key)) || {} : {};
+    refreshShop();
+    hud.addChat('✦', 5, who.admin ? `Administrator: on.${Object.values(pending).some((s) => s.draft) ? ' Sponsors await your approval: go and see their panels.' : ''}` : key ? 'That key was not recognised.' : 'Administrator: off.', true);
     hud.setFreeCamera(mayFly());
     showEmotes();
     app.onAdmin?.(who.admin ? key : '');
@@ -479,7 +588,13 @@ async function boot() {
     .on('kick', (id) => { presence?.kick(id); setTimeout(refreshRoster, 500); })
     .on('ban', (id, hours) => { presence?.ban(id, hours); setTimeout(refreshRoster, 800); })
     .on('unban', async ({ kind, key }) => { await callApi(`api/bans?${kind}=${encodeURIComponent(key)}`, { method: 'DELETE', key: who.key }); refreshRoster(); })
-    .on('hat', (i) => { if (owns(HATS[i]?.id)) { look.hat = i; store.set('mmf.hat', String(i)); } })
+    .on('hat', (i) => {
+      const h = HATS[i];
+      if (!h) return;
+      if (owns(h.id)) { look.hat = i; hud.setHat(i); store.set('mmf.hat', String(i)); }
+      else offer(`hat:${h.id}`, h.name, `${price(shop.prices.hat)}, once: it is yours for good in this browser, and everybody sees you wear it.`, shop.prices.hat, false);
+    })
+    .on('buy', (what) => { if (what === 'jetpack' && !owns('jetpack')) offer('jetpack', 'The jetpack', `${price(shop.prices.jetpack)}, once: press jump again in the air and fly for a second and a half, as often as you like.`, shop.prices.jetpack, false); })
     .on('drop', () => { look.bouquet = false; look.kinds = undefined; })
     .on('volume', (key, value) => {
       volume[key] = value;

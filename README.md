@@ -95,6 +95,8 @@ Worker sees — `"npc": true`, `"admin": true` — without showing any of it.
 | `ANTHROPIC_API_KEY` | **Billy's brain.** The alligator on the pond deck is a life coach: he answers with a handful of lines of his own until the Worker has this key — then through the Claude API. The model is `claude-opus-5-5` unless a variable `NPC_MODEL` names another (a smaller model costs much less per line). |
 | `ADMIN_KEY` | **The administrator's key**: any long password of your own invention. In the game, type `/admin <the key>` in the chat (it is checked by the server and sent to nobody) — or open the site once with `#admin=<the key>` at the end of the address. Without this secret, nobody is the administrator. |
 | `SCORE_SECRET` | Optional: signs the notes of the game runs (see "Cheating"). The notebook draws one by itself otherwise. |
+| `STRIPE_SECRET_KEY` | **Opens the shop.** The secret key of your Stripe account: `sk_test_…` to try with test cards, `sk_live_…` to sell. Without it nothing is sold and everything is free (see *The shop*). |
+| `STRIPE_WEBHOOK_SECRET` | The signing secret (`whsec_…`) of the webhook that Stripe calls when something is paid: without it no payment is ever believed. See *The shop* for the three steps. |
 
 Billy only answers questions (a question mark is required: anything else gets a line of his own, without
 asking the model), is sent that one question and nothing else, and what comes back is cut down to a single
@@ -259,8 +261,58 @@ round the ring (50). The emote panel shows where you stand; the administrator ha
 - **Places to sit**: benches along the promenade, cushions and benches all over the temple, logs, chairs…
 - And the rest: the big wheel, the hammocks, the beanbags and their laptops, the caves, the animals of light.
 
-Hats and the jetpack are free for now. Whether a visitor has one is asked in a single place
-(`owns()` in `src/player/Cosmetics.js`): that is where a shop would plug in.
+### The shop
+
+While the server has no Stripe key, **nothing is sold and everything is free** — hats, jetpack — as before.
+With a key, the shop opens (`/api/status` then says `"shop": "test"` or `"live"`):
+
+| What | Price | |
+|---|---|---|
+| A hat (each of the seven) | $9.99, once | Settings → Hat: a hat that is not yours shows its price; clicking it offers to buy it |
+| The jetpack | $30, once | Settings, under the hats |
+| The sponsor's panel over the board of a game (six of them) | $49 a month | step up to the board: "Sponsor this game" |
+| The backdrop of the shooting gallery | $99 a month | at the counter side of Bullseye Alley |
+| A gondola of the big wheel (twenty-four) | $29 a month | the red kiosk by the steps of the wheel: "The gondolas and their sponsors" |
+| A sky village (fifty) | $19 to $9,999 a month | at the sign or the board of the village: "Hire …" |
+
+Prices are decided in one file, `server/catalog.js` (and `VILLAGE_PRICES` in
+`src/world/layout/sponsors.js` for the villages): the browser is shown them and is never asked what
+something costs. Payment happens on Stripe's own page (the game never sees a card); the visitor comes back
+to the game, and what was paid arrives a few seconds later.
+
+**Switching it on** (Stripe dashboard, then the secrets of the Worker — never in a file):
+
+1. *Developers → API keys*: copy the **secret key** into the secret `STRIPE_SECRET_KEY`. Start with the key
+   of test mode (`sk_test_…`): payments are then made with Stripe's test cards (4242 4242 4242 4242) and no
+   money moves; the game says "Test mode: no real money" on what it offers.
+2. *Developers → Webhooks → Add endpoint*: the address is `https://<your site>/api/stripe/webhook`, the
+   events are `checkout.session.completed` and `customer.subscription.deleted`. Copy its **signing secret**
+   (`whsec_…`) into the secret `STRIPE_WEBHOOK_SECRET`.
+3. Deploy once more, check `https://<your site>/api/status` (`"shop": "test"`), buy a hat with a test card.
+   To sell for real, do the same two steps in live mode and replace the two secrets with the live ones.
+
+To keep both pairs at once, name them `STRIPE_TEST_SECRET_KEY`, `STRIPE_TEST_WEBHOOK_SECRET`,
+`STRIPE_LIVE_SECRET_KEY`, `STRIPE_LIVE_WEBHOOK_SECRET`, and set the variable `STRIPE_MODE` to `test` or
+`live` (without it, live wins as soon as its key is there).
+
+**Sponsors.** A place that can be sponsored is held by one sponsor at a time, for as long as the
+subscription runs (when it ends, Stripe says so and the place is free again). Its holder goes to it in the
+game — "Set up your panel" — and gives a name, a line under it, a link and a logo. **Nothing is shown before
+the administrator has approved it**: with the administrator's key on, the chat says when something awaits,
+and standing by the place offers "Approve …" and "Refuse it". The administrator can also fill a place in
+by hand, for a sponsor who paid some other way ("Fill this place in").
+
+**What a sponsor sends cannot harm the site or its visitors**: text is cut to one short line and loses
+anything that looks like markup; a link must start with `https://` and opens in a new tab; a logo is
+redrawn as a small picture in the sponsor's own browser before it is sent, the server only accepts a PNG,
+a JPEG or a WebP (told by its bytes, not by its name), of at most 90 KB and 1024 pixels a side, serves it
+as that kind of picture and nothing else (no guessing of types, no scripts, never as a page), and the game
+only ever paints it on a sign.
+
+**Who owns what.** There are no accounts: a purchase belongs to the browser that made it (the random name
+it gave itself, kept in its storage). Clearing the storage of the browser, or playing on another device,
+loses sight of it — the administrator can fill a sponsored place in again by hand; a lost hat cannot be
+given back from the game.
 
 ### Sky villages for hire
 
@@ -273,8 +325,9 @@ file): one of only fifty; your name on the sign and on the Mega map; roofs and f
 to your website at the sign; an address of your own to invite people (`?village=its-name`); and a place to
 meet where the nearby chat stays between those who are there.
 
-A village is given to a company by editing its line in `src/world/layout/sponsors.js` (name, motto,
-colours, web address): it then stops being for hire.
+A village is hired through the shop (see above): its holder then names it, at its sign, and the
+administrator approves. Without the shop, a village is given to a company by editing its line in
+`src/world/layout/sponsors.js` (name, motto, colours, web address): it then stops being for hire.
 
 ## The world
 
@@ -437,6 +490,9 @@ server/index.js            Node production server: static files + presence relay
 server/protocol.js         the relay itself (protocol, validation, batching), shared by both hostings
 server/api.js  scores.js  npc.js   the API of the game, shared by both hostings: rate limits, leaderboards,
                            the alligator's answers through the Claude API
+server/shop.js  stripe.js  catalog.js   the shop and the sponsors: what is sold and for how much, the payment
+                           page asked of Stripe and its signed webhook, the places that can be sponsored
+                           (src/net/Shop.js is the same thing seen from the game)
 cloudflare/worker.js       Cloudflare version: Worker + one Durable Object per room, one for the leaderboards
 wrangler.jsonc             Cloudflare deployment settings (build included)
 .github/workflows/deploy.yml   asks Cloudflare to build after every push (see "Putting it online with Cloudflare")
@@ -562,8 +618,9 @@ that is the last point. Going further means a referee: the server replaying the 
 | Command | What it does |
 |---|---|
 | `npm run bake` | bakes the world and the textures again |
-| `npm test` | 117 checks of the Node server, the protocol (chat included), the interpolation, full rooms and the API (leaderboards, limits) |
-| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (74 in all) |
+| `npm test` | 157 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures) |
+| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (106 in all) |
+| `npm run test:shop` | the shop in the real game, on the Node server with test keys and a stand-in for Stripe: a hat bought and worn, the panel of a game sponsored, filled in (with a logo) and approved by the administrator, the stand of the gondolas (8 checks) |
 | `npm run test:smoke` | drives the real site: welcome screen, walking, free camera, settings, large map (`-- --mobile` for the touch layout) |
 | `npm run test:audio` | Listens to the sound engine without ears: in headless Chromium it renders a dozen listener scenarios (beach, cliffs, pier, woods, mill, waterfall, cave, sky village, the climb…) and every one-shot effect through an offline audio context, measures level, spectrum, how the loudness moves and how tonal it is, fails on silence or clipping, and times `update()` (about 0.01 ms a frame) |
 | `npm run test:walk` | 39 checks in the real game: pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the fifty sky villages (prices, places to sit, the board of one for hire), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the four booths (a bot plays each through the pointer; boards), the quad race (a bot drives three laps), the acid pond, the shark, change of tier |
@@ -639,8 +696,10 @@ Game and multiplayer
   time the server finds believable. The cheat codes of the game itself disqualify a run; nothing more.
 - **The boulder, the shark** follow each visitor's own clock: two visitors standing side by side see the
   boulder in the same place only as far as their devices agree on the time (usually within a second).
-- **Hats and jetpack are free**: "paid later" is only prepared (one function decides who owns what); there
-  is no shop, no payment, no account to attach a purchase to.
+- **The shop was never run against the real Stripe**: its tests use a stand-in that answers like Stripe
+  (payment page, signed webhook, forged and stale ones). The first real purchase, with a test key, is yours
+  to make. There are no accounts (a purchase belongs to a browser), no refunds or invoices in the game
+  (Stripe's dashboard has them), and a subscription is ended from Stripe, not from the game.
 - **Sky villages**: all fifty are built and reachable; they carry made-up names until `sponsors.js` is
   edited. A village is a sign, a flag and roofs in the company's colours — no logo image yet, and the temple
   is the same fifty times. They are small dots from the valley.

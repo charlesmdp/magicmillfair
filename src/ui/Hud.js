@@ -171,6 +171,7 @@ export class Hud {
         <div class="row"><span>The camera turns with the character</span><button class="switch" data-set="follow" aria-pressed="false" aria-label="The camera turns with the character"></button></div>
         <h3>Hat</h3>
         <div class="hats">${HATS.map((h, i) => `<button data-hat="${i}">${h.name}</button>`).join('')}</div>
+        <button class="buy-jet" type="button" hidden></button>
         <h3>Your name</h3>
         <input type="text" maxlength="16" class="name" autocomplete="off" spellcheck="false" />
         <p class="net-info"></p>
@@ -244,7 +245,8 @@ export class Hud {
     for (const ev of ['mousedown', 'touchstart', 'wheel']) this.chatEl.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
     this.cameraBtn = h.querySelector('[data-act="camera"]');
     this.emotes.querySelector('[data-drop]').onclick = () => { this.emit('drop'); this.emotes.classList.remove('on'); };
-    h.querySelectorAll('[data-hat]').forEach((b) => (b.onclick = () => { this.setHat(+b.dataset.hat); this.emit('hat', +b.dataset.hat); }));
+    h.querySelectorAll('[data-hat]').forEach((b) => (b.onclick = () => this.emit('hat', +b.dataset.hat)));
+    h.querySelector('.buy-jet').onclick = () => this.emit('buy', 'jetpack');
     this.wastedEl = h.querySelector('.wasted');
     h.querySelectorAll('.quality button').forEach((b) => (b.onclick = () => this.emit('quality', b.dataset.q)));
     h.querySelectorAll('[data-vol]').forEach((r) => {
@@ -280,6 +282,53 @@ export class Hud {
     this.selfTag = el('div', 'tag self');
     this.selfTag.style.display = 'none';
     this.tagsEl.append(this.selfTag);
+  }
+
+  // ---------- the shop: what the hats and the jetpack cost, while they are sold
+  /** `tag(id)`: what to write after the name of a hat ('' when it is theirs); `jet`: the line of the jetpack, or null. */
+  setShop(tag, jet) {
+    this.hud.querySelectorAll('[data-hat]').forEach((b) => { const h = HATS[+b.dataset.hat], t = tag(h.id); b.textContent = t ? `${h.name} · ${t}` : h.name; b.classList.toggle('locked', !!t); });
+    const j = this.hud.querySelector('.buy-jet');
+    j.hidden = !jet;
+    if (jet) j.textContent = jet;
+  }
+
+  /**
+   * A few things to fill in. `fields`: [{ key, label, value, max, hint, type: 'text' | 'file' }]. Resolves to
+   * { key: text (a File, or null, for a file) }, or to null when the visitor gives up.
+   */
+  form(title, lead, fields, save = 'Save') {
+    const box = this.hud.querySelector('.chooser'), list = box.querySelector('.list'), close = box.querySelector('.close');
+    this._choice?.(null);
+    box.querySelector('h2').textContent = title;
+    box.querySelector('.lead').textContent = lead || '';
+    list.textContent = '';
+    list.classList.add('fields');
+    close.textContent = 'Cancel';
+    this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this.toggleBigMap(false);
+    this.input.exitLock();
+    return new Promise((resolve) => {
+      const inputs = {};
+      const done = (v) => { this._choice = null; box.classList.remove('on'); list.classList.remove('fields'); close.textContent = 'Stay here'; box.onclick = null; resolve(v); };
+      this._choice = done;
+      for (const f of fields) {
+        const row = el('label'), name = el('span'), input = el('input');
+        name.textContent = f.label;
+        if (f.type === 'file') { input.type = 'file'; input.accept = 'image/png,image/jpeg,image/webp'; }
+        else { input.type = 'text'; input.maxLength = f.max || 60; input.value = f.value || ''; input.autocomplete = 'off'; input.spellcheck = false; if (f.hint) input.placeholder = f.hint; }
+        row.append(name, input);
+        list.append(row);
+        inputs[f.key] = input;
+      }
+      const ok = el('button', 'save');
+      ok.type = 'button'; ok.textContent = save;
+      ok.onclick = (e) => { e.stopPropagation(); done(Object.fromEntries(fields.map((f) => [f.key, f.type === 'file' ? inputs[f.key].files[0] || null : inputs[f.key].value.trim()]))); };
+      list.append(ok);
+      close.onclick = (e) => { e.stopPropagation(); done(null); };
+      box.onclick = (e) => { if (e.target === box) done(null); };
+      box.classList.add('on');
+      inputs[fields[0].key]?.focus();
+    });
   }
 
   // ---------- a list to choose from (the sky villages)
