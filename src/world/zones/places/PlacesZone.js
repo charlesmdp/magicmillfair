@@ -329,21 +329,85 @@ export class PlacesZone {
       }
       wood.beam(posts[0].clone().addScaledVector(V(p.tx, 0, p.tz), -0.35), posts[1].clone().addScaledVector(V(p.tx, 0, p.tz), 0.35), 0.3, 0.26, { tile: 1 });
     }
-    for (const u of ISLAND.beams) {
-      // planks on two beams, out over the drop: find the edge of the cliff first
-      const p = islandPath(u);
+    const glow = parts.get('glow');
+    ISLAND.beams.forEach((u, i) => {
+      // timber out over the drop, to stand on while the boulder goes by: find the edge of the cliff first
+      // (a square frame: straight out from the island, and across — the path itself is a few degrees off)
+      const p = islandPath(u), n = V(p.nx, 0, p.nz), side = Math.sign(-p.nz * p.tx + p.nx * p.tz) || 1, t = V(-p.nz * side, 0, p.nx * side);
       let edge = w2;
       while (edge < w2 + 4 && this.ground(p.x + p.nx * (edge + 0.5), p.z + p.nz * (edge + 0.5)) > p.y - 0.8) edge += 0.25;
-      const cx = p.x + p.nx * (edge + 0.5), cz = p.z + p.nz * (edge + 0.5), y = p.y + 0.12;
-      const yaw = Math.atan2(-p.tz, p.tx); // local X along the path
-      wood.tint(0.8, 0.72, 0.6, 1);
-      for (const s of [-1.2, 1.2]) {
-        const bx = p.x + p.tx * s, bz = p.z + p.tz * s;
-        wood.beam(V(bx + p.nx * (edge - 1.6), y - 0.13, bz + p.nz * (edge - 1.6)), V(bx + p.nx * (edge + 1.15), y - 0.13, bz + p.nz * (edge + 1.15)), 0.2, 0.22, { tile: 1 });
+      const y = p.y + 0.14, HW = 0.3; // top of the timbers, half their width
+      const at = (out, along, dy = 0) => V(p.x + n.x * out + t.x * along, y + dy, p.z + n.z * out + t.z * along);
+      const yawOut = Math.atan2(n.x, n.z), yawAlong = Math.atan2(t.x, t.z);
+      // a walkway of two planks side by side on a squared timber, from `a` to `b` (points on its axis, at the top)
+      const walk = (a, b, yaw) => {
+        const mid = a.clone().add(b).multiplyScalar(0.5), half = a.distanceTo(b) / 2;
+        wood.tint(0.78, 0.7, 0.58, 1).place(mid.x, mid.y, mid.z, yaw).box(-0.14, -0.34, -half, 0.14, -0.07, half, { tile: 1 }).pop();
+        deck.tint(0.98, 0.9, 0.78, 1).place(mid.x, mid.y, mid.z, yaw);
+        for (const sx of [-1, 1]) deck.box(sx * HW, -0.07, -half, sx * 0.012, 0, half, { tile: 1.4 });
+        deck.pop();
+        this.platforms.push({ type: 'slab', x: mid.x, z: mid.z, hw: HW, hl: half, yaw, y });
+      };
+      // a strut from the rock below up to a timber
+      const strut = (out, along) => {
+        const foot = at(edge - 0.15, along, -3.1), head = at(out, along, -0.3);
+        wood.tint(0.7, 0.62, 0.5, 1).beam(foot, head, 0.16, 0.16, { tile: 1 });
+      };
+      // a rope between posts (it sags), and the posts themselves
+      const rail = (pts) => {
+        wood.tint(0.8, 0.72, 0.6, 1);
+        for (const q of pts) wood.box(q.x - 0.055, q.y - 0.3, q.z - 0.055, q.x + 0.055, q.y + 1.02, q.z + 0.055, { tile: 1 });
+        wood.tint(1.5, 1.3, 0.95, 1);
+        for (let k = 0; k + 1 < pts.length; k++) {
+          const a = pts[k].clone().setY(pts[k].y + 0.96), b = pts[k + 1].clone().setY(pts[k + 1].y + 0.96);
+          let prev = a;
+          for (let j = 1; j <= 5; j++) {
+            const q = a.clone().lerp(b, j / 5);
+            q.y -= Math.sin((j / 5) * Math.PI) * 0.16;
+            wood.rod(prev, q, 0.022, 4, { caps: false });
+            prev = q;
+          }
+        }
+      };
+      const lantern = (q) => {
+        wood.tint(0.6, 0.54, 0.45, 1).box(q.x - 0.05, q.y - 0.3, q.z - 0.05, q.x + 0.05, q.y + 1.75, q.z + 0.05, { tile: 1 });
+        glow.tint(1.0, 0.72, 0.3, 1).place(q.x, q.y + 1.52, q.z).lathe([[0.0, -0.13], [0.12, -0.06], [0.12, 0.08], [0.0, 0.15]], 6).pop();
+      };
+      if (i % 2 === 0) {
+        // two walkways out, joined at their ends by a third one along the cliff, with a rope on the sea side
+        const OUT = edge + 3.0, A = 2.3;
+        for (const sa of [-A, A]) { walk(at(edge - 1.4, sa), at(OUT + HW, sa), yawOut); strut(edge + 1.9, sa); }
+        walk(at(OUT, -A - HW), at(OUT, A + HW), yawAlong);
+        const posts = [-A - HW, -A / 2, 0, A / 2, A + HW].map((sa) => at(OUT + HW - 0.06, sa));
+        rail(posts);
+        lantern(at(OUT + HW - 0.06, A + HW + 0.2));
+        // the rope holds: one cannot step off on the sea side
+        const mid = at(OUT + HW + 0.1, 0);
+        this.colliders.push({ type: 'box', x: mid.x, z: mid.z, hw: 0.1, hl: A + HW + 0.2, yaw: yawAlong, y0: y - 0.6, y1: y + 1.4 });
+      } else {
+        // one walkway out to a round crow's nest
+        const OUT = edge + 3.9, R = 1.15, c = at(OUT, 0);
+        walk(at(edge - 1.4, 0), at(OUT - R + 0.25, 0), yawOut);
+        strut(edge + 1.7, 0);
+        deck.tint(0.98, 0.9, 0.78, 1).cylinder(c.x, y - 0.07, c.z, R, R, 0.07, 14, { tile: 1.4 });
+        wood.tint(0.78, 0.7, 0.58, 1).cylinder(c.x, y - 0.34, c.z, R * 0.92, R, 0.27, 14, { tile: 1, capTop: false, capBottom: true });
+        for (const sa of [-0.75, 0.75]) wood.tint(0.7, 0.62, 0.5, 1).beam(at(edge - 0.15, sa * 0.5, -3.1), at(OUT - 0.2, sa, -0.3), 0.16, 0.16, { tile: 1 });
+        this.platforms.push({ type: 'disc', x: c.x, z: c.z, r: R, y });
+        // a rope round the sea side of the nest
+        const posts = [];
+        for (let k = 0; k <= 6; k++) {
+          const a = (-0.62 + (k / 6) * 1.24) * Math.PI; // from one side of the walkway round to the other
+          posts.push(V(c.x + (n.x * Math.cos(a) + t.x * Math.sin(a)) * (R - 0.06), y, c.z + (n.z * Math.cos(a) + t.z * Math.sin(a)) * (R - 0.06)));
+        }
+        rail(posts);
+        for (let k = 0; k + 1 < posts.length; k++) {
+          const a = posts[k], b = posts[k + 1], mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2;
+          const ox = mx - c.x, oz = mz - c.z, ol = Math.hypot(ox, oz) || 1; // pushed just outside the deck
+          this.colliders.push({ type: 'box', x: mx + (ox / ol) * 0.22, z: mz + (oz / ol) * 0.22, hw: 0.1, hl: Math.hypot(b.x - a.x, b.z - a.z) / 2 + 0.08, yaw: Math.atan2(b.x - a.x, b.z - a.z), y0: y - 0.6, y1: y + 1.4 });
+        }
+        lantern(posts[3]);
       }
-      deck.tint(0.95, 0.88, 0.78, 1).place(cx, y, cz, yaw).box(-1.75, -0.05, -0.62, 1.75, 0, 0.62, { tile: 1.4 }).pop();
-      this.platforms.push({ type: 'slab', x: cx, z: cz, hw: 1.75, hl: 0.62, yaw, y });
-    }
+    });
     {
       // the top: standing stones in a ring, a mast and its pennant, two stone seats to take in the view
       const y = ISLAND.y1 + 0.2;

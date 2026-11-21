@@ -4,6 +4,9 @@
 // Environment: PORT (8787), HOST (0.0.0.0), TICK_HZ (12), MAX_PLAYERS (48, per room), DIST_DIR (../dist) and
 // ALLOWED_ORIGINS (comma separated origins allowed to open the WebSocket; default: same host and localhost).
 // The relay itself (protocol, validation, batching) is in ./protocol.js, shared with the Cloudflare version.
+// It also answers the game's small API (./api.js): the leaderboards (/api/scores, kept in SCORES_FILE, by
+// default data/scores.json) and the characters one can talk to (/api/npc, when ANTHROPIC_API_KEY is set;
+// NPC_MODEL picks the model).
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -13,6 +16,9 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { WebSocketServer } from 'ws';
 import { Room, MAX_FRAME, cleanRoom, originAllowed, parseOrigins } from './protocol.js';
+import { Limiter, LIMITS, BODY_MAX, allowed, parseBody, mayPost } from './api.js';
+import { scoresRoute } from './scores.js';
+import { NPC_MODEL, cleanTalk, npcReply } from './npc.js';
 
 const env = (name, def, min, max) => {
   const n = Number(process.env[name]);
@@ -26,6 +32,8 @@ const TICK_HZ = env('TICK_HZ', 12, 1, 60);
 const MAX_PLAYERS = Math.floor(env('MAX_PLAYERS', 48, 1, 4096)); // per room
 const ALLOWED_ORIGINS = parseOrigins(process.env.ALLOWED_ORIGINS);
 const HEARTBEAT_MS = 15000;
+const SCORES_FILE = path.resolve(process.env.SCORES_FILE || path.join(ROOT, 'data', 'scores.json'));
+const NPC = { apiKey: process.env.ANTHROPIC_API_KEY || '', model: process.env.NPC_MODEL || NPC_MODEL };
 
 const now = () => Math.round(performance.now());
 const splitUrl = (url) => String(url || '/').split(/\?(.*)/s); // → [path, query]
@@ -108,8 +116,70 @@ async function serveStatic(req, res, pathname) {
   else pipeline(fs.createReadStream(file), res, () => {});
 }
 
+// ------------------------------------------------------------------------------------------------- the API
+
+// The leaderboards: one JSON file, read once, rewritten whole (through a temporary file) when a board changes.
+const boards = {
+  data: null,
+  writing: Promise.resolve(),
+  async load() {
+    if (!this.data) {
+      try { this.data = JSON.parse(await fs.promises.readFile(SCORES_FILE, 'utf8')); } catch { this.data = {}; }
+      if (!this.data || typeof this.data !== 'object' || Array.isArray(this.data)) this.data = {};
+    }
+    return this.data;
+  },
+  async get(board) { return (await this.load())[board]; },
+  async put(board, list) {
+    (await this.load())[board] = list;
+    const text = JSON.stringify(this.data);
+    this.writing = this.writing.then(async () => {
+      await fs.promises.mkdir(path.dirname(SCORES_FILE), { recursive: true });
+      await fs.promises.writeFile(`${SCORES_FILE}.tmp`, text);
+      await fs.promises.rename(`${SCORES_FILE}.tmp`, SCORES_FILE);
+    }).catch((err) => console.error('[scores]', err.message));
+    return this.writing;
+  },
+};
+const limiter = new Limiter();
+const LIMIT_DAY = LIMITS.npcDay;
+
+// The text of a small request body (null when it is too long).
+function readBody(req) {
+  return new Promise((resolve) => {
+    let size = 0;
+    const chunks = [];
+    // (what comes after the limit is read and dropped, so that the answer can still be sent; far too much: hang up)
+    req.on('data', (c) => { size += c.length; if (size > BODY_MAX * 64) req.destroy(); else if (size <= BODY_MAX) chunks.push(c); });
+    req.on('end', () => resolve(size > BODY_MAX ? null : Buffer.concat(chunks).toString('utf8')));
+    req.on('error', () => resolve(null));
+  });
+}
+
+async function onApi(req, res, pathname, query) {
+  const json = (status, body, headers) => reply(req, res, status, JSON.stringify(body), { 'Content-Type': MIME.json, ...headers });
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
+  const client = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '';
+  const post = req.method === 'POST';
+  if (post && !mayPost(req.headers.origin, host, ALLOWED_ORIGINS)) return json(403, { error: 'Forbidden.' });
+  if (pathname === '/api/scores') {
+    if (post && !allowed(limiter, 'scores', client)) return json(429, { error: 'Too many requests.' }, { 'Retry-After': '60' });
+    const body = post ? parseBody(await readBody(req)) : null;
+    const out = await scoresRoute({ method: req.method, query: new URLSearchParams(query), body }, boards);
+    return json(out.status, out.body, out.status === 405 ? { Allow: 'GET, HEAD, POST' } : {});
+  }
+  // /api/npc
+  if (!post) return json(405, { error: 'Method not allowed.' }, { Allow: 'POST' });
+  if (!NPC.apiKey) return json(501, { reply: null, error: 'No model is configured for the characters.' });
+  const talk = cleanTalk(parseBody(await readBody(req)));
+  if (!talk) return json(400, { error: 'Not a conversation.' });
+  if (!allowed(limiter, 'npc', client) || !limiter.allow('npc:day', ...LIMIT_DAY)) return json(429, { reply: null, error: 'Too many requests.' }, { 'Retry-After': '60' });
+  return json(200, { reply: await npcReply(NPC, talk) });
+}
+
 async function onRequest(req, res) {
   const [pathname, query] = splitUrl(req.url);
+  if (pathname === '/api/scores' || pathname === '/api/npc') return onApi(req, res, pathname, query);
   if (req.method !== 'GET' && req.method !== 'HEAD') return reply(req, res, 405, 'Method not allowed.\n', { Allow: 'GET, HEAD' });
   if (pathname === '/healthz') return reply(req, res, 200, 'ok');
   if (pathname === '/api/presence') {

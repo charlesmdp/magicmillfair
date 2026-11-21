@@ -337,6 +337,11 @@ export const PATHS = [
     points: [[-176.5, 30.5], [-181, 22], [-186, 12], [-190.5, 3], [-193, -2]],
   },
   {
+    // From the shore path to the gate of the Sky Stones.
+    id: 'climb', kind: 'gravel', width: 1.8, cut: 0.5,
+    points: [[4, 49.6], [3.4, 56], [1.9, 63]],
+  },
+  {
     // The path that winds round the island.
     id: 'island', kind: 'dirt', width: 3.0, cut: 0.2,
     points: Array.from({ length: 96 }, (_, i) => { const p = islandPath(i / 95); return [Math.round(p.x * 100) / 100, Math.round(p.z * 100) / 100]; }),
@@ -375,6 +380,17 @@ export const VILLAGE = {
   wall: [[-362.4, 62.2], [-353.3, 51.6], [-353.3, 33.4]],
   wall2: [[-353.3, 26.6], [-353.3, 18.4], [-367.6, 9.3]],
 };
+
+// ---------------------------------------------------------------------------
+// Games and dangers
+
+// The Sky Stones: stones to jump from one to the next, up to a platform `height` metres above the ground.
+// (x, z) is the middle of its round lawn, levelled at y; one comes in through the gate, on the north side.
+export const CLIMB = { x: 0, z: 80, y: 8.3, r: 13.5, height: 90, gate: [1.6, 64.6] };
+// A pond of acid in a hollow of the north-western woods. Nobody tells you it is there.
+export const ACID = { x: -236, z: -82, r: 4.2 };
+// The boulder of the island: it rolls down the whole path, again and again (seconds; metres per second).
+export const BOULDER = { radius: 1.55, speed: 7.2, period: 52 };
 
 // ---------------------------------------------------------------------------
 // Caves: galleries and chambers under the mountains. Each node is [x, z, half width, floor, height of the roof];
@@ -417,7 +433,7 @@ export const CAVES = [
 // The camp in the woods north of the pond: hammocks round a fire.
 export const CAMP = { x: -197, z: -9, r: 12.5 };
 // Beanbags at the north end of the beach (the left end, looking out to sea)…
-export const BEACH_LOUNGE = { x: 45, z: -92, yaw: 0.35, r: 9 };
+export const BEACH_LOUNGE = { x: 43.5, z: -92, yaw: 0.35, r: 9 };
 // …and on a deck on stilts over the great pond, reached by a gangway from the north bank.
 export const POND_DECK = { x: -152.5, z: 37.5, yaw: 0.06, w: 16, l: 12, y: LEVELS.pondBig + 0.85, gangway: [[-151, 22.2], [-151.9, 31.5]] };
 
@@ -540,6 +556,7 @@ export const ZONES = [
   { id: 'stairway', name: 'The Stairway', x: -312, z: 60, r: 40 },
   { id: 'village', name: 'The High Village', x: -380, z: 36, r: 40 },
   { id: 'camp', name: 'The Camp', x: CAMP.x, z: CAMP.z, r: 26 },
+  { id: 'climb', name: 'The Sky Stones', x: CLIMB.x, z: CLIMB.z, r: 24 },
   { id: 'lounge', name: 'The Beach Lounge', x: BEACH_LOUNGE.x, z: BEACH_LOUNGE.z, r: 20 },
   { id: 'deck', name: 'The Pond Deck', x: POND_DECK.x, z: POND_DECK.z, r: 12 },
   { id: 'grotto', name: 'The Hidden Grotto', x: -303, z: 114, r: 21 },

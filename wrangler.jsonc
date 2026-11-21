@@ -15,7 +15,7 @@
     // Only these paths run the Worker; the files of the site are served directly.
     "run_worker_first": ["/ws", "/api/*", "/healthz"]
   },
-  // One Durable Object per multiplayer room (see cloudflare/worker.js).
+  // One Durable Object per multiplayer room, plus one that keeps the leaderboards (see cloudflare/worker.js).
   "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
   "vars": {
@@ -23,6 +23,9 @@
     "TICK_MS": "100",
     // Comma separated origins allowed to open the multiplayer socket. Empty: the site's own address only.
     "ALLOWED_ORIGINS": ""
+    // The characters one can talk to answer through Claude once the Worker has a secret named
+    // ANTHROPIC_API_KEY (dashboard: Settings → Variables and Secrets, or `npx wrangler secret put
+    // ANTHROPIC_API_KEY`). Never write the key in this file. NPC_MODEL (a variable) picks another model.
   },
   "observability": { "enabled": true },
   // No usage statistics sent to Cloudflare by the tool itself.

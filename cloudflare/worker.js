@@ -1,14 +1,25 @@
 // Magic Mill Fair on Cloudflare: one Worker. The built site (dist/) is served by Cloudflare's static assets;
-// this script only answers /ws (multiplayer presence), /api/presence and /healthz.
+// this script only answers /ws (multiplayer presence), /api/presence, /api/scores (the leaderboards),
+// /api/npc (the characters one can talk to) and /healthz.
 //
 // Each room is a Durable Object running the very relay of the Node server (../server/protocol.js). It is
 // written to sleep whenever nobody moves: connections stay open while the object hibernates, the clients'
 // pings are answered by Cloudflare itself, and what a newcomer must know about each visitor travels in the
 // socket attachments, so nothing is lost when the object is unloaded.
-// Variables (wrangler.jsonc): MAX_PLAYERS (48 per room), TICK_MS (100), ALLOWED_ORIGINS (default: same host);
+//
+// One more object of the same class, named "~api" (no room can have that name), is the game's notebook: it
+// keeps the leaderboards in its storage — the only thing this game ever stores — and counts how often each
+// address calls the API. The same code answers on the Node server (../server/scores.js, npc.js, api.js).
+// Variables (wrangler.jsonc): MAX_PLAYERS (48 per room), TICK_MS (100), ALLOWED_ORIGINS (default: same host),
+// NPC_MODEL; secret: ANTHROPIC_API_KEY (without it the characters use the lines kept in the game);
 // for tests only: STALE_MS, DEBUG.
 import { DurableObject } from 'cloudflare:workers';
 import { Room as Relay, MAX_FRAME, cleanRoom, originAllowed, parseOrigins } from '../server/protocol.js';
+import { Limiter, LIMITS, BODY_MAX, allowed, parseBody, mayPost } from '../server/api.js';
+import { scoresRoute } from '../server/scores.js';
+import { NPC_MODEL, cleanTalk, npcReply } from '../server/npc.js';
+
+const NOTEBOOK = '~api'; // the object that keeps the scores (room names are [a-z0-9_-] only)
 
 const PING = '{"t":"ping"}', PONG = '{"t":"pong"}'; // answered without waking the room
 const STALE_MS = 150000; // a connection silent for that long is a ghost (background tabs ping at least once a minute)
@@ -50,8 +61,31 @@ export class Room extends DurableObject {
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(PING, PONG));
   }
 
-  // Reached through the Worker below: a WebSocket handshake, or a head count.
+  // The notebook (see the top of this file): leaderboards and rate limits. `client` is the caller's address.
+  async api(request, url) {
+    const limiter = (this.limiter ||= new Limiter());
+    const client = url.searchParams.get('client') || '';
+    if (url.pathname === '/limit') {
+      // may this address talk to a character once more? (and has the day's ceiling been reached?)
+      const ok = allowed(limiter, 'npc', client) && limiter.allow('npc:day', ...LIMITS.npcDay);
+      return Response.json({ ok });
+    }
+    const post = request.method === 'POST';
+    if (post && !allowed(limiter, 'scores', client)) return Response.json({ error: 'Too many requests.' }, { status: 429, headers: { 'Retry-After': '60' } });
+    let body = null;
+    if (post) {
+      const text = await request.text();
+      body = text.length <= BODY_MAX ? parseBody(text) : null;
+    }
+    const store = { get: (board) => this.ctx.storage.get(`board:${board}`), put: (board, list) => this.ctx.storage.put(`board:${board}`, list) };
+    const out = await scoresRoute({ method: request.method, query: url.searchParams, body }, store);
+    return Response.json(out.body, { status: out.status, headers: { 'Cache-Control': 'no-store', ...(out.status === 405 ? { Allow: 'GET, HEAD, POST' } : {}) } });
+  }
+
+  // Reached through the Worker below: a WebSocket handshake, a head count, or the notebook.
   async fetch(request) {
+    const url = new URL(request.url);
+    if (url.pathname === '/api/scores' || url.pathname === '/limit') return this.api(request, url);
     if ((request.headers.get('Upgrade') || '').toLowerCase() !== 'websocket') {
       this.sweep();
       return Response.json({ players: this.relay.joined, ...(this.env.DEBUG ? { up: Date.now() - this.started } : {}) });
@@ -127,6 +161,27 @@ export default {
       const room = cleanRoom(url.searchParams.get('room'));
       const count = await env.ROOMS.get(env.ROOMS.idFromName(room)).fetch(new Request('https://room/count'));
       return Response.json({ room, ...(await count.json()) }, { headers: { 'Cache-Control': 'no-store' } });
+    }
+    if (url.pathname === '/api/scores' || url.pathname === '/api/npc') {
+      const json = (status, body, headers = {}) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store', ...headers } });
+      const post = request.method === 'POST';
+      if (post && !mayPost(request.headers.get('Origin'), url.host, parseOrigins(env.ALLOWED_ORIGINS))) return json(403, { error: 'Forbidden.' });
+      if (!env.ROOMS) return json(501, { error: 'Not configured.' });
+      const notebook = env.ROOMS.get(env.ROOMS.idFromName(NOTEBOOK));
+      const client = request.headers.get('CF-Connecting-IP') || '';
+      if (url.pathname === '/api/scores') {
+        const to = new URL(request.url);
+        to.searchParams.set('client', client);
+        return notebook.fetch(new Request(to, request));
+      }
+      if (!post) return json(405, { error: 'Method not allowed.' }, { Allow: 'POST' });
+      if (!env.ANTHROPIC_API_KEY) return json(501, { reply: null, error: 'No model is configured for the characters.' });
+      const text = await request.text();
+      const talk = cleanTalk(text.length <= BODY_MAX ? parseBody(text) : null);
+      if (!talk) return json(400, { error: 'Not a conversation.' });
+      const may = await (await notebook.fetch(new Request(`https://notebook/limit?client=${encodeURIComponent(client)}`))).json();
+      if (!may.ok) return json(429, { reply: null, error: 'Too many requests.' }, { 'Retry-After': '60' });
+      return json(200, { reply: await npcReply({ apiKey: env.ANTHROPIC_API_KEY, model: env.NPC_MODEL || NPC_MODEL }, talk) });
     }
     // Anything else that is not a file of the site (the files themselves never reach this script).
     return env.ASSETS ? env.ASSETS.fetch(request) : new Response('Not found.\n', { status: 404 });

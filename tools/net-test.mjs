@@ -38,7 +38,7 @@ function check(name, ok, detail) {
 async function startServer(env = {}, port = 0) {
   port = port || (await freePort());
   const proc = spawn(process.execPath, [path.join(ROOT, 'server/index.js')], {
-    env: { ...process.env, ALLOWED_ORIGINS: '', MAX_PLAYERS: '', DIST_DIR: '', HOST: '127.0.0.1', TICK_HZ: '20', ...env, PORT: String(port) },
+    env: { ...process.env, ALLOWED_ORIGINS: '', MAX_PLAYERS: '', DIST_DIR: '', HOST: '127.0.0.1', TICK_HZ: '20', ANTHROPIC_API_KEY: '', NPC_MODEL: '', ...env, PORT: String(port) },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   const server = { port, proc, log: '', alive: () => proc.exitCode === null && proc.signalCode === null };
@@ -502,6 +502,43 @@ async function testProtocol(server) {
   await strict.stop();
 }
 
+// ------------------------------------------------------------------------------- the API: scores, characters
+
+async function testApi({ port }) {
+  const json = (res) => { try { return JSON.parse(res.body.toString()); } catch { return null; } };
+  const post = (target, body, headers = {}) => request(port, target, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
+  let res = await request(port, '/api/scores');
+  check('api: GET /api/scores → the board of the Sky Stones, empty at first', res.status === 200 && json(res)?.board === 'sky' && Array.isArray(json(res).top) && json(res).top.length === 0 && /json/.test(res.headers['content-type']), [res.status, res.body.toString().slice(0, 120)]);
+  // a page of another site may not post (browsers say where a POST comes from); not counted by the limiter
+  res = await post('/api/scores', { board: 'sky', name: 'Mallory', ms: 150000 }, { origin: 'https://elsewhere.example' });
+  check('api: a POST from another site is refused', res.status === 403, res.status);
+  // six posts a minute per address: the first three are honest times
+  res = await post('/api/scores', { board: 'sky', name: '  Ada   <b>Lovelace</b> the first ', ms: 240000.4 });
+  const first = json(res);
+  check('api: a time is recorded, the name cleaned', res.status === 200 && first?.rank === 1 && first.best === true && first.top[0].ms === 240000 && first.top[0].name === 'Ada bLovelace/b' && first.top[0].at === undefined, res.body.toString().slice(0, 200));
+  res = await post('/api/scores', { board: 'sky', name: 'Bob', ms: 200000 });
+  const second = json(res);
+  res = await post('/api/scores', { board: 'sky', name: 'ada blovelace/B', ms: 300000 });
+  const third = json(res);
+  check('api: best first; a slower time changes nothing, whatever the case of the name', second?.rank === 1 && second.top.map((e) => e.name).join() === 'Bob,Ada bLovelace/b' && third?.rank === 2 && third.best === false && third.top[1].ms === 240000, [second, third]);
+  const bad = [];
+  bad.push((await post('/api/scores', { board: 'sky', name: 'Flash', ms: 1000 })).status); // nobody climbs that fast
+  bad.push((await post('/api/scores', { board: '__proto__', name: 'Eve', ms: 200000 })).status);
+  bad.push((await post('/api/scores', `{"board":"sky","name":"Big","ms":200000,"pad":"${'x'.repeat(6000)}"}`)).status);
+  check('api: impossible times, unknown boards and oversized bodies are refused', bad.join() === '400,400,400', bad);
+  res = await post('/api/scores', { board: 'sky', name: 'Carol', ms: 210000 });
+  const limited = res.status;
+  res = await request(port, '/api/scores?board=sky');
+  check('api: a seventh POST within the minute is turned away; the board is unchanged', limited === 429 && json(res)?.top.length === 2 && json(res).top[0].name === 'Bob', [limited, res.body.toString().slice(0, 160)]);
+  res = await request(port, '/api/scores?board=nope');
+  const del = await request(port, '/api/scores', { method: 'DELETE' });
+  check('api: unknown board → 404, other methods → 405', res.status === 404 && del.status === 405, [res.status, del.status]);
+  // the characters: no key in this test, so the game is told to use its own lines
+  res = await post('/api/npc', { npc: 'alligator', messages: [{ role: 'user', content: 'Hello Al' }] });
+  const get = await request(port, '/api/npc');
+  check('api: /api/npc without a key → 501 (the game uses its own lines), GET → 405', res.status === 501 && json(res)?.reply === null && get.status === 405, [res.status, get.status]);
+}
+
 // ------------------------------------------------------------------------------------------ Presence façade
 
 function listen(presence) {
@@ -869,6 +906,7 @@ try {
     server.dist = fx.dist;
     await section('protocol', () => testProtocol(server));
     await section('presence', () => testPresence(server));
+    await section('api', () => testApi(server));
     await section('cloudflare', () => testCloudflare(server, fx));
     if (process.env.NET_TEST_LOG) fs.writeFileSync(process.env.NET_TEST_LOG, server.log);
     // (the local tool also logs its own failed attempts to reach Cloudflare when offline: not the Worker's)
@@ -876,10 +914,13 @@ try {
     check('worker: still running at the end, no exception logged', server.alive() && !trouble.length, { alive: server.alive(), trouble: trouble.slice(0, 6) });
   } else {
     await section('interp', async () => testInterpolation());
-    server = await startServer({ DIST_DIR: fx.dist, MAX_PLAYERS: '4' });
+    server = await startServer({ DIST_DIR: fx.dist, MAX_PLAYERS: '4', SCORES_FILE: path.join(fx.tmp, 'scores.json') });
     await section('static', () => testStatic(server, fx));
     await section('protocol', () => testProtocol(server));
     await section('presence', () => testPresence(server));
+    await section('api', () => testApi(server));
+    const kept = (() => { try { return JSON.parse(fs.readFileSync(path.join(fx.tmp, 'scores.json'), 'utf8')); } catch { return null; } })();
+    check('api: the Node server keeps the boards in its file', kept?.sky?.length === 2 && kept.sky[0].name === 'Bob' && kept.sky[0].at > 0, kept);
     check('server: still running at the end, nothing on stderr', server.alive() && !/error|exception/i.test(server.log), server.log);
   }
 } catch (err) {

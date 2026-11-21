@@ -1,7 +1,8 @@
 // Dev tool: gameplay checks in headless Chromium — walking onto the pier, crossing a footbridge, climbing the
 // garden steps, being stopped by the mountains and by a wall, swimming, the stairway and the village, the
-// island, sitting and lying down, the big wheel, the caves, chat and emotes, changing the quality tier (page
-// reload at the same spot) — and the download size.
+// island (its wall, its walkways, its boulder), sitting and lying down, the big wheel, the caves, chat and
+// emotes, the Sky Stones (a bot makes every jump of the course; the clock, the board), the acid pond and the
+// shark, changing the quality tier (page reload at the same spot) — and the download size.
 // usage: node tools/walk-test.mjs [--q=low]
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
@@ -173,17 +174,63 @@ try {
     check('reaches the village; the wall of the lookout holds', Math.abs(v1.y - V.y) < 0.3 && v1.x < top[0] - 8 && v2.x < -353.6 && Math.abs(v2.y - V.y) < 0.3, `walked to x ${v1.x.toFixed(1)} at ${v1.y.toFixed(1)} m; stopped at x ${v2.x.toFixed(1)}`);
   }
 
-  // --- the island: on its path, then out on a beam over the drop
+  // --- the island: its wall is not climbed, its walkways hold, and the boulder flattens whoever stays on the path
   {
-    const b2 = places.beam;
-    await place(b2.x, b2.z, 0);
-    await frames(3);
-    const i0 = await state();
-    const beamAt = await page.evaluate(() => { const p = window.__mmf.world.places.platforms.filter((q) => q.type === 'slab' && q.hw === 1.75)[2]; return { x: p.x, z: p.z, y: p.y }; });
-    await place(beamAt.x, beamAt.z, 0);
-    await frames(3);
-    const i1 = await state();
-    check('walks the island path and stands on a beam over the drop', Math.abs(i0.y - b2.y) < 0.25 && Math.abs(i1.y - beamAt.y) < 0.1 && i1.grounded, `path at ${i0.y.toFixed(2)} (${b2.y.toFixed(2)}), beam at ${i1.y.toFixed(2)}`);
+    const isl = await page.evaluate(async () => {
+      const L = await import('/src/world/layout/layout.js');
+      const app = window.__mmf, { player, input, world } = app, g = world.games, dt = 1 / 60;
+      const out = {};
+      const at = (u) => L.islandPath(u);
+      const still = (n) => { for (let f = 0; f < n; f++) { input.move.x = 0; input.move.y = 0; input.jump = false; player.update(dt, 0, true); } };
+      const go = (dx, dz, n, run = false) => { for (let f = 0; f < n; f++) { input.move.x = dx; input.move.y = -dz; input.run = run; input.jump = false; player.update(dt, 0, true); } input.move.x = 0; input.move.y = 0; input.run = false; };
+      // the wall, between two hollows: walking and hopping into it leads nowhere
+      const w = at(0.45);
+      player.teleport(w.x, w.z, 0); still(5);
+      out.pathY = player.pos.y; out.pathWant = w.y;
+      for (let k = 0; k < 6; k++) { go(-w.nx, -w.nz, 40, true); input.jump = true; player.update(dt, 0, true); go(-w.nx, -w.nz, 40, true); }
+      still(60);
+      out.wall = { up: player.pos.y - w.y, inward: (w.x - player.pos.x) * w.nx + (w.z - player.pos.z) * w.nz };
+      // out on a walkway (the first station: two walkways joined by a third along the cliff)
+      const slabs = world.places.platforms.filter((q) => q.type === 'slab' && q.hw === 0.3);
+      const outer = slabs[2]; // the one along the cliff
+      const s0 = slabs[0];
+      player.teleport(s0.x, s0.z, 0); still(5);
+      out.walkway = { y: player.pos.y, want: s0.y, grounded: player.grounded };
+      // walk along it to its far end, then onto the outer one
+      const yaw = s0.yaw, ox = Math.sin(yaw), oz = Math.cos(yaw);
+      const sign = Math.sign((outer.x - s0.x) * ox + (outer.z - s0.z) * oz) || 1;
+      go(ox * sign, oz * sign, 70);
+      still(10);
+      out.outer = { y: player.pos.y, want: outer.y, d: Math.hypot(player.pos.x - outer.x, player.pos.z - outer.z), grounded: player.grounded };
+      // the rope on the sea side holds: keep walking out
+      go(ox * sign, oz * sign, 90, true);
+      still(10);
+      out.rope = { y: player.pos.y, grounded: player.grounded };
+      // the boulder: frozen where it passes that station (its clock is the time of day)
+      const station = at(L.ISLAND.beams[0]);
+      const travel = L.ISLAND_LENGTH / L.BOULDER.speed, when = (1 - L.ISLAND.beams[0]) * travel * 1000;
+      const left = g.boulderState(when), c = g.boulderAt;
+      out.boulder = { left, off: Math.hypot(c.x - station.x, c.z - station.z), y: c.y - station.y };
+      const deaths = [];
+      const died = (x, y, z) => { player.dead = null; player.pos.set(x, y, z); player.grounded = true; g._tickBoulder(player, when); const d = player.dead ? player.dead.cause : null; if (player.dead) { deaths.push(player.dead.respawn); player.dead = null; document.body.classList.remove('dead'); } return d; };
+      out.safeOuter = died(player.pos.x, player.pos.y, player.pos.z);
+      // in the hollow nearest to it (inside the rock, off the path)
+      const hollow = at(0.1), HW = L.ISLAND.width / 2;
+      const whenH = (1 - 0.1) * travel * 1000;
+      g.boulderState(whenH);
+      const hx = hollow.x - hollow.nx * (HW + 1.6), hz = hollow.z - hollow.nz * (HW + 1.6);
+      player.dead = null; player.pos.set(hx, hollow.y, hz); g._tickBoulder(player, whenH);
+      out.safeHollow = player.dead ? player.dead.cause : null; player.dead = null;
+      // on the path itself
+      g.boulderState(when);
+      out.onPath = died(station.x, station.y, station.z);
+      out.respawn = deaths[0] ? { x: deaths[0][0], z: deaths[0][1], walkable: world.collision.walkable(deaths[0][0], deaths[0][1]), y: world.collision.spawnHeight(deaths[0][0], deaths[0][1]) } : null;
+      player.teleport(-100, -40, 0);
+      return out;
+    });
+    check('the island wall is not climbed, by walking or by hopping', Math.abs(isl.pathY - isl.pathWant) < 0.25 && isl.wall.up < 0.9 && isl.wall.inward < 6, `ended ${isl.wall.up.toFixed(2)} m above the path, ${isl.wall.inward.toFixed(2)} m into the rock side`);
+    check('walks out on a walkway over the drop; the rope on the sea side holds', Math.abs(isl.walkway.y - isl.walkway.want) < 0.05 && isl.walkway.grounded && Math.abs(isl.outer.y - isl.outer.want) < 0.05 && isl.outer.grounded && isl.rope.grounded && Math.abs(isl.rope.y - isl.outer.want) < 0.05, JSON.stringify({ walkway: isl.walkway, outer: isl.outer, rope: isl.rope }));
+    check('the boulder flattens whoever stands on the path, spares the walkway and the hollow', isl.onPath === 'Flattened by the boulder' && isl.safeOuter === null && isl.safeHollow === null && isl.boulder.off < 0.5 && !!isl.respawn && isl.respawn.walkable && isl.respawn.y > 0.3, JSON.stringify({ onPath: isl.onPath, outer: isl.safeOuter, hollow: isl.safeHollow, boulder: isl.boulder, respawn: isl.respawn }));
   }
 
   // --- sitting down to work on a beanbag, lying in a hammock
@@ -262,6 +309,118 @@ try {
     await frames(4);
     const emote = await page.evaluate(() => { const r = window.__mmf.rank; return { active: r.active.length, kind: r.active[0]?.kind, calls: 0 }; });
     check('an animal of light is summoned', emote.active === 1 && emote.kind === 'tiger', JSON.stringify(emote));
+  }
+
+  // --- the Sky Stones: a bot takes every jump of the course with the real controller; the clock, the board
+  {
+    const climb = await page.evaluate(() => {
+      const app = window.__mmf, { player, input, world } = app, g = world.games, c = g.course, dt = 1 / 60;
+      const step = (dx, dz, jump) => { input.move.x = dx; input.move.y = -dz; input.run = true; input.jump = !!jump; player.update(dt, 0, true); g._tickClimb(dt, player); };
+      const onStone = (st) => {
+        if (!player.grounded || Math.abs(player.pos.y - st.y) > 0.02) return false;
+        if (st.beam) { const cs = Math.cos(st.beam.yaw), sn = Math.sin(st.beam.yaw), dx = player.pos.x - st.x, dz = player.pos.z - st.z; return Math.abs(dx * cs - dz * sn) <= st.beam.hw + 1e-3 && Math.abs(dx * sn + dz * cs) <= st.beam.half + 1e-3; }
+        return (player.pos.x - st.x) ** 2 + (player.pos.z - st.z) ** 2 <= st.r * st.r + 1e-3;
+      };
+      const putOn = (st, x, z) => { player.pos.set(x, st.y, z); player.vel.set(0, 0, 0); player.grounded = true; player.swimming = false; player.jet = 0; player.seat = null; };
+      // one jump from a to b: `margin` before the edge, using `share` of the room there is to run
+      const jump = (a, b, margin, share) => {
+        const tx = b.beam ? b.x - Math.sin(b.beam.yaw) * (b.beam.half - 0.5) : b.x, tz = b.beam ? b.z - Math.cos(b.beam.yaw) * (b.beam.half - 0.5) : b.z;
+        let sx, sz, ex, ez;
+        if (a.beam) {
+          const hx = Math.sin(a.beam.yaw), hz = Math.cos(a.beam.yaw);
+          sx = a.x - hx * a.beam.half * (2 * share - 1); sz = a.z - hz * a.beam.half * (2 * share - 1);
+          ex = a.x + hx * a.beam.half; ez = a.z + hz * a.beam.half;
+        } else {
+          const dx = tx - a.x, dz = tz - a.z, l = Math.hypot(dx, dz);
+          sx = a.x - (dx / l) * a.r * (2 * share - 1) * 0.98; sz = a.z - (dz / l) * a.r * (2 * share - 1) * 0.98;
+          ex = a.x + (dx / l) * a.r; ez = a.z + (dz / l) * a.r;
+        }
+        putOn(a, sx, sz);
+        let jumped = false;
+        for (let f = 0; f < 900; f++) {
+          const p = player.pos, gx = jumped ? tx : ex, gz = jumped ? tz : ez;
+          const dx = gx - p.x, dz = gz - p.z, l = Math.hypot(dx, dz) || 1;
+          const doJump = !jumped && player.grounded && l <= margin + Math.hypot(player.vel.x, player.vel.z) * dt;
+          if (jumped && player.grounded) return onStone(b);
+          step(l > 0.05 ? dx / l : 0, l > 0.05 ? dz / l : 0, doJump);
+          if (doJump) jumped = true;
+          if (p.y < Math.min(a.y, b.y) - 4) return false;
+        }
+        return false;
+      };
+      const ways = [];
+      for (const m of [0.08, 0.2, 0.35, 0.5, 0.7, 1.0]) for (const s of [1, 0.85, 0.7, 0.5]) ways.push([m, s]);
+      const out = { stones: c.length, height: c[c.length - 1].y - g.start.y, stuck: [], firstTry: 0 };
+      // the jetpack is refused all around the lawn
+      out.noFly = !player.canFly({ x: g.start.x, y: 20, z: g.start.z });
+      player.teleport(g.start.x, g.start.z, 0);
+      player.pos.y = g.start.y; // (on the lawn: a stone hangs over the plate)
+      for (let f = 0; f < 20; f++) step(0, 0, false);
+      out.ready = g.run.state;
+      out.line0 = document.querySelector('.hud .run').textContent;
+      for (let f = 0; f < 600 && !onStone(c[0]); f++) { const dx = c[0].x - player.pos.x, dz = c[0].z - player.pos.z, l = Math.hypot(dx, dz) || 1; step(dx / l, dz / l, false); }
+      out.running = g.run.state;
+      for (let i = 1; i < c.length; i++) {
+        let ok = false, n = 0;
+        for (const [m, s] of ways) { n++; if ((ok = jump(c[i - 1], c[i], m, s))) break; }
+        if (!ok) { out.stuck.push(i); putOn(c[i], c[i].x, c[i].z); } else if (n === 1) out.firstTry++;
+      }
+      for (let f = 0; f < 10; f++) step(0, 0, false);
+      out.state = g.run.state; out.clock = g.run.t; out.clean = g.run.clean;
+      out.line = document.querySelector('.hud .run').textContent;
+      out.name = app.presence ? app.presence.name : null;
+      return out;
+    });
+    await frames(6); // the time goes to the board (kept in this browser: the test has no server)
+    const board = await page.evaluate(() => { const g = window.__mmf.world.games; return { top: g.scores, note: document.querySelector('.hud .note').textContent }; });
+    check('the Sky Stones can be climbed: a bot makes every jump', climb.stuck.length === 0 && climb.stones > 140 && climb.height > 85, `${climb.stones} stones, ${climb.height.toFixed(1)} m, ${climb.firstTry} jumps at the first try, stuck at [${climb.stuck.join(', ')}]`);
+    check('the clock starts on leaving the plate and stops at the top; no jetpack there', climb.noFly && climb.ready === 'ready' && /^Ready/.test(climb.line0) && climb.running === 'running' && climb.state === 'done' && climb.clean && /^Top reached in \d+:\d\d\.\d\d!$/.test(climb.line), JSON.stringify({ ready: climb.ready, running: climb.running, state: climb.state, line: climb.line, noFly: climb.noFly }));
+    check('the time is written on the board at the gate', Array.isArray(board.top) && board.top.length === 1 && Math.abs(board.top[0].ms - climb.clock * 1000) < 2 && /#1 on the board/.test(board.note), JSON.stringify(board));
+  }
+
+  // --- what kills: the acid pond, the shark; the end-of-the-road screen
+  {
+    const acid = await page.evaluate(() => {
+      const app = window.__mmf, { player, input, world } = app, g = world.games, dt = 1 / 60;
+      const quiet = () => { input.move.x = 0; input.move.y = 0; input.run = false; input.jump = false; };
+      player.teleport(g.acid.x + 9, g.acid.z, 0);
+      const rim = player.pos.y - g.acid.y;
+      player.pos.set(g.acid.x, g.acid.y + 1.5, g.acid.z); player.grounded = false; player.vel.set(0, 0, 0);
+      for (let f = 0; f < 120 && !player.dead; f++) { quiet(); player.update(dt, 0, true); g.update(dt, f * dt, null); }
+      return { rim, cause: player.dead ? player.dead.cause : null, screen: document.body.classList.contains('dead'), text: document.querySelector('.wasted span').textContent, word: document.querySelector('.wasted b').textContent };
+    });
+    await frames(3);
+    const back = await page.evaluate(() => {
+      const app = window.__mmf, { player, input, world } = app, g = world.games, dt = 1 / 60;
+      for (let f = 0; f < 260; f++) { input.move.x = 0; input.move.y = 0; input.jump = false; player.update(dt, 0, true); }
+      return { alive: !player.dead, screen: document.body.classList.contains('dead'), away: Math.hypot(player.pos.x - g.acid.x, player.pos.z - g.acid.z), walkable: world.collision.walkable(player.pos.x, player.pos.z), anim: player.anim };
+    });
+    check('falling into the acid pond is the end: WASTED, then back on one\'s feet nearby', acid.cause === 'Dissolved in acid' && acid.screen && acid.word === 'WASTED' && acid.text === 'Dissolved in acid' && back.alive && !back.screen && back.away > 6 && back.away < 20 && back.walkable, JSON.stringify({ acid, back }));
+    const shark = await page.evaluate(() => {
+      const app = window.__mmf, { player, input, world } = app, g = world.games, dt = 1 / 30;
+      const quiet = () => { input.move.x = 0; input.move.y = 0; input.run = false; input.jump = false; };
+      // deep water, twelve metres inside the line where the sea ends for swimmers
+      const e = g.seaEdges[Math.floor(g.seaEdges.length / 2)], mx = (e[0] + e[2]) / 2, mz = (e[1] + e[3]) / 2;
+      let nx = -(e[3] - e[1]), nz = e[2] - e[0];
+      const nl = Math.hypot(nx, nz); nx /= nl; nz /= nl;
+      if (!world.collision.walkable(mx + nx * 12, mz + nz * 12)) { nx = -nx; nz = -nz; }
+      const x = mx + nx * 12, z = mz + nz * 12;
+      player.teleport(x, z, 0);
+      for (let f = 0; f < 90; f++) { quiet(); player.update(dt, 0, true); }
+      const out = { swimming: player.swimming, depth: world.data.waterAt(x, z) - world.data.heightAt(x, z), far: g.seaEdgeDistance(x, z), t: 0 };
+      const notes = [], ev = g.events;
+      g.events = { ...ev, note: (t) => notes.push(t) };
+      for (let f = 0; f < 30 * 40 && !player.dead; f++) { quiet(); player.update(dt, 0, true); g._tickShark(dt, f * dt, player); out.t += dt; }
+      g.events = ev;
+      out.cause = player.dead ? player.dead.cause : null; out.warned = notes[0] || null;
+      // and the line itself cannot be swum across
+      const respawn = player.dead ? player.dead.respawn : null;
+      out.respawn = respawn ? { walkable: world.collision.walkable(respawn[0], respawn[1]), y: world.collision.spawnHeight(respawn[0], respawn[1]) } : null;
+      for (let f = 0; f < 240; f++) { quiet(); player.update(dt, 0, true); }
+      out.alive = !player.dead;
+      return out;
+    });
+    check('swimming out to where the sea ends brings the shark', shark.swimming && shark.far < 30 && /fin/.test(shark.warned || '') && shark.cause === 'Eaten by the shark' && shark.t < 15 && !!shark.respawn && shark.respawn.walkable && shark.respawn.y > 0.2 && shark.alive, JSON.stringify(shark));
   }
 
   // --- quality change: the page reloads and resumes where we were

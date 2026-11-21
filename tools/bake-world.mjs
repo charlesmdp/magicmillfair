@@ -393,6 +393,9 @@ const islandSand = new Grid(N, N); // its little landing beach
 const stairMask = new Grid(N, N);
 const campMask = new Grid(N, N);
 const caveMouth = new Grid(N, N);
+const climbMask = new Grid(N, N);
+const acidMask = new Grid(N, N);
+let acidLevel = 0;
 const disc = (x, z, r, fn) => {
   for (let j = Math.max(0, Math.floor(gi(z - r))); j <= Math.min(N - 1, Math.ceil(gi(z + r))); j++) {
     for (let i = Math.max(0, Math.floor(gi(x - r))); i <= Math.min(N - 1, Math.ceil(gi(x + r))); i++) {
@@ -506,6 +509,28 @@ const disc = (x, z, r, fn) => {
     campMask.d[q] = 1 - smoothstep(C.r - 5, C.r + 0.5, d);
     if (d < C.r) noTrees.d[q] = 1;
   });
+  // --- the lawn of the Sky Stones, levelled into the hillside
+  const K = L.CLIMB;
+  disc(K.x, K.z, K.r + 9, (q, d) => {
+    H.d[q] = lerp(H.d[q], K.y, 1 - smoothstep(K.r, K.r + 9, d));
+    if (d < K.r + 1) { detailMask.d[q] = 0; noTrees.d[q] = 1; }
+    climbMask.d[q] = 1 - smoothstep(K.r - 0.5, K.r + 2.5, d);
+  });
+  disc(K.x, K.z, K.r + 16, (q) => { noTrees.d[q] = 1; }); // (and no tree in the way of those who fall)
+  // --- the acid pond: a bowl in the woods, bare and burnt round its rim
+  {
+    const A = L.ACID;
+    let sum = 0, cnt = 0;
+    disc(A.x, A.z, A.r + 2.5, (q, d) => { if (d > A.r + 1.5) { sum += H.d[q]; cnt++; } });
+    const rim = sum / cnt;
+    disc(A.x, A.z, A.r + 7, (q, d) => {
+      const bowl = rim - 1.7 * (1 - smoothstep(A.r * 0.25, A.r + 1.2, d));
+      H.d[q] = lerp(H.d[q], bowl, 1 - smoothstep(A.r + 2, A.r + 7, d));
+      if (d < A.r + 2) { detailMask.d[q] = 0.3; noTrees.d[q] = 1; }
+      acidMask.d[q] = 1 - smoothstep(A.r + 0.5, A.r + 3.5, d);
+    });
+    acidLevel = rim - 0.62;
+  }
   // --- nothing grows where people lounge
   disc(L.BEACH_LOUNGE.x, L.BEACH_LOUNGE.z, L.BEACH_LOUNGE.r + 1, (q) => { noTrees.d[q] = 1; });
   // --- cave mouths: level ground in front (not in the pool of the waterfall), nothing planted before or above them
@@ -970,6 +995,9 @@ for (let j = 0; j < N; j++) {
       setTint(q, 1.04, 1.0, 0.94, a * lanes * 0.6);
     }
     if (campMask.d[q] > 0) { over(q, 3, campMask.d[q] * 0.75); gh *= 1 - campMask.d[q] * 0.9; }
+    // the lawn of the Sky Stones (mown), the burnt rim of the acid pond
+    if (climbMask.d[q] > 0) { const a = climbMask.d[q]; over(q, 0, a); gh = lerp(gh, 0.12, a); setTint(q, 1.02, 1.06, 0.9, a * 0.6); }
+    if (acidMask.d[q] > 0) { const a = acidMask.d[q]; over(q, 4, a * 0.85); over(q, 7, a * 0.5 * smoothstep(0.1, 0.5, nC)); gh *= 1 - a; setTint(q, 0.62, 0.72, 0.42, a); }
 
     // --- slopes
     // grass holds on banks up to about 45 degrees; beyond that the soil shows (bare rock on the mountains)
@@ -1414,6 +1442,7 @@ const meta = {
   coast: coastPts.filter((_, k) => k % 3 === 0).map((q) => q.map(r2)),
   promenade: resample(smoothPath(L.PROMENADE.points, { step: 1 }), 2).map((q) => q.map(r2)),
   bounds: boundsPts.filter((_, k) => k % 2 === 0).map((q) => [r2(q[0]), r2(q[1])]),
+  acid: { y: r2(acidLevel) },
   map: L.MAP_VIEW,
 };
 fs.writeFileSync(path.join(OUT, 'world.json'), JSON.stringify(meta));

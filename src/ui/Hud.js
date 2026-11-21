@@ -125,6 +125,7 @@ export class Hud {
       </div>
       <div class="toast"><small>Now entering</small><span></span></div>
       <div class="pill note"></div>
+      <div class="pill run" aria-live="off"></div>
       <div class="tags"></div>
       <button class="minimap" type="button" title="Open the map (M)" aria-label="Open the map"><canvas width="192" height="192"></canvas></button>
       <div class="bigmap" role="dialog" aria-label="Map">
@@ -164,6 +165,7 @@ export class Hud {
     this.zoneEl = h.querySelector('.zone');
     this.toastEl = h.querySelector('.toast');
     this.noteEl = h.querySelector('.note');
+    this.runEl = h.querySelector('.run');
     this.tagsEl = h.querySelector('.tags');
     this.statsEl = h.querySelector('.stats');
     this.panel = h.querySelector('.panel');
@@ -303,6 +305,14 @@ export class Hud {
     this.toastEl.classList.add('show');
     clearTimeout(this._tz);
     this._tz = setTimeout(() => this.toastEl.classList.remove('show'), 3200);
+  }
+
+  /** The line of a game in progress (a clock, a score), under the place name; null takes it away. */
+  setRun(text) {
+    if (text === this._run) return;
+    this._run = text;
+    if (text) this.runEl.textContent = text;
+    this.runEl.classList.toggle('show', !!text);
   }
 
   note(text, ms = 2600) {

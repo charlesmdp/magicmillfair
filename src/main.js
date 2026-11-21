@@ -14,6 +14,8 @@ import { RankEmotes } from './player/RankEmotes.js';
 import { Hud, VERSION } from './ui/Hud.js';
 import { Presence, cleanChat } from './net/Presence.js';
 import { Npc } from './npc/Npc.js';
+import { Scores } from './net/Scores.js';
+import { formatTime } from './world/zones/games/course.js';
 import { RemoteAvatars } from './net/RemoteAvatars.js';
 import { Benchmark } from './app/Benchmark.js';
 import { SPAWN, ZONES } from './world/layout/layout.js';
@@ -83,6 +85,7 @@ async function boot() {
   };
   spawn();
   world.playerPos = player.pos;
+  world.player = player; // (the games and the dangers of the valley watch the player)
   // what the avatar wears and holds (see Cosmetics.js); the hat is remembered from one visit to the next
   const savedHat = parseInt(store.get('mmf.hat'), 10);
   const look = { hat: savedHat > 0 && savedHat < HATS.length && owns(HATS[savedHat].id) ? savedHat : 0, jet: false, bouquet: false, kinds: undefined, quad: false, bighead: false };
@@ -193,6 +196,24 @@ async function boot() {
     if (!sent) { hud.note('Not so fast: a line every two seconds'); return; }
     hud.addChat(name, color, sent, true);
     hud.say(hud.selfTag, sent);
+  };
+  // the Sky Stones: a clock while climbing, the board of the best times at the gate
+  const skyScores = new Scores('sky');
+  skyScores.top().then((list) => world.games.setScores(list));
+  world.games.events = {
+    note: (text) => hud.note(text, 4200),
+    run: (text) => hud.setRun(text),
+    finished: (ms, clean) => {
+      rank.play('dragon', me.root);
+      presence?.sendEmote(EMOTES.length + RANK_EMOTES.indexOf('dragon'));
+      if (!clean) { hud.note(`${formatTime(ms)} — but a cheat was on: not recorded`, 7000); return; }
+      skyScores.submit(name, ms).then(({ top, rank: place, best, shared }) => {
+        world.games.setScores(top);
+        const where = place ? `#${place} on the board` : 'not on the board this time';
+        hud.note(`${formatTime(ms)} — ${best ? where : 'your best time stands'}${shared ? '' : ' (kept in this browser only)'}`, 8000);
+        hud.addChat('✦', 5, `Sky Stones: ${name} reached the top in ${formatTime(ms)}${place ? ` (#${place})` : ''}`, true);
+      });
+    },
   };
   const toggleCamera = () => { if (state.mode === 'walk') setMode('free'); else if (state.mode === 'free') setMode('walk'); };
   const savedQuality = store.get('mmf.quality');

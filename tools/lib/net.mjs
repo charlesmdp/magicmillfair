@@ -21,7 +21,7 @@ export function freePort() {
   });
 }
 
-export function request(port, target, { method = 'GET', headers = {} } = {}) {
+export function request(port, target, { method = 'GET', headers = {}, body } = {}) {
   return new Promise((resolve, reject) => {
     const req = http.request({ host: '127.0.0.1', port, path: target, method, headers, agent: false }, (res) => {
       const chunks = [];
@@ -30,7 +30,7 @@ export function request(port, target, { method = 'GET', headers = {} } = {}) {
     });
     req.setTimeout(5000, () => req.destroy(new Error('timeout')));
     req.on('error', reject);
-    req.end();
+    req.end(body);
   });
 }
 
