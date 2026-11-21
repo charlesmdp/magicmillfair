@@ -19,7 +19,7 @@ import { Collision } from './Collision.js';
 import { Rocks } from './props/Rocks.js';
 import { Birds } from './wildlife/Birds.js';
 import { Ripples } from './water/Ripples.js';
-import { PIER } from './layout/layout.js';
+import { PIER, ISLAND } from './layout/layout.js';
 
 const LAYER_NAMES = ['lawn', 'meadow', 'forest', 'dirt', 'rock', 'sand', 'gravel', 'soil'];
 
@@ -103,6 +103,8 @@ export class World {
     this.zones = [];
     this.seats = []; // places to sit or lie (see player/PlayerController.js: seatAt)
     this.seatSources = []; // seats that move: functions (player position) → seat or null
+    this.actionSources = []; // other things to do on the spot: functions (player) → { label, run } or null
+    this.noFly = []; // discs { x, z, r } where the jetpack does not work
     this.ripples = new Ripples();
     this.scene.add(this.ripples.mesh);
     this.mill = new MillZone(this).build();
@@ -116,6 +118,8 @@ export class World {
     this.scene.add(this.places.group);
     this.zones.push(this.places);
     this.terrain.setHoles(this.places.holes);
+    this.npcs = this.places.npcs;
+    this.noFly.push({ x: ISLAND.x, z: ISLAND.z, r: ISLAND.r0 + 18 }); // the island is climbed on foot
     this.detail = 1;
     this.engine.on('detail', (d) => this.applyDetail(d));
     this.rocks = new Rocks(this);

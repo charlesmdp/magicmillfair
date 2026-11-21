@@ -1,0 +1,203 @@
+// Things an avatar can wear, hold or ride: hats, a bouquet, a jetpack, a quad.
+// Everything is modelled by hand in metres, in one material (colours in the vertices): one draw call each.
+//
+// What can be sold later goes through `owns(id)`: today it says yes to everything. Plug purchases in there
+// (and check them on a server before trusting them: anything decided in the browser can be faked).
+import * as THREE from 'three';
+import { MeshBuilder } from '../world/props/MeshBuilder.js';
+import { surfaceMaterial } from '../render/SurfaceMaterial.js';
+import { LAYER } from '../render/Shadows.js';
+
+/** Hats, in the order of their number on the network (3 bits: at most 8 entries, 'none' included). */
+export const HATS = [
+  { id: 'none', name: 'No hat' },
+  { id: 'cap', name: 'Cap', premium: true },
+  { id: 'straw', name: 'Straw hat', premium: true },
+  { id: 'beanie', name: 'Beanie', premium: true },
+  { id: 'tophat', name: 'Top hat', premium: true },
+  { id: 'cowboy', name: 'Cowboy hat', premium: true },
+  { id: 'crown', name: 'Crown', premium: true },
+  { id: 'wizard', name: 'Wizard hat', premium: true },
+];
+/** Other things meant to be sold one day. */
+export const EXTRAS = { jetpack: { name: 'Jetpack', premium: true } };
+
+/** Does this visitor have that item? Everything is free for now: the one place to change when it is not. */
+export function owns(id) { return id !== undefined; }
+
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+let material = null;
+export function cosmeticMaterial() {
+  if (!material) material = surfaceMaterial({ rough: 0.62, spec: 0.22, name: 'cosmetic', side: THREE.DoubleSide });
+  return material;
+}
+let glow = null;
+function glowMaterial() {
+  if (!glow) glow = surfaceMaterial({ rough: 0.4, spec: 0.2, emissive: [2.4, 2.0, 1.4], name: 'cosmetic-glow', side: THREE.DoubleSide });
+  return glow;
+}
+function mesh(builder, mat = cosmeticMaterial()) {
+  const m = new THREE.Mesh(builder.build(), mat);
+  m.layers.enable(LAYER.DYNAMIC_CASTER);
+  m.frustumCulled = false;
+  return m;
+}
+
+// ---------------------------------------------------------------------------
+// Hats. Modelled for a head of radius 1 whose top is at the origin (y up, the face towards +Z): the avatar
+// scales them to its own head.
+
+const hatCache = new Map();
+export function hatGeometry(id) {
+  if (hatCache.has(id)) return hatCache.get(id);
+  const b = new MeshBuilder();
+  const S = 16;
+  if (id === 'cap') {
+    b.tint(0.75, 0.1, 0.1, 1).lathe([[1.0, -0.22], [1.0, 0.0], [0.9, 0.3], [0.6, 0.52], [0.2, 0.6], [0.0, 0.61]], S);
+    b.tint(0.95, 0.95, 0.92, 1).cylinder(0, 0.58, 0, 0.09, 0.07, 0.07, 8); // the button on top
+    // the visor, curved round the front
+    b.tint(0.6, 0.07, 0.07, 1);
+    for (let i = 0; i < 8; i++) {
+      const a0 = -0.9 + (i / 8) * 1.8, a1 = -0.9 + ((i + 1) / 8) * 1.8, r0 = 0.98, r1 = 1.75;
+      const p = (a, r, y) => V(Math.sin(a) * r, y, Math.cos(a) * r * (r > 1 ? 1.05 : 1));
+      b.quad(p(a0, r0, -0.14), p(a1, r0, -0.14), p(a1, r1, -0.2), p(a0, r1, -0.2));
+    }
+  } else if (id === 'straw') {
+    b.tint(0.9, 0.76, 0.4, 1).lathe([[1.9, -0.06], [1.85, 0.0], [1.02, 0.06], [0.98, 0.42], [0.86, 0.56], [0.3, 0.62], [0.0, 0.62]], S);
+    b.tint(0.82, 0.68, 0.34, 1).lathe([[1.9, -0.06], [1.0, 0.0]], S); // underside of the brim
+    b.tint(0.2, 0.5, 0.3, 1).lathe([[1.0, 0.08], [1.01, 0.26]], S); // ribbon
+  } else if (id === 'beanie') {
+    b.tint(0.14, 0.36, 0.62, 1).lathe([[1.06, -0.3], [1.07, -0.1], [1.0, 0.25], [0.7, 0.55], [0.3, 0.7], [0.0, 0.72]], S);
+    b.tint(0.9, 0.9, 0.86, 1).lathe([[1.1, -0.32], [1.14, -0.24], [1.14, -0.08], [1.08, -0.04]], S); // turned-up rim
+    b.place(0, 0.84, 0).lathe([[0.0, -0.22], [0.2, -0.12], [0.24, 0.0], [0.2, 0.12], [0.0, 0.22]], 8).pop(); // pompom
+  } else if (id === 'tophat') {
+    b.tint(0.05, 0.05, 0.06, 1).lathe([[1.5, -0.03], [1.5, 0.03], [0.86, 0.06], [0.84, 1.25], [0.9, 1.3], [0.0, 1.3]], S);
+    b.tint(0.04, 0.04, 0.05, 1).lathe([[1.5, -0.03], [0.86, 0.0]], S);
+    b.tint(0.6, 0.08, 0.1, 1).lathe([[0.875, 0.08], [0.875, 0.34]], S); // band
+  } else if (id === 'cowboy') {
+    // the brim curls up at the sides
+    b.tint(0.45, 0.28, 0.14, 1);
+    const R = 12, A = 20;
+    const brim = (i, j) => {
+      const a = (j / A) * Math.PI * 2, r = 0.95 + (i / R) * 1.0;
+      const curl = Math.abs(Math.sin(a)) ** 2 * ((i / R) ** 2) * 0.55; // up at the sides (±X)
+      return V(Math.sin(a) * r * 1.0, 0.02 + curl - (i / R) * 0.05, Math.cos(a) * r * 1.12);
+    };
+    for (let i = 0; i < R; i++) for (let j = 0; j < A; j++) b.quad(brim(i, j), brim(i, j + 1), brim(i + 1, j + 1), brim(i + 1, j));
+    b.tint(0.5, 0.31, 0.16, 1).lathe([[0.97, 0.0], [0.88, 0.5], [0.72, 0.74], [0.4, 0.66], [0.0, 0.58]], S); // pinched crown
+    b.tint(0.12, 0.08, 0.05, 1).lathe([[0.975, 0.03], [0.94, 0.2]], S);
+  } else if (id === 'crown') {
+    b.tint(1.0, 0.72, 0.12, 1).lathe([[0.9, -0.05], [0.92, 0.3]], S);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a), w = 0.32;
+      const p0 = V(s * 0.92 - c * w, 0.3, c * 0.92 + s * w), p1 = V(s * 0.92 + c * w, 0.3, c * 0.92 - s * w), top = V(s * 0.98, 0.78, c * 0.98);
+      b.tint(1.0, 0.72, 0.12, 1).tri(p0, p1, top);
+      b.tint(i % 2 ? 0.8 : 0.1, 0.1, i % 2 ? 0.15 : 0.7, 1).place(s * 0.98, 0.8, c * 0.98).lathe([[0.0, -0.09], [0.09, 0.0], [0.0, 0.09]], 6).pop(); // jewels
+    }
+    b.tint(0.5, 0.05, 0.12, 1).lathe([[0.9, 0.24], [0.6, 0.42], [0.0, 0.46]], S); // velvet inside
+  } else if (id === 'wizard') {
+    b.tint(0.2, 0.1, 0.5, 1).lathe([[1.7, -0.04], [1.65, 0.02], [0.95, 0.06], [0.8, 0.5], [0.5, 1.2], [0.24, 1.75]], S);
+    b.tint(0.17, 0.08, 0.42, 1).lathe([[1.7, -0.04], [0.95, 0.0]], S);
+    // the tip, bent over
+    b.tint(0.2, 0.1, 0.5, 1).rod(V(0, 1.72, 0), V(0.3, 2.1, -0.18), 0.24, 8, { r1: 0.02, caps: false });
+    b.tint(1.0, 0.8, 0.2, 1).lathe([[0.97, 0.08], [0.92, 0.26]], S); // band
+    for (let i = 0; i < 5; i++) { const a = i * 1.9 + 0.4, y = 0.55 + i * 0.22, r = 0.82 - i * 0.12; b.place(Math.sin(a) * r, y, Math.cos(a) * r).lathe([[0.0, -0.07], [0.07, 0.0], [0.0, 0.07]], 4).pop(); } // stars
+  }
+  const g = b.empty ? null : b.build();
+  hatCache.set(id, g);
+  return g;
+}
+
+/** A hat mesh sized for a head of radius `r` (metres); null for 'none'. */
+export function makeHat(id, r) {
+  const g = hatGeometry(id);
+  if (!g) return null;
+  const m = new THREE.Mesh(g, cosmeticMaterial());
+  m.scale.setScalar(r);
+  m.layers.enable(LAYER.DYNAMIC_CASTER);
+  m.frustumCulled = false;
+  return m;
+}
+
+// ---------------------------------------------------------------------------
+// A bouquet: stems gathered in a paper cone, blossoms above. Origin in the fist, flowers towards +Y.
+
+export const FLOWER_COLORS = {
+  poppy: [0.85, 0.08, 0.06], cornflower: [0.2, 0.32, 0.85], buttercup: [0.98, 0.82, 0.1], daisy: [0.97, 0.97, 0.92], iris: [0.95, 0.8, 0.15],
+  foxglove: [0.82, 0.3, 0.6], lavender: [0.52, 0.4, 0.8], agapanthus: [0.35, 0.45, 0.9], heather: [0.75, 0.35, 0.6], lily: [0.98, 0.75, 0.82],
+};
+const MIXED = ['poppy', 'cornflower', 'buttercup', 'daisy', 'foxglove', 'lavender', 'poppy'];
+export function makeBouquet(kinds = MIXED) {
+  const b = new MeshBuilder();
+  b.tint(0.93, 0.9, 0.82, 1).lathe([[0.012, -0.12], [0.05, 0.02], [0.085, 0.15]], 8); // paper
+  const n = Math.max(3, Math.min(9, kinds.length));
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + 0.3, lean = i === 0 ? 0 : 0.085 + (i % 2) * 0.03, h = 0.3 + (i % 3) * 0.035;
+    const top = V(Math.sin(a) * lean, h, Math.cos(a) * lean);
+    b.tint(0.2, 0.5, 0.15, 1).rod(V(0, 0.0, 0), top, 0.006, 4, { caps: false });
+    const c = FLOWER_COLORS[kinds[i % kinds.length]] || FLOWER_COLORS.poppy;
+    b.tint(c[0], c[1], c[2], 1).place(top.x, top.y, top.z).lathe([[0.0, -0.012], [0.045, 0.0], [0.05, 0.016], [0.02, 0.035], [0.0, 0.03]], 7).pop();
+    b.tint(0.95, 0.75, 0.1, 1).place(top.x, top.y + 0.03, top.z).lathe([[0.0, -0.008], [0.014, 0.0], [0.0, 0.01]], 5).pop();
+  }
+  b.tint(0.25, 0.55, 0.18, 1);
+  for (let i = 0; i < 4; i++) { const a = i * 1.7; b.tri(V(0, 0.08, 0), V(Math.sin(a) * 0.1, 0.2, Math.cos(a) * 0.1), V(Math.sin(a + 0.5) * 0.07, 0.24, Math.cos(a + 0.5) * 0.07)); } // leaves
+  return mesh(b);
+}
+
+// ---------------------------------------------------------------------------
+// The jetpack: two tanks on the back (the avatar faces +Z, so they sit at -Z), nozzles underneath. Its flames
+// are a second small mesh, shown while it burns.
+
+export function makeJetpack() {
+  const b = new MeshBuilder();
+  for (const x of [-0.11, 0.11]) {
+    b.tint(0.75, 0.76, 0.78, 1).place(x, 0, 0).lathe([[0.0, -0.2], [0.07, -0.17], [0.085, -0.05], [0.085, 0.14], [0.06, 0.22], [0.0, 0.25]], 10).pop();
+    b.tint(0.2, 0.2, 0.22, 1).place(x, -0.2, 0).lathe([[0.03, 0.0], [0.065, -0.09]], 8).pop(); // nozzle
+    b.tint(0.85, 0.2, 0.1, 1).place(x, 0.02, 0).lathe([[0.088, -0.03], [0.088, 0.03]], 10).pop(); // stripe
+  }
+  b.tint(0.25, 0.25, 0.27, 1).box(-0.1, -0.06, 0.04, 0.1, 0.1, 0.1); // the plate against the back
+  const pack = mesh(b);
+  const f = new MeshBuilder();
+  for (const x of [-0.11, 0.11]) {
+    f.tint(1.0, 0.55, 0.12, 1).place(x, -0.29, 0).lathe([[0.055, 0.0], [0.07, -0.12], [0.0, -0.5]], 8).pop();
+    f.tint(1.0, 0.9, 0.5, 1).place(x, -0.29, 0).lathe([[0.03, 0.0], [0.035, -0.08], [0.0, -0.28]], 6).pop();
+  }
+  const flames = mesh(f, glowMaterial());
+  flames.layers.disable(LAYER.DYNAMIC_CASTER);
+  pack.add(flames);
+  pack.userData.flames = flames;
+  return pack;
+}
+
+// ---------------------------------------------------------------------------
+// The quad: four fat tyres, a seat, handlebars. Origin on the ground under the rider, facing +Z.
+
+export const QUAD = { seat: 0.62, length: 1.7 };
+let quadGeo = null;
+export function makeQuad() {
+  if (!quadGeo) {
+    const b = new MeshBuilder();
+    // tyres and hubs
+    for (const [x, z] of [[-0.48, 0.58], [0.48, 0.58], [-0.48, -0.56], [0.48, -0.56]]) {
+      b.tint(0.05, 0.05, 0.055, 1).place(x, 0.27, z, 0, 0, Math.PI / 2).lathe([[0.14, -0.13], [0.25, -0.12], [0.27, -0.05], [0.27, 0.05], [0.25, 0.12], [0.14, 0.13]], 12).pop();
+      b.tint(0.78, 0.78, 0.8, 1).place(x, 0.27, z, 0, 0, Math.PI / 2).lathe([[0.0, -0.14], [0.14, -0.135], [0.14, 0.135], [0.0, 0.14]], 8).pop();
+    }
+    // frame, engine, bodywork
+    b.tint(0.12, 0.12, 0.13, 1).box(-0.2, 0.22, -0.7, 0.2, 0.42, 0.72);
+    b.tint(0.85, 0.12, 0.08, 1);
+    b.box(-0.3, 0.42, 0.28, 0.3, 0.6, 0.84); // front
+    b.box(-0.28, 0.42, -0.84, 0.28, 0.56, -0.3); // rear rack
+    for (const s of [-1, 1]) { b.box(s * 0.3, 0.5, 0.34, s * 0.66, 0.56, 0.84); b.box(s * 0.28, 0.48, -0.82, s * 0.66, 0.54, -0.32); } // mudguards
+    b.tint(0.08, 0.08, 0.09, 1).box(-0.2, 0.5, -0.36, 0.2, QUAD.seat, 0.3); // seat
+    // handlebars and the headlight
+    b.tint(0.15, 0.15, 0.16, 1).rod(V(0, 0.58, 0.42), V(0, 0.92, 0.3), 0.03, 6);
+    b.rod(V(-0.36, 0.92, 0.28), V(0.36, 0.92, 0.28), 0.022, 6);
+    b.tint(0.04, 0.04, 0.045, 1).rod(V(-0.36, 0.92, 0.28), V(-0.24, 0.92, 0.28), 0.032, 6).rod(V(0.24, 0.92, 0.28), V(0.36, 0.92, 0.28), 0.032, 6);
+    b.tint(1.6, 1.5, 1.1, 1).place(0, 0.66, 0.85, 0, Math.PI / 2, 0).lathe([[0.0, 0.0], [0.09, 0.005], [0.1, 0.03]], 10).pop();
+    quadGeo = b.build();
+  }
+  const m = new THREE.Mesh(quadGeo, cosmeticMaterial());
+  m.layers.enable(LAYER.DYNAMIC_CASTER);
+  m.frustumCulled = false;
+  return m;
+}

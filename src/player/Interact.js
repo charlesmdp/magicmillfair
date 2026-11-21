@@ -1,4 +1,4 @@
-// What the player can do where they stand: sit, lie down, board the wheel… and get up again.
+// What the player can do where they stand: sit, lie down, board the wheel, pick a flower, talk… and get up again.
 import { ANIM, isResting } from './Character.js';
 
 const REACH = 1.9;
@@ -8,7 +8,8 @@ export class Interact {
    * @param {{ player: import('./PlayerController.js').PlayerController, world: object, hud: object,
    *           peers: () => Iterable<{x:number,y:number,z:number,anim:number}> }} o
    * world.seats: fixed seats (see seatAt); world.seatSources: functions (player position) → a seat that moves
-   * (a gondola of the wheel) or null.
+   * (a gondola of the wheel) or null; world.actionSources: functions (player) → { label, run } or null, for
+   * anything else that can be done on the spot.
    */
   constructor({ player, world, hud, peers }) {
     this.player = player;
@@ -16,6 +17,7 @@ export class Interact {
     this.hud = hud;
     this.peers = peers;
     this.target = null;
+    this.actions = [];
     this._at = { x: 0, y: 0, z: 0, yaw: 0 };
   }
 
@@ -43,35 +45,47 @@ export class Interact {
   update(active) {
     const { player, hud } = this;
     const seat = player.seat;
-    if (!active) { this.target = null; hud.setPrompt(0, null); hud.setPrompt(1, null); return; }
+    this.actions.length = 0;
+    this.target = null;
+    if (!active || player.dead) { hud.setPrompt(0, null); hud.setPrompt(1, null); return; }
     if (seat) {
-      this.target = null;
       // a ride is left where it can be: at the bottom
       if (seat.locked && seat.leaving && (!seat.canLeave || seat.canLeave())) { seat.leaving = false; player.stand(); return; }
       hud.setPrompt(0, seat.locked ? (seat.leaving ? 'Getting off at the bottom…' : 'Get off') : 'Stand up');
       hud.setPrompt(1, seat.work ? (seat.pose === ANIM.work ? 'Close the laptop' : 'Open the laptop') : null);
       return;
     }
+    if (player.riding) { hud.setPrompt(0, 'Get off the quad'); hud.setPrompt(1, null); return; }
     const can = player.grounded && !player.swimming;
-    this.target = can ? this._nearest() : null;
-    hud.setPrompt(0, this.target ? this.target.label || 'Sit' : null);
-    hud.setPrompt(1, null);
+    if (can) {
+      this.target = this._nearest();
+      for (const source of this.world.actionSources) { const a = source(player); if (a) this.actions.push(a); }
+    }
+    const first = this.target ? this.target.label || 'Sit' : this.actions[0]?.label;
+    const second = this.target ? this.actions[0]?.label : this.actions[1]?.label;
+    hud.setPrompt(0, first || null);
+    hud.setPrompt(1, second || null);
   }
 
   /** The first (0) or second (1) action offered. */
   press(i = 0) {
     const { player } = this;
     const seat = player.seat;
+    if (player.dead) return;
     if (seat) {
       if (i === 1) { if (seat.work) seat.pose = seat.pose === ANIM.work ? ANIM.sit : ANIM.work; return; }
       if (seat.locked) seat.leaving = !seat.leaving; else player.stand();
       return;
     }
-    if (i === 0 && this.target && !this._taken(this.target)) {
-      const s = this.target;
-      if (s.work) s.pose = ANIM.work; // sitting down to work: the laptop comes out by itself
-      s.leaving = false;
-      player.sit(s);
-    }
+    if (player.riding) { if (i === 0) player.riding = false; return; }
+    if (this.target) {
+      if (i === 0) {
+        if (this._taken(this.target)) return;
+        const s = this.target;
+        if (s.work) s.pose = ANIM.work; // sitting down to work: the laptop comes out by itself
+        s.leaving = false;
+        player.sit(s);
+      } else this.actions[0]?.run();
+    } else this.actions[i]?.run();
   }
 }

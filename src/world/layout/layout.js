@@ -417,9 +417,9 @@ export const CAVES = [
 // The camp in the woods north of the pond: hammocks round a fire.
 export const CAMP = { x: -197, z: -9, r: 12.5 };
 // Beanbags at the north end of the beach (the left end, looking out to sea)…
-export const BEACH_LOUNGE = { x: 44.5, z: -93, yaw: 0.35, r: 7 };
+export const BEACH_LOUNGE = { x: 45, z: -92, yaw: 0.35, r: 9 };
 // …and on a deck on stilts over the great pond, reached by a gangway from the north bank.
-export const POND_DECK = { x: -152.5, z: 37, yaw: 0.06, w: 10, l: 8, y: LEVELS.pondBig + 0.85, gangway: [[-151, 22.2], [-151.9, 33]] };
+export const POND_DECK = { x: -152.5, z: 37.5, yaw: 0.06, w: 16, l: 12, y: LEVELS.pondBig + 0.85, gangway: [[-151, 22.2], [-151.9, 31.5]] };
 
 // Boardwalk along the back of the beach (planks laid on graded ground).
 export const PROMENADE = {

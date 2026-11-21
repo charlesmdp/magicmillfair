@@ -14,18 +14,95 @@ import { ANIM } from '../../../player/Character.js';
 import { STAIRWAY, VILLAGE, ISLAND, islandPath, CAMP, BEACH_LOUNGE, POND_DECK, LEVELS, CAVES } from '../../layout/layout.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
-// beanbag colours (linear-ish albedo): no two neighbours alike
+// hammock and tent cloths
 const POUF = [[0.75, 0.12, 0.1], [0.9, 0.62, 0.08], [0.07, 0.42, 0.44], [0.86, 0.34, 0.5], [0.16, 0.3, 0.68], [0.85, 0.36, 0.08], [0.3, 0.55, 0.2], [0.5, 0.25, 0.6], [0.88, 0.82, 0.7], [0.1, 0.55, 0.7]];
+// beanbag chairs: as bright as sweets
+const CANDY = [[0.95, 0.24, 0.5], [0.16, 0.5, 0.95], [0.28, 0.78, 0.2], [0.58, 0.26, 0.9], [1.0, 0.5, 0.08], [1.0, 0.82, 0.14], [0.95, 0.16, 0.12], [0.2, 0.82, 0.78]];
+const scaled = (sx, sy, sz) => new THREE.Matrix4().makeScale(sx, sy, sz);
 
-/** Beanbag: a slumped cushion one sinks into. */
-function pouf(b, x, y, z, size, color, rot = 0) {
+/**
+ * Beanbag chair: a cushion to sit on and a taller one to lean against. (x, z) is where one sits, facing `yaw`;
+ * the seat is 0.235 m above y. Made for the avatar's sitting pose: thighs on the cushion, feet on the ground.
+ */
+const CHAIR_SEAT = 0.235;
+function beanbagChair(b, x, y, z, yaw, color, size = 1) {
+  const k = 0.9 + 0.2 * ((color[0] * 7 + color[2] * 3) % 1);
+  b.place(x, y, z, yaw);
   b.tint(color[0], color[1], color[2], 1);
-  b.place(x, y, z, rot);
-  const s = size;
-  b.lathe([[0.03, 0.01], [0.42 * s, 0.0], [0.56 * s, 0.12 * s], [0.58 * s, 0.3 * s], [0.48 * s, 0.46 * s], [0.28 * s, 0.52 * s], [0.03, 0.44 * s]], 12, { tile: 1 });
-  // the seam and its piping
-  b.tint(color[0] * 0.6, color[1] * 0.6, color[2] * 0.6, 1);
-  b.lathe([[0.585 * s, 0.19 * s], [0.6 * s, 0.21 * s], [0.585 * s, 0.23 * s]], 12, { tile: 1 });
+  b.push(new THREE.Matrix4().makeTranslation(0, 0, -0.2 * size).multiply(scaled(size, 1, 0.82 * size)));
+  b.lathe([[0.03, 0.0], [0.34, 0.0], [0.42, 0.06], [0.43, 0.15], [0.37, 0.215], [0.2, CHAIR_SEAT], [0.0, CHAIR_SEAT + 0.005]], 12, { tile: 1 });
+  b.pop();
+  b.tint(color[0] * 0.86 * k, color[1] * 0.86 * k, color[2] * 0.86 * k, 1);
+  b.push(new THREE.Matrix4().makeTranslation(0, 0, -0.47 * size).multiply(scaled(1.08 * size, 1, 0.6 * size)));
+  b.lathe([[0.03, 0.0], [0.33, 0.0], [0.4, 0.1], [0.41, 0.36], [0.37, 0.6], [0.26, 0.76], [0.1, 0.84], [0.0, 0.85]], 12, { tile: 1 });
+  b.pop();
+  b.pop();
+}
+
+/** A parasol: pole, canopy in two colours, a little finial. */
+function parasol(parts, x, y, z, color, r = 1.7) {
+  const pole = parts.get('woodDark'), cloth = parts.get('doubleSided');
+  pole.tint(1.3, 1.25, 1.15, 1).rod(V(x, y - 0.3, z), V(x, y + 2.5, z), 0.035, 6);
+  for (let i = 0; i < 8; i++) {
+    const a0 = (i / 8) * Math.PI * 2, a1 = ((i + 1) / 8) * Math.PI * 2, k = i % 2 ? 1 : 0.82;
+    cloth.tint(color[0] * k, color[1] * k, color[2] * k, 1).tri(V(x, y + 2.52, z), V(x + Math.cos(a0) * r, y + 2.05, z + Math.sin(a0) * r), V(x + Math.cos(a1) * r, y + 2.05, z + Math.sin(a1) * r), { tile: 1 });
+  }
+}
+
+/** A string of lights between two points, sagging, a bulb every 0.9 m. */
+function lightString(parts, a, c, sag = 0.5) {
+  const wire = parts.get('woodDark'), bulbs = parts.get('glow');
+  const n = Math.max(3, Math.round(a.distanceTo(c) / 0.9));
+  let prev = a;
+  wire.tint(0.1, 0.1, 0.1, 1);
+  for (let i = 1; i <= n; i++) {
+    const t = i / n, p = a.clone().lerp(c, t);
+    p.y -= Math.sin(Math.PI * t) * sag;
+    wire.rod(prev, p, 0.008, 3, { caps: false });
+    if (i < n) bulbs.tint(1, 0.84 + 0.1 * (i % 2), 0.5 + 0.2 * (i % 3), 1).place(p.x, p.y - 0.06, p.z).lathe([[0.0, -0.05], [0.045, -0.02], [0.045, 0.02], [0.0, 0.05]], 5).pop();
+    prev = p;
+  }
+}
+
+/**
+ * The alligator: lounging in a beanbag chair like everybody else, a drink in its hand. Modelled in the frame
+ * of its chair (it sits at the origin, facing +Z).
+ */
+function alligator(b, x, y, z, yaw) {
+  const G = [0.24, 0.5, 0.2], BELLY = [0.75, 0.78, 0.5], DARK = [0.14, 0.32, 0.13];
+  b.place(x, y, z, yaw);
+  const blob = (px, py, pz, sx, sy, sz, c, pitch = 0) => {
+    b.tint(c[0], c[1], c[2], 1);
+    b.push(new THREE.Matrix4().makeTranslation(px, py, pz).multiply(new THREE.Matrix4().makeRotationX(pitch)).multiply(scaled(sx, sy, sz)));
+    b.lathe([[0.0, -1], [0.55, -0.82], [0.9, -0.4], [1.0, 0.0], [0.9, 0.4], [0.55, 0.82], [0.0, 1]], 9, { tile: 1 });
+    b.pop();
+  };
+  blob(0, 0.55, -0.16, 0.25, 0.36, 0.2, G, -0.3); // body, leaning back
+  blob(0, 0.52, -0.05, 0.19, 0.3, 0.1, BELLY, -0.3); // pale belly
+  blob(0, 0.98, -0.2, 0.2, 0.15, 0.2, G); // head
+  blob(0, 0.95, 0.12, 0.13, 0.065, 0.27, G); // snout, upper jaw
+  blob(0, 0.875, 0.1, 0.115, 0.04, 0.24, BELLY); // lower jaw
+  for (const s of [-1, 1]) {
+    blob(s * 0.095, 1.11, -0.14, 0.06, 0.06, 0.06, G); // eye bumps
+    blob(s * 0.095, 1.125, -0.1, 0.035, 0.035, 0.03, [0.95, 0.9, 0.3]); // eyes
+    blob(s * 0.095, 1.125, -0.075, 0.012, 0.03, 0.012, [0.02, 0.02, 0.02]);
+    blob(s * 0.05, 0.99, 0.37, 0.022, 0.018, 0.022, DARK); // nostrils
+    for (let i = 0; i < 4; i++) blob(s * 0.115, 0.905, 0.03 + i * 0.085, 0.014, 0.028, 0.014, [0.97, 0.97, 0.92]); // teeth
+    // legs: thighs on the cushion, feet out in front; arms on the belly
+    blob(s * 0.17, 0.3, 0.1, 0.08, 0.08, 0.2, G);
+    blob(s * 0.18, 0.12, 0.3, 0.07, 0.13, 0.07, G);
+    blob(s * 0.18, 0.03, 0.38, 0.075, 0.03, 0.12, DARK);
+    blob(s * 0.25, 0.62, 0.0, 0.055, 0.055, 0.18, G, s > 0 ? -0.5 : 0.2);
+  }
+  for (let i = 0; i < 6; i++) blob(0, 0.86 - i * 0.1, -0.33 - i * 0.012, 0.035, 0.05, 0.03, DARK); // ridge down the back
+  // the tail, curling round on the deck to the left
+  for (let i = 0; i < 7; i++) { const a = i * 0.42; blob(-0.2 - Math.sin(a) * 0.5, 0.09 - i * 0.008, -0.2 + (1 - Math.cos(a)) * 0.5, 0.13 - i * 0.014, 0.09 - i * 0.009, 0.16, i % 2 ? DARK : G, 0); }
+  // a drink in the right hand: a glass, something orange, a straw
+  b.tint(0.92, 0.95, 0.97, 1).place(0.27, 0.68, 0.15).lathe([[0.03, 0.0], [0.045, 0.11]], 7).pop();
+  b.tint(1.0, 0.55, 0.1, 1).place(0.27, 0.69, 0.15).lathe([[0.0, 0.0], [0.028, 0.0], [0.04, 0.085], [0.0, 0.085]], 7).pop();
+  b.tint(0.9, 0.15, 0.2, 1).rod(V(0.27, 0.72, 0.15), V(0.3, 0.86, 0.17), 0.006, 4);
+  // sunglasses
+  b.tint(0.03, 0.03, 0.04, 1).box(-0.15, 1.1, -0.085, 0.15, 1.15, -0.07);
   b.pop();
 }
 
@@ -56,6 +133,7 @@ export class PlacesZone {
     this.platforms = [];
     this.areas = [];
     this.holes = []; // openings to cut in the terrain (cave mouths)
+    this.npcs = []; // characters to talk to: { id, name, x, y (where its bubble goes), z, reach }
     this.animated = [];
     this.seats = world.seats;
     this.ground = (x, z) => this.data.heightAt(x, z);
@@ -390,41 +468,49 @@ export class PlacesZone {
   // ---------------------------------------------------------------------------
   // Beanbags: at the north end of the beach, and on the deck over the pond. Sitting there, a laptop comes out.
 
+  /** Rows of beanbag chairs facing `yaw`, on a grid given in the frame of the lounge; returns their places. */
+  _chairs(b, spots, at, groundY, yaw, skip = () => false) {
+    spots.forEach(([lx, lz], i) => {
+      if (skip(i)) return;
+      const [px, pz] = at(lx, lz), py = groundY(px, pz);
+      const face = yaw + (((i * 37) % 11) / 11 - 0.5) * 0.5; // each turned a little its own way
+      beanbagChair(b, px, py, pz, face, CANDY[(i * 7 + ((i * i) >> 2)) % CANDY.length], 0.96 + ((i * 13) % 5) * 0.025);
+      this.seats.push(seatAt(px, py + CHAIR_SEAT, pz, face, { work: true, pose: ANIM.work, label: 'Sit down', reach: 1.5 }));
+      this.colliders.push({ type: 'circle', x: px - Math.sin(face) * 0.38, z: pz - Math.cos(face) * 0.38, r: 0.36, y0: py - 1, y1: py + 0.7 });
+    });
+  }
+
   _beach() {
     const parts = new Parts();
     const b = parts.get('matte');
     const { x, z, yaw } = BEACH_LOUNGE;
-    const spots = [[-3.6, -3.4], [-1.1, -4.3], [1.5, -4.0], [3.6, -2.4], [-4.2, -0.6], [4.4, 0.4], [-3.0, 2.3], [-0.4, 3.2], [2.4, 2.9], [0.2, -1.2]];
     const c = Math.cos(yaw), s = Math.sin(yaw);
-    spots.forEach(([lx, lz], i) => {
-      const px = x + lx * c + lz * s, pz = z - lx * s + lz * c, py = this.ground(px, pz);
-      // every bag turned towards the sea, give or take
-      const face = Math.PI / 2 + (((i * 37) % 11) / 11 - 0.5) * 0.9;
-      pouf(b, px, py - 0.02, pz, 1 + ((i * 13) % 5) * 0.04, POUF[i % POUF.length], i * 0.7);
-      this.seats.push(seatAt(px, py + 0.37, pz, face, { work: true, pose: ANIM.work, label: 'Sit down' }));
-      this.colliders.push({ type: 'circle', x: px, z: pz, r: 0.42, y0: py - 1, y1: py + 0.45 });
+    const at = (lx, lz) => [x + lx * c + lz * s, z - lx * s + lz * c];
+    // five rows of five, stepping down towards the sea (which lies towards +X here)
+    const spots = [];
+    for (let row = 0; row < 5; row++) for (let k = 0; k < 5; k++) spots.push([-5.2 + row * 2.5 + (k % 2) * 0.35, -5 + k * 2.5 + (row % 2) * 0.5]);
+    this._chairs(b, spots, at, this.ground, Math.PI / 2 + yaw * 0.4);
+    for (const [lx, lz] of [[-3.9, -3.7], [1.1, -1.2], [-1.4, 3.8], [3.6, 3.9]]) {
+      const [px, pz] = at(lx, lz);
+      lowTable(parts, px, this.ground(px, pz) - 0.03, pz, 0.36);
+      this.colliders.push({ type: 'circle', x: px, z: pz, r: 0.34, y0: -100, y1: this.ground(px, pz) + 0.5 });
+    }
+    // parasols, and strings of lights between poles round the lot
+    [[-2.6, -1.3, CANDY[5]], [2.4, 1.4, CANDY[1]], [-0.2, -4.9, CANDY[0]], [0.6, 5.2, CANDY[7]]].forEach(([lx, lz, tone]) => {
+      const [px, pz] = at(lx, lz);
+      parasol(parts, px, this.ground(px, pz), pz, tone, 1.9);
+      this.colliders.push({ type: 'circle', x: px, z: pz, r: 0.12 });
     });
-    for (const [lx, lz] of [[-1.6, -1.6], [2.2, 0.2]]) {
-      const px = x + lx * c + lz * s, pz = z - lx * s + lz * c;
-      lowTable(parts, px, this.ground(px, pz) - 0.03, pz);
-      this.colliders.push({ type: 'circle', x: px, z: pz, r: 0.4 });
-    }
-    {
-      // a sail for shade, on four leaning poles
-      const wood = parts.get('woodDark'), cloth = parts.get('doubleSided');
-      const corner = (lx, lz, h) => { const px = x + lx * c + lz * s, pz = z - lx * s + lz * c; return [px, this.ground(px, pz), pz, h]; };
-      const posts = [corner(-5.2, -5.2, 3.5), corner(5.4, -4.6, 2.9), corner(5.0, 4.4, 3.4), corner(-5.4, 4.6, 2.8)];
-      const tops = posts.map(([px, py, pz, h]) => {
-        wood.tint(0.8, 0.72, 0.6, 1).rod(V(px, py - 0.5, pz), V(px + (x - px) * 0.04, py + h, pz + (z - pz) * 0.04), 0.07, 7);
-        this.colliders.push({ type: 'circle', x: px, z: pz, r: 0.16 });
-        return V(px + (x - px) * 0.16, py + h - 0.15, pz + (z - pz) * 0.16);
-      });
-      // (the canvas lets the light through: lit from within rather than dark underneath)
-      const sail = parts.get('glow');
-      sail.tint(0.26, 0.25, 0.2, 1).quad(tops[0], tops[1], tops[2], tops[3], { tile: 1 }).quad(tops[3], tops[2], tops[1], tops[0], { tile: 1 });
-      void cloth;
-      for (const [px, py, pz] of [corner(-5.9, 0, 0), corner(6.0, -1.5, 0)]) lantern(parts, px, py, pz, 2.0);
-    }
+    const wood = parts.get('woodDark');
+    const poles = [[-7.2, -7.2], [0.5, -7.6], [7.4, -7.0], [7.6, 0.4], [7.2, 7.2], [-0.4, 7.6], [-7.4, 7.0], [-7.6, -0.2]].map(([lx, lz]) => {
+      const [px, pz] = at(lx, lz), py = this.ground(px, pz);
+      wood.tint(1.25, 1.2, 1.1, 1).rod(V(px, py - 0.5, pz), V(px, py + 3.0, pz), 0.05, 6);
+      this.colliders.push({ type: 'circle', x: px, z: pz, r: 0.14 });
+      return V(px, py + 2.95, pz);
+    });
+    poles.forEach((p, i) => lightString(parts, p, poles[(i + 1) % poles.length], 0.55));
+    lightString(parts, poles[0], poles[4], 0.9);
+    lightString(parts, poles[2], poles[6], 0.9);
     this._add('beach', parts);
   }
 
@@ -434,17 +520,18 @@ export class PlacesZone {
     const at = (lx, lz) => [D.x + lx * c + lz * s, D.z - lx * s + lz * c];
     const deck = parts.get('woodDeck'), wet = parts.get('woodWet'), wood = deck;
     // boards, joists, stilts down to the bed of the pond
-    deck.tint(0.96, 0.9, 0.8, 1).place(D.x, y, D.z, D.yaw);
-    for (let i = 0; i < 20; i++) {
-      const z0 = -hl + (i / 20) * D.l, k = 0.88 + 0.2 * (((i * 7) % 5) / 4);
-      deck.tint(0.96 * k, 0.9 * k, 0.8 * k, 1).box(-hw, -0.06, z0, hw, 0, z0 + D.l / 20 - 0.02, { tile: 2, faces: 'xXzZY' });
+    deck.place(D.x, y, D.z, D.yaw);
+    const N = Math.round(D.l / 0.4);
+    for (let i = 0; i < N; i++) {
+      const z0 = -hl + (i / N) * D.l, k = 0.88 + 0.2 * (((i * 7) % 5) / 4);
+      deck.tint(0.96 * k, 0.9 * k, 0.8 * k, 1).box(-hw, -0.06, z0, hw, 0, z0 + D.l / N - 0.02, { tile: 2, faces: 'xXzZY' });
     }
     deck.pop();
     wet.tint(0.8, 0.72, 0.62, 1);
-    for (const lx of [-hw + 0.3, 0, hw - 0.3]) {
+    for (const lx of [-hw + 0.3, -hw / 2, 0, hw / 2, hw - 0.3]) {
       const [x0, z0] = at(lx, -hl + 0.1), [x1, z1] = at(lx, hl - 0.1);
       wet.beam(V(x0, y - 0.2, z0), V(x1, y - 0.2, z1), 0.16, 0.26, { tile: 1 });
-      for (const lz of [-hl + 0.4, 0, hl - 0.4]) {
+      for (const lz of [-hl + 0.4, -hl / 3, hl / 3, hl - 0.4]) {
         const [px, pz] = at(lx, lz);
         wet.cylinder(px, this.ground(px, pz) - 0.5, pz, 0.14, 0.12, y - 0.2 - this.ground(px, pz) + 0.5, 7);
       }
@@ -475,18 +562,30 @@ export class PlacesZone {
       wood.beam(V(x0, y + 0.52, z0), V(x1, y + 0.52, z1), 0.05, 0.05, { tile: 1 });
       this.colliders.push({ type: 'box', x: (x0 + x1) / 2, z: (z0 + z1) / 2, hw: len / 2, hl: 0.1, yaw: Math.atan2(-(z1 - z0), x1 - x0), y0: y - 0.5, y1: y + 3 });
     }
-    // beanbags, a low table, lanterns at the corners
-    const b2 = parts.get('matte');
-    const spots = [[-3.4, 2.4, 0.2], [-1.2, 2.9, 0.0], [1.3, 2.8, -0.1], [3.5, 2.2, -0.35], [-3.6, -0.4, 0.5], [3.6, -0.6, -0.6], [0.0, 0.2, 0.0]];
-    spots.forEach(([lx, lz, turn], i) => {
+    // four rows of beanbag chairs facing the open water (an aisle from the gangway), one of them taken
+    const cushions = parts.get('matte');
+    const spots = [];
+    for (let row = 0; row < 4; row++) for (let k = 0; k < 6; k++) spots.push([-6.4 + k * 2.56 + (row % 2) * 0.3, -3.6 + row * 2.5]);
+    const GATOR = 22; // front row, towards the east end
+    this._chairs(cushions, spots, at, () => y, D.yaw);
+    {
+      const [lx, lz] = spots[GATOR], [px, pz] = at(lx, lz);
+      const seat = this.seats.find((q) => Math.abs(q.x - (px + Math.sin(q.yaw) * 0.22)) < 0.05 && Math.abs(q.z - (pz + Math.cos(q.yaw) * 0.22)) < 0.05);
+      if (seat) this.seats.splice(this.seats.indexOf(seat), 1); // that one is taken
+      const face = seat ? seat.yaw : D.yaw;
+      alligator(cushions, px, y + CHAIR_SEAT - 0.24, pz, face);
+      this.npcs.push({ id: 'alligator', name: 'Al', x: px, y: y + 1.45, z: pz, reach: 2.6 });
+    }
+    for (const [lx, lz] of [[-5.1, -2.3], [0.0, 0.2], [5.2, -2.4], [-2.5, 2.7], [2.6, 2.6]]) { const [px, pz] = at(lx, lz); lowTable(parts, px, y, pz, 0.34); this.colliders.push({ type: 'circle', x: px, z: pz, r: 0.32, y0: y - 0.5, y1: y + 1 }); }
+    for (const [lx, lz, tone] of [[-3.9, 1.3, CANDY[5]], [3.9, 1.3, CANDY[1]], [-1.3, -2.4, CANDY[0]]]) { const [px, pz] = at(lx, lz); parasol(parts, px, y, pz, tone, 1.8); this.colliders.push({ type: 'circle', x: px, z: pz, r: 0.1, y0: y - 0.5, y1: y + 3 }); }
+    // posts at the corners and the middles of the long sides, strings of lights between them
+    const posts = [[-hw + 0.12, -hl + 0.12], [0, -hl + 0.12], [hw - 0.12, -hl + 0.12], [hw - 0.12, hl - 0.12], [0, hl - 0.12], [-hw + 0.12, hl - 0.12]].map(([lx, lz]) => {
       const [px, pz] = at(lx, lz);
-      pouf(b2, px, y, pz, 1 + ((i * 11) % 4) * 0.04, POUF[(i + 3) % POUF.length], i * 1.1);
-      // facing the open water (local +Z), give or take
-      this.seats.push(seatAt(px, y + 0.39, pz, D.yaw + turn, { work: true, pose: ANIM.work, label: 'Sit down' }));
-      this.colliders.push({ type: 'circle', x: px, z: pz, r: 0.42, y0: y - 0.5, y1: y + 0.45 });
+      wood.tint(0.7, 0.6, 0.5, 1).box(px - 0.05, y, pz - 0.05, px + 0.05, y + 3.0, pz + 0.05, { tile: 1 });
+      return V(px, y + 2.95, pz);
     });
-    for (const [lx, lz] of [[-1.9, 1.0], [2.0, 0.9]]) { const [px, pz] = at(lx, lz); lowTable(parts, px, y, pz, 0.4); this.colliders.push({ type: 'circle', x: px, z: pz, r: 0.38, y0: y - 0.5, y1: y + 1 }); }
-    for (const [lx, lz] of [[-hw + 0.15, -hl + 0.15], [hw - 0.15, -hl + 0.15], [hw - 0.15, hl - 0.15], [-hw + 0.15, hl - 0.15]]) { const [px, pz] = at(lx, lz); lantern(parts, px, y, pz, 1.9); }
+    posts.forEach((p, i) => lightString(parts, p, posts[(i + 1) % posts.length], 0.5));
+    lightString(parts, posts[0], posts[3], 0.8); lightString(parts, posts[2], posts[5], 0.8); lightString(parts, posts[1], posts[4], 0.7);
     this._add('deck', parts);
   }
 

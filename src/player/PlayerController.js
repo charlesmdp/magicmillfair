@@ -1,8 +1,13 @@
-// Third-person character controller: walk, run, jump, swim, sit, with simple collisions.
+// Third-person character controller: walk, run, jump, swim, sit, ride, fly a little, with simple collisions.
 import * as THREE from 'three';
 import { ANIM, SEAT } from './Character.js';
 
 const WALK = 4.4, RUN = 8.2, SWIM = 3.1, SWIM_FAST = 5.3, JUMP = 5.4, GRAVITY = 15, RADIUS = 0.38, STEP = 0.62;
+const CLIMB = 1.35; // the steepest bare ground one can walk up (metres up per metre forward: about 53°)
+const SLIDE = 1.7; // steeper than that nobody stands: one slides down (cliffs are not climbed by hopping either)
+export const JET = { time: 1.5, thrust: 27, max: 7 }; // seconds of fuel, upward acceleration, top climbing speed
+const QUAD = { speed: 15.5, cruise: 9.5 };
+const DEATH = 3.6; // seconds between dying and standing again
 
 /**
  * A place to sit, from the middle of its seat (x, z) at height y, for someone facing `yaw`. What a seat
@@ -32,18 +37,31 @@ export class PlayerController {
     this.anim = ANIM.idle;
     this.speed = 0;
     this._p = { x: 0, z: 0 };
+    this._g = { x: 0, z: 0 };
     this.seat = null; // what the player sits or lies on
     this._seatTime = 0;
     this._at = { x: 0, y: 0, z: 0, yaw: 0 };
     this.splashed = 0; // set to the entry speed when the player has just dropped into water (read and cleared by the effects)
+    this.dead = null; // { t, cause, respawn: [x, z, yaw] } while lying there
+    this.riding = false; // on the quad
+    this.jet = 0; // seconds of jetpack burn left
+    this.fuel = JET.time;
+    this.gravity = 1; // (cheats)
+    this.boost = 1;
+    /** May the jetpack be used here? Set by the game (caves and some places say no). */
+    this.canFly = () => true;
+    /** Called with (cause) when the player dies, and with the place when they stand again. */
+    this.onDeath = null;
+    this.onRespawn = null;
   }
 
   teleport(x, z, yaw = 0) {
     this.seat = null;
-    this.pos.set(x, this.collision.groundAt(x, z, 1e4), z);
+    this.pos.set(x, this.collision.spawnHeight(x, z), z);
     this.vel.set(0, 0, 0);
     this.yaw = yaw;
     this.grounded = true;
+    this.jet = 0;
     this._sync();
   }
 
@@ -54,6 +72,8 @@ export class PlayerController {
     this.vel.set(0, 0, 0);
     this.swimming = false;
     this.grounded = true;
+    this.riding = false;
+    this.jet = 0;
   }
 
   /** Get up, at the seat's exit when it has one. */
@@ -67,6 +87,38 @@ export class PlayerController {
     this.vel.set(0, 0, 0);
     this.grounded = true;
     this._sync();
+  }
+
+  /**
+   * The end, for a few seconds. `cause` is shown on screen; `respawn` = [x, z, heading of the avatar] is where
+   * one stands again; `sink` (m/s) lets what one died in swallow the body.
+   */
+  die(cause, respawn, sink = 0) {
+    if (this.dead) return;
+    this.seat = null;
+    this.riding = false;
+    this.jet = 0;
+    this.vel.set(0, 0, 0);
+    this.dead = { t: 0, cause, respawn, sink };
+    this.onDeath?.(cause);
+  }
+
+  _dying(dt) {
+    const d = this.dead;
+    d.t += dt;
+    this.speed = 0;
+    this.swimming = this.wading = false;
+    if (d.sink) this.pos.y -= dt * d.sink;
+    this.anim = ANIM.dead;
+    this.character.setAnim(this.anim, 0);
+    this.character.update(dt);
+    this._sync();
+    if (d.t >= DEATH) {
+      this.dead = null;
+      const [x, z, yaw = 0] = d.respawn;
+      this.teleport(x, z, yaw);
+      this.onRespawn?.(x, z, yaw);
+    }
   }
 
   _seated(dt, control) {
@@ -96,11 +148,20 @@ export class PlayerController {
     r.rotation.y = this.yaw;
   }
 
+  /** Slope of the bare ground at (x, z): its gradient goes to `out`, its steepness (metres per metre) is returned. */
+  _gradient(x, z, out) {
+    const d = this.data, e = 0.7;
+    out.x = (d.heightAt(x + e, z) - d.heightAt(x - e, z)) / (2 * e);
+    out.z = (d.heightAt(x, z + e) - d.heightAt(x, z - e)) / (2 * e);
+    return Math.hypot(out.x, out.z);
+  }
+
   /**
    * @param camYaw heading of the camera (radians), movement is relative to it
    * @param control false while something else reads the inputs (free camera): the character just stands
    */
   update(dt, camYaw, control = true) {
+    if (this.dead) return this._dying(dt);
     if (this.seat) return this._seated(dt, control);
     const inp = this.input;
     const pos = this.pos, vel = this.vel;
@@ -110,17 +171,29 @@ export class PlayerController {
     let wx = -sin * f + cos * s, wz = -cos * f - sin * s;
     const wl = Math.hypot(wx, wz);
     // under the ground (a cave) the water of the surface above does not count
-    this.cave = this.collision.caveAt(pos.x, pos.z);
+    this.cave = this.collision.caveAt(pos.x, pos.z, pos.y);
     const terrain = this.cave ? this.cave.floorAt(pos.x, pos.z) : this.data.heightAt(pos.x, pos.z);
     const water = this.cave ? -1000 : this.data.waterAt(pos.x, pos.z);
     const depth = water > -500 ? water - terrain : -1;
     // deep enough and low enough: float
     this.swimming = depth > 1.2 && pos.y < water - 0.55;
     const wading = !this.swimming && depth > 0.25 && pos.y < water;
-    const top = this.swimming ? (inp.run ? SWIM_FAST : SWIM) : (inp.run ? RUN : WALK) * (wading ? 0.6 : 1);
+    if (this.riding && (this.swimming || (depth > 0.7 && pos.y < water))) this.riding = false; // a quad does not float
+    const riding = this.riding;
+    const top = this.swimming ? (inp.run ? SWIM_FAST : SWIM)
+      : riding ? (inp.run ? QUAD.speed : QUAD.cruise) * (wading ? 0.5 : 1)
+        : (inp.run ? RUN : WALK) * (wading ? 0.6 : 1) * this.boost;
     this.wading = wading;
     if (wl > 1e-3) { wx = (wx / Math.max(wl, 1)) * top; wz = (wz / Math.max(wl, 1)) * top; } else { wx = 0; wz = 0; }
-    const k = 1 - Math.exp(-dt * (this.grounded || this.swimming ? 11 : 3));
+    // ground too steep to stand on: down it goes, whatever the keys say
+    // (the sill of a cave mouth is steep rock too, but it is a doorstep)
+    const bare = this.grounded && !this.cave && Math.abs(pos.y - terrain) < 0.05 && !this.swimming && !this.collision.inCave(pos.x, pos.z);
+    this.sliding = false;
+    if (bare) {
+      const g = this._g, steep = this._gradient(pos.x, pos.z, g);
+      if (steep > SLIDE) { this.sliding = true; wx = (-g.x / steep) * 7.5; wz = (-g.z / steep) * 7.5; }
+    }
+    const k = 1 - Math.exp(-dt * (this.sliding ? 6 : riding ? 3.2 : this.jet > 0 ? 6 : this.grounded || this.swimming ? 11 : 3));
     vel.x += (wx - vel.x) * k; vel.z += (wz - vel.z) * k;
 
     // try to move, sliding along obstacles and refusing steps that are too high
@@ -129,9 +202,15 @@ export class PlayerController {
       p.x = pos.x + dx; p.z = pos.z + dz;
       this.collision.resolve(p, RADIUS, pos.y);
       this.collision.confine(p); // the mountains and the open sea
+      if (this.collision.blocked(p.x, p.z, pos.y)) return false; // the side of a floating stone
       const g = this.collision.groundAt(p.x, p.z, pos.y + 0.3);
       if ((this.grounded || this.swimming) && g - pos.y > STEP && !(this.swimming && g < water + 0.4)) return false;
       if (!this.grounded && !this.swimming && g > pos.y + 0.25) return false;
+      // bare rock that is too steep is not walked up (steps, decks and cave floors are not bare ground)
+      if (this.grounded && !this.sliding && g - pos.y > 0.04 && Math.abs(g - this.data.heightAt(p.x, p.z)) < 0.02 && !this.collision.inCave(p.x, p.z)) {
+        const d = Math.hypot(p.x - pos.x, p.z - pos.z);
+        if (d > 1e-4 && (g - pos.y) / d > CLIMB) return false;
+      }
       pos.x = p.x; pos.z = p.z;
       return true;
     };
@@ -154,13 +233,23 @@ export class PlayerController {
       pos.y += (target - pos.y) * Math.min(1, dt * 5);
       vel.y = 0;
       this.grounded = false;
+      this.jet = 0;
       if (ground > pos.y) { pos.y = ground; this.swimming = false; this.grounded = true; }
     } else if (this.grounded) {
-      if (control && inp.jump) { vel.y = JUMP; this.grounded = false; }
+      this.fuel = JET.time;
+      this.jet = 0;
+      if (control && inp.jump && !this.sliding) { vel.y = JUMP * (riding ? 0.75 : 1); this.grounded = false; }
       else if (ground < pos.y - 0.45) { this.grounded = false; vel.y = 0; }
       else pos.y += (ground - pos.y) * Math.min(1, dt * 22);
     } else {
-      vel.y -= GRAVITY * dt;
+      // a second press of "jump" in the air lights the jetpack, for as long as its fuel lasts
+      if (control && inp.jump && this.jet <= 0 && this.fuel > 0.1 && !riding && this.canFly(pos)) { this.jet = this.fuel; this.fuel = 0; vel.y = Math.max(vel.y, 2.5); }
+      if (this.jet > 0) {
+        this.jet -= dt;
+        if (!this.canFly(pos)) this.jet = 0;
+        vel.y = Math.min(JET.max, vel.y + JET.thrust * dt);
+      }
+      vel.y -= GRAVITY * this.gravity * dt;
       pos.y += vel.y * dt;
       if (pos.y <= ground && vel.y <= 0) { pos.y = ground; vel.y = 0; this.grounded = true; }
       // falling into deep water
@@ -174,9 +263,9 @@ export class PlayerController {
       const target = Math.atan2(vel.x, vel.z);
       let d = target - this.yaw;
       d = Math.atan2(Math.sin(d), Math.cos(d));
-      this.yaw += d * Math.min(1, dt * 12);
+      this.yaw += d * Math.min(1, dt * (riding ? 5 : 12));
     }
-    this.anim = this.swimming ? ANIM.swim : !this.grounded ? ANIM.jump : sp > 5.6 ? ANIM.run : sp > 0.5 ? ANIM.walk : ANIM.idle;
+    this.anim = riding ? ANIM.sit : this.swimming ? ANIM.swim : !this.grounded ? ANIM.jump : sp > 5.6 ? ANIM.run : sp > 0.5 ? ANIM.walk : ANIM.idle;
     this.character.setAnim(this.anim, sp);
     this.character.update(dt);
     this._sync();

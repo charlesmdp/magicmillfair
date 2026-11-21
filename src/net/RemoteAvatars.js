@@ -77,11 +77,12 @@ export class RemoteAvatars {
         root.position.set(peer.x, peer.y, peer.z);
         root.rotation.y = peer.yaw;
         character.setAnim(peer.anim, peer.speed);
+        character.setLook(peer.flags);
         // far avatars animate at a third of the frame rate
         if (dist < 90) character.update(dt);
         else if ((this.frame + peer.id) % 3 === 0) character.update(dt * 3);
         if (this.world && dist < 70 && (this.frame + peer.id) % 6 === 0) {
-          const cave = this.world.collision.caveAt(peer.x, peer.z);
+          const cave = this.world.collision.caveAt(peer.x, peer.z, peer.y);
           character.setAmbient(cave ? cave.light(peer.x, peer.z) : 1);
         }
         if (peer.anim === ANIM.swim && dist < 120 && this.world) {

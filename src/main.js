@@ -5,13 +5,15 @@ import { Input } from './core/Input.js';
 import { isMobile, TIERS } from './core/Quality.js';
 import { World } from './world/World.js';
 import { FreeCamera } from './player/FreeCamera.js';
-import { CharacterFactory, EMOTES, RANK_EMOTES } from './player/Character.js';
+import { CharacterFactory, EMOTES, RANK_EMOTES, packLook } from './player/Character.js';
+import { HATS, owns } from './player/Cosmetics.js';
 import { PlayerController } from './player/PlayerController.js';
 import { CameraRig } from './player/CameraRig.js';
 import { Interact } from './player/Interact.js';
 import { RankEmotes } from './player/RankEmotes.js';
 import { Hud, VERSION } from './ui/Hud.js';
 import { Presence, cleanChat } from './net/Presence.js';
+import { Npc } from './npc/Npc.js';
 import { RemoteAvatars } from './net/RemoteAvatars.js';
 import { Benchmark } from './app/Benchmark.js';
 import { SPAWN, ZONES } from './world/layout/layout.js';
@@ -81,6 +83,14 @@ async function boot() {
   };
   spawn();
   world.playerPos = player.pos;
+  // what the avatar wears and holds (see Cosmetics.js); the hat is remembered from one visit to the next
+  const savedHat = parseInt(store.get('mmf.hat'), 10);
+  const look = { hat: savedHat > 0 && savedHat < HATS.length && owns(HATS[savedHat].id) ? savedHat : 0, jet: false, bouquet: false, kinds: undefined, quad: false, bighead: false };
+  const timers = {}; // cheats that wear off: name → seconds left
+  // no jetpack underground, nor where a game forbids it
+  player.canFly = (p) => owns('jetpack') && !player.cave && !world.noFly.some((z) => (p.x - z.x) ** 2 + (p.z - z.z) ** 2 < z.r * z.r);
+  player.onDeath = (cause) => hud.wasted(cause);
+  player.onRespawn = () => { hud.wasted(null); rig.snap(player.pos, rig.yaw); };
   const rank = new RankEmotes(scene);
   Object.assign(app, { player, rig, free, me, rank });
 
@@ -130,10 +140,55 @@ async function boot() {
   };
   // sitting, lying down, boarding
   const interact = new Interact({ player, world, hud, peers: () => (avatars ? avatars.list : []) });
+  {
+    // picking flowers: looked for a few times a second around the feet
+    let flower = null, wait = 0;
+    world.actionSources.push((p) => {
+      if (--wait <= 0) { wait = 12; flower = world.scatter.flowerNear(p.pos.x, p.pos.z); }
+      return flower ? { label: look.bouquet ? 'Add to the bouquet' : 'Pick a flower', run: () => { look.kinds = [...(look.kinds || []), flower].slice(-9); look.bouquet = true; wait = 0; } } : null;
+    });
+  }
   app.interact = interact;
   // chat: shown to those who are there, kept nowhere
+  // cheat codes: typed in the chat, never sent to anyone
+  const CHEATS = {
+    BIGHEAD: () => { timers.bighead = 12; return 'Your head feels… roomy.'; },
+    BIGMOMMA: () => {
+      if (player.seat || player.swimming || player.cave) return 'Not here!';
+      player.riding = true;
+      return 'A quad! Shift goes faster, E gets off.';
+    },
+    MOON: () => { timers.moon = 25; return 'Gravity went for a walk.'; },
+    TURBO: () => { timers.turbo = 20; return 'Legs: upgraded.'; },
+    TINY: () => { timers.tiny = 20; return 'Everything looks bigger from down here.'; },
+    DISCO: () => { timers.disco = 15; return 'Disco!'; },
+    HELP: () => `Cheats: ${Object.keys(CHEATS).filter((k) => k !== 'HELP').map((k) => `/${k}`).join(' ')}`,
+  };
+  const cheat = (text) => {
+    const run = CHEATS[text.slice(1).trim().toUpperCase()];
+    hud.addChat('✦', 5, run ? run() : 'Unknown code. Try /HELP', true);
+  };
+  // characters to talk to: near one of them, what is typed goes to it and to nobody else
+  const npcs = world.npcs.map((n) => ({ ...n, brain: new Npc(n.id), tag: hud.tag(`npc-${n.id}`, n.name, 3), met: false }));
+  let talking = null;
+  world.actionSources.push((p) => {
+    const n = npcs.find((q) => (q.x - p.pos.x) ** 2 + (q.z - p.pos.z) ** 2 < q.reach * q.reach);
+    return n ? { label: `Talk to ${n.name}`, run: () => {
+      talking = n;
+      hud.toggleChat(true, `Say something to ${n.name}…`);
+      if (!n.met) { n.met = true; const hello = n.brain.greeting(); hud.addChat(n.name, 3, hello); hud.say(n.tag, hello); }
+    } } : null;
+  });
   const say = (text) => {
     if (!cleanChat(text)) return;
+    if (text.trim().startsWith('/')) { if (state.mode === 'walk') cheat(text.trim()); return; }
+    if (talking) {
+      const n = talking, mine = cleanChat(text);
+      hud.addChat(name, color, mine, true);
+      hud.say(hud.selfTag, mine);
+      n.brain.reply(mine).then((answer) => { hud.addChat(n.name, 3, answer); hud.say(n.tag, answer); });
+      return;
+    }
     const sent = presence ? presence.sendChat(text) : cleanChat(text);
     if (!sent) { hud.note('Not so fast: a line every two seconds'); return; }
     hud.addChat(name, color, sent, true);
@@ -146,6 +201,7 @@ async function boot() {
   showQuality();
   engine.on('detail', showQuality);
   hud.setName(name);
+  hud.setHat(look.hat);
   hud.setPresence('offline', 1);
   hud
     .on('camera', toggleCamera)
@@ -153,6 +209,8 @@ async function boot() {
     .on('interact', () => interact.press(0))
     .on('interact2', () => interact.press(1))
     .on('say', say)
+    .on('hat', (i) => { if (owns(HATS[i]?.id)) { look.hat = i; store.set('mmf.hat', String(i)); } })
+    .on('drop', () => { look.bouquet = false; look.kinds = undefined; })
     .on('color', (i) => { color = i; me.setColor(i); presence?.setIdentity(name, color); })
     .on('name', (n) => { if (!n) return; name = n; presence?.setIdentity(name, color); store.set('mmf.name', name); })
     .on('quality', (q) => {
@@ -166,7 +224,8 @@ async function boot() {
   input.on('camera', toggleCamera);
   input.on('perf', () => hud.toggleStats());
   input.on('emote', () => hud.toggleEmotes());
-  input.on('chat', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleChat(true); });
+  input.on('drop', () => { if (look.bouquet) { look.bouquet = false; look.kinds = undefined; } });
+  input.on('chat', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleChat(true, talking ? `Say something to ${talking.name}…` : undefined); });
   input.on('respawn', () => { if (state.mode === 'walk') { spawn(); hud.note('Back to the mill'); } });
   input.on('menu', () => { hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); hud.toggleChat(false); });
   input.on('map', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleBigMap(); });
@@ -226,8 +285,31 @@ async function boot() {
     }
     camera.updateMatrixWorld();
     interact.update(mode === 'walk');
+    // the name of the characters one can talk to floats over them; walking away ends the conversation
+    for (const n of npcs) {
+      const d2 = (n.x - player.pos.x) ** 2 + (n.z - player.pos.z) ** 2;
+      if (talking === n && d2 > (n.reach + 2.5) ** 2) { talking = null; hud.toggleChat(false); }
+      let on = d2 < 30 * 30;
+      if (on) { _p.set(n.x, n.y, n.z).project(camera); on = _p.z > -1 && _p.z < 1 && Math.abs(_p.x) < 1.1 && Math.abs(_p.y) < 1.1; }
+      if (on) n.tag.style.transform = `translate(${((_p.x * 0.5 + 0.5) * engine.width).toFixed(1)}px, ${((-_p.y * 0.5 + 0.5) * engine.height).toFixed(1)}px) translate(-50%, -100%)`;
+      if (on !== n.shown) { n.shown = on; n.tag.style.display = on ? '' : 'none'; }
+    }
     rank.update(dt, camera);
     me.setAmbient(player.cave ? player.cave.light(player.pos.x, player.pos.z) : 1); // dim in the caves
+    {
+      // cheats wear off; what the avatar wears follows what the player does
+      for (const k in timers) if ((timers[k] -= dt) <= 0) delete timers[k];
+      player.gravity = timers.moon ? 0.22 : 1;
+      player.boost = timers.turbo ? 2.2 : 1;
+      me.size = timers.tiny ? 0.45 : 1;
+      if (timers.disco) me.setColor(Math.floor(state.time * 6) % 16); else if (me.colorIndex !== color) me.setColor(color);
+      look.bighead = !!timers.bighead;
+      look.jet = player.jet > 0;
+      look.quad = player.riding;
+      if (player.swimming && look.bouquet) { look.bouquet = false; look.kinds = undefined; hud.note('The bouquet floats away…'); }
+      me.setLook(look);
+      hud.setHolding(look.bouquet);
+    }
     {
       // rings on the water around the swimmer, a splash when dropping in
       const p = player.pos, level = data.waterAt(p.x, p.z);
@@ -244,7 +326,7 @@ async function boot() {
     }
 
     if (presence) {
-      presence.setLocal(player.pos.x, player.pos.y, player.pos.z, player.yaw, player.anim, mode === 'free' ? 1 : 0);
+      presence.setLocal(player.pos.x, player.pos.y, player.pos.z, player.yaw, player.anim, packLook({ free: mode === 'free', ...look }));
       presence.update(dt);
       avatars.update(dt, camera, engine.width, engine.height);
     }

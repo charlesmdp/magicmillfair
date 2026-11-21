@@ -31,7 +31,7 @@ export class Input {
 
   _bind() {
     const t = this.target;
-    const actions = { KeyF: 'camera', KeyP: 'perf', KeyM: 'map', KeyH: 'help', Escape: 'menu', KeyT: 'emote', Enter: 'chat', KeyR: 'respawn', KeyG: 'photo' };
+    const actions = { KeyF: 'camera', KeyP: 'perf', KeyM: 'map', KeyH: 'help', Escape: 'menu', KeyT: 'emote', Enter: 'chat', KeyR: 'respawn', KeyG: 'photo', KeyB: 'drop' };
     window.addEventListener('keydown', (e) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.repeat) return;

@@ -10,6 +10,8 @@ const CELL = 32;
 const STRIDE = 12;
 // atlas tiles
 const T = { reed: 0, cattail: 1, iris: 2, fern: 3, daisy: 4, poppy: 5, buttercup: 6, cornflower: 7, foxglove: 8, heather: 9, agapanthus: 10, pad: 11, lily: 12, dune: 13, leaves: 14, lavender: 15 };
+// the ones that can be picked, by number
+const FLOWERS = { 2: 'iris', 4: 'daisy', 5: 'poppy', 6: 'buttercup', 7: 'cornflower', 8: 'foxglove', 9: 'heather', 10: 'agapanthus', 15: 'lavender' };
 // shapes: 0 two crossed quads, 1 three crossed quads, 2 rosette of six fronds, 3 flat on the water
 const CROSS2 = 0, CROSS3 = 1, ROSETTE = 2, FLAT = 3;
 const STILL = PONDS.map((p) => p.level); // water lilies float on the ponds, not on running water
@@ -266,6 +268,27 @@ export class Scatter {
   }
 
   /** How far small plants are drawn (m). */
+  /**
+   * A flower within reach of (x, z): its kind ('poppy', 'daisy'…), or null. Looks through the cells already
+   * generated around that point (a few thousand plants: call it a few times a second, not every frame).
+   */
+  flowerNear(x, z, reach = 1.3) {
+    const cx = Math.floor(x / CELL), cz = Math.floor(z / CELL), r2 = reach * reach;
+    let best = null, bestD = r2;
+    for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+      const cell = this.cells.get(`${cx + i},${cz + j}`);
+      if (!cell) continue;
+      const d = cell.data;
+      for (let k = 0; k < d.length; k += STRIDE) {
+        const kind = FLOWERS[d[k + 6]];
+        if (!kind) continue;
+        const dd = (d[k] - x) ** 2 + (d[k + 2] - z) ** 2;
+        if (dd < bestD) { bestD = dd; best = kind; }
+      }
+    }
+    return best;
+  }
+
   setRange(r) {
     this.range = r;
     this.material.uniforms.uScatter.value.x = r;

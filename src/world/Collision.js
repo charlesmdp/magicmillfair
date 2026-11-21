@@ -52,10 +52,35 @@ export class Collision {
     return false;
   }
 
-  /** The cave whose roof is over (x, z), or null: inside one of them and really under the rock. */
-  caveAt(x, z) {
-    for (const c of this.caves) if (c.contains(x, z) && this.data.heightAt(x, z) > c.floorAt(x, z) + 1.2) return c;
+  /**
+   * The cave whose roof is over (x, z), or null: inside one of them and really under the rock. With `y`, only
+   * for something that is in the gallery itself, not on the ground above it.
+   */
+  caveAt(x, z, y) {
+    for (const c of this.caves) {
+      if (!c.contains(x, z)) continue;
+      const floor = c.floorAt(x, z);
+      if (this.data.heightAt(x, z) <= floor + 1.2) continue;
+      if (y !== undefined && y > c.ceilingAt(x, z) + 0.6) continue; // walking on the mountain above
+      return c;
+    }
     return null;
+  }
+
+  /**
+   * Where something put down at (x, z) stands: on the ground (or the platform) there — or on the floor of a
+   * cave, when the spot is in a cave whose mountain cannot be walked on.
+   */
+  spawnHeight(x, z) {
+    for (const c of this.caves) {
+      if (!c.contains(x, z) || this.data.heightAt(x, z) <= c.floorAt(x, z) + 1.2) continue;
+      let above = false; // is the ground over the cave part of the playable area?
+      const b = this.bounds;
+      if (b) for (let i = 0, j = b.length - 1; i < b.length; j = i++) if ((b[j][1] > z) !== (b[i][1] > z) && x < ((b[i][0] - b[j][0]) * (z - b[j][1])) / (b[i][1] - b[j][1]) + b[j][0]) above = !above;
+      for (const a of this.areas) if (!a.cave && a.contains(x, z)) above = true;
+      if (!above) return c.floorAt(x, z);
+    }
+    return this.groundAt(x, z, 1e4);
   }
 
   /** Keeps a point inside the playable area, sliding along its edge. Mutates and returns `p` ({x, z}). */
@@ -85,8 +110,31 @@ export class Collision {
     return p;
   }
 
-  /** platform: { heightAt(x, z) -> number | null, clearance } */
-  addPlatform(p) { this.platforms.push(p); }
+  /**
+   * platform: { heightAt(x, z) -> number | null, clearance, thick }. `thick`: a solid body hangs that far under
+   * the surface (a floating stone): one cannot walk or jump into its side.
+   */
+  addPlatform(p) {
+    this.platforms.push(p);
+    if (p.thick) (this.solids || (this.solids = [])).push(p);
+  }
+
+  /** Is (x, z) within the footprint of a cave (its mouth included)? */
+  inCave(x, z) {
+    for (const c of this.caves) if (c.contains(x, z)) return true;
+    return false;
+  }
+
+  /** Is the side of a solid platform in the way of something standing at height y on (x, z)? */
+  blocked(x, z, y) {
+    if (!this.solids) return false;
+    for (const p of this.solids) {
+      const top = p.heightAt(x, z);
+      if (top === null) continue;
+      if (y + 0.3 < top - (p.clearance ?? 1.2) && y + 1.5 > top - p.thick) return true;
+    }
+    return false;
+  }
 
   _insert(x0, z0, x1, z1, id) {
     for (let cz = Math.floor(z0 / CELL); cz <= Math.floor(z1 / CELL); cz++) {
@@ -153,8 +201,12 @@ export class Collision {
    */
   groundAt(x, z, y) {
     let h = this.data.heightAt(x, z);
-    // in a cave one walks on its floor, under the ground
-    for (const c of this.caves) if (c.contains(x, z)) { const f = c.floorAt(x, z); if (f < h) h = f; }
+    // in a cave one walks on its floor, under the ground (unless one is on the mountain above it)
+    for (const c of this.caves) {
+      if (!c.contains(x, z)) continue;
+      const f = c.floorAt(x, z);
+      if (f < h && !(y > c.ceilingAt(x, z) + 0.9 && h > f + 1.2)) h = f;
+    }
     for (const p of this.platforms) {
       const ph = p.heightAt(x, z);
       if (ph === null || ph <= h) continue;

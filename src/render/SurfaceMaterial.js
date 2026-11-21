@@ -72,7 +72,12 @@ in vec3 vNormal;
 in vec4 vColor;
 void main() {
   vec2 uv = vUv * uParams.w;
+  #ifdef TINT_MASK
+  // the vertex alpha says how much of the surface takes the colour of the material (an avatar's paint)
+  vec3 albedo = mix(vColor.rgb, uColor, vColor.a);
+  #else
   vec3 albedo = uColor * vColor.rgb;
+  #endif
   #ifdef USE_MAP
   albedo *= texture(uMap, uv).rgb;
   #endif
@@ -99,7 +104,7 @@ void main() {
   float shadow = sunShadow(vWorld, Ng);
   Surface s;
   s.albedo = albedo * cav; s.N = N; s.Ng = Ng; s.rough = uParams.x; s.spec = uParams.y; s.sss = 0.0;
-  #ifdef USE_FADE
+  #if defined(USE_FADE) || defined(TINT_MASK)
   s.ao = uAmbient;
   #else
   s.ao = vColor.a * uAmbient;
@@ -143,6 +148,7 @@ export function surfaceMaterial(o = {}) {
   if (o.normalMap) defines.USE_NORMAL_MAP = 1;
   if (o.waterline) defines.WATERLINE = 1;
   if (o.fade) defines.USE_FADE = 1;
+  if (o.tintMask) defines.TINT_MASK = 1;
   const mat = makeMaterial({
     ...(o.fade ? { transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor } : {}),
     uniforms: {

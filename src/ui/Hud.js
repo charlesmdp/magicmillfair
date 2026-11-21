@@ -1,5 +1,6 @@
 // DOM interface: welcome screen, heads-up display, settings, touch controls, name tags.
 import { AVATAR_COLORS, EMOTES, RANK_EMOTES } from '../player/Character.js';
+import { HATS } from '../player/Cosmetics.js';
 import { TIERS, TIER_ORDER } from '../core/Quality.js';
 import { assetUrl } from '../core/Assets.js';
 
@@ -133,7 +134,9 @@ export class Hud {
       <div class="emotes">
         <div>${EMOTES.map((e, i) => `<button data-emote="${i}">${EMOTE_LABEL[i]}</button>`).join('')}</div>
         <div class="rank">${RANK_EMOTES.map((e, i) => `<button data-emote="${EMOTES.length + i}">${RANK_LABEL[e]}</button>`).join('')}</div>
+        <div class="held"><button data-drop>Put the bouquet down (B)</button></div>
       </div>
+      <div class="wasted" aria-live="assertive"><div class="band"><b>WASTED</b><span></span></div></div>
       <div class="prompts">
         <button class="prompt" type="button" data-prompt="0"><kbd>E</kbd><span></span></button>
         <button class="prompt" type="button" data-prompt="1"><kbd>L</kbd><span></span></button>
@@ -150,6 +153,8 @@ export class Hud {
         <h3>Display</h3>
         <div class="row"><span>Minimap</span><button class="switch" data-sw="map" aria-pressed="true" aria-label="Minimap"></button></div>
         <div class="row"><span>Performance figures</span><button class="switch" data-sw="stats" aria-pressed="false" aria-label="Performance figures"></button></div>
+        <h3>Hat</h3>
+        <div class="hats">${HATS.map((h, i) => `<button data-hat="${i}">${h.name}</button>`).join('')}</div>
         <h3>Your name</h3>
         <input type="text" maxlength="16" class="name" autocomplete="off" spellcheck="false" />
         <p class="net-info"></p>
@@ -202,7 +207,10 @@ export class Hud {
     this.chatInput.addEventListener('blur', () => { if (!this.chatInput.value) this.toggleChat(false); });
     for (const ev of ['mousedown', 'touchstart', 'wheel']) this.chatEl.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
     this.cameraBtn = h.querySelector('[data-act="camera"]');
-    this.emotes.querySelectorAll('button').forEach((b) => (b.onclick = () => { this.emit('emote', +b.dataset.emote); this.emotes.classList.remove('on'); }));
+    this.emotes.querySelectorAll('button[data-emote]').forEach((b) => (b.onclick = () => { this.emit('emote', +b.dataset.emote); this.emotes.classList.remove('on'); }));
+    this.emotes.querySelector('[data-drop]').onclick = () => { this.emit('drop'); this.emotes.classList.remove('on'); };
+    h.querySelectorAll('[data-hat]').forEach((b) => (b.onclick = () => { this.setHat(+b.dataset.hat); this.emit('hat', +b.dataset.hat); }));
+    this.wastedEl = h.querySelector('.wasted');
     h.querySelectorAll('.quality button').forEach((b) => (b.onclick = () => this.emit('quality', b.dataset.q)));
     h.querySelectorAll('[data-sw]').forEach((b) => (b.onclick = () => {
       const on = b.getAttribute('aria-pressed') !== 'true';
@@ -222,6 +230,16 @@ export class Hud {
     this.tagsEl.append(this.selfTag);
   }
 
+  // ---------- hats, the bouquet, dying
+  setHat(i) { this.hud.querySelectorAll('[data-hat]').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.hat === i))); }
+  setHolding(on) { if (on !== this._holding) { this._holding = on; this.emotes.classList.toggle('holding', on); } }
+
+  /** The end-of-the-road screen: `cause` is the line under the big word; null takes it away. */
+  wasted(cause) {
+    document.body.classList.toggle('dead', !!cause);
+    if (cause) this.wastedEl.querySelector('span').textContent = cause;
+  }
+
   // ---------- what can be done here
   /** Up to two actions: setPrompt(0, 'Sit') shows the first button, setPrompt(0, null) hides it. */
   setPrompt(i, text) {
@@ -234,7 +252,8 @@ export class Hud {
 
   // ---------- chat
   get chatOpen() { return this.chatEl.classList.contains('typing'); }
-  toggleChat(open = !this.chatOpen) {
+  toggleChat(open = !this.chatOpen, placeholder = 'Say something…') {
+    if (open) this.chatInput.placeholder = placeholder;
     this.chatEl.classList.toggle('typing', open);
     if (open) { this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this.chatInput.focus({ preventScroll: true }); }
     else if (document.activeElement === this.chatInput) this.chatInput.blur();
