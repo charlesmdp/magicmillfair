@@ -1,7 +1,9 @@
-// The sky villages: thirty hamlets perched on the mountains around the valley, one per company (see
+// The sky villages: fifty small temples perched on the mountains around the valley, one per company (see
 // layout/sponsors.js) — and the Sky Gate in the valley, from which one is carried up to them. Nobody walks
-// there. Each village: three houses, a sign, a flag, a bench that looks down on the valley, lanterns, and a
-// ring to go back through.
+// there. Each village: a hall under two roofs in its colours, two open pavilions with cushions round a table,
+// more cushions round an incense burner, benches that look down on the valley, lanterns, a flag, its sign
+// (and, while it is for hire, a board that says what hiring it brings), and a ring to go back through.
+// The higher a village stands, the dearer it is to hire.
 import * as THREE from 'three';
 import { Parts } from '../../props/MeshBuilder.js';
 import { staticCaster, LAYER } from '../../../render/Shadows.js';
@@ -10,11 +12,40 @@ import { makeMaterial, GLSL_COMMON, GLSL_LIGHTING } from '../../../render/global
 import { Polygon } from '../../Areas.js';
 import { seatAt } from '../../../player/PlayerController.js';
 import { SKY } from '../../layout/layout.js';
-import { SPONSORS, sponsorId } from '../../layout/sponsors.js';
+import { SPONSORS, sponsorId, VILLAGE_PRICES, VILLAGE_PERKS, money } from '../../layout/sponsors.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const STONE = [1.05, 1.02, 0.96], WALL = [1.75, 1.66, 1.46], DARK = [0.2, 0.2, 0.24], WOOD = [0.62, 0.44, 0.28];
+const RED = [0.62, 0.1, 0.07], DARK_RED = [0.4, 0.07, 0.06], GOLD = [1.35, 0.95, 0.25], PLASTER = [1.7, 1.6, 1.38], BRONZE = [0.42, 0.33, 0.16];
+const CUSHIONS = [[0.5, 0.08, 0.07], [0.95, 0.5, 0.06], [0.6, 0.12, 0.3], [0.9, 0.72, 0.2]];
+const CUSHION_SEAT = 0.235; // how high one sits on a cushion
 const RING = 1.4; // radius of the rings one goes through
+
+/**
+ * A pagoda roof (as on the temple, with fewer tiles), in the frame of the builder `b`: hipped, its slopes
+ * hollow, its corners turned up. The eaves are a rectangle hx × hz (half sizes) round (cx, cz) at height y; it
+ * rises `rise` to a rectangle ix × iz. `under`: how many rows get an underside (all of them when one can
+ * stand below).
+ */
+function roof(b, cx, cz, y, hx, hz, rise, curl, tone, { ix = 0.02, iz = 0.02, seg = 4, rows = 3, under = 1 } = {}) {
+  const at = (side, s, u, drop = 0) => {
+    const lift = curl * Math.abs(s) ** 2.6 * u * u, h = y + rise * (1 - u) ** 1.7 + lift - drop;
+    const along = side % 2 === 0 ? iz + (hz - iz) * u : ix + (hx - ix) * u, out = side % 2 === 0 ? ix + (hx - ix) * u : iz + (hz - iz) * u;
+    const sg = side < 2 ? 1 : -1;
+    return side % 2 === 0 ? V(cx + sg * out, h, cz + sg * s * along) : V(cx - sg * s * along, h, cz + sg * out);
+  };
+  for (let side = 0; side < 4; side++) {
+    for (let i = 0; i < seg; i++) {
+      const s0 = -1 + (2 * i) / seg, s1 = -1 + (2 * (i + 1)) / seg;
+      for (let j = 0; j < rows; j++) {
+        const u0 = j / rows, u1 = (j + 1) / rows, k = 0.88 + 0.24 * (((i * 3 + j * 5 + side) % 4) / 3);
+        b.tint(tone[0] * k, tone[1] * k, tone[2] * k, 1).quad(at(side, s0, u0), at(side, s1, u0), at(side, s1, u1), at(side, s0, u1));
+        if (j >= rows - under) b.tint(DARK_RED[0], DARK_RED[1], DARK_RED[2], 1).quad(at(side, s0, u1, 0.1), at(side, s1, u1, 0.1), at(side, s1, u0, 0.1), at(side, s0, u0, 0.1));
+      }
+      b.tint(DARK_RED[0] * 1.25, DARK_RED[1] * 1.25, DARK_RED[2] * 1.25, 1).quad(at(side, s0, 1), at(side, s1, 1), at(side, s1, 1, 0.1), at(side, s0, 1, 0.1));
+    }
+  }
+}
 
 // The light inside a ring: a slow whirl. `uv` runs from -1 to 1 across it.
 const PORTAL_VERT = /* glsl */ `
@@ -53,30 +84,38 @@ export class SkyZone {
     this.platforms = [];
     this.areas = [];
     this.seats = world.seats;
-    /** The villages: { index, id, name, motto, url, x, y, z, yaw, arrive: [x, z, which way one faces], ring: [x, z], sign: [x, z] } */
+    /**
+     * The villages: { index, id, name, motto, url, color, forHire, tier (0 to 9), price (dollars a month), x, y, z,
+     * yaw, arrive: [x, z, which way one faces], ring: [x, z], sign: [x, z], board: [x, z] }
+     */
     this.villages = [];
     this._roots = {};
     this._portals = []; // quads to merge: [centre, right, up]
     this._signs = [];
+    this._perks = [];
   }
 
   build() {
     const sites = this.data.meta.sky || [];
-    sites.forEach((site, i) => this._village(site, i, SPONSORS[i] || { name: `Sky Village ${i + 1}`, motto: '', color: [0.5, 0.5, 0.5] }));
+    // the price of each: ten prices, as many villages at each, from the lowest shelf to the highest
+    const order = sites.map((_, i) => i).sort((a, b) => sites[a].y - sites[b].y || a - b), tier = [];
+    order.forEach((i, rank) => { tier[i] = Math.min(VILLAGE_PRICES.length - 1, Math.floor((rank * VILLAGE_PRICES.length) / sites.length)); });
+    sites.forEach((site, i) => this._village(site, i, SPONSORS[i] || { name: `Sky Village ${i + 1}`, motto: '', color: [0.5, 0.5, 0.5], forHire: true }, tier[i]));
     this._gate();
     this.group.updateMatrixWorld(true);
     for (const [key, roots] of Object.entries(this._roots)) this.group.add(mergeStatic(roots, key));
     this._buildPortals();
     this._buildSigns();
+    this._buildPerks();
     this.group.updateMatrixWorld(true);
     this.group.traverse((o) => { if (o.isMesh) o.layers.disable(LAYER.REFLECT); });
     const k = this.world.engine.tier.phone ? 0.6 : 1;
-    this._cull = distanceCuller(this.group, [[/^sky\d:matte$/, 1300], [/^sky\d:/, 420 * k], [/^skygate:/, 600 * k], [/^sky-(portals|signs)$/, Infinity]]);
+    this._cull = distanceCuller(this.group, [[/^sky\d:matte$/, 1300], [/^sky\d:/, 420 * k], [/^skyv\d+:/, 150], [/^skygate:/, 600 * k], [/^sky-(portals|signs|perks)$/, Infinity]]);
     return this;
   }
 
-  _add(key, parts) {
-    const g = parts.toMeshes(this.world.materials, { name: key, layers: this.cast });
+  _add(key, parts, shadow = true) {
+    const g = parts.toMeshes(this.world.materials, { name: key, layers: shadow ? this.cast : [], castShadow: shadow });
     g.updateMatrixWorld(true);
     (this._roots[key] ||= []).push(g);
     this.group.add(g);
@@ -98,80 +137,127 @@ export class SkyZone {
     this.platforms.push({ type: 'disc', x, z, r: RING + 0.9, y: y + 0.12, clearance: 1.0 });
   }
 
-  _village(site, i, who) {
-    const { x, z, y, yaw } = site, parts = new Parts();
-    const m = parts.get('matte'), glow = parts.get('glow'), cloth = parts.get('doubleSided');
+  _village(site, i, who, tier) {
+    const { x, z, y, yaw } = site;
+    // What is seen from the valley (the hall, the ring) goes with the villages of its part of the sky; the
+    // rest (pavilions, cushions, benches, lanterns) is its own, and only drawn for those who are there.
+    const parts = new Parts(), close = new Parts();
+    const m = parts.get('matte'), n = close.get('matte'), glow = close.get('glow'), cloth = close.get('doubleSided');
     const c = Math.cos(yaw), s = Math.sin(yaw);
     const W = (lx, lz) => [x + lx * c + lz * s, z - lx * s + lz * c]; // local (right, towards the valley) → world
-    const col = who.color || [0.5, 0.5, 0.5];
-    for (const b of [m, glow, cloth]) b.place(x, y, z, yaw);
-    // houses: a stone foot, plastered walls, a roof in the colours of the village
-    const house = (lx, lz, w, l, h, turn) => {
-      for (const b of [m]) b.place(lx, 0, lz, turn);
-      m.tint(STONE[0] * 0.9, STONE[1] * 0.9, STONE[2] * 0.9, 1).box(-w / 2 - 0.15, -1.6, -l / 2 - 0.15, w / 2 + 0.15, 0.3, l / 2 + 0.15, { faces: 'xXzZY' });
-      m.tint(WALL[0], WALL[1], WALL[2], 1).box(-w / 2, 0.3, -l / 2, w / 2, h, l / 2, { faces: 'xXzZ' });
-      const rise = w * 0.42, e = 0.45;
-      m.tint(col[0] * 1.5, col[1] * 1.5, col[2] * 1.5, 1);
-      m.quad(V(-w / 2 - e, h - 0.12, l / 2 + e), V(0, h + rise, l / 2 + e), V(0, h + rise, -l / 2 - e), V(-w / 2 - e, h - 0.12, -l / 2 - e));
-      m.quad(V(0, h + rise, l / 2 + e), V(w / 2 + e, h - 0.12, l / 2 + e), V(w / 2 + e, h - 0.12, -l / 2 - e), V(0, h + rise, -l / 2 - e));
-      m.tint(col[0] * 1.1, col[1] * 1.1, col[2] * 1.1, 1);
-      m.quad(V(-w / 2 - e, h - 0.2, -l / 2 - e), V(0, h + rise - 0.08, -l / 2 - e), V(0, h + rise - 0.08, l / 2 + e), V(-w / 2 - e, h - 0.2, l / 2 + e));
-      m.quad(V(0, h + rise - 0.08, -l / 2 - e), V(w / 2 + e, h - 0.2, -l / 2 - e), V(w / 2 + e, h - 0.2, l / 2 + e), V(0, h + rise - 0.08, l / 2 + e));
-      m.tint(WALL[0], WALL[1], WALL[2], 1);
-      for (const g of [-1, 1]) { const A = V(-w / 2, h, g * l / 2), B = V(w / 2, h, g * l / 2), C = V(0, h + rise - 0.06, g * l / 2); if (g > 0) m.tri(A, B, C); else m.tri(B, A, C); }
-      // the door and two windows on the front (+Z), a chimney
-      m.tint(WOOD[0], WOOD[1], WOOD[2], 1).box(-0.5, 0.3, l / 2, 0.5, 2.25, l / 2 + 0.05);
-      m.tint(DARK[0], DARK[1], DARK[2] * 1.4, 1);
-      for (const g of [-1, 1]) m.box(g * (w / 2 - 0.95) - 0.38, 1.25, l / 2, g * (w / 2 - 0.95) + 0.38, 2.1, l / 2 + 0.04);
-      m.tint(STONE[0] * 0.8, STONE[1] * 0.8, STONE[2] * 0.8, 1).box(w / 4 - 0.25, h + rise * 0.3, -0.3, w / 4 + 0.25, h + rise + 0.6, 0.3);
-      m.pop();
-      const [hx, hz] = W(lx, lz);
-      this.colliders.push({ type: 'box', x: hx, z: hz, hw: w / 2 + 0.2, hl: l / 2 + 0.2, yaw: yaw + turn });
+    const col = who.color || [0.5, 0.5, 0.5], tone = [col[0] * 1.5, col[1] * 1.5, col[2] * 1.5];
+    const all = [m, n, glow, cloth];
+    for (const b of all) b.place(x, y, z, yaw);
+    const circle = (lx, lz, r, extra) => { const [wx, wz] = W(lx, lz); this.colliders.push({ type: 'circle', x: wx, z: wz, r, ...extra }); };
+    const seat = (lx, lz, h, facing, extra) => { const [wx, wz] = W(lx, lz); this.seats.push(seatAt(wx, y + h, wz, yaw + facing, extra)); };
+
+    // ---- the hall, at the back: a stone plinth, plastered walls with a red foot, a porch of four red columns,
+    // two roofs in the colours of the village, a golden point
+    {
+      const HW = SKY.hall.hw, HL = SKY.hall.hl, CZ = SKY.hall.z - 0.3, front = CZ + HL;
+      m.tint(STONE[0] * 0.9, STONE[1] * 0.9, STONE[2] * 0.9, 1).box(-HW - 0.55, -1.6, CZ - HL - 0.5, HW + 0.55, 0.45, front + 1.1, { faces: 'xXzZY' });
+      m.tint(STONE[0], STONE[1], STONE[2], 1).box(-1.5, -0.8, front + 1.1, 1.5, 0.22, front + 1.55, { faces: 'xXZY' });
+      m.tint(PLASTER[0], PLASTER[1], PLASTER[2], 1).box(-HW, 0.45, CZ - HL, HW, 3.0, front, { faces: 'xXzZ' });
+      m.tint(DARK_RED[0], DARK_RED[1], DARK_RED[2], 1).box(-HW - 0.03, 0.45, CZ - HL - 0.03, HW + 0.03, 1.15, front + 0.03, { faces: 'xXzZ' });
+      // the door: dark, in a red frame; a round window on either side
+      m.tint(0.1, 0.05, 0.04, 1).box(-0.75, 0.45, front, 0.75, 2.45, front + 0.05, { faces: 'Z' });
+      m.tint(RED[0], RED[1], RED[2], 1).box(-0.97, 0.45, front, -0.75, 2.67, front + 0.1, { faces: 'xXZ' }).box(0.75, 0.45, front, 0.97, 2.67, front + 0.1, { faces: 'xXZ' }).box(-0.97, 2.45, front, 0.97, 2.67, front + 0.1, { faces: 'yZ' });
+      for (const g of [-1, 1]) m.tint(0.12, 0.08, 0.07, 1).place(g * 2.1, 2.05, front + 0.04, 0, Math.PI / 2).lathe([[0.0, 0.0], [0.42, 0.0]], 10).pop();
+      for (const lx of [-3.45, -1.35, 1.35, 3.45]) m.tint(RED[0], RED[1], RED[2], 1).cylinder(lx, 0.45, front + 0.75, 0.16, 0.15, 2.55, 7, { capTop: false, capBottom: false });
+      roof(m, 0, CZ + 0.3, 3.0, HW + 1.25, HL + 1.45, 1.5, 0.75, tone, { ix: 2.0, iz: 1.0 });
+      m.tint(PLASTER[0], PLASTER[1], PLASTER[2], 1).box(-1.9, 4.35, CZ + 0.3 - 0.92, 1.9, 5.4, CZ + 0.3 + 0.92, { faces: 'xXzZ' });
+      m.tint(DARK_RED[0], DARK_RED[1], DARK_RED[2], 1).box(-1.93, 4.35, CZ + 0.3 - 0.95, 1.93, 4.75, CZ + 0.3 + 0.95, { faces: 'xXzZ' });
+      roof(m, 0, CZ + 0.3, 5.4, 2.95, 1.95, 1.5, 0.6, tone);
+      m.tint(GOLD[0], GOLD[1], GOLD[2], 1).place(0, 6.8, CZ + 0.3).lathe([[0.0, 0.0], [0.2, 0.08], [0.09, 0.3], [0.13, 0.5], [0.0, 0.95]], 6).pop();
+      const [hx, hz] = W(0, CZ + 0.3);
+      this.colliders.push({ type: 'box', x: hx, z: hz, hw: HW + 0.6, hl: HL + 0.85, yaw });
+    }
+
+    // ---- two open pavilions, left and right: a low table, four cushions round it
+    const cushion = (lx, lz, facing, k) => {
+      const cc = CUSHIONS[k % CUSHIONS.length];
+      n.tint(cc[0], cc[1], cc[2], 1).place(lx, 0, lz, k * 1.7).lathe([[0.0, 0.0], [0.3, 0.0], [0.37, 0.07], [0.37, 0.16], [0.29, 0.225], [0.0, 0.24]], 8).pop();
+      seat(lx, lz, CUSHION_SEAT, facing, { reach: 1.4 });
     };
-    house(-6.6, -3.6, 4.2, 5.0, 2.7, 0.9);
-    house(6.6, -3.6, 4.2, 5.0, 2.7, -0.9);
-    house(0, -8.4, 6.4, 4.4, 3.2, 0);
-    // the flag
-    m.tint(1.3, 1.25, 1.15, 1).rod(V(5.6, -0.3, 6.6), V(5.6, 7.2, 6.6), 0.06, 6);
+    for (const { x: px, z: pz, h: ph } of SKY.pavilions) {
+      const g = Math.sign(px) || 1;
+      n.tint(STONE[0], STONE[1], STONE[2], 1).box(px - ph, -1.2, pz - ph, px + ph, 0.03, pz + ph, { faces: 'xXzZY' });
+      for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        n.tint(RED[0], RED[1], RED[2], 1).cylinder(px + a * 1.95, 0.03, pz + b * 1.95, 0.13, 0.12, 2.5, 6, { capTop: false, capBottom: false });
+        circle(px + a * 1.95, pz + b * 1.95, 0.2);
+      }
+      roof(n, px, pz, 2.5, 2.95, 2.95, 1.25, 0.55, tone, { under: 3 });
+      n.tint(GOLD[0], GOLD[1], GOLD[2], 1).place(px, 3.7, pz).lathe([[0.0, 0.0], [0.13, 0.06], [0.05, 0.22], [0.0, 0.5]], 5).pop();
+      n.tint(WOOD[0], WOOD[1], WOOD[2], 1).cylinder(px, 0.03, pz, 0.17, 0.14, 0.3, 7, { capTop: false, capBottom: false }).cylinder(px, 0.33, pz, 0.56, 0.56, 0.05, 10, { capBottom: true });
+      circle(px, pz, 0.5, { y0: y - 1, y1: y + 0.6 });
+      for (let k = 0; k < 4; k++) { const a = Math.PI / 4 + (k * Math.PI) / 2; cushion(px + Math.sin(a) * 1.12, pz + Math.cos(a) * 1.12, a + Math.PI, k + (g > 0 ? 1 : 0)); }
+    }
+
+    // ---- before the ring: six cushions round an incense burner
+    {
+      const bz = 4.6;
+      n.tint(STONE[0] * 0.9, STONE[1] * 0.9, STONE[2] * 0.9, 1).place(0, 0, bz).lathe([[0.3, -0.3], [0.3, 0.1], [0.14, 0.2], [0.14, 0.42]], 7).pop();
+      n.tint(BRONZE[0], BRONZE[1], BRONZE[2], 1).place(0, 0.42, bz).lathe([[0.12, 0.0], [0.36, 0.14], [0.4, 0.3], [0.33, 0.33], [0.0, 0.3]], 9).pop();
+      glow.tint(1.0, 0.55, 0.2, 1).cylinder(0, 0.73, bz, 0.2, 0.02, 0.16, 6, { capBottom: false });
+      circle(0, bz, 0.5);
+      for (let k = 0; k < 6; k++) { const a = Math.PI / 6 + (k / 6) * Math.PI * 2; cushion(Math.sin(a) * 2.0, bz + Math.cos(a) * 2.0, a + Math.PI, k); }
+    }
+
+    // ---- at the edge: three stone benches that look down on the valley, lanterns between them
+    for (const lx of [-4.5, 0, 4.5]) {
+      n.tint(STONE[0], STONE[1], STONE[2], 1).box(lx - 1.05, 0.3, 9.36, lx + 1.05, 0.39, 9.84).box(lx - 0.92, -0.3, 9.42, lx - 0.68, 0.3, 9.78).box(lx + 0.68, -0.3, 9.42, lx + 0.92, 0.3, 9.78);
+      for (const o of [-0.5, 0.5]) seat(lx + o, 9.6, 0.39, 0);
+      const [bx, bz] = W(lx, 9.6);
+      this.colliders.push({ type: 'box', x: bx, z: bz, hw: 1.05, hl: 0.26, yaw, y0: y - 1, y1: y + 0.6 });
+    }
+    for (const [lx, lz] of [[-2.25, 9.5], [2.25, 9.5], [-2.7, -4.2], [2.7, -4.2]]) {
+      n.tint(STONE[0], STONE[1], STONE[2], 1).place(lx, 0, lz).lathe([[0.3, -0.2], [0.3, 0.1], [0.13, 0.2], [0.1, 0.95], [0.27, 1.05], [0.27, 1.12]], 6).lathe([[0.33, 1.5], [0.11, 1.68], [0.04, 1.84]], 6).pop();
+      glow.tint(1.0, 0.74, 0.36, 1).box(lx - 0.17, 1.12, lz - 0.17, lx + 0.17, 1.5, lz + 0.17);
+      circle(lx, lz, 0.3);
+    }
+
+    // ---- the flag
+    n.tint(1.3, 1.25, 1.15, 1).rod(V(8.7, -0.3, 4.2), V(8.7, 7.2, 4.2), 0.06, 6);
     cloth.tint(col[0] * 1.3, col[1] * 1.3, col[2] * 1.3, 1);
     for (let k = 0; k < 5; k++) {
       const a0 = k * 0.44, a1 = (k + 1) * 0.44, w0 = Math.sin(k * 1.2) * 0.14, w1 = Math.sin((k + 1) * 1.2) * 0.14;
-      cloth.quad(V(5.66 + a0, 5.7, 6.6 + w0), V(5.66 + a1, 5.7, 6.6 + w1), V(5.66 + a1, 7.1, 6.6 + w1), V(5.66 + a0, 7.1, 6.6 + w0));
+      cloth.quad(V(8.76 + a0, 5.7, 4.2 + w0), V(8.76 + a1, 5.7, 4.2 + w1), V(8.76 + a1, 7.1, 4.2 + w1), V(8.76 + a0, 7.1, 4.2 + w0));
     }
-    // the sign: two posts, a board (its face is drawn later, from the names of the villages)
-    const SW = 3.0, SH = 1.5, sy = 1.1, sa = 0.75; // facing the middle of the village
-    m.place(-5.6, 0, 5.6, sa);
-    m.tint(WOOD[0], WOOD[1], WOOD[2], 1).box(-SW / 2 - 0.09, -0.3, -0.06, -SW / 2 + 0.03, sy + SH + 0.25, 0.06).box(SW / 2 - 0.03, -0.3, -0.06, SW / 2 + 0.09, sy + SH + 0.25, 0.06);
-    m.tint(WOOD[0] * 0.7, WOOD[1] * 0.7, WOOD[2] * 0.7, 1).box(-SW / 2, sy - 0.06, -0.03, SW / 2, sy + SH + 0.06, 0.015);
-    m.pop();
-    {
-      const ca = Math.cos(yaw + sa), sn = Math.sin(yaw + sa), [bx, bz] = W(-5.6, 5.6);
+    circle(8.7, 4.2, 0.2);
+
+    // ---- the signs: two posts and a board each (their faces are drawn later, all on one sheet). On the left,
+    // the name of the village; on the right, while it is for hire, what hiring it brings.
+    const board = (lx, lz, turn, w, h, foot) => {
+      n.place(lx, 0, lz, turn);
+      n.tint(WOOD[0], WOOD[1], WOOD[2], 1).box(-w / 2 - 0.09, -0.3, -0.06, -w / 2 + 0.03, foot + h + 0.25, 0.06).box(w / 2 - 0.03, -0.3, -0.06, w / 2 + 0.09, foot + h + 0.25, 0.06);
+      n.tint(WOOD[0] * 0.7, WOOD[1] * 0.7, WOOD[2] * 0.7, 1).box(-w / 2, foot - 0.06, -0.03, w / 2, foot + h + 0.06, 0.015);
+      n.pop();
+      const ca = Math.cos(yaw + turn), sn = Math.sin(yaw + turn), [bx, bz] = W(lx, lz);
+      for (const g of [-1, 1]) this.colliders.push({ type: 'circle', x: bx + ca * g * w / 2, z: bz - sn * g * w / 2, r: 0.16 });
       // (the board looks along its local +Z: back towards the middle of the village)
-      this._signs.push({ i, centre: V(bx + sn * 0.03, y + sy + SH / 2, bz + ca * 0.03), right: V(ca, 0, -sn), w: SW, h: SH });
-      for (const g of [-1, 1]) this.colliders.push({ type: 'circle', x: bx + ca * g * SW / 2, z: bz - sn * g * SW / 2, r: 0.16 });
-    }
-    // a bench for two at the edge, looking down on the valley; lanterns on either side
-    m.tint(STONE[0], STONE[1], STONE[2], 1).box(-1.05, 0.3, 9.36, 1.05, 0.39, 9.84).box(-0.92, -0.3, 9.42, -0.68, 0.3, 9.78).box(0.68, -0.3, 9.42, 0.92, 0.3, 9.78);
-    for (const g of [-1, 1]) {
-      m.tint(DARK[0], DARK[1], DARK[2], 1).rod(V(g * 2.6, -0.2, 9.2), V(g * 2.6, 2.0, 9.2), 0.04, 6);
-      glow.tint(1, 0.82, 0.5, 1).box(g * 2.6 - 0.08, 2.0, 9.12, g * 2.6 + 0.08, 2.26, 9.28);
-    }
-    for (const b of [m, glow, cloth]) b.pop();
-    for (const o of [-0.5, 0.5]) { const [bx, bz] = W(o, 9.6); this.seats.push(seatAt(bx, y + 0.39, bz, yaw)); }
-    { const [bx, bz] = W(0, 9.6); this.colliders.push({ type: 'box', x: bx, z: bz, hw: 1.05, hl: 0.26, yaw, y0: y - 1, y1: y + 0.6 }); }
-    { const [fx, fz] = W(5.6, 6.6); this.colliders.push({ type: 'circle', x: fx, z: fz, r: 0.2 }); }
-    // the ring one arrives through, its back to the houses
+      return { i, centre: V(bx + sn * 0.03, y + foot + h / 2, bz + ca * 0.03), right: V(ca, 0, -sn), w, h };
+    };
+    this._signs.push(board(-5.6, 5.6, 0.75, 3.0, 1.5, 1.1));
+    if (who.forHire) this._perks.push(board(5.6, 5.6, -0.75, 2.3, 2.3, 0.7));
+    for (const b of all) b.pop();
+
+    // the ring one arrives through, its back to the hall
     const [rx, rz] = W(0, -2.6);
     this._ring(parts, rx, y, rz, yaw);
     // where one can walk: the round shelf
     const edge = [];
     for (let k = 0; k < 16; k++) { const a = (k / 16) * Math.PI * 2; edge.push([x + Math.cos(a) * (SKY.pad - 0.7), z + Math.sin(a) * (SKY.pad - 0.7)]); }
     this.areas.push(new Polygon(edge, { name: 'sky' }));
-    const [ax, az] = W(0, 0.4), [gx, gz] = W(-5.6, 5.6);
-    this.villages.push({ index: i, id: sponsorId(who), name: who.name, motto: who.motto || '', url: /^https:\/\//.test(who.url || '') ? who.url : null, color: col, x, y, z, yaw, arrive: [ax, az, yaw], ring: [rx, rz], sign: [gx, gz] }); // (one arrives looking at the valley)
+    const [ax, az] = W(0, 0.4), [gx, gz] = W(-5.6, 5.6), [px, pz] = W(5.6, 5.6);
+    const price = VILLAGE_PRICES[tier];
+    this.villages.push({
+      index: i, id: sponsorId(who), name: who.name, motto: who.forHire ? `For hire · ${money(price)} a month` : who.motto || '', url: /^https:\/\//.test(who.url || '') ? who.url : null, color: col,
+      forHire: !!who.forHire, tier, price, x, y, z, yaw, arrive: [ax, az, yaw], ring: [rx, rz], sign: [gx, gz], board: [px, pz], // (one arrives looking at the valley)
+    });
     // six sectors round the valley, so that what is behind the camera is not drawn
     const sector = Math.floor(((Math.atan2(z, x + 60) + Math.PI) / (2 * Math.PI)) * 6) % 6;
     this._add(`sky${sector}`, parts);
+    this._add(`skyv${i}`, close, false);
   }
 
   // The Sky Gate, in the valley: a bigger ring on three steps, lanterns, a signpost
@@ -214,7 +300,7 @@ export class SkyZone {
 
   // The faces of the signs: every name on one sheet, one mesh
   _buildSigns() {
-    const COLS = 5, ROWS = Math.ceil(this._signs.length / COLS), CW = 400, CH = 200;
+    const COLS = 5, ROWS = Math.ceil(this._signs.length / COLS), CW = 400, CH = 200; // (fifty of them: 2000 × 2000)
     const canvas = document.createElement('canvas');
     canvas.width = COLS * CW; canvas.height = ROWS * CH;
     const ctx = canvas.getContext('2d');
@@ -254,13 +340,56 @@ export class SkyZone {
     this.group.add(mesh);
   }
 
+  // The boards of the villages for hire: the same face for all (one small sheet, one mesh)
+  _buildPerks() {
+    if (!this._perks.length) return;
+    const S = 512, canvas = document.createElement('canvas');
+    canvas.width = S; canvas.height = S;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#f6f1e4'; ctx.fillRect(0, 0, S, S);
+    ctx.fillStyle = '#7a1420'; ctx.fillRect(0, 0, S, 118);
+    ctx.fillStyle = '#f2c14e'; ctx.fillRect(0, 118, S, 8);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#f6e7b8'; ctx.font = "700 50px Georgia, 'Times New Roman', serif"; ctx.fillText('YOUR VILLAGE?', S / 2, 46);
+    ctx.fillStyle = '#f2c14e'; ctx.font = '600 24px system-ui, sans-serif'; ctx.fillText('This one is for hire, by the month', S / 2, 92);
+    ctx.textAlign = 'left'; ctx.font = '600 25px system-ui, sans-serif';
+    VILLAGE_PERKS.forEach((line, k) => {
+      const ly = 166 + k * 47;
+      ctx.fillStyle = '#b3541e'; ctx.beginPath(); ctx.arc(40, ly, 8, 0, 7); ctx.fill();
+      ctx.fillStyle = '#1b2a22'; ctx.fillText(line, 62, ly + 1, S - 84);
+    });
+    ctx.textAlign = 'center'; ctx.fillStyle = '#5a5140'; ctx.font = '500 21px system-ui, sans-serif';
+    ctx.fillText('The price is on the other sign: the higher, the dearer', S / 2, 458, S - 30);
+    ctx.fillStyle = '#7a1420'; ctx.font = '700 22px system-ui, sans-serif'; ctx.fillText('Step up to this board to hire it', S / 2, 490);
+    const n = this._perks.length, pos = new Float32Array(n * 12), uv = new Float32Array(n * 8), idx = [], up = V(0, 1, 0);
+    this._perks.forEach((sg, k) => {
+      [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([a, b], q) => {
+        const p = sg.centre.clone().addScaledVector(sg.right, (a * sg.w) / 2).addScaledVector(up, (b * sg.h) / 2);
+        pos.set([p.x, p.y, p.z], (k * 4 + q) * 3);
+        uv.set([(a + 1) / 2, (b + 1) / 2], (k * 4 + q) * 2);
+      });
+      idx.push(k * 4, k * 4 + 1, k * 4 + 2, k * 4, k * 4 + 2, k * 4 + 3);
+    });
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    geo.setIndex(idx);
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
+    mesh.name = 'sky-perks';
+    mesh.frustumCulled = false;
+    this.group.add(mesh);
+  }
+
   /** The village one stands in, or null. */
   villageAt(x, z) {
     for (const v of this.villages) if ((x - v.x) ** 2 + (z - v.z) ** 2 < SKY.pad * SKY.pad) return v;
     return null;
   }
 
-  /** A village by its id (see sponsors.js) or its number (1 to 30). */
+  /** A village by its id (see sponsors.js) or its number (1 to 50). */
   find(key) {
     const k = String(key || '').toLowerCase();
     return this.villages.find((v) => v.id === k) || this.villages[parseInt(k, 10) - 1] || null;

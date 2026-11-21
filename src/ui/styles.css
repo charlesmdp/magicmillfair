@@ -210,6 +210,8 @@ button.pill.players:hover { border-color: rgba(242, 193, 78, 0.7); }
 .bigmap canvas { display: block; }
 .bigmap .legend { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 8px 14px 9px; font-size: 12.5px; color: var(--ink-soft); }
 .bigmap .legend b { font-family: Georgia, 'Times New Roman', serif; font-size: 16px; color: var(--ink); }
+.bigmap .legend .mega { margin-right: auto; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line); background: rgba(242, 193, 78, 0.14); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; }
+.bigmap .legend .mega:hover, .bigmap .legend .mega[aria-pressed="true"] { background: rgba(242, 193, 78, 0.32); }
 .touch .minimap { left: auto; right: calc(12px + var(--safe-r)); bottom: auto; top: calc(64px + var(--safe-t)); width: 96px; height: 96px; }
 
 .stats { position: absolute; right: calc(12px + var(--safe-r)); top: calc(64px + var(--safe-t)); padding: 10px 12px; border-radius: 12px; background: rgba(10, 16, 13, 0.78); border: 1px solid var(--line); font: 11.5px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre; display: none; pointer-events: none !important; }

@@ -428,6 +428,7 @@ const climbMask = new Grid(N, N);
 const acidMask = new Grid(N, N);
 const terraceMask = new Grid(N, N); // the terraces above the great waterfall
 const skyMask = new Grid(N, N); // the shelves of the sky villages
+const skyPaved = new Grid(N, N); // under their halls and pavilions
 const skySites = []; // { x, z, y, yaw }
 let acidLevel = 0;
 const disc = (x, z, r, fn) => {
@@ -605,6 +606,12 @@ const disc = (x, z, r, fn) => {
       });
       // which way it looks: at the valley
       p.yaw = Math.atan2(-60 - p.x, 10 - p.z);
+      // (the floors of its hall and of its pavilions: nothing grows there)
+      const c = Math.cos(p.yaw), sn = Math.sin(p.yaw);
+      for (const [lx, lz, hw, hl] of [[S.hall.x, S.hall.z, S.hall.hw + 0.9, S.hall.hl + 1.2], ...S.pavilions.map((v) => [v.x, v.z, v.h + 0.2, v.h + 0.2])]) {
+        const cx = p.x + lx * c + lz * sn, cz = p.z - lx * sn + lz * c;
+        disc(cx, cz, Math.hypot(hw, hl) + 1, (q, d, x, z) => { const u = (x - cx) * c - (z - cz) * sn, v = (x - cx) * sn + (z - cz) * c; if (Math.abs(u) < hw && Math.abs(v) < hl) skyPaved.d[q] = 1; });
+      }
     }
     log(`  ${skySites.length} sky villages, ${Math.min(...skySites.map((p) => p.y)).toFixed(0)} to ${Math.max(...skySites.map((p) => p.y)).toFixed(0)} m`);
     // the Sky Gate in the valley: a small round place on the lawn
@@ -666,7 +673,7 @@ const disc = (x, z, r, fn) => {
   }
   // --- nothing grows where people lounge
   disc(L.BEACH_LOUNGE.x, L.BEACH_LOUNGE.z, L.BEACH_LOUNGE.r + 1, (q) => { noTrees.d[q] = 1; });
-  disc(L.COVE.x, L.COVE.z, L.COVE.r, (q) => { noTrees.d[q] = 1; });
+  disc(L.COVE.x, L.COVE.z, L.COVE.r, (q) => { noTrees.d[q] = 1; }); // (the camp; the hollow behind it keeps its trees)
   // --- cave mouths: level ground in front (not in the pool of the waterfall), nothing planted before or above them
   for (const c of L.CAVES) {
     const [mx, mz, mr, floor] = c.nodes[0], [nx, nz] = c.nodes[1];
@@ -674,10 +681,16 @@ const disc = (x, z, r, fn) => {
     disc(mx, mz, 9, (q, d, x, z) => {
       noTrees.d[q] = 1;
       const along = (x - mx) * ax + (z - mz) * az, across = Math.abs((x - mx) * az - (z - mz) * ax);
-      if (c.id !== 'grotto' && along < 0.5 && along > -5 && across < mr + 2.5) {
+      if (!c.water && along < 0.5 && along > -5 && across < mr + 2.5) {
         const w = (1 - smoothstep(mr + 0.5, mr + 2.5, across)) * (1 - smoothstep(-2.5, -5, along));
         H.d[q] = lerp(H.d[q], floor - 0.04, w);
         if (w > 0.5) detailMask.d[q] = 0;
+      }
+      // a mouth on the sea: the bed rises to the doorstep, so that a swimmer walks out of the water
+      if (c.slip && along < 0.3 && along > -c.slip - 2 && across < mr + 2) {
+        const w = 1 - smoothstep(mr, mr + 2, across), sill = lerp(floor - 0.05, H.d[q], smoothstep(0.3, c.slip, -along));
+        if (sill > H.d[q]) H.d[q] = lerp(H.d[q], sill, w);
+        detailMask.d[q] = Math.min(detailMask.d[q], 1 - w);
       }
       // (no grass in the mouth itself, where the ground is cut away)
       if (along > -1.2 && along < c.open + 5 && across < mr + 1.5) caveMouth.d[q] = 1;
@@ -860,6 +873,21 @@ for (const s of streams) {
     if (ponds[0].sdf.d[q] > -0.3) H.d[q] = lerp(H.d[q], L.DAM.crestY, w);
     if (w > 0.5) { detailMask.d[q] = 0; padMask.d[q] = Math.max(padMask.d[q], 1); }
   }
+}
+
+{
+  // the plunge pool of the great waterfall: deep enough to dive into from the terrace above
+  const P = L.PLUNGE, ux = P.b[0] - P.a[0], uz = P.b[1] - P.a[1], len2 = ux * ux + uz * uz;
+  disc((P.a[0] + P.b[0]) / 2, (P.a[1] + P.b[1]) / 2, Math.sqrt(len2) / 2 + P.r + 1, (q, d, x, z) => {
+    if (streamField.d[q] > -0.2 || caveMouth.d[q] > 0) return; // water only, and not the doorstep of the grotto
+    const t = clamp(((x - P.a[0]) * ux + (z - P.a[1]) * uz) / len2, 0, 1);
+    const e = Math.hypot(x - P.a[0] - ux * t, z - P.a[1] - uz * t) / P.r;
+    if (e >= 1) return;
+    // (from the shore: a shelf one can walk up, as deep as one stands; then it drops)
+    const off = -streamField.d[q] - 0.2, stand = 1.3 / P.shelf, bank = off < stand ? off * P.shelf : 1.3 + (off - stand) * 2.5;
+    const depth = Math.min(P.depth * (1 - smoothstep(0.35, 1, e)), bank);
+    H.d[q] = Math.min(H.d[q], streamLevel.d[q] - depth);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1135,6 +1163,7 @@ for (let j = 0; j < N; j++) {
     // the terraces above the falls (bare rock, a little gravel), the shelves of the sky villages (a gravel court, mown grass)
     if (terraceMask.d[q] > 0) { const a = terraceMask.d[q]; over(q, 4, a * 0.9); over(q, 6, a * 0.45 * smoothstep(0.0, 0.5, nC)); gh *= 1 - a; }
     if (skyMask.d[q] > 0) { const a = skyMask.d[q]; over(q, 0, a); over(q, 6, a * 0.8 * smoothstep(0.1, 0.45, nB + 0.35)); gh = lerp(gh, 0.14, a); setTint(q, 1.03, 1.04, 0.92, a * 0.6); }
+    if (skyPaved.d[q] > 0) gh = 0;
 
     // --- slopes
     // grass holds on banks up to about 45 degrees; beyond that the soil shows (bare rock on the mountains)
@@ -1670,6 +1699,8 @@ log('preview');
     .extract({ left: Math.round(gi(mv.x0) + 0.5), top: Math.round(gi(mv.z0) + 0.5), width: Math.round(mv.x1 - mv.x0), height: Math.round(mv.z1 - mv.z0) })
     .resize(Math.round((mv.x1 - mv.x0) * 2), Math.round((mv.z1 - mv.z0) * 2), { kernel: 'cubic' })
     .jpeg({ quality: 84, mozjpeg: true }).toFile(path.join(OUT, 'map.jpg'));
+  // …and the whole square kilometre, mountains and their villages included, 1 pixel per metre
+  await sharp(Buffer.from(buf.buffer), { raw: { width: N, height: N, channels: 3 } }).jpeg({ quality: 80, mozjpeg: true }).toFile(path.join(OUT, 'megamap.jpg'));
   // elevation preview with contours
   const e = new Uint8Array(N * N * 3);
   for (let q = 0; q < N * N; q++) {

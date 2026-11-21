@@ -205,16 +205,42 @@ export function buildCave(parts, cave, { seats, colliders, ground }) {
     colliders.push({ type: 'circle', x, z, r: 0.6 });
   }
 
+  if (cave.hoard) {
+    // a chest that someone left there, its lid thrown back on something that shines; coins on the floor round it
+    const [x, z, yaw] = cave.hoard, y = at(x, z).floor, c = lit(x, y + 0.4, z);
+    wood.tint(0.56 * c[0], 0.38 * c[1], 0.22 * c[2], c[3]).place(x, y, z, yaw).box(-0.5, 0, -0.32, 0.5, 0.5, 0.32, { tile: 1, faces: 'xXzZy' });
+    wood.place(0, 0.5, -0.32, 0, -1.2).box(-0.5, 0, 0, 0.5, 0.07, 0.64, { tile: 1 }).pop();
+    wood.pop();
+    glow.tint(1, 0.78, 0.2, 1).place(x, y + 0.26, z, yaw).lathe([[0.0, 0.0], [0.36, 0.0], [0.26, 0.12], [0.0, 0.2]], 7).pop();
+    for (let k = 0; k < 9; k++) { const a = hash(x + k, z) * Math.PI * 2, d = 0.75 + 0.6 * hash(z, k); glow.cylinder(x + Math.cos(a) * d, y + 0.004, z + Math.sin(a) * d, 0.05, 0.05, 0.014, 6); }
+    colliders.push({ type: 'circle', x, z, r: 0.62 });
+  }
+  for (const [x, z, kind] of cave.stock || []) {
+    const y = at(x, z).floor, c = lit(x, y + 0.5, z), turn = hash(x, z) * 3;
+    if (kind === 'keg') {
+      wood.tint(0.6 * c[0], 0.43 * c[1], 0.27 * c[2], c[3]).place(x, y, z, turn).lathe([[0.0, 0.0], [0.27, 0.0], [0.33, 0.2], [0.35, 0.42], [0.33, 0.64], [0.27, 0.84], [0.0, 0.84]], 10, { tile: 0.8 }).pop();
+      colliders.push({ type: 'circle', x, z, r: 0.38 });
+    } else {
+      wood.tint(0.8 * c[0], 0.64 * c[1], 0.44 * c[2], c[3]).place(x, y, z, turn).box(-0.4, 0, -0.32, 0.4, 0.56, 0.32, { tile: 0.8 });
+      for (const e of [-0.4, 0.4]) wood.box(e - 0.03, 0, -0.35, e + 0.03, 0.59, 0.35, { tile: 0.8 });
+      wood.pop();
+      colliders.push({ type: 'circle', x, z, r: 0.5 });
+    }
+  }
+
   // ---- for the game
   // (the corridor starts a few metres in front of the mouth, so that it is entered from the valley floor)
-  const nodes = [[line[0].x - line[0].dx * 4.5, line[0].z - line[0].dz * 4.5, line[0].r - 0.22, line[0].floor, line[0].roof]];
+  // (…or from further away, where the mouth is come to through a place that is not part of the valley: the sea)
+  const reach = cave.reach || 4.5;
+  const nodes = [[line[0].x - line[0].dx * reach, line[0].z - line[0].dz * reach, line[0].r - 0.22 + (reach > 5 ? 1.6 : 0), line[0].floor, line[0].roof]];
+  if (reach > 5) nodes.push([line[0].x - line[0].dx * 3, line[0].z - line[0].dz * 3, line[0].r - 0.22, line[0].floor, line[0].roof]);
   for (let i = 0; i < line.length; i += 2) { const p = line[i]; nodes.push([p.x, p.z, p.r - 0.22, p.floor, p.roof]); }
   const last = line[line.length - 1];
   if ((line.length - 1) % 2) nodes.push([last.x, last.z, last.r - 0.22, last.floor, last.roof]);
   nodes.push([last.x + last.dx * 0.2, last.z + last.dz * 0.2, 0.2, last.floor, last.roof]); // the end wall is right there
   const corridor = new Corridor(nodes, { cave: true, cut: true, name: cave.id });
   /** Ambient light for someone standing at (x, z) in the cave. */
-  corridor.light = (x, z) => { const p = at(x, z); return Math.min(1.25, 0.2 + lightAt(x, p.floor + 1, z, corridor.depthAt(x, z))[0] * 0.75); };
+  corridor.light = (x, z) => { const p = at(x, z); return Math.min(1.25, 0.2 + lightAt(x, p.floor + 1, z, corridor.depthAt(x, z) - (reach - 4.5))[0] * 0.75); };
   const m = line[0];
   const hole = { x: m.x, z: m.z, dx: m.dx, dz: m.dz, half: m.r + 0.3, depth: cave.open + 4, floor: m.floor, height: m.roof + 0.3, shape: SHAPE / 2 };
   return { corridor, hole };

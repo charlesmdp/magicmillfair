@@ -131,7 +131,7 @@ export class Hud {
       <div class="tags"></div>
       <button class="minimap" type="button" title="Open the map (M)" aria-label="Open the map"><canvas width="192" height="192"></canvas></button>
       <div class="bigmap" role="dialog" aria-label="Map">
-        <div class="sheet"><canvas></canvas><div class="legend"><b>Map</b><span>Click anywhere to close</span></div></div>
+        <div class="sheet"><canvas></canvas><div class="legend"><b>Map</b><button class="mega" type="button" aria-pressed="false" title="The whole country, with the fifty sky villages">Mega map</button><span>Click anywhere to close</span></div></div>
       </div>
       <div class="stats"></div>
       <div class="emotes">
@@ -189,6 +189,9 @@ export class Hud {
     this.bigCanvas = this.bigEl.querySelector('canvas');
     this.mapEl.onclick = () => { this.toggleBigMap(true); this.mapEl.blur(); };
     this.bigEl.onclick = () => this.toggleBigMap(false);
+    // the mega map: the whole square kilometre, mountains included, with every sky village (loaded when asked for)
+    this.megaBtn = this.bigEl.querySelector('.mega');
+    this.megaBtn.onclick = (e) => { e.stopPropagation(); this.setMega(!this.mega); this.megaBtn.blur(); };
     for (const ev of ['mousedown', 'touchstart', 'wheel']) this.bigEl.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
     this.mapImg = new Image();
     this.mapImg.src = assetUrl('world/map.jpg');
@@ -541,6 +544,18 @@ export class Hud {
   // ---------- maps (north up). `view` is the window of the world drawn in map.jpg: { x0, z0, x1, z1 }.
   setMap(view, zones) { this.mapView = view; this.zones = zones; }
 
+  /** The sky villages, for the mega map: [{ name, x, z, color, forHire, price }], and how big the country is. */
+  setVillages(villages, size, label = (v) => v.name) { this.villages = villages; this.megaView = { x0: -size / 2, z0: -size / 2, x1: size / 2, z1: size / 2 }; this._villageLabel = label; }
+
+  setMega(on) {
+    this.mega = !!on && !!this.megaView;
+    this.megaBtn.setAttribute('aria-pressed', this.mega ? 'true' : 'false');
+    this.megaBtn.textContent = this.mega ? 'Valley map' : 'Mega map';
+    this.bigEl.querySelector('.legend b').textContent = this.mega ? 'Mega map' : 'Map';
+    if (this.mega && !this.megaImg) { this.megaImg = new Image(); this.megaImg.src = assetUrl('world/megamap.jpg'); }
+    this._bigSize = '';
+  }
+
   _marker(ctx, px, pz, heading, size) {
     ctx.save();
     ctx.translate(px, pz);
@@ -575,7 +590,8 @@ export class Hud {
 
   /** The whole valley, with the places, the other visitors and oneself. */
   drawBigMap(x, z, heading, others) {
-    const v = this.mapView, img = this.mapImg;
+    const mega = this.mega && this.megaImg.complete && this.megaImg.width > 0;
+    const v = mega ? this.megaView : this.mapView, img = mega ? this.megaImg : this.mapImg;
     if (!v || !this.bigMapOpen || !img.complete || !img.width) return;
     const cv = this.bigCanvas;
     // as large as the window allows, at the density of the screen
@@ -589,10 +605,22 @@ export class Hud {
     const k = w / (v.x1 - v.x0), X = (wx) => (wx - v.x0) * k, Z = (wz) => (wz - v.z0) * k;
     // place names
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = `600 ${Math.max(11, Math.round(w / 62))}px Georgia, 'Times New Roman', serif`;
     ctx.lineJoin = 'round';
+    if (mega) {
+      // the sky villages: a mark in the colours of each; the name of those that are taken, the price of the others
+      ctx.font = `600 ${Math.max(9, Math.round(w / 92))}px system-ui, sans-serif`;
+      for (const sv of this.villages || []) {
+        const px = X(sv.x), pz = Z(sv.z), rgb = sv.color.map((c) => Math.round(Math.min(1, c * 1.25) * 255)).join(',');
+        ctx.beginPath(); ctx.moveTo(px, pz - 7); ctx.lineTo(px + 6.5, pz + 4.5); ctx.lineTo(px - 6.5, pz + 4.5); ctx.closePath();
+        ctx.fillStyle = `rgb(${rgb})`; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = sv.forHire ? 'rgba(255, 255, 255, 0.75)' : '#f2c14e'; ctx.stroke();
+        const text = this._villageLabel(sv), half = ctx.measureText(text).width / 2 + 4, tx = Math.min(w - half, Math.max(half, px));
+        ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(14, 22, 17, 0.85)'; ctx.strokeText(text, tx, pz + 13);
+        ctx.fillStyle = sv.forHire ? '#e6dfcc' : '#f2c14e'; ctx.fillText(text, tx, pz + 13);
+      }
+    }
+    ctx.font = `600 ${Math.max(mega ? 9 : 11, Math.round(w / (mega ? 86 : 62)))}px Georgia, 'Times New Roman', serif`;
     for (const zone of this.zones || []) {
-      if (zone.hidden) continue; // (some places are for those who find them)
+      if (zone.hidden || (mega && zone.r < 30)) continue; // (some places are for those who find them; the mega map only names the large ones)
       const half = ctx.measureText(zone.name).width / 2 + 6;
       const tx = Math.min(w - half, Math.max(half, X(zone.x))), tz = Z(zone.z); // never cut by the edge
       ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(14, 22, 17, 0.8)'; ctx.strokeText(zone.name, tx, tz);

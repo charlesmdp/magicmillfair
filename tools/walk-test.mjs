@@ -222,15 +222,20 @@ try {
         void lip;
         player.teleport(-296, 123.2, 0);
         const y0 = player.pos.y;
-        go(1, 0.08, 150);
-        for (let f = 0; f < 200; f++) go(0, 0, 1);
-        out.leap = { y0, y: player.pos.y, x: player.pos.x, z: player.pos.z, walkable: world.collision.walkable(player.pos.x, player.pos.z), cave: !!player.cave };
+        let dived = false, swam = false;
+        for (let f = 0; f < 150; f++) { go(1, 0.08, 1); dived ||= player.diving; swam ||= player.swimming; }
+        for (let f = 0; f < 200; f++) { go(0, 0, 1); swam ||= player.swimming; }
+        out.leap = { y0, y: player.pos.y, x: player.pos.x, z: player.pos.z, walkable: world.collision.walkable(player.pos.x, player.pos.z), cave: !!player.cave, dived, swam, water: world.data.waterAt(player.pos.x, player.pos.z) };
+        // …and out of the pool on foot, to the shore where the steps start
+        for (let f = 0; f < 600 && Math.hypot(-277.5 - player.pos.x, 114.6 - player.pos.z) > 0.7; f++) { const dx = -277.5 - player.pos.x, dz = 114.6 - player.pos.z, l = Math.hypot(dx, dz); go(dx / l, dz / l, 1); }
+        out.ashore = { x: player.pos.x, y: player.pos.y, z: player.pos.z, swimming: player.swimming };
         return out;
       });
     });
     const okFlights = up.flights.every((f) => Math.abs(f.from - f.want0) < 0.35 && Math.abs(f.to - f.want) < 0.35 && f.off < 1.2);
     check('climbs the steps beside the falls, from terrace to terrace', okFlights && up.flights.length === 3 && Math.abs(up.flights[2].to - up.levels[2]) < 0.4, up.flights.map((f) => `${f.from.toFixed(1)} → ${f.to.toFixed(1)} (${f.want})`).join(', '));
     check('wades in the top pool, leaps from the lowest terrace into the pool of the great fall', up.pool.water > 45.5 && up.pool.y < up.pool.water && (up.pool.wading || up.pool.swimming) && Math.abs(up.leap.y0 - up.levels[0]) < 0.3 && up.leap.y < 13.5 && up.leap.x > -288 && up.leap.walkable && !up.leap.cave, JSON.stringify({ pool: up.pool, leap: up.leap }));
+    check('the leap ends in a swan dive into deep water; one walks out of the pool where the steps start', up.leap.dived && up.leap.swam && up.leap.y < up.leap.water && !up.ashore.swimming && up.ashore.y > 12.3 && Math.hypot(up.ashore.x + 277.5, up.ashore.z - 114.6) < 1, JSON.stringify({ leap: up.leap, ashore: up.ashore }));
   }
 
   // --- the secret cove: swum to along the foot of the cliffs, without waking the shark
@@ -253,12 +258,50 @@ try {
     });
     await frames(30);
     const named = await page.evaluate(() => document.querySelector('.hud .zone').textContent);
-    check('swims round the cape to the secret cove and lands on its beach; the shark stays away', cove.swam && !cove.dead && !cove.swimming && cove.y > 0.3 && cove.d < 9 && cove.minFar > 30 && cove.modes.join() === 'patrol' && cove.hidden && cove.seats >= 5 && named === 'The Secret Cove', JSON.stringify({ ...cove, named }));
+    check('swims round the cape to the secret cove and lands on its beach; the shark stays away', cove.swam && !cove.dead && !cove.swimming && cove.y > 0.3 && cove.d < 9 && cove.minFar > 30 && cove.modes.join() === 'patrol' && cove.hidden && cove.seats >= 18 && named === 'The Secret Cove', JSON.stringify({ ...cove, named }));
+  }
+
+  // --- the cave behind the fall that drops into the sea: only a swimmer finds it, along the foot of the cliffs
+  {
+    const den = await page.evaluate(() => {
+      const app = window.__mmf, { player, input, world } = app, g = world.games, dt = 1 / 30;
+      const go = (dx, dz, n) => { for (let f = 0; f < n; f++) { input.move.x = dx; input.move.y = -dz; input.run = true; input.jump = false; player.update(dt, 0, true); g._tickShark(dt, f * dt, player); } input.move.x = 0; input.move.y = 0; input.run = false; };
+      const to = (q, max = 900) => { for (let f = 0; f < max && Math.hypot(q[0] - player.pos.x, q[1] - player.pos.z) > 0.8; f++) { const dx = q[0] - player.pos.x, dz = q[1] - player.pos.z, l = Math.hypot(dx, dz); go(dx / l, dz / l, 1); out.minFar = Math.min(out.minFar, g.seaEdgeDistance(player.pos.x, player.pos.z)); out.modes.add(g.sharkState.mode); } };
+      const out = { minFar: 1e9, modes: new Set() };
+      return import('/src/world/layout/layout.js').then((L) => {
+        const cave = L.CAVES.find((c) => c.id === 'sea'), [mx, mz] = cave.nodes[0], [nx, nz] = cave.nodes[1], l = Math.hypot(nx - mx, nz - mz), ox = (mx - nx) / l, oz = (mz - nz) / l; // out of the mouth
+        player.teleport(95, -122, 0);
+        for (let f = 0; f < 60; f++) go(0, 0, 1);
+        out.swam = player.swimming;
+        // elsewhere the foot of the cliffs cannot be reached
+        for (const q of [[105, -140], [128, -152], [150, -172]]) to(q);
+        for (let f = 0; f < 200; f++) go(-0.7, -0.7, 1);
+        out.wall = { x: player.pos.x, z: player.pos.z, h: world.data.heightAt(player.pos.x, player.pos.z), swimming: player.swimming };
+        for (const q of [[152, -173], [166, -190], [mx + ox * 13, mz + oz * 13], [mx + ox * 6, mz + oz * 6]]) to(q);
+        out.before = { swimming: player.swimming, cave: !!player.cave };
+        for (const q of [[mx + ox * 0.5, mz + oz * 0.5], [nx, nz], ...cave.nodes.slice(2, 5).map((n) => [n[0], n[1]])]) to(q);
+        const room = cave.nodes[4], zone = L.ZONES.find((z) => z.id === 'sea');
+        Object.assign(out, { x: player.pos.x, y: player.pos.y, z: player.pos.z, cave: player.cave?.name || null, floor: room[3], d: Math.hypot(player.pos.x - room[0], player.pos.z - room[1]), dead: !!player.dead, swimming: player.swimming, hidden: zone.hidden === true, modes: [...out.modes], seats: world.seats.filter((s) => Math.hypot(s.x - room[0], s.z - room[1]) < 8).length });
+        return out;
+      });
+    });
+    await frames(30);
+    const named = await page.evaluate(() => document.querySelector('.hud .zone').textContent);
+    check('swims along the northern cliffs, through the fall into the cave behind it; the shark stays away', den.swam && den.wall.swimming && den.wall.h < -1 && den.before.swimming && !den.before.cave && den.cave === 'sea' && !den.dead && !den.swimming && Math.abs(den.y - den.floor) < 0.3 && den.d < 2 && den.minFar > 30 && den.modes.join() === 'patrol' && den.hidden && den.seats >= 3 && named === "The Smugglers' Den", JSON.stringify({ ...den, named }));
   }
 
   // --- the sky villages: carried there from the Sky Gate, and back through the ring
   {
-    const g = await page.evaluate(() => { const s = window.__mmf.sky; return { gate: s.gate, n: s.villages.length, names: s.villages.map((v) => v.name) }; });
+    const g = await page.evaluate(() => {
+      const s = window.__mmf.sky, seats = window.__mmf.world.seats, prices = {};
+      for (const v of s.villages) (prices[v.price] ||= []).push(v.y);
+      const tiers = Object.keys(prices).map(Number).sort((a, b) => a - b);
+      return {
+        gate: s.gate, n: s.villages.length, names: s.villages.map((v) => v.name), tiers, each: tiers.map((t) => prices[t].length),
+        rising: tiers.every((t, k) => k === 0 || Math.min(...prices[t]) >= Math.max(...prices[tiers[k - 1]])),
+        seats: Math.min(...s.villages.map((v) => seats.filter((q) => Math.hypot(q.x - v.x, q.z - v.z) < 12.5).length)), hire: s.villages.filter((v) => v.forHire).length,
+      };
+    });
     await place(g.gate.arrive[0], g.gate.arrive[1], 0);
     await frames(4);
     const offered = await prompt();
@@ -283,13 +326,23 @@ try {
       player.teleport(v.ring[0] + Math.sin(v.yaw) * 1.6, v.ring[1] + Math.cos(v.yaw) * 1.6, 0);
       return { edge, y, vy: v.y };
     });
+    // at the board of a village for hire: what it costs
+    const hire = await page.evaluate(() => {
+      const m = window.__mmf, v = m.sky.villageAt(m.player.pos.x, m.player.pos.z) || m.sky.villages[7];
+      m.player.teleport(v.board[0] - Math.sin(v.yaw) * 1.6, v.board[1] - Math.cos(v.yaw) * 1.6, v.yaw);
+      return { name: v.name, price: v.price, motto: v.motto };
+    });
+    await frames(6);
+    const board = await prompt();
+    await page.evaluate(() => { const m = window.__mmf, v = m.sky.villageAt(m.player.pos.x, m.player.pos.z); m.player.teleport(v.ring[0] + Math.sin(v.yaw) * 1.6, v.ring[1] + Math.cos(v.yaw) * 1.6, 0); });
     await frames(4);
     const ring = await prompt();
     await page.keyboard.press('KeyE');
     await frames(20);
-    const home = await page.evaluate(() => { const m = window.__mmf, p = m.player.pos; return { d: Math.hypot(p.x - m.sky.gate.x, p.z - m.sky.gate.z), village: m.sky.villageAt(p.x, p.z), byId: m.sky.find('eagle-rest')?.name, byNumber: m.sky.find('30')?.name }; });
-    check('the Sky Gate offers thirty villages; one is carried to the one chosen, facing the valley', offered.includes('Travel to a sky village') && g.n === 30 && listed.length === 30 && there.village === listed[7] && Math.abs(there.y - there.want) < 0.5 && there.grounded && there.zone === there.village && !there.open && there.facing > 0.5 && there.walkable, JSON.stringify({ offered, there }));
-    check('nobody walks off a village; its ring leads back to the valley', back.edge < 12.6 && Math.abs(back.y - back.vy) < 0.6 && ring.includes('Back to the valley') && ring.includes('Another village') && home.d < 4 && !home.village && home.byId === 'Eagle Rest' && home.byNumber === g.names[29], JSON.stringify({ back, ring, home }));
+    const home = await page.evaluate(() => { const m = window.__mmf, p = m.player.pos; return { d: Math.hypot(p.x - m.sky.gate.x, p.z - m.sky.gate.z), village: m.sky.villageAt(p.x, p.z), byId: m.sky.find('eagle-rest')?.name, byNumber: m.sky.find('50')?.name }; });
+    check('fifty villages: ten prices, five villages at each, the higher the dearer; twenty places to sit in each; the board of one for hire says what it costs', g.n === 50 && g.tiers.join() === '19,49,99,199,499,999,1999,3999,7999,9999' && g.each.every((k) => k === 5) && g.rising && g.seats >= 20 && g.hire === 50 && board.some((b) => b.startsWith(`Hire ${hire.name}`) && b.includes('a month')) && /^For hire · \$[\d,]+ a month$/.test(hire.motto), JSON.stringify({ tiers: g.tiers, each: g.each, rising: g.rising, seats: g.seats, hire, board }));
+    check('the Sky Gate offers fifty villages; one is carried to the one chosen, facing the valley', offered.includes('Travel to a sky village') && g.n === 50 && listed.length === 50 && there.village === listed[7] && Math.abs(there.y - there.want) < 0.5 && there.grounded && there.zone === there.village && !there.open && there.facing > 0.5 && there.walkable, JSON.stringify({ offered, there }));
+    check('nobody walks off a village; its ring leads back to the valley', back.edge < 12.6 && Math.abs(back.y - back.vy) < 0.6 && ring.includes('Back to the valley') && ring.includes('Another village') && home.d < 4 && !home.village && home.byId === 'Eagle Rest' && home.byNumber === g.names[49], JSON.stringify({ back, ring, home }));
   }
 
   // --- the island: its wall is not climbed, its walkways hold, and the boulder flattens whoever stays on the path
@@ -406,9 +459,10 @@ try {
     check('walks into a cave; its walls and its roof hold', c1.cave === 'north' && c1.z < -186 && Math.abs(c1.y - room[3]) < 0.4 && c1.cam < room[3] + room[4] + 0.2 && Math.hypot(c2.x - room[0], c2.z - room[1]) < room[2] + 0.6, `at z ${c1.z.toFixed(1)}, floor ${c1.y.toFixed(2)}, camera ${c1.cam.toFixed(1)}; ${Math.hypot(c2.x - room[0], c2.z - room[1]).toFixed(1)} m from the middle of a ${room[2]} m room`);
     await place(-280.5, 122.4, 90);
     await frames(3);
-    await walk(40, false);
+    const pool = await state();
+    await walk(70, true);
     const g = await page.evaluate(() => { const p = window.__mmf.player; return { x: p.pos.x, y: p.pos.y, cave: p.cave?.name || null, wading: !!p.wading, swimming: p.swimming }; });
-    check('walks through the waterfall into the grotto', g.cave === 'grotto' && g.x < -292 && !g.wading && !g.swimming, `x ${g.x.toFixed(1)}, y ${g.y.toFixed(2)}`);
+    check('swims across the pool and walks through the waterfall into the grotto', pool.swimming && g.cave === 'grotto' && g.x < -292 && !g.wading && !g.swimming, `x ${g.x.toFixed(1)}, y ${g.y.toFixed(2)}`);
   }
 
   // --- chat and the animals of light

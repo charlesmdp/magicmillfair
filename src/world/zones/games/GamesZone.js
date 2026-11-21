@@ -7,7 +7,7 @@ import { LAYER, staticCaster } from '../../../render/Shadows.js';
 import { mergeStatic, distanceCuller } from '../../props/StaticBatch.js';
 import { makeMaterial, GLSL_COMMON, GLSL_LIGHTING } from '../../../render/globals.js';
 import { cosmeticMaterial } from '../../../player/Cosmetics.js';
-import { CLIMB, ACID, BOULDER, ISLAND, islandPath, islandAt, ISLAND_LENGTH } from '../../layout/layout.js';
+import { CLIMB, ACID, BOULDER, ISLAND, islandPath, islandAt, ISLAND_LENGTH, SEA_REACH } from '../../layout/layout.js';
 import { climbCourse, stoneDepth, formatTime } from './course.js';
 import { canvasBoard, drawScores, drawSponsor } from './Boards.js';
 
@@ -479,14 +479,20 @@ export class GamesZone {
     this.shark = mesh;
     // where the sea ends for swimmers: the edges of the playable area beyond which there is only open water
     // (not the foot of the cliffs, which one may follow all the way to the secret cove)
-    const bd = this.data.meta.bounds, edges = [];
-    let area = 0;
-    for (let i = 0; i < bd.length; i++) { const a = bd[i], c = bd[(i + 1) % bd.length]; area += a[0] * c[1] - c[0] * a[1]; }
-    const turn = area > 0 ? 1 : -1; // which way round the outline goes
-    for (let i = 0; i < bd.length; i++) {
-      const a = bd[i], c = bd[(i + 1) % bd.length], mx = (a[0] + c[0]) / 2, mz = (a[1] + c[1]) / 2;
-      const l = Math.hypot(c[0] - a[0], c[1] - a[1]) || 1, nx = ((c[1] - a[1]) / l) * turn, nz = (-(c[0] - a[0]) / l) * turn; // outwards
-      if (this.ground(mx, mz) < -2 && this.ground(mx + nx * 20, mz + nz * 20) < -3 && this.ground(mx + nx * 42, mz + nz * 42) < -3) edges.push([a[0], a[1], c[0], c[1]]);
+    // (the valley's outline, and the stretches of sea added to it: an edge of one that lies within another is
+    // not an edge of the sea)
+    const outlines = [this.data.meta.bounds, ...SEA_REACH], edges = [];
+    const within = (bd, x, z) => { let inside = false; for (let i = 0, j = bd.length - 1; i < bd.length; j = i++) if ((bd[j][1] > z) !== (bd[i][1] > z) && x < ((bd[i][0] - bd[j][0]) * (z - bd[j][1])) / (bd[i][1] - bd[j][1]) + bd[j][0]) inside = !inside; return inside; };
+    for (const bd of outlines) {
+      let area = 0;
+      for (let i = 0; i < bd.length; i++) { const a = bd[i], c = bd[(i + 1) % bd.length]; area += a[0] * c[1] - c[0] * a[1]; }
+      const turn = area > 0 ? 1 : -1; // which way round the outline goes
+      for (let i = 0; i < bd.length; i++) {
+        const a = bd[i], c = bd[(i + 1) % bd.length], mx = (a[0] + c[0]) / 2, mz = (a[1] + c[1]) / 2;
+        const l = Math.hypot(c[0] - a[0], c[1] - a[1]) || 1, nx = ((c[1] - a[1]) / l) * turn, nz = (-(c[0] - a[0]) / l) * turn; // outwards
+        if (outlines.some((o) => o !== bd && within(o, mx + nx * 2, mz + nz * 2))) continue;
+        if (this.ground(mx, mz) < -2 && this.ground(mx + nx * 20, mz + nz * 20) < -3 && this.ground(mx + nx * 42, mz + nz * 42) < -3) edges.push([a[0], a[1], c[0], c[1]]);
+      }
     }
     this.seaEdges = edges;
     const e0 = edges[Math.floor(edges.length / 2)] || [200, 0, 200, 10];

@@ -312,11 +312,12 @@ export class PlacesZone {
   _cove() {
     const parts = new Parts();
     const wood = parts.get('woodDark'), rock = parts.get('rock'), paint = parts.get('paint');
-    const { x, z, yaw } = COVE, fx = Math.sin(yaw), fz = Math.cos(yaw), sx = fz, sz = -fx; // towards the sea, and along the beach
+    const { x, z } = COVE, fl = Math.hypot(COVE.sea[0], COVE.sea[1]), fx = COVE.sea[0] / fl, fz = COVE.sea[1] / fl, sx = fz, sz = -fx; // towards the sea, and along the beach
+    const yaw = Math.atan2(fx, fz); // facing the sea
     const at = (f, s) => [x + fx * f + sx * s, z + fz * f + sz * s];
     {
       // the boat: clinker planks, two thwarts, an oar across them
-      const [bx, bz] = at(1.5, 4.6), by = this.ground(bx, bz) + 0.1, a = yaw + 0.5;
+      const [bx, bz] = at(5.2, -9.5), by = this.ground(bx, bz) + 0.1, a = yaw + 0.5;
       wood.tint(0.5, 0.36, 0.24, 1).place(bx, by, bz, a, 0, 0.16);
       const rib = (t) => [0.02 + 0.72 * Math.sin(Math.PI * Math.min(1, t * 1.25) * 0.5) * (1 - 0.35 * t * t), 0.5 * t * t];
       for (let k = 0; k < 8; k++) {
@@ -333,37 +334,102 @@ export class PlacesZone {
       wood.pop();
       this.colliders.push({ type: 'circle', x: bx, z: bz, r: 1.25 });
     }
+    const [cx, cz] = at(-1, 0), cy = this.ground(cx, cz); // the fire
     {
-      // the fire: a ring of stones, two logs to sit on, facing the sea
-      const [cx, cz] = at(-1.5, -1.5), cy = this.ground(cx, cz);
-      for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2; rock.tint(0.82 + 0.06 * (k % 2), 0.8, 0.76, 1).place(cx + Math.cos(a) * 0.7, cy - 0.05, cz + Math.sin(a) * 0.7, a * 1.7).cube(0, 0.1, 0, 0.32, 0.26, 0.26, { tile: 1 }).pop(); }
+      // a ring of stones, and four logs to sit on round it (the side of the sea is left open)
+      for (let k = 0; k < 9; k++) { const a = (k / 9) * Math.PI * 2; rock.tint(0.82 + 0.06 * (k % 2), 0.8, 0.76, 1).place(cx + Math.cos(a) * 0.8, cy - 0.05, cz + Math.sin(a) * 0.8, a * 1.7).cube(0, 0.1, 0, 0.34, 0.26, 0.28, { tile: 1 }).pop(); }
       wood.tint(0.26, 0.22, 0.2, 1);
-      for (let k = 0; k < 3; k++) { const a = (k / 3) * Math.PI + 0.4; wood.rod(V(cx - Math.cos(a) * 0.45, cy + 0.08, cz - Math.sin(a) * 0.45), V(cx + Math.cos(a) * 0.45, cy + 0.26, cz + Math.sin(a) * 0.45), 0.08, 6); }
-      parts.get('glow').tint(1, 0.5, 0.14, 1).cylinder(cx, cy + 0.12, cz, 0.24, 0.02, 0.6, 6, { capTop: false });
-      this.colliders.push({ type: 'circle', x: cx, z: cz, r: 0.85 });
-      for (const s of [-1, 1]) {
-        const lx = cx - fx * 1.9 + sx * s * 1.5, lz = cz - fz * 1.9 + sz * s * 1.5, ly = this.ground(lx, lz), tx = Math.cos(yaw - s * 0.5), tz = -Math.sin(yaw - s * 0.5);
-        wood.tint(0.62, 0.52, 0.4, 1).rod(V(lx - tx * 0.9, ly + 0.2, lz - tz * 0.9), V(lx + tx * 0.9, ly + 0.2, lz + tz * 0.9), 0.2, 8);
-        for (const o of [-0.42, 0.42]) this.seats.push(seatAt(lx + tx * o, ly + 0.4, lz + tz * o, Math.atan2(cx - lx, cz - lz)));
-        this.colliders.push({ type: 'circle', x: lx, z: lz, r: 0.5, y0: ly - 1, y1: ly + 0.5 });
+      for (let k = 0; k < 4; k++) { const a = (k / 4) * Math.PI + 0.4; wood.rod(V(cx - Math.cos(a) * 0.5, cy + 0.08, cz - Math.sin(a) * 0.5), V(cx + Math.cos(a) * 0.5, cy + 0.3, cz + Math.sin(a) * 0.5), 0.085, 6); }
+      parts.get('glow').tint(1, 0.5, 0.14, 1).cylinder(cx, cy + 0.12, cz, 0.27, 0.02, 0.7, 6, { capTop: false });
+      this.colliders.push({ type: 'circle', x: cx, z: cz, r: 0.95 });
+      for (const turn of [-2.35, -1.2, 1.2, 2.35]) {
+        // (turn: where the log lies round the fire, 0 = on the side of the sea)
+        const a = yaw + turn, lx = cx + Math.sin(a) * 2.5, lz = cz + Math.cos(a) * 2.5, ly = this.ground(lx, lz), tx = Math.cos(a), tz = -Math.sin(a);
+        wood.tint(0.62, 0.52, 0.4, 1).rod(V(lx - tx * 0.95, ly + 0.2, lz - tz * 0.95), V(lx + tx * 0.95, ly + 0.2, lz + tz * 0.95), 0.2, 8);
+        for (const o of [-0.45, 0.45]) this.seats.push(seatAt(lx + tx * o, ly + 0.4, lz + tz * o, a + Math.PI));
+        this.colliders.push({ type: 'box', x: lx, z: lz, hw: 0.95, hl: 0.2, yaw: a, y0: ly - 1, y1: ly + 0.45 });
       }
     }
     {
-      // a chest half buried in the sand, its lid open on something that shines
-      const [tx, tz] = at(-5.2, 3.4), ty = this.ground(tx, tz);
-      wood.tint(0.42, 0.28, 0.16, 1).place(tx, ty - 0.12, tz, yaw + 2.2, 0.08, 0.1).box(-0.42, 0, -0.28, 0.42, 0.44, 0.28, { tile: 1, faces: 'xXzZy' });
+      // a chest half buried in the sand at the back of the beach, its lid open on something that shines
+      const [tx, tz] = at(-13, 3), ty = this.ground(tx, tz);
+      wood.tint(0.42, 0.28, 0.16, 1).place(tx, ty - 0.12, tz, yaw + 0.3, 0.08, 0.1).box(-0.42, 0, -0.28, 0.42, 0.44, 0.28, { tile: 1, faces: 'xXzZy' });
       wood.place(0, 0.44, -0.28, 0, -1.15).box(-0.42, 0, 0, 0.42, 0.06, 0.56, { tile: 1 }).pop();
       wood.pop();
-      paint.tint(1.4, 1.0, 0.25, 1).place(tx, ty - 0.12, tz, yaw + 2.2, 0.08, 0.1).box(-0.44, 0.1, -0.3, -0.36, 0.34, 0.3).box(0.36, 0.1, -0.3, 0.44, 0.34, 0.3).pop();
-      parts.get('glow').tint(1, 0.78, 0.2, 1).place(tx, ty + 0.2, tz, yaw + 2.2).lathe([[0.0, 0.0], [0.3, 0.0], [0.22, 0.1], [0.0, 0.16]], 7).pop();
+      paint.tint(1.4, 1.0, 0.25, 1).place(tx, ty - 0.12, tz, yaw + 0.3, 0.08, 0.1).box(-0.44, 0.1, -0.3, -0.36, 0.34, 0.3).box(0.36, 0.1, -0.3, 0.44, 0.34, 0.3).pop();
+      parts.get('glow').tint(1, 0.78, 0.2, 1).place(tx, ty + 0.2, tz, yaw + 0.3).lathe([[0.0, 0.0], [0.3, 0.0], [0.22, 0.1], [0.0, 0.16]], 7).pop();
       this.colliders.push({ type: 'circle', x: tx, z: tz, r: 0.5 });
     }
-    // a hammock between its posts, and two beanbag chairs: nobody will come and disturb you here
+    // hammocks under the palms at the back, two rows of beanbag chairs facing the sea, low tables, lanterns:
+    // nobody will come and disturb you here
     {
-      const [hx, hz] = at(-4.6, -5.4);
-      this._hammock(parts, hx, hz, yaw + 1.2, POUF[5]);
+      [[-9.5, -8, 1.25, 5], [-10.5, 0, 1.75, 2], [-9.5, 8, 2.1, 3]].forEach(([f, sd, turn, tone]) => { const [hx, hz] = at(f, sd); this._hammock(parts, hx, hz, yaw + turn, POUF[tone]); });
       const b = parts.get('matte');
-      this._chairs(b, [[1.2, -4.4], [0.6, -6.4]], at, this.ground, yaw);
+      this._chairs(b, [[2.4, -7], [2.6, -4.5], [2.4, -2], [2.4, 2], [2.6, 4.5], [2.4, 7], [-5.2, -7], [-5.6, -4.4], [-5.6, 4.4], [-5.2, 7]], at, this.ground, yaw);
+      for (const [f, sd] of [[2.9, -3.2], [2.9, 3.3], [-5.0, -5.7], [-5.0, 5.7]]) {
+        const [px, pz] = at(f, sd), py = this.ground(px, pz);
+        lowTable(parts, px, py - 0.03, pz, 0.36);
+        this.colliders.push({ type: 'circle', x: px, z: pz, r: 0.34, y0: -100, y1: py + 0.5 });
+      }
+      for (const [f, sd] of [[-7.6, -4.2], [-7.6, 4.2], [0.6, -9.4]]) { const [px, pz] = at(f, sd); lantern(parts, px, this.ground(px, pz), pz, 2.0); this.colliders.push({ type: 'circle', x: px, z: pz, r: 0.14 }); }
+    }
+    {
+      // Somebody has been drinking here: a crate and a keg of "OIL" (these are robots), bottles standing on the
+      // crate, lying in the sand, stuck in it. One texture for every label, one mesh for them all.
+      const glass = parts.get('paint'), labels = [];
+      const label = (c, right, up, w, h) => labels.push([c, right, up, w, h]); // centre, unit vectors along and up, size
+      const bottle = (px, py, pz, turn, pitch = 0, roll = 0, k = 1) => {
+        glass.tint(0.05, 0.11, 0.05, 1).place(px, py, pz, turn, pitch, roll);
+        glass.lathe([[0.0, 0.0], [0.05 * k, 0.0], [0.055 * k, 0.02 * k], [0.055 * k, 0.17 * k], [0.044 * k, 0.215 * k], [0.018 * k, 0.26 * k], [0.018 * k, 0.32 * k], [0.026 * k, 0.325 * k], [0.0, 0.33 * k]], 8);
+        glass.pop();
+        if (!pitch && !roll) label(V(px + Math.sin(turn) * 0.057 * k, py + 0.1 * k, pz + Math.cos(turn) * 0.057 * k), V(Math.cos(turn), 0, -Math.sin(turn)), V(0, 1, 0), 0.085 * k, 0.085 * k);
+      };
+      const [kx0, kz0] = at(-2.6, -3.4), ky0 = this.ground(kx0, kz0), ca = yaw + 0.4;
+      wood.tint(0.78, 0.62, 0.42, 1).place(kx0, ky0 - 0.06, kz0, ca).box(-0.36, 0, -0.3, 0.36, 0.5, 0.3, { tile: 0.8 });
+      for (const e of [-0.36, 0.36]) wood.box(e - 0.03, 0, -0.33, e + 0.03, 0.53, 0.33, { tile: 0.8 });
+      wood.pop();
+      for (const sgn of [-1, 1]) label(V(kx0 + Math.sin(ca) * 0.305 * sgn, ky0 + 0.2, kz0 + Math.cos(ca) * 0.305 * sgn), V(Math.cos(ca) * sgn, 0, -Math.sin(ca) * sgn), V(0, 1, 0), 0.5, 0.25);
+      this.colliders.push({ type: 'circle', x: kx0, z: kz0, r: 0.5, y0: ky0 - 1, y1: ky0 + 0.6 });
+      const top = (lx, lz) => [kx0 + lx * Math.cos(ca) + lz * Math.sin(ca), kz0 - lx * Math.sin(ca) + lz * Math.cos(ca)];
+      [[-0.2, 0.05, 0.3], [0.02, -0.1, 2.0], [0.2, 0.1, 4.1]].forEach(([lx, lz, t], i) => { const [bx, bz] = top(lx, lz); bottle(bx, ky0 + 0.44, bz, ca + t, 0, 0, 1.25 + 0.1 * i); });
+      // the keg, on its side
+      const [kx, kz] = at(-3.8, -5.0), ky = this.ground(kx, kz);
+      wood.tint(0.5, 0.36, 0.22, 1).place(kx, ky + 0.3, kz, yaw + 1.9, 0, Math.PI / 2).lathe([[0.0, -0.42], [0.25, -0.42], [0.31, -0.2], [0.33, 0], [0.31, 0.2], [0.25, 0.42], [0.0, 0.42]], 10, { tile: 0.8 }).pop();
+      paint.tint(0.12, 0.12, 0.13, 1);
+      for (const e of [-0.24, 0.24]) paint.place(kx, ky + 0.3, kz, yaw + 1.9, 0, Math.PI / 2).lathe([[0.315, e - 0.03], [0.325, e], [0.315, e + 0.03]], 10).pop();
+      {
+        const a = yaw + 1.9, ex = Math.cos(a), ez = -Math.sin(a); // the axis of the keg
+        label(V(kx + ex * 0.425, ky + 0.3, kz + ez * 0.425), V(-ez, 0, ex), V(0, 1, 0), 0.4, 0.2);
+      }
+      this.colliders.push({ type: 'circle', x: kx, z: kz, r: 0.42, y0: ky - 1, y1: ky + 0.7 });
+      // empties: round the fire, by the boat, by the chairs, under a hammock
+      for (const [f, sd, t, lying] of [[0.4, -1.7, 0.7, 1], [-2.9, 1.9, 2.2, 1], [-0.2, 1.6, 4.0, 0], [4.4, -7.6, 1.0, 1], [3.4, -5.6, 5.0, 0], [3.5, 0.4, 2.6, 1], [-6.4, 6.0, 3.3, 0], [-8.6, -6.6, 0.4, 1], [3.3, 5.6, 1.7, 0], [-4.4, -2.2, 5.6, 1]]) {
+        const [bx, bz] = at(f, sd), by = this.ground(bx, bz);
+        if (lying) bottle(bx, by + 0.065, bz, t, Math.PI / 2 - 0.06, 0, 1.3); else bottle(bx, by - 0.05, bz, t, 0.22, 0.1, 1.3);
+      }
+      // the labels
+      const canvas = document.createElement('canvas');
+      canvas.width = 256; canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#efe3c2'; ctx.fillRect(0, 0, 256, 128);
+      ctx.strokeStyle = '#3a2a18'; ctx.lineWidth = 8; ctx.strokeRect(8, 8, 240, 112);
+      ctx.fillStyle = '#2a1c10'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = "900 84px Georgia, 'Times New Roman', serif";
+      ctx.fillText('OIL', 128, 68);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const pos = [], uv = [], idx = [];
+      for (const [c, r, u, w, h] of labels) {
+        const i = pos.length / 3;
+        for (const [a, bb] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { pos.push(c.x + r.x * a * w / 2 + u.x * bb * h / 2, c.y + r.y * a * w / 2 + u.y * bb * h / 2, c.z + r.z * a * w / 2 + u.z * bb * h / 2); uv.push((a + 1) / 2, (bb + 1) / 2); }
+        idx.push(i, i + 1, i + 2, i, i + 2, i + 3);
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      geo.setIndex(idx);
+      const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide, toneMapped: false }));
+      mesh.name = 'cove:labels';
+      this.group.add(mesh);
     }
     this._add('cove', parts);
   }

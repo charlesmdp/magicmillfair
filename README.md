@@ -5,7 +5,7 @@ valley closed by mountains — and, a short walk down the valley, a cove with a 
 its big wheel. Around it: a stairway cut in the rock up to a temple lost on its mountain, terraces and pools
 above the great waterfall, caves (one of them behind the fall), sea cliffs with a fall that drops straight
 into the sea, a secret cove, an island with a boulder rolling down its path, a camp with hammocks, beanbag
-chairs to work from, and thirty little villages perched on the peaks. The first game of the fair is open —
+chairs to work from, and fifty little temples perched on the peaks. The first game of the fair is open —
 the Sky Stones, ninety metres of floating stones to climb against the clock. Stylised realism, a cosy
 adventure-game mood, playable with a keyboard, a gamepad or a finger, alone or together — with a chat,
 emotes that summon animals of light, hats, a jetpack, and a few ways to end up WASTED.
@@ -157,7 +157,7 @@ room; `?village=name` arrives straight in a sky village.
 | Run / jump | Shift / Space (Settings → *Run by default* turns Shift into "walk") | buttons on the right | trigger, A button |
 | Zoom | wheel | pinch | |
 | Flying camera | F (Space / C to go up and down, Shift to go faster) | drone button | |
-| Map | M, or click the minimap (click again or Escape to close) | tap the minimap | |
+| Map | M, or click the minimap (click again or Escape to close); its **Mega map** button shows the whole country with the fifty sky villages | tap the minimap | |
 | Jetpack | Space again while in the air: a second and a half of thrust | jump button again | A again |
 | Sit, lie down, board, pick a flower, talk, travel, get up | E when the action is offered (walking away or jumping gets up too) | tap the action shown above the jump button | |
 | Open or close the laptop; second action | L | tap the second action | |
@@ -214,7 +214,8 @@ round the ring (50). The emote panel shows where you stand; the administrator ha
   tell you where); the shark, for those who swim out to where the sea ends; the red mushrooms at the foot of
   the trees (pick one and eat it: a bad idea); `/kill`. A few seconds later you are back on your feet.
 - **A swan dive**: fall more than ten metres towards water deep enough to swim in, and the robot tips over,
-  arms spread, then joined, and goes in head first.
+  arms spread, then joined, and goes in head first. The pool of the great waterfall is deep enough: walk off
+  the lowest terrace above it.
 - **Hats**: none, cap, straw hat, beanie, top hat, cowboy hat, crown, wizard hat (Settings → Hat). Everybody
   sees yours.
 - **Jetpack**: press jump again in the air. A second and a half of thrust, refilled on landing; it does not
@@ -225,8 +226,9 @@ round the ring (50). The emote panel shows where you stand; the administrator ha
   him a question (E, then type — with a question mark, he only does questions) and he answers in one
   sentence that sails past the point and lands on it. What you ask him goes to nobody else.
 - **The sky villages**: step up to the Sky Gate — the stone ring on the lawn between the arrival and the
-  mill — and choose one of thirty villages perched on the mountains: you are carried there, facing the
-  valley. The ring of each village leads back, or on to another village.
+  mill — and choose one of fifty villages perched on the mountains: you are carried there, facing the
+  valley. The ring of each village leads back, or on to another village. A village that nobody has taken
+  yet says so on its sign, with its price; step up to its board to hire it (see *Sky villages for hire*).
 - **Listening**: every place has its sound — the surf on the beach and the water lapping under the pier, the
   wind in the leaves round the mill and the ponds, the roar of the waterfall, brooks, birds, a colder wind up
   in the mountains, drips in the caves — and its music: a fairground waltz on the pier, something quiet
@@ -237,9 +239,21 @@ round the ring (50). The emote panel shows where you stand; the administrator ha
 - And the rest: the big wheel, the hammocks, the beanbags and their laptops, the caves, the animals of light.
 
 Hats and the jetpack are free for now. Whether a visitor has one is asked in a single place
-(`owns()` in `src/player/Cosmetics.js`): that is where a shop would plug in. A sky village is given to a
-company by editing its line in `src/world/layout/sponsors.js` (name, motto, colours, web address); its
-visitors can be sent straight there with `?village=its-name`.
+(`owns()` in `src/player/Cosmetics.js`): that is where a shop would plug in.
+
+### Sky villages for hire
+
+There are fifty villages and there will never be more. Each is for hire by the month, at one of ten prices —
+$19, $49, $99, $199, $499, $999, $1,999, $3,999, $7,999 and $9,999 — five villages at each: the five lowest
+shelves are the cheapest, the five highest the dearest (the order is worked out from the altitudes when the
+game starts; the prices are `VILLAGE_PRICES` in `src/world/layout/sponsors.js`). A village for hire carries
+a made-up name, its price on its sign, and a board that says what hiring it brings (`VILLAGE_PERKS`, same
+file): one of only fifty; your name on the sign and on the Mega map; roofs and flag in your colours; a link
+to your website at the sign; an address of your own to invite people (`?village=its-name`); and a place to
+meet where the nearby chat stays between those who are there.
+
+A village is given to a company by editing its line in `src/world/layout/sponsors.js` (name, motto,
+colours, web address): it then stops being for hire.
 
 ## The world
 
@@ -264,25 +278,32 @@ mountain, under the rock, out at sea.
   valley, down to the pier and the island.
 - **Above the great waterfall**: rock steps climb beside the fall to three terraces, one above the other,
   each with a pool of the torrent and its own fall. Wade in the pools, sit on the bench of the top one —
-  or walk off the brink of the lowest and drop into the pool of the great fall.
+  or walk off the brink of the lowest and dive into the pool of the great fall, sixteen metres below (it
+  is deep, with banks to walk out on).
 - **Caves**: the waterfall shoots clear of the rock — walk through its pool, behind the falling water, into
   a grotto lit by crystals; a narrow passage leads on to a second, hidden room. Two more caves open at the
   foot of the northern mountains (behind the fields) and of the southern ones (near the old tree). All have
-  chairs and a table; they are otherwise empty, ready to receive things.
+  chairs and a table; they are otherwise empty, ready to receive things. A last one is not reached on foot,
+  and is not on the map: somebody hid things there.
 - **Sea cliffs**: where the capes close the cove, the land stands fifty metres and more above the water:
   fluted green faces, a stream that leaves its hanging valley and falls straight into the sea on the
   northern cape.
 - **The secret cove**: it is not named on the map. Swim round the southern cape, along the foot of the
-  cliffs: a pocket of sand shut in by rock, palms, a boat pulled up, a fire, a hammock, a chest.
+  cliffs: a beach in a hollow shut in by rock and woods, palms, a boat pulled up, a fire with four logs
+  round it, ten beanbag chairs facing the sea, three hammocks, low tables, lanterns, a chest — and what is
+  left of a party: a crate and a keg of OIL, empties in the sand (these are robots). Twenty-one places to
+  sit. The sea can also be swum northwards along the cliffs, as far as the fall that drops into it.
 - **The island**: a rock 35 m high, about 80 m off the beach (swim across from the north end of the cove).
   A path winds two and a quarter times round it up to a flat top with a ring of standing stones. Along the
   way: nine hollows cut in the rock on the inner side and, on the outer side, eight timber walkways out over
   the drop (two arms joined by a third along the cliff with a rope rail, or one arm out to a round crow's
   nest) — the places to be when the boulder comes down.
-- **The sky villages**: thirty hamlets on shoulders and tops of the mountains all around, 77 to 233 m up,
-  each with three houses, a sign, a flag, a bench that looks down on the valley and a ring to go back
-  through. They are reached from the Sky Gate only. Their sites are chosen by the world baker (places that
-  see the valley); they are not on the map.
+- **The sky villages**: fifty small temples on shoulders and tops of the mountains all around, 70 to 246 m
+  up. Each has a hall under two pagoda roofs in its colours, two open pavilions with cushions round a low
+  table, more cushions round an incense burner, three benches that look down on the valley, stone lanterns,
+  a flag, its sign and a ring to go back through — twenty places to sit. They are reached from the Sky Gate
+  only. Their sites are chosen by the world baker (places that see the valley); the **Mega map** shows them
+  all.
 - **Places to rest**: a camp in the woods north of the great pond (six hammocks, logs round a fire, two
   tents); beanbags of all colours under a sail at the north end of the beach, and on a deck on stilts over
   the great pond. Sitting on a beanbag brings a laptop onto your knees.
@@ -340,9 +361,11 @@ the secret cove and the sea cliffs included (`?bench=1`):
 | Light on a phone | 79 / 141 | 251,000 / 383,000 | 3.4 ms |
 
 (Computer rows at 1280×720, phone rows at 844×390.) Everything added since the first version — places,
-games, the thirty villages — costs some 25 draw calls on average: each place is merged into one mesh per
+games, the fifty villages — costs some 25 draw calls on average: each place is merged into one mesh per
 material and hidden with distance; a cave is three draw calls, an animal of light two, all the rings on the
-water one, the 162 Sky Stones five, the thirty villages three per sixth of the horizon in view.
+water one, the 162 Sky Stones five. Of the fifty villages only the halls and the rings are drawn from afar
+(one mesh per sixth of the horizon, 41,000 triangles in all); the furniture of a village (2,500 triangles)
+is only drawn for those who stand in it.
 
 **These are not frames per second.** The development environment had no graphics card: rendering is computed
 in software there, which says nothing about real frame rates. Draw calls and triangles are exact; script time
@@ -376,7 +399,7 @@ src/
     zones/places/          stairways, the temple (Temple.js), the terraces, the island, the camp, the beanbags,
                            the secret cove, the fall into the sea; Caves.js builds a cave
     zones/games/           the Sky Stones (course.js works out the stones), the boulder, the acid pond, the shark
-    zones/sky/             the thirty sky villages and the Sky Gate
+    zones/sky/             the fifty sky villages and the Sky Gate
   player/                  animated avatar and its poses, controller (walk, swim, jump, sit, fly, die), cameras,
                            Interact.js (what can be done here), RankEmotes.js (the animals of light),
                            Cosmetics.js (hats, jetpack, bouquet, quad — and who owns what)
@@ -521,7 +544,7 @@ that is the last point. Going further means a referee: the server replaying the 
 | `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (74 in all) |
 | `npm run test:smoke` | drives the real site: welcome screen, walking, free camera, settings, large map (`-- --mobile` for the touch layout) |
 | `npm run test:audio` | Listens to the sound engine without ears: in headless Chromium it renders a dozen listener scenarios (beach, cliffs, pier, woods, mill, waterfall, cave, sky village, the climb…) and every one-shot effect through an offline audio context, measures level, spectrum, how the loudness moves and how tonal it is, fails on silence or clipping, and times `update()` (about 0.01 ms a frame) |
-| `npm run test:walk` | 31 checks in the real game: pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls and the leap from the lowest, the swim to the secret cove, the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the acid pond, the shark, change of tier |
+| `npm run test:walk` | 36 checks in the real game: pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the fifty sky villages (prices, places to sit, the board of one for hire), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the acid pond, the shark, change of tier |
 | `npm run test:duo` | two visitors on the production server: they must see each other move, wave, summon an animal, chat and sit down (`-- --cloudflare` for the Cloudflare version) |
 | `npm run bench` | benchmark tour for each tier (`-- --mobile` for the phone profile) |
 | `npm run profile` | cost of each system (script, draw calls, triangles) at seven viewpoints |
@@ -596,9 +619,9 @@ Game and multiplayer
   boulder in the same place only as far as their devices agree on the time (usually within a second).
 - **Hats and jetpack are free**: "paid later" is only prepared (one function decides who owns what); there
   is no shop, no payment, no account to attach a purchase to.
-- **Sky villages**: all thirty are built and reachable; they carry made-up names until `sponsors.js` is
-  edited. A village is a sign, a flag and roofs in the company's colours — no logo image yet, and the houses
-  are the same thirty times. They are small white dots from the valley.
+- **Sky villages**: all fifty are built and reachable; they carry made-up names until `sponsors.js` is
+  edited. A village is a sign, a flag and roofs in the company's colours — no logo image yet, and the temple
+  is the same fifty times. They are small dots from the valley.
 - **The alligator** speaks from a short list of lines until the host is given an API key. With a key, what
   visitors type to him is sent to the model's provider (Anthropic) to get the answer; the game keeps none of
   it. That path was written from the official SDK's documentation but **has not been run against the real

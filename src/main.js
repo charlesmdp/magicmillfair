@@ -21,6 +21,7 @@ import { formatTime } from './world/zones/games/course.js';
 import { RemoteAvatars } from './net/RemoteAvatars.js';
 import { Benchmark } from './app/Benchmark.js';
 import { SPAWN, ZONES, CLIMB } from './world/layout/layout.js';
+import { VILLAGE_PERKS, money } from './world/layout/sponsors.js';
 import { FEATURES } from './app/config.js';
 import { Soundscape } from './audio/Soundscape.js';
 
@@ -321,6 +322,13 @@ async function boot() {
       .then((i) => { if (i !== null && state.mode === 'walk' && !player.dead) travel(list[i], `Welcome to ${list[i].name}`); });
   };
   const near = (p, q, r) => (p.pos.x - q[0]) ** 2 + (p.pos.z - q[1]) ** 2 < r * r;
+  // (the shop is not open yet: asking to buy says so)
+  const shop = { buy: () => hud.note('Hiring opens soon. Come back shortly!', 5200) };
+  // a village for hire: what it brings, what it costs, and the way to take it
+  const hireVillage = (v) => {
+    hud.choose(`Hire ${v.name}`, `${money(v.price)} a month, for as long as you like. ${VILLAGE_PERKS.join(' · ')}.`, [{ label: `Hire it · ${money(v.price)} a month`, note: 'Your name, your colours, your link', color: v.color }, { label: 'Not now', note: 'Keep looking round' }])
+      .then((i) => { if (i === 0) shop.buy(`village:${v.id}`, v.name); });
+  };
   world.actionSources.push((p) => {
     if (near(p, [sky.gate.x, sky.gate.z], 3.6)) return { label: 'Travel to a sky village', run: chooseVillage };
     const v = sky.villageAt(p.pos.x, p.pos.z);
@@ -330,6 +338,7 @@ async function boot() {
     const v = sky.villageAt(p.pos.x, p.pos.z);
     if (!v) return null;
     if (near(p, v.ring, 3.2)) return { label: 'Another village', run: chooseVillage };
+    if (v.forHire && (near(p, v.board, 3.0) || near(p, v.sign, 3.0))) return { label: `Hire ${v.name} · ${money(v.price)} a month`, run: () => hireVillage(v) };
     return v.url && near(p, v.sign, 3.4) ? { label: `Visit ${v.name}`, run: () => window.open(v.url, '_blank', 'noopener,noreferrer') } : null;
   });
   Object.assign(app, { travel, sky });
@@ -414,6 +423,7 @@ async function boot() {
   input.on('menu', () => { hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); hud.toggleChat(false); hud.closeChoice(); hud.closeRoster(); });
   input.on('map', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleBigMap(); });
   hud.setMap(data.meta.map, ZONES);
+  hud.setVillages(world.sky.villages, data.meta.size, (v) => (v.forHire ? money(v.price) : v.name));
   if (params.has('stats')) hud.setStatsVisible(true);
 
   // ---------- benchmark

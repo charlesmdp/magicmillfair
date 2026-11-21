@@ -131,7 +131,8 @@ export const STREAMS = [
       [-338.5, 144.8, 46.3, 9], [-331.1, 141.7, 46.2, 9], [-328.2, 140.5, 46.0, 3.4], [-325.4, 139.4, 36.5, 4.5],
       [-321.9, 137.9, 36.4, 8.5], [-314.5, 134.9, 36.3, 8.5], [-311.5, 133.7, 36.1, 3.4], [-308.7, 132.5, 27.2, 4.5],
       [-305.2, 131.1, 27.1, 9], [-298.8, 128.4, 27.0, 9], [-294.1, 126.5, 26.7, 4.6],
-      [-289.5, 124.6, 26.4, 2.8], [-285, 123, 11.75, 5.0], [-277, 120.5, 11.6, 4.4], [-266, 118.5, 11.2, 3.2], [-254, 117, 10.85, 3.2],
+      // (the plunge pool: wide and deep, see PLUNGE)
+      [-289.5, 124.6, 26.4, 2.8], [-285, 123, 11.75, 6.0], [-280.5, 124.1, 11.7, 13], [-275.5, 123.1, 11.62, 11.5], [-270.5, 119.8, 11.4, 4.2], [-266, 118.5, 11.2, 3.2], [-254, 117, 10.85, 3.2],
       [-244, 116, 10.55, 3.4], [-236, 114, 10.3, 3.8], [-229, 108, 10.2, 4.5], [-223, 101, 10.2, 6],
     ],
     falls: [0.5, 1.5, 2.5, 6.5, 10.5, 15.5],
@@ -210,6 +211,12 @@ export const COAST = {
   promenadeY: 3.2,
 };
 
+// More sea to swim in, beyond the outline of the valley (BOUNDS shapes the mountains: this does not): along the
+// northern sea cliffs, a few strokes off their foot, as far as the fall that drops into the sea and a little
+// beyond. (It overlaps the bay of the valley along its southern edge.)
+export const SEA_REACH = [
+  [[108, -145], [176, -145], [207, -170], [221, -206], [222, -242], [199, -243], [196, -235], [190, -225], [183, -216], [177, -208], [171, -202], [165, -194], [157, -186], [150, -178], [141, -168], [127, -158], [112, -148]],
+];
 // Where the capes are rock, the land stands high right at the water: sea cliffs, fluted and green, of about
 // `height` metres (more or less along the coast). They only exist outside the playable valley.
 export const SEA_CLIFFS = { height: 52, vary: 20, flute: 4.2, every: 11 };
@@ -217,7 +224,8 @@ export const SEA_CLIFFS = { height: 52, vary: 20, flute: 4.2, every: 11 };
 // way the water goes (towards the sea), the level of the hanging valley it comes from.
 export const SEA_FALL = { x: 168, z: -208, dir: [0.74, 0.67], y: 41, width: 3.4 };
 // The secret cove (see the pocket in COAST.line): reached by swimming round the southern cape.
-export const COVE = { x: 184, z: 193, yaw: -0.62, r: 16 };
+// (x, z): the middle of its camp, on the sand; `sea`: which way the bay lies from there.
+export const COVE = { x: 178, z: 196, sea: [0.93, -0.37], r: 17 };
 
 // The big pier: leaves the promenade, crosses the beach and heads out to sea.
 export const PIER = {
@@ -358,6 +366,11 @@ export const PATHS = [
     points: [[4, 49.6], [3.4, 56], [1.9, 63]],
   },
   {
+    // The race track: a loop round the wheat fields (see RACE). Closed: it ends where it starts.
+    id: 'race', kind: 'gravel', width: 7.5, cut: 1,
+    points: [[-50, -102.5], [-80, -103.5], [-98, -108.5], [-106, -122], [-106, -142], [-96, -156], [-60, -158.5], [-24, -156.5], [4, -152], [20, -144], [26, -130], [22, -116], [8, -107.5], [-20, -104], [-50, -102.5]],
+  },
+  {
     // The path that winds round the island.
     id: 'island', kind: 'dirt', width: 3.0, cut: 0.2,
     points: Array.from({ length: 96 }, (_, i) => { const p = islandPath(i / 95); return [Math.round(p.x * 100) / 100, Math.round(p.z * 100) / 100]; }),
@@ -396,6 +409,11 @@ export const FALLS = {
   seat: { x: -341.5, z: 134.6, yaw: 1.2 },
 };
 
+// The pool at the foot of the great waterfall is dug deep between these two points (`r` metres around the
+// line, `depth` metres under the water): one can leap into it from the lowest terrace, sixteen metres up.
+// Its banks shelve gently (`shelf`: the slope) as far as one can stand, then drop.
+export const PLUNGE = { a: [-285, 123.2], b: [-274.5, 123.2], r: 7.4, depth: 3.3, shelf: 0.72 };
+
 const SQUARE = { x: -378, z: 37 };
 // The temple on the mountain. Its shelf is levelled at `y`; the stairway arrives on the east side, between the
 // two walls of the lookout, under the gate. Each building: centre, yaw (its front, local +X, looks that way).
@@ -428,7 +446,12 @@ export const VILLAGE = {
 // Thirty little villages perched on the mountains all around, one for each company that wants its own:
 // nobody walks there, one is carried (see the Sky Gate). Their sites are chosen by the baker — shoulders and
 // tops that look down on the valley — and written to world.json; who lives where is in sponsors.js.
-export const SKY = { count: 30, pad: 12.5, apart: 64, gate: { x: -110.5, z: -39, yaw: -1.2 } }; // (the gate: on the lawn by the lane, on the way from the arrival to the mill)
+// (`hall`, `pavilions`: where the buildings of a village stand on its shelf — [right, towards the valley] from
+// its middle — and their half sizes; nothing grows under them)
+export const SKY = {
+  count: 50, pad: 12.5, apart: 64, gate: { x: -110.5, z: -39, yaw: -1.2 },
+  hall: { x: 0, z: -8.1, hw: 3.2, hl: 1.9 }, pavilions: [{ x: -7.0, z: -1.6, h: 2.35 }, { x: 7.0, z: -1.6, h: 2.35 }],
+}; // (the gate: on the lawn by the lane, on the way from the arrival to the mill)
 
 // ---------------------------------------------------------------------------
 // Games and dangers
@@ -440,6 +463,10 @@ export const SKY = { count: 30, pad: 12.5, apart: 64, gate: { x: -110.5, z: -39,
 export const CLIMB = { x: 0, z: 80, y: 8.3, r: 13.5, height: 90, gate: [1.6, 64.6], name: 'Mostly Up', tower: { x: -9.5, z: 101, r: 6.2, pitch: 7, turns: 12 } };
 // A pond of acid in a hollow of the north-western woods. Nobody tells you it is there.
 export const ACID = { x: -236, z: -82, r: 4.2 };
+// The race: three laps of the track round the wheat fields (the path 'race'), on a quad, against the clock.
+// `start`: where the line is, as a share of the lap from the first point of the path (one drives the way the
+// path is listed); `boosts` and `jump`: where the pads and the ramp are, the same way.
+export const RACE = { name: 'Quadmania', laps: 3, width: 7.5, start: 0.012, boosts: [0.2, 0.52, 0.86], jump: 0.66 };
 // The boulder of the island: it rolls down the whole path, again and again (seconds; metres per second).
 export const BOULDER = { radius: 1.55, speed: 7.2, period: 52 };
 
@@ -451,7 +478,8 @@ export const BOULDER = { radius: 1.55, speed: 7.2, period: 52 };
 export const CAVES = [
   {
     // behind the waterfall: a chamber under the torrent, then a narrow passage to a second, hidden room
-    id: 'grotto', name: 'The Hidden Grotto', open: 3.6,
+    // (`water`: its mouth opens on water, not on a doorstep of level ground)
+    id: 'grotto', name: 'The Hidden Grotto', open: 3.6, water: true,
     nodes: [
       [-286.1, 122.5, 2.7, 12.0, 3.6], [-290.6, 122.8, 4.3, 12.05, 4.6], [-297.5, 123.5, 7.2, 12.1, 6.2], [-303.0, 121.0, 4.6, 12.2, 4.7],
       [-307.0, 115.5, 2.1, 12.6, 3.1], [-311.0, 109.2, 2.3, 13.2, 3.3], [-316.0, 103.0, 5.9, 13.6, 5.6], [-319.6, 99.2, 2.6, 13.6, 3.0],
@@ -475,6 +503,18 @@ export const CAVES = [
     lights: [[-131.2, 204.5, 'lantern'], [-123.2, 208.8, 'crystal'], [-125.4, 194, 'lantern']],
     chairs: [[-128.6, 208.6, 0.4], [-125.6, 208.4, -0.5], [-127.2, 204.2, 3.14]],
     table: [-127.1, 206.6],
+  },
+  {
+    // in the northern sea cliffs, right behind the fall that drops into the sea: only swimmers find it.
+    // (`reach`: how far in front of the mouth one may come to it — here, from the sea, through the fall;
+    // `slip`: the sea bed rises to its doorstep, to walk out of the water)
+    id: 'sea', name: "The Smugglers' Den", open: 3.2, water: true, slip: 4.5, reach: 13,
+    nodes: [[165.7, -210.15, 2.4, 0.34, 3.4], [161.4, -214.1, 2.4, 0.4, 3.4], [156.8, -217.4, 2.2, 0.55, 3.2], [151.2, -219.2, 2.7, 0.72, 3.6], [144.2, -218.2, 6.8, 0.85, 6.0], [138.4, -216.6, 3.3, 0.85, 3.8]],
+    lights: [[159.2, -214.6, 'lantern'], [149.3, -221.6, 'crystal'], [142.0, -213.6, 'lantern'], [140.6, -220.4, 'crystal'], [139.6, -214.2, 'crystal']],
+    chairs: [[145.5, -220.1, -1.3], [143.9, -220.8, 0.46], [143.6, -219.1, 2.29]],
+    table: [144.4, -219.8],
+    hoard: [139.4, -216.9, 1.84], // a chest that someone left there, open, facing that way
+    stock: [[145.6, -213.3, 'keg'], [144.4, -212.9, 'keg'], [145.8, -223.0, 'keg'], [142.6, -223.2, 'crate'], [143.7, -223.5, 'crate']], // what they were hiding
   },
 ];
 
@@ -585,7 +625,7 @@ export const HERO_TREES = [
   [-9, -84, 'pine', 0.95],
   [-30, 40, 'willow', 0.95],
   // palms on the sand of the secret cove
-  [179.6, 189.6, 'palm', 0.85], [180.6, 200.2, 'palm', 0.95], [176.6, 195.4, 'palm', 0.75],
+  [171.2, 185.8, 'palm', 0.9], [165.6, 191.4, 'palm', 0.8], [166.2, 204.6, 'palm', 0.95], [172.6, 209.4, 'palm', 0.75], [182.4, 186.2, 'palm', 0.7], [183.6, 207.2, 'palm', 0.85],
   // on the island: pines holding on to its ledges, a palm by the landing
   ...[[0.07, 'palm', 0.8, -3.6], [0.2, 'pine', 0.7, 3.3], [0.31, 'cypress', 0.8, 3.2], [0.49, 'pine', 0.85, 3.4], [0.6, 'pine', 0.6, 3.2], [0.7, 'cypress', 0.7, 3.3], [0.8, 'pine', 0.75, 3.3], [0.9, 'pine', 0.55, 3.2]]
     .map(([u, species, scale, off]) => { const p = islandPath(u); return [Math.round((p.x + p.nx * off) * 10) / 10, Math.round((p.z + p.nz * off) * 10) / 10, species, scale]; }),
@@ -609,7 +649,7 @@ export const ZONES = [
   { id: 'stairway', name: 'The Stairway', x: -312, z: 60, r: 40 },
   { id: 'village', name: 'The Lost Temple', x: -380, z: 36, r: 40 },
   { id: 'terraces', name: 'Above the Falls', x: -318, z: 132, r: 30 },
-  { id: 'cove', name: 'The Secret Cove', x: COVE.x + 8, z: COVE.z - 8, r: 30, hidden: true }, // (not named on the map)
+  { id: 'cove', name: 'The Secret Cove', x: COVE.x, z: COVE.z + 2, r: 36, hidden: true }, // (not named on the map)
   { id: 'camp', name: 'The Camp', x: CAMP.x, z: CAMP.z, r: 26 },
   { id: 'climb', name: CLIMB.name, x: CLIMB.x, z: CLIMB.z, r: 24 },
   { id: 'skygate', name: 'The Sky Gate', x: SKY.gate.x, z: SKY.gate.z, r: 9 },
@@ -618,6 +658,7 @@ export const ZONES = [
   { id: 'grotto', name: 'The Hidden Grotto', x: -303, z: 114, r: 21 },
   { id: 'north', name: 'Echo Cave', x: -34, z: -190, r: 17 },
   { id: 'south', name: 'Hollow of the Old Tree', x: -126, z: 201, r: 16 },
+  { id: 'sea', name: "The Smugglers' Den", x: 150, z: -217, r: 17, hidden: true }, // (nor is this one)
 ];
 
 // The playable area (closed polygon). On land it is the foot of the mountains; at sea, how far one can swim.
@@ -628,8 +669,10 @@ export const BOUNDS = [
   // the cove
   [122, -150], [172, -148], [222, -116], [246, -40], [262, 40],
   // round the southern cape, out at sea, to the secret cove and back along the foot of the cliffs
-  [288, 110], [292, 168], [272, 202], [247, 185], [229, 171], [215, 184], [203, 193], [191, 196],
-  [181, 204], [174, 193], [178, 180], [197, 171], [202, 158], [196, 146], [177, 128],
+  [288, 110], [292, 168], [272, 202], [247, 185], [229, 171], [215, 184],
+  // (the land of the secret cove: its beach, the hollow behind it, up to the foot of the slopes)
+  [205, 197], [199, 210], [190, 221], [176, 225], [161, 221], [153, 208], [153, 193], [161, 183], [173, 178], [186, 174],
+  [197, 171], [202, 158], [196, 146], [177, 128],
   [170, 114], [130, 106],
   // south side, east to west
   [92, 113], [60, 126], [22, 146], [-22, 166], [-70, 178], [-124, 184], [-176, 180], [-222, 166], [-256, 146], [-279, 131],

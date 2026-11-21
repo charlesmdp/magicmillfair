@@ -18,11 +18,12 @@ import { PlacesZone } from './zones/places/PlacesZone.js';
 import { GamesZone } from './zones/games/GamesZone.js';
 import { SkyZone } from './zones/sky/SkyZone.js';
 import { Collision } from './Collision.js';
+import { Polygon } from './Areas.js';
 import { Rocks } from './props/Rocks.js';
 import { Mushrooms } from './props/Mushrooms.js';
 import { Birds } from './wildlife/Birds.js';
 import { Ripples } from './water/Ripples.js';
-import { PIER, ISLAND } from './layout/layout.js';
+import { PIER, ISLAND, SEA_REACH } from './layout/layout.js';
 
 const LAYER_NAMES = ['lawn', 'meadow', 'forest', 'dirt', 'rock', 'sand', 'gravel', 'soil'];
 
@@ -167,6 +168,7 @@ export class World {
       else col.addCircle(c.x, c.z, c.r, c.y0, c.y1);
     }
     for (const a of [...this.places.areas, ...this.sky.areas]) col.addArea(a);
+    for (const outline of SEA_REACH) col.addArea(new Polygon(outline, { name: 'sea' }));
     for (const p of [...(this.mill.platforms || []), ...this.places.platforms, ...this.games.platforms, ...this.sky.platforms]) {
       if (p.type === 'custom') {
         col.addPlatform({ clearance: p.clearance ?? 1.0, thick: p.thick, heightAt: p.heightAt });
