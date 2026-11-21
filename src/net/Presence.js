@@ -12,6 +12,7 @@ const SEND_MS = 1000 / 12; // own state goes out at ~12 Hz…
 const KEEPALIVE_MS = 2000; // …or every 2 s while nothing changes (unless the relay asks for another period, or none)
 const FALLBACK_MS = 2500; // no server after that long: same-browser presence takes over
 const PROBE_MS = 30000; // then the same-origin server is probed again at this period
+const MAX_SHARDS = 16; // how many rooms in a row are tried when they are full
 
 const now = () => performance.now();
 const round = (v, k) => Math.round(v * k) / k;
@@ -56,6 +57,10 @@ export class Presence {
     this._url = url;
     this.room = cleanRoom(room) || cleanRoom(this._query.get('room'))
       || cleanRoom(this._page.pathname.replace(/\/index\.html?$/i, '').replace(/_/g, '-')) || 'main';
+    // A room holds a limited number of visitors: when it is full the relay says so, and the next ones gather
+    // in "<room>-2", then "<room>-3"… `room` is the one in use, `shard` its number (1 = the room asked for).
+    this.baseRoom = this.room;
+    this.shard = 1;
     this.name = cleanName(name ?? stored('mmf.name'), '') || `Visitor ${10 + Math.floor(Math.random() * 90)}`;
     this.color = int(color, 15, int(parseInt(stored('mmf.color'), 10), 15, Math.floor(Math.random() * 16)));
     this._persist();
@@ -90,7 +95,8 @@ export class Presence {
       const explicit = this._url || (import.meta.env && import.meta.env.VITE_WS_URL) || this._query.get('ws');
       const target = explicit || /^https?:$/.test(this._page.protocol) ? wsUrl(explicit || '/ws', this.room) : null;
       if (target) {
-        this._ws = new WebSocketTransport(target, this._handlers('online'), { probeEvery: explicit ? 0 : PROBE_MS });
+        this._dial = (room) => new WebSocketTransport(wsUrl(explicit || '/ws', room), this._handlers('online'), { probeEvery: explicit ? 0 : PROBE_MS });
+        this._ws = this._dial(this.room);
         this._ws.open(); // keeps retrying in the background, whatever the fallback does
       }
       this._fallback(target ? FALLBACK_MS : 0);
@@ -170,6 +176,7 @@ export class Presence {
         try { this._message(tr, mode, m); } catch (err) { console.warn('[presence]', err); }
       },
       onclose: (tr) => {
+        if (tr.full && tr !== this._tr) return this._overflow(tr); // turned away from a full room
         if (tr !== this._tr) return;
         this._tr = null; // peers stay frozen for a moment: a quick reconnection will not make them blink
         this._fallback(FALLBACK_MS);
@@ -192,8 +199,19 @@ export class Presence {
     }, delay);
   }
 
+  // The room is full: try the next one (after sixteen of them, start again from the first a little later).
+  _overflow(tr) {
+    if (tr !== this._ws || !this._dial) return;
+    tr.close();
+    this.shard = this.shard >= MAX_SHARDS ? 1 : this.shard + 1;
+    this.room = this.shard === 1 ? this.baseRoom : `${this.baseRoom.slice(0, 44)}-${this.shard}`;
+    this._ws = this._dial(this.room);
+    if (this.shard === 1) setTimeout(() => { if (!this._disposed) this._ws.open(); }, 8000); else this._ws.open();
+  }
+
   _message(tr, mode, m) {
     if (!m || typeof m !== 'object' || this._disposed) return;
+    if (m.t === 'full') { if (tr !== this._tr) tr.full = true; return; } // (acted upon when the relay then hangs up, see onclose)
     if (m.t === 'welcome') {
       if (Number.isInteger(m.id)) this._welcome(tr, mode, m);
     } else if (tr !== this._tr) return;
@@ -214,6 +232,7 @@ export class Presence {
   _welcome(tr, mode, m) {
     clearTimeout(this._timer);
     if (this._bc && tr !== this._bc) { this._bc.close(); this._bc = null; }
+    if (tr) tr.full = false;
     this._tr = tr; this.mode = mode; this.id = m.id;
     this._interval = Math.max(SEND_MS, Number.isFinite(m.tick) ? m.tick : 0);
     // `idle`: how often to repeat an unchanged state. 0 = never (a relay that keeps the last state of everyone

@@ -3,17 +3,44 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#1b2a22" />
+    <meta name="theme-color" content="#1b1340" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Magic Mill Fair</title>
-    <meta name="description" content="A 3D world to explore: an old mill, its ponds and its valley between the mountains, and a grand pier by the sea." />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%231b2a22'/%3E%3Cg stroke='%23f2c14e' stroke-width='2' fill='none'%3E%3Ccircle cx='16' cy='16' r='9'/%3E%3Cpath d='M16 7v18M7 16h18M9.6 9.6l12.8 12.8M22.4 9.6L9.6 22.4'/%3E%3C/g%3E%3C/svg%3E" />
+    <meta name="description" content="A fair to wander in, in 3D: an old mill and its valley between the mountains, a grand pier with its big wheel, games, secrets, and friends to meet." />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <link rel="stylesheet" href="/src/ui/styles.css" />
   </head>
   <body>
     <canvas id="view" tabindex="0" aria-label="3D world"></canvas>
-    <div id="ui"></div>
+    <!-- the gate of the fair: drawn by the page itself, so that it is there before any script has loaded -->
+    <div id="ui">
+      <div class="splash">
+        <svg class="bunting" viewBox="0 0 1000 130" preserveAspectRatio="none" aria-hidden="true"><path d="M0 14 L25.0 17.6 L50.0 21.2 L75.0 24.7 L100.0 28.2 L125.0 31.6 L150.0 34.9 L175.0 38.0 L200.0 41.0 L225.0 43.9 L250.0 46.5 L275.0 49.0 L300.0 51.2 L325.0 53.2 L350.0 55.0 L375.0 56.5 L400.0 57.7 L425.0 58.7 L450.0 59.4 L475.0 59.9 L500.0 60.0 L525.0 59.9 L550.0 59.4 L575.0 58.7 L600.0 57.7 L625.0 56.5 L650.0 55.0 L675.0 53.2 L700.0 51.2 L725.0 49.0 L750.0 46.5 L775.0 43.9 L800.0 41.0 L825.0 38.0 L850.0 34.9 L875.0 31.6 L900.0 28.2 L925.0 24.7 L950.0 21.2 L975.0 17.6 L1000.0 14.0" fill="none" stroke="#f6e7c8" stroke-width="2.5" opacity="0.8"/><path d="M7.1 15.0L51.8 21.4L29.4 76.2Z" fill="#c8102e"/><path d="M65.9 23.5L110.6 29.7L88.2 84.6Z" fill="#f6e7c8"/><path d="M124.7 31.6L169.4 37.3L147.1 92.5Z" fill="#f2c14e"/><path d="M183.5 39.1L228.2 44.2L205.9 99.7Z" fill="#2f9aa8"/><path d="M242.4 45.7L287.1 50.1L264.7 105.9Z" fill="#c8102e"/><path d="M301.2 51.3L345.9 54.7L323.5 111.0Z" fill="#f6e7c8"/><path d="M360.0 55.6L404.7 58.0L382.4 114.8Z" fill="#f2c14e"/><path d="M418.8 58.5L463.5 59.7L441.2 117.1Z" fill="#2f9aa8"/><path d="M477.6 59.9L522.4 59.9L500.0 117.9Z" fill="#c8102e"/><path d="M536.5 59.7L581.2 58.5L558.8 117.1Z" fill="#f6e7c8"/><path d="M595.3 58.0L640.0 55.6L617.6 114.8Z" fill="#f2c14e"/><path d="M654.1 54.7L698.8 51.3L676.5 111.0Z" fill="#2f9aa8"/><path d="M712.9 50.1L757.6 45.7L735.3 105.9Z" fill="#c8102e"/><path d="M771.8 44.2L816.5 39.1L794.1 99.7Z" fill="#f6e7c8"/><path d="M830.6 37.3L875.3 31.6L852.9 92.5Z" fill="#f2c14e"/><path d="M889.4 29.7L934.1 23.5L911.8 84.6Z" fill="#2f9aa8"/><path d="M948.2 21.4L992.9 15.0L970.6 76.2Z" fill="#c8102e"/></svg>
+        <div class="card">
+          <div class="awning" aria-hidden="true"></div>
+          <svg class="wheel" viewBox="0 0 120 138" aria-hidden="true"><path class="stand" d="M60 60L34 134h52z" fill="none" stroke="#f2c14e" stroke-width="4" stroke-linejoin="round"/><g class="turn"><g fill="none" stroke="#f2c14e" stroke-width="3.2" stroke-linecap="round"><circle cx="60" cy="60" r="46"/><circle cx="60" cy="60" r="30" opacity="0.55"/><path d="M60 60L106.0 60.0M60 60L97.2 87.0M60 60L74.2 103.7M60 60L45.8 103.7M60 60L22.8 87.0M60 60L14.0 60.0M60 60L22.8 33.0M60 60L45.8 16.3M60 60L74.2 16.3M60 60L97.2 33.0"/></g><circle cx="106.0" cy="60.0" r="6.2" fill="#f2c14e" stroke="#1b1340" stroke-width="1.6"/><circle cx="97.2" cy="87.0" r="6.2" fill="#3fb6c9" stroke="#1b1340" stroke-width="1.6"/><circle cx="74.2" cy="103.7" r="6.2" fill="#f6e7c8" stroke="#1b1340" stroke-width="1.6"/><circle cx="45.8" cy="103.7" r="6.2" fill="#7bd66b" stroke="#1b1340" stroke-width="1.6"/><circle cx="22.8" cy="87.0" r="6.2" fill="#e8795a" stroke="#1b1340" stroke-width="1.6"/><circle cx="14.0" cy="60.0" r="6.2" fill="#3fb6c9" stroke="#1b1340" stroke-width="1.6"/><circle cx="22.8" cy="33.0" r="6.2" fill="#f6e7c8" stroke="#1b1340" stroke-width="1.6"/><circle cx="45.8" cy="16.3" r="6.2" fill="#7bd66b" stroke="#1b1340" stroke-width="1.6"/><circle cx="74.2" cy="16.3" r="6.2" fill="#f2c14e" stroke="#1b1340" stroke-width="1.6"/><circle cx="97.2" cy="33.0" r="6.2" fill="#e8795a" stroke="#1b1340" stroke-width="1.6"/></g><circle cx="60" cy="60" r="7" fill="#f2c14e" stroke="#1b1340" stroke-width="2"/></svg>
+          <div class="bulbs" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <h1 class="title">Magic <em>Mill</em> Fair</h1>
+          <div class="bulbs" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <p class="subtitle">An old mill, its ponds and its valley between the mountains… and down by the sea, a grand pier with its big wheel. Step right up!</p>
+          <div class="bar"><i></i></div>
+          <div class="hint load">Opening the gates…</div>
+          <div class="form">
+            <label for="mmf-name">Your name</label>
+            <input id="mmf-name" type="text" maxlength="16" autocomplete="off" spellcheck="false" />
+            <label>Colour</label>
+            <div class="swatches"></div>
+            <button class="go" type="button">Step right up!</button>
+            <div class="keys"></div>
+          </div>
+          <div class="version"></div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

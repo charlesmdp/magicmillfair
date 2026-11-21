@@ -1,17 +1,19 @@
-// Places reached from the valley: the stairway cut in the rock and the village high above, the island and its
-// winding path, the camp and its hammocks, the beanbags of the beach and of the deck on the pond.
+// Places reached from the valley: the stairway cut in the rock and the temple high above, the terraces over
+// the great waterfall, the island and its winding path, the camp and its hammocks, the beanbags of the beach
+// and of the deck on the pond, the secret cove and the fall that drops from the cliffs into the sea.
 // Each place is merged into one mesh per material and hidden when too far to matter.
 import * as THREE from 'three';
 import { Parts } from '../../props/MeshBuilder.js';
 import { staticCaster, LAYER } from '../../../render/Shadows.js';
 import { mergeStatic, distanceCuller } from '../../props/StaticBatch.js';
 import { stairs, wall, footbridge } from '../../props/Structures.js';
-import { buildOutbuilding } from '../mill/MillHouse.js';
 import { Corridor, Polygon } from '../../Areas.js';
 import { buildCave } from './Caves.js';
+import { buildTemple } from './Temple.js';
+import { fallsRibbon } from '../../water/Falls.js';
 import { seatAt } from '../../../player/PlayerController.js';
 import { ANIM } from '../../../player/Character.js';
-import { STAIRWAY, VILLAGE, ISLAND, islandPath, CAMP, BEACH_LOUNGE, POND_DECK, LEVELS, CAVES } from '../../layout/layout.js';
+import { STAIRWAY, VILLAGE, FALLS, COVE, ISLAND, islandPath, CAMP, BEACH_LOUNGE, POND_DECK, LEVELS, CAVES } from '../../layout/layout.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 // hammock and tent cloths
@@ -150,8 +152,11 @@ export class PlacesZone {
   }
 
   build() {
-    this._stairway();
-    this._village();
+    this._stairs(STAIRWAY, 'stairway', { stones: true });
+    this._temple();
+    this._terraces();
+    this._cove();
+    this._seaFall();
     this._island();
     this._camp();
     this._beach();
@@ -171,19 +176,20 @@ export class PlacesZone {
     // the village and its stairway are landmarks; furniture and small things go with distance
     const k = this.world.engine.tier.phone ? 0.6 : 1; // furniture goes sooner on a phone
     this._cull = distanceCuller(this.group, [
-      [/^village:(stone|slate)$/, Infinity], [/^stairway:rock$/, Infinity], [/^stairway:/, 420 * k], [/^village:/, 300 * k],
+      [/^temple:(slate|matte|paint|granite)$/, Infinity], [/^temple:/, 420 * k], [/^stairway:rock$/, Infinity], [/^stairway:/, 420 * k],
+      [/^terraces:rock$/, 600 * k], [/^terraces:/, 260 * k], [/^cove:/, 260 * k], [/^seafall/, Infinity],
       [/^cave-\w+:cave$/, 170 * k], [/^cave-/, 80 * k], [/^island:/, 340 * k], [/^camp/, 230 * k], [/^beach:/, 280 * k], [/^deck:(woodDeck|woodWet)$/, 520 * k], [/^deck:/, 240 * k],
     ]);
     return this;
   }
 
   // ---------------------------------------------------------------------------
-  // The stairway: five flights of steps cut in the rock, a landing at each corner
+  // Stairways: flights of steps cut in the rock, a landing at each corner (see STAIRWAY and FALLS.stairs)
 
-  _stairway() {
+  _stairs(def, place, { stones = false } = {}) {
     const parts = new Parts();
     const rock = parts.get('rock'), slab = parts.get('granite');
-    const pts = STAIRWAY.points, w = STAIRWAY.width, L = STAIRWAY.landing;
+    const pts = def.points, w = def.width, L = def.landing;
     const nodes = [];
     for (let k = 0; k + 1 < pts.length; k++) {
       const [ax, az, ay] = pts[k], [bx, bz, by] = pts[k + 1];
@@ -208,74 +214,29 @@ export class PlacesZone {
         this.colliders.push({ type: 'circle', x: x + ox * (L + 0.9), z: z + oz * (L + 0.9), r: 0.7 });
       }
     }
-    // at the foot: two standing stones mark the way up
-    const [fx, fz, fy] = pts[0], [nx, nz] = pts[1];
-    const l0 = Math.hypot(nx - fx, nz - fz), tx = (nx - fx) / l0, tz = (nz - fz) / l0;
-    for (const s of [-1, 1]) {
-      const px = fx - tx * 1.2 + -tz * s * 2.0, pz = fz - tz * 1.2 + tx * s * 2.0, gy = this.ground(px, pz);
-      rock.tint(0.86, 0.84, 0.8, 1).place(px, gy - 0.3, pz, 0.4 * s, 0.05 * s, 0).box(-0.32, 0, -0.26, 0.32, 2.3, 0.26, { tile: 1.6 }).box(-0.2, 2.3, -0.16, 0.2, 2.6, 0.16, { tile: 1.6 }).pop();
-      this.colliders.push({ type: 'circle', x: px, z: pz, r: 0.45 });
+    if (stones) {
+      // at the foot: two standing stones mark the way up
+      const [fx, fz] = pts[0], [nx, nz] = pts[1];
+      const l0 = Math.hypot(nx - fx, nz - fz), tx = (nx - fx) / l0, tz = (nz - fz) / l0;
+      for (const s of [-1, 1]) {
+        const px = fx - tx * 1.2 + -tz * s * 2.0, pz = fz - tz * 1.2 + tx * s * 2.0, gy = this.ground(px, pz);
+        rock.tint(0.86, 0.84, 0.8, 1).place(px, gy - 0.3, pz, 0.4 * s, 0.05 * s, 0).box(-0.32, 0, -0.26, 0.32, 2.3, 0.26, { tile: 1.6 }).box(-0.2, 2.3, -0.16, 0.2, 2.6, 0.16, { tile: 1.6 }).pop();
+        this.colliders.push({ type: 'circle', x: px, z: pz, r: 0.45 });
+      }
     }
-    void fy;
-    this.areas.push(new Corridor(nodes, { name: 'stairway' }));
-    this._add('stairway', parts);
+    this.areas.push(new Corridor(nodes, { name: place }));
+    this._add(place, parts);
   }
 
   // ---------------------------------------------------------------------------
-  // The village: a few stone houses round a square, a chapel, a fountain, and the lookout over the valley
+  // The temple on the mountain (see Temple.js), and the lookout over the valley at its edge
 
-  _village() {
+  _temple() {
     const y = VILLAGE.y + 0.04;
-    const tan = (deg) => Math.tan((deg * Math.PI) / 180);
-    VILLAGE.houses.forEach((h, i) => {
-      const p = new Parts(), hl = h.l / 2;
-      buildOutbuilding(p, {
-        W: h.w, L: h.l, eave: h.h, ridge: h.h + (h.w / 2) * tan(40 + (i % 3) * 3), base: -1.2,
-        doors: [{ side: 'e', at: hl + (i % 2 ? 0.9 : -0.6), w: 1.05, h: 2.02 }],
-        windows: [
-          { side: 'e', at: hl - 2.5, sill: 1.05 }, { side: 'e', at: hl + 2.6, sill: 1.05 },
-          { side: 'w', at: hl - 1.6, sill: 1.1 }, { side: 'w', at: hl + 1.8, sill: 1.1 },
-          { side: i % 2 ? 's' : 'n', at: h.w / 2, sill: 1.15, w: 0.8 },
-        ],
-        chimneyAt: (i % 2 ? 1 : -1) * (hl - 0.35), copings: i % 2 === 0,
-      });
-      // a stone step at the door (the wall runs from +Z to -Z)
-      const st = p.get('granite'), dz = i % 2 ? -0.9 : 0.6;
-      st.tint(0.8, 0.78, 0.75, 1).box(h.w / 2, -0.3, dz - 0.8, h.w / 2 + 0.5, 0.08, dz + 0.8, { tile: 1 });
-      this._add('village', p, h, y);
-      this.colliders.push({ type: 'box', x: h.x, z: h.z, hw: h.w / 2 + 0.12, hl: hl + 0.12, yaw: h.yaw });
-    });
-    {
-      // the chapel: a taller nave, a bell in its little tower over the door
-      const c = VILLAGE.chapel, p = new Parts(), hl = c.l / 2, ridge = c.h + (c.w / 2) * tan(52);
-      buildOutbuilding(p, {
-        W: c.w, L: c.l, eave: c.h, ridge, base: -1.2,
-        doors: [{ side: 's', at: c.w / 2, w: 1.2, h: 2.3 }],
-        windows: [{ side: 'e', at: hl - 1.6, sill: 1.3, w: 0.55, h: 1.3 }, { side: 'e', at: hl + 1.6, sill: 1.3, w: 0.55, h: 1.3 }, { side: 'w', at: hl - 1.6, sill: 1.3, w: 0.55, h: 1.3 }, { side: 'w', at: hl + 1.6, sill: 1.3, w: 0.55, h: 1.3 }],
-        copings: true,
-      });
-      const stone = p.get('stone'), slate = p.get('slate'), paint = p.get('paint');
-      const z0 = hl - 0.7, z1 = hl + 0.05, top = ridge + 2.4;
-      stone.tint(0.96, 0.95, 0.94, 1);
-      for (const s of [-1, 1]) stone.box(s * 0.75 - 0.22, ridge - 1.2, z0, s * 0.75 + 0.22, top, z1, { tile: 2 });
-      stone.box(-0.97, top, z0 - 0.05, 0.97, top + 0.3, z1 + 0.05, { tile: 2 });
-      slate.tint(0.9, 0.9, 0.92, 1);
-      const apex = V(0, top + 1.3, (z0 + z1) / 2), q = [V(-1.05, top + 0.3, z1 + 0.12), V(1.05, top + 0.3, z1 + 0.12), V(1.05, top + 0.3, z0 - 0.12), V(-1.05, top + 0.3, z0 - 0.12)];
-      for (let k = 0; k < 4; k++) slate.tri(q[k], q[(k + 1) % 4], apex, { tile: 2 });
-      paint.tint(0.35, 0.27, 0.1, 1).place(0, ridge + 1.05, (z0 + z1) / 2).lathe([[0.3, 0.0], [0.25, 0.12], [0.17, 0.36], [0.05, 0.44]], 10).pop(); // the bell
-      this._add('village', p, c, y);
-      this.colliders.push({ type: 'box', x: c.x, z: c.z, hw: c.w / 2 + 0.12, hl: hl + 0.12, yaw: c.yaw });
-    }
     const parts = new Parts();
-    {
-      // fountain in the middle of the square
-      const f = VILLAGE.fountain, g = parts.get('granite'), water = parts.get('glass');
-      g.tint(0.8, 0.79, 0.76, 1).place(f.x, y, f.z);
-      g.lathe([[1.75, -0.3], [1.75, 0.62], [1.5, 0.62], [1.5, 0.12], [0.3, 0.1], [0.3, 1.5], [0.55, 1.6], [0.55, 1.7], [0.1, 1.95]], 14, { tile: 1.5 });
-      g.pop();
-      water.tint(0.5, 0.75, 0.8, 1).cylinder(f.x, y + 0.5, f.z, 1.5, 1.5, 0.02, 14);
-      this.colliders.push({ type: 'circle', x: f.x, z: f.z, r: 1.85 });
-    }
+    const built = buildTemple(parts, VILLAGE, y, this.ground);
+    this.colliders.push(...built.colliders);
+    this.platforms.push(...built.platforms);
     {
       // the lookout: a low dry-stone wall along the edge above the valley, benches facing the view
       const dry = parts.get('stone'), cap = parts.get('granite');
@@ -290,10 +251,121 @@ export class PlacesZone {
       const stone = parts.get('granite');
       for (const bz of [47.5, 42.5, 37.5]) this._bench(stone, -355.1, y, bz, Math.PI / 2);
       this._bench(stone, -355.1, y, 22.5, Math.PI / 2);
-      for (const [lx, lz] of [[-355.6, 33.2], [-355.6, 26.8], [-372, 30], [-384, 44], [-370, 46]]) lantern(parts, lx, y, lz, 2.3);
     }
-    this.areas.push(new Polygon(VILLAGE.outline, { name: 'village' }));
-    this._add('village', parts);
+    this.areas.push(new Polygon(VILLAGE.outline, { name: 'temple' }));
+    this._add('temple', parts);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Above the great waterfall: three terraces, a pool of the torrent on each, steps from one to the next
+
+  _terraces() {
+    FALLS.stairs.forEach((st) => this._stairs(st, 'terraces'));
+    const parts = new Parts();
+    FALLS.levels.forEach((t, k) => {
+      // (the lowest terrace reaches the brink of the great fall: one can leap from it into the pool below)
+      const bank = k === 0 ? [...t.bank, [-280.5, 127.5], [-280.5, 121.5]] : t.bank;
+      this.areas.push(new Polygon(bank, { name: 'terraces' }));
+    });
+    // a cairn where each flight arrives, a lantern by each pool
+    const rock = parts.get('rock');
+    for (const st of FALLS.stairs) {
+      const [x, z, y] = st.points[st.points.length - 1], p = st.points[st.points.length - 2];
+      const l = Math.hypot(x - p[0], z - p[1]), sx = -(z - p[1]) / l, sz = (x - p[0]) / l;
+      const cx = x + sx * 2.4, cz = z + sz * 2.4;
+      for (let i = 0; i < 4; i++) rock.tint(0.9 - 0.04 * i, 0.88 - 0.04 * i, 0.84, 1).place(cx, y - 0.1 + i * 0.3, cz, i * 1.1).cube(0, 0.15, 0, 0.62 - i * 0.12, 0.3, 0.5 - i * 0.09, { tile: 1.2 }).pop();
+      this.colliders.push({ type: 'circle', x: cx, z: cz, r: 0.45 });
+      lantern(parts, x - sx * 2.3, y, z - sz * 2.3, 2.0);
+    }
+    // on the top terrace: a stone bench that looks down the three falls
+    const S = FALLS.seat;
+    this._bench(parts.get('granite'), S.x, FALLS.levels[2].y, S.z, S.yaw);
+    this._add('terraces', parts);
+  }
+
+  // ---------------------------------------------------------------------------
+  // The secret cove: a beach shut in by the cliffs. A boat pulled up on the sand, a fire, a hammock, a chest.
+
+  _cove() {
+    const parts = new Parts();
+    const wood = parts.get('woodDark'), rock = parts.get('rock'), paint = parts.get('paint');
+    const { x, z, yaw } = COVE, fx = Math.sin(yaw), fz = Math.cos(yaw), sx = fz, sz = -fx; // towards the sea, and along the beach
+    const at = (f, s) => [x + fx * f + sx * s, z + fz * f + sz * s];
+    {
+      // the boat: clinker planks, two thwarts, an oar across them
+      const [bx, bz] = at(1.5, 4.6), by = this.ground(bx, bz) + 0.1, a = yaw + 0.5;
+      wood.tint(0.5, 0.36, 0.24, 1).place(bx, by, bz, a, 0, 0.16);
+      const rib = (t) => [0.02 + 0.72 * Math.sin(Math.PI * Math.min(1, t * 1.25) * 0.5) * (1 - 0.35 * t * t), 0.5 * t * t];
+      for (let k = 0; k < 8; k++) {
+        const t0 = -1 + k / 4, t1 = -1 + (k + 1) / 4, w0 = rib(Math.abs(t0)), w1 = rib(Math.abs(t1));
+        const hw0 = 0.78 * (1 - t0 * t0 * 0.85) + 0.04, hw1 = 0.78 * (1 - t1 * t1 * 0.85) + 0.04;
+        for (const s of [-1, 1]) {
+          const A = V(s * hw0, 0.52 + w0[1] * 0.3, t0 * 2.0), B = V(s * hw1, 0.52 + w1[1] * 0.3, t1 * 2.0), C = V(s * hw1 * 0.35, 0.02, t1 * 1.9), D = V(s * hw0 * 0.35, 0.02, t0 * 1.9);
+          if (s > 0) wood.quad(A, B, C, D, { tile: 1 }).quad(D, C, B, A, { tile: 1 }); else wood.quad(B, A, D, C, { tile: 1 }).quad(C, D, A, B, { tile: 1 });
+        }
+        wood.quad(V(-hw0 * 0.35, 0.02, t0 * 1.9), V(hw0 * 0.35, 0.02, t0 * 1.9), V(hw1 * 0.35, 0.02, t1 * 1.9), V(-hw1 * 0.35, 0.02, t1 * 1.9), { tile: 1 });
+      }
+      wood.tint(0.7, 0.55, 0.38, 1).box(-0.66, 0.34, -0.62, 0.66, 0.38, -0.38, { tile: 1 }).box(-0.7, 0.34, 0.5, 0.7, 0.38, 0.74, { tile: 1 });
+      wood.tint(0.85, 0.72, 0.5, 1).rod(V(-0.5, 0.42, -1.3), V(0.45, 0.42, 1.5), 0.03, 5);
+      wood.pop();
+      this.colliders.push({ type: 'circle', x: bx, z: bz, r: 1.25 });
+    }
+    {
+      // the fire: a ring of stones, two logs to sit on, facing the sea
+      const [cx, cz] = at(-1.5, -1.5), cy = this.ground(cx, cz);
+      for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2; rock.tint(0.82 + 0.06 * (k % 2), 0.8, 0.76, 1).place(cx + Math.cos(a) * 0.7, cy - 0.05, cz + Math.sin(a) * 0.7, a * 1.7).cube(0, 0.1, 0, 0.32, 0.26, 0.26, { tile: 1 }).pop(); }
+      wood.tint(0.26, 0.22, 0.2, 1);
+      for (let k = 0; k < 3; k++) { const a = (k / 3) * Math.PI + 0.4; wood.rod(V(cx - Math.cos(a) * 0.45, cy + 0.08, cz - Math.sin(a) * 0.45), V(cx + Math.cos(a) * 0.45, cy + 0.26, cz + Math.sin(a) * 0.45), 0.08, 6); }
+      parts.get('glow').tint(1, 0.5, 0.14, 1).cylinder(cx, cy + 0.12, cz, 0.24, 0.02, 0.6, 6, { capTop: false });
+      this.colliders.push({ type: 'circle', x: cx, z: cz, r: 0.85 });
+      for (const s of [-1, 1]) {
+        const lx = cx - fx * 1.9 + sx * s * 1.5, lz = cz - fz * 1.9 + sz * s * 1.5, ly = this.ground(lx, lz), tx = Math.cos(yaw - s * 0.5), tz = -Math.sin(yaw - s * 0.5);
+        wood.tint(0.62, 0.52, 0.4, 1).rod(V(lx - tx * 0.9, ly + 0.2, lz - tz * 0.9), V(lx + tx * 0.9, ly + 0.2, lz + tz * 0.9), 0.2, 8);
+        for (const o of [-0.42, 0.42]) this.seats.push(seatAt(lx + tx * o, ly + 0.4, lz + tz * o, Math.atan2(cx - lx, cz - lz)));
+        this.colliders.push({ type: 'circle', x: lx, z: lz, r: 0.5, y0: ly - 1, y1: ly + 0.5 });
+      }
+    }
+    {
+      // a chest half buried in the sand, its lid open on something that shines
+      const [tx, tz] = at(-5.2, 3.4), ty = this.ground(tx, tz);
+      wood.tint(0.42, 0.28, 0.16, 1).place(tx, ty - 0.12, tz, yaw + 2.2, 0.08, 0.1).box(-0.42, 0, -0.28, 0.42, 0.44, 0.28, { tile: 1, faces: 'xXzZy' });
+      wood.place(0, 0.44, -0.28, 0, -1.15).box(-0.42, 0, 0, 0.42, 0.06, 0.56, { tile: 1 }).pop();
+      wood.pop();
+      paint.tint(1.4, 1.0, 0.25, 1).place(tx, ty - 0.12, tz, yaw + 2.2, 0.08, 0.1).box(-0.44, 0.1, -0.3, -0.36, 0.34, 0.3).box(0.36, 0.1, -0.3, 0.44, 0.34, 0.3).pop();
+      parts.get('glow').tint(1, 0.78, 0.2, 1).place(tx, ty + 0.2, tz, yaw + 2.2).lathe([[0.0, 0.0], [0.3, 0.0], [0.22, 0.1], [0.0, 0.16]], 7).pop();
+      this.colliders.push({ type: 'circle', x: tx, z: tz, r: 0.5 });
+    }
+    // a hammock between its posts, and two beanbag chairs: nobody will come and disturb you here
+    {
+      const [hx, hz] = at(-4.6, -5.4);
+      this._hammock(parts, hx, hz, yaw + 1.2, POUF[5]);
+      const b = parts.get('matte');
+      this._chairs(b, [[1.2, -4.4], [0.6, -6.4]], at, this.ground, yaw);
+    }
+    this._add('cove', parts);
+  }
+
+  // ---------------------------------------------------------------------------
+  // The fall into the sea: a stream leaves its hanging valley at the top of the cliffs and drops to the water
+
+  _seaFall() {
+    const F = this.data.meta.seaFall, foam = this.world.water.shared.uFoam;
+    if (!F) return;
+    const [ux, uz] = F.dir, side = V(-uz, 0, ux);
+    // the stream in its valley, running to the lip
+    const run = [];
+    for (let t = -26; t <= 0.5; t += 2.2) run.push(V(F.x + ux * t, F.y + Math.max(0, -t) * 0.07 + 0.05, F.z + uz * t));
+    const stream = fallsRibbon(run, side, F.width * 0.8, foam, (i) => Math.min(1, i / 3));
+    // the fall itself: off the lip, on a parabola, down to the sea
+    const v0 = 4.6, T = Math.sqrt((2 * F.y) / 9.81), sheet = [V(F.x - ux * 0.6, F.y + 0.06, F.z - uz * 0.6)], steps = 30;
+    for (let k = 0; k <= steps; k++) { const t = (k / steps) * T; sheet.push(V(F.x + ux * v0 * t, F.y + 0.04 - 4.905 * t * t, F.z + uz * v0 * t)); }
+    // (it widens and frays as it falls)
+    const fall = fallsRibbon(sheet, side, F.width, foam, (i) => (i === 0 ? 0 : 1));
+    const veil = fallsRibbon(sheet.slice(8), side, F.width * 2.1, foam, (i) => Math.min(0.5, i / 12));
+    const land = sheet[sheet.length - 1], boil = [];
+    for (let k = -2; k <= 7; k++) boil.push(V(land.x + ux * k * 1.5, 0.06, land.z + uz * k * 1.5));
+    const churn = fallsRibbon(boil, side, F.width * 3.2, foam, (i) => [0, 0.6, 0.9, 0.95, 0.8, 0.6, 0.42, 0.26, 0.12, 0][i], true);
+    for (const [m, name] of [[stream, 'seafall:stream'], [fall, 'seafall'], [veil, 'seafall:veil'], [churn, 'seafall:boil']]) { m.name = name; this.group.add(m); }
   }
 
   /** Stone bench for two, facing `yaw`. */

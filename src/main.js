@@ -60,11 +60,11 @@ async function boot() {
   });
 
   // ---------- loading
-  const label = (p) => (p < 0.5 ? 'Mountains, maps and textures…' : p < 0.7 ? 'Ponds, streams and reflections…' : p < 0.9 ? 'Planting the forest…' : 'Building the mill and the pier…');
+  const label = (p) => (p < 0.5 ? 'Raising the mountains…' : p < 0.7 ? 'Filling the ponds and the sea…' : p < 0.9 ? 'Planting the forest…' : 'Putting up the big wheel…');
   const factoryLoading = new CharacterFactory({ blobShadow: !engine.tier.shadowDynamic }).load();
   await world.load((p) => hud.setProgress(p * 0.94, label(p)));
   const factory = await factoryLoading;
-  hud.setProgress(0.97, 'Shadows and finishing touches…');
+  hud.setProgress(0.97, 'Stringing the lights…');
   await new Promise((r) => requestAnimationFrame(r));
   world.buildCollision();
   world.bakeShadows();
@@ -126,7 +126,7 @@ async function boot() {
     presence.on('chat', ({ id, peer, text }) => { hud.addChat(peer.name, peer.color, text); avatars.say(id, text); });
     // no toast when the list is merely rebuilt because the connection changed (local <-> online)
     let shownMode = presence.mode;
-    presence.on('status', ({ mode, count }) => { shownMode = mode; hud.setPresence(mode, count); });
+    presence.on('status', ({ mode, count }) => { shownMode = mode; hud.setPresence(mode, count, presence.shard); });
     presence.on('join', (peer) => { if (presence.mode === shownMode) hud.note(`${peer.name} joined`); });
     presence.on('leave', (peer) => { if (presence.mode === shownMode) hud.note(`${peer.name} left`); });
     presence.connect();
@@ -215,6 +215,33 @@ async function boot() {
       });
     },
   };
+  // the sky villages: one is carried there from the Sky Gate, and back through the ring of each village
+  const sky = world.sky;
+  const travel = (to, word) => {
+    const [x, z, facing] = to.arrive;
+    player.teleport(x, z, facing);
+    rig.snap(player.pos, facing + Math.PI); // the camera behind, looking the same way
+    hud.note(word, 4200);
+  };
+  const chooseVillage = () => {
+    const here = sky.villageAt(player.pos.x, player.pos.z);
+    const list = sky.villages.filter((v) => v !== here);
+    hud.choose('The sky villages', 'Perched on the mountains all around. Pick one: you will be carried there.', list.map((v) => ({ label: v.name, note: v.motto, color: v.color })))
+      .then((i) => { if (i !== null && state.mode === 'walk' && !player.dead) travel(list[i], `Welcome to ${list[i].name}`); });
+  };
+  const near = (p, q, r) => (p.pos.x - q[0]) ** 2 + (p.pos.z - q[1]) ** 2 < r * r;
+  world.actionSources.push((p) => {
+    if (near(p, [sky.gate.x, sky.gate.z], 3.6)) return { label: 'Travel to a sky village', run: chooseVillage };
+    const v = sky.villageAt(p.pos.x, p.pos.z);
+    return v && near(p, v.ring, 3.2) ? { label: 'Back to the valley', run: () => travel(sky.gate, 'Back in the valley') } : null;
+  });
+  world.actionSources.push((p) => {
+    const v = sky.villageAt(p.pos.x, p.pos.z);
+    if (!v) return null;
+    if (near(p, v.ring, 3.2)) return { label: 'Another village', run: chooseVillage };
+    return v.url && near(p, v.sign, 3.4) ? { label: `Visit ${v.name}`, run: () => window.open(v.url, '_blank', 'noopener,noreferrer') } : null;
+  });
+  Object.assign(app, { travel, sky });
   const toggleCamera = () => { if (state.mode === 'walk') setMode('free'); else if (state.mode === 'free') setMode('walk'); };
   const savedQuality = store.get('mmf.quality');
   const qualityChoice = params.get('q') && TIERS[params.get('q')] ? params.get('q') : savedQuality && TIERS[savedQuality] ? savedQuality : 'auto';
@@ -248,7 +275,7 @@ async function boot() {
   input.on('drop', () => { if (look.bouquet) { look.bouquet = false; look.kinds = undefined; } });
   input.on('chat', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleChat(true, talking ? `Say something to ${talking.name}…` : undefined); });
   input.on('respawn', () => { if (state.mode === 'walk') { spawn(); hud.note('Back to the mill'); } });
-  input.on('menu', () => { hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); hud.toggleChat(false); });
+  input.on('menu', () => { hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); hud.toggleChat(false); hud.closeChoice(); });
   input.on('map', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleBigMap(); });
   hud.setMap(data.meta.map, ZONES);
   if (params.has('stats')) hud.setStatsVisible(true);
@@ -363,7 +390,8 @@ async function boot() {
       const p = mode === 'walk' ? player.pos : camera.position;
       let best = null, bestD = 1;
       for (const z of ZONES) { const d = Math.hypot(p.x - z.x, p.z - z.z) / z.r; if (d < bestD) { bestD = d; best = z; } }
-      if (best) hud.setZone(best.name);
+      const village = sky.villageAt(p.x, p.z);
+      if (village) hud.setZone(village.name); else if (best) hud.setZone(best.name);
     }
     if (mode === 'walk' || mode === 'free') {
       const p = mode === 'walk' ? player.pos : camera.position;
@@ -422,6 +450,9 @@ async function boot() {
     hud.setName(name);
     store.set('mmf.name', name); store.set('mmf.color', String(color));
   }
+  // an address may lead straight to a sky village: ?village=its-name (or its number)
+  const invited = params.get('village') ? sky.find(params.get('village')) : null;
+  if (invited) travel(invited, `Welcome to ${invited.name}`);
   input.enabled = true;
   startBlend(2.4);
   rig._first = true;

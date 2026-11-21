@@ -369,11 +369,16 @@ export class GamesZone {
     mesh.frustumCulled = false;
     this.group.add(mesh);
     this.shark = mesh;
-    // where the sea ends for swimmers: the edges of the playable area that lie in open water
+    // where the sea ends for swimmers: the edges of the playable area beyond which there is only open water
+    // (not the foot of the cliffs, which one may follow all the way to the secret cove)
     const bd = this.data.meta.bounds, edges = [];
+    let area = 0;
+    for (let i = 0; i < bd.length; i++) { const a = bd[i], c = bd[(i + 1) % bd.length]; area += a[0] * c[1] - c[0] * a[1]; }
+    const turn = area > 0 ? 1 : -1; // which way round the outline goes
     for (let i = 0; i < bd.length; i++) {
-      const a = bd[i], c = bd[(i + 1) % bd.length];
-      if (this.ground((a[0] + c[0]) / 2, (a[1] + c[1]) / 2) < -1.5 && this.ground(a[0], a[1]) < -0.5) edges.push([a[0], a[1], c[0], c[1]]);
+      const a = bd[i], c = bd[(i + 1) % bd.length], mx = (a[0] + c[0]) / 2, mz = (a[1] + c[1]) / 2;
+      const l = Math.hypot(c[0] - a[0], c[1] - a[1]) || 1, nx = ((c[1] - a[1]) / l) * turn, nz = (-(c[0] - a[0]) / l) * turn; // outwards
+      if (this.ground(mx, mz) < -2 && this.ground(mx + nx * 20, mz + nz * 20) < -3 && this.ground(mx + nx * 42, mz + nz * 42) < -3) edges.push([a[0], a[1], c[0], c[1]]);
     }
     this.seaEdges = edges;
     const e0 = edges[Math.floor(edges.length / 2)] || [200, 0, 200, 10];

@@ -1,6 +1,7 @@
 // Dev tool: gameplay checks in headless Chromium — walking onto the pier, crossing a footbridge, climbing the
-// garden steps, being stopped by the mountains and by a wall, swimming, the stairway and the village, the
-// island (its wall, its walkways, its boulder), sitting and lying down, the big wheel, the caves, chat and
+// garden steps, being stopped by the mountains and by a wall, swimming, the stairway and the temple, the
+// terraces above the waterfall, the secret cove, the sky villages and their gate, the island (its wall, its
+// walkways, its boulder), sitting and lying down, the big wheel, the caves, chat and
 // emotes, the Sky Stones (a bot makes every jump of the course; the clock, the board), the acid pond and the
 // shark, changing the quality tier (page reload at the same spot) — and the download size.
 // usage: node tools/walk-test.mjs [--q=low]
@@ -171,7 +172,123 @@ try {
     await frames(3);
     await walk(30, true);
     const v2 = await state();
-    check('reaches the village; the wall of the lookout holds', Math.abs(v1.y - V.y) < 0.3 && v1.x < top[0] - 8 && v2.x < -353.6 && Math.abs(v2.y - V.y) < 0.3, `walked to x ${v1.x.toFixed(1)} at ${v1.y.toFixed(1)} m; stopped at x ${v2.x.toFixed(1)}`);
+    check('reaches the temple through its gate; the wall of the lookout holds', Math.abs(v1.y - V.y) < 0.3 && v1.x < top[0] - 8 && v2.x < -353.6 && Math.abs(v2.y - V.y) < 0.3, `walked to x ${v1.x.toFixed(1)} at ${v1.y.toFixed(1)} m; stopped at x ${v2.x.toFixed(1)}`);
+    // up the steps of the great hall, onto its plinth; its walls hold
+    const hall = await page.evaluate(() => {
+      const app = window.__mmf, { player, input } = app, dt = 1 / 60;
+      const go = (dx, dz, n) => { for (let f = 0; f < n; f++) { input.move.x = dx; input.move.y = -dz; input.run = false; input.jump = false; player.update(dt, 0, true); } input.move.x = 0; input.move.y = 0; };
+      return import('/src/world/layout/layout.js').then((L) => {
+        const H = L.VILLAGE.temple.hall, c = Math.cos(H.yaw), sn = Math.sin(H.yaw);
+        const W = (lx, lz) => [H.x + lx * c + lz * sn, H.z - lx * sn + lz * c];
+        const [sx, sz] = W(H.plinth + 4.5, 0.9), [tx, tz] = W(0, 0.9);
+        player.teleport(sx, sz, 0);
+        const y0 = player.pos.y;
+        const l = Math.hypot(tx - sx, tz - sz);
+        go((tx - sx) / l, (tz - sz) / l, 200);
+        const lx = (player.pos.x - H.x) * c - (player.pos.z - H.z) * sn;
+        return { y0, y: player.pos.y, want: L.VILLAGE.y + 0.94, front: lx, plinth: H.plinth };
+      });
+    });
+    check('climbs the steps of the great hall and stops at its wall', Math.abs(hall.y0 - (hall.want - 0.9)) < 0.3 && Math.abs(hall.y - hall.want) < 0.12 && hall.front > 4.6 && hall.front < hall.plinth, `from ${hall.y0.toFixed(2)} up to ${hall.y.toFixed(2)} (plinth ${hall.want.toFixed(2)}), ${hall.front.toFixed(2)} m in front of the middle`);
+  }
+
+  // --- above the great waterfall: up the steps beside it, from terrace to terrace, then off the brink
+  {
+    const up = await page.evaluate(() => {
+      const app = window.__mmf, { player, input, world } = app, dt = 1 / 60;
+      const go = (dx, dz, n, run = true) => { for (let f = 0; f < n; f++) { input.move.x = dx; input.move.y = -dz; input.run = run; input.jump = false; player.update(dt, 0, true); } input.move.x = 0; input.move.y = 0; input.run = false; };
+      return import('/src/world/layout/layout.js').then((L) => {
+        const F = L.FALLS, out = { flights: [], levels: F.levels.map((t) => t.y) };
+        for (const st of F.stairs) {
+          const [a] = st.points;
+          player.teleport(a[0], a[1], 0);
+          const start = player.pos.y;
+          for (let k = 0; k + 1 < st.points.length; k++) {
+            const p = st.points[k], q = st.points[k + 1];
+            for (let f = 0; f < 400 && Math.hypot(q[0] - player.pos.x, q[1] - player.pos.z) > 0.5; f++) { const dx = q[0] - player.pos.x, dz = q[1] - player.pos.z, l = Math.hypot(dx, dz); go(dx / l, dz / l, 1); }
+            void p;
+          }
+          const end = st.points.at(-1);
+          out.flights.push({ from: start, want0: st.points[0][2], to: player.pos.y, want: end[2], off: Math.hypot(end[0] - player.pos.x, end[1] - player.pos.z) });
+        }
+        // wading in the top pool
+        const pool = world.data.meta.streams.find((s) => s.id === 'torrent').samples.find((q) => Math.abs(q[2] - 46.25) < 0.12 && q[3] > 7);
+        player.teleport(pool[0], pool[1], 0);
+        for (let f = 0; f < 30; f++) go(0, 0, 1);
+        out.pool = { y: player.pos.y, water: world.data.waterAt(pool[0], pool[1]), wading: player.wading, swimming: player.swimming };
+        // from the lowest terrace, east over the brink of the great fall
+        const lip = world.data.meta.streams.find((s) => s.id === 'torrent');
+        void lip;
+        player.teleport(-296, 123.2, 0);
+        const y0 = player.pos.y;
+        go(1, 0.08, 150);
+        for (let f = 0; f < 200; f++) go(0, 0, 1);
+        out.leap = { y0, y: player.pos.y, x: player.pos.x, z: player.pos.z, walkable: world.collision.walkable(player.pos.x, player.pos.z), cave: !!player.cave };
+        return out;
+      });
+    });
+    const okFlights = up.flights.every((f) => Math.abs(f.from - f.want0) < 0.35 && Math.abs(f.to - f.want) < 0.35 && f.off < 1.2);
+    check('climbs the steps beside the falls, from terrace to terrace', okFlights && up.flights.length === 3 && Math.abs(up.flights[2].to - up.levels[2]) < 0.4, up.flights.map((f) => `${f.from.toFixed(1)} → ${f.to.toFixed(1)} (${f.want})`).join(', '));
+    check('wades in the top pool, leaps from the lowest terrace into the pool of the great fall', up.pool.water > 45.5 && up.pool.y < up.pool.water && (up.pool.wading || up.pool.swimming) && Math.abs(up.leap.y0 - up.levels[0]) < 0.3 && up.leap.y < 13.5 && up.leap.x > -288 && up.leap.walkable && !up.leap.cave, JSON.stringify({ pool: up.pool, leap: up.leap }));
+  }
+
+  // --- the secret cove: swum to along the foot of the cliffs, without waking the shark
+  {
+    const cove = await page.evaluate(() => {
+      const app = window.__mmf, { player, input, world } = app, g = world.games, dt = 1 / 30;
+      const go = (dx, dz, n) => { for (let f = 0; f < n; f++) { input.move.x = dx; input.move.y = -dz; input.run = true; input.jump = false; player.update(dt, 0, true); g._tickShark(dt, f * dt, player); } input.move.x = 0; input.move.y = 0; input.run = false; };
+      return import('/src/world/layout/layout.js').then((L) => {
+        const route = [[150, 100], [176, 118], [200, 140], [214, 160], [213, 174], [203, 184], [193, 190], [184, 194], [179, 196]];
+        player.teleport(route[0][0], route[0][1], 0);
+        for (let f = 0; f < 60; f++) go(0, 0, 1);
+        const out = { swam: player.swimming, minFar: 1e9, modes: new Set() };
+        for (const q of route.slice(1)) {
+          for (let f = 0; f < 600 && Math.hypot(q[0] - player.pos.x, q[1] - player.pos.z) > 1.2; f++) { const dx = q[0] - player.pos.x, dz = q[1] - player.pos.z, l = Math.hypot(dx, dz); go(dx / l, dz / l, 1); out.minFar = Math.min(out.minFar, g.seaEdgeDistance(player.pos.x, player.pos.z)); out.modes.add(g.sharkState.mode); }
+        }
+        for (let f = 0; f < 30; f++) go(0, 0, 1);
+        const zone = L.ZONES.find((z) => z.id === 'cove');
+        return { swam: out.swam, minFar: out.minFar, modes: [...out.modes], dead: !!player.dead, x: player.pos.x, y: player.pos.y, z: player.pos.z, swimming: player.swimming, d: Math.hypot(player.pos.x - L.COVE.x, player.pos.z - L.COVE.z), hidden: zone.hidden === true, seats: world.seats.filter((s) => Math.hypot(s.x - L.COVE.x, s.z - L.COVE.z) < 14).length };
+      });
+    });
+    await frames(30);
+    const named = await page.evaluate(() => document.querySelector('.hud .zone').textContent);
+    check('swims round the cape to the secret cove and lands on its beach; the shark stays away', cove.swam && !cove.dead && !cove.swimming && cove.y > 0.3 && cove.d < 9 && cove.minFar > 30 && cove.modes.join() === 'patrol' && cove.hidden && cove.seats >= 5 && named === 'The Secret Cove', JSON.stringify({ ...cove, named }));
+  }
+
+  // --- the sky villages: carried there from the Sky Gate, and back through the ring
+  {
+    const g = await page.evaluate(() => { const s = window.__mmf.sky; return { gate: s.gate, n: s.villages.length, names: s.villages.map((v) => v.name) }; });
+    await place(g.gate.arrive[0], g.gate.arrive[1], 0);
+    await frames(4);
+    const offered = await prompt();
+    await page.keyboard.press('KeyE');
+    await page.waitForSelector('.chooser.on', { timeout: 5000 });
+    const listed = await page.evaluate(() => [...document.querySelectorAll('.chooser .list button b')].map((b) => b.textContent));
+    await page.click('.chooser .list button:nth-child(8)');
+    await frames(30);
+    const there = await page.evaluate(() => {
+      const m = window.__mmf, p = m.player.pos, v = m.sky.villageAt(p.x, p.z);
+      // which way the camera looks: at the valley?
+      const f = new m.THREE.Vector3(); m.engine.camera.getWorldDirection(f);
+      const toValley = v ? Math.hypot(-60 - p.x, 10 - p.z) : 1;
+      return { village: v && v.name, y: p.y, want: v && v.y, grounded: m.player.grounded, zone: document.querySelector('.hud .zone').textContent, open: document.querySelector('.chooser').classList.contains('on'), facing: v ? (f.x * (-60 - p.x) + f.z * (10 - p.z)) / toValley : 0, walkable: m.world.collision.walkable(p.x, p.z) };
+    });
+    // the edge of the shelf holds; then back through the ring
+    const back = await page.evaluate(() => {
+      const m = window.__mmf, { player, input } = m, dt = 1 / 60, v = m.sky.villageAt(player.pos.x, player.pos.z);
+      const go = (dx, dz, n) => { for (let f = 0; f < n; f++) { input.move.x = dx; input.move.y = -dz; input.run = true; input.jump = false; player.update(dt, 0, true); } input.move.x = 0; input.move.y = 0; input.run = false; };
+      go(Math.sin(v.yaw + 0.7), Math.cos(v.yaw + 0.7), 240); // towards the valley, a little to the side of the bench
+      const edge = Math.hypot(player.pos.x - v.x, player.pos.z - v.z), y = player.pos.y;
+      player.teleport(v.ring[0] + Math.sin(v.yaw) * 1.6, v.ring[1] + Math.cos(v.yaw) * 1.6, 0);
+      return { edge, y, vy: v.y };
+    });
+    await frames(4);
+    const ring = await prompt();
+    await page.keyboard.press('KeyE');
+    await frames(20);
+    const home = await page.evaluate(() => { const m = window.__mmf, p = m.player.pos; return { d: Math.hypot(p.x - m.sky.gate.x, p.z - m.sky.gate.z), village: m.sky.villageAt(p.x, p.z), byId: m.sky.find('eagle-rest')?.name, byNumber: m.sky.find('30')?.name }; });
+    check('the Sky Gate offers thirty villages; one is carried to the one chosen, facing the valley', offered.includes('Travel to a sky village') && g.n === 30 && listed.length === 30 && there.village === listed[7] && Math.abs(there.y - there.want) < 0.5 && there.grounded && there.zone === there.village && !there.open && there.facing > 0.5 && there.walkable, JSON.stringify({ offered, there }));
+    check('nobody walks off a village; its ring leads back to the valley', back.edge < 12.6 && Math.abs(back.y - back.vy) < 0.6 && ring.includes('Back to the valley') && ring.includes('Another village') && home.d < 4 && !home.village && home.byId === 'Eagle Rest' && home.byNumber === g.names[29], JSON.stringify({ back, ring, home }));
   }
 
   // --- the island: its wall is not climbed, its walkways hold, and the boulder flattens whoever stays on the path

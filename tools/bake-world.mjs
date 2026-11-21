@@ -176,6 +176,8 @@ const seaMask = new Uint8Array(N * N);
 }
 const coastD = new Grid(N, N); // signed: + inland, - offshore
 const beach = new Grid(N, N);
+const seaCliff = new Grid(N, N); // 1 = sea cliff country: fluted faces that the land cover makes green
+const SC = L.SEA_CLIFFS;
 const coastBeach = coastPts.map((p) => clamp(p[2], 0, 1));
 for (let q = 0; q < N * N; q++) {
   const d = Math.min(coastField.dist[q], 240);
@@ -198,10 +200,18 @@ for (let j = 0; j < N; j++) {
       // sandy shore: beach face, berm, promenade level, then blend into the relief
       const sand = d < BW ? 2.3 * smoothstep(0, BW, d) ** 0.85 : 2.3 + (L.COAST.promenadeY - 2.3) * smoothstep(BW, BW + 6, d);
       const hBeach = lerp(sand, Math.max(base, L.COAST.promenadeY - 0.3), smoothstep(BW + 12, BW + 62, d));
-      // rocky shore: keep the relief, drop to the sea over a short distance
-      const top = Math.max(base, 2.5 + 3 * b);
-      const hCliff = lerp(-0.8, top, smoothstep(-1, 12 + top * 0.25, d) ** 0.75);
+      // rocky shore: keep the relief, drop to the sea over a short distance. Beyond the playable valley the
+      // capes are sea cliffs: the land stands high right at the water, its face cut by flutes (ribs and
+      // gullies running down it), the whole rampart sinking back into the mountain further inland.
+      const wild = (boundsSDF.d[q] > 0 ? smoothstep(0, 7, boundsSDF.d[q]) : 0) * (1 - b) * (1 - b);
+      const rib = Math.abs(Math.sin((coastField.pos[q] * 2 * Math.PI) / SC.every + 2.4 * fbm(x / 41, z / 41, { seed: 72, octaves: 2 })));
+      const gully = (1 - rib) ** 1.6 * wild;
+      const crest = (SC.height + SC.vary * fbm(x / 130, z / 130, { seed: 71, octaves: 2 })) * (1 - 0.16 * gully) * (1 - smoothstep(60, 215, d0));
+      const top = Math.max(base, 2.5 + 3 * b, crest * wild);
+      const run = lerp(12 + top * 0.25, 4.5 + top * 0.115, wild); // how far from the water the face tops out
+      const hCliff = lerp(-0.8, top, smoothstep(-1, run, d - gully * SC.flute) ** lerp(0.75, 0.6, wild));
       h = lerp(hCliff, hBeach, b);
+      seaCliff.d[q] = wild * (1 - smoothstep(run + 14, run + 50, d));
     } else {
       const a = -d;
       const hBeach = -(3.4 * (1 - Math.exp(-a / 60)) + a * 0.02);
@@ -211,6 +221,27 @@ for (let j = 0; j < N; j++) {
     H.d[q] = h;
   }
 }
+
+// The fall into the sea: a hanging valley cut into the cliffs of the northern cape. Its lip is the last point,
+// going seaward, where the land is still as high as the stream.
+const hAt = (x, z) => H.sample(gi(x), gi(z)); // the relief so far, anywhere
+const seaFall = (() => {
+  const F = L.SEA_FALL, [ux, uz] = F.dir;
+  const brow = hAt(F.x - ux * 14, F.z - uz * 14); // the land behind the face
+  const y = Math.min(F.y, brow - 4);
+  let lx = F.x - ux * 30, lz = F.z - uz * 30;
+  for (let t = -30; t < 30; t += 0.5) { const px = F.x + ux * t, pz = F.z + uz * t; if (hAt(px, pz) >= y + 0.5) { lx = px; lz = pz; } }
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const x = wx(i), z = wx(j), t = -((x - lx) * ux + (z - lz) * uz); // metres inland of the lip
+    if (t < -1.5 || t > 95) continue;
+    const side = Math.abs((x - lx) * -uz + (z - lz) * ux);
+    if (side > 26) continue;
+    const q = idx(i, j);
+    const floor = y - 0.45 + Math.max(0, t) * 0.07 + Math.max(0, side - F.width * 0.5) * 1.35 + smoothstep(60, 95, t) * 40;
+    if (H.d[q] > floor) { H.d[q] = lerp(floor, H.d[q], smoothstep(-0.5, -1.5, t)); detailMask.d[q] = Math.min(detailMask.d[q], 0.5); }
+  }
+  return { x: lx, z: lz, y, dir: F.dir, width: F.width, drop: y };
+})();
 
 // ---------------------------------------------------------------------------
 // 3. Streams: resolve centrelines, condition the valley floor
@@ -395,6 +426,9 @@ const campMask = new Grid(N, N);
 const caveMouth = new Grid(N, N);
 const climbMask = new Grid(N, N);
 const acidMask = new Grid(N, N);
+const terraceMask = new Grid(N, N); // the terraces above the great waterfall
+const skyMask = new Grid(N, N); // the shelves of the sky villages
+const skySites = []; // { x, z, y, yaw }
 let acidLevel = 0;
 const disc = (x, z, r, fn) => {
   for (let j = Math.max(0, Math.floor(gi(z - r))); j <= Math.min(N - 1, Math.ceil(gi(z + r))); j++) {
@@ -471,32 +505,118 @@ const disc = (x, z, r, fn) => {
   }
   var villageSDF = sdf;
 
-  // --- the stairway: flights of steps with a level landing at each corner. The rock is cut to them (or
-  // built up under them): steep faces on both sides.
-  const ST = L.STAIRWAY, sw = ST.width / 2;
-  const samples = [];
-  for (let k = 0; k + 1 < ST.points.length; k++) {
-    const [ax, az, ay] = ST.points[k], [bx, bz, by] = ST.points[k + 1];
-    const len = Math.hypot(bx - ax, bz - az), n = Math.ceil(len);
-    for (let m = k === 0 ? 0 : 1; m <= n; m++) {
-      const t = clamp(((m / n) * len - ST.landing) / (len - 2 * ST.landing), 0, 1);
-      samples.push([lerp(ax, bx, m / n), lerp(az, bz, m / n), lerp(ay, by, t)]);
+  // --- above the great waterfall: three terraces of level rock, a pool of the torrent on each (the pools
+  // themselves are dug with the stream, further down), sheer faces between them
+  const locked = new Uint8Array(N * N); // ground that the next shapes must leave alone
+  const FL = L.FALLS;
+  const terraceSDF = FL.levels.map((t) => polygonSDF(closedOutline(t.bank, [], 1)));
+  FL.levels.forEach((t, k) => {
+    const sdf = terraceSDF[k];
+    for (let q = 0; q < N * N; q++) if (sdf.d[q] <= 0) { H.d[q] = t.y - 0.03; locked[q] = 1; detailMask.d[q] = 0.25; terraceMask.d[q] = 1; noTrees.d[q] = 1; }
+  });
+  FL.levels.forEach((t, k) => {
+    const sdf = terraceSDF[k];
+    for (let q = 0; q < N * N; q++) {
+      const e = sdf.d[q];
+      if (e <= 0 || e > 12 || locked[q]) continue;
+      H.d[q] = clamp(H.d[q], t.y - e * 2.6, t.y + e * 3.2);
+      terraceMask.d[q] = Math.max(terraceMask.d[q], 1 - smoothstep(0, 5, e));
+      if (e < 9) noTrees.d[q] = 1; // (open to the sky, and seen from the valley)
+    }
+  });
+
+  // --- stairways: flights of steps with a level landing at each corner. The rock is cut to them (or built
+  // up under them): steep faces on both sides. The long one climbs to the temple; three short ones go up
+  // beside the falls, from terrace to terrace.
+  for (const ST of [L.STAIRWAY, ...FL.stairs]) {
+    const sw = ST.width / 2;
+    const samples = [];
+    for (let k = 0; k + 1 < ST.points.length; k++) {
+      const [ax, az, ay] = ST.points[k], [bx, bz, by] = ST.points[k + 1];
+      const len = Math.hypot(bx - ax, bz - az), n = Math.ceil(len);
+      for (let m = k === 0 ? 0 : 1; m <= n; m++) {
+        const t = clamp(((m / n) * len - ST.landing) / (len - 2 * ST.landing), 0, 1);
+        samples.push([lerp(ax, bx, m / n), lerp(az, bz, m / n), lerp(ay, by, t)]);
+      }
+    }
+    const sf = polylineField(samples, 18);
+    const ys = samples.map((q) => q[2]);
+    for (let q = 0; q < N * N; q++) {
+      const d = sf.dist[q];
+      if (d > 16) continue;
+      const y = interp(ys, sf.pos[q]) - 0.16; // the ground lies just under the steps
+      const e = d - sw - 0.15;
+      // (a terrace is never built up, but the steps that arrive on it are cut into its edge)
+      if (e <= 0) { H.d[q] = locked[q] ? Math.min(H.d[q], y) : y; detailMask.d[q] = 0; stairMask.d[q] = 1; }
+      else {
+        H.d[q] = locked[q] ? Math.min(H.d[q], y + e * 2.8) : clamp(H.d[q], y - e * 1.5, y + e * 2.8);
+        stairMask.d[q] = Math.max(stairMask.d[q], 1 - smoothstep(0, 1.3, e));
+        if (e < 1) detailMask.d[q] = Math.min(detailMask.d[q], 0.4);
+      }
+      if (d < sw + (ST === L.STAIRWAY ? 3.5 : 6.5)) noTrees.d[q] = 1;
     }
   }
-  const sf = polylineField(samples, 18);
-  const ys = samples.map((q) => q[2]);
-  for (let q = 0; q < N * N; q++) {
-    const d = sf.dist[q];
-    if (d > 16) continue;
-    const y = interp(ys, sf.pos[q]) - 0.16; // the ground lies just under the steps
-    const e = d - sw - 0.15;
-    if (e <= 0) { H.d[q] = y; detailMask.d[q] = 0; stairMask.d[q] = 1; }
-    else {
-      H.d[q] = clamp(H.d[q], y - e * 1.5, y + e * 2.8);
-      stairMask.d[q] = Math.max(stairMask.d[q], 1 - smoothstep(0, 1.3, e));
-      if (e < 1) detailMask.d[q] = Math.min(detailMask.d[q], 0.4);
+
+  // --- the sky villages: shoulders and tops of the mountains that look down on the valley, far enough from
+  // each other, each levelled into a small round shelf
+  {
+    const S = L.SKY, R = S.pad;
+    const TARGETS = [[L.MILL.house.x, L.MILL.house.z, 24], [-60, 20, 14], [40, 0, 6], [-168, 70, 22]]; // the mill, the valley, the seafront, the great pond
+    const sees = (x, y, z, [tx, tz, ty]) => {
+      const d = Math.hypot(tx - x, tz - z), n = Math.ceil(d / 8);
+      for (let k = 1; k < n; k++) { const t = k / n; if (hAt(x + (tx - x) * t, z + (tz - z) * t) > y + 2.5 + (ty + 10 - y - 2.5) * t) return false; }
+      return true;
+    };
+    const taken = [[L.VILLAGE.square.x, L.VILLAGE.square.z, 95], ...L.STAIRWAY.points.map((p) => [p[0], p[1], 60]), ...FL.levels.map((t) => [t.bank[0][0], t.bank[0][1], 80]), [seaFall.x, seaFall.z, 70]];
+    const cands = [];
+    for (let z = -474; z <= 474; z += 6) for (let x = -474; x <= 474; x += 6) {
+      const q = idx(Math.round(gi(x)), Math.round(gi(z))), d = boundsSDF.d[q];
+      if (d < 70 || d > 330 || coastD.d[q] < 45) continue;
+      const y = H.d[q];
+      if (y < 60 || taken.some(([tx, tz, r]) => Math.hypot(x - tx, z - tz) < r)) continue;
+      let lo = 1e9, hi = -1e9, above = 0;
+      for (let a = 0; a < 8; a++) {
+        const c = Math.cos((a * Math.PI) / 4), sn = Math.sin((a * Math.PI) / 4);
+        for (const r of [R * 0.5, R]) { const v = hAt(x + c * r, z + sn * r); lo = Math.min(lo, v); hi = Math.max(hi, v); }
+        if (hAt(x + c * 30, z + sn * 30) < y - 2) above++;
+      }
+      if (hi - lo > 16) continue;
+      const seen = TARGETS.filter((t) => sees(x, y, z, t)).length;
+      if (seen < 2) continue;
+      cands.push({ x, z, y, score: seen * 3 + above * 1.2 - (hi - lo) * 0.25 + Math.min(y, 200) * 0.015 });
     }
-    if (d < sw + 3.5) noTrees.d[q] = 1;
+    cands.sort((a, b) => b.score - a.score || a.x - b.x || a.z - b.z);
+    for (const c of cands) {
+      if (skySites.length >= S.count) break;
+      if (skySites.every((p) => Math.hypot(p.x - c.x, p.z - c.z) > S.apart)) skySites.push(c);
+    }
+    if (skySites.length < S.count) throw new Error(`only ${skySites.length} sites for the sky villages`);
+    // (in a stable order: from the north-west round to the south, so that a village keeps its number)
+    skySites.sort((a, b) => Math.atan2(a.z, a.x + 60) - Math.atan2(b.z, b.x + 60));
+    for (const p of skySites) {
+      let sum = 0, cnt = 0;
+      disc(p.x, p.z, R * 0.7, (q) => { sum += H.d[q]; cnt++; });
+      p.y = sum / cnt - 0.4;
+      disc(p.x, p.z, R + 9, (q, d) => {
+        const k = 1 - smoothstep(R, R + 9, d);
+        H.d[q] = lerp(H.d[q], p.y, k);
+        skyMask.d[q] = Math.max(skyMask.d[q], 1 - smoothstep(R - 1.5, R + 3, d));
+        if (d < R + 1) { detailMask.d[q] = 0; noTrees.d[q] = 1; }
+      });
+      // which way it looks: at the valley
+      p.yaw = Math.atan2(-60 - p.x, 10 - p.z);
+    }
+    log(`  ${skySites.length} sky villages, ${Math.min(...skySites.map((p) => p.y)).toFixed(0)} to ${Math.max(...skySites.map((p) => p.y)).toFixed(0)} m`);
+    // the Sky Gate in the valley: a small round place on the lawn
+    const G = S.gate;
+    let sum = 0, cnt = 0;
+    disc(G.x, G.z, 3, (q) => { sum += H.d[q]; cnt++; });
+    const gy = sum / cnt;
+    disc(G.x, G.z, 9, (q, d) => {
+      H.d[q] = lerp(H.d[q], gy, 1 - smoothstep(4.2, 9, d));
+      skyMask.d[q] = Math.max(skyMask.d[q], 1 - smoothstep(3.6, 5.6, d));
+      if (d < 6) { detailMask.d[q] = Math.min(detailMask.d[q], 0.2); noTrees.d[q] = 1; }
+    });
   }
 
   // --- the camp: a clearing on its wooded rise, gently levelled
@@ -533,6 +653,7 @@ const disc = (x, z, r, fn) => {
   }
   // --- nothing grows where people lounge
   disc(L.BEACH_LOUNGE.x, L.BEACH_LOUNGE.z, L.BEACH_LOUNGE.r + 1, (q) => { noTrees.d[q] = 1; });
+  disc(L.COVE.x, L.COVE.z, L.COVE.r, (q) => { noTrees.d[q] = 1; });
   // --- cave mouths: level ground in front (not in the pool of the waterfall), nothing planted before or above them
   for (const c of L.CAVES) {
     const [mx, mz, mr, floor] = c.nodes[0], [nx, nz] = c.nodes[1];
@@ -998,6 +1119,9 @@ for (let j = 0; j < N; j++) {
     // the lawn of the Sky Stones (mown), the burnt rim of the acid pond
     if (climbMask.d[q] > 0) { const a = climbMask.d[q]; over(q, 0, a); gh = lerp(gh, 0.12, a); setTint(q, 1.02, 1.06, 0.9, a * 0.6); }
     if (acidMask.d[q] > 0) { const a = acidMask.d[q]; over(q, 4, a * 0.85); over(q, 7, a * 0.5 * smoothstep(0.1, 0.5, nC)); gh *= 1 - a; setTint(q, 0.62, 0.72, 0.42, a); }
+    // the terraces above the falls (bare rock, a little gravel), the shelves of the sky villages (a gravel court, mown grass)
+    if (terraceMask.d[q] > 0) { const a = terraceMask.d[q]; over(q, 4, a * 0.9); over(q, 6, a * 0.45 * smoothstep(0.0, 0.5, nC)); gh *= 1 - a; }
+    if (skyMask.d[q] > 0) { const a = skyMask.d[q]; over(q, 0, a); over(q, 6, a * 0.8 * smoothstep(0.1, 0.45, nB + 0.35)); gh = lerp(gh, 0.14, a); setTint(q, 1.03, 1.04, 0.92, a * 0.6); }
 
     // --- slopes
     // grass holds on banks up to about 45 degrees; beyond that the soil shows (bare rock on the mountains)
@@ -1006,6 +1130,14 @@ for (let j = 0; j < N; j++) {
     over(q, 3, dirtS * 0.9 * (1 - 0.7 * mount));
     over(q, 4, Math.max(rockS, mount * Math.max(smoothstep(0.8, 1.15, slope + 0.12 * nB), smoothstep(TREE_LINE + 20, TREE_LINE + 90, h + 30 * nA) * 0.75)));
     gh *= 1 - smoothstep(0.8, 1.2, slope);
+
+    // --- sea cliffs: whatever can hold on to them is green. (The renderer paints steep ground as rock, except
+    // where the tint is this lush green: there, moss and grass hang on the face.)
+    if (seaCliff.d[q] > 0 && h > 1.2) {
+      const a = seaCliff.d[q] * smoothstep(1.2, 5, h);
+      setTint(q, 0.5 + 0.1 * nA, 1.3 + 0.08 * nB, 0.34, a * 0.92);
+      gh = lerp(gh, 0.5 * (1 - smoothstep(0.6, 1.0, slope)), a);
+    }
 
     // --- sea shore
     const b = beach.d[q];
@@ -1443,6 +1575,8 @@ const meta = {
   promenade: resample(smoothPath(L.PROMENADE.points, { step: 1 }), 2).map((q) => q.map(r2)),
   bounds: boundsPts.filter((_, k) => k % 2 === 0).map((q) => [r2(q[0]), r2(q[1])]),
   acid: { y: r2(acidLevel) },
+  seaFall: { x: r2(seaFall.x), z: r2(seaFall.z), y: r2(seaFall.y), dir: seaFall.dir, width: seaFall.width },
+  sky: skySites.map((p) => ({ x: p.x, z: p.z, y: r2(p.y), yaw: r2(p.yaw) })),
   map: L.MAP_VIEW,
 };
 fs.writeFileSync(path.join(OUT, 'world.json'), JSON.stringify(meta));
@@ -1493,7 +1627,12 @@ log('preview');
   };
   for (const key of ['house', 'annexA', 'annexB', 'shed']) paint(L.frameRect(L.MILL[key], 0.2), [74, 80, 96], 0.12);
   // the village and its stairway, the deck on the pond
-  for (const hs of [...L.VILLAGE.houses, L.VILLAGE.chapel]) paint(L.frameRect({ x: hs.x, z: hs.z, yaw: hs.yaw, width: hs.w, length: hs.l }, 0.35), [88, 92, 106], 0.12);
+  {
+    // the temple: its hall, its pavilions
+    const T = L.VILLAGE.temple;
+    paint(L.frameRect({ x: T.hall.x, z: T.hall.z, yaw: T.hall.yaw, width: T.hall.plinth * 2, length: T.hall.plinth * 2 }, 0.35), [150, 60, 50], 0.12);
+    for (const hs of T.pavilions) paint(L.frameRect({ x: hs.x, z: hs.z, yaw: hs.yaw, width: hs.w, length: hs.l }, 0.35), [88, 92, 106], 0.12);
+  }
   {
     const pts = L.STAIRWAY.points, w = L.STAIRWAY.width / 2 + 0.4;
     for (let k = 0; k + 1 < pts.length; k++) {

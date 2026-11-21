@@ -4,7 +4,9 @@ import { ANIM, EMOTES, RANK_EMOTES } from '../player/Character.js';
 
 const FAR = 240; // m: avatars further away are not drawn
 const TAG_RANGE = 70; // m: name tags fade out with distance
-const _v = new THREE.Vector3();
+const NEAR = 28; // m: within that distance an avatar gets everything (its shadow, its reflection, every frame of its animation)
+const CROWD = 14; // …for the nearest ones only: beyond that many, the others are drawn light
+const _v = new THREE.Vector3(), _m = new THREE.Matrix4(), _frustum = new THREE.Frustum(), _sphere = new THREE.Sphere();
 
 export class RemoteAvatars {
   /**
@@ -66,21 +68,37 @@ export class RemoteAvatars {
   update(dt, camera, width, height) {
     this.frame++;
     const cam = camera.position;
+    // what the camera can see (avatars are skinned: the renderer cannot cull them by itself)
+    _frustum.setFromProjectionMatrix(_m.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse), camera.coordinateSystem, camera.reversedDepth);
+    // in a crowd only the nearest get the full treatment: how far that goes this frame
+    let full = NEAR;
+    if (this.items.size > CROWD) {
+      const d = this._dists || (this._dists = []);
+      d.length = 0;
+      for (const it of this.items.values()) if (it.peer.visible) d.push(Math.hypot(it.peer.x - cam.x, it.peer.y - cam.y, it.peer.z - cam.z));
+      if (d.length > CROWD) { d.sort((a, b) => a - b); full = Math.min(NEAR, d[CROWD - 1]); }
+    }
     for (const it of this.items.values()) {
       const { peer, character, tag } = it;
       const root = character.root;
       const dist = peer.visible ? Math.hypot(peer.x - cam.x, peer.y - cam.y, peer.z - cam.z) : Infinity;
-      const visible = dist < FAR;
-      root.visible = visible;
+      const near = dist < FAR;
+      // out of sight (with a margin: its shadow may still be in view): known, placed, but not drawn nor animated
+      const seen = near && (dist < 6 || _frustum.intersectsSphere(_sphere.set(_v.set(peer.x, peer.y + 1, peer.z), 3.2)));
+      root.visible = seen;
       let tagOn = false;
-      if (visible) {
+      if (near) {
         root.position.set(peer.x, peer.y, peer.z);
         root.rotation.y = peer.yaw;
+      }
+      if (seen) {
         character.setAnim(peer.anim, peer.speed);
         character.setLook(peer.flags);
-        // far avatars animate at a third of the frame rate
-        if (dist < 90) character.update(dt);
-        else if ((this.frame + peer.id) % 3 === 0) character.update(dt * 3);
+        character.setLight(dist > full);
+        // near avatars animate every frame, the others every other frame, far ones at a quarter of the frame rate
+        const every = dist <= full ? 1 : dist < 90 ? 2 : 4;
+        it.late = (it.late || 0) + dt;
+        if (every === 1 || (this.frame + peer.id) % every === 0) { character.update(it.late); it.late = 0; }
         if (this.world && dist < 70 && (this.frame + peer.id) % 6 === 0) {
           const cave = this.world.collision.caveAt(peer.x, peer.z, peer.y);
           character.setAmbient(cave ? cave.light(peer.x, peer.z) : 1);
@@ -98,7 +116,7 @@ export class RemoteAvatars {
             tag.style.opacity = Math.min(1, (TAG_RANGE - dist) / 18).toFixed(2);
           }
         }
-      }
+      } else it.late = 0;
       if (tagOn !== it.shown) { it.shown = tagOn; tag.style.display = tagOn ? '' : 'none'; }
     }
   }

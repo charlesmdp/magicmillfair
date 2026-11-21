@@ -99,7 +99,10 @@ export class Rocks {
     for (const c of meta.coast) {
       if (c[2] > 0.45 || Math.abs(c[1]) > 330) continue;
       const n = 1 + Math.floor(hash(seed += 4.1) * 3);
-      for (let k = 0; k < n; k++) put(c[0] + (hash(seed += 1.3) - 0.5) * 12, c[1] + (hash(seed += 2.7) - 0.5) * 9, 0.6 + hash(seed += 0.61) ** 2 * 2.8, 0.42);
+      for (let k = 0; k < n; k++) {
+        const x = c[0] + (hash(seed += 1.3) - 0.5) * 12, z = c[1] + (hash(seed += 2.7) - 0.5) * 9, size = 0.6 + hash(seed += 0.61) ** 2 * 2.8;
+        if (data.heightAt(x, z) < 3.2) put(x, z, size, 0.42); // (at the water's edge, not hanging on a sea cliff)
+      }
     }
 
     // One instanced mesh per 224 m square of the map: whole squares are culled when out of view. A single

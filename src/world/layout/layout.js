@@ -126,11 +126,15 @@ export const STREAMS = [
     flat: 2.2, slope: 0.62, // ravine floor half-width and side slope carved around the stream
     fill: false, smooth: 1.2, // no levelled flood plain, and keep the steps of the bed sharp
     points: [
-      [-356, 152, 66, 2.0], [-340, 144, 54, 2.0], [-324, 138, 43.5, 2.2], [-310, 132.5, 34, 2.2], [-298, 128, 27.4, 2.4],
+      // (down the mountain in leaps; then three pools, one above the other, each spilling into the next)
+      [-372, 158.6, 82, 2.0], [-356, 152, 68, 2.0], [-345.2, 147.5, 57.4, 2.4], [-342.2, 146.3, 46.4, 4.5],
+      [-338.5, 144.8, 46.3, 9], [-331.1, 141.7, 46.2, 9], [-328.2, 140.5, 46.0, 3.4], [-325.4, 139.4, 36.5, 4.5],
+      [-321.9, 137.9, 36.4, 8.5], [-314.5, 134.9, 36.3, 8.5], [-311.5, 133.7, 36.1, 3.4], [-308.7, 132.5, 27.2, 4.5],
+      [-305.2, 131.1, 27.1, 9], [-298.8, 128.4, 27.0, 9], [-294.1, 126.5, 26.7, 4.6],
       [-289.5, 124.6, 26.4, 2.8], [-285, 123, 11.75, 5.0], [-277, 120.5, 11.6, 4.4], [-266, 118.5, 11.2, 3.2], [-254, 117, 10.85, 3.2],
       [-244, 116, 10.55, 3.4], [-236, 114, 10.3, 3.8], [-229, 108, 10.2, 4.5], [-223, 101, 10.2, 6],
     ],
-    falls: [0.5, 1.5, 2.5, 3.5, 5.5],
+    falls: [0.5, 1.5, 2.5, 6.5, 10.5, 15.5],
     // the big drop, drawn as a sheet of white water: [from sample of the lip, to the plunge pool]
     waterfall: { lip: [-289.5, 124.6], pool: [-285, 123] },
   },
@@ -196,12 +200,24 @@ export const COAST = {
   line: [
     [300, -540, 0], [282, -470, 0], [262, -400, 0], [238, -330, 0], [208, -270, 0], [176, -222, 0], [146, -186, 0], [116, -160, 0.15],
     [88, -138, 0.5], [66, -112, 0.9], [51, -82, 1.0], [43, -50, 1.0], [40, -18, 1.0], [41, 14, 1.0], [47, 44, 1.0], [58, 70, 0.85],
-    [76, 92, 0.45], [102, 108, 0.1], [134, 120, 0], [172, 136, 0], [210, 160, 0], [246, 196, 0], [276, 246, 0], [298, 310, 0],
+    [76, 92, 0.45], [102, 108, 0.1], [134, 120, 0], [172, 136, 0], [190, 150, 0],
+    // a pocket in the southern cape: the secret cove, shut in by the cliffs, its beach at the far end
+    [197, 158, 0.05], [192, 172, 0.45], [184, 187, 1.0], [187, 200, 1.0], [200, 199, 0.55], [212, 190, 0.2], [222, 178, 0.0],
+    [234, 186, 0], [246, 196, 0], [276, 246, 0], [298, 310, 0],
     [314, 390, 0], [326, 470, 0], [334, 540, 0],
   ],
   beachWidth: 20, // dry sand between the waterline and the promenade
   promenadeY: 3.2,
 };
+
+// Where the capes are rock, the land stands high right at the water: sea cliffs, fluted and green, of about
+// `height` metres (more or less along the coast). They only exist outside the playable valley.
+export const SEA_CLIFFS = { height: 52, vary: 20, flute: 4.2, every: 11 };
+// A stream that drops from the cliffs of the northern cape straight into the sea: the lip of the fall, the
+// way the water goes (towards the sea), the level of the hanging valley it comes from.
+export const SEA_FALL = { x: 168, z: -208, dir: [0.74, 0.67], y: 41, width: 3.4 };
+// The secret cove (see the pocket in COAST.line): reached by swimming round the southern cape.
+export const COVE = { x: 184, z: 193, yaw: -0.62, r: 16 };
 
 // The big pier: leaves the promenade, crosses the beach and heads out to sea.
 export const PIER = {
@@ -361,25 +377,57 @@ export const STAIRWAY = {
   landing: 1.7, // radius of the landings
 };
 
+// Above the great waterfall the torrent comes down in three steps, a pool on each. Rock stairs climb beside
+// them from the foot of the fall; each terrace is a bank of level rock on the north side of its pool.
+// (levels: the walking level of each terrace; `bank`: the polygon one can walk, pool included)
+export const FALLS = {
+  stairs: [
+    { width: 2.2, landing: 1.4, points: [[-280.5, 105.5, 12.25], [-297.5, 108.5, 21.6], [-301.5, 120.5, 27.45]] },
+    { width: 2.2, landing: 1.4, points: [[-304.5, 123.4, 27.45], [-319.5, 127.2, 36.75]] },
+    { width: 2.2, landing: 1.4, points: [[-322.5, 129.2, 36.75], [-337.5, 133.4, 46.65]] },
+  ],
+  levels: [
+    { y: 27.45, bank: [[-291.5, 119.5], [-306.5, 117.5], [-311, 127.5], [-309, 137], [-296.5, 133], [-290, 129]] },
+    { y: 36.75, bank: [[-313, 124.5], [-324.5, 124.5], [-328.5, 134.5], [-325.5, 143.5], [-313.5, 139.5], [-310.5, 131]] },
+    { y: 46.65, bank: [[-331, 130.5], [-343.5, 131], [-348, 141.5], [-344.5, 151.5], [-331, 147], [-327, 137.5]] },
+  ],
+  // on the top terrace: a bench that looks down the three falls to the valley
+  seat: { x: -341.5, z: 134.6, yaw: 1.2 },
+};
+
 const SQUARE = { x: -378, z: 37 };
-// a house whose front door (local +X) looks at the square, give or take `turn`
-const house = (x, z, w, l, h, turn = 0) => ({ x, z, w, l, h, yaw: Math.round((Math.atan2(-(SQUARE.z - z), SQUARE.x - x) + turn) * 1000) / 1000 });
+// The temple on the mountain. Its shelf is levelled at `y`; the stairway arrives on the east side, between the
+// two walls of the lookout, under the gate. Each building: centre, yaw (its front, local +X, looks that way).
+const facing = (x, z, tx = SQUARE.x, tz = SQUARE.z) => Math.round(Math.atan2(-(tz - z), tx - x) * 1000) / 1000;
 export const VILLAGE = {
   y: 108,
   outline: [[-353, 18], [-353, 52], [-363, 63], [-389, 65], [-403, 52], [-406, 27], [-394, 11], [-368, 9]],
   square: SQUARE,
-  // houses: centre, yaw, width (along local X), length, eave height
-  houses: [
-    house(-367.5, 16, 6.0, 8.0, 2.9, 0.12), house(-383, 16.5, 5.6, 7.4, 2.7, -0.08), house(-396.5, 25.5, 6.2, 8.6, 3.1, 0.1),
-    house(-398, 43, 6.4, 9.0, 3.0, -0.06), house(-390, 57, 5.8, 7.8, 2.8, 0.1), house(-374, 58.5, 5.6, 7.2, 2.7, -0.1),
-  ],
-  // the chapel: its door, in the gable (local +Z), looks at the square
-  chapel: { x: -362.5, z: 52.5, w: 5.0, l: 7.5, h: 3.4, yaw: Math.round(Math.atan2(SQUARE.x + 362.5, SQUARE.z - 52.5) * 1000) / 1000 },
-  fountain: { x: -378, z: 37 },
+  fountain: { x: -374.5, z: 37 }, // the lotus pond
   // low wall of the lookout, along the edge above the valley (east side)
   wall: [[-362.4, 62.2], [-353.3, 51.6], [-353.3, 33.4]],
   wall2: [[-353.3, 26.6], [-353.3, 18.4], [-367.6, 9.3]],
+  temple: {
+    hall: { x: -393.2, z: 36.5, yaw: facing(-393.2, 36.5, -360, 36.5), plinth: 6.2 }, // the pagoda: it looks east, over the court, at the valley
+    gate: { x: -358.6, z: 30, yaw: 0 },
+    pavilions: [
+      { x: -381, z: 15.6, w: 4.6, l: 7.2, yaw: facing(-381, 15.6, -381, 37) },
+      { x: -384, z: 58.4, w: 4.6, l: 7.2, yaw: facing(-384, 58.4, -384, 37) },
+      { x: -399.5, z: 20.5, w: 4.2, l: 5.6, yaw: facing(-399.5, 20.5) },
+    ],
+    bell: { x: -362.2, z: 17.6, yaw: 0.55 },
+    stupa: { x: -365, z: 53.6, yaw: 0.4 },
+    wheels: { x: -370.6, z: 11.9, yaw: -0.08, count: 8 },
+    urn: { x: -382.6, z: 36.8 },
+    lanterns: [[-362.5, 27.4], [-362.5, 32.6], [-368.5, 33.2], [-368.5, 40.6], [-380.5, 31.6], [-380.5, 41.8], [-386, 31.2], [-386, 42]],
+    masts: [[-355, 56.5], [-355.4, 21.2]],
+  },
 };
+
+// Thirty little villages perched on the mountains all around, one for each company that wants its own:
+// nobody walks there, one is carried (see the Sky Gate). Their sites are chosen by the baker — shoulders and
+// tops that look down on the valley — and written to world.json; who lives where is in sponsors.js.
+export const SKY = { count: 30, pad: 12.5, apart: 64, gate: { x: -110.5, z: -39, yaw: -1.2 } }; // (the gate: on the lawn by the lane, on the way from the arrival to the mill)
 
 // ---------------------------------------------------------------------------
 // Games and dangers
@@ -533,6 +581,8 @@ export const HERO_TREES = [
   [4, -92, 'pine', 1.2], // on the lookout
   [-9, -84, 'pine', 0.95],
   [-30, 40, 'willow', 0.95],
+  // palms on the sand of the secret cove
+  [179.6, 189.6, 'palm', 0.85], [180.6, 200.2, 'palm', 0.95], [176.6, 195.4, 'palm', 0.75],
   // on the island: pines holding on to its ledges, a palm by the landing
   ...[[0.07, 'palm', 0.8, -3.6], [0.2, 'pine', 0.7, 3.3], [0.31, 'cypress', 0.8, 3.2], [0.49, 'pine', 0.85, 3.4], [0.6, 'pine', 0.6, 3.2], [0.7, 'cypress', 0.7, 3.3], [0.8, 'pine', 0.75, 3.3], [0.9, 'pine', 0.55, 3.2]]
     .map(([u, species, scale, off]) => { const p = islandPath(u); return [Math.round((p.x + p.nx * off) * 10) / 10, Math.round((p.z + p.nz * off) * 10) / 10, species, scale]; }),
@@ -554,9 +604,12 @@ export const ZONES = [
   { id: 'pier', name: 'The Grand Pier', x: 96, z: 14, r: 72 },
   { id: 'island', name: 'The Island', x: ISLAND.x, z: ISLAND.z, r: 44 },
   { id: 'stairway', name: 'The Stairway', x: -312, z: 60, r: 40 },
-  { id: 'village', name: 'The High Village', x: -380, z: 36, r: 40 },
+  { id: 'village', name: 'The Lost Temple', x: -380, z: 36, r: 40 },
+  { id: 'terraces', name: 'Above the Falls', x: -318, z: 132, r: 30 },
+  { id: 'cove', name: 'The Secret Cove', x: COVE.x + 8, z: COVE.z - 8, r: 30, hidden: true }, // (not named on the map)
   { id: 'camp', name: 'The Camp', x: CAMP.x, z: CAMP.z, r: 26 },
   { id: 'climb', name: 'The Sky Stones', x: CLIMB.x, z: CLIMB.z, r: 24 },
+  { id: 'skygate', name: 'The Sky Gate', x: SKY.gate.x, z: SKY.gate.z, r: 9 },
   { id: 'lounge', name: 'The Beach Lounge', x: BEACH_LOUNGE.x, z: BEACH_LOUNGE.z, r: 20 },
   { id: 'deck', name: 'The Pond Deck', x: POND_DECK.x, z: POND_DECK.z, r: 12 },
   { id: 'grotto', name: 'The Hidden Grotto', x: -303, z: 114, r: 21 },
@@ -570,7 +623,11 @@ export const BOUNDS = [
   [-272, -30], [-270, -66], [-254, -104], [-224, -136], [-184, -158], [-136, -170], [-98, -176], [-74, -176], [-48, -172], [-8, -164],
   [28, -154], [60, -146], [84, -143],
   // the cove
-  [122, -150], [172, -148], [222, -116], [246, -40], [244, 50], [214, 100], [170, 114], [130, 106],
+  [122, -150], [172, -148], [222, -116], [246, -40], [262, 40],
+  // round the southern cape, out at sea, to the secret cove and back along the foot of the cliffs
+  [288, 110], [292, 168], [272, 202], [247, 185], [229, 171], [215, 184], [203, 193], [191, 196],
+  [181, 204], [174, 193], [178, 180], [197, 171], [202, 158], [196, 146], [177, 128],
+  [170, 114], [130, 106],
   // south side, east to west
   [92, 113], [60, 126], [22, 146], [-22, 166], [-70, 178], [-124, 184], [-176, 180], [-222, 166], [-256, 146], [-279, 131],
   [-284, 121], [-281, 108], [-276, 66], [-270, 20],

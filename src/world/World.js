@@ -16,6 +16,7 @@ import { MillZone } from './zones/mill/MillZone.js';
 import { PierZone, deckHeight } from './zones/pier/PierZone.js';
 import { PlacesZone } from './zones/places/PlacesZone.js';
 import { GamesZone } from './zones/games/GamesZone.js';
+import { SkyZone } from './zones/sky/SkyZone.js';
 import { Collision } from './Collision.js';
 import { Rocks } from './props/Rocks.js';
 import { Birds } from './wildlife/Birds.js';
@@ -124,6 +125,9 @@ export class World {
     this.games = new GamesZone(this).build().finish(); // the Sky Stones, and what kills
     this.scene.add(this.games.group);
     this.zones.push(this.games);
+    this.sky = new SkyZone(this).build(); // the villages perched on the mountains, the gate that leads to them
+    this.scene.add(this.sky.group);
+    this.zones.push(this.sky);
     this.detail = 1;
     this.engine.on('detail', (d) => this.applyDetail(d));
     this.rocks = new Rocks(this);
@@ -154,12 +158,12 @@ export class World {
     col.setBounds(this.data.meta.bounds);
     for (const [x, z, r] of this.forest.colliders()) col.addCircle(x, z, r);
     for (const [x, z, r] of this.rocks.colliders) col.addCircle(x, z, r);
-    for (const zone of [this.mill, this.places, this.games]) for (const c of zone.colliders) {
+    for (const zone of [this.mill, this.places, this.games, this.sky]) for (const c of zone.colliders) {
       if (c.type === 'box') col.addBox(c.x, c.z, c.hw, c.hl, c.yaw, c.y0, c.y1);
       else col.addCircle(c.x, c.z, c.r, c.y0, c.y1);
     }
-    for (const a of this.places.areas) col.addArea(a);
-    for (const p of [...(this.mill.platforms || []), ...this.places.platforms, ...this.games.platforms]) {
+    for (const a of [...this.places.areas, ...this.sky.areas]) col.addArea(a);
+    for (const p of [...(this.mill.platforms || []), ...this.places.platforms, ...this.games.platforms, ...this.sky.platforms]) {
       if (p.type === 'disc') {
         col.addPlatform({ clearance: p.clearance ?? 1.0, thick: p.thick, heightAt: (x, z) => ((x - p.x) ** 2 + (z - p.z) ** 2 <= p.r * p.r ? p.y : null) });
       } else if (p.type === 'deck') {

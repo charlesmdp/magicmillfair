@@ -38,8 +38,31 @@ const VIEWS = {
     return [-62, d.heightAt(-62, 132) + 2.2, 132, 97, 14];
   },
   island: [96, 21, -58, 294, -3],
-  village: [-340, 122, 44, 92, -13],
+  temple: [-367, 110, 30, 105.1, 10.5],
+  templeair: [-340, 136, 76, 46.3, -21.5],
   lookout: [-351.5, 112.2, 34, 268, -13],
+  // the fall into the sea, from a boat that is not there
+  seacliffs: () => { const F = window.__mmf.world.data.meta.seaFall; return [F.x + 70, 12, F.z + 60, 49.4, 6.5]; },
+  cove: [250, 70, 140, 132.3, -42.5],
+  terraces: [-204, 34, 92, 107, 2],
+  skystones: [2.4, 10.4, 52, 180, 17],
+  skygate: [-121.5, 14.2, -56, 212.9, -6.5],
+  acid: [-224, 33, -74, 56.3, -19.1],
+  // a sky village and the valley it looks down on
+  skyvillage: () => {
+    const v = window.__mmf.sky.villages[7], c = Math.cos(v.yaw), s = Math.sin(v.yaw);
+    const W = (lx, lz) => [v.x + lx * c + lz * s, v.z - lx * s + lz * c];
+    const [fx, fz] = W(10, -15), [tx, tz] = W(-2, 8);
+    return [fx, v.y + 9, fz, (Math.atan2(-(tx - fx), -(tz - fz)) * 180) / Math.PI, -16];
+  },
+  // the boulder of the island, stopped on its way down past a walkway
+  boulder: () => {
+    const g = window.__mmf.world.games;
+    Date.now = () => 20500;
+    g.boulderState(20500);
+    const b = g.boulderAt;
+    return [b.x + 9, b.y + 3.5, b.z + 6, (Math.atan2(9, 6) * 180) / Math.PI, -20];
+  },
   stairway: [-286, 78, 112, 28, -22],
   camp: [-188.6, 24.9, -1.5, 50, -15],
   lounge: [35, 6.6, -85, 316, -14],
@@ -105,7 +128,7 @@ for (const name of todo) {
     await page.evaluate((c) => window.__mmf.setCam(...c), pose);
     await frames(8);
   }
-  const png = await page.screenshot();
+  const png = await page.screenshot({ timeout: 240000 }); // (a frame of the Ultra tier can take a long time without a graphics card)
   await sharp(png).resize(1280, 720).jpeg({ quality: 84, mozjpeg: true }).toFile(path.join(OUT, `${name}.jpg`));
   console.log(`docs/${name}.jpg`);
 }

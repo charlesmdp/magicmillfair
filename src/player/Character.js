@@ -306,6 +306,27 @@ export class Character {
       if (this.quad) this.quad.visible = o.quad;
     }
     if (o.bighead !== undefined) l.bighead = o.bighead;
+    if (this._light) { this._light = false; this.setLight(true); } // (what has just been put on is light too)
+  }
+
+  /**
+   * A light avatar is drawn once: not in the real-time shadows, not in the mirror of the water. For the
+   * visitors who are far away, or many: in a crowd, that halves what each of them costs.
+   */
+  setLight(light) {
+    if (light === this._light) return;
+    this._light = light;
+    this.root.traverse((o) => {
+      if (!o.isMesh) return;
+      if (light) {
+        // (remembering what each mesh took part in, to give it back)
+        o.userData.passes = (o.layers.isEnabled(LAYER.DYNAMIC_CASTER) ? 1 : 0) | (o.layers.isEnabled(LAYER.REFLECT) ? 2 : 0);
+        o.layers.disable(LAYER.DYNAMIC_CASTER); o.layers.disable(LAYER.REFLECT);
+      } else {
+        if (o.userData.passes & 1) o.layers.enable(LAYER.DYNAMIC_CASTER);
+        if (o.userData.passes & 2) o.layers.enable(LAYER.REFLECT);
+      }
+    });
   }
 
   /** Ambient light on the avatar, 1 in the open (caves are darker). */

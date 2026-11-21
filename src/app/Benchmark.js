@@ -20,7 +20,14 @@ const TOUR = [
   [198, -40, 16, 150, -84, 18], // round the island
   [-40, -20, 30, -150, 30, 4], // back over the valley
   [-262, 78, 16, -318, 58, 40], // the stairway
-  [-349, 37, 4, -200, 40, 2], // from the lookout of the village: everything, down to the sea
+  [-349, 37, 4, -200, 40, 2], // from the lookout of the temple: everything, down to the sea
+  [-362, 31, 3, -393, 36, 8], // the court of the temple, its pagoda
+  [-262, 100, 26, -318, 132, 6], // the terraces above the great waterfall
+  [-112, -52, 5, -110, -39, 2], // the Sky Gate
+  [4, 50, 4, 0, 80, 30], // the Sky Stones from their gate
+  [28, 80, 60, 0, 80, 70], // …and from half way up
+  [226, 150, 30, 190, 190, 2], // the secret cove
+  [228, -160, 12, 162, -214, 22], // the fall into the sea
 ];
 const SEGMENT = 3.2; // seconds per leg in timed mode
 

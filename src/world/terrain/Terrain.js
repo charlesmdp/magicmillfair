@@ -1,6 +1,7 @@
 // Terrain: one instanced grid drawn for every selected quadtree node (CDLOD).
 // Heights come from the world height texture in the vertex shader, with continuous
-// morphing between levels of detail (no cracks, no popping, a single draw call).
+// morphing between levels of detail (no cracks, no popping, a single draw call): what a vertex shows
+// depends on its distance from the camera only, never on the node it happens to belong to.
 import * as THREE from 'three';
 import { makeMaterial, GLSL_COMMON, GLSL_SHADOW, GLSL_LIGHTING, GLSL_SURFACE } from '../../render/globals.js';
 
@@ -26,12 +27,19 @@ void main() {
   vec2 xz = iNode.xy + g * size;
   float h = worldHeightsLod(xz).x;
   float dist = distance(uLodCam, vec3(xz.x, h, xz.y));
-  float range = uRanges[level];
-  float morph = smoothstep(range * 0.70, range * 0.95, dist);
-  vec2 fr = fract(g * ${(GRID / 2).toFixed(1)}) * ${(2 / GRID).toFixed(8)};
-  g -= fr * morph;
+  // The detail a vertex shows depends on its distance alone (the ranges double from one level to the next):
+  // the level k that distance calls for, and how far it has morphed towards k + 1. A node finer than that
+  // folds its grid down to level k. Neighbours of any levels then meet exactly — on a cliff, anything less
+  // opens a crack.
+  float r0 = uRanges[0];
+  float k = clamp(max(float(level), ceil(log2(max(dist / (0.95 * r0), 1.0)))), 0.0, ${(LEVELS - 1).toFixed(1)});
+  float rk = r0 * exp2(k);
+  float morph = smoothstep(rk * 0.70, rk * 0.95, dist);
+  float cell = exp2(k - float(level)) * ${(1 / GRID).toFixed(8)}; // spacing of the level-k grid across this node
+  g = floor(g / cell + 0.001) * cell;
+  g -= fract(g / (2.0 * cell)) * (2.0 * cell) * morph; // odd vertices slide onto the even one below
   xz = iNode.xy + g * size;
-  vec4 t = textureLod(uHeightTex, worldUV(xz), iNode.w + morph);
+  vec4 t = textureLod(uHeightTex, worldUV(xz), k + morph);
   h = (t.r * 255.0 * 256.0 + t.g * 255.0) / 65535.0 * uWorldMap.w + uWorldMap.z;
   vWorld = vec3(xz.x, h, xz.y);
   vClip = dot(vWorld, uClipPlane.xyz) + uClipPlane.w;
@@ -136,8 +144,23 @@ void main() {
     vec2 wf = abs(Ng.xz) / max(abs(Ng.x) + abs(Ng.z), 1e-4);
     float streak = texture(uNoiseTex, vec2(vWorld.z * 0.045, vWorld.y * 0.006)).r * wf.x + texture(uNoiseTex, vec2(vWorld.x * 0.045, vWorld.y * 0.006)).r * wf.y;
     rock *= (0.84 + 0.2 * beds * (0.4 + 0.6 * mn.b)) * macro * mix(1.0, 0.6, smoothstep(0.5, 0.72, streak));
+    // Sea cliffs (the baker marks them with a lush green tint): moss, ferns and grass hang on the face,
+    // thick on the ribs and the ledges, thin in the gullies where the rock shows through.
+    float lush = smoothstep(0.3, 0.62, tint.g - max(tint.r, tint.b));
+    if (lush > 0.01) {
+      // clumps of different greens, seen from the side like the rock; darker in the gullies and under ledges
+      vec3 c1 = texture(uNoiseTex, vWorld.zy * vec2(0.021, 0.034)).rgb * wf.x + texture(uNoiseTex, vWorld.xy * vec2(0.021, 0.034)).rgb * wf.y;
+      vec3 c2 = texture(uNoiseTex, vWorld.zy * vec2(0.11, 0.17)).rgb * wf.x + texture(uNoiseTex, vWorld.xy * vec2(0.11, 0.17)).rgb * wf.y;
+      vec3 green = mix(vec3(0.035, 0.105, 0.03), vec3(0.13, 0.25, 0.06), smoothstep(0.25, 0.75, c1.r * 0.65 + c2.g * 0.35));
+      green = mix(green, vec3(0.2, 0.3, 0.07), smoothstep(0.62, 0.9, c1.b) * 0.6); // sunlit ferns
+      green *= (0.72 + 0.5 * c2.r) * mix(1.0, 0.55, smoothstep(0.5, 0.75, streak));
+      // bare rock shows where the face is sheer and wet, and at the foot where the waves reach
+      float bare = smoothstep(0.58, 0.82, c1.g * 0.55 + streak * 0.6) * 0.75;
+      float cling = lush * (1.0 - bare) * smoothstep(0.6, 4.5, vWorld.y + 2.0 * c2.b);
+      rock = mix(rock * 0.8, green, cling);
+    }
     albedo = mix(albedo, rock, steep);
-    tint = mix(tint, vec3(1.0), steep * 0.7);
+    tint = mix(tint, vec3(1.0), max(steep * 0.7, lush * steep));
   }
   albedo *= tint;
   float rough = 0.9, cav = 1.0;
@@ -304,13 +327,23 @@ export class Terrain {
     this.levels = [];
     const n0 = N / LEAF;
     const mn = new Float32Array(n0 * n0).fill(Infinity), mx = new Float32Array(n0 * n0).fill(-Infinity);
+    const put = (ni, nj, h) => {
+      if (ni < 0 || nj < 0) return;
+      const q = nj * n0 + ni;
+      if (h < mn[q]) mn[q] = h;
+      if (h > mx[q]) mx[q] = h;
+    };
     for (let j = 0; j < N; j++) {
-      const nj = (j / LEAF) | 0;
+      const nj = (j / LEAF) | 0, ej = j % LEAF === 0;
       for (let i = 0; i < N; i++) {
-        const h = d.height[j * N + i];
-        const q = nj * n0 + ((i / LEAF) | 0);
-        if (h < mn[q]) mn[q] = h;
-        if (h > mx[q]) mx[q] = h;
+        const h = d.height[j * N + i], ni = (i / LEAF) | 0, ei = i % LEAF === 0;
+        put(ni, nj, h);
+        // The last row and column of vertices of a node sit on the first cells of its neighbours: their
+        // heights count too. Without them, on a cliff, a node looks further from the camera than its edge
+        // really is, the edge is drawn before it has finished morphing, and the ground cracks open there.
+        if (ei) put(ni - 1, nj, h);
+        if (ej) put(ni, nj - 1, h);
+        if (ei && ej) put(ni - 1, nj - 1, h);
       }
     }
     this.levels.push({ n: n0, min: mn, max: mx, size: LEAF });
@@ -358,7 +391,7 @@ export class Terrain {
     const half = size / 2;
     for (let b = 0; b < 2; b++) for (let a = 0; a < 2; a++) {
       if (!this._select(level - 1, i * 2 + a, j * 2 + b, cull)) {
-        // child is outside its own range: draw it at its level, the shader morphs it to the parent's grid
+        // child is outside its own range: drawn all the same (the shader gives it the detail of the whole node)
         const cx0 = x0 + a * half, cz0 = z0 + b * half;
         if (cull) {
           const Lc = this.levels[level - 1];

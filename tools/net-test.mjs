@@ -648,6 +648,22 @@ async function testPresence(server) {
   await until(() => b.peers.size === 1);
   check('presence: dispose() leaves the room', b.peers.size === 1 && eb.some((e) => e.type === 'leave' && e.name === 'Cléo') && eb.some((e) => e.type === 'status' && e.count === 3) && b.count === 2, eb.filter((e) => e.type !== 'emote'));
 
+  // --- a full room (four visitors in this test): the next ones gather in the room next door
+  {
+    const crowd = [];
+    for (let k = 0; k < 4; k++) { const p = new Presence({ room: 'crowd', name: `Crowd ${k}`, url }); p.connect(); crowd.push(p); }
+    await until(() => crowd.every((p) => p.mode === 'online' && p.count === 4), 6000);
+    const late1 = new Presence({ room: 'crowd', name: 'Late 1', url }), late2 = new Presence({ room: 'crowd', name: 'Late 2', url });
+    late1.connect();
+    await until(() => late1.mode === 'online', 6000);
+    late2.connect();
+    await until(() => late2.mode === 'online' && late2.count === 2 && late1.count === 2, 6000);
+    const heads = [await headCount(server.port, 'crowd'), await headCount(server.port, 'crowd-2')];
+    check('presence: when a room is full, newcomers gather in the next one', crowd.every((p) => p.count === 4 && p.room === 'crowd' && p.shard === 1) && late1.room === 'crowd-2' && late1.shard === 2 && late2.room === 'crowd-2' && late1.count === 2 && late2.peers.size === 1 && heads.join() === '4,2', { rooms: [late1.room, late2.room], counts: [late1.count, late2.count, ...crowd.map((p) => p.count)], modes: [late1.mode, late2.mode], heads });
+    for (const p of [...crowd, late1, late2]) p.dispose();
+    await until(() => false, 150);
+  }
+
   if (CF) {
     a.dispose();
     b.dispose();

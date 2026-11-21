@@ -42,26 +42,15 @@ export class Hud {
 
   // ---------- welcome
   _splash() {
-    const s = (this.splash = el('div', 'splash'));
-    s.innerHTML = `
-      <div class="card">
-        <svg class="wheel" viewBox="0 0 64 64" aria-hidden="true"><g fill="none" stroke="#f2c14e" stroke-width="2.4"><circle cx="32" cy="32" r="26"/><circle cx="32" cy="32" r="5" fill="#f2c14e"/>
-          ${Array.from({ length: 8 }, (_, i) => { const a = (i / 8) * Math.PI * 2; return `<path d="M32 32L${(32 + Math.cos(a) * 26).toFixed(1)} ${(32 + Math.sin(a) * 26).toFixed(1)}"/><circle cx="${(32 + Math.cos(a) * 26).toFixed(1)}" cy="${(32 + Math.sin(a) * 26).toFixed(1)}" r="3.4" fill="#e8795a" stroke="none"/>`; }).join('')}</g></svg>
-        <h1 class="title">Magic <em>Mill</em> Fair</h1>
-        <p class="subtitle">An old mill, its ponds and its valley between the mountains… and down by the sea, a grand pier with its big wheel.</p>
-        <div class="bar"><i></i></div>
-        <div class="hint load">Getting the world ready…</div>
-        <div class="form">
-          <label for="mmf-name">Your name</label>
-          <input id="mmf-name" type="text" maxlength="16" autocomplete="off" spellcheck="false" />
-          <label>Colour</label>
-          <div class="swatches"></div>
-          <button class="go" type="button">Explore</button>
-          <div class="keys"></div>
-        </div>
-        <div class="version">${VERSION}</div>
-      </div>`;
-    this.root.append(s);
+    // the page carries its own loading screen (index.html), shown before any script: it is taken over here
+    let s = this.root.querySelector('.splash');
+    if (!s) {
+      s = el('div', 'splash');
+      s.innerHTML = '<div class="card"><h1 class="title">Magic <em>Mill</em> Fair</h1><div class="bar"><i></i></div><div class="hint load"></div><div class="form"><label for="mmf-name">Your name</label><input id="mmf-name" type="text" maxlength="16" autocomplete="off" spellcheck="false" /><label>Colour</label><div class="swatches"></div><button class="go" type="button">Step right up!</button><div class="keys"></div></div><div class="version"></div></div>';
+      this.root.append(s);
+    }
+    this.splash = s;
+    s.querySelector('.version').textContent = VERSION;
     this.bar = s.querySelector('.bar i');
     this.loadHint = s.querySelector('.hint.load');
   }
@@ -146,6 +135,9 @@ export class Hud {
         <div class="log" aria-live="polite"></div>
         <form class="say"><input type="text" maxlength="200" placeholder="Say something…" autocomplete="off" spellcheck="false" enterkeyhint="send" aria-label="Chat message" /></form>
       </div>
+      <div class="chooser" role="dialog" aria-label="Choose">
+        <div class="sheet"><h2></h2><p class="lead"></p><div class="list"></div><button class="close" type="button">Stay here</button></div>
+      </div>
       <div class="panel" role="dialog" aria-label="Settings">
         <h2>Settings</h2>
         <h3>Graphics quality</h3>
@@ -225,12 +217,50 @@ export class Hud {
     name.addEventListener('change', () => this.emit('name', name.value.trim().slice(0, 16)));
     this.nameInput = name;
     // prevent clicks on the interface from reaching the 3D view
-    for (const n of [this.panel, this.emotes]) for (const ev of ['mousedown', 'touchstart', 'wheel']) n.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
+    for (const n of [this.panel, this.emotes, h.querySelector('.chooser')]) for (const ev of ['mousedown', 'touchstart', 'wheel']) n.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
     // the visitor's own speech bubble (the others have their name tag)
     this.selfTag = el('div', 'tag self');
     this.selfTag.style.display = 'none';
     this.tagsEl.append(this.selfTag);
   }
+
+  // ---------- a list to choose from (the sky villages)
+  /**
+   * Shows `items` ([{ label, note, color: [r, g, b] }]) under a title; resolves to the index chosen, or to
+   * null when the visitor closes the list (button, Escape, click outside).
+   */
+  choose(title, lead, items) {
+    const box = this.hud.querySelector('.chooser'), list = box.querySelector('.list');
+    this._choice?.(null);
+    box.querySelector('h2').textContent = title;
+    box.querySelector('.lead').textContent = lead || '';
+    list.textContent = '';
+    this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this.toggleBigMap(false);
+    this.input.exitLock(); // the list is clicked: the pointer must be free
+    return new Promise((resolve) => {
+      const done = (i) => { this._choice = null; box.classList.remove('on'); box.onclick = null; resolve(i); };
+      this._choice = done;
+      items.forEach((it, i) => {
+        const b = el('button');
+        b.type = 'button';
+        const dot = el('i');
+        if (it.color) dot.style.background = `rgb(${it.color.map((c) => Math.round(Math.min(1, c * 1.2) * 255)).join(',')})`;
+        const text = el('span');
+        text.append(el('b', '', ''), el('small', '', ''));
+        text.firstChild.textContent = it.label;
+        text.lastChild.textContent = it.note || '';
+        b.append(dot, text);
+        b.onclick = (e) => { e.stopPropagation(); done(i); };
+        list.append(b);
+      });
+      box.querySelector('.close').onclick = (e) => { e.stopPropagation(); done(null); };
+      box.onclick = (e) => { if (e.target === box) done(null); };
+      box.classList.add('on');
+      list.scrollTop = 0;
+    });
+  }
+  get choosing() { return !!this._choice; }
+  closeChoice() { this._choice?.(null); }
 
   // ---------- hats, the bouquet, dying
   setHat(i) { this.hud.querySelectorAll('[data-hat]').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.hat === i))); }
@@ -322,12 +352,12 @@ export class Hud {
     this._tn = setTimeout(() => this.noteEl.classList.remove('show'), ms);
   }
 
-  setPresence(mode, count) {
+  setPresence(mode, count, shard = 1) {
     const dot = this.hud.querySelector('.players .dot');
     dot.className = `dot ${mode === 'online' ? 'online' : mode === 'local' ? 'local' : ''}`;
     this.hud.querySelector('.players .count').textContent = count <= 1 ? (mode === 'online' ? 'Online · on your own' : 'On your own') : `${count} visitors`;
     this.hud.querySelector('.net-info').textContent = mode === 'online'
-      ? 'Connected: everyone who opens this address sees each other.'
+      ? (shard > 1 ? `Connected, in room ${shard}: the first rooms are full. To be sure to meet someone, share an address ending in ?room=a-name-of-your-own.` : 'Connected: everyone who opens this address sees each other.')
       : mode === 'local'
         ? 'Local mode: only the tabs of this browser see each other (no presence server found).'
         : 'Offline.';
@@ -396,6 +426,7 @@ export class Hud {
     ctx.font = `600 ${Math.max(11, Math.round(w / 62))}px Georgia, 'Times New Roman', serif`;
     ctx.lineJoin = 'round';
     for (const zone of this.zones || []) {
+      if (zone.hidden) continue; // (some places are for those who find them)
       const half = ctx.measureText(zone.name).width / 2 + 6;
       const tx = Math.min(w - half, Math.max(half, X(zone.x))), tz = Z(zone.z); // never cut by the edge
       ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(14, 22, 17, 0.8)'; ctx.strokeText(zone.name, tx, tz);
