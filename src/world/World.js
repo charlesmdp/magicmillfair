@@ -19,6 +19,7 @@ import { GamesZone } from './zones/games/GamesZone.js';
 import { SkyZone } from './zones/sky/SkyZone.js';
 import { Collision } from './Collision.js';
 import { Rocks } from './props/Rocks.js';
+import { Mushrooms } from './props/Mushrooms.js';
 import { Birds } from './wildlife/Birds.js';
 import { Ripples } from './water/Ripples.js';
 import { PIER, ISLAND } from './layout/layout.js';
@@ -107,6 +108,7 @@ export class World {
     this.seatSources = []; // seats that move: functions (player position) → seat or null
     this.actionSources = []; // other things to do on the spot: functions (player) → { label, run } or null
     this.noFly = []; // discs { x, z, r } where the jetpack does not work
+    this.sponsorSlots = []; // things that can be sponsored: { id, what, x, y, z, reach, set(sponsor) }
     this.ripples = new Ripples();
     this.scene.add(this.ripples.mesh);
     this.mill = new MillZone(this).build();
@@ -132,6 +134,8 @@ export class World {
     this.engine.on('detail', (d) => this.applyDetail(d));
     this.rocks = new Rocks(this);
     this.scene.add(this.rocks.group);
+    this.mushrooms = new Mushrooms(this, this.forest.colliders());
+    this.scene.add(this.mushrooms.group);
     this.birds = new Birds(this);
     this.scene.add(this.birds.mesh);
     return this;
@@ -164,7 +168,9 @@ export class World {
     }
     for (const a of [...this.places.areas, ...this.sky.areas]) col.addArea(a);
     for (const p of [...(this.mill.platforms || []), ...this.places.platforms, ...this.games.platforms, ...this.sky.platforms]) {
-      if (p.type === 'disc') {
+      if (p.type === 'custom') {
+        col.addPlatform({ clearance: p.clearance ?? 1.0, thick: p.thick, heightAt: p.heightAt });
+      } else if (p.type === 'disc') {
         col.addPlatform({ clearance: p.clearance ?? 1.0, thick: p.thick, heightAt: (x, z) => ((x - p.x) ** 2 + (z - p.z) ** 2 <= p.r * p.r ? p.y : null) });
       } else if (p.type === 'deck') {
         const ax = p.a.x, az = p.a.z, dx = p.b.x - ax, dz = p.b.z - az, len = Math.hypot(dx, dz);
@@ -236,6 +242,7 @@ export class World {
     for (const s of this.systems) s.update?.(dt, camera);
     for (const z of this.zones) z.update?.(dt, this.engine.time, camera);
     this.birds.update(dt, this.engine.time, this.playerPos);
+    this.mushrooms.update(dt);
     this.ripples.update(this.engine.time);
     mark('zones');
     this.forest.update(camera);

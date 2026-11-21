@@ -5,7 +5,7 @@ import { Input } from './core/Input.js';
 import { isMobile, TIERS } from './core/Quality.js';
 import { World } from './world/World.js';
 import { FreeCamera } from './player/FreeCamera.js';
-import { CharacterFactory, EMOTES, RANK_EMOTES, packLook } from './player/Character.js';
+import { CharacterFactory, EMOTE_LIST, emoteIndex, packLook } from './player/Character.js';
 import { HATS, owns } from './player/Cosmetics.js';
 import { PlayerController } from './player/PlayerController.js';
 import { CameraRig } from './player/CameraRig.js';
@@ -15,10 +15,13 @@ import { Hud, VERSION } from './ui/Hud.js';
 import { Presence, cleanChat } from './net/Presence.js';
 import { Npc } from './npc/Npc.js';
 import { Scores } from './net/Scores.js';
+import { countVisit } from './net/Visits.js';
+import { callApi } from './net/api.js';
 import { formatTime } from './world/zones/games/course.js';
 import { RemoteAvatars } from './net/RemoteAvatars.js';
 import { Benchmark } from './app/Benchmark.js';
-import { SPAWN, ZONES } from './world/layout/layout.js';
+import { SPAWN, ZONES, CLIMB } from './world/layout/layout.js';
+import { FEATURES } from './app/config.js';
 
 const params = new URLSearchParams(location.search);
 const SHOT = params.has('shot'); // screenshot tool: no interface, free camera
@@ -90,6 +93,13 @@ async function boot() {
   const savedHat = parseInt(store.get('mmf.hat'), 10);
   const look = { hat: savedHat > 0 && savedHat < HATS.length && owns(HATS[savedHat].id) ? savedHat : 0, jet: false, bouquet: false, kinds: undefined, quad: false, bighead: false };
   const timers = {}; // cheats that wear off: name → seconds left
+  // habits kept from one visit to the next
+  const settings = { run: store.get('mmf.run') === '1', follow: store.get('mmf.follow') === '1' };
+  player.autoRun = settings.run;
+  rig.follow = settings.follow;
+  // who is visiting: `admin` once the server has recognised the administrator's key; `days`: visits in a row
+  const who = { admin: false, days: 1 };
+  app.who = who;
   // no jetpack underground, nor where a game forbids it
   player.canFly = (p) => owns('jetpack') && !player.cave && !world.noFly.some((z) => (p.x - z.x) ** 2 + (p.z - z.z) ** 2 < z.r * z.r);
   player.onDeath = (cause) => hud.wasted(cause);
@@ -134,12 +144,21 @@ async function boot() {
   };
 
   // ---------- interface actions
+  // an animal of light is earned by coming back several days in a row (the administrator has them all)
+  const unlocked = (e) => !e.rank || who.admin || who.days >= e.days;
+  const showEmotes = () => hud.setEmotes(EMOTE_LIST.map((e, i) => ({ index: i, ...e, locked: !unlocked(e) })), who.days);
   const emote = (i) => {
-    if (state.mode !== 'walk') return;
-    if (i < EMOTES.length) { if (me.resting) return; me.emote(i); } // seated: only the animals of light
-    else if (i < EMOTES.length + RANK_EMOTES.length) rank.play(RANK_EMOTES[i - EMOTES.length], me.root);
-    else return;
+    const e = EMOTE_LIST[i];
+    if (state.mode !== 'walk' || !e || player.dead) return false;
+    if (e.rank) {
+      if (!unlocked(e)) { hud.note(`The ${e.label.toLowerCase()} comes to those who visit ${e.days} days in a row (you are at ${who.days})`, 4200); return false; }
+      rank.play(e.rank, me.root);
+    } else {
+      if (e.clip && me.resting) return false; // seated: gestures of the arms and animals of light only
+      me.emote(i);
+    }
     presence?.sendEmote(i);
+    return true;
   };
   // sitting, lying down, boarding
   const interact = new Interact({ player, world, hud, peers: () => (avatars ? avatars.list : []) });
@@ -152,25 +171,46 @@ async function boot() {
       return flower ? { label: look.bouquet ? 'Add to the bouquet' : 'Pick a flower', run: () => { look.kinds = [...(look.kinds || []), flower].slice(-9); look.bouquet = true; wait = 0; } } : null;
     });
   }
+  // toadstools: picked and eaten on the spot. Nobody should do that.
+  world.actionSources.push((p) => {
+    const it = world.mushrooms.near(p.pos.x, p.pos.y, p.pos.z);
+    return it ? { label: 'Pick and eat the mushroom', run: () => { world.mushrooms.pick(it); player.die('Ate a strange mushroom', [p.pos.x, p.pos.z, player.yaw]); } } : null;
+  });
   app.interact = interact;
   // chat: shown to those who are there, kept nowhere
-  // cheat codes: typed in the chat, never sent to anyone
-  const CHEATS = {
-    BIGHEAD: () => { timers.bighead = 12; return 'Your head feels… roomy.'; },
-    BIGMOMMA: () => {
+  // Commands, typed in the chat and never sent to anyone: /kill (when stuck), an emote by its name (/wave,
+  // /cheer…) — and a few secret words, known by their fingerprints only (they are written nowhere in the game).
+  const fingerprint = (word) => { let h = 2166136261; for (const c of word) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
+  const SECRETS = new Map([
+    [0xd8797277, () => { timers.bighead = 12; return 'Your head feels… roomy.'; }],
+    [0xdb851716, () => {
       if (player.seat || player.swimming || player.cave) return 'Not here!';
       player.riding = true;
       return 'A quad! Shift goes faster, E gets off.';
-    },
-    MOON: () => { timers.moon = 25; return 'Gravity went for a walk.'; },
-    TURBO: () => { timers.turbo = 20; return 'Legs: upgraded.'; },
-    TINY: () => { timers.tiny = 20; return 'Everything looks bigger from down here.'; },
-    DISCO: () => { timers.disco = 15; return 'Disco!'; },
-    HELP: () => `Cheats: ${Object.keys(CHEATS).filter((k) => k !== 'HELP').map((k) => `/${k}`).join(' ')}`,
-  };
-  const cheat = (text) => {
-    const run = CHEATS[text.slice(1).trim().toUpperCase()];
-    hud.addChat('✦', 5, run ? run() : 'Unknown code. Try /HELP', true);
+    }],
+    [0x9b3e5c80, () => { timers.moon = 25; return 'Gravity went for a walk.'; }],
+    [0x58ffc1db, () => { timers.turbo = 20; return 'Legs: upgraded.'; }],
+    [0x26b6b2ab, () => { delete timers.giant; timers.tiny = 20; return 'Everything looks bigger from down here.'; }],
+    [0xb77215b9, () => { timers.disco = 15; return 'Disco!'; }],
+    [0x9c5b13ae, () => { delete timers.tiny; timers.giant = 20; return 'Mind the lamp posts.'; }],
+    [0x3f66406c, () => { timers.spring = 25; return 'Boing.'; }],
+    [0xc4c40e95, () => {
+      if (player.seat || player.cave || player.dead) return 'Not here!';
+      timers.rocket = 9; player.launch(34);
+      return 'Lift-off!';
+    }],
+    [0xa2793b81, () => { timers.skate = 20; return 'Somebody waxed the valley.'; }],
+    [0x8354f3fc, () => { timers.fisheye = 20; return 'What big eyes you have.'; }],
+  ]);
+  const command = (text) => {
+    const [word, ...rest] = text.slice(1).trim().split(/\s+/), name = word.toLowerCase();
+    const tell = (line) => hud.addChat('✦', 5, line, true);
+    if (name === 'kill') { if (!player.dead) player.die('Took the easy way out', [SPAWN.x, SPAWN.z, SPAWN.yaw + Math.PI]); return; }
+    if (name === 'admin') { adminKey(rest.join(' ')); return; }
+    const e = emoteIndex(name);
+    if (e >= 0) { emote(e); return; }
+    const secret = SECRETS.get(fingerprint(word.toUpperCase()));
+    tell(secret ? secret() : 'Unknown command.');
   };
   // characters to talk to: near one of them, what is typed goes to it and to nobody else
   const npcs = world.npcs.map((n) => ({ ...n, brain: new Npc(n.id), tag: hud.tag(`npc-${n.id}`, n.name, 3), met: false }));
@@ -179,13 +219,13 @@ async function boot() {
     const n = npcs.find((q) => (q.x - p.pos.x) ** 2 + (q.z - p.pos.z) ** 2 < q.reach * q.reach);
     return n ? { label: `Talk to ${n.name}`, run: () => {
       talking = n;
-      hud.toggleChat(true, `Say something to ${n.name}…`);
+      hud.toggleChat(true, n.brain.ask || `Say something to ${n.name}…`);
       if (!n.met) { n.met = true; const hello = n.brain.greeting(); hud.addChat(n.name, 3, hello); hud.say(n.tag, hello); }
     } } : null;
   });
   const say = (text) => {
     if (!cleanChat(text)) return;
-    if (text.trim().startsWith('/')) { if (state.mode === 'walk') cheat(text.trim()); return; }
+    if (text.trim().startsWith('/')) { if (state.mode === 'walk') command(text.trim()); return; }
     if (talking) {
       const n = talking, mine = cleanChat(text);
       hud.addChat(name, color, mine, true);
@@ -198,21 +238,23 @@ async function boot() {
     hud.addChat(name, color, sent, true);
     hud.say(hud.selfTag, sent);
   };
-  // the Sky Stones: a clock while climbing, the board of the best times at the gate
+  // the climb: a clock while climbing, the board of the best times at the gate
   const skyScores = new Scores('sky');
-  skyScores.top().then((list) => world.games.setScores(list));
+  const lists = (tops) => Object.fromEntries(Object.entries(tops).map(([k, v]) => [k, v])); // (already { name, score })
+  skyScores.tops().then((tops) => world.games.setScores(lists(tops)));
   world.games.events = {
     note: (text) => hud.note(text, 4200),
     run: (text) => hud.setRun(text),
+    started: () => { skyScores.start(); },
     finished: (ms, clean) => {
       rank.play('dragon', me.root);
-      presence?.sendEmote(EMOTES.length + RANK_EMOTES.indexOf('dragon'));
+      presence?.sendEmote(emoteIndex('dragon'));
       if (!clean) { hud.note(`${formatTime(ms)} — but a cheat was on: not recorded`, 7000); return; }
-      skyScores.submit(name, ms).then(({ top, rank: place, best, shared }) => {
-        world.games.setScores(top);
-        const where = place ? `#${place} on the board` : 'not on the board this time';
+      skyScores.submit(name, ms).then(({ tops, rank: place, best, shared }) => {
+        world.games.setScores(lists(tops));
+        const where = place ? `#${place} of all time` : 'not on the board this time';
         hud.note(`${formatTime(ms)} — ${best ? where : 'your best time stands'}${shared ? '' : ' (kept in this browser only)'}`, 8000);
-        hud.addChat('✦', 5, `Sky Stones: ${name} reached the top in ${formatTime(ms)}${place ? ` (#${place})` : ''}`, true);
+        hud.addChat('✦', 5, `${CLIMB.name}: ${name} reached the top in ${formatTime(ms)}${place ? ` (#${place})` : ''}`, true);
       });
     },
   };
@@ -243,7 +285,7 @@ async function boot() {
     return v.url && near(p, v.sign, 3.4) ? { label: `Visit ${v.name}`, run: () => window.open(v.url, '_blank', 'noopener,noreferrer') } : null;
   });
   Object.assign(app, { travel, sky });
-  const toggleCamera = () => { if (state.mode === 'walk') setMode('free'); else if (state.mode === 'free') setMode('walk'); };
+  const toggleCamera = () => { if (state.mode === 'walk') { if (mayFly()) setMode('free'); } else if (state.mode === 'free') setMode('walk'); };
   const savedQuality = store.get('mmf.quality');
   const qualityChoice = params.get('q') && TIERS[params.get('q')] ? params.get('q') : savedQuality && TIERS[savedQuality] ? savedQuality : 'auto';
   const showQuality = () => hud.setQuality(qualityChoice, engine.tierId, engine.scale, engine.detail, engine.tier.phone);
@@ -251,7 +293,32 @@ async function boot() {
   engine.on('detail', showQuality);
   hud.setName(name);
   hud.setHat(look.hat);
+  hud.setSettings(settings);
+  showEmotes();
   hud.setPresence('offline', 1);
+  // who may fly the camera about (everyone, or the administrator alone: see app/config.js)
+  const mayFly = () => FEATURES.freeCamera === 'everyone' || who.admin;
+  hud.setFreeCamera(mayFly());
+  // the administrator: `/admin <key>` in the chat (or #admin=<key> in the address) — the key is checked by the server
+  const adminKey = async (key) => {
+    key = String(key || '').trim();
+    if (!key) { store.del('mmf.admin'); who.admin = false; }
+    else {
+      const ok = (await callApi('api/admin', { key }))?.ok === true;
+      who.admin = ok;
+      if (ok) store.set('mmf.admin', key); else store.del('mmf.admin');
+    }
+    hud.addChat('✦', 5, who.admin ? 'Administrator: on.' : key ? 'That key was not recognised.' : 'Administrator: off.', true);
+    hud.setFreeCamera(mayFly());
+    showEmotes();
+    app.onAdmin?.(who.admin ? key : '');
+  };
+  {
+    const fromHash = /[#&]admin=([^&]+)/.exec(location.hash);
+    if (fromHash) { history.replaceState(null, '', location.pathname + location.search); adminKey(decodeURIComponent(fromHash[1])); }
+    else if (store.get('mmf.admin')) adminKey(store.get('mmf.admin'));
+  }
+  countVisit().then((v) => { who.days = v.days; showEmotes(); if (v.days > 1) setTimeout(() => hud.note(`Day ${v.days} in a row — welcome back!`, 5000), 9000); });
   hud
     .on('camera', toggleCamera)
     .on('emote', emote)
@@ -260,6 +327,12 @@ async function boot() {
     .on('say', say)
     .on('hat', (i) => { if (owns(HATS[i]?.id)) { look.hat = i; store.set('mmf.hat', String(i)); } })
     .on('drop', () => { look.bouquet = false; look.kinds = undefined; })
+    .on('setting', (key, on) => {
+      settings[key] = on;
+      store.set(`mmf.${key}`, on ? '1' : '0');
+      player.autoRun = settings.run;
+      rig.follow = settings.follow;
+    })
     .on('color', (i) => { color = i; me.setColor(i); presence?.setIdentity(name, color); })
     .on('name', (n) => { if (!n) return; name = n; presence?.setIdentity(name, color); store.set('mmf.name', name); })
     .on('quality', (q) => {
@@ -274,7 +347,7 @@ async function boot() {
   input.on('perf', () => hud.toggleStats());
   input.on('emote', () => hud.toggleEmotes());
   input.on('drop', () => { if (look.bouquet) { look.bouquet = false; look.kinds = undefined; } });
-  input.on('chat', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleChat(true, talking ? `Say something to ${talking.name}…` : undefined); });
+  input.on('chat', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleChat(true, talking ? talking.brain.ask || `Say something to ${talking.name}…` : undefined); });
   input.on('respawn', () => { if (state.mode === 'walk') { spawn(); hud.note('Back to the mill'); } });
   input.on('menu', () => { hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); hud.toggleChat(false); hud.closeChoice(); });
   input.on('map', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleBigMap(); });
@@ -315,11 +388,11 @@ async function boot() {
       free.update(dt);
       player.update(dt, rig.heading, false);
     } else if (mode === 'walk') {
-      for (let i = 0; i < 10; i++) if (input.pressed(`Digit${(i + 1) % 10}`)) emote(i);
+      for (let i = 0; i < 10; i++) if (input.pressed(`Digit${(i + 1) % 10}`)) emote(hud.quickEmote(i));
       if (input.pressed('KeyE')) interact.press(0);
       if (input.pressed('KeyL')) interact.press(1);
       player.update(dt, rig.heading, true);
-      rig.update(dt, player.pos);
+      rig.update(dt, player.pos, player);
       if (state.blend) {
         const b = state.blend;
         b.t += dt / b.duration;
@@ -350,7 +423,12 @@ async function boot() {
       for (const k in timers) if ((timers[k] -= dt) <= 0) delete timers[k];
       player.gravity = timers.moon ? 0.22 : 1;
       player.boost = timers.turbo ? 2.2 : 1;
-      me.size = timers.tiny ? 0.45 : 1;
+      player.spring = timers.spring ? 2 : 1;
+      player.grip = timers.skate ? 0.09 : 1;
+      player.cheat = !!(timers.moon || timers.turbo || timers.spring || timers.skate || timers.rocket);
+      me.size = timers.tiny ? 0.45 : timers.giant ? 2.3 : 1;
+      const fov = timers.fisheye ? 104 : engine.width < engine.height ? 68 : 55;
+      if (Math.abs(camera.fov - fov) > 0.05) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 5); camera.updateProjectionMatrix(); }
       if (timers.disco) me.setColor(Math.floor(state.time * 6) % 16); else if (me.colorIndex !== color) me.setColor(color);
       look.bighead = !!timers.bighead;
       look.jet = player.jet > 0;
@@ -362,7 +440,7 @@ async function boot() {
     {
       // rings on the water around the swimmer, a splash when dropping in
       const p = player.pos, level = data.waterAt(p.x, p.z);
-      if (player.splashed) { if (level > -500) world.ripples.splash(engine.time, p.x, level, p.z, player.splashed); player.splashed = 0; }
+      if (player.splashed) { if (level > -500) world.ripples.splash(engine.time, p.x, level, p.z, player.splashed); player.splashed = 0; player.dived = false; }
       if ((player.swimming || player.wading) && level > -500) world.ripples.trail(0, engine.time, dt, p.x, level, p.z, player.speed, player.swimming);
       // one's own speech bubble
       const tag = hud.selfTag, saying = tag.classList.contains('saying') && mode === 'walk';

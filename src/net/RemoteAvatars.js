@@ -1,6 +1,6 @@
 // Draws the other visitors: one avatar and one name tag per peer of the presence layer.
 import * as THREE from 'three';
-import { ANIM, EMOTES, RANK_EMOTES } from '../player/Character.js';
+import { ANIM, EMOTE_LIST } from '../player/Character.js';
 
 const FAR = 240; // m: avatars further away are not drawn
 const TAG_RANGE = 70; // m: name tags fade out with distance
@@ -34,8 +34,10 @@ export class RemoteAvatars {
     presence.on('emote', ({ id, emote }) => {
       const it = this.items.get(id);
       if (!it) return;
-      if (emote < EMOTES.length) it.character.emote(emote);
-      else if (it.peer.visible) this.rank?.play(RANK_EMOTES[emote - EMOTES.length], it.character.root);
+      const e = EMOTE_LIST[emote];
+      if (!e) return; // (an emote of a newer version of the game)
+      if (!e.rank) it.character.emote(emote);
+      else if (it.peer.visible) this.rank?.play(e.rank, it.character.root);
     });
     for (const peer of presence.peers.values()) this._add(peer);
   }

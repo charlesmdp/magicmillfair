@@ -1,12 +1,13 @@
 // DOM interface: welcome screen, heads-up display, settings, touch controls, name tags.
-import { AVATAR_COLORS, EMOTES, RANK_EMOTES } from '../player/Character.js';
+import { AVATAR_COLORS } from '../player/Character.js';
 import { HATS } from '../player/Cosmetics.js';
 import { TIERS, TIER_ORDER } from '../core/Quality.js';
 import { assetUrl } from '../core/Assets.js';
 
 const ICON = {
   gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.9 2.9l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.9-2.9l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.9-2.9l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.9 2.9l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
-  cam: '<svg viewBox="0 0 24 24"><path d="M3 8h3l2-3h8l2 3h3v11H3z"/><circle cx="12" cy="13" r="3.6"/></svg>',
+  // (a little drone: the camera that flies about)
+  cam: '<svg viewBox="0 0 24 24"><path d="M2.5 6.5h6M15.5 6.5h6"/><path d="M5.5 6.5v2.3l3.5 1.9M18.5 6.5v2.3L15 10.7"/><rect x="9" y="9.6" width="6" height="4.6" rx="1.5"/><circle cx="12" cy="17.6" r="2.1"/><path d="M12 14.2v1.3"/></svg>',
   smile: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 14.5s1.5 2 4 2 4-2 4-2M9 9.5h.01M15 9.5h.01"/></svg>',
   jump: '<svg viewBox="0 0 24 24"><path d="M12 19V6M6 11l6-6 6 6"/></svg>',
   run: '<svg viewBox="0 0 24 24"><path d="M13 5.5a1.6 1.6 0 1 0 0-.01M6 21l3.5-6 3 2 1.5 4M9.5 15l1.5-6 4 2 3 0M11 9l-4 1-1 3"/></svg>',
@@ -15,8 +16,8 @@ const ICON = {
   chat: '<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>',
   hand: '<svg viewBox="0 0 24 24"><path d="M8 12V6a1.5 1.5 0 0 1 3 0v5V4.5a1.5 1.5 0 0 1 3 0V11V6a1.5 1.5 0 0 1 3 0v8c0 4-2.5 6.5-6 6.5S5.5 18 4 14l-1-2.6a1.4 1.4 0 0 1 2.5-1.2z"/></svg>',
 };
-const EMOTE_LABEL = ['Wave', 'Dance', 'Thumbs up', 'Yes', 'No', 'Punch'];
-const RANK_LABEL = { deer: 'Deer', wolf: 'Wolf', tiger: 'Tiger', dragon: 'Dragon' };
+// the emotes on the keys 1 to 0: the six gestures of the model, then cheering on (see EMOTE_LIST)
+const QUICK = ['wave', 'dance', 'thumbsup', 'yes', 'no', 'punch', 'cheer', 'clap', 'hype', 'rage'];
 const hex = (i) => `#${AVATAR_COLORS[((i % 16) + 16) % 16].toString(16).padStart(6, '0')}`;
 
 // the version of this build (see vite.config.js)
@@ -109,7 +110,7 @@ export class Hud {
       <div class="top-right">
         <button class="icon" data-act="chat" title="Chat (Enter)" aria-label="Chat">${ICON.chat}</button>
         <button class="icon" data-act="emote" title="Emotes (T)" aria-label="Emotes">${ICON.smile}</button>
-        <button class="icon" data-act="camera" title="Free camera (F)" aria-label="Free camera" aria-pressed="false">${ICON.cam}</button>
+        <button class="icon" data-act="camera" title="Flying camera (F)" aria-label="Flying camera" aria-pressed="false">${ICON.cam}</button>
         <button class="icon" data-act="settings" title="Settings" aria-label="Settings">${ICON.gear}</button>
       </div>
       <div class="toast"><small>Now entering</small><span></span></div>
@@ -122,8 +123,6 @@ export class Hud {
       </div>
       <div class="stats"></div>
       <div class="emotes">
-        <div>${EMOTES.map((e, i) => `<button data-emote="${i}">${EMOTE_LABEL[i]}</button>`).join('')}</div>
-        <div class="rank">${RANK_EMOTES.map((e, i) => `<button data-emote="${EMOTES.length + i}">${RANK_LABEL[e]}</button>`).join('')}</div>
         <div class="held"><button data-drop>Put the bouquet down (B)</button></div>
       </div>
       <div class="wasted" aria-live="assertive"><div class="band"><b>WASTED</b><span></span></div></div>
@@ -133,7 +132,7 @@ export class Hud {
       </div>
       <div class="chat">
         <div class="log" aria-live="polite"></div>
-        <form class="say"><input type="text" maxlength="200" placeholder="Say something…" autocomplete="off" spellcheck="false" enterkeyhint="send" aria-label="Chat message" /></form>
+        <form class="say"><input type="text" maxlength="200" placeholder="Say something…" autocomplete="off" spellcheck="false" enterkeyhint="send" aria-label="Chat message" /><small class="tip">Stuck somewhere? Type <b>/kill</b> · an emote by its name: <b>/wave</b>, <b>/cheer</b>…</small></form>
       </div>
       <div class="chooser" role="dialog" aria-label="Choose">
         <div class="sheet"><h2></h2><p class="lead"></p><div class="list"></div><button class="close" type="button">Stay here</button></div>
@@ -146,6 +145,9 @@ export class Hud {
         <h3>Display</h3>
         <div class="row"><span>Minimap</span><button class="switch" data-sw="map" aria-pressed="true" aria-label="Minimap"></button></div>
         <div class="row"><span>Performance figures</span><button class="switch" data-sw="stats" aria-pressed="false" aria-label="Performance figures"></button></div>
+        <h3>Controls</h3>
+        <div class="row"><span>Run by default <small>(Shift walks)</small></span><button class="switch" data-set="run" aria-pressed="false" aria-label="Run by default"></button></div>
+        <div class="row"><span>The camera turns with the character</span><button class="switch" data-set="follow" aria-pressed="false" aria-label="The camera turns with the character"></button></div>
         <h3>Hat</h3>
         <div class="hats">${HATS.map((h, i) => `<button data-hat="${i}">${h.name}</button>`).join('')}</div>
         <h3>Your name</h3>
@@ -201,11 +203,15 @@ export class Hud {
     this.chatInput.addEventListener('blur', () => { if (!this.chatInput.value) this.toggleChat(false); });
     for (const ev of ['mousedown', 'touchstart', 'wheel']) this.chatEl.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
     this.cameraBtn = h.querySelector('[data-act="camera"]');
-    this.emotes.querySelectorAll('button[data-emote]').forEach((b) => (b.onclick = () => { this.emit('emote', +b.dataset.emote); this.emotes.classList.remove('on'); }));
     this.emotes.querySelector('[data-drop]').onclick = () => { this.emit('drop'); this.emotes.classList.remove('on'); };
     h.querySelectorAll('[data-hat]').forEach((b) => (b.onclick = () => { this.setHat(+b.dataset.hat); this.emit('hat', +b.dataset.hat); }));
     this.wastedEl = h.querySelector('.wasted');
     h.querySelectorAll('.quality button').forEach((b) => (b.onclick = () => this.emit('quality', b.dataset.q)));
+    h.querySelectorAll('[data-set]').forEach((b) => (b.onclick = () => {
+      const on = b.getAttribute('aria-pressed') !== 'true';
+      b.setAttribute('aria-pressed', String(on));
+      this.emit('setting', b.dataset.set, on);
+    }));
     h.querySelectorAll('[data-sw]').forEach((b) => (b.onclick = () => {
       const on = b.getAttribute('aria-pressed') !== 'true';
       b.setAttribute('aria-pressed', String(on));
@@ -261,6 +267,46 @@ export class Hud {
   }
   get choosing() { return !!this._choice; }
   closeChoice() { this._choice?.(null); }
+
+  // ---------- emotes, settings
+  /**
+   * The emotes offered: [{ index, id, label, clip | move | rank, days, locked }] (see EMOTE_LIST). The animals of
+   * light are shown with the number of days in a row that earns them; `days`: where the visitor stands.
+   */
+  setEmotes(list, days = 1) {
+    this._emoteIds = Object.fromEntries(list.map((e) => [e.id, e.index]));
+    const box = this.emotes, held = box.querySelector('.held');
+    box.querySelectorAll('.group').forEach((n) => n.remove());
+    const groups = [
+      ['', list.filter((e) => e.clip)],
+      ['Cheer on', list.filter((e) => e.move)],
+      [`Animals of light — day ${days} in a row`, list.filter((e) => e.rank).sort((a, b) => a.days - b.days)],
+    ];
+    for (const [title, items] of groups) {
+      if (!items.length) continue;
+      const g = el('div', `group${items[0].rank ? ' rank' : ''}`);
+      if (title) g.append(el('h4', '', title));
+      const row = el('div', 'set');
+      for (const e of items) {
+        const b = el('button');
+        b.type = 'button';
+        b.textContent = e.label;
+        b.title = e.rank ? `/${e.id} — earned by visiting ${e.days} days in a row` : `/${e.id}`;
+        if (e.rank) b.append(el('small', '', e.locked ? `day ${e.days}` : '✓'));
+        if (e.locked) b.classList.add('locked');
+        b.onclick = () => { this.emit('emote', e.index); box.classList.remove('on'); };
+        row.append(b);
+      }
+      g.append(row);
+      box.insertBefore(g, held);
+    }
+  }
+  /** The emote on key `i` (0 = the key 1): its number, or -1. */
+  quickEmote(i) { return this._emoteIds?.[QUICK[i]] ?? -1; }
+
+  setSettings(settings) { this.hud.querySelectorAll('[data-set]').forEach((b) => b.setAttribute('aria-pressed', String(!!settings[b.dataset.set]))); }
+  /** May the visitor fly the camera about? (the button disappears otherwise) */
+  setFreeCamera(on) { this.cameraBtn.style.display = on ? '' : 'none'; }
 
   // ---------- hats, the bouquet, dying
   setHat(i) { this.hud.querySelectorAll('[data-hat]').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.hat === i))); }

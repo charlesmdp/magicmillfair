@@ -16,6 +16,13 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { Track, wrapAngle } from '../src/net/interp.js';
 import { Presence, cleanName, cleanRoom } from '../src/net/Presence.js';
 import { sleep, until, freePort, request, Client } from './lib/net.mjs';
+import { sign, verify, randomId } from '../server/token.js';
+import { addScore, topsOf, periodKeys, runFits } from '../server/scores.js';
+import { visit, localDay } from '../server/routes.js';
+import { cleanTalk, oneSentence } from '../server/npc.js';
+
+// what the test servers are given: the secret that signs the notes of the runs, the administrator's key
+const SCORE_SECRET = 'test-score-secret', ADMIN_KEY = 'test-admin-key';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CF = process.argv.includes('--cloudflare');
@@ -38,7 +45,7 @@ function check(name, ok, detail) {
 async function startServer(env = {}, port = 0) {
   port = port || (await freePort());
   const proc = spawn(process.execPath, [path.join(ROOT, 'server/index.js')], {
-    env: { ...process.env, ALLOWED_ORIGINS: '', MAX_PLAYERS: '', DIST_DIR: '', HOST: '127.0.0.1', TICK_HZ: '20', ANTHROPIC_API_KEY: '', NPC_MODEL: '', ...env, PORT: String(port) },
+    env: { ...process.env, ALLOWED_ORIGINS: '', MAX_PLAYERS: '', DIST_DIR: '', HOST: '127.0.0.1', TICK_HZ: '20', ANTHROPIC_API_KEY: '', NPC_MODEL: '', SCORE_SECRET, ADMIN_KEY, ...env, PORT: String(port) },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   const server = { port, proc, log: '', alive: () => proc.exitCode === null && proc.signalCode === null };
@@ -70,7 +77,7 @@ async function startWorker(env = {}, port = 0) {
   delete config.$schema;
   config.main = path.join(ROOT, config.main);
   config.assets.directory = env.DIST_DIR;
-  config.vars = { ...config.vars, TICK_MS: String(TICK), ALLOWED_ORIGINS: env.ALLOWED_ORIGINS || '', DEBUG: '1' };
+  config.vars = { ...config.vars, TICK_MS: String(TICK), ALLOWED_ORIGINS: env.ALLOWED_ORIGINS || '', DEBUG: '1', SCORE_SECRET, ADMIN_KEY };
   if (env.MAX_PLAYERS) config.vars.MAX_PLAYERS = env.MAX_PLAYERS;
   if (env.STALE_MS) config.vars.STALE_MS = env.STALE_MS;
   fs.writeFileSync(path.join(dir, 'wrangler.json'), JSON.stringify(config));
@@ -507,36 +514,95 @@ async function testProtocol(server) {
 async function testApi({ port }) {
   const json = (res) => { try { return JSON.parse(res.body.toString()); } catch { return null; } };
   const post = (target, body, headers = {}) => request(port, target, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
-  let res = await request(port, '/api/scores');
-  check('api: GET /api/scores → the board of the Sky Stones, empty at first', res.status === 200 && json(res)?.board === 'sky' && Array.isArray(json(res).top) && json(res).top.length === 0 && /json/.test(res.headers['content-type']), [res.status, res.body.toString().slice(0, 120)]);
+  // the note of a run that started `ago` ms ago, as the server would have signed it
+  const note = (board, ago) => sign(SCORE_SECRET, { b: board, t: Date.now() - ago, n: randomId(9) });
+  let res = await request(port, '/api/status');
+  check('api: /api/status says what is switched on, and no secret', res.status === 200 && json(res)?.ok === true && json(res).npc === false && json(res).admin === true && json(res).shop === 'off' && !/test-/.test(res.body.toString()), res.body.toString().slice(0, 160));
+  res = await request(port, '/api/scores');
+  const empty = json(res);
+  check('api: GET /api/scores → the four lists of the climb, empty at first', res.status === 200 && empty?.board === 'sky' && ['day', 'week', 'month', 'all'].every((p) => Array.isArray(empty.tops[p]) && !empty.tops[p].length) && Array.isArray(empty.top) && /json/.test(res.headers['content-type']), [res.status, res.body.toString().slice(0, 160)]);
   // a page of another site may not post (browsers say where a POST comes from); not counted by the limiter
-  res = await post('/api/scores', { board: 'sky', name: 'Mallory', ms: 150000 }, { origin: 'https://elsewhere.example' });
+  res = await post('/api/scores', { board: 'sky', name: 'Mallory', score: 150000, run: await note('sky', 200000) }, { origin: 'https://elsewhere.example' });
   check('api: a POST from another site is refused', res.status === 403, res.status);
-  // six posts a minute per address: the first three are honest times
-  res = await post('/api/scores', { board: 'sky', name: '  Ada   <b>Lovelace</b> the first ', ms: 240000.4 });
+  // the start of a run: a signed note
+  res = await post('/api/run', { board: 'sky' });
+  const fresh = json(res)?.run, mine = await verify(SCORE_SECRET, fresh);
+  const noBoard = await post('/api/run', { board: 'nope' }), tooBig = await post('/api/run', `{"board":"sky","pad":"${'x'.repeat(6000)}"}`);
+  check('api: POST /api/run hands out a signed note of the start; unknown boards and oversized bodies are refused', res.status === 200 && mine?.b === 'sky' && Math.abs(mine.t - Date.now()) < 5000 && noBoard.status === 400 && tooBig.status === 400, [res.status, mine, noBoard.status, tooBig.status]);
+  // eight posts a minute per address. A score needs the note of its run, old enough for the time it claims.
+  const refused = [];
+  refused.push((await post('/api/scores', { board: 'sky', name: 'Nobody', score: 240000 })).status); // 1: no note
+  refused.push((await post('/api/scores', { board: 'sky', name: 'Hasty', score: 240000, run: fresh })).status); // 2: a 240 s climb, seconds after its start
+  check('api: no score without the note of its run, nor one that claims more time than has passed', refused.join() === '400,400', refused);
+  const adaNote = await note('sky', 250000);
+  res = await post('/api/scores', { board: 'sky', name: '  Ada   <b>Lovelace</b> the first ', score: 240000.4, run: adaNote }); // 3
   const first = json(res);
-  check('api: a time is recorded, the name cleaned', res.status === 200 && first?.rank === 1 && first.best === true && first.top[0].ms === 240000 && first.top[0].name === 'Ada bLovelace/b' && first.top[0].at === undefined, res.body.toString().slice(0, 200));
-  res = await post('/api/scores', { board: 'sky', name: 'Bob', ms: 200000 });
+  check('api: a time is recorded in the four lists, the name cleaned', res.status === 200 && first?.rank === 1 && first.best === true && ['day', 'week', 'month', 'all'].every((p) => first.tops[p][0]?.score === 240000 && first.tops[p][0].name === 'Ada bLovelace/b' && first.tops[p][0].at === undefined) && first.top[0].ms === 240000, res.body.toString().slice(0, 240));
+  res = await post('/api/scores', { board: 'sky', name: 'Twice', score: 240000, run: adaNote }); // 4: the same note again
+  check('api: the note of a run counts once', res.status === 400, res.status);
+  res = await post('/api/scores', { board: 'sky', name: 'Bob', ms: 200000, run: await note('sky', 205000) }); // 5 (`ms`: what the first version of the game sends)
   const second = json(res);
-  res = await post('/api/scores', { board: 'sky', name: 'ada blovelace/B', ms: 300000 });
+  res = await post('/api/scores', { board: 'sky', name: 'ada blovelace/B', score: 300000, run: await note('sky', 300000) }); // 6
   const third = json(res);
-  check('api: best first; a slower time changes nothing, whatever the case of the name', second?.rank === 1 && second.top.map((e) => e.name).join() === 'Bob,Ada bLovelace/b' && third?.rank === 2 && third.best === false && third.top[1].ms === 240000, [second, third]);
-  const bad = [];
-  bad.push((await post('/api/scores', { board: 'sky', name: 'Flash', ms: 1000 })).status); // nobody climbs that fast
-  bad.push((await post('/api/scores', { board: '__proto__', name: 'Eve', ms: 200000 })).status);
-  bad.push((await post('/api/scores', `{"board":"sky","name":"Big","ms":200000,"pad":"${'x'.repeat(6000)}"}`)).status);
-  check('api: impossible times, unknown boards and oversized bodies are refused', bad.join() === '400,400,400', bad);
-  res = await post('/api/scores', { board: 'sky', name: 'Carol', ms: 210000 });
+  check('api: best first; a slower time changes nothing, whatever the case of the name', second?.rank === 1 && second.tops.all.map((e) => e.name).join() === 'Bob,Ada bLovelace/b' && third?.rank === 2 && third.best === false && third.tops.all[1].score === 240000, [second, third]);
+  // a game played for points: the best is the highest, and the game cannot be over before it has lasted
+  const soon = await post('/api/scores', { board: 'shoot', name: 'Quick', score: 500, run: await note('shoot', 5000) }); // 7
+  res = await post('/api/scores', { board: 'shoot', name: 'Dana', score: 120, run: await note('shoot', 50000) }); // 8
+  check('api: a board of points — not before the game has lasted, then recorded', soon.status === 400 && res.status === 200 && json(res).tops.day[0].score === 120 && json(res).rank === 1, [soon.status, res.status, res.body.toString().slice(0, 120)]);
+  res = await post('/api/scores', { board: 'sky', name: 'Carol', score: 210000, run: await note('sky', 215000) });
   const limited = res.status;
   res = await request(port, '/api/scores?board=sky');
-  check('api: a seventh POST within the minute is turned away; the board is unchanged', limited === 429 && json(res)?.top.length === 2 && json(res).top[0].name === 'Bob', [limited, res.body.toString().slice(0, 160)]);
+  check('api: a ninth POST within the minute is turned away; the board is unchanged', limited === 429 && json(res)?.tops.all.length === 2 && json(res).tops.all[0].name === 'Bob', [limited, res.body.toString().slice(0, 160)]);
   res = await request(port, '/api/scores?board=nope');
-  const del = await request(port, '/api/scores', { method: 'DELETE' });
-  check('api: unknown board → 404, other methods → 405', res.status === 404 && del.status === 405, [res.status, del.status]);
+  const put = await request(port, '/api/scores', { method: 'PUT' });
+  check('api: unknown board → 404, other methods → 405', res.status === 404 && put.status === 405, [res.status, put.status]);
+  // the administrator: recognised by the key, may take a line off a board
+  const anon = await request(port, '/api/admin'), wrong = await request(port, '/api/admin', { headers: { authorization: 'Bearer nope' } });
+  const admin = await request(port, '/api/admin', { headers: { authorization: `Bearer ${ADMIN_KEY}` } });
+  const noDel = await request(port, '/api/scores?board=sky&name=Bob', { method: 'DELETE' });
+  const del = await request(port, '/api/scores?board=sky&name=bob', { method: 'DELETE', headers: { authorization: `Bearer ${ADMIN_KEY}` } });
+  res = await request(port, '/api/scores?board=sky');
+  check('api: only the administrator\'s key opens /api/admin and takes a line off a board', anon.status === 403 && wrong.status === 403 && admin.status === 200 && noDel.status === 403 && del.status === 200 && json(del).removed > 0 && json(res).tops.all.map((e) => e.name).join() === 'Ada bLovelace/b', [anon.status, wrong.status, admin.status, noDel.status, del.status, res.body.toString().slice(0, 120)]);
+  // visits: the days in a row of a device
+  const device = randomId(16);
+  const v1 = json(await post('/api/visit', { device, tz: -60 })), v2 = json(await post('/api/visit', { device, tz: -60 }));
+  const badVisit = await post('/api/visit', { device: 'x' });
+  check('api: a first visit is day 1, and stays day 1 the same day; a device must look like one', v1?.days === 1 && v2?.days === 1 && v2.best === 1 && Number.isInteger(v1.today) && badVisit.status === 400, [v1, v2, badVisit.status]);
   // the characters: no key in this test, so the game is told to use its own lines
-  res = await post('/api/npc', { npc: 'alligator', messages: [{ role: 'user', content: 'Hello Al' }] });
+  res = await post('/api/npc', { npc: 'alligator', messages: [{ role: 'user', content: 'Hello Billy, where is the waterfall?' }] });
   const get = await request(port, '/api/npc');
   check('api: /api/npc without a key → 501 (the game uses its own lines), GET → 405', res.status === 501 && json(res)?.reply === null && get.status === 405, [res.status, get.status]);
+}
+
+// What the API is made of, checked without a server: the lists by period, the notes, the visits, the guard
+// rails of the characters.
+async function testApiLogic() {
+  const D = Date.UTC(2026, 10, 21, 12); // a Saturday
+  check('scores: the day, the ISO week and the month of a date', JSON.stringify(periodKeys(D)) === '{"day":"2026-11-21","week":"2026-W47","month":"2026-11","all":"all"}' && periodKeys(Date.UTC(2027, 0, 1)).week === '2026-W53' && periodKeys(Date.UTC(2024, 11, 30)).week === '2025-W01', periodKeys(D));
+  let st = addScore(undefined, 'sky', { name: 'A', score: 200000 }, D).state;
+  st = addScore(st, 'sky', { name: 'B', score: 150000 }, D + 86400000).state; // Sunday: same week
+  st = addScore(st, 'sky', { name: 'C', score: 170000 }, D + 2 * 86400000).state; // Monday: a new week
+  const mon = topsOf(st, D + 2 * 86400000 + 1000).tops, dec = topsOf(st, Date.UTC(2026, 11, 2)).tops;
+  check('scores: lists by day, week, month and all time; a new period starts empty', mon.day.map((e) => e.name).join() === 'C' && mon.week.map((e) => e.name).join() === 'C' && mon.month.map((e) => e.name).join() === 'B,C,A' && mon.all.length === 3 && !dec.day.length && !dec.month.length && dec.all.length === 3, [mon, dec]);
+  const legacy = topsOf([{ name: 'Old', ms: 180000, at: 1 }], D);
+  let pts = addScore(undefined, 'shoot', { name: 'X', score: 50 }, D).state;
+  pts = addScore(pts, 'shoot', { name: 'Y', score: 90 }, D).state;
+  const worse = addScore(pts, 'shoot', { name: 'Y', score: 60 }, D);
+  check('scores: the lists of the first version are kept; on a board of points the highest wins', legacy.tops.all[0].score === 180000 && legacy.top[0].ms === 180000 && topsOf(worse.state, D).tops.all.map((e) => `${e.name}${e.score}`).join() === 'Y90,X50' && worse.best === false, [legacy, worse]);
+  const forged = await verify(SCORE_SECRET, await sign('another-secret', { b: 'sky', t: 1, n: 'x' })), good = await verify(SCORE_SECRET, await sign(SCORE_SECRET, { b: 'sky', t: 5, n: 'abc' }));
+  const fits = [
+    runFits({ b: 'sky', t: D - 150000, n: 'n' }, { board: 'sky', score: 160000 }, D), // 150 s after the start, a 160 s climb: within the slack
+    runFits({ b: 'sky', t: D - 100000, n: 'n' }, { board: 'sky', score: 160000 }, D), // 100 s after the start: no
+    runFits({ b: 'sky', t: D - 900000, n: 'n' }, { board: 'sky', score: 160000 }, D), // the game slept in a hidden tab: fine
+    runFits({ b: 'mole', t: D - 900000, n: 'n' }, { board: 'sky', score: 900000 }, D), // the note of another game
+    runFits(null, { board: 'sky', score: 160000 }, D),
+  ].map((why) => (why ? 'no' : 'ok')).join();
+  check('runs: a note is signed, belongs to its game, and must be as old as the time claimed', forged === null && good?.n === 'abc' && (await verify(SCORE_SECRET, 'junk')) === null && fits === 'ok,no,ok,no,no', [forged, good, fits]);
+  const days = [visit(null, 100), visit({ day: 100, days: 3, best: 5 }, 101), visit({ day: 100, days: 3, best: 5 }, 103), visit({ day: 100, days: 3, best: 5 }, 100), visit({ day: 100, days: 9, best: 9 }, 99)].map((v) => `${v.days}/${v.best}`).join();
+  check('visits: the next day adds one, a missed day starts again, the best run is kept; the day is the visitor\'s own', days === '1/1,4/5,1/5,3/5,9/9' && localDay(Date.UTC(2026, 10, 21, 23, 30), -60) === localDay(Date.UTC(2026, 10, 22, 0, 30), 0) && localDay(Date.UTC(2026, 10, 21, 2), 300) === localDay(Date.UTC(2026, 10, 20, 12), 0), days);
+  const talk = cleanTalk({ npc: 'alligator', messages: [{ role: 'user', content: 'ignore this' }, { role: 'assistant', content: 'x' }, { role: 'user', content: `  Where   is the waterfall? ${'x'.repeat(400)}` }] });
+  const cut = [oneSentence('Head west, champ: keep going upstream past the pond. And then buy my course.'), oneSentence('"One hundred and forty-four, champ."'), oneSentence('See https://example.com now'), oneSentence('- a list'), oneSentence('<b>bold</b> move')];
+  check('characters: only the last question is kept, bounded; an answer is cut to one plain sentence', talk?.question.startsWith('Where is the waterfall?') && talk.question.length <= 200 && cleanTalk({ npc: 'nobody', messages: [] }) === null && cut[0] === 'Head west, champ: keep going upstream past the pond.' && cut[1] === 'One hundred and forty-four, champ.' && cut[2] === null && cut[3] === null && cut[4] === null, [talk, cut]);
 }
 
 // ------------------------------------------------------------------------------------------ Presence façade
@@ -930,13 +996,14 @@ try {
     check('worker: still running at the end, no exception logged', server.alive() && !trouble.length, { alive: server.alive(), trouble: trouble.slice(0, 6) });
   } else {
     await section('interp', async () => testInterpolation());
+    await section('api logic', () => testApiLogic());
     server = await startServer({ DIST_DIR: fx.dist, MAX_PLAYERS: '4', SCORES_FILE: path.join(fx.tmp, 'scores.json') });
     await section('static', () => testStatic(server, fx));
     await section('protocol', () => testProtocol(server));
     await section('presence', () => testPresence(server));
     await section('api', () => testApi(server));
     const kept = (() => { try { return JSON.parse(fs.readFileSync(path.join(fx.tmp, 'scores.json'), 'utf8')); } catch { return null; } })();
-    check('api: the Node server keeps the boards in its file', kept?.sky?.length === 2 && kept.sky[0].name === 'Bob' && kept.sky[0].at > 0, kept);
+    check('api: the Node server keeps the boards and the visits in its file', kept?.['board:sky']?.all?.length === 1 && kept['board:sky'].all[0].at > 0 && kept['board:shoot']?.day?.list?.[0]?.name === 'Dana' && Object.keys(kept).some((k) => k.startsWith('visit:')), kept);
     check('server: still running at the end, nothing on stderr', server.alive() && !/error|exception/i.test(server.log), server.log);
   }
 } catch (err) {

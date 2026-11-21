@@ -1,62 +1,119 @@
 // Leaderboards of the fair's games, independent of where they are kept: server/index.js (a JSON file) and
-// cloudflare/worker.js (the storage of a Durable Object) both go through this.
+// cloudflare/worker.js (the storage of a Durable Object) both go through this (see routes.js).
 //
-//   GET  /api/scores?board=sky            → { board, top: [{ name, ms }] }            (the ten best, best first)
-//   POST /api/scores  { board, name, ms }  → { board, top, rank, best }                 (rank: 1 = first; best: a personal best)
+//   GET    /api/scores?board=sky                    → { board, tops: { day, week, month, all }, top }
+//   POST   /api/run     { board }                   → { run }      a signed note of when the run started
+//   POST   /api/scores  { board, name, score, run } → { board, tops, top, rank, best }
+//   DELETE /api/scores?board=sky&name=Somebody      → { removed }  (the administrator only)
 //
-// One line per name: a better time replaces the previous one, a worse one changes nothing. Times come from the
-// players' own browsers: there is no referee, only bounds on what is believed (see BOARDS).
+// Each list holds one line per name, best first: [{ name, score }]. `top` is the all-time list again, as the
+// first version of the game expects it ({ name, ms }). Four lists per board: the day, the week (from Monday),
+// the month — all three by the UTC calendar — and all time.
+//
+// Scores come from the players' own browsers: there is no referee. What is believed is bounded (see BOARDS),
+// and a score only counts with the note of its run, handed out by this server when the run started: the time
+// between the note and the score must fit the game (a climb announced as 150 s cannot arrive 20 s after its
+// start; a 45-second game cannot be over in 10). A note is used once. The administrator can take a line off.
 import { cleanName } from './protocol.js';
 
-/** board id → the fastest time believed and the slowest worth keeping (ms). */
+/**
+ * board id → what a score is. order 'asc': a time in ms, the lower the better, and the run lasted about that
+ * long; order 'desc': points, and the game lasts `length` ms (never less). min / max: what is believed.
+ */
 export const BOARDS = {
-  sky: { min: 100_000, max: 6 * 3600_000 }, // the Sky Stones: a bot that never misses needs about 150 s
+  sky: { order: 'asc', min: 100_000, max: 6 * 3600_000 }, // the climb: a bot that never misses needs about 150 s
+  race: { order: 'asc', min: 40_000, max: 3600_000 }, // three laps on a quad
+  shoot: { order: 'desc', min: 1, max: 9999, length: 45_000 }, // the shooting gallery
+  mole: { order: 'desc', min: 1, max: 9999, length: 45_000 }, // whack-a-mole
+  milk: { order: 'desc', min: 1, max: 9999, length: 45_000 }, // milk for the clown
+  bell: { order: 'desc', min: 1, max: 1000, length: 4_000 }, // the high striker: one blow of the mallet
 };
-export const KEPT = 200, SHOWN = 10;
+export const KEPT = { all: 200, month: 100, week: 100, day: 100 }, SHOWN = 10;
+export const PERIODS = ['day', 'week', 'month', 'all'];
+const SLACK = 20_000; // ms of grace between the clocks of the server and of a browser (a slow network, a slow phone)
 
 const key = (name) => name.toLowerCase();
+const two = (n) => String(n).padStart(2, '0');
 
-/** The line a POST asks to add, or null when it makes no sense. */
+/** The names of the day, the week and the month `at` (ms) falls in: { day: '2026-03-09', week: '2026-W11', month: '2026-03', all: 'all' }. */
+export function periodKeys(at) {
+  const d = new Date(at), y = d.getUTCFullYear(), m = d.getUTCMonth(), day = d.getUTCDate();
+  // ISO week: the week of a date is the week of its Thursday
+  const thu = new Date(Date.UTC(y, m, day));
+  thu.setUTCDate(thu.getUTCDate() - ((thu.getUTCDay() + 6) % 7) + 3);
+  const week = 1 + Math.round((thu - Date.UTC(thu.getUTCFullYear(), 0, 4)) / 604800000);
+  return { day: `${y}-${two(m + 1)}-${two(day)}`, week: `${thu.getUTCFullYear()}-W${two(week)}`, month: `${y}-${two(m + 1)}`, all: 'all' };
+}
+
+/** The line a POST asks to add ({ board, name, score, run }), or null when it makes no sense. */
 export function cleanScore(body) {
   if (!body || typeof body !== 'object' || !Object.hasOwn(BOARDS, body.board)) return null;
   const { min, max } = BOARDS[body.board];
-  const ms = Math.round(Number(body.ms));
-  if (!Number.isFinite(ms) || ms < min || ms > max) return null;
+  const score = Math.round(Number(body.score ?? body.ms));
+  if (!Number.isFinite(score) || score < min || score > max) return null;
   if (typeof body.name !== 'string' || !body.name.trim()) return null;
-  return { board: body.board, name: cleanName(body.name), ms };
+  return { board: body.board, name: cleanName(body.name), score, run: typeof body.run === 'string' ? body.run : '' };
 }
 
-/** Adds a time to a board (an array of { name, ms, at }, best first). Returns { list, rank, best }. */
-export function addScore(list, { name, ms }, at = Date.now()) {
-  list = Array.isArray(list) ? list.filter((e) => e && typeof e.name === 'string' && Number.isFinite(e.ms)) : [];
-  const mine = list.find((e) => key(e.name) === key(name));
-  const best = !mine || ms < mine.ms;
-  if (best) {
-    list = list.filter((e) => e !== mine);
-    list.push({ name, ms, at });
-    list.sort((a, b) => a.ms - b.ms || a.at - b.at);
-    list = list.slice(0, KEPT);
-  }
-  const rank = list.findIndex((e) => key(e.name) === key(name)) + 1; // 0: did not make the list
-  return { list, rank, best };
-}
+const lines = (list) => (Array.isArray(list) ? list.filter((e) => e && typeof e.name === 'string' && Number.isFinite(e.score ?? e.ms)).map((e) => ({ name: e.name, score: e.score ?? e.ms, at: e.at || 0 })) : []);
 
-export const topOf = (list) => (Array.isArray(list) ? list.slice(0, SHOWN).map((e) => ({ name: e.name, ms: e.ms })) : []);
+/** What is kept for a board, whatever was stored before (the first version kept one array of { name, ms, at }). */
+export function boardState(stored, at = Date.now()) {
+  const keys = periodKeys(at), old = Array.isArray(stored) ? { all: stored } : stored && typeof stored === 'object' ? stored : {};
+  const state = { v: 2, all: lines(old.all) };
+  for (const p of ['day', 'week', 'month']) state[p] = old[p] && old[p].key === keys[p] ? { key: keys[p], list: lines(old[p].list) } : { key: keys[p], list: [] };
+  return state;
+}
 
 /**
- * Answers a request on /api/scores. `store` keeps one value per board: { get(board) → list | undefined, put(board, list) },
- * both may be asynchronous. Returns { status, body }.
+ * Adds a score to the four lists of a board. Returns { state, rank, best }: rank in the all-time list
+ * (1 = first, 0 = not listed), best = a personal all-time best.
  */
-export async function scoresRoute({ method, query, body }, store) {
-  if (method === 'GET' || method === 'HEAD') {
-    const board = query.get('board') || 'sky';
-    if (!Object.hasOwn(BOARDS, board)) return { status: 404, body: { error: 'Unknown board.' } };
-    return { status: 200, body: { board, top: topOf(await store.get(board)) } };
+export function addScore(stored, board, { name, score }, at = Date.now()) {
+  const state = boardState(stored, at), asc = BOARDS[board].order === 'asc';
+  const better = (a, b) => (asc ? a < b : a > b);
+  let best = false;
+  for (const p of PERIODS) {
+    let list = p === 'all' ? state.all : state[p].list;
+    const mine = list.find((e) => key(e.name) === key(name));
+    if (mine && !better(score, mine.score)) continue;
+    if (p === 'all') best = true;
+    list = list.filter((e) => e !== mine);
+    list.push({ name, score, at });
+    list.sort((a, b) => (asc ? a.score - b.score : b.score - a.score) || a.at - b.at);
+    list = list.slice(0, KEPT[p]);
+    if (p === 'all') state.all = list; else state[p].list = list;
   }
-  if (method !== 'POST') return { status: 405, body: { error: 'Method not allowed.' } };
-  const score = cleanScore(body);
-  if (!score) return { status: 400, body: { error: 'Not a score.' } };
-  const { list, rank, best } = addScore(await store.get(score.board), score);
-  if (best) await store.put(score.board, list);
-  return { status: 200, body: { board: score.board, top: topOf(list), rank, best } };
+  return { state, rank: state.all.findIndex((e) => key(e.name) === key(name)) + 1, best };
+}
+
+/** Takes a name off every list of a board. Returns { state, removed }. */
+export function removeScore(stored, name, at = Date.now()) {
+  const state = boardState(stored, at);
+  let removed = 0;
+  const strip = (list) => list.filter((e) => (key(e.name) === key(name) ? (removed++, false) : true));
+  state.all = strip(state.all);
+  for (const p of ['day', 'week', 'month']) state[p].list = strip(state[p].list);
+  return { state, removed };
+}
+
+/** What a board shows: { tops: { day, week, month, all }, top } (see the top of this file). */
+export function topsOf(stored, at = Date.now()) {
+  const state = boardState(stored, at), cut = (list) => list.slice(0, SHOWN).map((e) => ({ name: e.name, score: e.score }));
+  const tops = { day: cut(state.day.list), week: cut(state.week.list), month: cut(state.month.list), all: cut(state.all) };
+  return { tops, top: tops.all.map((e) => ({ name: e.name, ms: e.score, score: e.score })) };
+}
+
+/**
+ * Does the note of a run fit the score that claims it? `note` is the payload signed at the start ({ b: board,
+ * t: when, n: nonce }), `at` is now. Returns '' when it does, else why not.
+ */
+export function runFits(note, { board, score }, at = Date.now()) {
+  const rule = BOARDS[board];
+  if (!note || note.b !== board || !Number.isFinite(note.t) || typeof note.n !== 'string') return 'no run';
+  const elapsed = at - note.t;
+  if (elapsed < 0 || elapsed > rule.max + 3600_000) return 'expired';
+  // (a run may well have lasted longer than its clock says — the game stops while its tab is hidden — never less)
+  if (rule.order === 'asc') return elapsed >= score - SLACK ? '' : 'the time does not match the run';
+  return elapsed >= (rule.length || 0) - 2000 ? '' : 'too soon';
 }

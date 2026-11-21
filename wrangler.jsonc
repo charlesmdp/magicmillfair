@@ -23,9 +23,12 @@
     "TICK_MS": "100",
     // Comma separated origins allowed to open the multiplayer socket. Empty: the site's own address only.
     "ALLOWED_ORIGINS": ""
-    // The characters one can talk to answer through Claude once the Worker has a secret named
-    // ANTHROPIC_API_KEY (dashboard: Settings → Variables and Secrets, or `npx wrangler secret put
-    // ANTHROPIC_API_KEY`). Never write the key in this file. NPC_MODEL (a variable) picks another model.
+    // Secrets are NOT written here: add them in the dashboard (the Worker → Settings → Variables and
+    // Secrets → Add → type "Secret"), or with `npx wrangler secret put NAME`:
+    //   ANTHROPIC_API_KEY  Billy the alligator then answers through Claude (NPC_MODEL, a variable, picks the model)
+    //   ADMIN_KEY          the administrator's key: a long password of your own (`/admin <key>` in the chat)
+    //   SCORE_SECRET       optional: signs the notes of the game runs (drawn and kept by the Worker otherwise)
+    // https://<the site>/api/status tells which of them the Worker sees (true / false, never their value).
   },
   "observability": { "enabled": true },
   // No usage statistics sent to Cloudflare by the tool itself.

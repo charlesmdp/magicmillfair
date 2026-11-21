@@ -15,12 +15,72 @@ export const AVATAR_COLORS = [
 ];
 
 /** Animation ids exchanged over the network. */
-export const ANIM = { idle: 0, walk: 1, run: 2, jump: 3, swim: 4, sit: 5, lie: 6, work: 7, dead: 8 };
-const CLIP_OF = ['Idle', 'Walking', 'Running', 'Jump', 'Running', 'Sitting', 'Idle', 'Sitting', 'Death'];
+export const ANIM = { idle: 0, walk: 1, run: 2, jump: 3, swim: 4, sit: 5, lie: 6, work: 7, dead: 8, dive: 9 };
+const CLIP_OF = ['Idle', 'Walking', 'Running', 'Jump', 'Running', 'Sitting', 'Idle', 'Sitting', 'Death', 'Idle'];
 /** Emotes played by the avatar itself; the ones after them (RANK_EMOTES) summon an animal of light. */
 export const EMOTES = ['Wave', 'Dance', 'ThumbsUp', 'Yes', 'No', 'Punch'];
 export const RANK_EMOTES = ['deer', 'wolf', 'tiger', 'dragon'];
 export const isResting = (anim) => anim === ANIM.sit || anim === ANIM.lie || anim === ANIM.work;
+
+/**
+ * Every emote, in the order of the numbers that travel over the network (never reorder: append).
+ *   clip: an animation of the model · move: a gesture made by hand (see MOVES) · rank: an animal of light,
+ *   earned by coming back `days` days in a row. `id` is also the chat command (/wave, /cheer…).
+ */
+export const EMOTE_LIST = [
+  { id: 'wave', label: 'Wave', clip: 'Wave' }, { id: 'dance', label: 'Dance', clip: 'Dance' }, { id: 'thumbsup', label: 'Thumbs up', clip: 'ThumbsUp' },
+  { id: 'yes', label: 'Yes', clip: 'Yes' }, { id: 'no', label: 'No', clip: 'No' }, { id: 'punch', label: 'Punch', clip: 'Punch' },
+  { id: 'deer', label: 'Stag', rank: 'deer', days: 10 }, { id: 'wolf', label: 'Wolf', rank: 'wolf', days: 25 },
+  { id: 'tiger', label: 'Tiger', rank: 'tiger', days: 30 }, { id: 'dragon', label: 'Dragon', rank: 'dragon', days: 50 },
+  { id: 'rage', label: 'Rage', move: 'rage' }, { id: 'cheer', label: 'Cheer', move: 'cheer' }, { id: 'clap', label: 'Clap', move: 'clap' },
+  { id: 'hype', label: 'Jump for joy', move: 'hype' }, { id: 'go', label: 'Go! Go!', move: 'go' }, { id: 'bow', label: 'Bow', move: 'bow' },
+];
+export const emoteIndex = (id) => EMOTE_LIST.findIndex((e) => e.id === id);
+
+const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+/**
+ * Gestures made by hand, on top of the standing pose: fn(t, P, e) fills P for the instant t (seconds), e being
+ * the 0..1 envelope that eases the gesture in and out. P: L / R = where each hand goes ([x to the left, y up,
+ * z forward], metres from the feet), lift (m), lean (the whole body, forward), bend (from the waist), twist,
+ * roll, head (turned), nod (radians).
+ */
+const MOVES = {
+  // fists shaking by the head, feet stamping, the head saying no
+  rage: { T: 3.0, fn(t, P, e) {
+    const s = Math.sin(t * 26);
+    P.L = [0.36 + 0.03 * s, 1.22 + 0.09 * Math.sin(t * 31), 0.42]; P.R = [-0.36 - 0.03 * s, 1.22 + 0.09 * Math.sin(t * 29 + 1), 0.42];
+    P.lift = 0.07 * Math.abs(Math.sin(t * 9.5)) * e; P.lean = 0.22 * e; P.twist = 0.13 * Math.sin(t * 9.5) * e; P.head = 0.4 * Math.sin(t * 17) * e;
+  } },
+  // fists pumped in turn, little hops
+  cheer: { T: 3.2, fn(t, P, e) {
+    const a = Math.sin(t * 9);
+    P.L = [0.3, 1.25 + 0.4 * Math.max(0, a), 0.18]; P.R = [-0.3, 1.25 + 0.4 * Math.max(0, -a), 0.18];
+    P.lift = 0.1 * Math.abs(a) * e; P.roll = 0.06 * a * e;
+  } },
+  // applause
+  clap: { T: 2.8, fn(t, P, e) {
+    const c = 0.5 + 0.5 * Math.cos(t * 22);
+    P.L = [0.03 + 0.17 * c, 1.12, 0.36]; P.R = [-0.03 - 0.17 * c, 1.12, 0.36];
+    P.nod = 0.08 * Math.sin(t * 5.5) * e;
+  } },
+  // three jumps for joy, arms in a V
+  hype: { T: 2.7, fn(t, P, e) {
+    P.L = [0.5, 1.75, 0]; P.R = [-0.5, 1.75, 0];
+    P.lift = 0.42 * Math.abs(Math.sin((t * Math.PI) / 0.9)) * e; P.twist = 0.5 * Math.sin(t * 3.5) * e;
+  } },
+  // both arms waving overhead, from side to side
+  go: { T: 3.2, fn(t, P, e) {
+    const s = Math.sin(t * 7);
+    P.L = [0.28 + 0.3 * s, 1.75, 0.05]; P.R = [-0.28 + 0.3 * s, 1.75, 0.05];
+    P.roll = -0.1 * s * e;
+  } },
+  // a bow from the waist
+  bow: { T: 2.6, fn(t, P) {
+    const b = ss(0.1, 0.7, t) * (1 - ss(1.7, 2.4, t));
+    P.bend = 0.62 * b; P.nod = 0.2 * b;
+  } },
+};
+const REST_HAND = [0.33, 0.74, 0.04]; // about where a hand hangs (gestures ease in from there)
 
 /**
  * What an avatar wears and holds travels in the 8 "flags" bits of its state:
@@ -215,6 +275,10 @@ export class Character {
     this.look = { hat: 0, jet: false, bouquet: false, quad: false, bighead: false };
     this.big = 0; // 0..1: how far the head has grown
     this.size = 1; // (a cheat shrinks the avatar)
+    this.move = null; // a gesture made by hand: { fn, t, T } (see MOVES)
+    this.tip = 0; // radians the body has tipped forward in a dive
+    this.diveT = 0;
+    this._pose = { L: null, R: null, lift: 0, lean: 0, bend: 0, twist: 0, roll: 0, head: 0, nod: 0 };
     this._bent = []; this._bentN = 0; // bones bent by hand this frame, and what they were before
     this.mixer.addEventListener('finished', (e) => {
       if (this.emoting && e.action === this.actions[this.emoting]) { this.emoting = null; this._play(CLIP_OF[Math.max(0, this.anim)], 0.25); }
@@ -242,6 +306,7 @@ export class Character {
     if (id !== was) {
       this.anim = id;
       if (this.emoting && id !== ANIM.idle) this.emoting = null;
+      if (this.move && id !== ANIM.idle && !isResting(id)) this.move = null;
       // getting up from a seat: the short "standing up" clip, then whatever comes next
       const rising = (was === ANIM.sit || was === ANIM.work) && (id === ANIM.idle || id === ANIM.walk);
       if (!this.emoting) this._play(rising && id === ANIM.idle ? 'Standing' : CLIP_OF[id] || 'Idle', id === ANIM.jump || id === ANIM.dead ? 0.1 : 0.22);
@@ -260,11 +325,19 @@ export class Character {
   /** True while the avatar is seated or lying (no emote of its own then). */
   get resting() { return isResting(this.anim); }
 
+  /** Plays emote number `index` of EMOTE_LIST (those that summon an animal are not for the avatar itself). */
   emote(index) {
-    const name = EMOTES[index];
-    if (!name || !this.actions[name] || this.resting || this.anim === ANIM.dead) return;
-    this.emoting = name;
-    this._play(name, 0.15);
+    const e = EMOTE_LIST[index];
+    if (!e || this.anim === ANIM.dead || this.anim === ANIM.dive) return;
+    if (e.move) {
+      // (a gesture can be made sitting down: the arms only)
+      if (this.emoting) { this.emoting = null; this._play(CLIP_OF[Math.max(0, this.anim)], 0.15); }
+      this.move = { fn: MOVES[e.move].fn, t: 0, T: MOVES[e.move].T };
+    } else if (e.clip && this.actions[e.clip] && !this.resting) {
+      this.move = null;
+      this.emoting = e.clip;
+      this._play(e.clip, 0.15);
+    }
   }
 
   _setLaptop(on) {
@@ -353,10 +426,26 @@ export class Character {
     this.recline += ((this.anim === ANIM.lie ? 1 : 0) - this.recline) * k;
     this.stroke += dt * (swim ? 2.2 + 3.4 * moving : 0);
     const m = this.model;
-    m.rotation.x = this.tilt - (this.recline * Math.PI) / 2;
-    m.rotation.z = swim ? Math.sin(this.stroke) * 0.16 * moving : 0; // the body rolls with each stroke
-    m.position.y = base + (swim ? 0.45 + 0.3 * moving + Math.sin(this.stroke * 2) * 0.03 : 0) + this.recline * 0.3 + (riding ? QUAD.seat - SEAT.under : 0);
-    m.position.z = this.recline * 0.86 + (riding ? 0.16 : 0); // lying: the body is centred on the spot, head behind
+    // a dive: the body tips over, about its middle, until it points at the water
+    const diving = this.anim === ANIM.dive;
+    this.diveT = diving ? this.diveT + dt : 0;
+    this.tip += ((diving ? 0.35 + 2.4 * ss(0.05, 0.85, this.diveT) : 0) - this.tip) * Math.min(1, dt * 10);
+    // a gesture made by hand
+    const P = this._pose, mv = this.move;
+    P.L = P.R = null; P.lift = P.lean = P.bend = P.twist = P.roll = P.head = P.nod = 0;
+    if (mv) {
+      mv.t += dt;
+      if (mv.t >= mv.T) this.move = null;
+      else {
+        mv.fn(mv.t, P, ss(0, 0.25, mv.t) * (1 - ss(mv.T - 0.3, mv.T, mv.t)));
+        if (this.resting) P.lift = P.lean = P.twist = P.roll = 0; // seated: the arms and the head only
+      }
+    }
+    m.rotation.x = this.tilt + this.tip + P.lean - (this.recline * Math.PI) / 2;
+    m.rotation.y = P.twist;
+    m.rotation.z = (swim ? Math.sin(this.stroke) * 0.16 * moving : 0) + P.roll; // the body rolls with each stroke
+    m.position.y = base + (swim ? 0.45 + 0.3 * moving + Math.sin(this.stroke * 2) * 0.03 : 0) + this.recline * 0.3 + (riding ? QUAD.seat - SEAT.under : 0) + P.lift + 0.85 * (1 - Math.cos(this.tip));
+    m.position.z = this.recline * 0.86 + (riding ? 0.16 : 0) - 0.85 * Math.sin(this.tip); // lying: the body is centred on the spot, head behind
     // a growing head (and whatever is on it)
     this.big += ((l.bighead ? 1 : 0) - this.big) * Math.min(1, dt * 5);
     this.bones.Head.scale.setScalar(this.headScale * (1 + 1.35 * this.big));
@@ -369,11 +458,31 @@ export class Character {
     }
     const holding = l.bouquet && this.bouquet && !this.resting && !swim && this.anim !== ANIM.dead;
     if (this.bouquet) this.bouquet.visible = !!holding;
-    const hands = swim || holding || riding || this.anim === ANIM.work;
+    const gesture = this.move && (P.L || P.R || P.head || P.nod || P.bend);
+    const hands = swim || holding || riding || this.anim === ANIM.work || diving || gesture;
     if (!hands) return;
     // hands put where they belong: the arms are bent to reach
     this.root.updateMatrixWorld(true);
-    if (swim) {
+    if (diving) {
+      // arms spread wide like a swan, then joined ahead of the head for the water
+      const j = ss(0.4, 0.75, this.diveT);
+      for (const s of [1, -1]) this._reach(s > 0 ? 'L' : 'R', _t.set(s * (0.8 - 0.74 * j), 1.15 + 0.95 * j, -0.1 + 0.2 * j), true);
+    } else if (gesture) {
+      const e = ss(0, 0.25, this.move.t) * (1 - ss(this.move.T - 0.3, this.move.T, this.move.t));
+      if (P.bend) {
+        // (before the arms and the head, which hang from the waist)
+        const waist = this.bones.Abdomen || this.bones.Torso || this.bones.Body;
+        if (waist) { this._keep(waist); this._turn(waist, _axis.set(1, 0, 0).applyQuaternion(this.root.quaternion), P.bend); waist.updateWorldMatrix(false, true); }
+      }
+      if (P.L) this._reach('L', _t.set(REST_HAND[0] + (P.L[0] - REST_HAND[0]) * e, REST_HAND[1] + (P.L[1] - REST_HAND[1]) * e, REST_HAND[2] + (P.L[2] - REST_HAND[2]) * e));
+      if (P.R) this._reach('R', _t.set(-REST_HAND[0] + (P.R[0] + REST_HAND[0]) * e, REST_HAND[1] + (P.R[1] - REST_HAND[1]) * e, REST_HAND[2] + (P.R[2] - REST_HAND[2]) * e));
+      if (P.head || P.nod) {
+        const head = this.bones.Head;
+        this._keep(head);
+        if (P.head) this._turn(head, _axis.set(0, 1, 0), P.head);
+        if (P.nod) this._turn(head, _axis.set(1, 0, 0).applyQuaternion(this.root.quaternion), P.nod);
+      }
+    } else if (swim) {
       // crawl: each hand goes round, over the head, down in front, back along the body
       for (const [side, phase, sx] of [['L', 0, 1], ['R', Math.PI, -1]]) {
         const a = this.stroke + phase, reach = 0.25 + 0.2 * moving;

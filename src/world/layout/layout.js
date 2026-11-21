@@ -353,7 +353,7 @@ export const PATHS = [
     points: [[-176.5, 30.5], [-181, 22], [-186, 12], [-190.5, 3], [-193, -2]],
   },
   {
-    // From the shore path to the gate of the Sky Stones.
+    // From the shore path to the gate of the climb.
     id: 'climb', kind: 'gravel', width: 1.8, cut: 0.5,
     points: [[4, 49.6], [3.4, 56], [1.9, 63]],
   },
@@ -433,7 +433,7 @@ export const SKY = { count: 30, pad: 12.5, apart: 64, gate: { x: -110.5, z: -39,
 // ---------------------------------------------------------------------------
 // Games and dangers
 
-// The Sky Stones: stones to jump from one to the next, up to a platform `height` metres above the ground.
+// The climbing game ("Mostly Up"): stones to jump from one to the next, up to a platform `height` metres above the ground.
 // (x, z) is the middle of its round lawn, levelled at y; one comes in through the gate, on the north side.
 // `tower`: the striped tower one climbs to watch and cheer, in a bay cut into the hill behind the lawn (its
 // winding stair rises `pitch` metres a turn, `turns` times; nobody gets from it into the game).
@@ -611,7 +611,7 @@ export const ZONES = [
   { id: 'terraces', name: 'Above the Falls', x: -318, z: 132, r: 30 },
   { id: 'cove', name: 'The Secret Cove', x: COVE.x + 8, z: COVE.z - 8, r: 30, hidden: true }, // (not named on the map)
   { id: 'camp', name: 'The Camp', x: CAMP.x, z: CAMP.z, r: 26 },
-  { id: 'climb', name: 'The Sky Stones', x: CLIMB.x, z: CLIMB.z, r: 24 },
+  { id: 'climb', name: CLIMB.name, x: CLIMB.x, z: CLIMB.z, r: 24 },
   { id: 'skygate', name: 'The Sky Gate', x: SKY.gate.x, z: SKY.gate.z, r: 9 },
   { id: 'lounge', name: 'The Beach Lounge', x: BEACH_LOUNGE.x, z: BEACH_LOUNGE.z, r: 20 },
   { id: 'deck', name: 'The Pond Deck', x: POND_DECK.x, z: POND_DECK.z, r: 12 },

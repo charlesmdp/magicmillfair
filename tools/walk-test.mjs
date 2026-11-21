@@ -2,7 +2,8 @@
 // garden steps, being stopped by the mountains and by a wall, swimming, the stairway and the temple, the
 // terraces above the waterfall, the secret cove, the sky villages and their gate, the island (its wall, its
 // walkways, its boulder), sitting and lying down, the big wheel, the caves, chat and
-// emotes, the Sky Stones (a bot makes every jump of the course; the clock, the board), the acid pond and the
+// emotes and commands, the climb (a bot makes every jump of the course; the clock, the board), the tower from
+// which it is watched, a dive, the mushrooms, the acid pond and the
 // shark, changing the quality tier (page reload at the same spot) — and the download size.
 // usage: node tools/walk-test.mjs [--q=low]
 import { createRequire } from 'node:module';
@@ -422,13 +423,30 @@ try {
     await frames(4);
     const said = await page.evaluate(() => ({ log: [...document.querySelectorAll('.chat .log p')].map((e) => e.textContent), bubble: document.querySelector('.tag.self .bubble')?.textContent, focus: document.activeElement === document.querySelector('.chat input') }));
     check('Enter opens the chat, the line shows in the log and over the avatar', typing && said.log.some((l) => l.endsWith('Hello valley')) && said.bubble === 'Hello valley' && !said.focus, JSON.stringify(said));
-    await page.keyboard.press('Digit9');
-    await frames(4);
-    const emote = await page.evaluate(() => { const r = window.__mmf.rank; return { active: r.active.length, kind: r.active[0]?.kind, calls: 0 }; });
-    check('an animal of light is summoned', emote.active === 1 && emote.kind === 'tiger', JSON.stringify(emote));
+    // a gesture on a key, an emote by its name; the animals of light are earned by coming back day after day
+    await page.keyboard.press('Digit7');
+    await frames(3);
+    const cheer = await page.evaluate(() => !!window.__mmf.me.move);
+    const command = async (text) => { await page.keyboard.press('Enter'); await frames(2); await page.keyboard.type(text); await page.keyboard.press('Enter'); await frames(4); };
+    await command('/tiger');
+    const locked = await page.evaluate(() => ({ active: window.__mmf.rank.active.length, note: document.querySelector('.hud .note').textContent }));
+    await page.evaluate(() => { window.__mmf.who.days = 30; });
+    await command('/tiger');
+    const emote = await page.evaluate(() => { const r = window.__mmf.rank; return { active: r.active.length, kind: r.active[0]?.kind }; });
+    await command('/help');
+    const unknown = await page.evaluate(() => [...document.querySelectorAll('.chat .log p')].pop()?.textContent || '');
+    check('a key cheers; an animal of light is summoned by name once enough days in a row have earned it', cheer && locked.active === 0 && /30 days in a row/.test(locked.note) && emote.active === 1 && emote.kind === 'tiger', JSON.stringify({ cheer, locked, emote }));
+    check('an unknown command says nothing of the secret ones', /Unknown command\.$/.test(unknown), unknown);
+    // stuck somewhere: /kill, then back on one's feet at the mill
+    await command('/kill');
+    const gone = await page.evaluate(() => ({ dead: window.__mmf.player.dead?.cause, screen: document.body.classList.contains('dead') }));
+    await page.evaluate(() => { const p = window.__mmf.player; for (let i = 0; i < 300 && p.dead; i++) p.update(1 / 30, 0, true); });
+    await frames(3);
+    const back = await page.evaluate(async () => { const L = await import('/src/world/layout/layout.js'), p = window.__mmf.player; return { alive: !p.dead, d: Math.hypot(p.pos.x - L.SPAWN.x, p.pos.z - L.SPAWN.z), screen: document.body.classList.contains('dead') }; });
+    check('/kill is the way out when stuck: WASTED, then back at the mill', !!gone.dead && gone.screen && back.alive && back.d < 1 && !back.screen, JSON.stringify({ gone, back }));
   }
 
-  // --- the Sky Stones: a bot takes every jump of the course with the real controller; the clock, the board
+  // --- the climb: a bot takes every jump of the course with the real controller; the clock, the board
   {
     const climb = await page.evaluate(() => {
       const app = window.__mmf, { player, input, world } = app, g = world.games, c = g.course, dt = 1 / 60;
@@ -490,9 +508,9 @@ try {
     });
     await frames(6); // the time goes to the board (kept in this browser: the test has no server)
     const board = await page.evaluate(() => { const g = window.__mmf.world.games; return { top: g.scores, note: document.querySelector('.hud .note').textContent }; });
-    check('the Sky Stones can be climbed: a bot makes every jump', climb.stuck.length === 0 && climb.stones > 140 && climb.height > 85, `${climb.stones} stones, ${climb.height.toFixed(1)} m, ${climb.firstTry} jumps at the first try, stuck at [${climb.stuck.join(', ')}]`);
+    check('the climb can be done: a bot makes every jump', climb.stuck.length === 0 && climb.stones > 140 && climb.height > 85, `${climb.stones} stones, ${climb.height.toFixed(1)} m, ${climb.firstTry} jumps at the first try, stuck at [${climb.stuck.join(', ')}]`);
     check('the clock starts on leaving the plate and stops at the top; no jetpack there', climb.noFly && climb.ready === 'ready' && /^Ready/.test(climb.line0) && climb.running === 'running' && climb.state === 'done' && climb.clean && /^Top reached in \d+:\d\d\.\d\d!$/.test(climb.line), JSON.stringify({ ready: climb.ready, running: climb.running, state: climb.state, line: climb.line, noFly: climb.noFly }));
-    check('the time is written on the board at the gate', Array.isArray(board.top) && board.top.length === 1 && Math.abs(board.top[0].ms - climb.clock * 1000) < 2 && /#1 on the board/.test(board.note), JSON.stringify(board));
+    check('the time is written on the board at the gate, in its four lists', ['day', 'week', 'month', 'all'].every((p) => board.top?.[p]?.length === 1 && Math.abs(board.top[p][0].score - climb.clock * 1000) < 2) && /#1 of all time/.test(board.note), JSON.stringify(board));
   }
 
   // --- what kills: the acid pond, the shark; the end-of-the-road screen

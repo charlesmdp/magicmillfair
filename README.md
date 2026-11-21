@@ -80,16 +80,25 @@ password of sorts — anyone who has it can start builds: keep it in the secret,
 What runs at Cloudflare: the files of the site are served directly; `cloudflare/worker.js` only answers the
 multiplayer and the small API of the game. Each room is a *Durable Object* running exactly the same relay as
 the Node server (`server/protocol.js`), and it **goes to sleep as soon as nobody moves**: visitors stay
-connected, but the room no longer consumes anything. One more object of the same kind keeps the
-leaderboards (`/api/scores`): they are the only thing this game stores, and they need no database to be
-created — the storage comes with the object.
+connected, but the room no longer consumes anything. One more object of the same kind is the game's
+notebook: it keeps the leaderboards and how many days in a row each device has come back — all this game
+stores — and needs no database to be created: the storage comes with the object.
 
-**The alligator's brain** (optional): the alligator on the pond deck answers with a handful of lines of its
-own until the Worker has a secret named `ANTHROPIC_API_KEY` — then it answers through the Claude API.
-Dashboard → the Worker → **Settings** → **Variables and Secrets** → add a *secret* with that name (or
-`npx wrangler secret put ANTHROPIC_API_KEY`). Never write the key in a file. The model is `claude-opus-5-5`
-unless a variable `NPC_MODEL` names another (a smaller model costs much less per line). Each address may
-send ten lines a minute, and everyone together 3,000 a day: a ceiling on what the key can spend.
+**Secrets of the Worker** (dashboard → the Worker → **Settings** → **Variables and Secrets** → **Add** →
+type *Secret*; or `npx wrangler secret put NAME`). Never write one of them in a file. After adding a
+secret, deploy once more (the dashboard offers it). `https://<your site>/api/status` then says what the
+Worker sees — `"npc": true`, `"admin": true` — without showing any of it.
+
+| Secret | What it does |
+|---|---|
+| `ANTHROPIC_API_KEY` | **Billy's brain.** The alligator on the pond deck is a life coach: he answers with a handful of lines of his own until the Worker has this key — then through the Claude API. The model is `claude-opus-5-5` unless a variable `NPC_MODEL` names another (a smaller model costs much less per line). |
+| `ADMIN_KEY` | **The administrator's key**: any long password of your own invention. In the game, type `/admin <the key>` in the chat (it is checked by the server and sent to nobody) — or open the site once with `#admin=<the key>` at the end of the address. Without this secret, nobody is the administrator. |
+| `SCORE_SECRET` | Optional: signs the notes of the game runs (see "Cheating"). The notebook draws one by itself otherwise. |
+
+Billy only answers questions (a question mark is required: anything else gets a line of his own, without
+asking the model), is sent that one question and nothing else, and what comes back is cut down to a single
+plain sentence. Each address may ask ten questions a minute, and everyone together 3,000 a day: a ceiling
+on what the key can spend.
 
 Costs: the rooms are SQLite-backed Durable Objects, the only kind the free Cloudflare plan accepts — up to
 100,000 requests and 13,000 GB-seconds a day when this was written, after which the rooms stop answering
@@ -125,13 +134,13 @@ npm start
 from **a single process**, on port `PORT` (8787 by default). Behind a proxy (nginx, Caddy, a PaaS…), it is
 enough to let the WebSocket upgrade through. Useful variables: `PORT`, `HOST`, `TICK_HZ` (12), `MAX_PLAYERS`
 (48 per room), `ALLOWED_ORIGINS` (origins allowed to open the multiplayer socket; empty = the site itself),
-`SCORES_FILE` (where the leaderboards are kept: `data/scores.json` by default), `ANTHROPIC_API_KEY` and
-`NPC_MODEL` (the alligator, see above).
+`SCORES_FILE` (where the leaderboards and the visits are kept: `data/scores.json` by default),
+`ANTHROPIC_API_KEY` and `NPC_MODEL` (Billy), `ADMIN_KEY` and `SCORE_SECRET` (see the table above).
 On a server, `npm ci --omit=dev --omit=optional` is enough (the baking tools are not needed).
 
 Fully static hosting (GitHub Pages, Netlify, a plain folder): `dist/` works as it is from any sub-path.
-Without a server, only the tabs of one browser see each other, the best times of the Sky Stones are kept in
-each visitor's own browser, and the alligator keeps to its own lines. To plug in a relay hosted
+Without a server, only the tabs of one browser see each other, the best scores and the days in a row are
+kept in each visitor's own browser, and Billy keeps to his own lines. To plug in a relay hosted
 elsewhere: build with `VITE_WS_URL=wss://example.org/ws`, or add `?ws=wss://example.org/ws` to the address,
 and declare the origin of the site in `ALLOWED_ORIGINS` on the relay.
 
@@ -143,11 +152,11 @@ room; `?village=name` arrives straight in a sky village.
 
 | | Keyboard / mouse | Touch | Gamepad |
 |---|---|---|---|
-| Move | WASD, ZQSD or arrows (physical key positions) | virtual stick on the left | left stick |
+| Move | WASD, ZQSD or arrows (by the place of the keys) | virtual stick on the left | left stick |
 | Look around | drag the mouse; double-click to capture the pointer | drag on the right | right stick |
-| Run / jump | Shift / Space | buttons on the right | trigger, A button |
+| Run / jump | Shift / Space (Settings → *Run by default* turns Shift into "walk") | buttons on the right | trigger, A button |
 | Zoom | wheel | pinch | |
-| Free camera | F (Space / C to go up and down, Shift to go faster) | camera button | |
+| Flying camera | F (Space / C to go up and down, Shift to go faster) | drone button | |
 | Map | M, or click the minimap (click again or Escape to close) | tap the minimap | |
 | Jetpack | Space again while in the air: a second and a half of thrust | jump button again | A again |
 | Sit, lie down, board, pick a flower, talk, travel, get up | E when the action is offered (walking away or jumping gets up too) | tap the action shown above the jump button | |
@@ -155,7 +164,8 @@ room; `?village=name` arrives straight in a sky village.
 | Put the bouquet down | B | Emotes → Put the bouquet down | |
 | Hat | Settings → Hat | Settings → Hat | |
 | Chat | Enter, type, Enter (Escape to cancel) | speech-bubble button | |
-| Emotes | T, or 1 to 6; 7 to 0 for the stag, the wolf, the tiger and the dragon | smiley button | |
+| Emotes | T; 1 to 6 for the gestures, 7 to 0 to cheer, clap, jump for joy, rage; or by name in the chat: `/wave`, `/cheer`, `/bow`… | smiley button | |
+| Stuck somewhere | `/kill` in the chat: WASTED, then back at the mill | the same | |
 | Performance figures | P | Settings → Performance figures | |
 | Back to the mill | R | | |
 
@@ -167,44 +177,56 @@ put down at the bottom.
 **Chat**: what you say appears in a log and in a bubble over your head, for those who are in the room at
 that moment. Nothing of it is stored anywhere: no history — a line is relayed and forgotten (200 characters
 at most, five in a row then one every two seconds). What the game keeps is on your own device: your name,
-your colour, your hat, the quality tier. The one thing kept by the server is the board of the best climbs
-of the Sky Stones (a name and a time).
+your colour, your hat, the quality tier. What the server keeps: the boards of the games (a name and a score) and, for
+a random number drawn by each browser, the days in a row it has visited.
 
-**Cheat codes**, typed in the chat (they are not sent to anyone): `/BIGHEAD` (a head twice as big for twelve
-seconds), `/BIGMOMMA` (a quad to ride: Shift goes faster, E gets off), `/MOON` (low gravity), `/TURBO`
-(fast legs), `/TINY` (a very small robot), `/DISCO` (all the colours), `/HELP` (the list). Some of them
-disqualify a climb of the Sky Stones.
+Letter shortcuts (M, F, T, P, R, B…) go by the letter printed on the key, whatever the keyboard; walking goes
+by the place of the keys. Settings also offers *The camera turns with the character*.
 
-**Animals of light**: four emotes open a sun-coloured ring above you in which a mechanical animal appears
-for five to six seconds — a stag that rears, a wolf that howls, a tiger that leaps through the ring, a dragon
-that coils round it. Everybody around sees them.
+**Commands** are typed in the chat and sent to nobody: `/kill`, the emotes by name — and a few secret words
+that do silly things. They are written nowhere: the game only knows their fingerprints (see `main.js`).
+Some of them disqualify a run in a game.
+
+**Animals of light**: a sun-coloured ring opens above you and a mechanical animal appears in it for five to
+six seconds — a stag that rears, a wolf that howls, a tiger that leaps through the ring, a dragon that coils
+round it. Everybody around sees them. They are earned by coming back: the stag after 10 days in a row, the
+wolf after 25, the tiger after 30, the dragon after 50 (the emote panel shows where you stand; the
+administrator has them all).
 
 ## Things to do
 
-- **The Sky Stones** (south of the beach, through the striped gate): 162 floating stones and planks spiral
+- **Mostly Up** (south of the beach, through the striped gate): 162 floating stones and planks spiral
   up to a platform 90 m above the lawn. Step on the start plate, and the clock starts when you leave it;
   it stops on the summit. Easy at the foot — wide stones, short jumps — and merciless near the top, where
   the stones are a metre across and the take-off must be within half a metre of the edge. No jetpack, no
-  quad there; falling costs nothing but the climb. The ten best times are on the board by the gate
-  (the course was checked by a bot that makes every jump: a perfect climb takes about two and a half
-  minutes).
+  quad there; falling costs nothing but the climb. The best times of the day, the week, the month and of
+  all time are on the board by the gate, under the panel of the game's sponsor ("your brand here" until
+  someone takes it). The course was checked by a bot that makes every jump: a perfect climb takes about two
+  and a half minutes.
+- **The Grandstand**: the striped tower behind the lawn. Its stair winds round it for twelve turns, with a
+  landing on each that faces the climb, up to a deck 84 m above the lawn: the place to watch friends climb
+  and cheer them on (Cheer, Clap, Jump for joy, Go! Go!). Nobody gets from the tower into the game.
 - **The boulder of the island**: every 52 seconds a boulder rolls down the whole path of the island. The top
   of the screen says how far above you it is: step into one of the hollows cut in the rock, or out onto one
   of the timber walkways over the drop, and let it pass. Stay on the path and you are flattened.
 - **Ways to end up WASTED**: the boulder; a pond of acid hidden in the woods of the north-west (nobody will
-  tell you where); the shark, for those who swim out to where the sea ends. A few seconds later you are
-  back on your feet nearby.
+  tell you where); the shark, for those who swim out to where the sea ends; the red mushrooms at the foot of
+  the trees (pick one and eat it: a bad idea); `/kill`. A few seconds later you are back on your feet.
+- **A swan dive**: fall more than ten metres towards water deep enough to swim in, and the robot tips over,
+  arms spread, then joined, and goes in head first.
 - **Hats**: none, cap, straw hat, beanie, top hat, cowboy hat, crown, wizard hat (Settings → Hat). Everybody
   sees yours.
 - **Jetpack**: press jump again in the air. A second and a half of thrust, refilled on landing; it does not
-  work in caves, on the island or around the Sky Stones.
+  work in caves, on the island, around Mostly Up or on its tower.
 - **Flowers**: walk up to a flower and pick it (E): a bouquet grows in your hand, flower by flower. B puts
   it down; swimming loses it.
-- **Al**: an alligator lounges in a beanbag chair on the deck of the great pond. Talk to him (E, then type):
-  what you say to him goes to nobody else.
+- **Billy**: an alligator lounges in a beanbag chair on the deck of the great pond. He is a life coach: ask
+  him a question (E, then type — with a question mark, he only does questions) and he answers in one
+  sentence that sails past the point and lands on it. What you ask him goes to nobody else.
 - **The sky villages**: step up to the Sky Gate — the stone ring on the lawn between the arrival and the
   mill — and choose one of thirty villages perched on the mountains: you are carried there, facing the
   valley. The ring of each village leads back, or on to another village.
+- **Places to sit**: benches along the promenade, cushions and benches all over the temple, logs, chairs…
 - And the rest: the big wheel, the hammocks, the beanbags and their laptops, the caves, the animals of light.
 
 Hats and the jetpack are free for now. Whether a visitor has one is asked in a single place

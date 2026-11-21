@@ -91,8 +91,16 @@ try {
   const waved = await until(() => bob.page.evaluate(() => [...window.__mmf.avatars.items.values()].some((it) => it.character.emoting === 'Wave')), 20000);
   check('Bob sees Alice wave', !!waved);
   await alice.page.screenshot({ path: path.join(OUT, 'alice.png') });
-  // an animal of light
+  // a gesture of encouragement
   await alice.page.keyboard.press('Digit8');
+  const clap = await until(() => bob.page.evaluate(() => [...window.__mmf.avatars.items.values()].some((it) => !!it.character.move)), 20000);
+  check('Bob sees Alice clap', !!clap);
+  // an animal of light (Alice has come often enough to have earned it)
+  await alice.page.evaluate(() => { window.__mmf.who.days = 99; });
+  await alice.page.keyboard.press('Enter');
+  await frames(alice, 2);
+  await alice.page.keyboard.type('/wolf');
+  await alice.page.keyboard.press('Enter');
   const wolf = await until(() => bob.page.evaluate(() => window.__mmf.rank.active.some((e) => e.kind === 'wolf')), 20000);
   check('Bob sees the wolf Alice summons', !!wolf);
   // chat

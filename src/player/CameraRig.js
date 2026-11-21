@@ -16,6 +16,8 @@ export class CameraRig {
     this._first = true;
     this._q = { x: 0, z: 0 };
     this.lift = 0;
+    this.follow = false; // a setting: the camera swings round behind the walker by itself
+    this._hands = 0; // seconds since the player last turned the camera
   }
 
   /** Camera heading used to interpret movement input. */
@@ -28,8 +30,16 @@ export class CameraRig {
     this._snapped = true;
   }
 
-  update(dt, target) {
+  /** `walker` ({ yaw, speed }): who is followed, when the camera may turn with them (see `follow`). */
+  update(dt, target, walker = null) {
     const look = this.input.consumeLook();
+    this._hands = look.x || look.y ? 0 : this._hands + dt;
+    if (this.follow && walker && walker.speed > 0.6 && this._hands > 0.7) {
+      // towards the back of the walker — unless they are coming at the camera: then it waits
+      let d = walker.yaw + Math.PI - this.yaw;
+      d = Math.atan2(Math.sin(d), Math.cos(d));
+      if (Math.abs(d) < 2.3) this.yaw += d * (1 - Math.exp(-dt * Math.min(1, walker.speed / 4.4)));
+    }
     this.yaw -= look.x;
     this.pitch = Math.max(-1.25, Math.min(0.5, this.pitch - look.y));
     this.distance = Math.max(2.2, Math.min(16, this.distance * (1 + this.input.consumeZoom() * 0.09)));

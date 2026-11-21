@@ -1,5 +1,5 @@
 // The small HTTP API of the game, shared by the Node server and the Cloudflare Worker: who may ask, how often,
-// and what a request looks like once read. The routes themselves are in scores.js and npc.js.
+// and what a request looks like once read. The routes themselves are in routes.js (with scores.js) and npc.js.
 import { originAllowed } from './protocol.js';
 
 export const BODY_MAX = 4096; // bytes of JSON a POST may carry
@@ -21,7 +21,9 @@ export class Limiter {
 
 /** How often one address may do what (per route). */
 export const LIMITS = {
-  scores: [[6, 60_000], [40, 3600_000]], // a climb takes minutes: six posts a minute is already generous
+  scores: [[8, 60_000], [90, 3600_000]], // a climb takes minutes, a game at a booth less than one
+  run: [[30, 60_000], [400, 3600_000]], // a note for each start (the start plate of the climb is left often)
+  visit: [[10, 60_000], [60, 3600_000]],
   npc: [[10, 60_000], [120, 3600_000]],
   npcDay: [3000, 24 * 3600_000], // everyone together: a ceiling on what the key can spend in a day
 };

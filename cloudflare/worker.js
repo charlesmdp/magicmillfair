@@ -8,15 +8,18 @@
 // socket attachments, so nothing is lost when the object is unloaded.
 //
 // One more object of the same class, named "~api" (no room can have that name), is the game's notebook: it
-// keeps the leaderboards in its storage — the only thing this game ever stores — and counts how often each
-// address calls the API. The same code answers on the Node server (../server/scores.js, npc.js, api.js).
+// keeps in its storage what the game remembers — the leaderboards, how many days in a row each device came
+// back — and counts how often each address calls the API. The same code answers on the Node server
+// (../server/routes.js, scores.js, npc.js, api.js).
 // Variables (wrangler.jsonc): MAX_PLAYERS (48 per room), TICK_MS (100), ALLOWED_ORIGINS (default: same host),
-// NPC_MODEL; secret: ANTHROPIC_API_KEY (without it the characters use the lines kept in the game);
-// for tests only: STALE_MS, DEBUG.
+// NPC_MODEL; secrets: ANTHROPIC_API_KEY (without it the characters use the lines kept in the game), ADMIN_KEY
+// (the administrator's key; without it nobody is the administrator), SCORE_SECRET (optional: signs the notes
+// of the game runs; drawn and kept by the notebook otherwise); for tests only: STALE_MS, DEBUG.
 import { DurableObject } from 'cloudflare:workers';
 import { Room as Relay, MAX_FRAME, cleanRoom, originAllowed, parseOrigins } from '../server/protocol.js';
 import { Limiter, LIMITS, BODY_MAX, allowed, parseBody, mayPost } from '../server/api.js';
-import { scoresRoute } from '../server/scores.js';
+import { route } from '../server/routes.js';
+import { randomId, sameSecret } from '../server/token.js';
 import { NPC_MODEL, cleanTalk, npcReply } from '../server/npc.js';
 
 const NOTEBOOK = '~api'; // the object that keeps the scores (room names are [a-z0-9_-] only)
@@ -61,7 +64,7 @@ export class Room extends DurableObject {
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(PING, PONG));
   }
 
-  // The notebook (see the top of this file): leaderboards and rate limits. `client` is the caller's address.
+  // The notebook (see the top of this file): what the game keeps, and the rate limits. `client` is the caller's address.
   async api(request, url) {
     const limiter = (this.limiter ||= new Limiter());
     const client = url.searchParams.get('client') || '';
@@ -70,22 +73,35 @@ export class Room extends DurableObject {
       const ok = allowed(limiter, 'npc', client) && limiter.allow('npc:day', ...LIMITS.npcDay);
       return Response.json({ ok });
     }
-    const post = request.method === 'POST';
-    if (post && !allowed(limiter, 'scores', client)) return Response.json({ error: 'Too many requests.' }, { status: 429, headers: { 'Retry-After': '60' } });
+    const reading = request.method === 'GET' || request.method === 'HEAD';
     let body = null;
-    if (post) {
+    if (!reading) {
       const text = await request.text();
       body = text.length <= BODY_MAX ? parseBody(text) : null;
     }
-    const store = { get: (board) => this.ctx.storage.get(`board:${board}`), put: (board, list) => this.ctx.storage.put(`board:${board}`, list) };
-    const out = await scoresRoute({ method: request.method, query: url.searchParams, body }, store);
-    return Response.json(out.body, { status: out.status, headers: { 'Cache-Control': 'no-store', ...(out.status === 405 ? { Allow: 'GET, HEAD, POST' } : {}) } });
+    const env = this.env, storage = this.ctx.storage;
+    const ctx = (this.apiCtx ||= {
+      limiter, now: () => Date.now(),
+      store: { get: (key) => storage.get(key), put: (key, value) => storage.put(key, value), delete: (key) => storage.delete(key) },
+      flags: { npc: !!env.ANTHROPIC_API_KEY, admin: !!env.ADMIN_KEY, shop: 'off' },
+      // the secret that signs the notes of the runs: given, or drawn once and kept here
+      secret: async () => {
+        if (!this.signing) {
+          this.signing = env.SCORE_SECRET || (await storage.get('secret'));
+          if (!this.signing) await storage.put('secret', (this.signing = randomId(32)));
+        }
+        return this.signing;
+      },
+    });
+    const bearer = /^Bearer (.+)$/.exec(request.headers.get('Authorization') || '')?.[1] || '';
+    const out = await route({ method: request.method, path: url.pathname, query: url.searchParams, body, client, admin: sameSecret(bearer, env.ADMIN_KEY || '') }, ctx);
+    return Response.json(out.body, { status: out.status, headers: { 'Cache-Control': 'no-store', ...out.headers } });
   }
 
   // Reached through the Worker below: a WebSocket handshake, a head count, or the notebook.
   async fetch(request) {
     const url = new URL(request.url);
-    if (url.pathname === '/api/scores' || url.pathname === '/limit') return this.api(request, url);
+    if (url.pathname.startsWith('/api/') || url.pathname === '/limit') return this.api(request, url);
     if ((request.headers.get('Upgrade') || '').toLowerCase() !== 'websocket') {
       this.sweep();
       return Response.json({ players: this.relay.joined, ...(this.env.DEBUG ? { up: Date.now() - this.started } : {}) });
@@ -162,14 +178,15 @@ export default {
       const count = await env.ROOMS.get(env.ROOMS.idFromName(room)).fetch(new Request('https://room/count'));
       return Response.json({ room, ...(await count.json()) }, { headers: { 'Cache-Control': 'no-store' } });
     }
-    if (url.pathname === '/api/scores' || url.pathname === '/api/npc') {
+    if (url.pathname.startsWith('/api/')) {
       const json = (status, body, headers = {}) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store', ...headers } });
-      const post = request.method === 'POST';
-      if (post && !mayPost(request.headers.get('Origin'), url.host, parseOrigins(env.ALLOWED_ORIGINS))) return json(403, { error: 'Forbidden.' });
+      const post = request.method === 'POST', reading = request.method === 'GET' || request.method === 'HEAD';
+      if (!reading && !mayPost(request.headers.get('Origin'), url.host, parseOrigins(env.ALLOWED_ORIGINS))) return json(403, { error: 'Forbidden.' });
       if (!env.ROOMS) return json(501, { error: 'Not configured.' });
       const notebook = env.ROOMS.get(env.ROOMS.idFromName(NOTEBOOK));
       const client = request.headers.get('CF-Connecting-IP') || '';
-      if (url.pathname === '/api/scores') {
+      if (url.pathname !== '/api/npc') {
+        // everything the game keeps is in the notebook
         const to = new URL(request.url);
         to.searchParams.set('client', client);
         return notebook.fetch(new Request(to, request));

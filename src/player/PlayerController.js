@@ -53,6 +53,13 @@ export class PlayerController {
     this.fuel = JET.time;
     this.gravity = 1; // (cheats)
     this.boost = 1;
+    this.spring = 1; // how high one jumps
+    this.grip = 1; // how well the feet hold the ground (below 1: it is ice)
+    this.cheat = false; // true while a cheat changes how one moves (the games then keep no record)
+    this.autoRun = false; // a setting: run unless Shift is held, instead of the other way round
+    this.diving = false; // head first into deep water, from high up
+    this._peak = 0; // the highest the feet have been since they left the ground
+    this._plunge = 0; // seconds under water left after a dive
     /** May the jetpack be used here? Set by the game (caves and some places say no). */
     this.canFly = () => true;
     /** Called with (cause) when the player dies, and with the place when they stand again. */
@@ -70,6 +77,16 @@ export class PlayerController {
     this.jet = 0;
     this._ground = this.pos.y;
     this._sync();
+  }
+
+  /** Thrown into the air at `speed` m/s (a cheat). */
+  launch(speed) {
+    if (this.dead) return;
+    this.seat = null;
+    this.riding = false;
+    this.grounded = this.swimming = false;
+    this.vel.y = speed;
+    this._peak = this.pos.y;
   }
 
   /** Sit (or lie) on a seat: see seatAt(). A seat with at(out) moves (a gondola); `locked` ones are left on purpose only. */
@@ -104,6 +121,7 @@ export class PlayerController {
     if (this.dead) return;
     this.seat = null;
     this.riding = false;
+    this.diving = false;
     this.jet = 0;
     this.vel.set(0, 0, 0);
     this.dead = { t: 0, cause, respawn, sink };
@@ -187,9 +205,10 @@ export class PlayerController {
     const wading = !this.swimming && depth > 0.25 && pos.y < water;
     if (this.riding && (this.swimming || (depth > 0.7 && pos.y < water))) this.riding = false; // a quad does not float
     const riding = this.riding;
-    const top = this.swimming ? (inp.run ? SWIM_FAST : SWIM)
-      : riding ? (inp.run ? QUAD.speed : QUAD.cruise) * (wading ? 0.5 : 1)
-        : (inp.run ? RUN : WALK) * (wading ? 0.6 : 1) * this.boost;
+    const fast = control && inp.run !== this.autoRun; // (Shift runs, or walks when running is the habit)
+    const top = this.swimming ? (fast ? SWIM_FAST : SWIM)
+      : riding ? (fast ? QUAD.speed : QUAD.cruise) * (wading ? 0.5 : 1)
+        : (fast ? RUN : WALK) * (wading ? 0.6 : 1) * this.boost;
     this.wading = wading;
     if (wl > 1e-3) { wx = (wx / Math.max(wl, 1)) * top; wz = (wz / Math.max(wl, 1)) * top; } else { wx = 0; wz = 0; }
     // The ground really under the feet. (The avatar's own height eases over steps, so it may be a little off:
@@ -212,7 +231,7 @@ export class PlayerController {
         if (rise > EASE) { const t = Math.min(1, (rise - EASE) / (CLIMB - EASE)), f = 1 - 0.5 * t * t * (3 - 2 * t); wx *= f; wz *= f; }
       }
     }
-    const k = 1 - Math.exp(-dt * (this.sliding ? 6 : riding ? 3.2 : this.jet > 0 ? 6 : this.grounded || this.swimming ? 11 : 3));
+    const k = 1 - Math.exp(-dt * (this.sliding ? 6 : riding ? 3.2 : this.jet > 0 ? 6 : this.swimming ? 11 : this.grounded ? 11 * this.grip : 3));
     vel.x += (wx - vel.x) * k; vel.z += (wz - vel.z) * k;
 
     // try to move, sliding along obstacles and refusing steps that are too high
@@ -265,21 +284,26 @@ export class PlayerController {
     // vertical motion
     const ground = col.groundAt(pos.x, pos.z, pos.y + 0.3);
     if (this.swimming) {
-      const target = water - 1.05;
+      // (after a dive one goes down a little before coming back up)
+      const target = Math.max(water - 1.05 - (this._plunge > 0 ? 1.9 * Math.min(1, this._plunge / 0.45) : 0), Math.min(water - 1.05, ground + 0.25));
+      this._plunge -= dt;
       pos.y += (target - pos.y) * Math.min(1, dt * 5);
       vel.y = 0;
       this.grounded = false;
+      this.diving = false;
       this.jet = 0;
       if (ground > pos.y) { pos.y = ground; this.swimming = false; this.grounded = true; }
     } else if (this.grounded) {
       this.fuel = JET.time;
       this.jet = 0;
+      this.diving = false;
+      this._peak = pos.y;
       // the feet follow a slope exactly, and take a step (a tread, a kerb) smoothly
       if (wasGrounded) {
         const lim = Math.hypot(pos.x - fromX, pos.z - fromZ) * 2.5 + 0.01, d = ground - this._ground;
         pos.y += d > lim ? lim : d < -lim ? -lim : d;
       }
-      if (control && inp.jump && !this.sliding) { vel.y = JUMP * (riding ? 0.75 : 1); this.grounded = false; }
+      if (control && inp.jump && !this.sliding) { vel.y = JUMP * this.spring * (riding ? 0.75 : 1); this.grounded = false; }
       else if (ground < pos.y - 0.45) { this.grounded = false; vel.y = 0; }
       else pos.y += (ground - pos.y) * (1 - Math.exp(-dt * 22));
     } else {
@@ -292,9 +316,20 @@ export class PlayerController {
       }
       vel.y -= GRAVITY * this.gravity * dt;
       pos.y += vel.y * dt;
-      if (pos.y <= ground && vel.y <= 0) { pos.y = ground; vel.y = 0; this.grounded = true; }
+      if (pos.y > this._peak) this._peak = pos.y;
+      // falling from more than ten metres towards deep water: head first, like a swan
+      if (!this.diving && vel.y < -3 && this.jet <= 0 && !riding && depth > 1.3 && this._peak - water > 10 && pos.y - water > 2.5) this.diving = true;
+      else if (this.diving && depth < 1.25) this.diving = false; // (drifted over the shore)
+      if (pos.y <= ground && vel.y <= 0) { pos.y = ground; vel.y = 0; this.grounded = true; this.diving = false; }
       // falling into deep water
-      if (depth > 1.2 && pos.y < water - 0.9) { this.swimming = true; this.splashed = Math.max(1, -vel.y); vel.y = 0; }
+      if (depth > 1.2 && pos.y < water - 0.9) {
+        this.swimming = true;
+        this.splashed = Math.max(1, -vel.y) * (this.diving ? 1.5 : 1);
+        this._plunge = this.diving ? 0.9 : 0;
+        this.dived = this.diving; // (read and cleared by the effects)
+        this.diving = false;
+        vel.y = 0;
+      }
     }
     this._ground = ground;
 
@@ -308,7 +343,7 @@ export class PlayerController {
       d = Math.atan2(Math.sin(d), Math.cos(d));
       this.yaw += d * Math.min(1, dt * (riding ? 5 : 12));
     }
-    this.anim = riding ? ANIM.sit : this.swimming ? ANIM.swim : !this.grounded ? ANIM.jump : sp > 5.6 ? ANIM.run : sp > 0.5 ? ANIM.walk : ANIM.idle;
+    this.anim = riding ? ANIM.sit : this.swimming ? ANIM.swim : this.diving ? ANIM.dive : !this.grounded ? ANIM.jump : sp > 5.6 ? ANIM.run : sp > 0.5 ? ANIM.walk : ANIM.idle;
     this.character.setAnim(this.anim, sp);
     this.character.update(dt);
     this._sync();

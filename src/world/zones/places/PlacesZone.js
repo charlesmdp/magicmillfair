@@ -252,6 +252,29 @@ export class PlacesZone {
       for (const bz of [47.5, 42.5, 37.5]) this._bench(stone, -355.1, y, bz, Math.PI / 2);
       this._bench(stone, -355.1, y, 22.5, Math.PI / 2);
     }
+    {
+      // places to sit, all over: round cushions before the great hall and round the lotus pond, a bench on
+      // each side of the door of every pavilion, benches by the bell, the stupa and the prayer wheels
+      const T = VILLAGE.temple, stone = parts.get('granite'), cloth = parts.get('matte');
+      const cushion = (x, z, yaw, k) => {
+        const c = k % 2 ? [0.5, 0.08, 0.07] : [0.95, 0.5, 0.06];
+        cloth.tint(c[0], c[1], c[2], 1).place(x, y, z, k * 1.7).lathe([[0.0, 0.0], [0.3, 0.0], [0.37, 0.07], [0.37, 0.16], [0.29, 0.225], [0.0, 0.24]], 10, { tile: 1 }).pop();
+        this.seats.push(seatAt(x, y + CHAIR_SEAT, z, yaw, { reach: 1.4 }));
+      };
+      // (in two groups, left and right of the way up to the hall; they look at it)
+      const hx = T.hall.x + T.hall.plinth + 3.4;
+      [-5.6, -4.5, -3.4, 3.4, 4.5, 5.6].forEach((o, k) => { cushion(hx, T.hall.z + o, -Math.PI / 2, k); cushion(hx + 1.3, T.hall.z + o + 0.2, -Math.PI / 2, k + 1); });
+      const F = VILLAGE.fountain;
+      for (let k = 0; k < 6; k++) { const a = 0.5 + (k / 6) * Math.PI * 2, x = F.x + Math.sin(a) * 4.1, z = F.z + Math.cos(a) * 4.1; cushion(x, z, a + Math.PI, k); }
+      for (const p of T.pavilions) {
+        const c = Math.cos(p.yaw || 0), sn = Math.sin(p.yaw || 0), out = p.w / 2 + 0.85;
+        for (const side of [-1, 1]) { const lz = side * (p.l / 4 + 0.75); this._bench(stone, p.x + out * c + lz * sn, y, p.z - out * sn + lz * c, (p.yaw || 0) + Math.PI / 2); }
+      }
+      const towards = (o, d, turn) => { const a = (o.yaw || 0) + turn; this._bench(stone, o.x + Math.sin(a) * d, y, o.z + Math.cos(a) * d, a + Math.PI); };
+      towards(T.bell, 3.6, 1.9); // facing the bell
+      towards(T.stupa, 3.9, 2.6);
+      towards(T.wheels, 2.9, 0); // in front of the prayer wheels
+    }
     this.areas.push(new Polygon(VILLAGE.outline, { name: 'temple' }));
     this._add('temple', parts);
   }
@@ -710,7 +733,7 @@ export class PlacesZone {
       if (seat) this.seats.splice(this.seats.indexOf(seat), 1); // that one is taken
       const face = seat ? seat.yaw : D.yaw;
       alligator(cushions, px, y + CHAIR_SEAT - 0.24, pz, face);
-      this.npcs.push({ id: 'alligator', name: 'Al', x: px, y: y + 1.45, z: pz, reach: 2.6 });
+      this.npcs.push({ id: 'alligator', name: 'Billy', x: px, y: y + 1.45, z: pz, reach: 2.6 });
     }
     for (const [lx, lz] of [[-5.1, -2.3], [0.0, 0.2], [5.2, -2.4], [-2.5, 2.7], [2.6, 2.6]]) { const [px, pz] = at(lx, lz); lowTable(parts, px, y, pz, 0.34); this.colliders.push({ type: 'circle', x: px, z: pz, r: 0.32, y0: y - 0.5, y1: y + 1 }); }
     for (const [lx, lz, tone] of [[-3.9, 1.3, CANDY[5]], [3.9, 1.3, CANDY[1]], [-1.3, -2.4, CANDY[0]]]) { const [px, pz] = at(lx, lz); parasol(parts, px, y, pz, tone, 1.8); this.colliders.push({ type: 'circle', x: px, z: pz, r: 0.1, y0: y - 0.5, y1: y + 3 }); }

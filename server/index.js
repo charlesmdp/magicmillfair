@@ -4,9 +4,9 @@
 // Environment: PORT (8787), HOST (0.0.0.0), TICK_HZ (12), MAX_PLAYERS (48, per room), DIST_DIR (../dist) and
 // ALLOWED_ORIGINS (comma separated origins allowed to open the WebSocket; default: same host and localhost).
 // The relay itself (protocol, validation, batching) is in ./protocol.js, shared with the Cloudflare version.
-// It also answers the game's small API (./api.js): the leaderboards (/api/scores, kept in SCORES_FILE, by
+// It also answers the game's small API (./routes.js): the leaderboards, the visits… (kept in SCORES_FILE, by
 // default data/scores.json) and the characters one can talk to (/api/npc, when ANTHROPIC_API_KEY is set;
-// NPC_MODEL picks the model).
+// NPC_MODEL picks the model). ADMIN_KEY is the administrator's key (none: nobody is the administrator).
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -17,7 +17,8 @@ import { promisify } from 'node:util';
 import { WebSocketServer } from 'ws';
 import { Room, MAX_FRAME, cleanRoom, originAllowed, parseOrigins } from './protocol.js';
 import { Limiter, LIMITS, BODY_MAX, allowed, parseBody, mayPost } from './api.js';
-import { scoresRoute } from './scores.js';
+import { route } from './routes.js';
+import { randomId, sameSecret } from './token.js';
 import { NPC_MODEL, cleanTalk, npcReply } from './npc.js';
 
 const env = (name, def, min, max) => {
@@ -34,6 +35,7 @@ const ALLOWED_ORIGINS = parseOrigins(process.env.ALLOWED_ORIGINS);
 const HEARTBEAT_MS = 15000;
 const SCORES_FILE = path.resolve(process.env.SCORES_FILE || path.join(ROOT, 'data', 'scores.json'));
 const NPC = { apiKey: process.env.ANTHROPIC_API_KEY || '', model: process.env.NPC_MODEL || NPC_MODEL };
+const ADMIN_KEY = process.env.ADMIN_KEY || '';
 
 const now = () => Math.round(performance.now());
 const splitUrl = (url) => String(url || '/').split(/\?(.*)/s); // → [path, query]
@@ -118,31 +120,47 @@ async function serveStatic(req, res, pathname) {
 
 // ------------------------------------------------------------------------------------------------- the API
 
-// The leaderboards: one JSON file, read once, rewritten whole (through a temporary file) when a board changes.
-const boards = {
+// What the game keeps (leaderboards, visits…): one JSON file of keys and values, read once, rewritten whole
+// (through a temporary file) when something changes.
+const store = {
   data: null,
   writing: Promise.resolve(),
   async load() {
     if (!this.data) {
       try { this.data = JSON.parse(await fs.promises.readFile(SCORES_FILE, 'utf8')); } catch { this.data = {}; }
       if (!this.data || typeof this.data !== 'object' || Array.isArray(this.data)) this.data = {};
+      // (the first version kept { sky: [...] })
+      for (const [k, v] of Object.entries(this.data)) if (!k.includes(':') && Array.isArray(v)) { this.data[`board:${k}`] = v; delete this.data[k]; }
     }
     return this.data;
   },
-  async get(board) { return (await this.load())[board]; },
-  async put(board, list) {
-    (await this.load())[board] = list;
+  async get(key) { return (await this.load())[key]; },
+  async put(key, value) { (await this.load())[key] = value; return this.save(); },
+  async delete(key) { delete (await this.load())[key]; return this.save(); },
+  save() {
     const text = JSON.stringify(this.data);
     this.writing = this.writing.then(async () => {
       await fs.promises.mkdir(path.dirname(SCORES_FILE), { recursive: true });
       await fs.promises.writeFile(`${SCORES_FILE}.tmp`, text);
       await fs.promises.rename(`${SCORES_FILE}.tmp`, SCORES_FILE);
-    }).catch((err) => console.error('[scores]', err.message));
+    }).catch((err) => console.error('[store]', err.message));
     return this.writing;
   },
 };
 const limiter = new Limiter();
 const LIMIT_DAY = LIMITS.npcDay;
+const api = {
+  store, limiter, now: () => Date.now(),
+  flags: { npc: !!NPC.apiKey, admin: !!ADMIN_KEY, shop: 'off' },
+  // the secret that signs the notes of the runs: given (SCORE_SECRET), or drawn once and kept with the rest
+  async secret() {
+    if (!this._secret) {
+      this._secret = process.env.SCORE_SECRET || (await store.get('secret'));
+      if (!this._secret) await store.put('secret', (this._secret = randomId(32)));
+    }
+    return this._secret;
+  },
+};
 
 // The text of a small request body (null when it is too long).
 function readBody(req) {
@@ -160,26 +178,27 @@ async function onApi(req, res, pathname, query) {
   const json = (status, body, headers) => reply(req, res, status, JSON.stringify(body), { 'Content-Type': MIME.json, ...headers });
   const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
   const client = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '';
-  const post = req.method === 'POST';
-  if (post && !mayPost(req.headers.origin, host, ALLOWED_ORIGINS)) return json(403, { error: 'Forbidden.' });
-  if (pathname === '/api/scores') {
-    if (post && !allowed(limiter, 'scores', client)) return json(429, { error: 'Too many requests.' }, { 'Retry-After': '60' });
-    const body = post ? parseBody(await readBody(req)) : null;
-    const out = await scoresRoute({ method: req.method, query: new URLSearchParams(query), body }, boards);
-    return json(out.status, out.body, out.status === 405 ? { Allow: 'GET, HEAD, POST' } : {});
+  const reading = req.method === 'GET' || req.method === 'HEAD';
+  if (!reading && !mayPost(req.headers.origin, host, ALLOWED_ORIGINS)) return json(403, { error: 'Forbidden.' });
+  if (pathname === '/api/npc') {
+    if (req.method !== 'POST') return json(405, { error: 'Method not allowed.' }, { Allow: 'POST' });
+    if (!NPC.apiKey) return json(501, { reply: null, error: 'No model is configured for the characters.' });
+    const talk = cleanTalk(parseBody(await readBody(req)));
+    if (!talk) return json(400, { error: 'Not a conversation.' });
+    if (!allowed(limiter, 'npc', client) || !limiter.allow('npc:day', ...LIMIT_DAY)) return json(429, { reply: null, error: 'Too many requests.' }, { 'Retry-After': '60' });
+    return json(200, { reply: await npcReply(NPC, talk) });
   }
-  // /api/npc
-  if (!post) return json(405, { error: 'Method not allowed.' }, { Allow: 'POST' });
-  if (!NPC.apiKey) return json(501, { reply: null, error: 'No model is configured for the characters.' });
-  const talk = cleanTalk(parseBody(await readBody(req)));
-  if (!talk) return json(400, { error: 'Not a conversation.' });
-  if (!allowed(limiter, 'npc', client) || !limiter.allow('npc:day', ...LIMIT_DAY)) return json(429, { reply: null, error: 'Too many requests.' }, { 'Retry-After': '60' });
-  return json(200, { reply: await npcReply(NPC, talk) });
+  const bearer = /^Bearer (.+)$/.exec(String(req.headers.authorization || ''))?.[1] || '';
+  const out = await route({
+    method: req.method, path: pathname, query: new URLSearchParams(query), client,
+    body: reading ? null : parseBody(await readBody(req)), admin: sameSecret(bearer, ADMIN_KEY),
+  }, api);
+  return json(out.status, out.body, out.headers);
 }
 
 async function onRequest(req, res) {
   const [pathname, query] = splitUrl(req.url);
-  if (pathname === '/api/scores' || pathname === '/api/npc') return onApi(req, res, pathname, query);
+  if (pathname.startsWith('/api/') && pathname !== '/api/presence') return onApi(req, res, pathname, query);
   if (req.method !== 'GET' && req.method !== 'HEAD') return reply(req, res, 405, 'Method not allowed.\n', { Allow: 'GET, HEAD' });
   if (pathname === '/healthz') return reply(req, res, 200, 'ok');
   if (pathname === '/api/presence') {

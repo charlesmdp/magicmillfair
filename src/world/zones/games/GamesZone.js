@@ -1,5 +1,6 @@
-// Games and dangers: the Sky Stones (a climb from stone to stone against the clock), the boulder that rolls
-// down the island, the acid pond, the shark that keeps swimmers from going too far.
+// Games and dangers: the climb from stone to stone against the clock ("Mostly Up") and the tower from which
+// it is watched, the boulder that rolls down the island, the acid pond, the shark that keeps swimmers from
+// going too far.
 import * as THREE from 'three';
 import { Parts, MeshBuilder } from '../../props/MeshBuilder.js';
 import { LAYER, staticCaster } from '../../../render/Shadows.js';
@@ -8,6 +9,7 @@ import { makeMaterial, GLSL_COMMON, GLSL_LIGHTING } from '../../../render/global
 import { cosmeticMaterial } from '../../../player/Cosmetics.js';
 import { CLIMB, ACID, BOULDER, ISLAND, islandPath, islandAt, ISLAND_LENGTH } from '../../layout/layout.js';
 import { climbCourse, stoneDepth, formatTime } from './course.js';
+import { canvasBoard, drawScores, drawSponsor } from './Boards.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const mmss = formatTime;
@@ -57,6 +59,7 @@ export class GamesZone {
 
   build() {
     this._climb();
+    this._tower();
     this._acid();
     this._boulder();
     this._shark();
@@ -65,7 +68,7 @@ export class GamesZone {
   }
 
   // ---------------------------------------------------------------------------
-  // The Sky Stones
+  // The climb ("Mostly Up")
 
   _climb() {
     const parts = new Parts();
@@ -139,24 +142,164 @@ export class GamesZone {
       ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 10; ctx.strokeRect(12, 12, w - 24, h - 24);
       ctx.fillStyle = '#f6e7b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.font = `700 ${h * 0.56}px Georgia, 'Times New Roman', serif`;
-      ctx.fillText('THE SKY STONES', w / 2, h * 0.52);
+      ctx.fillText(C.name.toUpperCase(), w / 2, h * 0.52);
     }, 4.4, 0.82);
     sign.mesh.position.set(gx, gy + 3.2, gz);
     sign.mesh.rotation.y = Math.atan2(first.x - gx, first.z - gz) + Math.PI; // read from outside
     this.group.add(sign.mesh);
-    // the board of the best climbs, to the right of the gate
-    this.board = this._board(512, 704, (ctx, w, h) => this._drawScores(ctx, w, h), 2.5, 3.44);
-    const bx = gx + 3.9, bz = gz - 0.6, by = this.ground(bx, bz);
-    this.board.mesh.position.set(bx, by + 2.25, bz);
-    this.board.mesh.rotation.y = sign.mesh.rotation.y + 0.35;
-    this.group.add(this.board.mesh);
-    const post = new Parts(), pw = post.get('woodDark');
-    pw.tint(1.1, 1.0, 0.85, 1);
-    for (const s of [-1.05, 1.05]) pw.box(bx + Math.cos(this.board.mesh.rotation.y) * s - 0.06, by - 0.3, bz - Math.sin(this.board.mesh.rotation.y) * s - 0.06, bx + Math.cos(this.board.mesh.rotation.y) * s + 0.06, by + 4.05, bz - Math.sin(this.board.mesh.rotation.y) * s + 0.06, { tile: 1 });
-    this._add(post, 'climb-posts');
-    this.colliders.push({ type: 'circle', x: bx, z: bz, r: 0.9 });
+    // the board of the best climbs, to the right of the gate, under the panel of whoever sponsors the game
     this.scores = null; // not asked yet
+    const stand = this.scoreStand('sky', gx + 4.6, gz - 0.7, sign.mesh.rotation.y + 0.35, {
+      title: `${C.name.toUpperCase()} — BEST CLIMBS`, sub: `${C.height} m of stones · no jetpack · fastest to the top`, format: mmss, what: 'this game',
+    });
+    this.board = stand.board;
     this.world.noFly.push({ x: C.x, z: C.z, r: C.r + 12 }); // (wide enough that nobody flies in from outside)
+  }
+
+  /**
+   * A scoreboard on two posts with a sponsor panel above it, facing `yaw`: what every game of the fair has at
+   * its entrance. Returns { board, panel, setScores(lists), setSponsor(sponsor) }; the place is added to
+   * world.sponsorSlots under `board:<id>` (walk up to it to sponsor the game).
+   */
+  scoreStand(id, x, z, yaw, { title, sub, format, what = 'this game', width = 3.4 }) {
+    const y = this.ground(x, z), k = width / 3.4;
+    const state = { lists: null, sponsor: null };
+    const board = canvasBoard(1024, 904, (ctx, w, h) => drawScores(ctx, w, h, { title, sub, lists: state.lists, format }), width, 3.0 * k);
+    board.mesh.position.set(x, y + 0.75 + 1.5 * k, z);
+    board.mesh.rotation.y = yaw;
+    const panel = canvasBoard(1024, 316, (ctx, w, h) => drawSponsor(ctx, w, h, state.sponsor, { what }), width, 1.05 * k);
+    panel.mesh.position.set(x, y + 0.75 + 3.0 * k + 0.08 + 0.525 * k, z);
+    panel.mesh.rotation.y = yaw;
+    this.group.add(board.mesh, panel.mesh);
+    const post = new Parts(), pw = post.get('woodDark'), paint = post.get('paint');
+    const ax = Math.cos(yaw), az = -Math.sin(yaw), top = y + 0.75 + 4.05 * k + 0.25;
+    for (const s of [-1, 1]) {
+      const px = x + ax * s * (width / 2 + 0.09), pz = z + az * s * (width / 2 + 0.09);
+      pw.tint(1.1, 1.0, 0.85, 1).box(px - 0.07, y - 0.3, pz - 0.07, px + 0.07, top, pz + 0.07, { tile: 1 });
+      paint.tint(1.0, 0.75, 0.12, 1).place(px, top, pz).lathe([[0.0, -0.02], [0.13, 0.1], [0.0, 0.26]], 8).pop();
+    }
+    this._add(post, `stand-${id}`);
+    this.colliders.push({ type: 'box', x, z, hw: width / 2 + 0.2, hl: 0.14, yaw });
+    const stand = {
+      id, board, panel,
+      setScores: (lists) => { state.lists = lists; board.redraw(); },
+      setSponsor: (sponsor) => { state.sponsor = sponsor; panel.redraw(); },
+    };
+    (this.world.sponsorSlots ||= []).push({ id: `board:${id}`, what, x: x + Math.sin(yaw) * 1.4, y, z: z + Math.cos(yaw) * 1.4, reach: 3.2, set: stand.setSponsor });
+    (this.stands ||= {})[id] = stand;
+    return stand;
+  }
+
+  // ---------------------------------------------------------------------------
+  // The tower of those who watch: a striped fairground tower in the bay behind the lawn, a stair winding round
+  // it with a landing on every turn that faces the climb, a deck under a tent roof at the top. One gets in and
+  // out by its door only: there is no way from it into the game.
+
+  _tower() {
+    const C = CLIMB, T = C.tower, parts = new Parts();
+    const paint = parts.get('paint'), deck = parts.get('woodDeck'), cloth = parts.get('doubleSided');
+    const base = C.y, P = T.pitch, N = T.turns, top = base + P * N, TAU = Math.PI * 2;
+    const R0 = 2.0, R1 = 3.62, RW = 3.78, RD = 5.4, LAND = Math.PI / 3;
+    const face = Math.atan2(C.x - T.x, C.z - T.z); // towards the lawn
+    // `u`: the angle round the tower, from where a landing starts (landings are centred on the side of the lawn)
+    const pt = (u, r, y) => V(T.x + Math.sin(face + u - LAND / 2) * r, y, T.z + Math.cos(face + u - LAND / 2) * r);
+    const uOf = (x, z) => { const u = (Math.atan2(x - T.x, z - T.z) - face + LAND / 2) % TAU; return u < 0 ? u + TAU : u; };
+    const rise = (u) => (u < LAND ? 0 : (P * (u - LAND)) / (TAU - LAND)); // the landing, then the steps up to the next one
+    this.tower = { x: T.x, z: T.z, top, r: RD };
+
+    // --- what one walks on: each turn of the stair, then the deck (all round outside the stair, and its last landing)
+    for (let k = 0; k < N; k++) {
+      this.platforms.push({ type: 'custom', clearance: 1.6, heightAt: (x, z) => {
+        const r2 = (x - T.x) ** 2 + (z - T.z) ** 2;
+        return r2 > RW * RW || r2 < (R0 - 0.4) ** 2 ? null : base + P * k + rise(uOf(x, z));
+      } });
+    }
+    this.platforms.push({ type: 'custom', clearance: 1.0, heightAt: (x, z) => {
+      const r2 = (x - T.x) ** 2 + (z - T.z) ** 2;
+      return r2 > RD * RD ? null : r2 >= RW * RW || uOf(x, z) < LAND ? top : null;
+    } });
+    // --- what holds people in: the shaft, the wall of the stair (open at the door, and at the top landing),
+    // the rail of the deck, the rail between the top landing and the well of the stair
+    this.colliders.push({ type: 'circle', x: T.x, z: T.z, r: R0 });
+    const ring = (r, n, band) => {
+      for (let i = 0; i < n; i++) {
+        const u = ((i + 0.5) / n) * TAU, q = pt(u, r, 0), [y0, y1] = band(u);
+        this.colliders.push({ type: 'box', x: q.x, z: q.z, hw: r * Math.tan(Math.PI / n) + 0.06, hl: 0.1, yaw: face + u - LAND / 2, y0, y1 });
+      }
+    };
+    ring(RW + 0.1, 24, (u) => (u < LAND ? [base + 3.2, top - 0.9] : [base - 2, top + 6]));
+    ring(RD, 28, () => [top - 0.6, top + 6]);
+    {
+      const q = pt(LAND + 0.04, (R0 + RW) / 2, 0);
+      this.colliders.push({ type: 'box', x: q.x, z: q.z, hw: (RW - R0) / 2 + 0.1, hl: 0.08, yaw: face + LAND / 2 + 0.04 + Math.PI / 2, y0: top - 0.5, y1: top + 6 });
+    }
+    this.world.noFly.push({ x: T.x, z: T.z, r: RD + 4 });
+
+    // --- the shaft, in bands of red and cream
+    for (let i = 0; i <= N * 2; i++) {
+      const c = i % 2 ? [0.93, 0.9, 0.82] : [0.78, 0.12, 0.1];
+      paint.tint(c[0], c[1], c[2], 1).cylinder(T.x, base - 0.6 + i * (P / 2), T.z, R0, R0, i === N * 2 ? 4.9 : P / 2, 14, { capTop: false, capBottom: false });
+    }
+    // --- the stair: steps, landings, the band along their outer edge, a rail
+    const STEPS = Math.round(P / 0.2), du = (TAU - LAND) / STEPS, sh = P / STEPS;
+    const TEAL = [0.05, 0.4, 0.42], PLANK = [1.0, 0.94, 0.84], EDGE = [0.86, 0.66, 0.2];
+    const flat = (u0, u1, r0, r1, y, n) => {
+      for (let i = 0; i < n; i++) {
+        const a = u0 + ((u1 - u0) * i) / n, b = u0 + ((u1 - u0) * (i + 1)) / n;
+        deck.tint(PLANK[0], PLANK[1], PLANK[2], 1).quad(pt(a, r0, y), pt(a, r1, y), pt(b, r1, y), pt(b, r0, y), { tile: 1.2 });
+        deck.tint(0.6, 0.55, 0.48, 1).quad(pt(a, r0, y - 0.09), pt(b, r0, y - 0.09), pt(b, r1, y - 0.09), pt(a, r1, y - 0.09), { tile: 1.2 });
+      }
+    };
+    const fascia = (a, b, ya, yb, r, depth) => paint.tint(EDGE[0], EDGE[1], EDGE[2], 1).quad(pt(a, r, ya - depth), pt(b, r, yb - depth), pt(b, r, yb + 0.02), pt(a, r, yb + 0.02));
+    const rail = (u0, u1, r, y0, y1, n) => {
+      paint.tint(TEAL[0], TEAL[1], TEAL[2], 1);
+      for (let i = 0; i <= n; i++) {
+        const a = u0 + ((u1 - u0) * i) / n, ya = y0 + ((y1 - y0) * i) / n;
+        paint.rod(pt(a, r, ya), pt(a, r, ya + 1.08), 0.032, 5, { caps: false });
+        if (i < n) { const b = u0 + ((u1 - u0) * (i + 1)) / n, yb = y0 + ((y1 - y0) * (i + 1)) / n; paint.beam(pt(a, r, ya + 1.08), pt(b, r, yb + 1.08), 0.07, 0.06); }
+      }
+    };
+    for (let k = 0; k < N; k++) {
+      const y0 = base + P * k;
+      if (k > 0) { flat(0, LAND, R0, R1, y0, 4); fascia(0, LAND, y0, y0, R1, 0.3); rail(0, LAND, R1 - 0.04, y0, y0, 2); }
+      for (let i = 0; i < STEPS; i++) {
+        const a = LAND + i * du, b = a + du, ya = y0 + sh * i, yb = ya + sh;
+        deck.tint(PLANK[0] * 0.8, PLANK[1] * 0.8, PLANK[2] * 0.8, 1).quad(pt(a, R0, ya), pt(a, R1, ya), pt(a, R1, yb), pt(a, R0, yb), { tile: 1.2 }); // riser
+        deck.tint(PLANK[0], PLANK[1], PLANK[2], 1).quad(pt(a, R0, yb), pt(a, R1, yb), pt(b, R1, yb), pt(b, R0, yb), { tile: 1.2 }); // tread
+        deck.tint(0.6, 0.55, 0.48, 1).quad(pt(a, R0, ya - 0.05), pt(b, R0, yb - 0.05), pt(b, R1, yb - 0.05), pt(a, R1, ya - 0.05), { tile: 1.2 }); // seen from below
+        fascia(a, b, ya, yb, R1, 0.34);
+      }
+      rail(LAND, TAU, R1 - 0.04, y0 + sh, y0 + P, 10);
+    }
+    // --- the deck at the top, its rails, the tent roof on its posts, a pennant
+    flat(0, TAU, R1, RD, top, 24);
+    flat(0, LAND, R0, R1, top, 4);
+    fascia(0, TAU / 2, top, top, RD, 0.3); fascia(TAU / 2, TAU, top, top, RD, 0.3);
+    rail(0, TAU, RD - 0.06, top, top, 24);
+    rail(LAND + 0.06, TAU - 0.75, R1 + 0.06, top, top, 8);
+    for (let i = 0; i < 8; i++) paint.tint(0.93, 0.9, 0.82, 1).rod(pt((i / 8) * TAU, RD - 0.06, top + 1.08), pt((i / 8) * TAU, RD - 0.06, top + 3.2), 0.07, 6, { caps: false });
+    const apex = V(T.x, top + 5.9, T.z), eave = top + 3.1, ROOF = 16;
+    for (let i = 0; i < ROOF; i++) {
+      const a = (i / ROOF) * TAU, b = ((i + 1) / ROOF) * TAU, c = i % 2 ? [0.95, 0.92, 0.84] : [0.8, 0.12, 0.1];
+      cloth.tint(c[0], c[1], c[2], 1).tri(apex, pt(a, RD + 0.7, eave), pt(b, RD + 0.7, eave));
+      cloth.tri(pt(a, RD + 0.7, eave), pt(a, RD + 0.72, eave - 0.4), pt(b, RD + 0.7, eave)); // a scalloped edge
+    }
+    paint.tint(1.0, 0.75, 0.12, 1).place(T.x, top + 5.85, T.z).lathe([[0.0, 0.0], [0.22, 0.14], [0.0, 0.42]], 8).pop();
+    paint.tint(0.93, 0.9, 0.82, 1).rod(V(T.x, top + 6.2, T.z), V(T.x, top + 9.4, T.z), 0.045, 6);
+    cloth.tint(1.0, 0.75, 0.1, 1).tri(V(T.x, top + 9.4, T.z), V(T.x, top + 8.5, T.z), V(T.x + 2.1, top + 8.95, T.z + 0.3));
+    this._add(parts, 'tower');
+    // a sign over the door
+    const sign = this._board(768, 160, (ctx, w, h) => {
+      ctx.fillStyle = '#16211b'; ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 8; ctx.strokeRect(8, 8, w - 16, h - 16);
+      ctx.fillStyle = '#f6e7b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = "700 62px Georgia, 'Times New Roman', serif"; ctx.fillText('THE GRANDSTAND', w / 2, h * 0.4);
+      ctx.fillStyle = '#f2c14e'; ctx.font = '600 28px system-ui, sans-serif'; ctx.fillText('climb up · watch them · cheer', w / 2, h * 0.76);
+    }, 3.3, 0.69);
+    const sp = pt(LAND / 2, RW + 0.25, base + 3.75);
+    sign.mesh.position.copy(sp);
+    sign.mesh.rotation.y = face;
+    this.group.add(sign.mesh);
   }
 
   /** The line of the game in progress (see Hud.setRun): only the game that wrote it may take it away. */
@@ -166,45 +309,10 @@ export class GamesZone {
   }
 
   /** A flat sign drawn with a canvas: { mesh, redraw() }. */
-  _board(w, h, draw, width, height) {
-    const canvas = document.createElement('canvas');
-    canvas.width = w; canvas.height = h;
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.anisotropy = 4;
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide, toneMapped: false }));
-    const redraw = () => { draw(canvas.getContext('2d'), w, h); texture.needsUpdate = true; };
-    redraw();
-    return { mesh, redraw };
-  }
+  _board(w, h, draw, width, height) { return canvasBoard(w, h, draw, width, height); }
 
-  _drawScores(ctx, w, h) {
-    ctx.fillStyle = '#16211b'; ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 8; ctx.strokeRect(8, 8, w - 16, h - 16);
-    ctx.fillStyle = '#f2c14e'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = "700 44px Georgia, 'Times New Roman', serif";
-    ctx.fillText('BEST CLIMBS', w / 2, 54);
-    ctx.font = '600 22px system-ui, sans-serif'; ctx.fillStyle = '#cfc7b2';
-    ctx.fillText(`${CLIMB.height} m of stones · no jetpack`, w / 2, 96);
-    const list = this.scores;
-    ctx.font = '600 30px system-ui, sans-serif';
-    if (!list || !list.length) {
-      ctx.fillStyle = '#f6f1e4';
-      ctx.fillText(list ? 'Nobody has made it yet.' : '…', w / 2, h / 2 - 10);
-      if (list) { ctx.font = '500 24px system-ui, sans-serif'; ctx.fillStyle = '#cfc7b2'; ctx.fillText('Be the first!', w / 2, h / 2 + 30); }
-      return;
-    }
-    list.slice(0, 10).forEach((e, i) => {
-      const y = 150 + i * 53;
-      ctx.fillStyle = i === 0 ? '#f2c14e' : i < 3 ? '#f6f1e4' : '#cfc7b2';
-      ctx.textAlign = 'left'; ctx.fillText(`${i + 1}.`, 34, y);
-      ctx.fillText(String(e.name).slice(0, 16), 86, y);
-      ctx.textAlign = 'right'; ctx.fillText(mmss(e.ms), w - 34, y);
-    });
-  }
-
-  /** The best climbs to show on the board: [{ name, ms }], best first. */
-  setScores(list) { this.scores = list || []; this.board.redraw(); }
+  /** The best climbs to show on the board: { day, week, month, all }, each [{ name, score }] best first. */
+  setScores(lists) { this.scores = lists; this.stands.sky.setScores(lists); }
 
   _tickClimb(dt, player) {
     const C = CLIMB, p = player.pos, run = this.run, ev = this.events;
@@ -212,14 +320,14 @@ export class GamesZone {
     this.near = d < C.r + 14;
     if (d > C.r + 5) { if (run.state !== 'idle') { run.state = 'idle'; this._line('climb', null); } return; }
     if (player.riding) player.riding = false; // on foot only
-    const cheating = player.gravity !== 1 || player.boost !== 1;
+    const cheating = player.cheat || player.gravity !== 1 || player.boost !== 1;
     const onPlate = player.grounded && Math.abs(p.y - C.y) < 0.4 && (p.x - this.start.x) ** 2 + (p.z - this.start.z) ** 2 < this.start.r ** 2;
     if (onPlate) {
       if (run.state !== 'ready') { run.state = 'ready'; run.t = 0; this._line('climb', 'Ready — the clock starts when you leave the plate'); }
       run.clean = !cheating;
       return;
     }
-    if (run.state === 'ready') { run.state = 'running'; run.t = 0; }
+    if (run.state === 'ready') { run.state = 'running'; run.t = 0; ev.started?.(); }
     if (run.state !== 'running') return;
     run.t += dt;
     if (cheating || player.jet > 0) run.clean = false;
