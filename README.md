@@ -227,6 +227,12 @@ round the ring (50). The emote panel shows where you stand; the administrator ha
 - **The sky villages**: step up to the Sky Gate — the stone ring on the lawn between the arrival and the
   mill — and choose one of thirty villages perched on the mountains: you are carried there, facing the
   valley. The ring of each village leads back, or on to another village.
+- **Listening**: every place has its sound — the surf on the beach and the water lapping under the pier, the
+  wind in the leaves round the mill and the ponds, the roar of the waterfall, brooks, birds, a colder wind up
+  in the mountains, drips in the caves — and its music: a fairground waltz on the pier, something quiet
+  everywhere else, something epic that builds as one climbs Mostly Up. Nothing of it is a recording: it is
+  all synthesised in the browser (`src/audio/`), so there is nothing to download. Settings → Sound sets the
+  two volumes (zero switches a family off altogether).
 - **Places to sit**: benches along the promenade, cushions and benches all over the temple, logs, chairs…
 - And the rest: the big wheel, the hammocks, the beanbags and their laptops, the caves, the animals of light.
 
@@ -374,7 +380,10 @@ src/
   player/                  animated avatar and its poses, controller (walk, swim, jump, sit, fly, die), cameras,
                            Interact.js (what can be done here), RankEmotes.js (the animals of light),
                            Cosmetics.js (hats, jetpack, bouquet, quad — and who owns what)
-  npc/Npc.js               the characters one can talk to (the alligator): their own lines, or the server's
+  audio/                   the sound: Soundscape (what the game calls), Ambience (the places), Music and tunes
+                           (three musics, written as notes), Effects (the one-shots), SoundMap (what the baked
+                           maps say of each spot), synth (shared parts) — all of it synthesised
+  npc/Npc.js               the characters one can talk to (Billy the alligator): their own lines, or the server's
   net/                     multiplayer presence and chat (WebSocket or between-tabs transport, interpolation),
                            Scores.js (the leaderboards)
   ui/                      welcome screen, minimap and large map, chat, action prompts, settings, touch controls
@@ -511,6 +520,7 @@ that is the last point. Going further means a referee: the server replaying the 
 | `npm test` | 117 checks of the Node server, the protocol (chat included), the interpolation, full rooms and the API (leaderboards, limits) |
 | `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (74 in all) |
 | `npm run test:smoke` | drives the real site: welcome screen, walking, free camera, settings, large map (`-- --mobile` for the touch layout) |
+| `npm run test:audio` | Listens to the sound engine without ears: in headless Chromium it renders a dozen listener scenarios (beach, cliffs, pier, woods, mill, waterfall, cave, sky village, the climb…) and every one-shot effect through an offline audio context, measures level, spectrum, how the loudness moves and how tonal it is, fails on silence or clipping, and times `update()` (about 0.01 ms a frame) |
 | `npm run test:walk` | 31 checks in the real game: pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls and the leap from the lowest, the swim to the secret cove, the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the acid pond, the shark, change of tier |
 | `npm run test:duo` | two visitors on the production server: they must see each other move, wave, summon an animal, chat and sit down (`-- --cloudflare` for the Cloudflare version) |
 | `npm run bench` | benchmark tour for each tier (`-- --mobile` for the phone profile) |

@@ -22,6 +22,7 @@ import { RemoteAvatars } from './net/RemoteAvatars.js';
 import { Benchmark } from './app/Benchmark.js';
 import { SPAWN, ZONES, CLIMB } from './world/layout/layout.js';
 import { FEATURES } from './app/config.js';
+import { Soundscape } from './audio/Soundscape.js';
 
 const params = new URLSearchParams(location.search);
 const SHOT = params.has('shot'); // screenshot tool: no interface, free camera
@@ -72,6 +73,15 @@ async function boot() {
   world.buildCollision();
   world.bakeShadows();
 
+  // ---------- sound: every ambience, music and effect is synthesised (src/audio/): nothing to download.
+  // Browsers only allow sound after a gesture: the first click, key or touch starts it.
+  const level = (key, def) => { const v = parseFloat(store.get(key)); return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : def; };
+  const volume = { sound: level('mmf.sound', 0.8), music: level('mmf.music', 0.6) };
+  const audio = new Soundscape({ data });
+  audio.setLevels(volume);
+  for (const ev of ['pointerdown', 'keydown', 'touchend']) window.addEventListener(ev, () => audio.unlock(), { passive: true });
+  app.audio = audio;
+
   // ---------- player and cameras
   const floorAt = (x, z) => Math.max(data.heightAt(x, z), data.waterAt(x, z));
   let color = parseInt(store.get('mmf.color'), 10);
@@ -102,8 +112,8 @@ async function boot() {
   app.who = who;
   // no jetpack underground, nor where a game forbids it
   player.canFly = (p) => owns('jetpack') && !player.cave && !world.noFly.some((z) => (p.x - z.x) ** 2 + (p.z - z.z) ** 2 < z.r * z.r);
-  player.onDeath = (cause) => hud.wasted(cause);
-  player.onRespawn = () => { hud.wasted(null); rig.snap(player.pos, rig.yaw); };
+  player.onDeath = (cause) => { hud.wasted(cause); audio.play('wasted'); };
+  player.onRespawn = () => { hud.wasted(null); rig.snap(player.pos, rig.yaw); audio.play('respawn'); };
   const rank = new RankEmotes(scene);
   Object.assign(app, { player, rig, free, me, rank });
 
@@ -133,7 +143,14 @@ async function boot() {
   const startPresence = () => {
     presence = new Presence({ name, color });
     avatars = new RemoteAvatars({ scene, factory, presence, hud, rank, world });
-    presence.on('chat', ({ id, peer, text, near }) => { hud.addChat(peer.name, peer.color, text, false, near); avatars.say(id, text); });
+    presence.on('chat', ({ id, peer, text, near }) => { hud.addChat(peer.name, peer.color, text, false, near); avatars.say(id, text); audio.play('chat'); });
+    // what the others do is heard when they are close
+    presence.on('emote', ({ id, emote: i }) => {
+      const o = presence.peers.get(id), e = EMOTE_LIST[i];
+      if (!o || !o.visible || !e) return;
+      const d = Math.hypot(o.x - player.pos.x, o.z - player.pos.z);
+      if (d < 40) audio.play(e.rank ? 'rank' : e.id === 'cheer' || e.id === 'clap' || e.id === 'hype' || e.id === 'go' ? 'cheer' : e.id === 'rage' ? 'rage' : 'emote', { volume: Math.max(0.15, 1 - d / 40) * 0.8 });
+    });
     // put out of the room by the administrator: said plainly, and that is the end of the visit to this room
     presence.on('kicked', ({ ban }) => hud.banner(ban ? 'The administrator has banned you from the fair.' : 'The administrator has put you out of this room. Reload the page to come back in.'));
     presence.on('who', ({ list, now }) => { roster.details = new Map(list.map((p) => [p.id, p])); roster.now = now; if (hud.rosterOpen) showRoster(); });
@@ -179,9 +196,11 @@ async function boot() {
     if (e.rank) {
       if (!unlocked(e)) { hud.note(`The ${e.label.toLowerCase()} comes to those who visit ${e.days} days in a row (you are at ${who.days})`, 4200); return false; }
       rank.play(e.rank, me.root);
+      audio.play('rank');
     } else {
       if (e.clip && me.resting) return false; // seated: gestures of the arms and animals of light only
       me.emote(i);
+      audio.play(e.id === 'cheer' || e.id === 'clap' || e.id === 'hype' || e.id === 'go' ? 'cheer' : e.id === 'rage' ? 'rage' : 'emote');
     }
     presence?.sendEmote(i);
     return true;
@@ -194,13 +213,13 @@ async function boot() {
     world.actionSources.push((p) => {
       // (flowers grow on the ground: nothing to pick from a stone, a deck or a roof above them)
       if (--wait <= 0) { wait = 12; flower = Math.abs(p.pos.y - data.heightAt(p.pos.x, p.pos.z)) < 0.7 ? world.scatter.flowerNear(p.pos.x, p.pos.z) : null; }
-      return flower ? { label: look.bouquet ? 'Add to the bouquet' : 'Pick a flower', run: () => { look.kinds = [...(look.kinds || []), flower].slice(-9); look.bouquet = true; wait = 0; } } : null;
+      return flower ? { label: look.bouquet ? 'Add to the bouquet' : 'Pick a flower', run: () => { look.kinds = [...(look.kinds || []), flower].slice(-9); look.bouquet = true; wait = 0; audio.play('pick'); } } : null;
     });
   }
   // toadstools: picked and eaten on the spot. Nobody should do that.
   world.actionSources.push((p) => {
     const it = world.mushrooms.near(p.pos.x, p.pos.y, p.pos.z);
-    return it ? { label: 'Pick and eat the mushroom', run: () => { world.mushrooms.pick(it); player.die('Ate a strange mushroom', [p.pos.x, p.pos.z, player.yaw]); } } : null;
+    return it ? { label: 'Pick and eat the mushroom', run: () => { world.mushrooms.pick(it); audio.play('eat'); player.die('Ate a strange mushroom', [p.pos.x, p.pos.z, player.yaw]); } } : null;
   });
   app.interact = interact;
   // chat: shown to those who are there, kept nowhere
@@ -272,8 +291,9 @@ async function boot() {
   world.games.events = {
     note: (text) => hud.note(text, 4200),
     run: (text) => hud.setRun(text),
-    started: () => { skyScores.start(); },
+    started: () => { skyScores.start(); audio.play('start'); },
     finished: (ms, clean) => {
+      audio.play('victory');
       rank.play('dragon', me.root);
       presence?.sendEmote(emoteIndex('dragon'));
       if (!clean) { hud.note(`${formatTime(ms)} — but a cheat was on: not recorded`, 7000); return; }
@@ -292,6 +312,7 @@ async function boot() {
     player.teleport(x, z, facing);
     rig.snap(player.pos, facing + Math.PI); // the camera behind, looking the same way
     hud.note(word, 4200);
+    audio.play('teleport');
   };
   const chooseVillage = () => {
     const here = sky.villageAt(player.pos.x, player.pos.z);
@@ -321,6 +342,7 @@ async function boot() {
   hud.setName(name);
   hud.setHat(look.hat);
   hud.setSettings(settings);
+  hud.setVolume(volume);
   showEmotes();
   hud.setPresence('offline', 1);
   // who may fly the camera about (everyone, or the administrator alone: see app/config.js)
@@ -361,6 +383,12 @@ async function boot() {
     .on('unban', async ({ kind, key }) => { await callApi(`api/bans?${kind}=${encodeURIComponent(key)}`, { method: 'DELETE', key: who.key }); refreshRoster(); })
     .on('hat', (i) => { if (owns(HATS[i]?.id)) { look.hat = i; store.set('mmf.hat', String(i)); } })
     .on('drop', () => { look.bouquet = false; look.kinds = undefined; })
+    .on('volume', (key, value) => {
+      volume[key] = value;
+      store.set(`mmf.${key}`, String(value));
+      audio.setLevels(volume);
+      audio.unlock();
+    })
     .on('setting', (key, on) => {
       settings[key] = on;
       store.set(`mmf.${key}`, on ? '1' : '0');
@@ -399,6 +427,8 @@ async function boot() {
     if (ext) gpuName = String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || '').replace(/^ANGLE \((.*)\)$/, '$1').slice(0, 64);
   } catch { /* hidden by the browser */ }
   let slow = 0, zoneTimer = 0, lastScale = engine.scale;
+  const sound = { listener: { x: 0, y: 0, z: 0, speed: 0, grounded: true, swimming: false, wading: false, riding: false, dead: false, cave: false, surface: 'grass', climb: null, game: null }, surf: new Float32Array(8), grounded: true, fall: 0, jet: 0 };
+  app.sound = sound;
   const fmt = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)} M` : n >= 1e3 ? `${Math.round(n / 1e3)} k` : String(n));
 
   engine.start((dt) => {
@@ -474,7 +504,11 @@ async function boot() {
     {
       // rings on the water around the swimmer, a splash when dropping in
       const p = player.pos, level = data.waterAt(p.x, p.z);
-      if (player.splashed) { if (level > -500) world.ripples.splash(engine.time, p.x, level, p.z, player.splashed); player.splashed = 0; player.dived = false; }
+      if (player.splashed) {
+        if (level > -500) world.ripples.splash(engine.time, p.x, level, p.z, player.splashed);
+        audio.play(player.dived ? 'dive' : 'splash', { volume: Math.min(1, 0.4 + player.splashed / 12) });
+        player.splashed = 0; player.dived = false;
+      }
       if ((player.swimming || player.wading) && level > -500) world.ripples.trail(0, engine.time, dt, p.x, level, p.z, player.speed, player.swimming);
       // one's own speech bubble
       const tag = hud.selfTag, saying = tag.classList.contains('saying') && mode === 'walk';
@@ -486,6 +520,29 @@ async function boot() {
       } else if (tag.style.display !== 'none') tag.style.display = 'none';
     }
 
+    {
+      // what is heard: where the player is, what they walk on, what they are doing
+      const p = player.pos, terrain = data.heightAt(p.x, p.z), run = world.games.run;
+      const ear = sound.listener;
+      ear.x = p.x; ear.y = p.y; ear.z = p.z; ear.speed = player.speed;
+      ear.grounded = player.grounded; ear.swimming = player.swimming; ear.wading = !!player.wading; ear.riding = player.riding; ear.dead = !!player.dead;
+      ear.cave = !!player.cave;
+      if (app.frames % 6 === 0) {
+        if (player.wading) ear.surface = 'water';
+        else if (player.cave) ear.surface = 'stone';
+        else if (p.y - terrain > 0.12) ear.surface = p.x > -25 && p.y < 12 ? 'wood' : world.games.tower && Math.hypot(p.x - world.games.tower.x, p.z - world.games.tower.z) < 7 ? 'wood' : 'stone'; // a deck, or steps and stones
+        else { data.surfaceAt(p.x, p.z, sound.surf); const w = sound.surf; ear.surface = w[5] > 0.45 ? 'sand' : w[4] + w[6] > 0.5 ? 'stone' : 'grass'; }
+      }
+      ear.climb = run.state === 'running' ? Math.min(1, Math.max(0, (p.y - CLIMB.y) / CLIMB.height)) : null;
+      // leaving the ground, coming back to it, lighting the jetpack
+      if (mode === 'walk' && !player.dead && !player.seat) {
+        if (sound.grounded && !player.grounded && !player.swimming && player.vel.y > 2) audio.play('jump');
+        else if (!sound.grounded && player.grounded && sound.fall < -4) audio.play('land', { volume: Math.min(1, -sound.fall / 14) });
+        if (player.jet > 0 && !(sound.jet > 0)) audio.play('jet');
+      }
+      sound.grounded = player.grounded || player.swimming; sound.fall = player.vel.y; sound.jet = player.jet;
+      audio.update(dt, ear);
+    }
     if (presence) {
       presence.setLocal(player.pos.x, player.pos.y, player.pos.z, player.yaw, player.anim, packLook({ free: mode === 'free', ...look }));
       presence.update(dt);

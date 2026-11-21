@@ -161,6 +161,9 @@ export class Hud {
         <h3>Display</h3>
         <div class="row"><span>Minimap</span><button class="switch" data-sw="map" aria-pressed="true" aria-label="Minimap"></button></div>
         <div class="row"><span>Performance figures</span><button class="switch" data-sw="stats" aria-pressed="false" aria-label="Performance figures"></button></div>
+        <h3>Sound</h3>
+        <div class="row"><span>Sounds</span><input type="range" class="vol" data-vol="sound" min="0" max="100" step="5" aria-label="Volume of the sounds" /></div>
+        <div class="row"><span>Music</span><input type="range" class="vol" data-vol="music" min="0" max="100" step="5" aria-label="Volume of the music" /></div>
         <h3>Controls</h3>
         <div class="row"><span>Run by default <small>(Shift walks)</small></span><button class="switch" data-set="run" aria-pressed="false" aria-label="Run by default"></button></div>
         <div class="row"><span>The camera turns with the character</span><button class="switch" data-set="follow" aria-pressed="false" aria-label="The camera turns with the character"></button></div>
@@ -239,6 +242,10 @@ export class Hud {
     h.querySelectorAll('[data-hat]').forEach((b) => (b.onclick = () => { this.setHat(+b.dataset.hat); this.emit('hat', +b.dataset.hat); }));
     this.wastedEl = h.querySelector('.wasted');
     h.querySelectorAll('.quality button').forEach((b) => (b.onclick = () => this.emit('quality', b.dataset.q)));
+    h.querySelectorAll('[data-vol]').forEach((r) => {
+      r.addEventListener('input', () => this.emit('volume', r.dataset.vol, +r.value / 100));
+      r.addEventListener('keydown', (e) => e.stopPropagation());
+    });
     h.querySelectorAll('[data-set]').forEach((b) => (b.onclick = () => {
       const on = b.getAttribute('aria-pressed') !== 'true';
       b.setAttribute('aria-pressed', String(on));
@@ -342,6 +349,8 @@ export class Hud {
   /** The emote on key `i` (0 = the key 1): its number, or -1. */
   quickEmote(i) { return this._emoteIds?.[QUICK[i]] ?? -1; }
 
+  /** { sound, music }, each 0..1. */
+  setVolume(volume) { this.hud.querySelectorAll('[data-vol]').forEach((r) => { r.value = String(Math.round((volume[r.dataset.vol] ?? 0) * 100)); }); }
   setSettings(settings) { this.hud.querySelectorAll('[data-set]').forEach((b) => b.setAttribute('aria-pressed', String(!!settings[b.dataset.set]))); }
   /** May the visitor fly the camera about? (the button disappears otherwise) */
   setFreeCamera(on) { this.cameraBtn.style.display = on ? '' : 'none'; }

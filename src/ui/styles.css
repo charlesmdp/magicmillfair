@@ -339,3 +339,5 @@ body.dead #view { filter: grayscale(1) contrast(1.15) brightness(0.72); }
 @media (prefers-reduced-motion: reduce) { .wheel { animation: none; } }
 
 button.pill.players { pointer-events: auto; }
+
+.panel input.vol { flex: 0 0 150px; accent-color: var(--accent); }
