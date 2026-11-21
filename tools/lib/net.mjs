@@ -41,7 +41,8 @@ export class Client {
     this.waiters = [];
     this.id = 0;
     this.code = null; // close code once closed
-    this.ws = new WebSocket(`ws://127.0.0.1:${port}/ws${room ? `?room=${encodeURIComponent(room)}` : ''}`, options);
+    const { dev, ...wsOptions } = options; // `dev`: the name the browser gave itself, as the game passes it
+    this.ws = new WebSocket(`ws://127.0.0.1:${port}/ws${room ? `?room=${encodeURIComponent(room)}` : '?'}${dev ? `&dev=${dev}` : ''}`, wsOptions);
     this.opened = new Promise((resolve) => {
       this.ws.once('open', () => resolve(true));
       this.ws.once('error', () => resolve(false));
@@ -75,9 +76,9 @@ export class Client {
     });
   }
 
-  async hello(name, color = 0) {
+  async hello(name, color = 0, dev) {
     await this.opened;
-    this.send({ t: 'hello', name, color, v: 1 });
+    this.send({ t: 'hello', name, color, v: 2, ...(dev && { dev }) });
     const welcome = await this.wait((m) => m.t === 'welcome');
     this.id = welcome ? welcome.id : 0;
     return welcome;

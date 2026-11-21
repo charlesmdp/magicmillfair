@@ -80,6 +80,7 @@ async function startWorker(env = {}, port = 0) {
   config.vars = { ...config.vars, TICK_MS: String(TICK), ALLOWED_ORIGINS: env.ALLOWED_ORIGINS || '', DEBUG: '1', SCORE_SECRET, ADMIN_KEY };
   if (env.MAX_PLAYERS) config.vars.MAX_PLAYERS = env.MAX_PLAYERS;
   if (env.STALE_MS) config.vars.STALE_MS = env.STALE_MS;
+  if (env.NEAR) config.vars.NEAR = env.NEAR;
   fs.writeFileSync(path.join(dir, 'wrangler.json'), JSON.stringify(config));
   const proc = spawn(process.execPath, [
     path.join(ROOT, 'node_modules/wrangler/bin/wrangler.js'), 'dev', '--config', path.join(dir, 'wrangler.json'),
@@ -509,6 +510,122 @@ async function testProtocol(server) {
   await strict.stop();
 }
 
+// --------------------------------------------------------------------- a crowd; the administrator; nearby chat
+
+// More visitors than each is told about in detail: to each the nearest ones, the others on the map.
+async function testCrowd(start, dist) {
+  const server = await start({ NEAR: '2', MAX_PLAYERS: '20', DIST_DIR: dist });
+  const { port } = server;
+  // five visitors: three together, two together 300 m away
+  const spots = [[0, 0], [3, 0], [6, 0], [300, 0], [303, 0]], cs = [];
+  for (const [i, [x, z]] of spots.entries()) {
+    const c = new Client(port, 'crowd');
+    c.welcome = await c.hello(`P${i}`, i);
+    c.send({ t: 's', p: [x, 1, z, 0], a: 0, f: 0 });
+    cs.push(c);
+    await sleep(TICK);
+  }
+  await sleep(700); // (the circles are worked out every 400 ms)
+  const told = cs.map((c) => [...new Set(c.rows().map((r) => r[0]))].sort((a, b) => a - b).join());
+  const last = cs[4].welcome;
+  check('crowd: each is told about the nearest ones only (two here), never more', told[0] === [cs[1].id, cs[2].id].join() && told[3] === String(cs[4].id) && told[4] === String(cs[3].id) && told[1] === [cs[0].id, cs[2].id].sort((a, b) => a - b).join(), told);
+  check('crowd: a newcomer is welcomed with who is there, not where (that comes with those around)', !!last && last.near === 2 && last.peers.length === 4 && last.peers.every((p) => p.p === undefined), last);
+  const map = await cs[0].wait((m) => m.t === 'm' && m.p.includes(cs[4].id), 4000);
+  const at = (id) => { const i = map ? map.p.findIndex((v, k) => k % 3 === 0 && v === id) : -1; return i < 0 ? null : [map.p[i + 1], map.p[i + 2]]; };
+  check('crowd: the map says roughly where everybody is', !!map && map.p.length === 15 && JSON.stringify(at(cs[3].id)) === '[300,0]' && JSON.stringify(at(cs[1].id)) === '[3,0]', map);
+  // one of the three walks over to the far pair: the first is told it has gone, the pair hears of it
+  cs[2].send({ t: 's', p: [301, 1, 1, 0], a: 1, f: 0 });
+  const gone = await cs[0].wait((m) => m.t === 'u' && Array.isArray(m.g) && m.g.includes(cs[2].id), 3000);
+  const arrived = await cs[3].wait((m) => m.t === 'u' && m.s.some((r) => r[0] === cs[2].id && r[1] === 301), 3000);
+  check('crowd: who walks away is told to be gone; who they walk up to hears of them', !!gone && !!arrived, [gone, arrived]);
+  // an emote is for those around
+  cs[0].send({ t: 'e', e: 3 });
+  const waved = await cs[1].wait((m) => m.t === 'e' && m.id === cs[0].id);
+  await sleep(TICK * 3);
+  check('crowd: an emote goes to those around, not across the map', !!waved && !cs[3].msgs.some((m) => m.t === 'e'), waved);
+  // alone, far from everybody: told that nobody watches (the state may then be sent less often); and back
+  cs[4].send({ t: 's', p: [1900, 1, 1900, 0], a: 1, f: 0 });
+  const unseen = await cs[4].wait((m) => m.t === 'w' && m.n === 0, 3000);
+  const from = cs[4].msgs.length;
+  cs[4].send({ t: 's', p: [302, 1, 2, 0], a: 1, f: 0 });
+  const seen = await cs[4].wait((m) => m.t === 'w' && m.n === 1 && cs[4].msgs.indexOf(m) >= from, 3000);
+  check('crowd: a visitor nobody is near is told so, and told again when someone is', !!unseen && !!seen, [unseen, seen]);
+  // the crowd thins out: everybody is told about everybody again
+  await Promise.all([cs[1].close(), cs[2].close()]);
+  const mark = cs[0].msgs.length;
+  cs[3].send({ t: 's', p: [304, 1, 0, 0.5], a: 0, f: 0 });
+  const again = await cs[0].wait((m) => m.t === 'u' && cs[0].msgs.indexOf(m) >= mark && m.s.some((r) => r[0] === cs[4].id) , 3000);
+  const far = await cs[0].wait((m) => m.t === 'u' && cs[0].msgs.indexOf(m) >= mark && m.s.some((r) => r[0] === cs[3].id && r[1] === 304), 3000);
+  check('crowd: when it thins out, everybody hears of everybody again', !!again && !!far, [again, far]);
+  await Promise.all(cs.map((c) => c.close()));
+  await server.stop();
+}
+
+// The administrator: who is there, putting someone out, keeping them out; a line said to those nearby only.
+async function testModeration(start, dist) {
+  const server = await start({ MAX_PLAYERS: '20', DIST_DIR: dist });
+  const { port } = server;
+  const json = (res) => { try { return JSON.parse(res.body.toString()); } catch { return null; } };
+  // (under Node each visitor comes from an address of their own — what a proxy in front of the server says)
+  const from = (n, dev) => ({ headers: { 'x-forwarded-for': `10.9.8.${n}`, 'user-agent': `TestBrowser/${n}` }, ...(dev && { dev }) });
+  const DEV = 'device-of-eve-0123456789';
+  const adm = new Client(port, 'mod', from(1)), eve = new Client(port, 'mod', from(2, DEV)), bob = new Client(port, 'mod', from(3));
+  await adm.hello('Admin', 1);
+  await eve.hello('Eve', 2, DEV);
+  await bob.hello('Bob', 3);
+  adm.send({ t: 's', p: [0, 1, 0, 0], a: 0, f: 0 }); bob.send({ t: 's', p: [5, 1, 0, 0], a: 0, f: 0 }); eve.send({ t: 's', p: [100, 1, 0, 0], a: 0, f: 0 });
+  // not the administrator: asking who is there or putting someone out does nothing; a wrong key is told so
+  eve.send({ t: 'who' }); eve.send({ t: 'kick', id: bob.id }); eve.send({ t: 'admin', key: 'a guess' });
+  const no = await eve.wait((m) => m.t === 'admin');
+  await sleep(TICK * 4);
+  check('admin: without the key, nothing — who, kick and a wrong key', !!no && no.ok === false && !eve.msgs.some((m) => m.t === 'who') && bob.code === null, [no, bob.code]);
+  adm.send({ t: 'admin', key: ADMIN_KEY });
+  const yes = await adm.wait((m) => m.t === 'admin');
+  adm.send({ t: 'who' });
+  const who = await adm.wait((m) => m.t === 'who');
+  const e = who?.list.find((p) => p.id === eve.id);
+  check('admin: with the key, who is there — name, address, browser, device, since when', !!yes && yes.ok === true && who?.list.length === 3 && e?.name === 'Eve' && (CF || e.ip === '10.9.8.2') && e.ip.length > 0 && e.ua === 'TestBrowser/2' && e.dev === DEV && Number.isFinite(e.since), who);
+  // a line for those nearby (20 m), a line for everyone
+  adm.send({ t: 'c', m: 'psst', n: 1 }); adm.send({ t: 'c', m: 'hello all' });
+  const near = await bob.wait((m) => m.t === 'c' && m.m === 'psst'), all = await eve.wait((m) => m.t === 'c' && m.m === 'hello all');
+  check('chat: a line said to those nearby stops at twenty metres; a line to everyone does not', near?.n === 1 && !!all && all.n === undefined && !eve.msgs.some((m) => m.t === 'c' && m.m === 'psst'), [near, all]);
+  // put out
+  adm.send({ t: 'kick', id: bob.id });
+  const out = await bob.wait((m) => m.t === 'kicked');
+  const code = await Promise.race([bob.closed, sleep(4000)]);
+  const left = await eve.wait((m) => m.t === 'leave' && m.id === bob.id);
+  check('admin: kick — told why, hung up on (4001), the others see them leave', out?.ban === false && code === 4001 && !!left, [out, code]);
+  // kept out: neither the address nor the device gets back in, until the administrator lifts it
+  adm.send({ t: 'ban', id: eve.id, h: 1 });
+  const banned = await eve.wait((m) => m.t === 'kicked');
+  const eveCode = await Promise.race([eve.closed, sleep(4000)]);
+  await sleep(400); // (the list is kept by the notebook)
+  const sameAddress = new Client(port, 'mod', from(2));
+  const k1 = await sameAddress.wait((m) => m.t === 'kicked', 4000);
+  const admin = { authorization: `Bearer ${ADMIN_KEY}` };
+  const noList = await request(port, '/api/bans');
+  const list = json(await request(port, '/api/bans', { headers: admin }))?.bans || [];
+  const ipBan = list.find((b) => b.kind === 'ip'), devBan = list.find((b) => b.kind === 'dev');
+  check('admin: ban — put out (4003), the same address is turned away; the list is the administrator\'s', banned?.ban === true && eveCode === 4003 && k1?.ban === true && noList.status === 403 && ipBan?.key === e.ip && devBan?.key === DEV && ipBan.name === 'Eve' && ipBan.until > Date.now(), [banned, eveCode, k1, noList.status, list]);
+  const lifted = json(await request(port, `/api/bans?ip=${encodeURIComponent(ipBan?.key || '')}`, { method: 'DELETE', headers: admin }));
+  const sameDevice = new Client(port, 'mod', from(4, DEV)); // another address, the device that was banned
+  const k2 = await sameDevice.wait((m) => m.t === 'kicked', 4000);
+  const other = new Client(port, 'mod', from(5, 'device-of-fay-0123456789'));
+  const wf = await other.hello('Fay', 5, 'device-of-fay-0123456789');
+  await request(port, `/api/bans?dev=${DEV}`, { method: 'DELETE', headers: admin });
+  const back = new Client(port, 'mod', from(2, DEV));
+  const wb = await back.hello('Eve', 2, DEV);
+  check('admin: the device stays out when the address is let in again; others come in; a lifted ban lets them back', lifted?.removed === 1 && k2?.ban === true && !!wf && !!wb, [lifted, k2, !!wf, !!wb]);
+  // guessing the key: a handful of tries, then the door
+  const guesser = new Client(port, 'mod', from(6));
+  await guesser.hello('Guesser', 6);
+  for (let i = 0; i < 7; i++) guesser.send({ t: 'admin', key: `guess ${i}` });
+  const shut = await Promise.race([guesser.closed, sleep(4000)]);
+  check('admin: after a few wrong keys the connection is closed', shut !== undefined && guesser.msgs.filter((m) => m.t === 'admin').length <= 5, [shut, guesser.msgs.filter((m) => m.t === 'admin').length]);
+  await Promise.all([adm, other, back, sameAddress, sameDevice].map((c) => c.close()));
+  await server.stop();
+}
+
 // ------------------------------------------------------------------------------- the API: scores, characters
 
 async function testApi({ port }) {
@@ -710,6 +827,7 @@ async function testPresence(server) {
   c.update(0.016);
   const adaSeenByCleo = c.peers.get(a.id);
   check('presence: a newcomer sees existing players at once, at their last position', !!adaSeenByCleo && adaSeenByCleo.visible && near(adaSeenByCleo.x, stopAt, 0.005) && adaSeenByCleo.name === 'Zoé 3' && c.count === 3, adaSeenByCleo);
+  await until(() => b.peers.size === 2); // (the others have heard of the newcomer)
   c.dispose();
   await until(() => b.peers.size === 1);
   check('presence: dispose() leaves the room', b.peers.size === 1 && eb.some((e) => e.type === 'leave' && e.name === 'Cléo') && eb.some((e) => e.type === 'status' && e.count === 3) && b.count === 2, eb.filter((e) => e.type !== 'emote'));
@@ -940,7 +1058,7 @@ async function testCloudflare(server, fx) {
   for (let i = 0; i < 8; i++) { await sleep(2000); h1.send('{"t":"ping"}'); h2.send('{"t":"ping"}'); } // answered at the edge
   const info = JSON.parse((await request(port, '/api/presence?room=sleepy')).body.toString());
   check('cf: an idle room is unloaded (hibernation) while its visitors stay connected',
-    info.players === 2 && info.up < Date.now() - quietSince - 4000 && h1.code === null && h2.code === null && h1.msgs.filter((m) => m.t === 'pong').length === 8, { info, idle: Date.now() - quietSince });
+    info.players === 2 && info.up < Date.now() - quietSince - 4000 && h1.code === null && h2.code === null && h1.msgs.filter((m) => m.t === 'pong').length === 8, { info, idle: Date.now() - quietSince, codes: [h1.code, h2.code], pongs: h1.msgs.filter((m) => m.t === 'pong').length, others: h1.msgs.filter((m) => m.t !== 'pong').slice(-4) });
   const h3 = new Client(port, 'sleepy');
   const w3 = await h3.hello('Trois', 5);
   check('cf: after waking up, a newcomer still learns who is there and where',
@@ -990,6 +1108,8 @@ try {
     await section('presence', () => testPresence(server));
     await section('api', () => testApi(server));
     await section('cloudflare', () => testCloudflare(server, fx));
+    await section('crowd', () => testCrowd(startWorker, fx.dist));
+    await section('moderation', () => testModeration(startWorker, fx.dist));
     if (process.env.NET_TEST_LOG) fs.writeFileSync(process.env.NET_TEST_LOG, server.log);
     // (the local tool also logs its own failed attempts to reach Cloudflare when offline: not the Worker's)
     const trouble = server.log.split('\n').filter((line) => /\[wrangler:error\]|\[ERROR\]|Uncaught/.test(line));
@@ -1002,6 +1122,8 @@ try {
     await section('protocol', () => testProtocol(server));
     await section('presence', () => testPresence(server));
     await section('api', () => testApi(server));
+    await section('crowd', () => testCrowd(startServer, fx.dist));
+    await section('moderation', () => testModeration(startServer, fx.dist));
     const kept = (() => { try { return JSON.parse(fs.readFileSync(path.join(fx.tmp, 'scores.json'), 'utf8')); } catch { return null; } })();
     check('api: the Node server keeps the boards and the visits in its file', kept?.['board:sky']?.all?.length === 1 && kept['board:sky'].all[0].at > 0 && kept['board:shoot']?.day?.list?.[0]?.name === 'Dana' && Object.keys(kept).some((k) => k.startsWith('visit:')), kept);
     check('server: still running at the end, nothing on stderr', server.alive() && !/error|exception/i.test(server.log), server.log);

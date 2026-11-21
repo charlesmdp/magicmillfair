@@ -98,7 +98,7 @@ async function boot() {
   player.autoRun = settings.run;
   rig.follow = settings.follow;
   // who is visiting: `admin` once the server has recognised the administrator's key; `days`: visits in a row
-  const who = { admin: false, days: 1 };
+  const who = { admin: false, key: '', days: 1 };
   app.who = who;
   // no jetpack underground, nor where a game forbids it
   player.canFly = (p) => owns('jetpack') && !player.cave && !world.noFly.some((z) => (p.x - z.x) ** 2 + (p.z - z.z) ** 2 < z.r * z.r);
@@ -133,14 +133,40 @@ async function boot() {
   const startPresence = () => {
     presence = new Presence({ name, color });
     avatars = new RemoteAvatars({ scene, factory, presence, hud, rank, world });
-    presence.on('chat', ({ id, peer, text }) => { hud.addChat(peer.name, peer.color, text); avatars.say(id, text); });
+    presence.on('chat', ({ id, peer, text, near }) => { hud.addChat(peer.name, peer.color, text, false, near); avatars.say(id, text); });
+    // put out of the room by the administrator: said plainly, and that is the end of the visit to this room
+    presence.on('kicked', ({ ban }) => hud.banner(ban ? 'The administrator has banned you from the fair.' : 'The administrator has put you out of this room. Reload the page to come back in.'));
+    presence.on('who', ({ list, now }) => { roster.details = new Map(list.map((p) => [p.id, p])); roster.now = now; if (hud.rosterOpen) showRoster(); });
+    presence.on('admin', ({ ok }) => { if (ok && hud.rosterOpen) presence.who(); });
+    if (who.key) presence.setAdminKey(who.key);
     // no toast when the list is merely rebuilt because the connection changed (local <-> online)
     let shownMode = presence.mode;
     presence.on('status', ({ mode, count }) => { shownMode = mode; hud.setPresence(mode, count, presence.shard); });
-    presence.on('join', (peer) => { if (presence.mode === shownMode) hud.note(`${peer.name} joined`); });
-    presence.on('leave', (peer) => { if (presence.mode === shownMode) hud.note(`${peer.name} left`); });
+    // (in a crowd, comings and goings are not announced)
+    presence.on('join', (peer) => { if (presence.mode === shownMode && presence.count <= 30) hud.note(`${peer.name} joined`); if (hud.rosterOpen) showRoster(); });
+    presence.on('leave', (peer) => { if (presence.mode === shownMode && presence.count <= 30) hud.note(`${peer.name} left`); if (hud.rosterOpen) showRoster(); });
     presence.connect();
     Object.assign(app, { presence, avatars });
+  };
+
+  // ---------- who is here (and, for the administrator, where from; putting out, keeping out)
+  const roster = { details: null, bans: null, now: 0 };
+  const showRoster = () => {
+    const p = player.pos, zoneOf = (x, z) => { let best = null, bd = 1; for (const zn of ZONES) { if (zn.hidden) continue; const d = Math.hypot(x - zn.x, z - zn.z) / zn.r; if (d < bd) { bd = d; best = zn; } } return best ? best.name : ''; };
+    const people = [{ id: presence?.id || 0, name, color, me: true, where: zoneOf(p.x, p.z) }];
+    if (presence) {
+      for (const o of [...presence.peers.values()].sort((a, b) => a.name.localeCompare(b.name))) {
+        const known = o.visible || o.far, d = known ? Math.hypot(o.x - p.x, o.z - p.z) : 0;
+        people.push({ id: o.id, name: o.name, color: o.color, where: known ? `${d < 1000 ? `${Math.round(d)} m away` : 'far away'}${zoneOf(o.x, o.z) ? ` · ${zoneOf(o.x, o.z)}` : ''}` : '' });
+      }
+    }
+    hud.showRoster({ people, mode: presence?.mode || 'offline', admin: who.admin && presence?.admin, details: roster.details, bans: roster.bans, now: roster.now });
+  };
+  const refreshRoster = async () => {
+    if (!who.admin) return;
+    presence?.who();
+    roster.bans = (await callApi('api/bans', { key: who.key }))?.bans || null;
+    if (hud.rosterOpen) showRoster();
   };
 
   // ---------- interface actions
@@ -223,7 +249,7 @@ async function boot() {
       if (!n.met) { n.met = true; const hello = n.brain.greeting(); hud.addChat(n.name, 3, hello); hud.say(n.tag, hello); }
     } } : null;
   });
-  const say = (text) => {
+  const say = (text, channel = 'all') => {
     if (!cleanChat(text)) return;
     if (text.trim().startsWith('/')) { if (state.mode === 'walk') command(text.trim()); return; }
     if (talking) {
@@ -233,9 +259,10 @@ async function boot() {
       n.brain.reply(mine).then((answer) => { hud.addChat(n.name, 3, answer); hud.say(n.tag, answer); });
       return;
     }
-    const sent = presence ? presence.sendChat(text) : cleanChat(text);
+    const near = channel === 'near'; // (heard within twenty metres only)
+    const sent = presence ? presence.sendChat(text, near) : cleanChat(text);
     if (!sent) { hud.note('Not so fast: a line every two seconds'); return; }
-    hud.addChat(name, color, sent, true);
+    hud.addChat(name, color, sent, true, near);
     hud.say(hud.selfTag, sent);
   };
   // the climb: a clock while climbing, the board of the best times at the gate
@@ -306,8 +333,11 @@ async function boot() {
     else {
       const ok = (await callApi('api/admin', { key }))?.ok === true;
       who.admin = ok;
+      who.key = ok ? key : '';
       if (ok) store.set('mmf.admin', key); else store.del('mmf.admin');
     }
+    if (!who.admin) who.key = '';
+    presence?.setAdminKey(who.key);
     hud.addChat('✦', 5, who.admin ? 'Administrator: on.' : key ? 'That key was not recognised.' : 'Administrator: off.', true);
     hud.setFreeCamera(mayFly());
     showEmotes();
@@ -325,6 +355,10 @@ async function boot() {
     .on('interact', () => interact.press(0))
     .on('interact2', () => interact.press(1))
     .on('say', say)
+    .on('roster', () => { showRoster(); refreshRoster(); })
+    .on('kick', (id) => { presence?.kick(id); setTimeout(refreshRoster, 500); })
+    .on('ban', (id, hours) => { presence?.ban(id, hours); setTimeout(refreshRoster, 800); })
+    .on('unban', async ({ kind, key }) => { await callApi(`api/bans?${kind}=${encodeURIComponent(key)}`, { method: 'DELETE', key: who.key }); refreshRoster(); })
     .on('hat', (i) => { if (owns(HATS[i]?.id)) { look.hat = i; store.set('mmf.hat', String(i)); } })
     .on('drop', () => { look.bouquet = false; look.kinds = undefined; })
     .on('setting', (key, on) => {
@@ -349,7 +383,7 @@ async function boot() {
   input.on('drop', () => { if (look.bouquet) { look.bouquet = false; look.kinds = undefined; } });
   input.on('chat', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleChat(true, talking ? talking.brain.ask || `Say something to ${talking.name}…` : undefined); });
   input.on('respawn', () => { if (state.mode === 'walk') { spawn(); hud.note('Back to the mill'); } });
-  input.on('menu', () => { hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); hud.toggleChat(false); hud.closeChoice(); });
+  input.on('menu', () => { hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); hud.toggleChat(false); hud.closeChoice(); hud.closeRoster(); });
   input.on('map', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleBigMap(); });
   hud.setMap(data.meta.map, ZONES);
   if (params.has('stats')) hud.setStatsVisible(true);
@@ -474,7 +508,7 @@ async function boot() {
     }
     if (mode === 'walk' || mode === 'free') {
       const p = mode === 'walk' ? player.pos : camera.position;
-      const heading = mode === 'walk' ? rig.yaw : free.yaw, others = avatars ? avatars.list : [];
+      const heading = mode === 'walk' ? rig.yaw : free.yaw, others = avatars ? avatars.everyone : [];
       if (hud.bigMapOpen) hud.drawBigMap(p.x, p.z, heading, others);
       else if (app.frames % 3 === 0) hud.drawMap(p.x, p.z, heading, others);
     }

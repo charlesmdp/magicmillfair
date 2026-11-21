@@ -7,6 +7,7 @@
 //   POST /api/visit  { device, tz }           → { days, best, today }             (see visit())
 //   GET | POST | DELETE /api/scores, POST /api/run                                 (see scores.js)
 //   GET  /api/admin                           → { ok }   (with the administrator's key: Authorization: Bearer …)
+//   GET | POST | DELETE /api/bans             the administrator's list of who is kept out (see below)
 //
 // req: { method, path, query (URLSearchParams), body (object | null), client (address), admin (boolean) }
 // ctx: { store: { get(key), put(key, value), delete(key) } (may be asynchronous), limiter (api.js),
@@ -32,7 +33,36 @@ export function visit(seen, day) {
   return { day: was ? Math.max(day, was.day) : day, days, best: Math.max(days, was?.best || 0) };
 }
 
-const DEVICE = /^[A-Za-z0-9_-]{16,64}$/;
+const DEVICE = /^[A-Za-z0-9_-]{16,64}$/, ADDRESS = /^[0-9a-fA-F:.]{2,64}$/;
+
+// --- Who is kept out: by address and by device (the random name a browser gave itself), for a time or for good.
+// Kept under one key: { ip: { address: entry }, dev: { device: entry } }, entry = { until (ms, 0 = for good),
+// name (as they were called), at }.
+const liveBans = (bans, now) => {
+  const out = { ip: {}, dev: {} };
+  for (const kind of ['ip', 'dev']) for (const [k, e] of Object.entries(bans?.[kind] || {})) if (e && (e.until === 0 || e.until > now)) out[kind][k] = e;
+  return out;
+};
+
+/** Is this address, or this device, kept out? */
+export async function banned(ctx, ip, dev) {
+  const bans = await ctx.store.get('bans');
+  if (!bans) return false;
+  const live = liveBans(bans, ctx.now());
+  return (!!ip && Object.hasOwn(live.ip, ip)) || (!!dev && Object.hasOwn(live.dev, dev));
+}
+
+/** Keeps an address and / or a device out for `hours` (0: for good). */
+export async function addBan(ctx, { ip, dev, name, hours }) {
+  const now = ctx.now(), bans = liveBans(await ctx.store.get('bans'), now);
+  const h = Math.max(0, Math.min(87600, Number(hours) || 0));
+  const entry = { until: h > 0 ? now + h * 3600_000 : 0, name: cleanName(name || ''), at: now };
+  let added = 0;
+  if (typeof ip === 'string' && ADDRESS.test(ip)) { bans.ip[ip] = entry; added++; }
+  if (typeof dev === 'string' && DEVICE.test(dev)) { bans.dev[dev] = entry; added++; }
+  if (added) await ctx.store.put('bans', bans);
+  return added;
+}
 
 async function used(ctx, nonce, expires) {
   // notes already spent, until they would have expired anyway
@@ -51,6 +81,21 @@ export async function route(req, ctx) {
   if (path === '/api/status') return out(200, { ok: true, ...ctx.flags, time: now });
 
   if (path === '/api/admin') return req.admin ? out(200, { ok: true }) : out(403, { error: 'Forbidden.' });
+
+  if (path === '/api/bans') {
+    if (!req.admin) return out(403, { error: 'Forbidden.' });
+    const bans = liveBans(await ctx.store.get('bans'), now);
+    if (method === 'POST') {
+      if (!(await addBan(ctx, body || {}))) return out(400, { error: 'Nobody to keep out.' });
+    } else if (method === 'DELETE') {
+      const ip = query.get('ip') || '', dev = query.get('dev') || '';
+      const had = (Object.hasOwn(bans.ip, ip) ? (delete bans.ip[ip], 1) : 0) + (Object.hasOwn(bans.dev, dev) ? (delete bans.dev[dev], 1) : 0);
+      if (had) await ctx.store.put('bans', bans);
+      return out(200, { removed: had });
+    } else if (method !== 'GET' && method !== 'HEAD') return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD, POST, DELETE' });
+    const live = liveBans(await ctx.store.get('bans'), now);
+    return out(200, { bans: ['ip', 'dev'].flatMap((kind) => Object.entries(live[kind]).map(([key, e]) => ({ kind, key, ...e }))) });
+  }
 
   if (path === '/api/visit') {
     if (method !== 'POST') return out(405, { error: 'Method not allowed.' }, { Allow: 'POST' });

@@ -43,7 +43,7 @@ export class BroadcastTransport {
     if (msg.t === 'hello') { this.me.name = msg.name; this.me.color = msg.color; this._post('hello'); }
     else if (msg.t === 's') { this.me.s = [[this.id, ...msg.p, msg.a, msg.f]]; this._post('u'); }
     else if (msg.t === 'e') this._post('e', msg.e);
-    else if (msg.t === 'c') this._post('c', undefined, msg.m);
+    else if (msg.t === 'c') this._post('c', undefined, msg.m, msg.n ? { n: 1, at: this.me.s[0]?.slice(1, 4) } : undefined);
     return true;
   }
 
@@ -59,9 +59,9 @@ export class BroadcastTransport {
 
   _up(msg) { this.handlers.onmessage?.(this, msg); }
 
-  _post(t, e, m) {
+  _post(t, e, m, near) {
     this.spoke = clock();
-    try { this.bc.postMessage({ t, id: this.id, ...this.me, now: Math.round(this.spoke), e, m }); } catch { /* channel closed */ }
+    try { this.bc.postMessage({ t, id: this.id, ...this.me, now: Math.round(this.spoke), e, m, ...near }); } catch { /* channel closed */ }
   }
 
   _receive(m) {
@@ -78,7 +78,11 @@ export class BroadcastTransport {
     // A state repeated by a hello or an emote is not fresh: only a newcomer takes it, as a starting point.
     if (Array.isArray(row) && row[0] === m.id && (m.t === 'u' || !peer)) this._up({ t: 'u', now: m.now, s: [row] });
     if (m.t === 'e') this._up({ t: 'e', id: m.id, e: m.e });
-    if (m.t === 'c') this._up({ t: 'c', id: m.id, m: m.m });
+    if (m.t === 'c') {
+      // (a line said to those nearby: within 20 m of where we are, as the relay would have it)
+      const mine = this.me.s[0], far = m.n && (!mine || !Array.isArray(m.at) || Math.hypot(mine[1] - m.at[0], mine[2] - m.at[1], mine[3] - m.at[2]) > 20);
+      if (!far) this._up(m.n ? { t: 'c', id: m.id, m: m.m, n: 1 } : { t: 'c', id: m.id, m: m.m });
+    }
     if (m.t === 'hello' && !peer) this._post('hello'); // a newcomer: tell it who and where we are
   }
 

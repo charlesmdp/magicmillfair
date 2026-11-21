@@ -18,16 +18,17 @@ fs.mkdirSync(OUT, { recursive: true });
 const opt = Object.fromEntries(process.argv.slice(2).filter((a) => a.startsWith('--')).map((a) => { const [k, v] = a.slice(2).split('='); return [k, v ?? true]; }));
 const steps = +(opt.steps || 10);
 const PORT = 8791;
+const ADMIN_KEY = 'duo-admin-key'; // (what the test server is given as the administrator's key)
 
 const CF = !!opt.cloudflare;
 let server;
 if (CF) {
   // wrangler builds the site itself (build.command of wrangler.jsonc), exactly as a deployment does
-  server = spawn(process.execPath, [path.join(ROOT, 'node_modules/wrangler/bin/wrangler.js'), 'dev', '--port', String(PORT), '--ip', '127.0.0.1', '--inspector-port', String(PORT + 1), '--show-interactive-dev-session=false'],
+  server = spawn(process.execPath, [path.join(ROOT, 'node_modules/wrangler/bin/wrangler.js'), 'dev', '--port', String(PORT), '--ip', '127.0.0.1', '--inspector-port', String(PORT + 1), '--show-interactive-dev-session=false', '--var', `ADMIN_KEY:${ADMIN_KEY}`],
     { cwd: ROOT, env: { ...process.env, WRANGLER_SEND_METRICS: 'false' }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
 } else {
   await build({ root: ROOT, logLevel: 'error' });
-  server = spawn(process.execPath, [path.join(ROOT, 'server/index.js')], { env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  server = spawn(process.execPath, [path.join(ROOT, 'server/index.js')], { env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', ADMIN_KEY }, stdio: ['ignore', 'pipe', 'pipe'] });
 }
 let serverLog = '';
 server.stdout.on('data', (d) => { serverLog += d; });
@@ -119,10 +120,36 @@ try {
   await bob.page.evaluate(([x, z]) => { const a = window.__mmf; a.player.teleport(x + 3, z + 3, 0); a.rig.snap(a.player.pos, Math.PI / 4); }, [seat.x, seat.z]);
   const laptop = seated && await until(() => bob.page.evaluate(() => [...window.__mmf.avatars.items.values()].some((it) => it.character.root.visible && it.character.laptop?.visible)), 10000);
   check('Bob sees Alice sitting at work, laptop on her knees', !!seated && !!laptop, seated ? `pose ${seated.anim}` : 'never seen seated');
-  // leaving
-  await alice.context.close();
-  const alone = await until(async () => { const b = await status(bob); return b.count === 1 ? b : null; }, 20000);
-  check('Bob is told when Alice leaves', !!alone);
+  // a line for those nearby only (Bob stands three metres from Alice): Tab switches who hears
+  await alice.page.keyboard.press('KeyE'); // (Alice gets up)
+  await frames(alice, 3);
+  await alice.page.keyboard.press('Enter');
+  await frames(alice, 2);
+  await alice.page.keyboard.press('Tab');
+  await alice.page.keyboard.type('psst, Bob');
+  await alice.page.keyboard.press('Enter');
+  const whisper = await until(() => bob.page.evaluate(() => [...document.querySelectorAll('.chat .log p.near')].map((e) => e.textContent).find((l) => /psst, Bob$/.test(l)) || null), 20000);
+  check('a line said to those nearby reaches Bob, marked as such', !!whisper, JSON.stringify(whisper));
+  // who is here: everybody sees the names; the administrator also sees where from, and can put someone out
+  await bob.page.click('.pill.players');
+  await frames(bob, 3);
+  const plain = await bob.page.evaluate(() => ({ rows: [...document.querySelectorAll('.roster .who b')].map((e) => e.textContent), acts: document.querySelectorAll('.roster .acts button').length, more: document.querySelectorAll('.roster .more').length }));
+  await bob.page.keyboard.press('Escape');
+  check('the head count opens the list of who is here — names only for a visitor', plain.rows.length === 2 && plain.rows.includes('Alice') && plain.rows.some((r) => /^Bob \(you\)$/.test(r)) && plain.acts === 0 && plain.more === 0, JSON.stringify(plain));
+  await alice.page.keyboard.press('Enter');
+  await frames(alice, 2);
+  await alice.page.keyboard.type(`/admin ${ADMIN_KEY}`);
+  await alice.page.keyboard.press('Enter');
+  await until(() => alice.page.evaluate(() => window.__mmf.who.admin && window.__mmf.presence.admin), 20000);
+  await alice.page.click('.pill.players');
+  const seenByAdmin = await until(() => alice.page.evaluate(() => { const more = [...document.querySelectorAll('.roster .more')].map((e) => e.textContent); return more.length === 2 ? { more, acts: [...document.querySelectorAll('.roster .acts button')].map((e) => e.textContent) } : null; }), 20000);
+  await alice.page.screenshot({ path: path.join(OUT, 'roster-admin.png') });
+  check('the administrator also sees the address, the browser and the device of each, and can kick or ban', !!seenByAdmin && seenByAdmin.more.every((m) => /127\.0\.0\.1|::1/.test(m) && /Chrome \d+ · /.test(m) && /device /.test(m)) && seenByAdmin.acts.join() === 'Kick,Ban 1 h,Ban 1 day,Ban for good', JSON.stringify(seenByAdmin));
+  await alice.page.click('.roster .acts button'); // Kick (Bob: the only other visitor)
+  const out = await until(() => bob.page.evaluate(() => { const b = document.querySelector('.banner'); return b.classList.contains('on') ? b.textContent : null; }), 20000);
+  await bob.page.screenshot({ path: path.join(OUT, 'bob-kicked.png') });
+  const left = await until(async () => ((await status(alice)).count === 1 ? true : null), 20000);
+  check('kicked: Bob is told so and is out; Alice is alone in the room', /put you out/.test(out || '') && !!left, JSON.stringify(out));
   const info = await (await fetch(`http://127.0.0.1:${PORT}/api/presence?room=main`)).json().catch(() => null);
   check('the server counts who is left in the room', !!info && info.room === 'main' && info.players === 1, JSON.stringify(info));
 } catch (err) {

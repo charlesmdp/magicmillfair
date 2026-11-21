@@ -11,14 +11,14 @@
 // keeps in its storage what the game remembers — the leaderboards, how many days in a row each device came
 // back — and counts how often each address calls the API. The same code answers on the Node server
 // (../server/routes.js, scores.js, npc.js, api.js).
-// Variables (wrangler.jsonc): MAX_PLAYERS (48 per room), TICK_MS (100), ALLOWED_ORIGINS (default: same host),
+// Variables (wrangler.jsonc): MAX_PLAYERS (250 per room), TICK_MS (100), ALLOWED_ORIGINS (default: same host),
 // NPC_MODEL; secrets: ANTHROPIC_API_KEY (without it the characters use the lines kept in the game), ADMIN_KEY
 // (the administrator's key; without it nobody is the administrator), SCORE_SECRET (optional: signs the notes
 // of the game runs; drawn and kept by the notebook otherwise); for tests only: STALE_MS, DEBUG.
 import { DurableObject } from 'cloudflare:workers';
-import { Room as Relay, MAX_FRAME, cleanRoom, originAllowed, parseOrigins } from '../server/protocol.js';
+import { Room as Relay, MAX_FRAME, NEAR, RANGE, cleanRoom, originAllowed, parseOrigins } from '../server/protocol.js';
 import { Limiter, LIMITS, BODY_MAX, allowed, parseBody, mayPost } from '../server/api.js';
-import { route } from '../server/routes.js';
+import { route, banned, addBan } from '../server/routes.js';
 import { randomId, sameSecret } from '../server/token.js';
 import { NPC_MODEL, cleanTalk, npcReply } from '../server/npc.js';
 
@@ -46,13 +46,17 @@ export class Room extends DurableObject {
     this.tickMs = Math.round(number(env.TICK_MS, 100, 20, 1000));
     this.staleMs = number(env.STALE_MS, STALE_MS, 1000, 3600000);
     this.relay = new Relay({
-      max: Math.floor(number(env.MAX_PLAYERS, 48, 1, 4096)),
+      max: Math.floor(number(env.MAX_PLAYERS, 250, 1, 4096)),
+      near: Math.floor(number(env.NEAR, NEAR, 1, 1000)), range: number(env.RANGE, RANGE, 10, 5000), // (a crowd: see protocol.js)
       tick: this.tickMs,
       idle: 0, // no keep-alive states: an idle room must receive nothing, so that it can sleep
       now: () => Date.now() - EPOCH,
       send: (ws, text) => { try { ws.send(text); } catch { /* closing */ } },
       drop: (ws, code, reason) => this.drop(ws, code, reason),
-      save: (p) => { try { p.conn.serializeAttachment({ id: p.id, name: p.name, color: p.color, joined: p.joined, state: p.state }); } catch { /* closing */ } },
+      save: (p) => { try { p.conn.serializeAttachment({ id: p.id, name: p.name, color: p.color, joined: p.joined, state: p.state, ip: p.ip, ua: p.ua, dev: p.dev, admin: p.admin, since: p.since }); } catch { /* closing */ } },
+      admin: (key) => sameSecret(key, env.ADMIN_KEY || ''),
+      // the list of who is kept out is the notebook's (every room asks it)
+      ban: (who) => ctx.waitUntil(env.ROOMS.get(env.ROOMS.idFromName(NOTEBOOK)).fetch(new Request('https://notebook/ban', { method: 'POST', body: JSON.stringify(who) })).catch(() => {})),
     });
     // Back from hibernation: the sockets are still connected, their owners are described by the attachments.
     const sockets = ctx.getWebSockets().map((ws) => ({ ws, known: ws.deserializeAttachment() }));
@@ -73,6 +77,10 @@ export class Room extends DurableObject {
       const ok = allowed(limiter, 'npc', client) && limiter.allow('npc:day', ...LIMITS.npcDay);
       return Response.json({ ok });
     }
+    const store = { get: (key) => this.ctx.storage.get(key), put: (key, value) => this.ctx.storage.put(key, value), delete: (key) => this.ctx.storage.delete(key) };
+    // (asked by the Worker and by the rooms only: these two paths are not reachable from outside)
+    if (url.pathname === '/banned') return Response.json({ banned: await banned({ store, now: () => Date.now() }, url.searchParams.get('ip') || '', url.searchParams.get('dev') || '') });
+    if (url.pathname === '/ban') return Response.json({ added: await addBan({ store, now: () => Date.now() }, (await request.json().catch(() => null)) || {}) });
     const reading = request.method === 'GET' || request.method === 'HEAD';
     let body = null;
     if (!reading) {
@@ -82,7 +90,7 @@ export class Room extends DurableObject {
     const env = this.env, storage = this.ctx.storage;
     const ctx = (this.apiCtx ||= {
       limiter, now: () => Date.now(),
-      store: { get: (key) => storage.get(key), put: (key, value) => storage.put(key, value), delete: (key) => storage.delete(key) },
+      store,
       flags: { npc: !!env.ANTHROPIC_API_KEY, admin: !!env.ADMIN_KEY, shop: 'off' },
       // the secret that signs the notes of the runs: given, or drawn once and kept here
       secret: async () => {
@@ -101,7 +109,7 @@ export class Room extends DurableObject {
   // Reached through the Worker below: a WebSocket handshake, a head count, or the notebook.
   async fetch(request) {
     const url = new URL(request.url);
-    if (url.pathname.startsWith('/api/') || url.pathname === '/limit') return this.api(request, url);
+    if (url.pathname.startsWith('/api/') || url.pathname === '/limit' || url.pathname === '/banned' || url.pathname === '/ban') return this.api(request, url);
     if ((request.headers.get('Upgrade') || '').toLowerCase() !== 'websocket') {
       this.sweep();
       return Response.json({ players: this.relay.joined, ...(this.env.DEBUG ? { up: Date.now() - this.started } : {}) });
@@ -117,7 +125,7 @@ export class Room extends DurableObject {
       return new Response(null, { status: 101, webSocket: client });
     }
     this.ctx.acceptWebSocket(server);
-    const p = this.relay.add(server);
+    const p = this.relay.add(server, undefined, { ip: request.headers.get('CF-Connecting-IP') || '', ua: request.headers.get('User-Agent') || '' });
     p.seen = Date.now();
     this.relay.io.save(p);
     return new Response(null, { status: 101, webSocket: client });
@@ -128,14 +136,19 @@ export class Room extends DurableObject {
     const p = this.relay.players.get(ws);
     if (p) p.seen = Date.now();
     this.relay.receive(ws, typeof message === 'string' ? message : null);
-    // States are batched: one timer per burst of activity, none while the room is quiet.
-    if (this.relay.pending && !this.timer) {
-      this.timer = setTimeout(() => {
-        this.timer = null;
-        this.relay.flush();
-        this.sweep();
-      }, this.tickMs);
-    }
+    this.arm();
+  }
+
+  // States are batched: one timer per burst of activity, none while the room is quiet. (In a crowd the relay
+  // may ask for another round — its circles and its map lag a little behind what moves — then goes quiet.)
+  arm() {
+    if (!this.relay.pending || this.timer) return;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      this.relay.flush();
+      this.sweep();
+      this.arm();
+    }, this.tickMs);
   }
 
   webSocketClose(ws) { this.drop(ws, 1000, 'bye'); }
@@ -159,6 +172,14 @@ export class Room extends DurableObject {
   }
 }
 
+// Is this address or this device kept out? The notebook knows (asked once per connection).
+async function isBanned(env, ip, dev) {
+  try {
+    const res = await env.ROOMS.get(env.ROOMS.idFromName(NOTEBOOK)).fetch(new Request(`https://notebook/banned?ip=${encodeURIComponent(ip)}&dev=${encodeURIComponent(dev)}`));
+    return !!(await res.json()).banned;
+  } catch { return false; } // (the notebook cannot be reached: let them in)
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -168,6 +189,15 @@ export default {
         return new Response('WebSocket endpoint.\n', { status: 426, headers: { Upgrade: 'websocket' } });
       }
       if (!originAllowed(request.headers.get('Origin'), url.host, parseOrigins(env.ALLOWED_ORIGINS))) return new Response(null, { status: 403 });
+      // kept out by the administrator?
+      const ip = request.headers.get('CF-Connecting-IP') || '', dev = url.searchParams.get('dev') || '';
+      if (await isBanned(env, ip, dev)) {
+        const pair = new WebSocketPair();
+        pair[1].accept();
+        pair[1].send('{"t":"kicked","ban":true}');
+        pair[1].close(4003, 'banned');
+        return new Response(null, { status: 101, webSocket: pair[0] });
+      }
       const room = cleanRoom(url.searchParams.get('room'));
       return env.ROOMS.get(env.ROOMS.idFromName(room)).fetch(request);
     }

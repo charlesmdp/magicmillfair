@@ -34,6 +34,9 @@ export const EMOTE_LIST = [
   { id: 'tiger', label: 'Tiger', rank: 'tiger', days: 30 }, { id: 'dragon', label: 'Dragon', rank: 'dragon', days: 50 },
   { id: 'rage', label: 'Rage', move: 'rage' }, { id: 'cheer', label: 'Cheer', move: 'cheer' }, { id: 'clap', label: 'Clap', move: 'clap' },
   { id: 'hype', label: 'Jump for joy', move: 'hype' }, { id: 'go', label: 'Go! Go!', move: 'go' }, { id: 'bow', label: 'Bow', move: 'bow' },
+  { id: 'goldfish', label: 'Goldfish', rank: 'goldfish', days: 2 }, { id: 'squirrel', label: 'Squirrel', rank: 'squirrel', days: 3 },
+  { id: 'carp', label: 'Carp', rank: 'carp', days: 5 }, { id: 'eagle', label: 'Eagle', rank: 'eagle', days: 15 },
+  { id: 'panda', label: 'Panda', rank: 'panda', days: 20 }, { id: 'elephant', label: 'Elephant', rank: 'elephant', days: 35 },
 ];
 export const emoteIndex = (id) => EMOTE_LIST.findIndex((e) => e.id === id);
 

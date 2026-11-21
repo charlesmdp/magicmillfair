@@ -7,9 +7,11 @@
 import { Track, wrapAngle } from './interp.js';
 import { BroadcastTransport } from './transports/BroadcastTransport.js';
 import { WebSocketTransport } from './transports/WebSocketTransport.js';
+import { deviceId } from './device.js';
 
 const SEND_MS = 1000 / 12; // own state goes out at ~12 Hz…
 const KEEPALIVE_MS = 2000; // …or every 2 s while nothing changes (unless the relay asks for another period, or none)
+const UNSEEN_MS = 500; // …and only twice a second while nobody is close enough to be told about us (the relay says so)
 const FALLBACK_MS = 2500; // no server after that long: same-browser presence takes over
 const PROBE_MS = 30000; // then the same-origin server is probed again at this period
 const MAX_SHARDS = 16; // how many rooms in a row are tried when they are full
@@ -40,11 +42,13 @@ function stored(key) {
 }
 
 // ws(s):// URL of the presence endpoint for a room; `raw` may be relative or http(s). Null when unusable.
-function wsUrl(raw, room) {
+// (`dev`: the random name of this browser — what a ban holds on to, besides the address)
+function wsUrl(raw, room, dev) {
   try {
     const url = new URL(raw, typeof location !== 'undefined' ? location.href : undefined);
     if (/^https?:$/.test(url.protocol)) url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     url.searchParams.set('room', room);
+    if (dev) url.searchParams.set('dev', dev);
     return url.href;
   } catch { return null; }
 }
@@ -66,7 +70,14 @@ export class Presence {
     this._persist();
     this.id = 0; // own id in the room (0 until connected)
     this.mode = 'offline';
-    /** @type {Map<number, { id, name, color, x, y, z, yaw, anim, flags, speed, visible }>} */
+    this.device = deviceId();
+    this.admin = false; // the relay has recognised the administrator's key
+    this.kicked = null; // { ban } once the administrator has put this visitor out
+    /**
+     * Everybody else in the room. `visible`: drawn (the relay tells us about them in detail); `far`: in the
+     * room but too far, or too many, for that — only x and z are known then, roughly, for the maps.
+     * @type {Map<number, { id, name, color, x, y, z, yaw, anim, flags, speed, visible, far }>}
+     */
     this.peers = new Map();
     this._tracks = new Map(); // peer id → Track
     this._on = {}; // event type → Set of listeners
@@ -78,12 +89,18 @@ export class Presence {
     this._due = this._sentAt = this._repeats = this._timer = 0;
     this._sentKey = this._status = '';
     this._chat = 5; this._chatAt = now(); // same allowance as the relay: five lines in a row, then one every 2 s
+    this._seen = true; // is anyone close enough to be told about us? (see `w` in the protocol)
+    this._key = ''; // the administrator's key, when this visitor has one
   }
 
   /** Players in the room, self included. */
   get count() { return this.peers.size + 1; }
 
-  /** Events: 'status' { mode, count }, 'join' peer, 'leave' peer, 'emote' { id, emote }, 'chat' { id, peer, text }, 'identity' peer (renamed). */
+  /**
+   * Events: 'status' { mode, count }, 'join' peer, 'leave' peer, 'emote' { id, emote }, 'chat' { id, peer, text,
+   * near }, 'identity' peer (renamed), 'admin' { ok }, 'who' { list } (the administrator's view of the room),
+   * 'kicked' { ban }.
+   */
   on(type, fn) { (this._on[type] ||= new Set()).add(fn); return this; }
   off(type, fn) { this._on[type]?.delete(fn); return this; }
 
@@ -93,9 +110,9 @@ export class Presence {
     this._started = true;
     try {
       const explicit = this._url || (import.meta.env && import.meta.env.VITE_WS_URL) || this._query.get('ws');
-      const target = explicit || /^https?:$/.test(this._page.protocol) ? wsUrl(explicit || '/ws', this.room) : null;
+      const target = explicit || /^https?:$/.test(this._page.protocol) ? wsUrl(explicit || '/ws', this.room, this.device) : null;
       if (target) {
-        this._dial = (room) => new WebSocketTransport(wsUrl(explicit || '/ws', room), this._handlers('online'), { probeEvery: explicit ? 0 : PROBE_MS });
+        this._dial = (room) => new WebSocketTransport(wsUrl(explicit || '/ws', room, this.device), this._handlers('online'), { probeEvery: explicit ? 0 : PROBE_MS });
         this._ws = this._dial(this.room);
         this._ws.open(); // keeps retrying in the background, whatever the fallback does
       }
@@ -122,15 +139,26 @@ export class Presence {
    * One chat line for the room. Returns the text as sent ('' when empty, or when lines come too fast: the
    * relay would not pass them on either). Nothing is stored anywhere: who is not there does not get it.
    */
-  sendChat(text) {
+  sendChat(text, near = false) {
     const m = cleanChat(text), t = now();
     this._chat = Math.min(5, this._chat + (t - this._chatAt) / 2000);
     this._chatAt = t;
     if (!m || this._chat < 1) return '';
     this._chat -= 1;
-    if (this._tr) this._tr.send({ t: 'c', m });
+    if (this._tr) this._tr.send(near ? { t: 'c', m, n: 1 } : { t: 'c', m }); // (`near`: only those within 20 m get it)
     return m;
   }
+
+  /** The administrator's key ('' to give it up): the relay answers with an 'admin' event. */
+  setAdminKey(key) {
+    this._key = String(key || '');
+    if (!this._key) { this.admin = false; return; }
+    if (this._tr && this.mode === 'online') this._tr.send({ t: 'admin', key: this._key });
+  }
+  /** The administrator: who is in the room (answered by a 'who' event), put someone out, keep them out. */
+  who() { if (this.admin && this._tr) this._tr.send({ t: 'who' }); }
+  kick(id) { if (this.admin && this._tr) this._tr.send({ t: 'kick', id }); }
+  ban(id, hours = 0) { if (this.admin && this._tr) this._tr.send({ t: 'ban', id, h: hours }); }
 
   setIdentity(name, color) {
     this.name = cleanName(name, this.name);
@@ -167,7 +195,7 @@ export class Presence {
   _persist() {
     try { localStorage.setItem('mmf.name', this.name); localStorage.setItem('mmf.color', String(this.color)); } catch { /* no storage */ }
   }
-  _hello() { return { t: 'hello', name: this.name, color: this.color, v: 1 }; }
+  _hello() { return { t: 'hello', name: this.name, color: this.color, v: 2, dev: this.device }; }
 
   _handlers(mode) {
     return {
@@ -176,6 +204,7 @@ export class Presence {
         try { this._message(tr, mode, m); } catch (err) { console.warn('[presence]', err); }
       },
       onclose: (tr) => {
+        if (this.kicked) return; // put out: no coming back through the window
         if (tr.full && tr !== this._tr) return this._overflow(tr); // turned away from a full room
         if (tr !== this._tr) return;
         this._tr = null; // peers stay frozen for a moment: a quick reconnection will not make them blink
@@ -212,10 +241,15 @@ export class Presence {
   _message(tr, mode, m) {
     if (!m || typeof m !== 'object' || this._disposed) return;
     if (m.t === 'full') { if (tr !== this._tr) tr.full = true; return; } // (acted upon when the relay then hangs up, see onclose)
+    if (m.t === 'kicked') return this._out(!!m.ban);
     if (m.t === 'welcome') {
       if (Number.isInteger(m.id)) this._welcome(tr, mode, m);
     } else if (tr !== this._tr) return;
     else if (m.t === 'u') this._states(m);
+    else if (m.t === 'm') this._far(m);
+    else if (m.t === 'w') this._seen = !!m.n;
+    else if (m.t === 'admin') { this.admin = !!m.ok; this._emit('admin', { ok: this.admin }); }
+    else if (m.t === 'who') { if (Array.isArray(m.list)) this._emit('who', { list: m.list, now: m.now }); }
     else if (m.t === 'join') {
       if (this._join(m)) this._changed();
     } else if (m.t === 'leave') {
@@ -223,7 +257,7 @@ export class Presence {
     } else if (m.t === 'e' && this.peers.has(m.id) && int(m.e, 31, -1) >= 0) this._emit('emote', { id: m.id, emote: m.e });
     else if (m.t === 'c' && this.peers.has(m.id)) {
       const text = cleanChat(m.m);
-      if (text) this._emit('chat', { id: m.id, peer: this.peers.get(m.id), text });
+      if (text) this._emit('chat', { id: m.id, peer: this.peers.get(m.id), text, near: !!m.n });
     }
   }
 
@@ -243,7 +277,22 @@ export class Presence {
     for (const id of [...this.peers.keys()]) if (!kept.has(id)) this._leave(id);
     this._changed();
     this._sentKey = ''; this._due = 0; // share our own state right away
+    this._seen = true;
+    this.admin = false;
+    if (tr && mode === 'online' && this._key) tr.send({ t: 'admin', key: this._key });
     this._flush(now());
+  }
+
+  // Put out by the administrator: everything stops, and stays stopped.
+  _out(ban) {
+    this.kicked = { ban };
+    clearTimeout(this._timer);
+    for (const tr of [this._ws, this._bc]) if (tr) tr.close();
+    this._ws = this._bc = this._tr = null;
+    for (const id of [...this.peers.keys()]) this._leave(id);
+    this.mode = 'offline';
+    this._changed();
+    this._emit('kicked', { ban });
   }
 
   // Adds a peer, or updates the identity of a known one. `stamp` (server time) is only given by a welcome.
@@ -252,7 +301,7 @@ export class Presence {
     const name = cleanName(info.name), color = int(info.color, 15);
     let peer = this.peers.get(info.id);
     const known = !!peer;
-    if (!known) this.peers.set(info.id, (peer = { id: info.id, name, color, x: 0, y: 0, z: 0, yaw: 0, anim: 0, flags: 0, speed: 0, visible: false }));
+    if (!known) this.peers.set(info.id, (peer = { id: info.id, name, color, x: 0, y: 0, z: 0, yaw: 0, anim: 0, flags: 0, speed: 0, visible: false, far: false }));
     if (!known || stamp !== undefined) {
       // A welcome starts a new timeline (the server clock may have restarted): never reuse an old track.
       const track = new Track(this._interval), t = now();
@@ -285,13 +334,36 @@ export class Presence {
     this._emit('status', { mode: this.mode, count: this.count });
   }
 
-  // {t:'u', now, s:[[id, x, y, z, yaw, anim, flags, age?], …]}: each state was captured at `now - age`.
+  // {t:'u', now, s:[[id, x, y, z, yaw, anim, flags, age?], …], g?: [id, …]}: each state was captured at
+  // `now - age`; `g` lists the peers the relay will no longer tell us about (too far, or too many closer ones).
   _states(m) {
     if (!Array.isArray(m.s)) return;
     const t = now(), base = Number.isFinite(m.now) ? m.now : t;
     for (const r of m.s) {
       const track = Array.isArray(r) ? this._tracks.get(r[0]) : null;
-      if (track) track.push(base - (r[7] > 0 ? r[7] : 0), t, r[1], r[2], r[3], r[4], int(r[5], 15), int(r[6], 255));
+      if (!track) continue;
+      const peer = this.peers.get(r[0]);
+      if (peer) peer.far = false;
+      track.push(base - (r[7] > 0 ? r[7] : 0), t, r[1], r[2], r[3], r[4], int(r[5], 15), int(r[6], 255));
+    }
+    if (Array.isArray(m.g)) {
+      for (const id of m.g) {
+        const peer = this.peers.get(id);
+        if (!peer) continue;
+        // (a fresh track: when they come near again they appear where they are, not where they were)
+        this._tracks.set(id, new Track(this._interval));
+        peer.visible = false; peer.far = true;
+      }
+    }
+  }
+
+  // {t:'m', p:[id, x, z, …]}: roughly where everybody is. Only used for those we are not told about in detail.
+  _far(m) {
+    if (!Array.isArray(m.p)) return;
+    for (let i = 0; i + 2 < m.p.length; i += 3) {
+      const peer = this.peers.get(m.p[i]);
+      if (!peer || peer.visible || !Number.isFinite(m.p[i + 1]) || !Number.isFinite(m.p[i + 2])) continue;
+      peer.far = true; peer.x = m.p[i + 1]; peer.z = m.p[i + 2];
     }
   }
 
@@ -300,7 +372,8 @@ export class Presence {
   _flush(t) {
     const l = this._local;
     if (t < this._due || !this._tr || !this._hasLocal || ![l[0], l[1], l[2], l[3]].every(Number.isFinite)) return;
-    this._due = Math.max(this._due + this._interval, t + this._interval / 2);
+    const every = this._seen ? this._interval : Math.max(this._interval, UNSEEN_MS); // (nobody near: no hurry)
+    this._due = Math.max(this._due + every, t + every / 2);
     const p = [round(l[0], 100), round(l[1], 100), round(l[2], 100), round(wrapAngle(l[3]), 1000)];
     const a = int(Math.trunc(l[4]), 15), f = int(Math.trunc(l[5]), 255);
     const key = `${p}|${a}|${f}`;

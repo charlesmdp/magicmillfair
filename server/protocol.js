@@ -1,23 +1,39 @@
 // The presence relay, independent of where it runs: server/index.js (Node, `ws`) and cloudflare/worker.js
 // (a Durable Object) both drive this same Room, so the two can never speak different dialects.
-// No authority over the game: every client shares its own avatar state and a room batches those states to its
-// other members.
+// No authority over the game: every client shares its own avatar state and a room hands those states on.
 //
 // Protocol (JSON text frames)
-//   client → server   {t:'hello',name,color,v:1}   {t:'s',p:[x,y,z,yaw],a,f}   {t:'e',e}   {t:'c',m}   {t:'ping',c}
-//   server → client   {t:'welcome',id,now,tick,idle?,peers:[{id,name,color,p,a,f}]}   {t:'join',id,name,color}
-//                     {t:'leave',id}   {t:'u',now,s:[[id,x,y,z,yaw,a,f,age]]}   {t:'e',id,e}   {t:'c',id,m}
-//                     {t:'pong',c,now}   {t:'full'}
-//   `c` is a chat line: relayed to the others as it comes, never stored, never sent back to its author.
+//   client → server   {t:'hello',name,color,v:2,dev?}   {t:'s',p:[x,y,z,yaw],a,f}   {t:'e',e}   {t:'c',m,n?}
+//                     {t:'ping',c}   {t:'admin',key}   and, from the administrator: {t:'who'}   {t:'kick',id}
+//                     {t:'ban',id,h}
+//   server → client   {t:'welcome',id,now,tick,idle?,near,peers:[{id,name,color,p,a,f}]}   {t:'join',id,name,color}
+//                     {t:'leave',id}   {t:'u',now,s:[[id,x,y,z,yaw,a,f,age]],g?:[id]}   {t:'e',id,e}
+//                     {t:'c',id,m,n?}   {t:'m',p:[id,x,z,…]}   {t:'w',n}   {t:'pong',c,now}   {t:'full'}
+//                     {t:'admin',ok}   {t:'who',list:[{id,name,ip,ua,dev,since}]}   {t:'kicked',ban}
+//   `c` is a chat line: relayed as it comes, never stored, never sent back to its author; with `n` it only goes
+//   to those within CHAT_NEAR metres of who says it.
 //   `now` is the relay clock (ms). `age` (ms) tells how long before `now` a state was received: clients rebuild
 //   smooth motion from `now - age`. A `join` for an id already known is a rename. `tick` is the batching period
 //   (clients need not send faster); `idle`, when present, is how often an unchanged state should be repeated
 //   as a keep-alive (0 = never).
+//
+// A crowd. Up to `near` others, a room simply tells everybody everything. Beyond that each visitor is told in
+// detail about the `near` visitors closest to them (within `range` metres): what one receives no longer grows
+// with the crowd. `g` lists those who have left that circle (they are no longer drawn); `m`, every couple of
+// seconds, gives the whereabouts of everybody for the map; `w` tells a visitor whether anyone is close enough
+// to be told about them (nobody: their state may be sent less often).
+//
+// The administrator is whoever sends the right key (the host checks it: io.admin). They may ask who is there
+// (address, browser, device), put someone out (kick) or keep them out (ban: the host keeps the list).
 
 export const MAX_FRAME = 2048; // bytes
 export const RATE = 40, BURST = RATE * 2; // messages per second, averaged over 2 s (token bucket)
 export const CHAT_MAX = 200; // characters in a chat line
 export const CHAT_BURST = 5, CHAT_EVERY = 2000; // chat lines: five in a row, then one every two seconds
+export const CHAT_NEAR = 20; // m: how far a line said "to those nearby" carries
+export const NEAR = 40, RANGE = 220; // how many others one is told about in detail, and from how far (m)
+const AREA_MS = 400, MAP_MS = 2000; // how often the circles and the map are worked out
+const KEY_TRIES = 5; // wrong administrator keys a connection may send
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const round = (v, k) => Math.round(v * k) / k;
@@ -37,6 +53,9 @@ export function cleanChat(text) {
   const s = typeof text === 'string' ? text.replace(/\s+/g, ' ').replace(/\p{C}/gu, '').replace(/ {2,}/g, ' ').trim() : '';
   return [...s].slice(0, CHAT_MAX).join('').trim();
 }
+
+/** The random name a browser gives itself (see src/net/Visits.js): '' when it does not look like one. */
+export const cleanDevice = (s) => (typeof s === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(s) ? s : '');
 
 /** Avatar state of an `s` message, bounded and rounded: [x, y, z, yaw, anim, flags], or null when malformed. */
 export function cleanState(m) {
@@ -71,18 +90,28 @@ export class Room {
    *   max      players allowed in the room
    *   tick     batching period announced to clients (ms)
    *   idle     optional keep-alive period announced to clients (ms, 0 = none)
+   *   near     optional: how many others each player is told about in detail (default NEAR)
+   *   range    optional: …and from how far, in metres (default RANGE)
    *   now()    relay clock (ms)
    *   send(connection, text)
    *   drop(connection, code, reason)   close a misbehaving connection (the host then calls remove())
+   *   kick(connection, code, reason)   optional: close a connection politely, its last message delivered (default: drop)
    *   busy(connection)                 optional: true when a reader is too slow for disposable states
    *   save(player)                     optional: called when what a newcomer must know about a player changed
    *   id()                             optional: source of player ids (default: 1, 2, 3… per room)
+   *   admin(key)                       optional: is this the administrator's key? (default: nobody is)
+   *   ban({ ip, dev, name, hours })    optional: keep someone out from now on (0 hours: for good)
    */
   constructor(io) {
     this.io = io;
     this.players = new Map(); // connection → player
     this.nextId = 1;
     this.pending = false; // some state waits for the next flush()
+    this.near = Math.max(1, io.near ?? NEAR);
+    this.range = io.range ?? RANGE;
+    this.crowded = false; // more players than `near`: each is told about those around them only
+    this.areaAt = this.mapAt = -1e9; // when the circles and the map were last worked out (relay clock)
+    this.moved = this.unmapped = false; // someone has moved since the circles / the map were worked out
   }
 
   get size() { return this.players.size; }
@@ -91,18 +120,23 @@ export class Room {
 
   /**
    * A connection arrives. Returns its player, or null when the room is full (the host says so and closes).
-   * `known` ({ id, name, color, joined, state }) restores a player whose connection outlived the host's memory.
+   * `known` ({ id, name, color, joined, state, ip, ua, dev, admin, since }) restores a player whose connection
+   * outlived the host's memory; `from` ({ ip, ua }) is what the host knows of a new one.
    */
-  add(connection, known) {
+  add(connection, known, from) {
     if (!known && this.players.size >= this.io.max) return null;
+    const t = this.io.now();
     const p = {
       conn: connection, id: known ? known.id : this.io.id ? this.io.id() : this.nextId, name: 'Visitor', color: 0, joined: false,
-      alive: true, tokens: BURST, stamp: this.io.now(), chat: CHAT_BURST, chatAt: this.io.now(),
+      alive: true, tokens: BURST, stamp: t, chat: CHAT_BURST, chatAt: t,
       state: null, row: '', at: 0, dirty: false, rested: true, // last state, its serialised row, when it came, relay flags
+      ver: 0, area: null, sent: null, gone: null, watched: undefined, // (a crowd) version of the state, who they are told about, what was sent
+      ip: String((known || from)?.ip || '').slice(0, 64), ua: String((known || from)?.ua || '').slice(0, 220), dev: '', admin: false, tries: 0, since: known?.since || t,
     };
     if (known) {
       p.name = cleanName(known.name); p.color = int(known.color, 15); p.joined = !!known.joined;
-      if (Array.isArray(known.state) && known.state.length === 6 && known.state.every(Number.isFinite)) { p.state = known.state; p.row = `[${p.id},${p.state.join(',')}`; }
+      p.dev = cleanDevice(known.dev); p.admin = !!known.admin;
+      if (Array.isArray(known.state) && known.state.length === 6 && known.state.every(Number.isFinite)) { p.state = known.state; p.row = `[${p.id},${p.state.join(',')}`; p.ver = 1; }
     }
     if (p.id >= this.nextId) this.nextId = p.id + 1;
     this.players.set(connection, p);
@@ -122,6 +156,17 @@ export class Room {
     for (const p of this.players.values()) if (p.joined && p !== except) this.io.send(p.conn, text);
   }
 
+  /** To those within `reach` metres of `p` (who must have said where they are). */
+  around(p, reach, text) {
+    if (!p.state) return;
+    const [x, y, z] = p.state, r2 = reach * reach;
+    for (const o of this.players.values()) {
+      if (!o.joined || o === p || !o.state) continue;
+      const dx = o.state[0] - x, dy = o.state[1] - y, dz = o.state[2] - z;
+      if (dx * dx + dy * dy + dz * dz <= r2) this.io.send(o.conn, text);
+    }
+  }
+
   /** One frame from a connection: its text, or anything else for a binary frame (ignored, but counted). */
   receive(connection, text) {
     const p = this.players.get(connection);
@@ -139,8 +184,12 @@ export class Room {
     else if (m.t === 'ping') this.io.send(connection, `{"t":"pong","c":${Number.isFinite(m.c) ? m.c : 0},"now":${t}}`);
     else if (!p.joined) return;
     else if (m.t === 's') this._state(p, m, t);
-    else if (m.t === 'e' && Number.isInteger(m.e) && m.e >= 0 && m.e <= 31) this.broadcast(`{"t":"e","id":${p.id},"e":${m.e}}`, p);
-    else if (m.t === 'c') this._chat(p, m, t);
+    else if (m.t === 'e' && Number.isInteger(m.e) && m.e >= 0 && m.e <= 31) {
+      const out = `{"t":"e","id":${p.id},"e":${m.e}}`;
+      if (this.crowded) this.around(p, this.range, out); else this.broadcast(out, p);
+    } else if (m.t === 'c') this._chat(p, m, t);
+    else if (m.t === 'admin') this._admin(p, m);
+    else if (p.admin && (m.t === 'who' || m.t === 'kick' || m.t === 'ban')) this._moderate(p, m);
   }
 
   _chat(p, m, t) {
@@ -151,20 +200,47 @@ export class Room {
     const text = cleanChat(m.m);
     if (!text) return;
     p.chat -= 1;
-    this.broadcast(JSON.stringify({ t: 'c', id: p.id, m: text }), p);
+    if (m.n) this.around(p, CHAT_NEAR, JSON.stringify({ t: 'c', id: p.id, m: text, n: 1 }));
+    else this.broadcast(JSON.stringify({ t: 'c', id: p.id, m: text }), p);
+  }
+
+  _admin(p, m) {
+    if (p.tries >= KEY_TRIES) return this.io.drop(p.conn, 1008, 'key');
+    const ok = typeof m.key === 'string' && m.key.length <= 256 && !!this.io.admin?.(m.key);
+    if (!ok) p.tries++;
+    p.admin = ok;
+    this.io.send(p.conn, `{"t":"admin","ok":${ok}}`);
+    this.io.save?.(p);
+  }
+
+  _moderate(p, m) {
+    if (m.t === 'who') {
+      const list = [...this.players.values()].filter((o) => o.joined).map((o) => ({ id: o.id, name: o.name, ip: o.ip, ua: o.ua, dev: o.dev, since: o.since }));
+      return this.io.send(p.conn, JSON.stringify({ t: 'who', now: this.io.now(), list }));
+    }
+    const target = [...this.players.values()].find((o) => o.id === m.id);
+    if (!target || target === p) return;
+    const ban = m.t === 'ban';
+    if (ban) this.io.ban?.({ ip: target.ip, dev: target.dev, name: target.name, hours: clamp(Number(m.h) || 0, 0, 87600) });
+    this.io.send(target.conn, `{"t":"kicked","ban":${ban}}`);
+    (this.io.kick || this.io.drop)(target.conn, ban ? 4003 : 4001, ban ? 'banned' : 'kicked');
   }
 
   _hello(p, m) {
     const name = cleanName(m.name), color = int(m.color, 15);
+    if (!p.dev) p.dev = cleanDevice(m.dev);
     if (p.joined && name === p.name && color === p.color) return;
     p.name = name; p.color = color;
     if (!p.joined) {
       p.joined = true;
+      // (in a crowd, where the others are comes with the first batch of those around)
+      const crowded = this.joined > this.near + 1;
       const peers = [...this.players.values()].filter((o) => o.joined && o !== p)
-        .map((o) => ({ id: o.id, name: o.name, color: o.color, ...(o.state && { p: o.state.slice(0, 4), a: o.state[4], f: o.state[5] }) }));
-      const welcome = { t: 'welcome', id: p.id, now: this.io.now(), tick: this.io.tick, peers };
+        .map((o) => ({ id: o.id, name: o.name, color: o.color, ...(o.state && !crowded && { p: o.state.slice(0, 4), a: o.state[4], f: o.state[5] }) }));
+      const welcome = { t: 'welcome', id: p.id, now: this.io.now(), tick: this.io.tick, near: this.near, peers };
       if (this.io.idle !== undefined) welcome.idle = this.io.idle;
       this.io.send(p.conn, JSON.stringify(welcome));
+      this.pending = true; // (the crowd may have just become one)
     }
     this.broadcast(JSON.stringify({ t: 'join', id: p.id, name, color }), p);
     this.io.save?.(p);
@@ -175,9 +251,9 @@ export class Room {
     if (!state) return;
     const row = `[${p.id},${state.join(',')}`; // closed with its age when a flush sends it
     const at = Math.max(t, p.at + 1); // strictly increasing per player: clients order states by time
-    if (row !== p.row) { p.row = row; p.state = state; p.at = at; p.dirty = true; p.rested = false; this.io.save?.(p); }
+    if (row !== p.row) { p.row = row; p.state = state; p.at = at; p.dirty = true; p.rested = false; p.ver++; this.moved = this.unmapped = true; this.io.save?.(p); }
     // First repeat after a relayed change: relay it once more, so that clients know the player has stopped.
-    else if (!p.rested && !p.dirty) { p.rested = true; p.at = at; p.dirty = true; }
+    else if (!p.rested && !p.dirty) { p.rested = true; p.at = at; p.dirty = true; p.ver++; }
     else return;
     this.pending = true;
   }
@@ -186,6 +262,19 @@ export class Room {
   flush() {
     this.pending = false;
     const t = this.io.now();
+    const crowded = this.joined > this.near + 1;
+    if (crowded !== this.crowded) {
+      // the crowd forms, or thins out: start again from what everybody is known to have
+      this.crowded = crowded;
+      this.areaAt = this.mapAt = -1e9;
+      this.moved = this.unmapped = crowded;
+      for (const p of this.players.values()) {
+        p.area = p.gone = null; p.sent = crowded ? new Map() : null;
+        if (!crowded && p.state) p.dirty = true; // (those who were out of sight of some are shown to all again)
+        if (!crowded && p.watched === false) { p.watched = undefined; this.io.send(p.conn, '{"t":"w","n":1}'); }
+      }
+    }
+    if (crowded) return this._flushAround(t);
     const ids = [], rows = [];
     for (const p of this.players.values()) if (p.dirty) { p.dirty = false; ids.push(p.id); rows.push(`${p.row},${Math.max(0, t - p.at)}]`); }
     if (!rows.length) return;
@@ -196,6 +285,73 @@ export class Room {
       const own = ids.indexOf(p.id);
       if (own < 0) this.io.send(p.conn, all);
       else if (rows.length > 1) this.io.send(p.conn, `${head}${rows.filter((_, i) => i !== own).join(',')}]}`);
+    }
+  }
+
+  // A crowd: to each their own batch — the states, changed since they last got them, of those around them.
+  // (`pending` stays up while the circles or the map are behind what has moved: the host flushes again,
+  // then the room can go quiet)
+  _flushAround(t) {
+    if (this.moved && t - this.areaAt >= AREA_MS) { this.areaAt = t; this.moved = false; this._areas(); }
+    const head = `{"t":"u","now":${t},"s":[`;
+    for (const r of this.players.values()) {
+      r.dirty = false;
+      if (!r.joined || !r.area || this.io.busy?.(r.conn)) continue;
+      let rows = '';
+      for (const q of r.area) {
+        if (r.sent.get(q.id) === q.ver) continue;
+        r.sent.set(q.id, q.ver);
+        rows += `${rows ? ',' : ''}${q.row},${Math.max(0, t - q.at)}]`;
+      }
+      if (!rows && !r.gone) continue;
+      this.io.send(r.conn, r.gone ? `${head}${rows}],"g":[${r.gone.join(',')}]}` : `${head}${rows}]}`);
+      r.gone = null;
+    }
+    if (this.unmapped && t - this.mapAt >= MAP_MS) {
+      // where everybody is, roughly, for the maps (each ignores those it is told about in detail)
+      this.mapAt = t; this.unmapped = false;
+      let all = '';
+      for (const p of this.players.values()) if (p.joined && p.state) all += `${all ? ',' : ''}${p.id},${Math.round(p.state[0])},${Math.round(p.state[2])}`;
+      const text = `{"t":"m","p":[${all}]}`;
+      for (const p of this.players.values()) if (p.joined && !this.io.busy?.(p.conn)) this.io.send(p.conn, text);
+    }
+    if (this.moved || this.unmapped) this.pending = true;
+  }
+
+  // Who is told about whom: for each player, the `near` nearest others within `range`.
+  _areas() {
+    const list = [];
+    for (const p of this.players.values()) if (p.joined && p.state) { p._n = []; p._d = []; p._w = 0; p.sent ||= new Map(); list.push(p); }
+    const K = this.near, R2 = this.range * this.range;
+    const take = (a, b, d) => {
+      // (a short sorted list: most candidates are turned away by one comparison)
+      const ds = a._d, ns = a._n;
+      if (ds.length === K && d >= ds[K - 1]) return;
+      let i = ds.length;
+      while (i > 0 && ds[i - 1] > d) i--;
+      ds.splice(i, 0, d); ns.splice(i, 0, b);
+      if (ds.length > K) { ds.pop(); ns.pop(); }
+    };
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i], s = a.state;
+      for (let j = i + 1; j < list.length; j++) {
+        const b = list[j], u = b.state, dx = s[0] - u[0], dy = s[1] - u[1], dz = s[2] - u[2], d = dx * dx + dy * dy + dz * dz;
+        if (d <= R2) { take(a, b, d); take(b, a, d); }
+      }
+    }
+    for (const p of list) {
+      const next = p._n;
+      for (const q of next) q._w++;
+      if (p.area) {
+        // those who are no longer around (those who left the room were announced already)
+        for (const q of p.area) if (!next.includes(q)) { p.sent.delete(q.id); if (this.players.get(q.conn) === q) (p.gone ||= []).push(q.id); }
+      }
+      p.area = next;
+      p._n = p._d = null;
+    }
+    for (const p of list) {
+      const w = p._w > 0;
+      if (w !== p.watched) { p.watched = w; this.io.send(p.conn, `{"t":"w","n":${w ? 1 : 0}}`); }
     }
   }
 }

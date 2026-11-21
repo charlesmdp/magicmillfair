@@ -1,7 +1,7 @@
 // Magic Mill Fair — production server: static files from dist/ plus the multiplayer presence relay on /ws.
 // The server has no authority over the game: every client shares its own avatar state and the server only
 // batches those states to the other members of the room at a fixed tick.
-// Environment: PORT (8787), HOST (0.0.0.0), TICK_HZ (12), MAX_PLAYERS (48, per room), DIST_DIR (../dist) and
+// Environment: PORT (8787), HOST (0.0.0.0), TICK_HZ (12), MAX_PLAYERS (250, per room), DIST_DIR (../dist) and
 // ALLOWED_ORIGINS (comma separated origins allowed to open the WebSocket; default: same host and localhost).
 // The relay itself (protocol, validation, batching) is in ./protocol.js, shared with the Cloudflare version.
 // It also answers the game's small API (./routes.js): the leaderboards, the visits… (kept in SCORES_FILE, by
@@ -15,9 +15,9 @@ import { pipeline } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { WebSocketServer } from 'ws';
-import { Room, MAX_FRAME, cleanRoom, originAllowed, parseOrigins } from './protocol.js';
+import { Room, MAX_FRAME, NEAR, RANGE, cleanRoom, originAllowed, parseOrigins } from './protocol.js';
 import { Limiter, LIMITS, BODY_MAX, allowed, parseBody, mayPost } from './api.js';
-import { route } from './routes.js';
+import { route, banned, addBan } from './routes.js';
 import { randomId, sameSecret } from './token.js';
 import { NPC_MODEL, cleanTalk, npcReply } from './npc.js';
 
@@ -30,7 +30,7 @@ const DIST = path.resolve(process.env.DIST_DIR || path.join(ROOT, 'dist'));
 const PORT = Math.floor(env('PORT', 8787, 0, 65535));
 const HOST = process.env.HOST || '0.0.0.0';
 const TICK_HZ = env('TICK_HZ', 12, 1, 60);
-const MAX_PLAYERS = Math.floor(env('MAX_PLAYERS', 48, 1, 4096)); // per room
+const MAX_PLAYERS = Math.floor(env('MAX_PLAYERS', 250, 1, 4096)); // per room
 const ALLOWED_ORIGINS = parseOrigins(process.env.ALLOWED_ORIGINS);
 const HEARTBEAT_MS = 15000;
 const SCORES_FILE = path.resolve(process.env.SCORES_FILE || path.join(ROOT, 'data', 'scores.json'));
@@ -219,6 +219,8 @@ let nextId = 1;
 // What a Room needs from this host (see ./protocol.js). Connections are `ws` sockets.
 const io = {
   max: MAX_PLAYERS,
+  // (in a crowd, each visitor is told in detail about the NEAR nearest within RANGE metres: see protocol.js)
+  near: Math.floor(env('NEAR', NEAR, 1, 1000)), range: env('RANGE', RANGE, 10, 5000),
   tick: Math.round(1000 / TICK_HZ),
   now,
   id: () => nextId++,
@@ -228,7 +230,11 @@ const io = {
     else ws.send(text);
   },
   drop: (ws) => ws.terminate(), // flooding; the close event then removes the player
+  // put out by the administrator: closed politely (the reason is delivered), then for good
+  kick: (ws, code, reason) => { try { ws.close(code, reason); } catch { /* already closing */ } setTimeout(() => ws.terminate(), 2000).unref(); },
   busy: (ws) => ws.bufferedAmount > 1 << 16,
+  admin: (key) => sameSecret(key, ADMIN_KEY),
+  ban: (who) => { addBan(api, who).catch((err) => console.error('[ban]', err.message)); },
 };
 
 function census() {
@@ -236,11 +242,12 @@ function census() {
   return { rooms: counts.length, players: counts.reduce((sum, n) => sum + n, 0) };
 }
 
-function onConnection(ws, roomId) {
+function onConnection(ws, roomId, from) {
   ws.on('error', () => {}); // e.g. oversized frame: ws closes the socket itself (1009)
+  if (from.banned) { ws.send('{"t":"kicked","ban":true}'); return ws.close(4003, 'banned'); }
   let room = rooms.get(roomId);
   if (!room) rooms.set(roomId, (room = new Room(io)));
-  const p = room.add(ws);
+  const p = room.add(ws, undefined, from);
   if (!p) { ws.send('{"t":"full"}'); return ws.close(1013, 'full'); }
   ws.on('pong', () => { p.alive = true; });
   ws.on('message', (data, isBinary) => {
@@ -277,7 +284,13 @@ server.on('upgrade', (req, socket, head) => {
   const [pathname, query] = splitUrl(req.url);
   const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
   if (pathname === '/ws' && originAllowed(req.headers.origin, host, ALLOWED_ORIGINS)) {
-    return wss.handleUpgrade(req, socket, head, (ws) => onConnection(ws, cleanRoom(new URLSearchParams(query).get('room'))));
+    // who is knocking: the address, the browser, the name the browser gave itself (what a ban holds on to)
+    const q = new URLSearchParams(query);
+    const from = { ip: String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '', ua: String(req.headers['user-agent'] || '') };
+    return banned(api, from.ip, q.get('dev') || '').catch(() => false).then((out) => {
+      from.banned = out;
+      wss.handleUpgrade(req, socket, head, (ws) => onConnection(ws, cleanRoom(q.get('room')), from));
+    });
   }
   socket.on('error', () => {});
   socket.end(`HTTP/1.1 ${pathname === '/ws' ? '403 Forbidden' : '404 Not Found'}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);

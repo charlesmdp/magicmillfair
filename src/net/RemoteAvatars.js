@@ -64,8 +64,10 @@ export class RemoteAvatars {
     if (it) this.hud.say(it.tag, text);
   }
 
-  /** Positions for the minimap. */
+  /** Those who are drawn in the world (near enough for the relay to tell us about them in detail). */
   get list() { return [...this.items.values()].filter((it) => it.peer.visible).map((it) => it.peer); }
+  /** Everybody whose whereabouts are known, for the maps: those drawn, and those too far for that (`far`). */
+  get everyone() { return [...this.items.values()].filter((it) => it.peer.visible || it.peer.far).map((it) => it.peer); }
 
   update(dt, camera, width, height) {
     this.frame++;

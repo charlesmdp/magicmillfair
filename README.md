@@ -188,10 +188,11 @@ that do silly things. They are written nowhere: the game only knows their finger
 Some of them disqualify a run in a game.
 
 **Animals of light**: a sun-coloured ring opens above you and a mechanical animal appears in it for five to
-six seconds — a stag that rears, a wolf that howls, a tiger that leaps through the ring, a dragon that coils
-round it. Everybody around sees them. They are earned by coming back: the stag after 10 days in a row, the
-wolf after 25, the tiger after 30, the dragon after 50 (the emote panel shows where you stand; the
-administrator has them all).
+six seconds. Everybody around sees them. Ten of them, earned by coming back day after day: a goldfish that
+blows bubbles (2 days in a row), a squirrel that nibbles a nut (3), a carp that leaps as up a waterfall (5),
+a stag that rears (10), an eagle that spreads its wings (15), a panda that munches bamboo (20), a wolf that
+howls (25), a tiger that leaps through the ring (30), an elephant that trumpets (35) and a dragon that coils
+round the ring (50). The emote panel shows where you stand; the administrator has them all.
 
 ## Things to do
 
@@ -436,40 +437,71 @@ Building blocks added with the places and the games (`zones/places/PlacesZone.js
 The server decides nothing: each visitor sends the state of their avatar (position, heading, animation —
 which includes sitting, lying and working — and what it wears) ten to twelve times a second, the relay hands
 it on per room, and each client rebuilds a smooth motion by interpolation. Emotes and chat lines are relayed
-as they come. The relay keeps the last state of those who are connected, in memory, and forgets them when
-they leave (on Cloudflare, a room that everybody has left is deleted). Without a reachable relay, the same
-interface works between the tabs of one browser. The protocol is described at the top of
-`server/protocol.js`, the client interface in `src/net/Presence.js`. The same relay runs under Node
-(`server/index.js`) and on Cloudflare (`cloudflare/worker.js`).
+as they come; a line said "to those nearby" only goes to the visitors within twenty metres (the relay does
+the sorting: nobody further away receives it). The relay keeps the last state of those who are connected,
+in memory, and forgets them when they leave (on Cloudflare, a room that everybody has left is deleted).
+Without a reachable relay, the same interface works between the tabs of one browser. The protocol is
+described at the top of `server/protocol.js`, the client interface in `src/net/Presence.js`. The same relay
+runs under Node (`server/index.js`) and on Cloudflare (`cloudflare/worker.js`).
 
-**What is stored**: the leaderboards — for each board, up to 200 lines of a name, a time and a date — and
-nothing else. No accounts, no positions, no chat. Under Node they are a JSON file; on Cloudflare, the
-storage of one Durable Object. Times are reported by the players' own browsers: the server only refuses
-what cannot be true (a climb of the Sky Stones in under 100 seconds) and what comes too fast (six posts a
-minute per address). There is no referee.
+**What is stored**: the leaderboards (for each board, a name, a score and a date, in four lists), for each
+device — a random number drawn by the browser — the days in a row it has come back, and the administrator's
+list of who is kept out. No accounts, no positions, no chat. Under Node these are a JSON file; on
+Cloudflare, the storage of one Durable Object.
+
+**The administrator** is whoever knows `ADMIN_KEY` (`/admin <key>` in the chat). Clicking the head count
+(top left) lists who is in the room — for everybody, the names; for the administrator, also the address,
+the browser and the device of each, with buttons to put a visitor out (*Kick*: they can come back) or to
+keep them out (*Ban*, for an hour, a day or for good: by address and by device; the list of bans is at the
+bottom of the same panel, with a button to lift each). The address is what the host sees (`CF-Connecting-IP`
+on Cloudflare): a ban by address also keeps out whoever shares it — a school, a mobile operator.
+
+**Cheating.** Everything a visitor does runs in their own browser, so nothing here can be made cheat-proof;
+what is done is to make cheating pointless or tedious:
+- a score only counts with the note of its run: a token signed by the server when the run starts (`POST
+  /api/run`), which says when. A climb announced as 150 seconds must arrive at least 130 seconds after its
+  note; a 45-second game cannot be over in 10; a note counts once. Posting a made-up score therefore takes
+  as long as playing, and cannot be hurried;
+- what is believed is bounded per game (`BOARDS` in `server/scores.js`: nobody climbs in under 100 seconds),
+  and posts are rate-limited per address;
+- the game's own secret codes disqualify a run in the browser itself;
+- the administrator can take any line off a board (`DELETE /api/scores?board=…&name=…` with the key) and
+  ban whoever posted it.
+A cheater who writes a program that plays the whole run at human speed still gets on the board; what stops
+that is the last point. Going further means a referee: the server replaying the run from the inputs.
 
 ### How many visitors at once?
 
-- **On each visitor's screen** the crowd is bounded: a room holds 48 visitors, so nobody ever sees more than
-  47 others. Each avatar is one draw call (one more in the real-time shadow pass) and a name tag in HTML.
-  A full room standing round one visitor, everyone in view, was measured on the Balanced tier: about 85 more
-  draw calls and 170,000 more triangles than alone, and some 4 ms more script time per frame on the
-  development machine. The fourteen nearest avatars are drawn in full; the others lose their real-time
-  shadow and their reflection and are animated every other frame; those out of view are not drawn at all.
-- **Beyond 48**, newcomers are put together in the next room — `main`, then `main-2`, `main-3`… — without
-  anyone noticing. Two hundred visitors are five rooms, two thousand are forty-two. People who want to be
-  sure to meet use a room of their own (`?room=name`).
-- **On the wire**, a visitor sends about 60 bytes ten to twelve times a second and receives the states of
-  their room in batches: about 20 KB a second in a full room.
-- **On the server**, rooms are independent. Under Node, one process on a small machine carries dozens of
-  full rooms (a full room is some 600 small messages in and 500 batches out per second). On Cloudflare each
-  room is its own object, so rooms scale by themselves — the limit is the plan. On the free plan (100,000
-  requests a day, incoming WebSocket messages counted twenty for one, and 13,000 GB-seconds of running time
-  a day when this was written) that is roughly 55 visitor-hours a day, or one busy room for an afternoon:
-  enough to show the game, not to open it to a crowd. Hundreds of visitors need the paid plan, billed by
-  use — by the prices known when this was written, a few cents an hour per hundred visitors present. Check
-  the pricing pages linked above before counting on any of these figures.
-- None of this has been tried with a real crowd: the tests run rooms of a few clients.
+- **A room holds 250 visitors** (`MAX_PLAYERS`; 48 until this version). The old limit came from the fact
+  that everybody was told about everybody ten times a second: what each visitor received, and what the
+  relay sent, grew with the square of the crowd. Now, beyond forty visitors, each one is told in detail
+  about the **forty nearest** (within 220 m) and only roughly — a dot on the map, every two seconds — about
+  the others. Whatever the crowd, a visitor receives about 14 KB a second and draws at most forty avatars.
+- **On each visitor's screen**: each avatar is one draw call (one more in the real-time shadow pass) and a
+  name tag in HTML. The fourteen nearest are drawn in full; the others lose their real-time shadow and
+  their reflection and are animated every other frame; those out of view are not drawn at all. A crowd of
+  forty-seven standing round one visitor was measured on the Balanced tier: about 85 more draw calls and
+  170,000 more triangles than alone, some 4 ms more script time per frame on the development machine.
+- **On the relay** (measured in memory on the development machine, every visitor moving): 300 visitors cost
+  3.6 ms of work per tick of 100 ms (4 % of one processor), 1,000 visitors 13 ms (13 %), 2,000 visitors
+  37 ms. A visitor nobody is near is told so and sends their state twice a second instead of twelve times.
+- **Beyond 250**, newcomers are put together in the next room — `main`, then `main-2`, `main-3`… up to
+  sixteen of them, 4,000 visitors — without anyone noticing. People who want to be sure to meet use a room
+  of their own (`?room=name`).
+- **Why not thousands in one room?** A room is one object, on one processor, through which every message of
+  every visitor passes: a thousand visitors are ten thousand incoming messages a second. The relay's own
+  work would allow it (see above); the host is the limit. Under Node, raise `MAX_PLAYERS` and measure. On
+  Cloudflare a Durable Object is advised to stay around a thousand requests a second, and every incoming
+  message is billed (twenty for one request): 250 is a cautious ceiling, not a measured one. A world where
+  thousands share one place needs the map cut into regions, each with its relay, and visitors handed from
+  one to the next: not done here.
+- **What it costs on Cloudflare**: on the free plan (100,000 requests a day, incoming WebSocket messages
+  counted twenty for one, and 13,000 GB-seconds of running time a day when this was written) roughly 55
+  visitor-hours a day: enough to show the game, not to open it to a crowd. Hundreds of visitors need the paid
+  plan, billed by use — by the prices known when this was written, a few cents an hour per hundred visitors
+  present. Check the pricing pages linked above before counting on any of these figures.
+- None of this has been tried with a real crowd: the tests run rooms of a few clients, and the figures above
+  come from a simulation of the relay alone.
 
 ## Tools
 

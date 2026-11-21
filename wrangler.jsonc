@@ -19,7 +19,9 @@
   "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
   "vars": {
-    "MAX_PLAYERS": "48",
+    // How many visitors a room holds before the next ones gather in another (each is told in detail about
+    // the forty nearest: see server/protocol.js).
+    "MAX_PLAYERS": "250",
     "TICK_MS": "100",
     // Comma separated origins allowed to open the multiplayer socket. Empty: the site's own address only.
     "ALLOWED_ORIGINS": ""

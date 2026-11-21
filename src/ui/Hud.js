@@ -26,6 +26,18 @@ export const VERSION = `Version ${BUILD.commit || 'local'}${BUILD.date ? ` · bu
 
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
 
+/** "Chrome 141 · Windows · computer" out of what a browser says of itself. */
+export function describeAgent(ua) {
+  ua = String(ua || '');
+  if (!ua) return 'unknown browser';
+  const os = /Windows/.test(ua) ? 'Windows' : /iPhone|iPad|iPod/.test(ua) ? 'iOS' : /Android/.test(ua) ? 'Android' : /Mac OS X/.test(ua) ? 'macOS' : /CrOS/.test(ua) ? 'ChromeOS' : /Linux/.test(ua) ? 'Linux' : 'unknown system';
+  const hit = (re) => re.exec(ua)?.[1];
+  const browser = hit(/Edg\w*\/(\d+)/) ? `Edge ${hit(/Edg\w*\/(\d+)/)}` : hit(/OPR\/(\d+)/) ? `Opera ${hit(/OPR\/(\d+)/)}` : hit(/Firefox\/(\d+)/) ? `Firefox ${hit(/Firefox\/(\d+)/)}`
+    : hit(/(?:Chrome|CriOS)\/(\d+)/) ? `Chrome ${hit(/(?:Chrome|CriOS)\/(\d+)/)}` : hit(/Version\/(\d+)[\d.]* .*Safari/) ? `Safari ${hit(/Version\/(\d+)[\d.]* .*Safari/)}` : ua.split(/[ /]/)[0].slice(0, 24);
+  const device = /iPad|Tablet/.test(ua) || (/Android/.test(ua) && !/Mobile/.test(ua)) ? 'tablet' : /Mobi|iPhone|iPod|Android/.test(ua) ? 'phone' : 'computer';
+  return `${browser} · ${os} · ${device}`;
+}
+
 export class Hud {
   constructor(root, { input, isTouch }) {
     this.root = root;
@@ -105,7 +117,7 @@ export class Hud {
     h.innerHTML = `
       <div class="top-left">
         <div class="pill zone">The Mill</div>
-        <div class="pill players"><span class="dot"></span><span class="count">On your own</span></div>
+        <button class="pill players" type="button" title="Who is here"><span class="dot"></span><span class="count">On your own</span></button>
       </div>
       <div class="top-right">
         <button class="icon" data-act="chat" title="Chat (Enter)" aria-label="Chat">${ICON.chat}</button>
@@ -132,11 +144,15 @@ export class Hud {
       </div>
       <div class="chat">
         <div class="log" aria-live="polite"></div>
-        <form class="say"><input type="text" maxlength="200" placeholder="Say something…" autocomplete="off" spellcheck="false" enterkeyhint="send" aria-label="Chat message" /><small class="tip">Stuck somewhere? Type <b>/kill</b> · an emote by its name: <b>/wave</b>, <b>/cheer</b>…</small></form>
+        <form class="say"><div class="line"><button type="button" class="chan" title="Who hears you (Tab)">Everyone</button><input type="text" maxlength="200" placeholder="Say something…" autocomplete="off" spellcheck="false" enterkeyhint="send" aria-label="Chat message" /></div><small class="tip">Stuck somewhere? Type <b>/kill</b> · an emote by its name: <b>/wave</b>, <b>/cheer</b>…</small></form>
       </div>
       <div class="chooser" role="dialog" aria-label="Choose">
         <div class="sheet"><h2></h2><p class="lead"></p><div class="list"></div><button class="close" type="button">Stay here</button></div>
       </div>
+      <div class="roster" role="dialog" aria-label="Visitors">
+        <div class="sheet"><h2>Who is here</h2><p class="lead"></p><div class="list"></div><div class="bans"></div><button class="close" type="button">Close</button></div>
+      </div>
+      <div class="banner" role="alert"></div>
       <div class="panel" role="dialog" aria-label="Settings">
         <h2>Settings</h2>
         <h3>Graphics quality</h3>
@@ -192,14 +208,30 @@ export class Hud {
     this.chatLog = this.chatEl.querySelector('.log');
     this.chatForm = this.chatEl.querySelector('.say');
     this.chatInput = this.chatForm.querySelector('input');
+    // who hears a line: everyone in the room, or those within twenty metres (Tab, or the button, switches)
+    this.chatChannel = 'all';
+    this.chanBtn = this.chatForm.querySelector('.chan');
+    const channel = (to) => {
+      this.chatChannel = to;
+      this.chanBtn.textContent = to === 'near' ? 'Nearby' : 'Everyone';
+      this.chanBtn.classList.toggle('near', to === 'near');
+      if (!this._chatTo) this.chatInput.placeholder = to === 'near' ? 'Say something to those within 20 m…' : 'Say something to everyone…';
+    };
+    this.chanBtn.onclick = () => { channel(this.chatChannel === 'near' ? 'all' : 'near'); this.chatInput.focus({ preventScroll: true }); };
+    this.chanBtn.addEventListener('mousedown', (e) => e.preventDefault()); // (the field keeps the focus)
+    this._channel = channel;
     this.chatForm.addEventListener('submit', (e) => {
       e.preventDefault();
       const text = this.chatInput.value;
       this.chatInput.value = '';
       this.toggleChat(false);
-      if (text.trim()) this.emit('say', text);
+      if (text.trim()) this.emit('say', text, this.chatChannel);
     });
-    this.chatInput.addEventListener('keydown', (e) => { if (e.key === 'Escape') { this.chatInput.value = ''; this.toggleChat(false); } e.stopPropagation(); });
+    this.chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { this.chatInput.value = ''; this.toggleChat(false); }
+      else if (e.key === 'Tab' && !this._chatTo) { e.preventDefault(); channel(this.chatChannel === 'near' ? 'all' : 'near'); }
+      e.stopPropagation();
+    });
     this.chatInput.addEventListener('blur', () => { if (!this.chatInput.value) this.toggleChat(false); });
     for (const ev of ['mousedown', 'touchstart', 'wheel']) this.chatEl.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
     this.cameraBtn = h.querySelector('[data-act="camera"]');
@@ -222,8 +254,14 @@ export class Hud {
     name.addEventListener('keydown', (e) => e.stopPropagation());
     name.addEventListener('change', () => this.emit('name', name.value.trim().slice(0, 16)));
     this.nameInput = name;
+    // who is here: opened from the head count
+    this.rosterEl = h.querySelector('.roster');
+    h.querySelector('.players').onclick = (e) => { e.currentTarget.blur(); this.emit('roster'); };
+    this.rosterEl.querySelector('.close').onclick = () => this.closeRoster();
+    this.rosterEl.onclick = (e) => { if (e.target === this.rosterEl) this.closeRoster(); };
+    this.bannerEl = h.querySelector('.banner');
     // prevent clicks on the interface from reaching the 3D view
-    for (const n of [this.panel, this.emotes, h.querySelector('.chooser')]) for (const ev of ['mousedown', 'touchstart', 'wheel']) n.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
+    for (const n of [this.panel, this.emotes, h.querySelector('.chooser'), this.rosterEl, h.querySelector('.players')]) for (const ev of ['mousedown', 'touchstart', 'wheel']) n.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
     // the visitor's own speech bubble (the others have their name tag)
     this.selfTag = el('div', 'tag self');
     this.selfTag.style.display = 'none';
@@ -308,6 +346,72 @@ export class Hud {
   /** May the visitor fly the camera about? (the button disappears otherwise) */
   setFreeCamera(on) { this.cameraBtn.style.display = on ? '' : 'none'; }
 
+  // ---------- who is here
+  get rosterOpen() { return this.rosterEl.classList.contains('on'); }
+  closeRoster() { this.rosterEl.classList.remove('on'); }
+  /**
+   * The list of the visitors of the room. people: [{ id, name, color, me, where (a few words) }]; for the
+   * administrator, `details` (id → { ip, ua, dev, since }) and `bans` ([{ kind, key, name, until }]) add what
+   * only they may see and do: 'kick' (id), 'ban' (id, hours) and 'unban' ({ kind, key }) are emitted.
+   */
+  showRoster({ people, mode, admin = false, details = null, bans = null, now = 0 }) {
+    const box = this.rosterEl, list = box.querySelector('.list'), bansEl = box.querySelector('.bans');
+    if (!this.rosterOpen) { this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this.toggleBigMap(false); this.input.exitLock(); }
+    box.querySelector('h2').textContent = people.length > 1 ? `Who is here — ${people.length} visitors` : 'Who is here';
+    box.querySelector('.lead').textContent = mode === 'online' ? (admin ? 'You are the administrator: you also see where each visitor connects from, and can put them out.' : 'Everyone in this room.')
+      : mode === 'local' ? 'No server here: only the tabs of this browser see each other.' : 'Offline: nobody else can be seen.';
+    list.textContent = '';
+    const ago = (t) => { const m = Math.max(0, Math.round((now - t) / 60000)); return m < 1 ? 'just arrived' : m < 60 ? `here for ${m} min` : `here for ${Math.floor(m / 60)} h ${m % 60} min`; };
+    for (const p of people) {
+      const row = el('div', `who${p.me ? ' me' : ''}`);
+      const dot = el('i'); dot.style.background = hex(p.color);
+      const text = el('span');
+      const name = el('b'); name.textContent = p.me ? `${p.name} (you)` : p.name;
+      const where = el('small'); where.textContent = p.where || '';
+      text.append(name, where);
+      row.append(dot, text);
+      const d = details?.get(p.id);
+      if (admin && d) {
+        const more = el('small', 'more');
+        more.textContent = `${d.ip || 'address unknown'} · ${describeAgent(d.ua)}${d.dev ? ` · device ${d.dev.slice(0, 8)}…` : ''} · ${ago(d.since)}`;
+        more.title = d.ua || '';
+        text.append(more);
+        if (!p.me) {
+          const acts = el('span', 'acts');
+          const act = (label, title, fn) => { const b = el('button'); b.type = 'button'; b.textContent = label; b.title = title; b.onclick = fn; acts.append(b); };
+          act('Kick', 'Put out of the room (they can come back)', () => this.emit('kick', p.id));
+          act('Ban 1 h', 'Keep out for an hour (address and device)', () => this.emit('ban', p.id, 1));
+          act('Ban 1 day', 'Keep out for a day', () => this.emit('ban', p.id, 24));
+          act('Ban for good', 'Keep out until the ban is lifted', () => this.emit('ban', p.id, 0));
+          row.append(acts);
+        }
+      }
+      list.append(row);
+    }
+    bansEl.textContent = '';
+    if (admin && bans && bans.length) {
+      bansEl.append(el('h3', '', 'Kept out'));
+      for (const b of bans) {
+        const row = el('div', 'who');
+        const text = el('span');
+        const name = el('b'); name.textContent = b.name || '?';
+        const what = el('small'); what.textContent = `${b.kind === 'ip' ? `address ${b.key}` : `device ${String(b.key).slice(0, 8)}…`} · ${b.until ? `until ${new Date(b.until).toLocaleString()}` : 'for good'}`;
+        text.append(name, what);
+        const lift = el('button'); lift.type = 'button'; lift.textContent = 'Lift'; lift.onclick = () => this.emit('unban', { kind: b.kind, key: b.key });
+        const acts = el('span', 'acts'); acts.append(lift);
+        row.append(text, acts);
+        bansEl.append(row);
+      }
+    }
+    box.classList.add('on');
+  }
+
+  /** A message that stays (put out by the administrator, for instance); null takes it away. */
+  banner(text) {
+    this.bannerEl.textContent = text || '';
+    this.bannerEl.classList.toggle('on', !!text);
+  }
+
   // ---------- hats, the bouquet, dying
   setHat(i) { this.hud.querySelectorAll('[data-hat]').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.hat === i))); }
   setHolding(on) { if (on !== this._holding) { this._holding = on; this.emotes.classList.toggle('holding', on); } }
@@ -330,20 +434,27 @@ export class Hud {
 
   // ---------- chat
   get chatOpen() { return this.chatEl.classList.contains('typing'); }
-  toggleChat(open = !this.chatOpen, placeholder = 'Say something…') {
-    if (open) this.chatInput.placeholder = placeholder;
+  /** `to`: the placeholder when the line goes to a character (then nobody else hears it); else to the room. */
+  toggleChat(open = !this.chatOpen, to = '') {
+    if (open) {
+      this._chatTo = to;
+      this.chanBtn.style.display = to ? 'none' : '';
+      if (to) this.chatInput.placeholder = to; else this._channel(this.chatChannel);
+    }
     this.chatEl.classList.toggle('typing', open);
     if (open) { this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this.chatInput.focus({ preventScroll: true }); }
     else if (document.activeElement === this.chatInput) this.chatInput.blur();
   }
 
-  /** A line in the chat log. Lines fade away after a while; the log shows again whenever one comes in. */
-  addChat(name, color, text, self = false) {
-    const line = el('p', self ? 'self' : '');
+  /** A line in the chat log (`near`: said to those nearby only). Lines fade away after a while; the log shows again whenever one comes in. */
+  addChat(name, color, text, self = false, near = false) {
+    const line = el('p', `${self ? 'self' : ''}${near ? ' near' : ''}`);
     const who = el('b');
     who.style.color = hex(color);
     who.textContent = name;
-    line.append(who, document.createTextNode(` ${text}`));
+    line.append(who);
+    if (near) { const tag = el('i'); tag.textContent = 'nearby'; line.append(tag); }
+    line.append(document.createTextNode(` ${text}`));
     this.chatLog.append(line);
     while (this.chatLog.childElementCount > 40) this.chatLog.firstElementChild.remove();
     this.chatLog.scrollTop = this.chatLog.scrollHeight;
@@ -441,7 +552,7 @@ export class Hud {
     for (const o of others) {
       const px = S / 2 + (o.x - x) * k, pz = S / 2 + (o.z - z) * k;
       if (px < 0 || pz < 0 || px > S || pz > S) continue;
-      ctx.beginPath(); ctx.arc(px, pz, 4, 0, 7); ctx.fillStyle = `#${AVATAR_COLORS[o.color % 16].toString(16).padStart(6, '0')}`; ctx.fill();
+      ctx.beginPath(); ctx.arc(px, pz, o.far ? 3 : 4, 0, 7); ctx.fillStyle = `#${AVATAR_COLORS[o.color % 16].toString(16).padStart(6, '0')}`; ctx.fill();
       ctx.lineWidth = 1.5; ctx.strokeStyle = '#fff'; ctx.stroke();
     }
     this._marker(ctx, S / 2, S / 2, heading, 9);
@@ -480,10 +591,12 @@ export class Hud {
     }
     // the others, with their names
     ctx.font = `600 ${Math.max(10, Math.round(w / 80))}px system-ui, sans-serif`;
+    const named = others.length <= 40; // (in a crowd, only those close by are named)
     for (const o of others) {
       const px = X(o.x), pz = Z(o.z);
-      ctx.beginPath(); ctx.arc(px, pz, 5.5, 0, 7); ctx.fillStyle = `#${AVATAR_COLORS[o.color % 16].toString(16).padStart(6, '0')}`; ctx.fill();
+      ctx.beginPath(); ctx.arc(px, pz, o.far ? 4 : 5.5, 0, 7); ctx.fillStyle = `#${AVATAR_COLORS[o.color % 16].toString(16).padStart(6, '0')}`; ctx.fill();
       ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke();
+      if (!named && o.far) continue;
       ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(14, 22, 17, 0.8)'; ctx.strokeText(o.name, px, pz - 14);
       ctx.fillStyle = '#fff'; ctx.fillText(o.name, px, pz - 14);
     }
