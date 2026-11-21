@@ -316,7 +316,7 @@ export const PATHS = [
   {
     // Spur of the pond path to the foot of the waterfall.
     id: 'falls', kind: 'dirt', width: 1.3, cut: 0.5,
-    points: [[-239, 103], [-247, 109.5], [-257, 112.5], [-267, 113.6], [-275, 115.4]],
+    points: [[-239, 103], [-247, 109.5], [-257, 112.5], [-267, 113.6], [-274, 114.9], [-276.4, 114.6]],
   },
   {
     id: 'garden', kind: 'gravel', width: 1.2, cut: 0.3,
@@ -382,7 +382,8 @@ export const STAIRWAY = {
 // (levels: the walking level of each terrace; `bank`: the polygon one can walk, pool included)
 export const FALLS = {
   stairs: [
-    { width: 2.2, landing: 1.4, points: [[-280.5, 105.5, 12.25], [-297.5, 108.5, 21.6], [-301.5, 120.5, 27.45]] },
+    // (the first flight starts on the shore of the plunge pool, where the path ends, and cuts through the ridge)
+    { width: 2.2, landing: 1.4, points: [[-277.5, 114.2, 12.8], [-280.5, 105.5, 15.5], [-297.5, 108.5, 21.6], [-301.5, 120.5, 27.45]] },
     { width: 2.2, landing: 1.4, points: [[-304.5, 123.4, 27.45], [-319.5, 127.2, 36.75]] },
     { width: 2.2, landing: 1.4, points: [[-322.5, 129.2, 36.75], [-337.5, 133.4, 46.65]] },
   ],
@@ -434,7 +435,9 @@ export const SKY = { count: 30, pad: 12.5, apart: 64, gate: { x: -110.5, z: -39,
 
 // The Sky Stones: stones to jump from one to the next, up to a platform `height` metres above the ground.
 // (x, z) is the middle of its round lawn, levelled at y; one comes in through the gate, on the north side.
-export const CLIMB = { x: 0, z: 80, y: 8.3, r: 13.5, height: 90, gate: [1.6, 64.6] };
+// `tower`: the striped tower one climbs to watch and cheer, in a bay cut into the hill behind the lawn (its
+// winding stair rises `pitch` metres a turn, `turns` times; nobody gets from it into the game).
+export const CLIMB = { x: 0, z: 80, y: 8.3, r: 13.5, height: 90, gate: [1.6, 64.6], name: 'Mostly Up', tower: { x: -9.5, z: 101, r: 6.2, pitch: 7, turns: 12 } };
 // A pond of acid in a hollow of the north-western woods. Nobody tells you it is there.
 export const ACID = { x: -236, z: -82, r: 4.2 };
 // The boulder of the island: it rolls down the whole path, again and again (seconds; metres per second).

@@ -31,13 +31,20 @@ export class Input {
 
   _bind() {
     const t = this.target;
-    const actions = { KeyF: 'camera', KeyP: 'perf', KeyM: 'map', KeyH: 'help', Escape: 'menu', KeyT: 'emote', Enter: 'chat', KeyR: 'respawn', KeyG: 'photo', KeyB: 'drop' };
+    // Shortcuts go by the letter printed on the key ("M" opens the map on any keyboard: on a French one that
+    // key is not where the American M is); walking goes by the place of the keys (see update()). A keyboard
+    // without Latin letters falls back on the places.
+    const letters = { f: 'camera', p: 'perf', m: 'map', h: 'help', t: 'emote', r: 'respawn', g: 'photo', b: 'drop' };
+    const places = { KeyF: 'camera', KeyP: 'perf', KeyM: 'map', KeyH: 'help', KeyT: 'emote', KeyR: 'respawn', KeyG: 'photo', KeyB: 'drop' };
+    const others = { Escape: 'menu', Enter: 'chat', NumpadEnter: 'chat' };
     window.addEventListener('keydown', (e) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.repeat) return;
+      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
       this.keys.add(e.code);
       this._pressed.add(e.code);
-      if (actions[e.code]) this.emit(actions[e.code]);
+      const key = typeof e.key === 'string' && e.key.length === 1 ? e.key.toLowerCase() : '';
+      const action = others[e.code] || (key >= 'a' && key <= 'z' ? letters[key] : key && key.toLowerCase() !== key.toUpperCase() ? places[e.code] : letters[key] || places[e.code]);
+      if (action) this.emit(action);
       // (Enter opens the chat: without this, the same key press would go on to submit the empty field it has just focused)
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.code)) e.preventDefault();
     });

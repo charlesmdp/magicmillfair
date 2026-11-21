@@ -202,6 +202,7 @@ export class World {
     const y0 = PIER.deckY - 0.6, y1 = PIER.deckY + 4;
     for (const c of pier.colliders) {
       if (c.type === 'local') { const [x, z] = toWorld(c.x, c.z); col.addCircle(x, z, c.r, deckHeight(c.x) - 0.6, y1); }
+      else if (c.type === 'box') col.addBox(c.x, c.z, c.hw, c.hl, c.yaw, c.y0, c.y1);
       else col.addCircle(c.x, c.z, c.r);
     }
     const W = PIER.width / 2, HW = PIER.headWidth / 2, L = PIER.length, h0 = L - PIER.headLength;

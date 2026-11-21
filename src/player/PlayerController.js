@@ -5,6 +5,9 @@ import { ANIM, SEAT } from './Character.js';
 const WALK = 4.4, RUN = 8.2, SWIM = 3.1, SWIM_FAST = 5.3, JUMP = 5.4, GRAVITY = 15, RADIUS = 0.38, STEP = 0.62;
 const CLIMB = 1.35; // the steepest bare ground one can walk up (metres up per metre forward: about 53°)
 const SLIDE = 1.7; // steeper than that nobody stands: one slides down (cliffs are not climbed by hopping either)
+const REACH = 0.6; // slopes are measured over that distance ahead, never over one frame's stride (which shrinks as the frame rate rises)
+const EASE = 0.7; // from that slope up, one climbs more and more slowly (half speed at the limit)
+const OK = 0, BLOCKED = 1, STEEP = 2;
 export const JET = { time: 1.5, thrust: 27, max: 7 }; // seconds of fuel, upward acceleration, top climbing speed
 const QUAD = { speed: 15.5, cruise: 9.5 };
 const DEATH = 3.6; // seconds between dying and standing again
@@ -38,6 +41,8 @@ export class PlayerController {
     this.speed = 0;
     this._p = { x: 0, z: 0 };
     this._g = { x: 0, z: 0 };
+    this._ground = 0; // the ground under the feet at the end of the last frame
+    this.sliding = false;
     this.seat = null; // what the player sits or lies on
     this._seatTime = 0;
     this._at = { x: 0, y: 0, z: 0, yaw: 0 };
@@ -61,7 +66,9 @@ export class PlayerController {
     this.vel.set(0, 0, 0);
     this.yaw = yaw;
     this.grounded = true;
+    this.sliding = false;
     this.jet = 0;
+    this._ground = this.pos.y;
     this._sync();
   }
 
@@ -83,7 +90,7 @@ export class PlayerController {
     this.seat = null;
     const e = typeof s.exit === 'function' ? s.exit() : s.exit;
     if (e) { this.pos.x = e[0]; this.pos.z = e[1]; }
-    this.pos.y = this.collision.groundAt(this.pos.x, this.pos.z, this.pos.y + 1.4);
+    this.pos.y = this._ground = this.collision.groundAt(this.pos.x, this.pos.z, this.pos.y + 1.4);
     this.vel.set(0, 0, 0);
     this.grounded = true;
     this._sync();
@@ -185,49 +192,78 @@ export class PlayerController {
         : (inp.run ? RUN : WALK) * (wading ? 0.6 : 1) * this.boost;
     this.wading = wading;
     if (wl > 1e-3) { wx = (wx / Math.max(wl, 1)) * top; wz = (wz / Math.max(wl, 1)) * top; } else { wx = 0; wz = 0; }
+    // The ground really under the feet. (The avatar's own height eases over steps, so it may be a little off:
+    // steps and slopes are judged from the ground itself, which gives the same walk at any frame rate.)
+    let here = this.collision.groundAt(pos.x, pos.z, pos.y + 0.3);
+    const wasGrounded = this.grounded, fromX = pos.x, fromZ = pos.z;
     // ground too steep to stand on: down it goes, whatever the keys say
     // (the sill of a cave mouth is steep rock too, but it is a doorstep)
-    const bare = this.grounded && !this.cave && Math.abs(pos.y - terrain) < 0.05 && !this.swimming && !this.collision.inCave(pos.x, pos.z);
+    const bare = this.grounded && !this.cave && Math.abs(here - terrain) < 0.02 && !this.swimming && !this.collision.inCave(pos.x, pos.z);
+    const wasSliding = this.sliding;
     this.sliding = false;
     if (bare) {
       const g = this._g, steep = this._gradient(pos.x, pos.z, g);
-      if (steep > SLIDE) { this.sliding = true; wx = (-g.x / steep) * 7.5; wz = (-g.z / steep) * 7.5; }
+      // (once sliding, one slides on until the ground is clearly gentler: no dithering at the limit)
+      if (steep > (wasSliding ? SLIDE * 0.86 : SLIDE)) { this.sliding = true; wx = (-g.x / steep) * 7.5; wz = (-g.z / steep) * 7.5; }
+      else if (wx || wz) {
+        // uphill, the steeper the slower
+        const l = Math.hypot(wx, wz);
+        const rise = (this.data.heightAt(pos.x + (wx / l) * REACH, pos.z + (wz / l) * REACH) - terrain) / REACH;
+        if (rise > EASE) { const t = Math.min(1, (rise - EASE) / (CLIMB - EASE)), f = 1 - 0.5 * t * t * (3 - 2 * t); wx *= f; wz *= f; }
+      }
     }
     const k = 1 - Math.exp(-dt * (this.sliding ? 6 : riding ? 3.2 : this.jet > 0 ? 6 : this.grounded || this.swimming ? 11 : 3));
     vel.x += (wx - vel.x) * k; vel.z += (wz - vel.z) * k;
 
     // try to move, sliding along obstacles and refusing steps that are too high
+    const col = this.collision;
     const tryMove = (dx, dz) => {
       const p = this._p;
       p.x = pos.x + dx; p.z = pos.z + dz;
-      this.collision.resolve(p, RADIUS, pos.y);
-      this.collision.confine(p); // the mountains and the open sea
-      if (this.collision.blocked(p.x, p.z, pos.y)) return false; // the side of a floating stone
-      const g = this.collision.groundAt(p.x, p.z, pos.y + 0.3);
-      if ((this.grounded || this.swimming) && g - pos.y > STEP && !(this.swimming && g < water + 0.4)) return false;
-      if (!this.grounded && !this.swimming && g > pos.y + 0.25) return false;
+      col.resolve(p, RADIUS, pos.y);
+      col.confine(p); // the mountains and the open sea
+      if (col.blocked(p.x, p.z, pos.y)) return BLOCKED; // the side of a floating stone
+      const feet = this.grounded ? Math.max(pos.y, here) : pos.y;
+      const g = col.groundAt(p.x, p.z, feet + 0.3);
+      if (this.grounded || this.swimming) { if (g - feet > STEP && !(this.swimming && g < water + 0.4)) return BLOCKED; }
+      else if (g > pos.y + 0.25) return BLOCKED;
       // bare rock that is too steep is not walked up (steps, decks and cave floors are not bare ground)
-      if (this.grounded && !this.sliding && g - pos.y > 0.04 && Math.abs(g - this.data.heightAt(p.x, p.z)) < 0.02 && !this.collision.inCave(p.x, p.z)) {
-        const d = Math.hypot(p.x - pos.x, p.z - pos.z);
-        if (d > 1e-4 && (g - pos.y) / d > CLIMB) return false;
+      if (this.grounded && !this.sliding && g > here + 1e-4 && Math.abs(g - this.data.heightAt(p.x, p.z)) < 0.02 && !col.inCave(p.x, p.z)) {
+        const mx = p.x - pos.x, mz = p.z - pos.z, d = Math.hypot(mx, mz);
+        if (d > 1e-6) {
+          const qx = pos.x + (mx / d) * REACH, qz = pos.z + (mz / d) * REACH, far = this.data.heightAt(qx, qz);
+          if ((far - here) / REACH > CLIMB && Math.abs(col.groundAt(qx, qz, feet + 0.3) - far) < 0.02 && !col.inCave(qx, qz)) return STEEP;
+        }
       }
-      pos.x = p.x; pos.z = p.z;
-      return true;
+      pos.x = p.x; pos.z = p.z; here = g;
+      return OK;
     };
     // in short steps, so that a slow frame cannot carry the walker through a thin obstacle (railings, walls)
     const dist = Math.hypot(vel.x, vel.z) * dt;
     const steps = Math.max(1, Math.ceil(dist / 0.22));
-    const dx = (vel.x * dt) / steps, dz = (vel.z * dt) / steps;
+    let dx = (vel.x * dt) / steps, dz = (vel.z * dt) / steps;
     for (let i = 0; i < steps && (dx || dz); i++) {
-      if (tryMove(dx, dz)) continue;
-      const okX = tryMove(dx, 0), okZ = tryMove(0, dz);
+      const res = tryMove(dx, dz);
+      if (res === OK) continue;
+      if (res === STEEP) {
+        // too steep to go up: what is left of the stride follows the contour line
+        const g = this._g, steep = this._gradient(pos.x, pos.z, g);
+        if (steep > 1e-3) {
+          const ux = g.x / steep, uz = g.z / steep, up = dx * ux + dz * uz, v = vel.x * ux + vel.z * uz;
+          if (up > 0) { dx -= up * ux; dz -= up * uz; }
+          if (v > 0) { vel.x -= v * ux; vel.z -= v * uz; }
+        }
+        if (Math.hypot(dx, dz) < 1e-5 || tryMove(dx, dz) !== OK) { vel.x = 0; vel.z = 0; break; }
+        continue;
+      }
+      const okX = tryMove(dx, 0) === OK, okZ = tryMove(0, dz) === OK;
       if (!okX) vel.x = 0;
       if (!okZ) vel.z = 0;
       if (!okX && !okZ) break;
     }
 
     // vertical motion
-    const ground = this.collision.groundAt(pos.x, pos.z, pos.y + 0.3);
+    const ground = col.groundAt(pos.x, pos.z, pos.y + 0.3);
     if (this.swimming) {
       const target = water - 1.05;
       pos.y += (target - pos.y) * Math.min(1, dt * 5);
@@ -238,9 +274,14 @@ export class PlayerController {
     } else if (this.grounded) {
       this.fuel = JET.time;
       this.jet = 0;
+      // the feet follow a slope exactly, and take a step (a tread, a kerb) smoothly
+      if (wasGrounded) {
+        const lim = Math.hypot(pos.x - fromX, pos.z - fromZ) * 2.5 + 0.01, d = ground - this._ground;
+        pos.y += d > lim ? lim : d < -lim ? -lim : d;
+      }
       if (control && inp.jump && !this.sliding) { vel.y = JUMP * (riding ? 0.75 : 1); this.grounded = false; }
       else if (ground < pos.y - 0.45) { this.grounded = false; vel.y = 0; }
-      else pos.y += (ground - pos.y) * Math.min(1, dt * 22);
+      else pos.y += (ground - pos.y) * (1 - Math.exp(-dt * 22));
     } else {
       // a second press of "jump" in the air lights the jetpack, for as long as its fuel lasts
       if (control && inp.jump && this.jet <= 0 && this.fuel > 0.1 && !riding && this.canFly(pos)) { this.jet = this.fuel; this.fuel = 0; vel.y = Math.max(vel.y, 2.5); }
@@ -255,11 +296,13 @@ export class PlayerController {
       // falling into deep water
       if (depth > 1.2 && pos.y < water - 0.9) { this.swimming = true; this.splashed = Math.max(1, -vel.y); vel.y = 0; }
     }
+    this._ground = ground;
 
-    // face the way we are going
-    const sp = Math.hypot(vel.x, vel.z);
+    // face the way we are going; the speed is the one really made (pushing against a wall is not walking)
+    const push = Math.hypot(vel.x, vel.z);
+    const sp = Math.min(push, Math.hypot(pos.x - fromX, pos.z - fromZ) / Math.max(dt, 1e-4) + 0.4);
     this.speed = sp;
-    if (sp > 0.4) {
+    if (push > 0.4) {
       const target = Math.atan2(vel.x, vel.z);
       let d = target - this.yaw;
       d = Math.atan2(Math.sin(d), Math.cos(d));

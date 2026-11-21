@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { Parts, MeshBuilder } from '../../props/MeshBuilder.js';
 import { LAYER, staticCaster } from '../../../render/Shadows.js';
 import { ANIM, SEAT } from '../../../player/Character.js';
+import { seatAt } from '../../../player/PlayerController.js';
 import { PIER, PROMENADE, COAST, pierToWorld, BEACH_LOUNGE } from '../../layout/layout.js';
 import { roadRibbon } from '../../props/Structures.js';
 import { distanceCuller, mergeStatic } from '../../props/StaticBatch.js';
@@ -176,6 +177,10 @@ export class PierZone {
     wood.box(-0.9, 0.6, 0.2, 0.9, 0.95, 0.25, { tile: 1 });
     for (const sx of [-0.8, 0.8]) { iron.box(sx - 0.03, 0, -0.22, sx + 0.03, 0.42, 0.22); iron.box(sx - 0.03, 0.42, 0.18, sx + 0.03, 0.95, 0.24); }
     for (const b of [wood, iron]) b.pop();
+    // two places, back to the backrest (which is on the +Z side of the bench)
+    const ax = Math.cos(yaw), az = -Math.sin(yaw);
+    for (const s of [-0.45, 0.45]) this.world.seats.push(seatAt(x + ax * s, y + 0.47, z + az * s, yaw + Math.PI));
+    this.colliders.push({ type: 'box', x, z, hw: 0.9, hl: 0.27, yaw, y0: y - 1, y1: y + 0.7 });
   }
 
   _beach(parts) {

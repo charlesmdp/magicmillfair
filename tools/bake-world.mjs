@@ -637,6 +637,19 @@ const disc = (x, z, r, fn) => {
     climbMask.d[q] = 1 - smoothstep(K.r - 0.5, K.r + 2.5, d);
   });
   disc(K.x, K.z, K.r + 16, (q) => { noTrees.d[q] = 1; }); // (and no tree in the way of those who fall)
+  {
+    // …and, behind the lawn, a bay cut into the hill at the same level: the tower of those who watch stands in it
+    const T = K.tower, ux = T.x - K.x, uz = T.z - K.z, len2 = ux * ux + uz * uz;
+    disc(T.x, T.z, T.r + 32, (q, d, x, z) => {
+      const t = clamp(((x - K.x) * ux + (z - K.z) * uz) / len2, 0, 1);
+      const e = Math.hypot(x - K.x - ux * t, z - K.z - uz * t) - T.r; // how far outside the bay
+      if (e > 8) return;
+      H.d[q] = lerp(H.d[q], K.y, 1 - smoothstep(0, 8, e));
+      if (e < 1) detailMask.d[q] = 0;
+      climbMask.d[q] = Math.max(climbMask.d[q], 1 - smoothstep(-0.5, 2.5, e));
+    });
+    disc(T.x, T.z, T.r + 9, (q) => { noTrees.d[q] = 1; });
+  }
   // --- the acid pond: a bowl in the woods, bare and burnt round its rim
   {
     const A = L.ACID;

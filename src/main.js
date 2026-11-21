@@ -147,7 +147,8 @@ async function boot() {
     // picking flowers: looked for a few times a second around the feet
     let flower = null, wait = 0;
     world.actionSources.push((p) => {
-      if (--wait <= 0) { wait = 12; flower = world.scatter.flowerNear(p.pos.x, p.pos.z); }
+      // (flowers grow on the ground: nothing to pick from a stone, a deck or a roof above them)
+      if (--wait <= 0) { wait = 12; flower = Math.abs(p.pos.y - data.heightAt(p.pos.x, p.pos.z)) < 0.7 ? world.scatter.flowerNear(p.pos.x, p.pos.z) : null; }
       return flower ? { label: look.bouquet ? 'Add to the bouquet' : 'Pick a flower', run: () => { look.kinds = [...(look.kinds || []), flower].slice(-9); look.bouquet = true; wait = 0; } } : null;
     });
   }

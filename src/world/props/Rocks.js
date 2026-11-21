@@ -2,7 +2,7 @@
 // Three shapes, instanced; placed once at load from the baked data (deterministic).
 import * as THREE from 'three';
 import { LAYER } from '../../render/Shadows.js';
-import { CAVES, STAIRWAY } from '../layout/layout.js';
+import { CAVES, STAIRWAY, FALLS } from '../layout/layout.js';
 
 function hash(n) {
   const s = Math.sin(n * 127.1 + 311.7) * 43758.5453;
@@ -49,11 +49,18 @@ export class Rocks {
     this.colliders = [];
     const data = world.data, meta = data.meta;
     const items = [];
-    // no boulder in front of a cave or at the foot of the stairway
+    // no boulder in front of a cave, at the foot of the stairway, nor on any flight of steps
     const clear = [...CAVES.map((c) => [c.nodes[0][0], c.nodes[0][1], 8]), [STAIRWAY.points[0][0], STAIRWAY.points[0][1], 6]];
+    const flights = [];
+    for (const st of [STAIRWAY, ...FALLS.stairs]) for (let k = 0; k + 1 < st.points.length; k++) flights.push([st.points[k], st.points[k + 1], st.width / 2 + 0.9]);
     const put = (x, z, size, sink = 0.3) => {
       if (!data.inside(x, z, 4)) return;
       for (const [cx, cz, r] of clear) if ((x - cx) ** 2 + (z - cz) ** 2 < r * r) return;
+      for (const [p, q, half] of flights) {
+        const dx = q[0] - p[0], dz = q[1] - p[1];
+        const t = Math.min(1, Math.max(0, ((x - p[0]) * dx + (z - p[1]) * dz) / (dx * dx + dz * dz)));
+        if (Math.hypot(x - p[0] - dx * t, z - p[1] - dz * t) < half + size * 0.8) return;
+      }
       const ground = data.heightAt(x, z), water = data.waterAt(x, z);
       if (water > -500 && water - ground > 1.3) return; // too deep to show
       items.push({ x, y: ground - size * sink, z, size });
