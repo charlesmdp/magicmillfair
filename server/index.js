@@ -226,6 +226,7 @@ async function onRequest(req, res) {
 // ------------------------------------------------------------------------------------------------- presence
 
 const rooms = new Map(); // room id → Room
+const blasts = new Map(); // room id → when its big red button last went off (a room that empties is forgotten; this is not)
 let nextId = 1;
 
 // What a Room needs from this host (see ./protocol.js). Connections are `ws` sockets.
@@ -260,7 +261,10 @@ function onConnection(ws, roomId, from) {
   ws.on('error', () => {}); // e.g. oversized frame: ws closes the socket itself (1009)
   if (from.banned) { ws.send('{"t":"kicked","ban":true}'); return ws.close(4003, 'banned'); }
   let room = rooms.get(roomId);
-  if (!room) rooms.set(roomId, (room = new Room(io)));
+  if (!room) {
+    rooms.set(roomId, (room = new Room({ ...io, fired: (at) => { if (blasts.size > 5000) blasts.clear(); blasts.set(roomId, at); } })));
+    if (blasts.has(roomId)) room.blastAt = blasts.get(roomId);
+  }
   const p = room.add(ws, undefined, from);
   if (!p) { ws.send('{"t":"full"}'); return ws.close(1013, 'full'); }
   ws.on('pong', () => { p.alive = true; });

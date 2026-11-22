@@ -25,6 +25,8 @@ import { SPAWN, ZONES, CLIMB, RACE } from './world/layout/layout.js';
 import { VILLAGE_PERKS, VILLAGE_PITCH, money } from './world/layout/sponsors.js';
 import { FEATURES } from './app/config.js';
 import { Soundscape } from './audio/Soundscape.js';
+import { Blast } from './world/effects/Blast.js';
+import { BLAST_EVERY } from '../server/protocol.js';
 
 const params = new URLSearchParams(location.search);
 const SHOT = params.has('shot'); // screenshot tool: no interface, free camera
@@ -157,6 +159,8 @@ async function boot() {
       audio.play(important ? 'score' : 'chat');
       if (important) hud.note(`${peer.name}: ${text}`, 9000); // (an administrator's announcement: on the screen too)
     });
+    presence.on('blast', ({ self, peer, since }) => detonate(self ? name : peer?.name || 'Somebody', since));
+    presence.on('blastWait', ({ wait }) => hud.note(`Patience: one nuclear explosion every fifteen minutes. Next one in ${Math.ceil(wait / 60000)} min.`, 4500));
     // named an administrator by one of them: the key of our own is kept, and checked like any other
     presence.on('promoted', ({ key, by, id }) => {
       if (key) adminKey(key).then(() => { if (who.admin) hud.addChat('✦', 5, `${by || 'An administrator'} has made you an administrator. The list of who is here shows you more, and "Important" is yours in the chat.`, true); });
@@ -454,6 +458,36 @@ async function boot() {
     hud.note(word, 4200);
     audio.play('teleport');
   };
+  // The big red button at the top of the island: a nuclear explosion far out at sea — one for the whole room,
+  // and no other for a quarter of an hour (the relay sees to it; alone, this browser does).
+  const blast = new Blast();
+  scene.add(blast.group);
+  const button = world.places.button;
+  const bomb = { readyAt: Number(store.get('mmf.blast')) || 0, fuse: 0, since: 0 };
+  const blastLeft = () => Math.max(0, (presence?.mode === 'online' ? presence.blastReadyAt : bomb.readyAt) - Date.now());
+  const mmss = (ms) => { const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  /** It is going off: a siren first (unless we arrive in the middle of the show), then the flash. */
+  const detonate = (by, since = 0) => {
+    if (blast.active || bomb.fuse > 0) return;
+    if (since > 0) { blast.fire(since); return; }
+    bomb.fuse = 1.9;
+    button.press();
+    audio.play('press');
+    hud.addChat('✦', 5, `${by} pressed the big red button. Enjoy the show!`, true);
+  };
+  const pressButton = () => {
+    if (blastLeft() > 0) { hud.note(`Patience: one nuclear explosion every fifteen minutes. Next one in ${mmss(blastLeft())}.`, 4500); return; }
+    if (presence?.sendBlast()) return; // (the relay tells the whole room, us included)
+    bomb.readyAt = Date.now() + BLAST_EVERY;
+    store.set('mmf.blast', String(bomb.readyAt));
+    detonate(name);
+  };
+  world.actionSources.push((p) => {
+    if (!near(p, [button.x, button.z], button.reach) || Math.abs(p.pos.y - button.y) > 2.5) return null;
+    const left = blastLeft();
+    return { label: left > 0 ? `The button is recharging · ${mmss(left)}` : 'Press the big red button', run: pressButton };
+  });
+  Object.assign(app, { blast, pressButton, bomb });
   // The administrator goes where they like: next to a visitor ({ id }), or to a spot of the map ({ x, z }).
   const goTo = (to) => {
     if (!who.admin || state.mode !== 'walk' || player.dead) return;
@@ -763,6 +797,20 @@ async function boot() {
         camera.position.copy(b.pos).lerp(_p, k);
         camera.quaternion.copy(b.quat).slerp(_q, k);
       }
+    }
+    {
+      // the big red button: the fuse, then the show — the screen whitens, the camera trembles when the blast arrives
+      if (bomb.fuse > 0 && (bomb.fuse -= dt) <= 0) blast.fire(0);
+      const fx = blast.update(dt, camera);
+      if (fx.boom) audio.play('boom');
+      hud.setFlash(fx.flash);
+      if (fx.shake > 0.003 && !fair.session) { // (not while a game is being played: that would be unfair)
+        camera.position.x += (Math.random() - 0.5) * fx.shake;
+        camera.position.y += (Math.random() - 0.5) * fx.shake * 0.7;
+        camera.position.z += (Math.random() - 0.5) * fx.shake;
+      }
+      bomb.since += dt;
+      if (button.pressed > 0 || bomb.since > 0.5) { button.update(button.pressed > 0 ? dt : 0, blastLeft() <= 0); bomb.since = 0; }
     }
     camera.updateMatrixWorld();
     interact.update(mode === 'walk' && !fair.session);

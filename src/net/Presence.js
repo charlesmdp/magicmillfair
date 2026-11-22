@@ -73,6 +73,7 @@ export class Presence {
     this.device = deviceId();
     this.admin = false; // the relay has recognised an administrator's key
     this.owner = false; // …the owner's
+    this.blastReadyAt = 0; // when the big red button may be pressed again (Date.now() clock; 0: now)
     this.kicked = null; // { ban } once the administrator has put this visitor out
     /**
      * Everybody else in the room. `visible`: drawn (the relay tells us about them in detail); `far`: in the
@@ -165,6 +166,15 @@ export class Presence {
   who() { if (this.admin && this._tr) this._tr.send({ t: 'who' }); }
   kick(id) { if (this.admin && this._tr) this._tr.send({ t: 'kick', id }); }
   ban(id, hours = 0) { if (this.admin && this._tr) this._tr.send({ t: 'ban', id, h: hours }); }
+  /**
+   * The big red button. True when the relay was asked (it answers the whole room with a 'blast' event, or
+   * this visitor alone with 'blastWait' when it is too soon); false when there is no relay to ask.
+   */
+  sendBlast() {
+    if (!this._tr || this.mode !== 'online') return false;
+    this._tr.send({ t: 'n' });
+    return true;
+  }
   /** Names that visitor an administrator (their browser is handed a key of its own: a 'promoted' event there). */
   promote(id) { if (this.admin && this._tr) this._tr.send({ t: 'promote', id }); }
   /** The owner has taken the title away (see /api/admins): whoever holds that key in this room loses it at once. */
@@ -266,7 +276,13 @@ export class Presence {
     } else if (m.t === 'leave') {
       if (this._leave(m.id)) this._changed();
     } else if (m.t === 'e' && this.peers.has(m.id) && int(m.e, 31, -1) >= 0) this._emit('emote', { id: m.id, emote: m.e });
-    else if (m.t === 'g' && this.peers.has(m.id) && typeof m.b === 'string') this._emit('score', { id: m.id, peer: this.peers.get(m.id), board: m.b });
+    else if (m.t === 'n' && mode === 'online') {
+      // the big red button went off (for everybody), or it is too soon (for who pressed it)
+      const wait = Number.isFinite(m.wait) ? Math.max(0, m.wait) : 0;
+      this.blastReadyAt = Date.now() + wait;
+      if (Number.isInteger(m.id)) this._emit('blast', { id: m.id, self: m.id === this.id, peer: this.peers.get(m.id) || null, since: 0 });
+      else this._emit('blastWait', { wait });
+    } else if (m.t === 'g' && this.peers.has(m.id) && typeof m.b === 'string') this._emit('score', { id: m.id, peer: this.peers.get(m.id), board: m.b });
     else if (m.t === 'c' && this.peers.has(m.id)) {
       const text = cleanChat(m.m);
       if (text) this._emit('chat', { id: m.id, peer: this.peers.get(m.id), text, near: !!m.n, important: !!m.i });
@@ -290,6 +306,12 @@ export class Presence {
     this._changed();
     this._sentKey = ''; this._due = 0; // share our own state right away
     this._seen = true;
+    // (the big red button: when it is ready again; a show that is still going on is joined in the middle)
+    this.blastReadyAt = 0;
+    if (mode === 'online' && Array.isArray(m.blast) && Number.isFinite(m.blast[0])) {
+      this.blastReadyAt = Date.now() + Math.max(0, m.blast[0]);
+      if (Number.isFinite(m.blast[1]) && m.blast[1] < 50_000) this._emit('blast', { id: 0, self: false, peer: null, since: m.blast[1] / 1000 });
+    }
     this.admin = this.owner = false;
     if (tr && mode === 'online' && this._key) tr.send({ t: 'admin', key: this._key });
     this._flush(now());

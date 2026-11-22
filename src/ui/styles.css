@@ -352,6 +352,7 @@ body.dead #view { filter: grayscale(1) contrast(1.15) brightness(0.72); }
 .touch .prompts { left: auto; right: calc(16px + var(--safe-r)); bottom: calc(108px + var(--safe-b)); transform: none; flex-direction: column; align-items: flex-end; }
 
 /* chat */
+.flash { position: absolute; inset: 0; display: none; pointer-events: none !important; background: radial-gradient(circle at 50% 45%, #fff, #fff6dc); z-index: 3; }
 .chat { position: absolute; left: calc(172px + var(--safe-l)); bottom: calc(12px + var(--safe-b)); width: min(380px, 46vw); pointer-events: none !important; }
 .chat .log { max-height: 148px; overflow: hidden; display: flex; flex-direction: column; opacity: 0; transition: opacity 0.6s; scrollbar-width: thin; }
 .chat .log > :first-child { margin-top: auto; } /* (the lines sit at the bottom, and what is above can still be scrolled to) */

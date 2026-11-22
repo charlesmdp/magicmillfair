@@ -485,7 +485,7 @@ async function pageMain(opt) {
     };
     for (const name of SOUNDS) {
       if (opt.only && !opt.only.includes(name) && !opt.only.includes('effects')) continue;
-      const m = await one(name);
+      const m = await one(name, undefined, name === 'boom' ? 14 : 5.5); // (the blast rolls away over the hills for a while)
       const status = [];
       if (m.bad) status.push(fail('bad samples'));
       if (m.peak >= 0.99) status.push(fail('clips')); else if (m.peak > 0.7) status.push('WARN: into the safety net');

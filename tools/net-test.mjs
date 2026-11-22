@@ -680,6 +680,19 @@ async function testModeration(start, dist) {
     again1?.ok === true && again1.owner === undefined && removed?.removed === 1 && removed.admins.length === 0 && !!lost && !!lost2 && dead.status === 403 && other.msgs.filter((m) => m.t === 'who').length === 1,
     [again1, removed, !!lost, !!lost2, dead.status]);
   await again.close();
+  // the big red button: one explosion for the whole room; then it says how long to wait — to newcomers too
+  back.send({ t: 'n' });
+  const boomA = await adm.wait((m) => m.t === 'n'), boomB = await back.wait((m) => m.t === 'n');
+  other.send({ t: 'n' });
+  const tooSoon = await other.wait((m) => m.t === 'n' && m.id === undefined);
+  await sleep(TICK * 4);
+  const late = new Client(port, 'mod', from(8));
+  const lateWelcome = await late.hello('Late', 8);
+  check('the big red button: it goes off for the whole room, once; then it says how long to wait, to newcomers too',
+    boomA?.id === back.id && boomB?.id === back.id && boomA.wait === 900000 && tooSoon?.wait > 880000 && tooSoon.wait <= 900000 && adm.msgs.filter((m) => m.t === 'n').length === 1
+    && Array.isArray(lateWelcome?.blast) && lateWelcome.blast[0] > 880000 && lateWelcome.blast[0] <= 900000 && lateWelcome.blast[1] >= 0 && lateWelcome.blast[1] < 20000,
+    [boomA, boomB, tooSoon, lateWelcome?.blast]);
+  await late.close();
   // guessing the key: a handful of tries, then the door
   const guesser = new Client(port, 'mod', from(6));
   await guesser.hello('Guesser', 6);

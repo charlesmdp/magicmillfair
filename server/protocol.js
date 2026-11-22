@@ -5,11 +5,14 @@
 // Protocol (JSON text frames)
 //   client → server   {t:'hello',name,color,v:2,dev?}   {t:'s',p:[x,y,z,yaw],a,f}   {t:'e',e}   {t:'c',m,n?}
 //                     {t:'g',b}   a score of mine has just gone on board b (relayed as {t:'g',id,b})
+//                     {t:'n'}     the big red button: answered {t:'n',id,wait} to the whole room when it goes
+//                                 off (wait: ms before the next one), {t:'n',wait} to the sender when it is too soon
 //                     {t:'ping',c}   {t:'admin',key}   and, from an administrator: {t:'who'}   {t:'kick',id}
 //                     {t:'ban',id,h}   {t:'promote',id} (names that visitor an administrator)   {t:'demote',key}
 //                     (the owner: the administrator whose key has that id is one no more)   {t:'c',m,i:1} (a
 //                     line on the "important" channel: relayed to the whole room, marked as such)
-//   server → client   {t:'welcome',id,now,tick,idle?,near,peers:[{id,name,color,p,a,f}]}   {t:'join',id,name,color}
+//   server → client   {t:'welcome',id,now,tick,idle?,near,blast?:[ms before the button is ready, ms since it went off],
+//                     peers:[{id,name,color,p,a,f}]}   {t:'join',id,name,color}
 //                     {t:'leave',id}   {t:'u',now,s:[[id,x,y,z,yaw,a,f,age]],g?:[id]}   {t:'e',id,e}
 //                     {t:'c',id,m,n?}   {t:'m',p:[id,x,z,…]}   {t:'w',n}   {t:'pong',c,now}   {t:'full'}
 //                     {t:'admin',ok,owner?,out?} (out: the title was taken away)   {t:'who',list:[{id,name,ip,ua,dev,since,cc,city,admin}]}
@@ -40,6 +43,7 @@ export const CHAT_MAX = 200; // characters in a chat line
 export const CHAT_BURST = 5, CHAT_EVERY = 2000; // chat lines: five in a row, then one every two seconds
 export const CHAT_NEAR = 20; // m: how far a line said "to those nearby" carries
 export const NEAR = 40, RANGE = 220; // how many others one is told about in detail, and from how far (m)
+export const BLAST_EVERY = 15 * 60_000; // ms between two presses of the big red button, for a whole room
 const AREA_MS = 400, MAP_MS = 2000; // how often the circles and the map are worked out
 const KEY_TRIES = 5; // wrong administrator keys a connection may send
 
@@ -111,6 +115,8 @@ export class Room {
    *                                    { rank: 'owner' | 'admin', id } — or a promise of one of these (default: nobody's)
    *   promote({ name, by })            optional: names an administrator; resolves to { key, id } (the key to hand over) or null
    *   ban({ ip, dev, name, hours })    optional: keep someone out from now on (0 hours: for good)
+   *   fired(at)                        optional: the big red button went off at `at` (relay clock): a host that
+   *                                    forgets its rooms keeps it, and gives it back by setting room.blastAt
    */
   constructor(io) {
     this.io = io;
@@ -206,9 +212,20 @@ export class Room {
       if (p.scored !== undefined && t - p.scored < 3000) return;
       p.scored = t;
       this.broadcast(`{"t":"g","id":${p.id},"b":"${m.b}"}`, p);
-    } else if (m.t === 'c') this._chat(p, m, t);
+    } else if (m.t === 'n') this._blast(p, t);
+    else if (m.t === 'c') this._chat(p, m, t);
     else if (m.t === 'admin') this._admin(p, m);
     else if (p.admin && (m.t === 'who' || m.t === 'kick' || m.t === 'ban' || m.t === 'promote' || m.t === 'demote')) this._moderate(p, m);
+  }
+
+  // The big red button: one explosion for the whole room, and no other before BLAST_EVERY has gone by.
+  _blast(p, t) {
+    const left = this.blastAt === undefined ? 0 : this.blastAt + BLAST_EVERY - t;
+    if (left > 0) return this.io.send(p.conn, `{"t":"n","wait":${Math.ceil(left)}}`);
+    this.blastAt = t;
+    this.io.fired?.(t);
+    const text = `{"t":"n","id":${p.id},"wait":${BLAST_EVERY}}`;
+    for (const o of this.players.values()) if (o.joined) this.io.send(o.conn, text);
   }
 
   _chat(p, m, t) {
@@ -285,6 +302,8 @@ export class Room {
         .map((o) => ({ id: o.id, name: o.name, color: o.color, ...(o.state && !crowded && { p: o.state.slice(0, 4), a: o.state[4], f: o.state[5] }) }));
       const welcome = { t: 'welcome', id: p.id, now: this.io.now(), tick: this.io.tick, near: this.near, peers };
       if (this.io.idle !== undefined) welcome.idle = this.io.idle;
+      // (the big red button: how long before it is ready again, how long ago it went off)
+      if (this.blastAt !== undefined && this.blastAt + BLAST_EVERY > welcome.now) welcome.blast = [Math.ceil(this.blastAt + BLAST_EVERY - welcome.now), Math.max(0, Math.floor(welcome.now - this.blastAt))];
       this.io.send(p.conn, JSON.stringify(welcome));
       this.pending = true; // (the crowd may have just become one)
     }

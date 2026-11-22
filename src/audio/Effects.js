@@ -54,6 +54,21 @@ const RECIPES = {
     s.tone(t + 0.02, 'sine', 380, 190, 0.08, 0.26, 0.006, 0.05, 0.025);
     s.tone(t + 0.14, 'sine', 210, 330, 0.07, 0.22, 0.006, 0.045, 0.025);
   },
+  // the big red button: the clunk of the press and a hand-cranked siren winding up…
+  press(s, t) {
+    s.tone(t, 'sine', 190, 70, 0.07, 0.4, 0.002, 0.02, 0.06);
+    s.noise(t, 'pink', 'lowpass', 900, 300, 0.7, 0.1, 0.002, 0.02, 0.05);
+    s.tone(t + 0.15, 'pulse', 220, 660, 1.5, 0.11, 0.2, 1.6, 0.35);
+    s.tone(t + 0.15, 'pulse', 223, 668, 1.5, 0.08, 0.2, 1.6, 0.35);
+  },
+  // …and, when the blast wave arrives: a crack, a thump felt in the chest, a roar that rolls away over the hills
+  boom(s, t) {
+    s.noise(t, 'white', 'highpass', 1800, 500, 0.7, 0.12, 0.002, 0.05, 0.22);
+    s.tone(t, 'sine', 72, 24, 2.2, 0.44, 0.004, 0.7, 0.8);
+    s.tone(t + 0.08, 'sine', 44, 30, 3.4, 0.2, 0.05, 2.4, 0.9);
+    s.noise(t, 'brown', 'lowpass', 440, 70, 0.7, 0.3, 0.01, 2.6, 1.0);
+    s.noise(t + 0.7, 'pink', 'lowpass', 210, 60, 0.7, 0.16, 0.4, 4.4, 1.0);
+  },
   wasted(s, t) {
     s.tone(t, 'sine', 92, 36, 0.5, 0.5, 0.004, 0.1, 0.28);
     s.tone(t, 'brass', 73.4, 69.3, 1.2, 0.18, 0.02, 0.6, 0.3); // two low notes that grate against each other, sinking

@@ -697,6 +697,41 @@ try {
     check('the quad race: asked for in the paddock, three laps against the clock, the pads and the ramp on the way, the time on the board', race.ask.some((t) => t.startsWith('Race:')) && race.over && race.laps.length === 3 && race.time > 35000 && race.time < 90000 && race.still > 150 && race.air > 30 && race.boost > 100 && race.top > 24 && race.riding && race.quad && race.after.closed && !race.after.riding && !race.after.driver && best === race.time, JSON.stringify(race));
   }
 
+  // --- the big red button at the top of the island: a show far out at sea, then a quarter of an hour of patience
+  {
+    const red = await page.evaluate(() => new Promise((res) => {
+      const app = window.__mmf, { player, hud, blast, world } = app, b = world.places.button, out = {};
+      const prompts = () => [...document.querySelectorAll('.prompt.on span')].map((e) => e.textContent);
+      localStorage.removeItem('mmf.blast'); app.bomb.readyAt = 0;
+      player.teleport(b.x - 1.3, b.z + 0.2, Math.PI / 2);
+      app.rig.snap(player.pos, -Math.PI / 2);
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        out.ask = prompts();
+        out.height = player.pos.y;
+        app.input.emit?.('interact');
+        if (!app.bomb.fuse) app.pressButton();
+        out.fuse = app.bomb.fuse;
+        out.said = [...document.querySelectorAll('.chat .log p')].map((p) => p.textContent).slice(-1)[0];
+        const t0 = performance.now();
+        const wait = () => {
+          if (blast.active && blast.t > 0.2) {
+            out.active = true; out.t = blast.t; out.visible = blast.group.visible;
+            out.flash = Number(document.querySelector('.flash').style.opacity) || 0;
+            out.again = prompts();
+            // (the rest of the show is not waited for: it is cut short here)
+            blast.t = 61.9;
+            requestAnimationFrame(() => requestAnimationFrame(() => { out.over = !blast.active && !blast.group.visible; out.exposure = app.blast._exposure; res(out); }));
+          } else if (performance.now() - t0 > 20000) res(out);
+          else requestAnimationFrame(wait);
+        };
+        wait();
+      }));
+    }));
+    check('the big red button: asked for at the top of the island, a siren, then the show; no other for a quarter of an hour',
+      red.ask?.includes('Press the big red button') && red.height > 30 && red.fuse > 0 && /pressed the big red button/.test(red.said || '') && red.active && red.visible && red.flash > 0.05 && /recharging · 1[45]:\d\d/.test((red.again || []).join()) && red.over,
+      JSON.stringify(red));
+  }
+
   // --- quality change: the page reloads and resumes where we were
   await place(-121.8, -40, 184);
   await frames(3);

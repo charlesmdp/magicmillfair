@@ -11,6 +11,7 @@ import { Corridor, Polygon } from '../../Areas.js';
 import { buildCave } from './Caves.js';
 import { buildTemple } from './Temple.js';
 import { fallsRibbon } from '../../water/Falls.js';
+import { canvasBoard } from '../games/Boards.js';
 import { seatAt } from '../../../player/PlayerController.js';
 import { ANIM } from '../../../player/Character.js';
 import { STAIRWAY, VILLAGE, FALLS, COVE, ISLAND, islandPath, CAMP, BEACH_LOUNGE, POND_DECK, LEVELS, CAVES, GLADE } from '../../layout/layout.js';
@@ -609,7 +610,7 @@ export class PlacesZone {
       const y = ISLAND.y1 + 0.2;
       for (let k = 0; k < 7; k++) {
         const a = (k / 7) * Math.PI * 2 + 0.4, r = ISLAND.summit - 1.1, x = ISLAND.x + Math.cos(a) * r, z = ISLAND.z + Math.sin(a) * r;
-        if (k === 2) continue; // where the path comes up
+        if (k === 2 || k === 6) continue; // where the path comes up; where the sign of the button stands
         rock.tint(0.84, 0.82, 0.78, 1).place(x, y - 0.3, z, a, 0.06 * (k % 3 - 1), 0).box(-0.3, 0, -0.22, 0.3, 1.25 + 0.3 * (k % 2), 0.22, { tile: 1.6 }).pop();
         this.colliders.push({ type: 'circle', x, z, r: 0.4 });
       }
@@ -620,6 +621,7 @@ export class PlacesZone {
       const g = rock;
       this._bench(g, ISLAND.x - 3.2, y, ISLAND.z + 1.2, -Math.PI / 2); // facing the beach and the valley
       this._bench(g, ISLAND.x + 1.0, y, ISLAND.z + 3.3, 0);
+      this._button(parts, y);
     }
     {
       // where one lands: a mooring post, and a marker stone at the foot of the path
@@ -628,6 +630,97 @@ export class PlacesZone {
       this.colliders.push({ type: 'circle', x: p.x + p.nx * 2.6, z: p.z + p.nz * 2.6, r: 0.25 });
     }
     this._add('island', parts);
+  }
+
+  // ---------------------------------------------------------------------------
+  // The big red button, at the top of the island, facing the open sea: a drum painted like a circus ring, a
+  // red dome on it, a lamp that says whether it is ready, and beside it the sign that explains — in the best
+  // of moods — what it does (see effects/Blast.js). Bunting from the mast, because it is a fair.
+
+  _button(parts, y) {
+    const paint = parts.get('paint'), wood = parts.get('woodDark'), cloth = parts.get('doubleSided'), glow = parts.get('glow');
+    const bx = ISLAND.x + 3.6, bz = ISLAND.z - 0.1; // the button: on the side of the open sea
+    const RED = [0.85, 0.1, 0.08], CREAM = [0.97, 0.93, 0.84], GOLD = [1.5, 1.05, 0.25];
+    // the drum: stripes all round, a gold rim top and bottom, a hazard collar under the dome
+    for (let k = 0; k < 12; k++) {
+      const a0 = (k / 12) * Math.PI * 2, a1 = ((k + 1) / 12) * Math.PI * 2, c = k % 2 ? CREAM : RED, r = 0.42;
+      paint.tint(c[0], c[1], c[2], 1).quad(V(bx + Math.cos(a0) * r, y - 0.3, bz + Math.sin(a0) * r), V(bx + Math.cos(a0) * r, y + 0.9, bz + Math.sin(a0) * r), V(bx + Math.cos(a1) * r, y + 0.9, bz + Math.sin(a1) * r), V(bx + Math.cos(a1) * r, y - 0.3, bz + Math.sin(a1) * r));
+    }
+    paint.tint(GOLD[0], GOLD[1], GOLD[2], 1).cylinder(bx, y, bz, 0.46, 0.46, 0.07, 16).cylinder(bx, y + 0.86, bz, 0.47, 0.47, 0.07, 16);
+    for (let k = 0; k < 16; k++) {
+      const a0 = (k / 16) * Math.PI * 2, a1 = ((k + 1) / 16) * Math.PI * 2, c = k % 2 ? [0.06, 0.06, 0.07] : [1.5, 1.2, 0.1];
+      paint.tint(c[0], c[1], c[2], 1).quad(V(bx + Math.cos(a0) * 0.36, y + 0.932, bz + Math.sin(a0) * 0.36), V(bx + Math.cos(a0) * 0.2, y + 0.932, bz + Math.sin(a0) * 0.2), V(bx + Math.cos(a1) * 0.2, y + 0.932, bz + Math.sin(a1) * 0.2), V(bx + Math.cos(a1) * 0.36, y + 0.932, bz + Math.sin(a1) * 0.36));
+    }
+    this.colliders.push({ type: 'circle', x: bx, z: bz, r: 0.5 });
+    // what moves: the dome (it goes down when pressed), the two lamps (green: ready; red: recharging)
+    const piece = (material, fill) => { const p = new Parts(); fill(p.get(material)); const m = new THREE.Mesh(p.get(material).build(), this.world.materials[material]); m.frustumCulled = false; this.group.add(m); return m; };
+    const dome = piece('paint', (b) => b.tint(1.5, 0.07, 0.05, 1).lathe([[0.2, 0.0], [0.2, 0.05], [0.17, 0.11], [0.1, 0.155], [0.0, 0.17]], 14));
+    dome.name = 'moving-button:dome';
+    dome.position.set(bx, y + 0.93, bz);
+    const lamp = (c) => { const m = piece('glow', (b) => b.tint(c[0], c[1], c[2], 1).lathe([[0.0, -0.05], [0.05, 0.0], [0.0, 0.05]], 8)); m.name = 'moving-button:lamp'; m.position.set(bx - 0.44, y + 0.6, bz); return m; };
+    const ready = lamp([0.25, 1.6, 0.35]), wait = lamp([1.7, 0.2, 0.12]);
+    wait.visible = false;
+    // the sign, beside it, turned towards whoever comes up
+    const sa = (6 / 7) * Math.PI * 2 + 0.4, sr = ISLAND.summit - 1.45, sx = ISLAND.x + Math.cos(sa) * sr, sz = ISLAND.z + Math.sin(sa) * sr;
+    const yaw = Math.atan2(ISLAND.x - sx, ISLAND.z - sz), W = 2.7, H = 1.62, low = 0.95;
+    const sign = canvasBoard(1024, 614, (ctx, w, h) => {
+      const serif = "Georgia, 'Times New Roman', serif";
+      ctx.fillStyle = '#7a1420'; ctx.fillRect(0, 0, w, h);
+      // hazard stripes along the top and the bottom
+      for (const y0 of [0, h - 44]) { ctx.save(); ctx.beginPath(); ctx.rect(0, y0, w, 44); ctx.clip(); for (let x = -60; x < w + 60; x += 56) { ctx.fillStyle = (x / 56) % 2 ? '#15151a' : '#f2c14e'; ctx.beginPath(); ctx.moveTo(x, y0 + 44); ctx.lineTo(x + 28, y0 + 44); ctx.lineTo(x + 72, y0); ctx.lineTo(x + 44, y0); ctx.fill(); ctx.fillStyle = (x / 56) % 2 ? '#f2c14e' : '#15151a'; ctx.beginPath(); ctx.moveTo(x + 28, y0 + 44); ctx.lineTo(x + 56, y0 + 44); ctx.lineTo(x + 100, y0); ctx.lineTo(x + 72, y0); ctx.fill(); } ctx.restore(); }
+      ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 8; ctx.strokeRect(14, 58, w - 28, h - 116);
+      ctx.fillStyle = '#ffe9a8'; for (let i = 0; i < 28; i++) { ctx.beginPath(); ctx.arc(40 + i * 35, 80, 5.5, 0, 7); ctx.arc(40 + i * 35, h - 80, 5.5, 0, 7); ctx.fill(); }
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#f2c14e'; ctx.font = `700 40px ${serif}`; ctx.fillText('★  TODAY AND EVERY DAY  ★', w / 2, 128);
+      ctx.fillStyle = '#fff3d6'; ctx.font = `900 92px ${serif}`; ctx.fillText('FREE NUCLEAR', w / 2, 212, w - 80); ctx.fillText('EXPLOSION!', w / 2, 306, w - 80);
+      ctx.fillStyle = '#f2c14e'; ctx.font = `700 46px ${serif}`; ctx.fillText('Press the big red button.', w / 2, 388);
+      ctx.fillStyle = '#f6e7c8'; ctx.font = `italic 600 36px ${serif}`; ctx.fillText('Everything is destroyed already anyway,', w / 2, 444, w - 70); ctx.fillText('so enjoy the show!', w / 2, 488, w - 70);
+      ctx.fillStyle = '#d9b9a0'; ctx.font = '600 22px system-ui, sans-serif'; ctx.fillText('One every 15 minutes · No refunds · Do look at the flash, it is lovely', w / 2, 536, w - 60);
+    }, W, H);
+    sign.mesh.position.set(sx, y + low + H / 2, sz);
+    sign.mesh.rotation.y = yaw;
+    sign.mesh.name = 'island:sign';
+    this.group.add(sign.mesh);
+    // its two posts, its back, a gold ball on each post
+    paint.tint(0.34, 0.07, 0.09, 1).place(sx, y, sz, yaw).box(-W / 2, low, -0.05, W / 2, low + H, -0.012, { faces: 'zxXyY' });
+    wood.tint(0.95, 0.9, 0.8, 1).place(sx, y, sz, yaw);
+    for (const g of [-1, 1]) wood.box(g * (W / 2 + 0.07) - 0.06, -0.3, -0.09, g * (W / 2 + 0.07) + 0.06, low + H + 0.12, 0.03, { tile: 1 });
+    wood.pop();
+    paint.tint(GOLD[0], GOLD[1], GOLD[2], 1);
+    for (const g of [-1, 1]) paint.place(g * (W / 2 + 0.07), low + H + 0.12, -0.03).lathe([[0.0, 0.0], [0.09, 0.04], [0.1, 0.12], [0.0, 0.2]], 8).pop();
+    paint.pop();
+    for (const g of [-1, 1]) this.colliders.push({ type: 'circle', x: sx + Math.cos(yaw) * g * (W / 2 + 0.07), z: sz - Math.sin(yaw) * g * (W / 2 + 0.07), r: 0.16 });
+    this.colliders.push({ type: 'box', x: sx, z: sz, hw: W / 2, hl: 0.1, yaw, y0: y + low - 0.2, y1: y + low + H });
+    // bunting from the mast to the sign, and from the mast to the stones of the other side
+    const TONES = [RED, CREAM, [1.5, 1.05, 0.2], [0.1, 0.6, 0.65]];
+    const bunting = (a, b, n) => {
+      let prev = a;
+      for (let k = 1; k <= n; k++) {
+        const q = a.clone().lerp(b, k / n);
+        q.y -= Math.sin((k / n) * Math.PI) * 0.55;
+        wood.tint(0.9, 0.85, 0.7, 1).rod(prev, q, 0.012, 4, { caps: false });
+        const m = prev.clone().lerp(q, 0.5), c = TONES[k % TONES.length];
+        cloth.tint(c[0] * 1.1, c[1] * 1.1, c[2] * 1.1, 1).tri(prev.clone().lerp(q, 0.12), prev.clone().lerp(q, 0.88), V(m.x, m.y - 0.34, m.z));
+        prev = q;
+      }
+    };
+    const top = V(ISLAND.x, y + 5.4, ISLAND.z);
+    bunting(top, V(sx, y + low + H + 0.3, sz), 12);
+    bunting(top, V(ISLAND.x - 4.6, y + 1.7, ISLAND.z - 2.6), 11);
+    bunting(top, V(ISLAND.x + 0.8, y + 1.7, ISLAND.z + 5.0), 11);
+    glow.tint(1.0, 0.78, 0.35, 1).place(top.x, top.y + 0.12, top.z).lathe([[0.0, -0.1], [0.1, 0.0], [0.0, 0.1]], 6).pop();
+    /** Where one stands to press it, what moves, and how it is told what state it is in. */
+    this.button = {
+      x: bx, y, z: bz, reach: 1.7, pressed: 0,
+      /** `ready`: the lamp; `dt`: the dome comes back up after a press. */
+      update: (dt, isReady) => {
+        const b = this.button;
+        b.pressed = Math.max(0, b.pressed - dt * 1.6);
+        dome.position.y = y + 0.93 - 0.1 * Math.min(1, b.pressed * 2);
+        ready.visible = isReady; wait.visible = !isReady;
+      },
+      press: () => { this.button.pressed = 1; },
+    };
   }
 
   // ---------------------------------------------------------------------------

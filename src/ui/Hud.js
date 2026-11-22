@@ -177,6 +177,7 @@ export class Hud {
       <div class="roster" role="dialog" aria-label="Visitors">
         <div class="sheet"><h2>Who is here</h2><p class="lead"></p><div class="body"><div class="list"></div><div class="admins"></div><div class="bans"></div><div class="visitors"></div></div><button class="close" type="button">Close</button></div>
       </div>
+      <div class="flash" aria-hidden="true"></div>
       <div class="banner" role="alert"></div>
       <div class="panel" role="dialog" aria-label="Settings">
         <h2>Settings</h2>
@@ -475,6 +476,15 @@ export class Hud {
   /** { sound, music }, each 0..1. */
   setVolume(volume) { this.hud.querySelectorAll('[data-vol]').forEach((r) => { r.value = String(Math.round((volume[r.dataset.vol] ?? 0) * 100)); }); }
   setSettings(settings) { this.hud.querySelectorAll('[data-set]').forEach((b) => b.setAttribute('aria-pressed', String(!!settings[b.dataset.set]))); }
+  /** The screen whitens (0: not at all, 1: wholly): the flash of the big red button. */
+  setFlash(v) {
+    v = v < 0.01 ? 0 : Math.min(1, v);
+    if (v === this._flash) return;
+    this._flash = v;
+    const f = (this._flashEl ||= this.root.querySelector('.flash'));
+    f.style.opacity = String(v);
+    f.style.display = v ? 'block' : 'none';
+  }
   /** An administrator has the "important" channel of the chat. */
   setAdmin(on) {
     this._admin = !!on;

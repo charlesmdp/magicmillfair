@@ -16,7 +16,7 @@
 // (the administrator's key; without it nobody is the administrator), SCORE_SECRET (optional: signs the notes
 // of the game runs; drawn and kept by the notebook otherwise); for tests only: STALE_MS, DEBUG.
 import { DurableObject } from 'cloudflare:workers';
-import { Room as Relay, MAX_FRAME, NEAR, RANGE, cleanRoom, originAllowed, parseOrigins } from '../server/protocol.js';
+import { Room as Relay, MAX_FRAME, NEAR, RANGE, BLAST_EVERY, cleanRoom, originAllowed, parseOrigins } from '../server/protocol.js';
 import { Limiter, LIMITS, BODY_MAX, allowed, parseBody, mayPost, bodyMax } from '../server/api.js';
 import { stripeConfig } from '../server/stripe.js';
 import { route, banned, addBan } from '../server/routes.js';
@@ -68,6 +68,8 @@ export class Room extends DurableObject {
       // whose key: the owner's (the secret ADMIN_KEY), or that of an administrator who was named (the notebook knows them)
       admin: (key) => (sameSecret(key, env.ADMIN_KEY || '') ? { rank: 'owner', id: '' } : looksNamed(key) ? this.notebook('/admin-key', { key }).then((r) => r?.who || null) : false),
       promote: (who) => this.notebook('/promote', who).then((r) => r?.made || null),
+      // the big red button: when it last went off outlives the sleep of the room (and is forgotten once it may go off again)
+      fired: (at) => { ctx.waitUntil(Promise.all([ctx.storage.put('blastAt', at), ctx.storage.setAlarm(Date.now() + BLAST_EVERY + 5000)]).catch(() => {})); },
       // the list of who is kept out is the notebook's (every room asks it)
       ban: (who) => ctx.waitUntil(env.ROOMS.get(env.ROOMS.idFromName(NOTEBOOK)).fetch(new Request('https://notebook/ban', { method: 'POST', body: JSON.stringify(who) })).catch(() => {})),
     });
@@ -79,7 +81,11 @@ export class Room extends DurableObject {
       this.relay.add(ws, known).seen = ctx.getWebSocketAutoResponseTimestamp(ws) ? 0 : this.started;
     }
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(PING, PONG));
+    ctx.blockConcurrencyWhile(async () => { const at = await ctx.storage.get('blastAt'); if (Number.isFinite(at)) this.relay.blastAt = at; });
   }
+
+  /** The big red button may go off again: nothing is kept of the last time. */
+  async alarm() { await this.ctx.storage.delete('blastAt'); }
 
   /** Asks the notebook something only the rooms and the Worker may ask (a path that is not reachable from outside). */
   async notebook(path, body) {
