@@ -219,8 +219,9 @@ round the ring (50). The emote panel shows where you stand; the administrator ha
     the booth, or swing down from the ceiling on a cord; a golden one flashes past now and then (100 points);
     a black one must be left alone (−40). Everything comes quicker and stays less long as the game goes on.
     A row of hits pays a little more each time. Its backdrop is a sponsor's tarp.
-  - *Whack-a-Mole*: nine holes. Moles come up for less and less time; golden ones are worth three; hitting a
-    rabbit costs twenty points.
+  - *Whack-a-Mole*: nine molehills in a lawn. Moles come up for less and less time; golden ones are worth
+    three; one in a hard hat takes two blows; hitting a rabbit costs twenty points and ends the row of hits
+    that was paying a little more each time.
   - *Feed the Clown*: hold the button down and keep the jet of milk in his mouth — one smooth stream that
     takes a moment to follow the hand, splashes in his mouth and splatters anywhere else. He slides about
     faster and faster, bobs, then starts changing his mind. A bottle on the wall fills as he drinks.

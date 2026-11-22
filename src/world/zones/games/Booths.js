@@ -20,7 +20,7 @@ const WHITE = [0.97, 0.95, 0.9], WOOD = [0.9, 0.8, 0.66];
 /** id (also the board of its scores), name, where it stands on the pier (along, side), its colour, how long a game lasts. */
 export const BOOTHS = [
   { id: 'shoot', name: 'Bullseye Alley', along: 81, side: -19, color: [0.85, 0.18, 0.14], seconds: 45, how: 'Click the targets as they show: the small ones at the back are worth more. Leave the black ones alone!' },
-  { id: 'mole', name: 'Whack-a-Mole', along: 81, side: 19, color: [0.1, 0.6, 0.62], seconds: 45, how: 'Click the moles as they come up. Golden ones are worth three. Leave the rabbits alone!' },
+  { id: 'mole', name: 'Whack-a-Mole', along: 81, side: 19, color: [0.1, 0.6, 0.62], seconds: 45, how: 'Click the moles as they come up. Golden ones are worth three; a hard hat takes two blows. Leave the rabbits alone!' },
   { id: 'milk', name: 'Feed the Clown', along: 123, side: -18, color: [0.95, 0.66, 0.08], seconds: 45, how: 'Hold the button down and keep the jet of milk in his mouth. He will not stay still.' },
   { id: 'bell', name: 'Ring the Bell', along: 123, side: 18, color: [0.2, 0.42, 0.85], seconds: 0, how: 'Three blows. Strike when the needle is right at the top — it goes through in a blink. The best one counts.' },
 ];
@@ -132,6 +132,7 @@ export class Booths {
     // prizes hung under the beam: bears, ducks, rabbits
     const TOYS = [[0.55, 0.36, 0.2], [1.5, 1.2, 0.2], [1.3, 1.25, 1.2], [1.3, 0.5, 0.65], [0.3, 0.55, 1.2]];
     for (let k = 0; k < 7; k++) {
+      if (k > 1 && k < 5) continue; // (none in the middle: that is where one looks through)
       const x = -HALF + 0.55 + k * ((HALF * 2 - 1.1) / 6), t = TOYS[k % TOYS.length], y = 2.52 - (k % 2) * 0.12;
       wood.tint(0.9, 0.85, 0.7, 1).box(x - 0.008, y + 0.2, FRONT - 0.2, x + 0.008, 2.93, FRONT - 0.184);
       paint.tint(t[0], t[1], t[2], 1).place(x, y, FRONT - 0.19, 0.3 * (k % 3 - 1));
@@ -292,14 +293,34 @@ export class Booths {
     // the table: green baize, dark rings where the holes are, a wooden rim
     paint.tint(0.14, 0.5, 0.22, 1).quad(V(-HALF, top(0.45), 0.45), V(HALF, top(0.45), 0.45), V(HALF, top(-3.2), -3.2), V(-HALF, top(-3.2), -3.2));
     paint.tint(0.1, 0.36, 0.16, 1).quad(V(-HALF, 0, 0.5), V(HALF, 0, 0.5), V(HALF, top(0.45), 0.45), V(-HALF, top(0.45), 0.45));
-    for (const h of holes) {
+    // (mown in stripes, a molehill of fresh earth round each hole, daisies between them)
+    for (let k = 0; k < 6; k++) { const z0 = 0.45 - k * 0.61, z1 = z0 - 0.61; if (k % 2) paint.tint(0.18, 0.58, 0.26, 1).quad(V(-HALF, top(z0) + 0.004, z0), V(HALF, top(z0) + 0.004, z0), V(HALF, top(z1) + 0.004, z1), V(-HALF, top(z1) + 0.004, z1)); }
+    const ring = (h, r, lift, c) => {
       const pts = [];
-      for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; pts.push(V(h.x + Math.cos(a) * 0.36, top(h.z - Math.sin(a) * 0.36) + 0.012, h.z - Math.sin(a) * 0.36)); }
-      paint.tint(0.04, 0.03, 0.03, 1).poly(pts);
+      for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; pts.push(V(h.x + Math.cos(a) * r, top(h.z - Math.sin(a) * r) + lift, h.z - Math.sin(a) * r)); }
+      paint.tint(c[0], c[1], c[2], 1).poly(pts);
+    };
+    for (const h of holes) { ring(h, 0.5, 0.008, [0.36, 0.25, 0.15]); ring(h, 0.43, 0.012, [0.28, 0.19, 0.11]); ring(h, 0.36, 0.016, [0.04, 0.03, 0.03]); }
+    for (let k = 0; k < 16; k++) {
+      const x = -2.7 + ((k * 37) % 55) / 10, z = 0.2 - ((k * 23) % 31) / 10;
+      if (holes.some((h) => Math.hypot(h.x - x, h.z - z) < 0.62)) continue;
+      paint.tint(1.5, 1.5, 1.45, 1).place(x, top(z) + 0.02, z, k).cylinder(0, 0, 0, 0.05, 0.05, 0.012, 6).pop();
+      paint.tint(1.5, 1.1, 0.15, 1).place(x, top(z) + 0.03, z).cylinder(0, 0, 0, 0.02, 0.02, 0.012, 5).pop();
     }
     wood.tint(0.6, 0.45, 0.3, 1).box(-HALF, top(-3.2), -3.3, HALF, top(-3.2) + 0.5, -3.2, { tile: 1 });
-    paint.tint(0.3, 0.6, 0.85, 1).box(-HALF, 0, BACK, HALF, 3.0, BACK + 0.04, { faces: 'Z' }); // a painted sky behind
-    paint.tint(0.2, 0.55, 0.2, 1).box(-HALF, 0, BACK + 0.04, HALF, 2.1, BACK + 0.07, { faces: 'Z' });
+    // behind: a sky, hills, clouds, a sun
+    paint.tint(0.35, 0.62, 0.95, 1).box(-HALF, 0, BACK, HALF, 3.1, BACK + 0.04, { faces: 'Z' });
+    for (const [cx, cy, r, k] of [[-1.9, 1.7, 1.6, 0], [0.4, 1.55, 2.0, 1], [2.3, 1.75, 1.5, 0]]) {
+      const pts = [];
+      for (let a = 0; a <= 10; a++) pts.push(V(cx + Math.cos((Math.PI * a) / 10) * r, Math.min(3.05, cy + Math.sin((Math.PI * a) / 10) * r * 0.5), BACK + 0.05 + k * 0.004));
+      paint.tint(0.2 + 0.08 * k, 0.55 + 0.1 * k, 0.24, 1).poly(pts);
+    }
+    { const pts = []; for (let a = 0; a < 14; a++) pts.push(V(-2.1 + Math.cos((Math.PI * 2 * a) / 14) * 0.3, 2.72 + Math.sin((Math.PI * 2 * a) / 14) * 0.3, BACK + 0.045)); paint.tint(1.6, 1.3, 0.3, 1).poly(pts); }
+    for (const [cx, cy] of [[0.9, 2.78], [2.3, 2.6]]) for (const [dx, r] of [[-0.28, 0.18], [0, 0.26], [0.3, 0.19]]) {
+      const pts = [];
+      for (let a = 0; a < 10; a++) pts.push(V(cx + dx + Math.cos((Math.PI * 2 * a) / 10) * r, cy + Math.sin((Math.PI * 2 * a) / 10) * r * 0.7, BACK + 0.06));
+      paint.tint(1.5, 1.5, 1.5, 1).poly(pts);
+    }
     // the creatures: a body with a face on its front; brown for a mole, golden, or white with long ears
     const creature = (body, ears) => geometry((b) => {
       b.tint(body[0], body[1], body[2], 1).lathe([[0.27, -0.5], [0.29, 0.1], [0.24, 0.3], [0.12, 0.42], [0.0, 0.45]], 9);
@@ -308,7 +329,16 @@ export class Booths {
       b.tint(0.97, 0.97, 0.94, 1).box(-0.05, 0.02, 0.26, 0.05, 0.09, 0.29);
       if (ears) for (const g of [-1, 1]) b.tint(body[0], body[1], body[2], 1).box(g * 0.12 - 0.05, 0.38, -0.03, g * 0.12 + 0.05, 0.86, 0.03);
     });
-    const KINDS = [creature([0.42, 0.27, 0.16]), creature([1.5, 1.05, 0.2]), creature([1.25, 1.22, 1.18], true)];
+    const hatted = geometry((b) => {
+      b.tint(0.42, 0.27, 0.16, 1).lathe([[0.27, -0.5], [0.29, 0.1], [0.24, 0.3], [0.12, 0.42], [0.0, 0.45]], 9);
+      b.tint(0.02, 0.02, 0.02, 1).box(-0.13, 0.2, 0.22, -0.07, 0.27, 0.27).box(0.07, 0.2, 0.22, 0.13, 0.27, 0.27);
+      b.tint(1.0, 0.5, 0.55, 1).box(-0.045, 0.1, 0.27, 0.045, 0.17, 0.31);
+      b.tint(1.5, 1.05, 0.1, 1).lathe([[0.3, 0.3], [0.3, 0.33], [0.22, 0.36], [0.2, 0.5], [0.0, 0.56]], 9); // the hard hat
+    });
+    const KINDS = [creature([0.42, 0.27, 0.16]), creature([1.5, 1.05, 0.2]), creature([1.25, 1.22, 1.18], true), hatted];
+    const star = this._mesh(booth, geometry((b) => { const pts = []; for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2, r = i % 2 ? 0.16 : 0.42; pts.push(V(Math.cos(a) * r, 0, -Math.sin(a) * r)); } b.tint(1, 0.9, 0.35, 1); for (let i = 0; i < 10; i++) b.tri(V(0, 0, 0), pts[i], pts[(i + 1) % 10]); }, 'glow'), 'star', 'glow');
+    star.visible = false;
+    let burst = 0;
     for (const h of holes) { h.mesh = this._mesh(booth, KINDS[0], 'mole'); h.mesh.visible = false; }
     const mallet = this._mesh(booth, geometry((b) => {
       b.tint(0.7, 0.55, 0.36, 1).box(-0.035, 0, -0.035, 0.035, 0.75, 0.035);
@@ -318,7 +348,7 @@ export class Booths {
     let next = 0.6, swing = 0, swingAt = null;
     const game = {
       view: { pos: [0, 2.55, 2.15], look: [0, 1.05, -1.35], fov: 56 }, firstPerson: true, crosshair: true,
-      reset() { game.score = 0; next = 0.5; for (const h of holes) { h.state = 0; h.up = 0; } },
+      reset() { game.score = 0; game.streak = 0; next = 0.5; burst = 0; for (const h of holes) { h.state = 0; h.up = 0; } },
       step(dt, t, time, aim, io) {
         const p = t < 0 ? 0 : clamp01(t / 45);
         if ((next -= dt) <= 0) {
@@ -326,8 +356,8 @@ export class Booths {
           const free = holes.filter((h) => h.state === 0);
           if (free.length) {
             const h = free[Math.floor(Math.random() * free.length)], r = Math.random();
-            h.kind = t > 8 && r < 0.16 ? 2 : t > 10 && r < 0.28 ? 1 : 0;
-            h.state = 1; h.timer = t < 0 ? 1.2 : lerp(1.5, 0.62, p); h.squash = 0;
+            h.kind = t > 8 && r < 0.16 ? 2 : t > 10 && r < 0.28 ? 1 : t > 16 && r < 0.42 ? 3 : 0;
+            h.state = 1; h.timer = (t < 0 ? 1.2 : lerp(1.5, 0.62, p)) * (h.kind === 3 ? 1.5 : 1); h.squash = 0; h.hits = h.kind === 3 ? 2 : 1;
             h.mesh.geometry = KINDS[h.kind];
           }
         }
@@ -339,6 +369,8 @@ export class Booths {
           h.mesh.position.set(h.x, h.y - 0.5 + h.up * 0.56, h.z);
           h.mesh.scale.set(1 + 0.25 * h.squash, 1 - 0.45 * h.squash, 1 + 0.25 * h.squash);
         }
+        if (burst > 0) { burst -= dt; star.scale.setScalar(1.6 - burst * 3); star.rotation.y += dt * 9; }
+        star.visible = burst > 0;
         if (swing > 0) {
           swing -= dt;
           const u = clamp01(swing / 0.22); // 1 → 0
@@ -356,12 +388,15 @@ export class Booths {
         if (!best) return;
         swing = 0.22; swingAt = best;
         if ((best.state === 1 || best.state === 2) && best.up > 0.35) {
-          const pts = best.kind === 2 ? -20 : best.kind === 1 ? 30 : 10 + Math.round(5 * clamp01(best.timer));
-          game.score = Math.max(0, game.score + pts);
+          star.position.set(best.x, best.y + 0.42, best.z); burst = 0.3;
+          if (--best.hits > 0) { best.squash = 0.6; io.play('whack', { volume: 0.6 }); return; } // (the hard hat takes the first blow)
+          const pts = best.kind === 2 ? -20 : best.kind === 1 ? 30 : best.kind === 3 ? 25 : 10 + Math.round(5 * clamp01(best.timer));
+          // (a row of hits pays a little more each time; a rabbit ends it)
+          if (pts > 0) { game.score += pts + Math.min(10, game.streak * 2); game.streak++; } else { game.score = Math.max(0, game.score + pts); game.streak = 0; }
           best.state = 3;
           io.play(best.kind === 2 ? 'fail' : 'whack', { volume: 0.8 });
           if (best.kind === 2) io.note('Not the rabbit! −20');
-        } else io.play('miss', { volume: 0.5 });
+        } else { game.streak = 0; io.play('miss', { volume: 0.5 }); }
       },
     };
     game.reset();
