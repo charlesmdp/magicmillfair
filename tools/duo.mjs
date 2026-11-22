@@ -28,7 +28,10 @@ if (CF) {
     { cwd: ROOT, env: { ...process.env, WRANGLER_SEND_METRICS: 'false' }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
 } else {
   await build({ root: ROOT, logLevel: 'error' });
-  server = spawn(process.execPath, [path.join(ROOT, 'server/index.js')], { env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', ADMIN_KEY }, stdio: ['ignore', 'pipe', 'pipe'] });
+  // (its own store, emptied first: a score kept from an earlier run would not be news to anyone)
+  const store = path.join(ROOT, 'tools/preview/duo-test-store.json');
+  fs.rmSync(store, { force: true });
+  server = spawn(process.execPath, [path.join(ROOT, 'server/index.js')], { env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', ADMIN_KEY, SCORES_FILE: store }, stdio: ['ignore', 'pipe', 'pipe'] });
 }
 let serverLog = '';
 server.stdout.on('data', (d) => { serverLog += d; });

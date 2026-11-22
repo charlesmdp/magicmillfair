@@ -13,7 +13,7 @@ import { Polygon } from '../../Areas.js';
 import { fallsMaterial } from '../../water/Falls.js';
 import { seatAt } from '../../../player/PlayerController.js';
 import { SKY } from '../../layout/layout.js';
-import { SPONSORS, sponsorId, VILLAGE_PRICES, VILLAGE_PERKS, money } from '../../layout/sponsors.js';
+import { SPONSORS, sponsorId, VILLAGE_PRICES, VILLAGE_PERKS, VILLAGE_PITCH, money } from '../../layout/sponsors.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const STONE = [1.05, 1.02, 0.96], WALL = [1.75, 1.66, 1.46], DARK = [0.2, 0.2, 0.24], WOOD = [0.62, 0.44, 0.28];
@@ -253,7 +253,7 @@ export class SkyZone {
     const [ax, az] = W(0, 0.4), [gx, gz] = W(-5.6, 5.6), [px, pz] = W(5.6, 5.6);
     const price = VILLAGE_PRICES[tier];
     this.villages.push({
-      index: i, id: sponsorId(who), name: who.name, motto: who.forHire ? `For hire · ${money(price)} a month` : who.motto || '', url: /^https:\/\//.test(who.url || '') ? who.url : null, color: col,
+      index: i, id: sponsorId(who), name: who.name, motto: who.forHire ? `For sale · ${money(price)} a month` : who.motto || '', url: /^https:\/\//.test(who.url || '') ? who.url : null, color: col,
       forHire: !!who.forHire, tier, price, x, y, z, yaw, arrive: [ax, az, yaw], ring: [rx, rz], sign: [gx, gz], board: [px, pz], // (one arrives looking at the valley)
     });
     // six sectors round the valley, so that what is behind the camera is not drawn
@@ -436,8 +436,8 @@ export class SkyZone {
     ctx.fillStyle = '#7a1420'; ctx.fillRect(0, 0, S, 118);
     ctx.fillStyle = '#f2c14e'; ctx.fillRect(0, 118, S, 8);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#f6e7b8'; ctx.font = "700 50px Georgia, 'Times New Roman', serif"; ctx.fillText('YOUR VILLAGE?', S / 2, 46);
-    ctx.fillStyle = '#f2c14e'; ctx.font = '600 24px system-ui, sans-serif'; ctx.fillText('This one is for hire, by the month', S / 2, 92);
+    ctx.fillStyle = '#f6e7b8'; ctx.font = "700 44px Georgia, 'Times New Roman', serif"; ctx.fillText(VILLAGE_PITCH.title, S / 2, 46, S - 30);
+    ctx.fillStyle = '#f2c14e'; ctx.font = '600 22px system-ui, sans-serif'; ctx.fillText(VILLAGE_PITCH.sub, S / 2, 92, S - 30);
     ctx.textAlign = 'left'; ctx.font = '600 25px system-ui, sans-serif';
     VILLAGE_PERKS.forEach((line, k) => {
       const ly = 166 + k * 47;
@@ -445,8 +445,8 @@ export class SkyZone {
       ctx.fillStyle = '#1b2a22'; ctx.fillText(line, 62, ly + 1, S - 84);
     });
     ctx.textAlign = 'center'; ctx.fillStyle = '#5a5140'; ctx.font = '500 21px system-ui, sans-serif';
-    ctx.fillText('The price is on the other sign: the higher, the dearer', S / 2, 458, S - 30);
-    ctx.fillStyle = '#7a1420'; ctx.font = '700 22px system-ui, sans-serif'; ctx.fillText('Step up to this board to hire it', S / 2, 490);
+    ctx.fillText(VILLAGE_PITCH.foot, S / 2, 458, S - 30);
+    ctx.fillStyle = '#7a1420'; ctx.font = '700 22px system-ui, sans-serif'; ctx.fillText('FOR SALE — step up to this board', S / 2, 490);
     const n = this._perks.length, pos = new Float32Array(n * 12), uv = new Float32Array(n * 8), idx = [], up = V(0, 1, 0);
     this._perks.forEach((sg, k) => {
       [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([a, b], q) => {

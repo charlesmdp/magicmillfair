@@ -168,9 +168,11 @@ export class Booths {
   }
 
   // ---------------------------------------------------------------------------
-  // Bullseye Alley: nothing runs on rails. Targets pop up from behind three rows of painted bushes (the far
-  // ones smaller, and worth more), some sliding along once they are up; others are thrown across the booth,
+  // Bullseye Alley: hardly anything runs on rails. Targets pop up from behind three rows of painted bushes (the
+  // far ones smaller, and worth more), some sliding along once they are up; others are thrown across the booth,
   // or swing down from the ceiling on a cord; a golden one flashes past; and a black one must be left alone.
+  // Now and then, though, a train of targets does go by on one of two rails: something steady to break the
+  // rhythm (and, later in the game, a black one riding in the middle of it).
   // Everything comes quicker and stays less long as the game goes on.
 
   _shoot(parts, booth) {
@@ -194,7 +196,10 @@ export class Booths {
     const [sx, sz] = pierToWorld(booth.along, booth.side + 2.6);
     (this.world.sponsorSlots ||= []).push({ id: 'tarp:shoot', what: 'the backdrop of the shooting gallery', x: sx, y: booth.y, z: sz, reach: 3, set: (sp) => { state.sponsor = sp; tarp.redraw(); } });
 
-    const RED = [0.85, 0.12, 0.1], MAX = 12, BOMBS = 3;
+    // the two rails (a dark bar the targets ride on): one in front of the middle row, one in front of the last
+    const RAILS = [{ z: -2.38, y: 1.5, r: 0.2, pts: 15 }, { z: -3.18, y: 2.02, r: 0.16, pts: 35 }];
+    for (const r of RAILS) paint.tint(0.17, 0.17, 0.2, 1).box(-HALF, r.y - r.r - 0.045, r.z - 0.025, HALF, r.y - r.r - 0.005, r.z + 0.025, { faces: 'ZY' });
+    const RED = [0.85, 0.12, 0.1], MAX = 16, BOMBS = 3;
     const pool = (geo, n, name) => { const m = new THREE.InstancedMesh(geo, this.world.materials.paint, n); m.name = `moving-shoot:${name}`; m.frustumCulled = false; booth.dyn.add(m); return m; };
     const discs = pool(geometry((b) => disc(b, [[1, RED], [0.68, WHITE], [0.36, RED]])), MAX, 'targets');
     const bombs = pool(geometry((b) => { disc(b, [[1, [0.05, 0.05, 0.06]], [0.82, [0.16, 0.16, 0.18]]]); b.tint(1.4, 0.1, 0.08, 1).place(0, 0, 0.03, 0, 0, Math.PI / 4).box(-0.62, -0.1, 0, 0.62, 0.1, 0.01).box(-0.1, -0.62, 0, 0.1, 0.62, 0.01).pop(); }), BOMBS, 'bombs');
@@ -204,7 +209,17 @@ export class Booths {
     const G = { on: false, t: 0, x0: 0, dir: 1, y: 2.0, wait: 8 };
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s3 = new THREE.Vector3(), p3 = new THREE.Vector3();
     const rnd = (a, b) => a + Math.random() * (b - a);
-    let gap = 0.5;
+    let gap = 0.5, rail = 5;
+    // a train: three to five targets, evenly spaced, at a steady pace along one rail
+    const train = (t) => {
+      const p = t < 0 ? 0 : clamp01(t / 45), on = RAILS[Math.random() < 0.55 ? 0 : 1], dir = Math.random() < 0.5 ? 1 : -1;
+      const n = 3 + Math.floor(Math.random() * 3), speed = rnd(1.5, 2.1) * (1 + 0.5 * p), black = t > 16 && Math.random() < 0.6 ? Math.floor(Math.random() * n) : -1;
+      for (let k = 0; k < n; k++) {
+        const bomb = k === black, s = slots.find((o) => !o.on && o.bomb === bomb);
+        if (!s) continue;
+        Object.assign(s, { on: true, kind: 'rail', t: 0, hit: 0, x0: -dir * (HALF + 0.3 + k * 0.62), x: -dir * (HALF + 0.3 + k * 0.62), vx: dir * speed, vy: 0, y: on.y, z: on.z, r: bomb ? on.r * 0.95 : on.r, pts: bomb ? -40 : on.pts, life: 99 });
+      }
+    };
     const spawn = (t) => {
       const p = t < 0 ? 0 : clamp01(t / 45), r = Math.random();
       const bomb = t > 9 && r < 0.14, kind = bomb ? 'pop' : t > 6 && r < 0.14 + 0.2 + 0.12 * p ? 'fly' : t > 18 && r < 0.14 + 0.2 + 0.12 * p + 0.16 ? 'swing' : 'pop';
@@ -223,11 +238,12 @@ export class Booths {
     };
     const game = {
       view: { pos: [0, 1.72, 2.5], look: [0, 1.75, -3], fov: 58 }, firstPerson: true, crosshair: true,
-      reset() { game.score = 0; game.streak = 0; game.reload = 0; gap = 0.4; for (const s of slots) s.on = false; G.on = false; G.wait = 14; },
+      reset() { game.score = 0; game.streak = 0; game.reload = 0; gap = 0.4; rail = rnd(4, 7); for (const s of slots) s.on = false; G.on = false; G.wait = 14; },
       /** t: seconds played (-1 while nobody plays: a target shows now and then), time: the clock of the world */
       step(dt, t, time, aim, io) {
         const p = t < 0 ? 0 : clamp01(t / 45);
         if ((gap -= dt) <= 0) { gap = t < 0 ? rnd(1.2, 2.4) : lerp(0.62, 0.27, p) * rnd(0.7, 1.3); spawn(t); }
+        if ((rail -= dt) <= 0) { rail = t < 0 ? rnd(7, 12) : rnd(6.5, 11); train(t); }
         let d = 0, b = 0;
         for (const s of slots) {
           let scale = 0, tip = 0;
@@ -240,6 +256,10 @@ export class Booths {
               s.x += s.vx * dt; if (Math.abs(s.x) > 2.7) { s.x = Math.sign(s.x) * 2.7; s.vx = -s.vx; }
               s.y = s.top - s.r * 1.1 + s.r * 2.05 * Math.max(0, up) ** 0.7;
               scale = s.r;
+            } else if (s.kind === 'rail') {
+              s.x = s.x0 + s.vx * s.t;
+              if (Math.abs(s.x) > HALF + 0.3 && s.x * s.vx > 0) s.on = false;
+              scale = Math.abs(s.x) > HALF - 0.04 ? 0 : s.r; // (it comes in through the wall)
             } else if (s.kind === 'fly') {
               s.x = s.x0 + s.vx * s.t; s.y = s.y0 + s.vy * s.t - 2.7 * s.t * s.t;
               if (Math.abs(s.x) > HALF + 0.35 || s.y < 0.9) s.on = false;
@@ -268,7 +288,7 @@ export class Booths {
           io.play('shot', { volume: 0.7 });
           const at = (z) => { const u = (z - aim.o.z) / aim.d.z; return [aim.o.x + aim.d.x * u, aim.o.y + aim.d.y * u]; };
           let hit = null, pts = 0;
-          for (const s of slots) { if (!s.on || s.hit > 0) continue; const [hx, hy] = at(s.z); if (Math.hypot(hx - s.x, hy - s.y) < s.r * 1.12 && (!hit || s.z > hit.z)) hit = s; }
+          for (const s of slots) { if (!s.on || s.hit > 0 || Math.abs(s.x) > HALF) continue; const [hx, hy] = at(s.z); if (Math.hypot(hx - s.x, hy - s.y) < s.r * 1.12 && (!hit || s.z > hit.z)) hit = s; }
           if (G.on) { const [hx, hy] = at(-3.3); if (Math.hypot(hx - gx, hy - gy) < 0.17) { pts = 100; G.on = false; hit = null; } }
           if (hit) { pts = hit.pts; hit.hit = 0.22; }
           // (a row of hits pays a little more each time; the black one takes points away)

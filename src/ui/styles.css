@@ -149,11 +149,11 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border-radius: 
 .note { position: absolute; left: 50%; bottom: calc(96px + var(--safe-b)); transform: translateX(-50%); opacity: 0; transition: opacity 0.4s; pointer-events: none !important; }
 .note.show { opacity: 1; }
 /* a list to choose from (the sky villages) */
-.chooser { position: absolute; inset: 0; display: none; place-items: center; background: rgba(8, 14, 10, 0.6); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 16; padding: 12px; }
+.chooser { position: absolute; inset: 0; display: none; place-items: center; grid-template-rows: minmax(0, 1fr); background: rgba(8, 14, 10, 0.6); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 16; padding: 12px; }
 .chooser.on { display: grid; }
 .roster { position: absolute; inset: 0; display: none; place-items: center; background: rgba(8, 14, 10, 0.6); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 16; padding: 12px; }
 .roster.on { display: grid; }
-.roster .sheet { width: min(720px, 100%); max-height: min(86vh, 100%); display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 18px 18px 14px; box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5); }
+.roster .sheet { width: min(720px, 100%); max-height: min(86vh, 86dvh); min-height: 0; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 18px 18px 14px; box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5); }
 .roster h2 { margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 22px; font-weight: 600; }
 .roster h3 { margin: 14px 0 6px; font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft); font-weight: 600; }
 .roster .lead { margin: 4px 0 12px; font-size: 13.5px; color: var(--ink-soft); }
@@ -182,7 +182,7 @@ button.pill.players:hover { border-color: rgba(242, 193, 78, 0.7); }
 .chat .say .chan.near { border-color: #59c173; color: #b9f0c6 !important; }
 .chat p.near { background: rgba(18, 52, 30, 0.7); }
 .chat p i { font-style: normal; font-size: 10.5px; opacity: 0.8; margin-left: 5px; padding: 0 5px; border-radius: 6px; background: rgba(89, 193, 115, 0.35); }
-.chooser .sheet { width: min(760px, 100%); max-height: min(86vh, 100%); display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 18px 18px 14px; box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5); }
+.chooser .sheet { width: min(760px, 100%); max-height: min(86vh, 86dvh); min-height: 0; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 18px 18px 14px; box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5); }
 .chooser h2 { margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 24px; font-weight: 600; }
 .chooser .lead { margin: 4px 0 12px; font-size: 13.5px; color: var(--ink-soft); }
 .chooser .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; overflow-y: auto; padding-right: 4px; -webkit-overflow-scrolling: touch; }
@@ -260,7 +260,22 @@ body.playing canvas { cursor: none; }
 .emotes .group h4 { margin: 2px 4px 0; font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft); font-weight: 600; text-align: center; }
 .emotes .set { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; max-width: min(92vw, 640px); }
 .emotes button small { display: block; font-size: 9.5px; opacity: 0.8; margin-top: 1px; }
-.emotes button.locked { opacity: 0.5; }
+.emotes button.locked { opacity: 0.62; border-style: dashed !important; }
+.emotes button.locked small::before { content: ''; display: inline-block; width: 8px; height: 10px; margin-right: 3px; vertical-align: -1px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 12'%3E%3Cpath d='M2 5V3.5a3 3 0 0 1 6 0V5h1v6H1V5zm1.5 0h3V3.5a1.5 1.5 0 0 0-3 0z' fill='%23ffe6a6'/%3E%3C/svg%3E") no-repeat center / contain; }
+/* the animals of light: the days in a row, what they bring, how far the next one is */
+.emotes .rank { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 2px; gap: 7px; }
+.emotes .streak { display: flex; gap: 11px; align-items: center; max-width: min(92vw, 640px); padding: 9px 11px; border-radius: 13px; background: linear-gradient(135deg, rgba(242, 193, 78, 0.26), rgba(242, 193, 78, 0.05)); border: 1px solid rgba(242, 193, 78, 0.45); }
+.emotes .streak .count { display: grid; place-items: center; min-width: 78px; padding: 7px 8px; border-radius: 11px; background: rgba(0, 0, 0, 0.32); box-shadow: inset 0 0 0 1px rgba(242, 193, 78, 0.35); }
+.emotes .streak .count b { font: 800 32px/1 Georgia, 'Times New Roman', serif; color: #ffd66b; text-shadow: 0 0 14px rgba(255, 200, 80, 0.55); }
+.emotes .streak .count span { margin-top: 3px; font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: #ffe6a6; white-space: nowrap; }
+.emotes .streak .about { flex: 1; min-width: 0; text-align: left; }
+.emotes .streak h4 { margin: 0 0 2px !important; text-align: left !important; color: #ffe6a6 !important; font-size: 11.5px !important; }
+.emotes .streak p { margin: 0; font-size: 12px; line-height: 1.35; white-space: normal; }
+.emotes .streak .bar { height: 7px; border-radius: 4px; background: rgba(255, 255, 255, 0.14); margin: 6px 0 4px; overflow: hidden; }
+.emotes .streak .bar i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #f2c14e, #fff0c0); }
+.emotes .streak .next { color: #ffe6a6; }
+.emotes .streak .next b { color: #fff; }
+.touch .emotes .streak p:not(.next) { display: none; } /* (a phone has no room for the long version) */
 .chat .say .tip { display: block; margin: 5px 4px 0; font-size: 11.5px; color: var(--ink-soft); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); }
 .row small { color: var(--ink-soft); font-size: 11.5px; }
 .emotes .held { display: none; }
@@ -295,7 +310,10 @@ body.dead #view { filter: grayscale(1) contrast(1.15) brightness(0.72); }
 
 /* chat */
 .chat { position: absolute; left: calc(172px + var(--safe-l)); bottom: calc(12px + var(--safe-b)); width: min(380px, 46vw); pointer-events: none !important; }
-.chat .log { max-height: 148px; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; opacity: 0; transition: opacity 0.6s; }
+.chat .log { max-height: 148px; overflow: hidden; display: flex; flex-direction: column; opacity: 0; transition: opacity 0.6s; scrollbar-width: thin; }
+.chat .log > :first-child { margin-top: auto; } /* (the lines sit at the bottom, and what is above can still be scrolled to) */
+/* scrolled with the wheel (the pointer over it), or while typing: the log opens up and goes back through what was said */
+.chat.peek .log, .chat.typing .log { max-height: min(46vh, 420px); overflow-y: auto; opacity: 1; padding: 4px; background: rgba(10, 16, 12, 0.5); border-radius: 12px; }
 .chat.fresh .log, .chat.typing .log { opacity: 1; }
 .chat.typing .log { overflow-y: auto; pointer-events: auto; }
 .chat p { margin: 2px 0 0; padding: 3px 9px; border-radius: 10px; background: rgba(10, 16, 13, 0.55); font-size: 13px; line-height: 1.35; width: fit-content; max-width: 100%; overflow-wrap: anywhere; }

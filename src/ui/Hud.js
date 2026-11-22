@@ -236,7 +236,21 @@ export class Hud {
       this.toggleChat(false);
       if (text.trim()) this.emit('say', text, this.chatChannel);
     });
+    // what was said earlier: the wheel with the pointer over the log (it opens up for a while), or, while
+    // typing, the wheel, the scroll bar, a finger, Page Up and Page Down
+    window.addEventListener('wheel', (e) => {
+      if (document.pointerLockElement || !this.chatLog.childElementCount || this.root.querySelector('.chooser.on, .roster.on, .bigmap.on')) return;
+      const r = this.chatLog.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY > r.bottom + 4 || e.clientY < r.bottom - Math.max(r.height, 150)) return;
+      e.preventDefault(); e.stopPropagation();
+      if (!this.chatEl.classList.contains('peek') && !this.chatOpen) { this.chatEl.classList.add('peek'); this.chatLog.scrollTop = this.chatLog.scrollHeight; }
+      this.chatLog.scrollTop += e.deltaY;
+      clearTimeout(this._tp);
+      this._tp = setTimeout(() => { this.chatEl.classList.remove('peek'); this.chatLog.scrollTop = this.chatLog.scrollHeight; }, 7000);
+    }, { capture: true, passive: false });
+    this.chatLog.addEventListener('mousedown', (e) => e.preventDefault()); // (the scroll bar must not take the line being typed away)
     this.chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'PageUp' || e.key === 'PageDown') { this.chatLog.scrollTop += (e.key === 'PageUp' ? -1 : 1) * this.chatLog.clientHeight * 0.8; e.preventDefault(); }
       if (e.key === 'Escape') { this.chatInput.value = ''; this.toggleChat(false); }
       else if (e.key === 'Tab' && !this._chatTo) { e.preventDefault(); channel(this.chatChannel === 'near' ? 'all' : 'near'); }
       e.stopPropagation();
@@ -378,22 +392,24 @@ export class Hud {
     this._emoteIds = Object.fromEntries(list.map((e) => [e.id, e.index]));
     const box = this.emotes, held = box.querySelector('.held');
     box.querySelectorAll('.group').forEach((n) => n.remove());
+    const ranks = list.filter((e) => e.rank).sort((a, b) => a.days - b.days);
     const groups = [
       ['', list.filter((e) => e.clip)],
       ['Cheer on', list.filter((e) => e.move)],
-      [`Animals of light — day ${days} in a row`, list.filter((e) => e.rank).sort((a, b) => a.days - b.days)],
+      ['', ranks],
     ];
     for (const [title, items] of groups) {
       if (!items.length) continue;
       const g = el('div', `group${items[0].rank ? ' rank' : ''}`);
       if (title) g.append(el('h4', '', title));
+      if (items[0].rank) g.append(this._streak(ranks, days));
       const row = el('div', 'set');
       for (const e of items) {
         const b = el('button');
         b.type = 'button';
         b.textContent = e.label;
-        b.title = e.rank ? `/${e.id} — earned by visiting ${e.days} days in a row` : `/${e.id}`;
-        if (e.rank) b.append(el('small', '', e.locked ? `day ${e.days}` : '✓'));
+        b.title = e.rank ? (e.locked ? `Comes on day ${e.days} in a row: ${Math.max(1, e.days - days)} more to go` : `/${e.id} — yours`) : `/${e.id}`;
+        if (e.rank) b.append(el('small', '', e.locked ? `Day ${e.days}` : '✓ yours'));
         if (e.locked) b.classList.add('locked');
         b.onclick = () => { this.emit('emote', e.index); box.classList.remove('on'); };
         row.append(b);
@@ -401,6 +417,22 @@ export class Hud {
       g.append(row);
       box.insertBefore(g, held);
     }
+  }
+  // What the animals of light are and how one earns them: the days in a row so far, the next animal, how far along.
+  _streak(ranks, days) {
+    const box = el('div', 'streak'), count = el('div', 'count'), about = el('div', 'about');
+    count.append(el('b', '', String(days)), el('span', '', days === 1 ? 'day in a row' : 'days in a row'));
+    const next = ranks.find((e) => e.locked), last = [...ranks].reverse().find((e) => !e.locked);
+    const from = last ? Math.min(days, last.days) : 1, to = next ? next.days : from;
+    const bar = el('div', 'bar'), fill = el('i');
+    fill.style.width = `${next ? Math.round(100 * Math.min(1, Math.max(0.04, (days - from) / Math.max(1, to - from)))) : 100}%`;
+    bar.append(fill);
+    const line = el('p', 'next');
+    if (next) { const left = Math.max(1, next.days - days); line.append('Next: the ', el('b', '', next.label), ` on day ${next.days} — come back `, el('b', '', left === 1 ? 'tomorrow' : `${left} more days`), left === 1 ? '' : ' in a row'); }
+    else line.append('Every animal is yours. Show them off!');
+    about.append(el('h4', '', 'Animals of light'), el('p', '', 'Visit every day: each day in a row calls a new animal to your side. Miss a day and the count starts again at 1.'), bar, line);
+    box.append(count, about);
+    return box;
   }
   /** The emote on key `i` (0 = the key 1): its number, or -1. */
   quickEmote(i) { return this._emoteIds?.[QUICK[i]] ?? -1; }
@@ -507,6 +539,8 @@ export class Hud {
       if (to) this.chatInput.placeholder = to; else this._channel(this.chatChannel);
     }
     this.chatEl.classList.toggle('typing', open);
+    this.chatEl.classList.remove('peek');
+    this.chatLog.scrollTop = this.chatLog.scrollHeight;
     if (open) { this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this.chatInput.focus({ preventScroll: true }); }
     else if (document.activeElement === this.chatInput) this.chatInput.blur();
   }
@@ -520,9 +554,11 @@ export class Hud {
     line.append(who);
     if (near) { const tag = el('i'); tag.textContent = 'nearby'; line.append(tag); }
     line.append(document.createTextNode(` ${text}`));
+    // (someone reading further up is left where they are)
+    const reading = (this.chatOpen || this.chatEl.classList.contains('peek')) && this.chatLog.scrollHeight - this.chatLog.scrollTop - this.chatLog.clientHeight > 40;
     this.chatLog.append(line);
-    while (this.chatLog.childElementCount > 40) this.chatLog.firstElementChild.remove();
-    this.chatLog.scrollTop = this.chatLog.scrollHeight;
+    while (this.chatLog.childElementCount > 200) this.chatLog.firstElementChild.remove();
+    if (!reading) this.chatLog.scrollTop = this.chatLog.scrollHeight;
     this.chatEl.classList.add('fresh');
     clearTimeout(this._tc);
     this._tc = setTimeout(() => this.chatEl.classList.remove('fresh'), 14000);

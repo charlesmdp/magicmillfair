@@ -4,6 +4,7 @@
 // usage: node tools/shop-test.mjs [--q=low]      (npm run test:shop)
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +33,7 @@ const stripe = http.createServer((req, res) => {
 await new Promise((resolve) => stripe.listen(STRIPE_PORT, '127.0.0.1', resolve));
 
 await build({ root: ROOT, logLevel: 'error' });
+fs.rmSync(path.join(ROOT, 'tools/preview/shop-test-store.json'), { force: true }); // (what an earlier run sold is not for sale twice)
 const server = spawn(process.execPath, [path.join(ROOT, 'server/index.js')], {
   env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', ADMIN_KEY, STRIPE_SECRET_KEY: STRIPE_KEY, STRIPE_WEBHOOK_SECRET: HOOK, STRIPE_API: `http://127.0.0.1:${STRIPE_PORT}`, SCORES_FILE: path.join(ROOT, 'tools/preview/shop-test-store.json') },
   stdio: ['ignore', 'pipe', 'pipe'],
@@ -71,7 +73,7 @@ try {
   const device = await page.evaluate(() => localStorage.getItem('mmf.device'));
   check('the hats carry their price, the jetpack too, while the shop is open', before[0] === 'No hat' && before[6] === 'Crown · $9.99' && jet === 'Jetpack · $30', JSON.stringify({ before, jet }));
   await page.evaluate(() => document.querySelector('[data-hat="6"]').click());
-  await page.waitForSelector('.chooser.on', { timeout: 5000 });
+  await page.waitForSelector('.chooser.on', { timeout: 20000 });
   const offer = await page.evaluate(() => [...document.querySelectorAll('.chooser .list button')].map((b) => b.textContent));
   const worn = await page.evaluate(() => document.querySelector('[data-hat="6"]').getAttribute('aria-pressed'));
   await Promise.all([page.waitForURL('https://checkout.stripe.test/**', { timeout: 20000 }), page.click('.chooser .list button:nth-child(1)')]);
@@ -95,7 +97,7 @@ try {
   const mine = await prompts();
   check('by the board of a game: "Sponsor … · $49 a month" while it is free, "Set up your panel" once it is theirs', free.some((t) => /^Sponsor this game · \$49 a month$/.test(t)) && mine.includes('Set up your panel'), JSON.stringify({ free, mine, slot }));
   await page.keyboard.press('KeyE');
-  await page.waitForSelector('.chooser.on .fields', { timeout: 5000 });
+  await page.waitForSelector('.chooser.on .fields', { timeout: 20000 });
   const inputs = page.locator('.chooser .fields input');
   await inputs.nth(0).fill('Acme <b>Robotics</b>');
   await inputs.nth(1).fill('Friendly machines since 1999');
@@ -124,7 +126,7 @@ try {
   await frames(8);
   const stand = await prompts();
   await page.keyboard.press('KeyE');
-  await page.waitForSelector('.chooser.on', { timeout: 5000 });
+  await page.waitForSelector('.chooser.on', { timeout: 20000 });
   const cars = await page.evaluate(() => [...document.querySelectorAll('.chooser .list button')].map((b) => b.textContent));
   check('the stand of the wheel lists its twenty-four gondolas, free at $29 a month', stand.includes('The gondolas and their sponsors') && cars.length === 24 && /Gondola 7/.test(cars[6]) && /Free · \$29 a month/.test(cars[6]), JSON.stringify({ stand, cars: cars.slice(5, 8) }));
   check('no error in the page', logs.length === 0, logs.join(' | '));

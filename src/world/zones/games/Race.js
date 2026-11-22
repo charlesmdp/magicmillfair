@@ -198,8 +198,9 @@ export class Race {
           S.drift = 0; S.charge = 0;
         }
         const turn = steer * (drifting ? 2.5 : 1.95) * clamp(Math.abs(along0) / 6, 0, 1) / (1 + 0.016 * Math.max(0, speed - 9)) * (along0 < -0.5 ? -1 : 1);
-        if (S.grounded) S.yaw += turn * dt; else S.yaw += turn * 0.35 * dt;
-        const fx = Math.sin(S.yaw), fz = Math.cos(S.yaw), rx = fz, rz = -fx;
+        // (the heading is counted the way the valley's are: it grows turning left)
+        if (S.grounded) S.yaw -= turn * dt; else S.yaw -= turn * 0.35 * dt;
+        const fx = Math.sin(S.yaw), fz = Math.cos(S.yaw), rx = -fz, rz = fx; // forwards, and to the right
         let vf = S.vx * fx + S.vz * fz, vl = S.vx * rx + S.vz * rz;
         this.locate(S.x, S.z, S.i, loc);
         const on = Math.abs(loc.side) < this.width / 2 + 0.5, top = (S.boost > 0 ? BOOST : TOP) * (on ? 1 : OFF);
@@ -256,8 +257,8 @@ export class Race {
         // ---- what the player is, as far as the world is concerned
         const slip = clamp(vl / 9, -1, 1);
         pl.pos.set(S.x, S.y, S.z);
-        pl.yaw = S.yaw - slip * 0.35; // the quad points into the slide
-        S.tilt += ((S.grounded ? -steer * 0.1 * clamp(speed / TOP, 0, 1) - slip * 0.12 : 0) - S.tilt) * Math.min(1, dt * 8);
+        pl.yaw = S.yaw + slip * 0.35; // the quad points into the slide
+        S.tilt += ((S.grounded ? steer * 0.1 * clamp(speed / TOP, 0, 1) - slip * 0.12 : 0) - S.tilt) * Math.min(1, dt * 8);
         pl.roll = S.tilt;
         pl.pitch = S.grounded ? clamp(-(S.slope || 0) / Math.max(4, speed), -0.5, 0.5) * 0.9 : clamp(-S.vy / 26, -0.45, 0.45);
         pl.speed = speed; pl.grounded = S.grounded;

@@ -18,13 +18,15 @@ export const VILLAGE_PRICES = [19, 49, 99, 199, 499, 999, 1999, 3999, 7999, 9999
 export const money = (usd) => { const s = String(Math.round(usd)); return `$${s.length > 3 ? `${s.slice(0, -3)},${s.slice(-3)}` : s}`; };
 // What the board of a village for hire promises (keep each line short: it is painted on a sign).
 export const VILLAGE_PERKS = [
-  'One of only 50 villages, ever',
-  'Your name on the sign and on the map',
-  'Roofs and flag in your colours',
-  'A link to your website at the sign',
-  'Your own address to invite people',
-  'Meet there: nearby chat stays private',
+  'Only 50 exist. We ran out of mountains.',
+  'Your name on the sign AND on the map',
+  'Roofs and flag in your colours. Tasteful?',
+  'A link to your website. Clicks may occur.',
+  'An address of your own to invite people',
+  'Nearby chat stays private. Plot freely.',
 ];
+/** What the brochure says (the board of a village for sale, the list at the Sky Gate). */
+export const VILLAGE_PITCH = { title: 'A BRIGHTER TOMORROW!', sub: 'Mountain-top living for the discerning brand', foot: 'Pay for view™ — others sell pay-per-view. We sell the view.' };
 const FOR_HIRE = 'This village is for hire';
 const tones = [[0.72, 0.16, 0.12], [0.14, 0.38, 0.62], [0.86, 0.6, 0.1], [0.2, 0.5, 0.26], [0.5, 0.24, 0.56], [0.1, 0.5, 0.52], [0.85, 0.38, 0.12], [0.2, 0.25, 0.42]];
 const names = [

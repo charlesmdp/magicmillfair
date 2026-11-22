@@ -67,14 +67,16 @@ try {
   console.log(`start ${JSON.stringify(a)}`);
   console.log(`after walking ${JSON.stringify(b)} (moved ${moved.toFixed(2)} m)`);
   if (moved < 0.5) { failed = true; console.log('FAIL: the character did not move'); }
-  await page.click('[data-act="camera"]');
+  // the flying camera is the administrator's: a visitor has neither the button nor the key
+  const fly = await page.evaluate(() => getComputedStyle(document.querySelector('[data-act="camera"]')).display);
+  await page.keyboard.press('KeyF');
   await frames(3);
-  await shot('4-free');
+  const stillWalking = await page.evaluate(() => !document.querySelector('[data-act="camera"]').classList.contains('on') && window.__mmf.player.pos.distanceTo(window.__mmf.engine.camera.position) < 12);
+  if (fly !== 'none' || !stillWalking) { failed = true; console.log(`FAIL: the flying camera is offered to a visitor (button ${fly}, walking ${stillWalking})`); }
   await page.click('[data-act="settings"]');
   await frames(3);
   await shot('5-settings');
   await page.click('[data-act="settings"]');
-  await page.click('[data-act="camera"]');
   await frames(4);
   await shot('6-back');
   // the minimap opens the large map; a click closes it

@@ -350,7 +350,7 @@ try {
     await page.keyboard.press('KeyE');
     await frames(20);
     const home = await page.evaluate(() => { const m = window.__mmf, p = m.player.pos; return { d: Math.hypot(p.x - m.sky.gate.x, p.z - m.sky.gate.z), village: m.sky.villageAt(p.x, p.z), byId: m.sky.find('eagle-rest')?.name, byNumber: m.sky.find('50')?.name }; });
-    check('fifty villages: ten prices, five villages at each, the higher the dearer; twenty places to sit in each; the board of one for hire says what it costs', g.n === 50 && g.tiers.join() === '19,49,99,199,499,999,1999,3999,7999,9999' && g.each.every((k) => k === 5) && g.rising && g.seats >= 20 && g.hire === 50 && board.some((b) => b.startsWith(`Hire ${hire.name}`) && b.includes('a month')) && /^For hire · \$[\d,]+ a month$/.test(hire.motto), JSON.stringify({ tiers: g.tiers, each: g.each, rising: g.rising, seats: g.seats, hire, board }));
+    check('fifty villages: ten prices, five villages at each, the higher the dearer; twenty places to sit in each; the board of one for hire says what it costs', g.n === 50 && g.tiers.join() === '19,49,99,199,499,999,1999,3999,7999,9999' && g.each.every((k) => k === 5) && g.rising && g.seats >= 20 && g.hire === 50 && board.some((b) => b.startsWith(`Buy ${hire.name}`) && b.includes('a month')) && /^For sale · \$[\d,]+ a month$/.test(hire.motto), JSON.stringify({ tiers: g.tiers, each: g.each, rising: g.rising, seats: g.seats, hire, board }));
     check('the Sky Gate offers fifty villages; one is carried to the one chosen, facing the valley', offered.includes('Travel to a sky village') && g.n === 50 && listed.length === 50 && there.village === listed[7] && Math.abs(there.y - there.want) < 0.5 && there.grounded && there.zone === there.village && !there.open && there.facing > 0.5 && there.walkable, JSON.stringify({ offered, there }));
     check('nobody walks off a village; its ring leads back to the valley', back.edge < 12.6 && Math.abs(back.y - back.vy) < 0.6 && ring.includes('Back to the valley') && ring.includes('Another village') && home.d < 4 && !home.village && home.byId === 'Eagle Rest' && home.byNumber === g.names[49], JSON.stringify({ back, ring, home }));
   }
@@ -499,7 +499,7 @@ try {
     const emote = await page.evaluate(() => { const r = window.__mmf.rank; return { active: r.active.length, kind: r.active[0]?.kind }; });
     await command('/help');
     const unknown = await page.evaluate(() => [...document.querySelectorAll('.chat .log p')].pop()?.textContent || '');
-    check('a key cheers; an animal of light is summoned by name once enough days in a row have earned it', cheer && locked.active === 0 && /30 days in a row/.test(locked.note) && emote.active === 1 && emote.kind === 'tiger', JSON.stringify({ cheer, locked, emote }));
+    check('a key cheers; an animal of light is summoned by name once enough days in a row have earned it', cheer && locked.active === 0 && /day 30 in a row/.test(locked.note) && /29 more days/.test(locked.note) && emote.active === 1 && emote.kind === 'tiger', JSON.stringify({ cheer, locked, emote }));
     check('an unknown command says nothing of the secret ones', /Unknown command\.$/.test(unknown), unknown);
     // stuck somewhere: /kill, then back on one's feet at the mill
     await command('/kill');
@@ -679,7 +679,7 @@ try {
         let n = 0, air = 0, boost = 0, top = 0, still = 0;
         for (; n < 60 * 150 && app.fair.session === s && !s.over; n++) {
           const ahead = r.at(S.s + 7 + Math.hypot(S.vx, S.vz) * 0.45), want = Math.atan2(ahead.x - S.x, ahead.z - S.z), err = Math.atan2(Math.sin(want - S.yaw), Math.cos(want - S.yaw));
-          input.move.x = Math.max(-1, Math.min(1, err * 2.4)); input.move.y = Math.abs(err) > 0.9 ? 0.3 : 1; input.run = false; input.jump = false;
+          input.move.x = Math.max(-1, Math.min(1, -err * 2.4)); input.move.y = Math.abs(err) > 0.9 ? 0.3 : 1; input.run = false; input.jump = false; // (a heading grows turning left)
           app.fairStep(dt);
           if (S.count > 0 && Math.hypot(S.vx, S.vz) < 0.01) still++;
           if (!S.grounded) air++; if (S.boost > 0) boost++; top = Math.max(top, Math.hypot(S.vx, S.vz));

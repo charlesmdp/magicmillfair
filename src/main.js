@@ -22,7 +22,7 @@ import { formatTime } from './world/zones/games/course.js';
 import { RemoteAvatars } from './net/RemoteAvatars.js';
 import { Benchmark } from './app/Benchmark.js';
 import { SPAWN, ZONES, CLIMB, RACE } from './world/layout/layout.js';
-import { VILLAGE_PERKS, money } from './world/layout/sponsors.js';
+import { VILLAGE_PERKS, VILLAGE_PITCH, money } from './world/layout/sponsors.js';
 import { FEATURES } from './app/config.js';
 import { Soundscape } from './audio/Soundscape.js';
 
@@ -202,7 +202,7 @@ async function boot() {
     const e = EMOTE_LIST[i];
     if (state.mode !== 'walk' || !e || player.dead) return false;
     if (e.rank) {
-      if (!unlocked(e)) { hud.note(`The ${e.label.toLowerCase()} comes to those who visit ${e.days} days in a row (you are at ${who.days})`, 4200); return false; }
+      if (!unlocked(e)) { const left = e.days - who.days; hud.note(`The ${e.label.toLowerCase()} comes on day ${e.days} in a row. You are on day ${who.days}: come back ${left === 1 ? 'tomorrow' : `${left} more days running`}!`, 5200); return false; }
       rank.play(e.rank, me.root);
       audio.play('rank');
     } else {
@@ -436,8 +436,10 @@ async function boot() {
   };
   const chooseVillage = () => {
     const here = sky.villageAt(player.pos.x, player.pos.z);
-    const list = sky.villages.filter((v) => v !== here);
-    hud.choose('The sky villages', 'Perched on the mountains all around. Pick one: you will be carried there.', list.map((v) => ({ label: v.name, note: v.motto, color: v.color })))
+    // (the cheapest first; each is the only one of its kind)
+    const list = sky.villages.filter((v) => v !== here).sort((a, b) => a.price - b.price || a.name.localeCompare(b.name));
+    hud.choose('The sky villages — pay for view', 'Others invented pay-per-view. We invented pay FOR view: fifty mountain tops, one of each, the cheapest first. Pick one and you are carried there — looking is free.',
+      list.map((v) => ({ label: v.name, note: v.forHire ? `For sale · ${money(v.price)}/mo · 1 left` : `Sold · ${v.motto || 'somebody lives here'}`, color: v.color })))
       .then((i) => { if (i !== null && state.mode === 'walk' && !player.dead) travel(list[i], `Welcome to ${list[i].name}`); });
   };
   const near = (p, q, r) => (p.pos.x - q[0]) ** 2 + (p.pos.z - q[1]) ** 2 < r * r;
@@ -525,7 +527,7 @@ async function boot() {
   // a village for hire: what it brings, what it costs, and the way to take it
   const hireVillage = (v) => {
     if (!shop.open) { hud.note('Hiring opens soon. Come back shortly!', 5200); return; }
-    hud.choose(`Hire ${v.name}`, `${money(v.price)} a month, for as long as you like. ${VILLAGE_PERKS.join(' · ')}.`, [{ label: `Hire it · ${money(v.price)} a month`, note: 'Your name, your colours, your link', color: v.color }, { label: 'Not now', note: 'Keep looking round' }])
+    hud.choose(`${v.name} is for sale`, `${VILLAGE_PITCH.title} ${money(v.price)} a month and this mountain top is yours — the only ${v.name} there will ever be. ${VILLAGE_PERKS.join(' ')} ${VILLAGE_PITCH.foot}`, [{ label: `Take it · ${money(v.price)} a month`, note: 'Your name, your colours, your link', color: v.color }, { label: 'Not now', note: 'My accountant is watching' }])
       .then(async (i) => { if (i !== 0) return; hud.note('Opening the payment page…', 8000); const wrong = await shop.buy(`village:${v.id}`); if (wrong) hud.note(wrong, 7000); });
   };
   world.actionSources.push((p) => {
@@ -541,7 +543,7 @@ async function boot() {
       // (its holder sets it up there; the administrator approves there; anybody else may hire it while it is free)
       const id = `village:${v.id}`, view = shop.slots[id];
       if (view?.mine || (who.admin && (pending[id]?.draft || view))) { const acts = placeActions(id); if (acts.length) return acts[0]; }
-      if (v.forHire && !view) return { label: `Hire ${v.name} · ${money(v.price)} a month`, run: () => hireVillage(v) };
+      if (v.forHire && !view) return { label: `Buy ${v.name} · ${money(v.price)} a month`, run: () => hireVillage(v) };
     }
     return v.url && near(p, v.sign, 3.4) ? { label: `Visit ${v.name}`, run: () => window.open(v.url, '_blank', 'noopener,noreferrer') } : null;
   });
