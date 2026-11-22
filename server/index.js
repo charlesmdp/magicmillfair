@@ -21,7 +21,7 @@ import { stripeConfig } from './stripe.js';
 import { route, banned, addBan } from './routes.js';
 import { adminOf, looksNamed, nameAdmin } from './admins.js';
 import { geoFromHeaders } from './visitors.js';
-import { randomId, sameSecret } from './token.js';
+import { randomId, sameSecret, bearerKey } from './token.js';
 import { NPC_MODEL, cleanTalk, npcReply } from './npc.js';
 
 const env = (name, def, min, max) => {
@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = parseOrigins(process.env.ALLOWED_ORIGINS);
 const HEARTBEAT_MS = 15000;
 const SCORES_FILE = path.resolve(process.env.SCORES_FILE || path.join(ROOT, 'data', 'scores.json'));
 const NPC = { apiKey: process.env.ANTHROPIC_API_KEY || '', model: process.env.NPC_MODEL || NPC_MODEL };
-const ADMIN_KEY = process.env.ADMIN_KEY || '';
+const ADMIN_KEY = (process.env.ADMIN_KEY || '').trim(); // (a space or a new line pasted with it does not count)
 // behind a proxy that says where each visitor comes from (Cloudflare's "visitor location" headers): GEO_HEADERS=1
 const GEO_HEADERS = /^(1|true|yes)$/i.test(process.env.GEO_HEADERS || '');
 const geoOf = (req) => (GEO_HEADERS ? geoFromHeaders((name) => req.headers[name]) : null);
@@ -196,7 +196,7 @@ async function onApi(req, res, pathname, query) {
     if (!allowed(limiter, 'npc', client) || !limiter.allow('npc:day', ...LIMIT_DAY)) return json(429, { reply: null, error: 'Too many requests.' }, { 'Retry-After': '60' });
     return json(200, { reply: await npcReply(NPC, talk) });
   }
-  const bearer = /^Bearer (.+)$/.exec(String(req.headers.authorization || ''))?.[1] || '';
+  const bearer = bearerKey(req.headers.authorization);
   const max = bodyMax(pathname), raw = reading ? null : await readBody(req, max);
   const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() || (req.socket.encrypted ? 'https' : 'http');
   const out = await route({

@@ -102,8 +102,8 @@ Worker sees — `"npc": true`, `"admin": true` — without showing any of it.
 
 | Secret | What it does |
 |---|---|
-| `ANTHROPIC_API_KEY` | **Billy's brain.** The alligator on the pond deck is a life coach: he answers with a handful of lines of his own until the Worker has this key — then through the Claude API. The model is `claude-opus-5-5` unless a variable `NPC_MODEL` names another (a smaller model costs much less per line). |
-| `ADMIN_KEY` | **The administrator's key**: any long password of your own invention. In the game, type `/admin <the key>` in the chat (it is checked by the server and sent to nobody) — or open the site once with `#admin=<the key>` at the end of the address. Without this secret, nobody is the administrator. |
+| `ANTHROPIC_API_KEY` | **Billy's brain.** The alligator on the pond deck is a life coach: he answers with a handful of lines of his own until the Worker has this key — then through the Claude API. The model is `claude-sonnet-5-5` unless a variable `NPC_MODEL` names another (`claude-haiku-5-5` costs a twentieth of that per line). Every answer of his carries one strange fact that is true. |
+| `ADMIN_KEY` | **The administrator's key**: any long password of your own invention. In the game, type `/admin <the key>` in the chat (it is checked by the server and sent to nobody) — or open the site once with `#admin=<the key>` at the end of the address (typed after the address of a page that is already open, it works too; spaces round the key do not count, and the game says why when it is refused). Without this secret, nobody is the administrator. |
 | `SCORE_SECRET` | Optional: signs the notes of the game runs (see "Cheating"). The notebook draws one by itself otherwise. |
 | `STRIPE_SECRET_KEY` | **Opens the shop.** The secret key of your Stripe account: `sk_test_…` to try with test cards, `sk_live_…` to sell. Without it nothing is sold and everything is free (see *The shop*). |
 | `STRIPE_WEBHOOK_SECRET` | The signing secret (`whsec_…`) of the webhook that Stripe calls when something is paid: without it no payment is ever believed. See *The shop* for the three steps. |
@@ -169,7 +169,7 @@ room; `?village=name` arrives straight in a sky village.
 | Look around | drag the mouse; double-click to capture the pointer | drag on the right | right stick |
 | Run / jump | one runs by default and Shift walks (Settings → *Run by default* to have it the other way round) / Space | buttons on the right | trigger, A button |
 | Zoom | wheel | pinch | |
-| Flying camera | F (Space / C to go up and down, Shift to go faster) | drone button | |
+| Flying camera (the eye at the top right: the administrator's, see `app/config.js`) | F (Space / C to go up and down, Shift to go faster) | the eye | |
 | Map | M, or click the minimap (click again or Escape to close); its **Mega map** button shows the whole country with the fifty sky villages | tap the minimap | |
 | Jetpack | Space again while in the air: a second and a half of thrust | jump button again | A again |
 | Sit, lie down, board, pick a flower, talk, travel, get up | E when the action is offered (walking away or jumping gets up too) | tap the action shown above the jump button | |
@@ -192,7 +192,10 @@ put down at the bottom.
 
 **Chat**: what you say appears in a log and in a bubble over your head, for those who are in the room at
 that moment. Nothing of it is stored anywhere: no history — a line is relayed and forgotten (200 characters
-at most, five in a row then one every two seconds). What the game keeps is on your own device: your name,
+at most, five in a row then one every two seconds). A page left in the background still receives what
+is said while it stays connected: the title of the tab counts the lines, and a mark in the log — *while you
+were away* — shows where the reading had stopped (the log holds the last 200 lines; a phone that went to
+sleep was disconnected, and what was said meanwhile is gone). What the game keeps is on your own device: your name,
 your colour, your hat, the quality tier. What the server keeps: the boards of the games (a name and a score) and, for
 a random number drawn by each browser, the days in a row it has visited.
 
@@ -240,20 +243,29 @@ round the ring (50). The emote panel shows where you stand; the administrator ha
     a flash at the top, never twice at the same pace, quicker at each of three blows — and the scale is
     anything but fair: nine tenths of the way up is worth 5,900. The best blow counts; the bell rings from
     9,000, which takes a blow given within a hundredth of a second.
-- **Quadmania**: 412 m of gravel track north of the mill — up a long straight, an S through a grove
-  planted for it (the trunks stand a couple of metres from the track), back along the foot of the crags,
-  round the wheat field and through a hairpin to the line. In the paddock under the striped tent, press E:
-  you are put on a quad behind the line, under the gantry — three red lights, then green — for three laps
-  against the clock, seen from low behind the quad. Hold the drift button in a bend to slide through it
-  (let go after a good slide and the quad leaps forward) and hop with the jump button. On the way: four
-  **pads** of running chevrons of light, each between two posts topped with arrows of light (a second of
-  extra speed); two **chicanes** (two walls of bales, one from each side); three **logs** lying across half
-  the track (hop them at full speed, or go round: driven into, a log is a wall); and the **ramp**, at the
-  end of a funnel of bales that brings every quad onto it: taken at speed, right after its pad, it throws
-  the quad five metres up for more than a second. Red and white kerbs mark the inside of the bends, bales
-  the outside, boards of arrows the sharp ones. Leaving the track for the grass is slow; cutting across
-  the fields does not count. There is a stand with an awning beside the straight (eighteen places to sit
-  and watch). A bot that never drifts and goes round every log needs about 73 seconds.
+- **Quadmania**: 400 m of gravel track north of the mill, drawn to be driven **flat out**: whoever
+  drives well never has to lift. The straight of the start, a long sweeper through a grove planted for it
+  (the trunks stand a few metres from the track), esses along the foot of the crags, a straight for the
+  ramp, a second sweeper above the beach, and back to the line. No bend is tighter than 21 m in the
+  middle of the track (a quad at full speed turns in 12 m, in 17.5 m while a boost lasts). Where to ask is
+  written on the ground — a red disc, RACE HERE, under the striped tent of the paddock, an arrow of light
+  over it. **A race leaves every five seconds**, on a clock everybody shares, and each start has the name
+  of a colour (Red, Blue, Green, Yellow, Purple, Orange, in turn): the board by the tent says which one
+  is next and in how many seconds, and friends who ask for the same start leave at the same instant, side
+  by side on the grid. Then the gantry — three red lights, green — and three laps against the clock,
+  seen from low behind the quad. Hold the drift button in a bend to slide through it (let go after a good
+  slide and the quad leaps forward) and hop with the jump button. On the way: four **pads** of running
+  chevrons of light, each between two posts topped with arrows of light (a second of extra speed); two
+  **chicanes** (two walls of bales 24 m apart, one from each side: far enough to change sides without
+  lifting); and the **ramp**, at the end of a funnel of bales that brings every quad onto it: taken at
+  speed, right after its pad, it throws the quad five metres up for more than a second. Red and white
+  kerbs mark the inside of the bends, bales the outside, boards of arrows the way round. Leaving the track
+  for the grass is slow; cutting across the fields does not count. There is a stand with an awning beside
+  the straight (eighteen places to sit and watch). A bot that follows the middle of the track and never
+  lifts needs 54.5 seconds; nothing under 42 is believed. **The first track is kept**: add `?track=classic`
+  to the address to drive it (an oval of 330 m round the wheat field, with its own baked maps in
+  `public/assets/world-classic`); times driven there are not recorded. Which of the two is the track of the
+  game is one word in `layout.js` (`TRACKS`).
 - **Wing It**: the little theatre on the plaza at the foot of the pier. Step up before its stage and press
   E: a pair of wings is strapped on your back and you are hung in the middle of the stage, in front of
   everybody. Click, tap or press Space to flap; the rest of the time you fall. You do not travel: the
@@ -452,7 +464,9 @@ mountain, under the rock, out at sea.
   round it, ten beanbag chairs facing the sea, three hammocks, low tables, lanterns, a chest — and what is
   left of a party: a crate and a keg of OIL, empties in the sand (these are robots). Twenty-one places to
   sit. The sea can also be swum northwards along the cliffs, as far as the fall that drops into it.
-- **The Golden Cove**: not on the map either. Swim on northwards past the fall: a pocket of sand under the
+- **The Golden Cove**: not on the map either. Swim on northwards past the fall, along the foot of the
+  cliffs (the shark keeps to the open sea: it leaves alone whoever follows them): a beach shelves into the
+  water there — one finds the bottom and walks out —, behind it a pocket of sand under the
   cliffs, the prints of four very large paws in it, and a stair of 225 steps cut across the face of the
   cliff, a rope on the side of the drop. It climbs to a ledge 44 m above the sea where a dog of polished
   gold, fifteen metres tall, sits on a round plinth and looks out over the bay — an Australian shepherd,
@@ -605,7 +619,9 @@ it into the 1024 × 1024 m maps the game reads: relief, water levels, normals, g
 and the map shown in the game. `npm run bake:textures` generates every texture (ground, stone, bark,
 foliage, flowers): there is not a single photograph in the project, everything is procedural.
 
-To change the world: edit `layout.js`, run `npm run bake:world` again, reload the page.
+To change the world: edit `layout.js`, run `npm run bake:world` again, reload the page. The race has two
+tracks (`TRACKS` in `layout.js`), each with its own maps: `TRACK=classic npm run bake:world` bakes those of
+the track that is not in use into `public/assets/world-classic`.
 
 The golden dog of the cove is baked too: `tools/bake-statue.mjs` describes it as a blend of some fifty
 rounded shapes (a signed distance field: eggs, limbs, flaps for the ears, a ring for the collar), turns the
@@ -698,6 +714,9 @@ out whoever shares it — a school, a mobile operator.
   they see and do what an administrator does, and can name others in turn. Two things stay the owner's:
   taking the title away (*Remove*, in the list of the administrators who were named — it works at once,
   the key opens nothing any more), and being put out — no administrator can kick or ban the owner.
+- **Seeing the game as a visitor does**: a button at the top of the list of who is here. No free view, no
+  approvals, no key sent to the room: exactly what somebody without the key has. A yellow pill at the top
+  left says so and brings the administrator back; it lasts until the tab is closed.
 - **The "important" channel**: in the chat, Tab (or the button left of the line) goes round *Everyone*,
   *Nearby* and — for an administrator — *Important*: a line said there reaches the whole room in another
   colour, marked as such, and is shown on everybody's screen for a few seconds.
@@ -771,8 +790,8 @@ that is the last point. Going further means a referee: the server replaying the 
 | `npm run test:shop` | the shop in the real game, on the Node server with test keys and a stand-in for Stripe: a hat bought and worn, the panel of a game sponsored, filled in (with a logo) and approved by the administrator, the stand of the gondolas (8 checks) |
 | `npm run test:smoke` | drives the real site: welcome screen, walking, free camera, settings, large map (`-- --mobile` for the touch layout) |
 | `npm run test:audio` | Listens to the sound engine without ears: in headless Chromium it renders a dozen listener scenarios (beach, cliffs, pier, woods, mill, waterfall, cave, sky village, the climb…) and every one-shot effect through an offline audio context, measures level, spectrum, how the loudness moves and how tonal it is, fails on silence or clipping, and times `update()` (about 0.01 ms a frame) |
-| `npm run test:walk` | 44 checks in the real game: pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls and the high clearing above them, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the fifty sky villages (prices, places to sit, the board of one for hire, the one dressed as a demonstration), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the four booths (a bot plays each through the pointer; boards), the quad race (a bot drives three laps round the logs and through the chicanes, and flies off the ramp), a log hopped at full speed, the flying theatre (a bot flaps through nine pairs of columns), the acid pond, the shark, change of tier |
-| `npm run test:duo` | two visitors on the production server: they must see each other move, wave, summon an animal, chat and sit down (`-- --cloudflare` for the Cloudflare version) |
+| `npm run test:walk` | 44 checks in the real game: pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls and the high clearing above them, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the swim on to the golden cove (the shark stays away; out of the sea on the beach; the stair up to the golden dog), the fifty sky villages (prices, places to sit, the board of one for hire, the one dressed as a demonstration), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the four booths (a bot plays each through the pointer; boards), the quad race (asked for in the paddock, it leaves with the next named start; a bot drives three laps flat out — it never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, and flies off the ramp), the flying theatre (a bot flaps through nine pairs of columns), the acid pond, the shark, change of tier |
+| `npm run test:duo` | 23 checks with two visitors on the production server: they must see each other move, wave, summon an animal, chat and sit down; the administrator's key in the address, the administrator seeing the game as a visitor does (`-- --cloudflare` for the Cloudflare version) |
 | `npm run bench` | benchmark tour for each tier (`-- --mobile` for the phone profile) |
 | `npm run profile` | cost of each system (script, draw calls, triangles) at seven viewpoints |
 | `npm run shots -- name=x,y,z,heading,pitch` | screenshots from a viewpoint |

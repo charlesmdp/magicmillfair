@@ -33,6 +33,16 @@ export async function verify(secret, token) {
 }
 
 /** Compares two secrets without telling, by the time it takes, where they differ. */
+/**
+ * The key of an "Authorization: Bearer …" header. The game sends it percent-encoded, so that any character
+ * can be in a key; a page loaded before that sends it as it is. Spaces round it do not count.
+ */
+export function bearerKey(header) {
+  const raw = /^Bearer\s+(.+)$/i.exec(String(header || ''))?.[1]?.trim() || '';
+  if (!/%[0-9a-f]{2}/i.test(raw)) return raw;
+  try { return decodeURIComponent(raw); } catch { return raw; }
+}
+
 export function sameSecret(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string' || !a || !b) return false;
   const x = enc.encode(a), y = enc.encode(b);

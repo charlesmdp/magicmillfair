@@ -20,7 +20,7 @@ import { Room as Relay, MAX_FRAME, NEAR, RANGE, BLAST_EVERY, cleanRoom, originAl
 import { Limiter, LIMITS, BODY_MAX, allowed, parseBody, mayPost, bodyMax } from '../server/api.js';
 import { stripeConfig } from '../server/stripe.js';
 import { route, banned, addBan } from '../server/routes.js';
-import { randomId, sameSecret } from '../server/token.js';
+import { randomId, sameSecret, bearerKey } from '../server/token.js';
 import { NPC_MODEL, cleanTalk, npcReply } from '../server/npc.js';
 import { adminOf, looksNamed, nameAdmin } from '../server/admins.js';
 import { cleanGeo, packGeo, unpackGeo } from '../server/visitors.js';
@@ -66,7 +66,7 @@ export class Room extends DurableObject {
       drop: (ws, code, reason) => this.drop(ws, code, reason),
       save: (p) => { try { p.conn.serializeAttachment({ id: p.id, name: p.name, color: p.color, kit: p.kit, joined: p.joined, state: p.state, ip: p.ip, ua: p.ua, dev: p.dev, admin: p.admin ? p.rank || 'owner' : false, key: p.key, cc: p.cc, city: p.city, since: p.since }); } catch { /* closing */ } },
       // whose key: the owner's (the secret ADMIN_KEY), or that of an administrator who was named (the notebook knows them)
-      admin: (key) => (sameSecret(key, env.ADMIN_KEY || '') ? { rank: 'owner', id: '' } : looksNamed(key) ? this.notebook('/admin-key', { key }).then((r) => r?.who || null) : false),
+      admin: (key) => (sameSecret(key, (env.ADMIN_KEY || '').trim()) ? { rank: 'owner', id: '' } : looksNamed(key) ? this.notebook('/admin-key', { key }).then((r) => r?.who || null) : false),
       promote: (who) => this.notebook('/promote', who).then((r) => r?.made || null),
       // the big red button: when it last went off outlives the sleep of the room (and is forgotten once it may go off again)
       fired: (at) => { ctx.waitUntil(Promise.all([ctx.storage.put('blastAt', at), ctx.storage.setAlarm(Date.now() + BLAST_EVERY + 5000)]).catch(() => {})); },
@@ -127,9 +127,9 @@ export class Room extends DurableObject {
         return this.signing;
       },
     });
-    const bearer = /^Bearer (.+)$/.exec(request.headers.get('Authorization') || '')?.[1] || '';
+    const bearer = bearerKey(request.headers.get('Authorization'));
     const out = await route({
-      method: request.method, path: url.pathname, query: url.searchParams, body, client, admin: sameSecret(bearer, env.ADMIN_KEY || ''), bearer,
+      method: request.method, path: url.pathname, query: url.searchParams, body, client, admin: sameSecret(bearer, (env.ADMIN_KEY || '').trim()), bearer, // (a space or a new line pasted with the secret does not count)
       geo: unpackGeo(request.headers.get(GEO)), raw, signature: request.headers.get('Stripe-Signature') || '', site: url.origin,
     }, ctx);
     if (out.bytes) return new Response(out.bytes, { status: out.status, headers: out.headers });

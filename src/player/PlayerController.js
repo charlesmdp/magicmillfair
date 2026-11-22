@@ -64,6 +64,7 @@ export class PlayerController {
     this.diving = false; // head first into deep water, from high up
     this._peak = 0; // the highest the feet have been since they left the ground
     this._plunge = 0; // seconds under water left after a dive
+    this._sink = 0; // …and how fast one is still going down
     /** May the jetpack be used here? Set by the game (caves and some places say no). */
     this.canFly = () => true;
     /** Called with (cause) when the player dies, and with the place when they stand again. */
@@ -305,13 +306,20 @@ export class PlayerController {
     // vertical motion
     const ground = col.groundAt(pos.x, pos.z, pos.y + 0.3);
     if (this.swimming) {
-      // (after a dive one goes down a little before coming back up)
-      const target = Math.max(water - 1.05 - (this._plunge > 0 ? 1.9 * Math.min(1, this._plunge / 0.45) : 0), Math.min(water - 1.05, ground + 0.25));
-      this._plunge -= dt;
-      pos.y += (target - pos.y) * Math.min(1, dt * 5);
+      if (this._plunge > 0) {
+        // a dive carries on under the surface: head first, slowing, a metre or two down — as deep as the bed
+        // allows — before one comes back up
+        this._plunge -= dt;
+        this._sink *= Math.exp(-dt * 3.4);
+        pos.y = Math.max(pos.y - this._sink * dt, Math.min(water - 1.05, ground + 0.3));
+        if (this._sink < 0.7) this._plunge = 0;
+      } else {
+        const target = water - 1.05;
+        pos.y += (target - pos.y) * Math.min(1, dt * (pos.y < target - 0.4 ? 2.6 : 5)); // (up from a dive: unhurried)
+      }
       vel.y = 0;
       this.grounded = false;
-      this.diving = false;
+      this.diving = this._plunge > 0;
       this.jet = 0;
       if (ground > pos.y) { pos.y = ground; this.swimming = false; this.grounded = true; }
     } else if (this.grounded) {
@@ -346,7 +354,8 @@ export class PlayerController {
       if (depth > 1.2 && pos.y < water - 0.9) {
         this.swimming = true;
         this.splashed = Math.max(1, -vel.y) * (this.diving ? 1.5 : 1);
-        this._plunge = this.diving ? 0.9 : 0;
+        this._plunge = this.diving ? 1.1 : 0;
+        this._sink = Math.min(9.5, Math.max(4, -vel.y * 0.42)); // how fast one is still going down (m/s)
         this.dived = this.diving; // (read and cleared by the effects)
         this.diving = false;
         vel.y = 0;
@@ -364,7 +373,7 @@ export class PlayerController {
       d = Math.atan2(Math.sin(d), Math.cos(d));
       this.yaw += d * Math.min(1, dt * (riding ? 5 : 12));
     }
-    this.anim = riding ? ANIM.sit : this.swimming ? ANIM.swim : this.diving ? ANIM.dive : !this.grounded ? ANIM.jump : sp > 5.6 ? ANIM.run : sp > 0.5 ? ANIM.walk : ANIM.idle;
+    this.anim = riding ? ANIM.sit : this.swimming && !this.diving ? ANIM.swim : this.diving ? ANIM.dive : !this.grounded ? ANIM.jump : sp > 5.6 ? ANIM.run : sp > 0.5 ? ANIM.walk : ANIM.idle;
     this.character.setAnim(this.anim, sp);
     this.character.update(dt);
     this._sync();

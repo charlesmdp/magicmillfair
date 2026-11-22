@@ -10,7 +10,7 @@ import { cosmeticMaterial } from '../../../player/Cosmetics.js';
 import { Booths } from './Booths.js';
 import { Race } from './Race.js';
 import { Wing } from './Wing.js';
-import { CLIMB, ACID, BOULDER, ISLAND, islandPath, islandAt, ISLAND_LENGTH, SEA_REACH, PONDS } from '../../layout/layout.js';
+import { CLIMB, ACID, BOULDER, ISLAND, islandPath, islandAt, ISLAND_LENGTH, SEA_REACH, SHARK, PONDS } from '../../layout/layout.js';
 import { climbCourse, stoneDepth, formatTime } from './course.js';
 import { canvasBoard, drawScores, drawSponsor } from './Boards.js';
 
@@ -638,7 +638,7 @@ export class GamesZone {
     const far = this.seaEdgeDistance(p.x, p.z);
     mesh.visible = far < 600;
     const inWater = player.swimming && !player.dead;
-    if (s.mode !== 'chase' && inWater && far < 30) {
+    if (s.mode !== 'chase' && inWater && far < SHARK.near) {
       s.mode = 'chase';
       this.events.note?.('A fin is heading your way. Swim back!');
       if (Math.hypot(p.x - s.x, p.z - s.z) > 60) {
@@ -648,7 +648,7 @@ export class GamesZone {
         s.yaw = Math.atan2(p.x - s.x, p.z - s.z); s.speed = 6;
       }
     }
-    if (s.mode === 'chase' && (!inWater || far > 46)) s.mode = 'patrol';
+    if (s.mode === 'chase' && (!inWater || far > SHARK.far)) s.mode = 'patrol';
     let tx, tz, speed;
     if (s.mode === 'chase') { tx = p.x; tz = p.z; speed = 9.5; }
     else {
@@ -697,6 +697,7 @@ export class GamesZone {
       if (!player.dead && (p.x - a.x) ** 2 + (p.z - a.z) ** 2 < a.r * a.r && p.y < a.y + 0.1) player.die('Dissolved in acid', [a.x + a.r + 7, a.z + 3, -Math.PI / 2], 0.4);
       this.booths.update(dt, time, p, camera);
       this.wing.update(dt, time, p);
+      this.race.update?.(p);
     }
     if (camera) this._cull(camera.position);
   }

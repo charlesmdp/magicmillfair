@@ -29,7 +29,7 @@ html, body {
 /* ---------- loading and welcome: the gate of the fair, at dusk ---------- */
 .splash {
   position: absolute; inset: 0; display: grid; place-items: center; pointer-events: auto; overflow-y: auto; z-index: 20;
-  padding: calc(clamp(64px, 12vh, 120px) + 4px) 24px 24px;
+  padding: calc(clamp(64px, 12vh, 120px) + clamp(30px, 6vw, 70px)) 24px 24px;
   background:
     radial-gradient(60% 40% at 50% 106%, rgba(242, 193, 78, 0.34), rgba(242, 193, 78, 0) 70%),
     radial-gradient(34% 28% at 10% 100%, rgba(232, 121, 90, 0.3), rgba(232, 121, 90, 0) 70%),
@@ -79,6 +79,23 @@ html, body {
 /* bunting across the top */
 .bunting { position: absolute; z-index: 3; top: 0; left: 0; width: 100%; height: clamp(64px, 12vh, 120px); pointer-events: none; transform-origin: 50% 0; animation: sway 5.5s ease-in-out infinite alternate; filter: drop-shadow(0 4px 5px rgba(0, 0, 0, 0.4)); }
 @keyframes sway { from { transform: skewX(-1.3deg); } to { transform: skewX(1.3deg); } }
+/* the banner hung across the gate: red cloth, gold letters, a trefoil at each end, cords up to the bunting */
+.gate-banner { position: absolute; z-index: 3; top: clamp(40px, 8.5vh, 92px); left: 50%; width: max-content; max-width: calc(100% - 20px); display: flex; align-items: flex-start; pointer-events: none; transform: translateX(-50%) rotate(-1.2deg); transform-origin: 50% 0; animation: hang 6s ease-in-out infinite alternate; filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.45)); }
+@keyframes hang { from { transform: translateX(-50%) rotate(-1.4deg); } to { transform: translateX(-50%) rotate(0.9deg); } }
+.gate-banner i { flex: none; width: clamp(10px, 2vw, 26px); height: clamp(26px, 5.4vw, 62px); background: linear-gradient(90deg, #7a0a1c, #a50d26); }
+.gate-banner i:first-child { clip-path: polygon(100% 0, 0 0, 55% 50%, 0 100%, 100% 100%); margin-right: -1px; }
+.gate-banner i:last-child { clip-path: polygon(0 0, 100% 0, 45% 50%, 100% 100%, 0 100%); margin-left: -1px; background: linear-gradient(270deg, #7a0a1c, #a50d26); }
+.gate-banner b {
+  display: flex; align-items: center; gap: clamp(6px, 1.4vw, 18px); min-width: 0; height: clamp(26px, 5.4vw, 62px); padding: 0 clamp(8px, 1.8vw, 24px);
+  background: linear-gradient(180deg, #d8152f 0%, #b30f27 100%); border-top: 3px solid #f2c14e; border-bottom: 3px solid #f2c14e;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+.gate-banner span { font: 900 clamp(15px, 3.5vw, 40px) / 1 Georgia, 'Iowan Old Style', 'Times New Roman', serif; letter-spacing: 0.07em; text-transform: uppercase; white-space: nowrap; color: #fff3d6; text-shadow: 0 2px 0 #5a0715, 0 0 18px rgba(242, 193, 78, 0.5); }
+.gate-banner em { font-style: normal; color: #ffe14d; text-shadow: 0 2px 0 #5a0715, 0 0 16px rgba(150, 255, 90, 0.75); }
+.gate-banner svg { flex: none; width: clamp(15px, 3.2vw, 38px); height: clamp(15px, 3.2vw, 38px); animation: spin 12s linear infinite; }
+.splash.done .gate-banner { display: none; }
+@media (max-height: 560px) { .gate-banner { display: none; } }
+@media (prefers-reduced-motion: reduce) { .gate-banner, .gate-banner svg { animation: none; } }
 /* the booth: a dark panel under a striped awning */
 .card {
   position: relative; width: min(460px, 100%); text-align: center; padding: 34px 24px 18px; border-radius: 6px 6px 20px 20px;
@@ -104,7 +121,12 @@ html, body {
   font-family: Georgia, 'Iowan Old Style', 'Times New Roman', serif; font-size: clamp(34px, 8vw, 54px); letter-spacing: 0.03em; margin: 0; font-weight: 700; text-wrap: balance;
   color: #fff3d6; text-shadow: 0 0 20px rgba(242, 193, 78, 0.6), 0 3px 0 #7a0a1c;
 }
-.title em { font-style: normal; color: var(--accent); }
+.title em { font-style: normal; color: var(--accent); animation: fallout 3.6s ease-in-out infinite alternate; }
+/* (a breath of something green round the second word: it is that kind of oasis) */
+@keyframes fallout { from { text-shadow: 0 0 20px rgba(242, 193, 78, 0.6), 0 3px 0 #7a0a1c; } to { text-shadow: 0 0 26px rgba(150, 255, 90, 0.85), 0 0 8px rgba(150, 255, 90, 0.5), 0 3px 0 #7a0a1c; } }
+/* a strip of hazard tape along the foot of the card */
+.tape { margin: 12px -24px -18px; height: 22px; border-radius: 0 0 19px 19px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: repeating-linear-gradient(-45deg, #f2c14e 0 12px, #1b1622 12px 24px); }
+.tape span { padding: 2px 12px; background: #f2c14e; color: #1b1622; font: 800 9.5px/1.4 system-ui, sans-serif; letter-spacing: 0.16em; text-transform: uppercase; white-space: nowrap; }
 .subtitle { margin: 10px 0 18px; color: var(--ink-soft); font-size: 15px; line-height: 1.45; text-wrap: pretty; }
 /* the progress: a strip of golden tickets being torn off */
 .bar { height: 14px; border-radius: 8px; background: rgba(255, 255, 255, 0.1); border: 1px dashed rgba(246, 231, 200, 0.42); overflow: hidden; }
@@ -117,6 +139,11 @@ html, body {
   .card { padding-top: 26px; }
   .subtitle { display: none; }
   .bar { margin-top: 12px; }
+}
+@media (min-height: 561px) and (max-height: 780px) {
+  /* (short screens: the name of the place and the form; the wheel is on the pier anyway) */
+  .card.ready .wheel { display: none; }
+  .card.ready { padding-top: 30px; }
 }
 @media (min-height: 561px) and (max-height: 860px) {
   .card.ready .wheel { width: 62px; height: 72px; margin: 0 auto 2px; }
@@ -182,6 +209,13 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border-radius: 
 .roster h3 { margin: 14px 0 6px; font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft); font-weight: 600; }
 .roster .lead { margin: 4px 0 12px; font-size: 13.5px; color: var(--ink-soft); }
 .roster .body { flex: 1 1 auto; min-height: 60px; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-right: 4px; }
+.roster .see-as { align-self: flex-start; margin: -4px 0 12px; padding: 7px 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.08); font-size: 13px; }
+.roster .see-as:hover { background: rgba(242, 193, 78, 0.22); border-color: rgba(242, 193, 78, 0.7); }
+.pill.as-visitor { pointer-events: auto; gap: 7px; background: rgba(242, 193, 78, 0.92); color: #2a1d05 !important; border-color: transparent; font-size: 12.5px; font-weight: 700; }
+.pill.as-visitor[hidden] { display: none; }
+.pill.as-visitor svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.chat .log p.away { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); opacity: 0.9; }
+.chat .log p.away::before, .chat .log p.away::after { content: ''; flex: 1; height: 1px; background: currentColor; opacity: 0.5; }
 .roster .flag { font-size: 1.05em; }
 .roster .flag.code { display: inline-block; padding: 0 4px; border-radius: 4px; border: 1px solid var(--line); font-size: 10px; font-weight: 700; letter-spacing: 0.04em; vertical-align: 1px; color: var(--ink-soft); }
 .roster .who b em.rank { font-style: normal; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; padding: 1px 6px; border-radius: 6px; background: rgba(242, 193, 78, 0.25); border: 1px solid rgba(242, 193, 78, 0.6); color: #ffe6a6; vertical-align: 2px; }
@@ -376,23 +410,23 @@ body.dead #view { filter: grayscale(1) contrast(1.15) brightness(0.72); }
 .shelf-featured h3 { background: #ffe14d; color: #201a05; }
 .shelf .row { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
 .shelf-featured .row { grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); }
-.card { position: relative; aspect-ratio: 4 / 5; padding: 0; border: 3px solid rgba(255, 255, 255, 0.16); border-radius: 6px; overflow: hidden; cursor: pointer; color: #fff; text-align: left; transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease; }
-.card:hover, .card.picked { transform: translateY(-3px) scale(1.025); border-color: #fff; box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45), 0 0 22px rgba(255, 255, 255, 0.28); z-index: 1; }
-.card.picked { border-color: #ffe14d; }
-.card.uncommon, .detail.uncommon .stage { background: linear-gradient(180deg, #7bd957 0%, #2f8f3a 55%, #1c5a2a 100%); }
-.card.rare, .detail.rare .stage { background: linear-gradient(180deg, #4fc3ff 0%, #2470d6 55%, #173d8f 100%); }
-.card.epic, .detail.epic .stage { background: linear-gradient(180deg, #d27bff 0%, #8438d8 55%, #4a1b8f 100%); }
-.card.legendary, .detail.legendary .stage { background: linear-gradient(180deg, #ffc24d 0%, #e8742a 55%, #9a3312 100%); }
-.card .shine, .stage .shine { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(70% 55% at 50% 38%, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0) 70%), repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.08) 0 14px, transparent 14px 44px); }
-.card canvas, .stage canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.35)); }
-.card .rar { position: absolute; left: 8px; top: 7px; font: 800 9.5px/1 system-ui, sans-serif; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255, 255, 255, 0.9); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
-.card .foot { position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 9px 8px; display: flex; align-items: flex-end; justify-content: space-between; gap: 6px; background: linear-gradient(180deg, transparent, rgba(8, 6, 30, 0.82) 46%); }
-.card .foot b { min-width: 0; font: italic 900 14px/1.05 'Arial Black', Impact, Arial, sans-serif; text-transform: uppercase; letter-spacing: 0.01em; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45); }
-.card.big .foot b { font-size: 19px; }
-.card .price { flex: none; padding: 4px 8px; border-radius: 5px; background: #fff; color: #17124f !important; font: 900 12px/1 system-ui, sans-serif; font-style: normal; transform: skewX(-8deg); white-space: nowrap; }
-.card .price.has { background: #5ef08a; color: #06361a !important; }
-.card.worn .price { background: #ffe14d; color: #201a05 !important; }
-.card.worn::after { content: ''; position: absolute; right: 8px; top: 8px; width: 12px; height: 12px; border-radius: 50%; background: #ffe14d; box-shadow: 0 0 10px #ffe14d; }
+.shop .card { position: relative; aspect-ratio: 4 / 5; padding: 0; border: 3px solid rgba(255, 255, 255, 0.16); border-radius: 6px; overflow: hidden; cursor: pointer; color: #fff; text-align: left; transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease; }
+.shop .card:hover, .shop .card.picked { transform: translateY(-3px) scale(1.025); border-color: #fff; box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45), 0 0 22px rgba(255, 255, 255, 0.28); z-index: 1; }
+.shop .card.picked { border-color: #ffe14d; }
+.shop .card.uncommon, .detail.uncommon .stage { background: linear-gradient(180deg, #7bd957 0%, #2f8f3a 55%, #1c5a2a 100%); }
+.shop .card.rare, .detail.rare .stage { background: linear-gradient(180deg, #4fc3ff 0%, #2470d6 55%, #173d8f 100%); }
+.shop .card.epic, .detail.epic .stage { background: linear-gradient(180deg, #d27bff 0%, #8438d8 55%, #4a1b8f 100%); }
+.shop .card.legendary, .detail.legendary .stage { background: linear-gradient(180deg, #ffc24d 0%, #e8742a 55%, #9a3312 100%); }
+.shop .card .shine, .stage .shine { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(70% 55% at 50% 38%, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0) 70%), repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.08) 0 14px, transparent 14px 44px); }
+.shop .card canvas, .stage canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.35)); }
+.shop .card .rar { position: absolute; left: 8px; top: 7px; font: 800 9.5px/1 system-ui, sans-serif; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255, 255, 255, 0.9); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
+.shop .card .foot { position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 9px 8px; display: flex; align-items: flex-end; justify-content: space-between; gap: 6px; background: linear-gradient(180deg, transparent, rgba(8, 6, 30, 0.82) 46%); }
+.shop .card .foot b { min-width: 0; font: italic 900 14px/1.05 'Arial Black', Impact, Arial, sans-serif; text-transform: uppercase; letter-spacing: 0.01em; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45); }
+.shop .card.big .foot b { font-size: 19px; }
+.shop .card .price { flex: none; padding: 4px 8px; border-radius: 5px; background: #fff; color: #17124f !important; font: 900 12px/1 system-ui, sans-serif; font-style: normal; transform: skewX(-8deg); white-space: nowrap; }
+.shop .card .price.has { background: #5ef08a; color: #06361a !important; }
+.shop .card.worn .price { background: #ffe14d; color: #201a05 !important; }
+.shop .card.worn::after { content: ''; position: absolute; right: 8px; top: 8px; width: 12px; height: 12px; border-radius: 50%; background: #ffe14d; box-shadow: 0 0 10px #ffe14d; }
 .detail { min-height: 0; display: flex; flex-direction: column; border-radius: 8px; overflow: hidden; background: rgba(8, 6, 34, 0.62); border: 2px solid rgba(255, 255, 255, 0.18); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.4); }
 .detail .stage { position: relative; flex: 1 1 46%; min-height: 150px; }
 .detail .about { flex: none; padding: 14px 18px 16px; }
@@ -479,6 +513,7 @@ body.dead #view { filter: grayscale(1) contrast(1.15) brightness(0.72); }
   .card.ready .subtitle { display: none; }
   .card.ready .form { grid-column: 2; grid-row: 1 / span 2; margin: 0; }
   .card.ready .version { grid-column: 1 / span 2; margin-top: 8px; text-align: center; }
+  .card.ready .tape { grid-column: 1 / span 2; margin-bottom: -12px; }
   .card.ready .form label { margin: 8px 0 5px; }
   .card.ready .form label:first-child { margin-top: 0; }
   .card.ready .swatches { gap: 6px; }

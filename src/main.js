@@ -24,11 +24,11 @@ import { Presence, cleanChat } from './net/Presence.js';
 import { Npc } from './npc/Npc.js';
 import { Scores } from './net/Scores.js';
 import { countVisit } from './net/Visits.js';
-import { callApi, checkAdminKey } from './net/api.js';
+import { callApi, checkAdminKey, hasApi, sharedNow } from './net/api.js';
 import { formatTime } from './world/zones/games/course.js';
 import { RemoteAvatars } from './net/RemoteAvatars.js';
 import { Benchmark } from './app/Benchmark.js';
-import { SPAWN, ZONES, CLIMB, RACE, WING } from './world/layout/layout.js';
+import { SPAWN, ZONES, CLIMB, RACE, WING, TRACK } from './world/layout/layout.js';
 import { VILLAGE_PERKS, VILLAGE_PITCH, money } from './world/layout/sponsors.js';
 import { FEATURES } from './app/config.js';
 import { Soundscape } from './audio/Soundscape.js';
@@ -409,9 +409,11 @@ async function boot() {
   const playRace = () => {
     if (fair.session || player.dead) return;
     if (player.cheat || timers.moon || timers.turbo) { hud.note('Not with a cheat on.'); return; }
-    fair.session = world.games.race.open(player, fairIo); fair.kind = 'race'; fair.after = 0;
+    // (it leaves with the next start: whoever asks for the same one leaves at the same instant)
+    const start = world.games.race.nextStart();
+    fair.session = world.games.race.open(player, fairIo, start, presence?.id ?? 0); fair.kind = 'race'; fair.after = 0;
     player.driver = fair.session;
-    hud.note(touch ? 'Three laps! The stick steers; hold Run to drift, Jump to hop.' : 'Three laps! Arrows or WASD · Shift: drift (a boost when you let go) · Space: hop · E: give up', 7000);
+    hud.note(`${start.name} start! ${touch ? 'The stick steers; hold Run to drift, Jump to hop.' : 'Arrows or WASD · Shift: drift (a boost when you let go) · Space: hop · E: give up'}`, 7000);
     startBlend(0.6);
   };
   // the flying theatre: up on the stage with a pair of wings; the game holds the flyer, the scenery goes by
@@ -430,8 +432,11 @@ async function boot() {
     const booth = world.games.booths.near(p.pos.x, p.pos.z);
     if (booth) return { label: `Play ${booth.name}`, run: () => playBooth(booth) };
     if (world.games.wing.near(p.pos.x, p.pos.z)) return { label: `Play ${WING.name}`, run: playWing };
-    return world.games.race.near(p.pos.x, p.pos.z) ? { label: `Race: ${RACE.laps} laps on a quad`, run: playRace } : null;
+    if (!world.games.race.near(p.pos.x, p.pos.z)) return null;
+    const start = world.games.race.nextStart();
+    return { label: `Race: ${RACE.laps} laps on a quad · ${start.name} start in ${Math.ceil(start.wait)} s`, run: playRace };
   });
+  world.games.race.clock = sharedNow;
   // one frame of the game being played
   const fairStep = (dt) => {
     const s = fair.session;
@@ -460,7 +465,11 @@ async function boot() {
       player.update(dt, rig.heading, true);
       fair.fov = s.camera(camera, dt);
       hud.setRun(s.line);
-      if (s.over && fair.after === 0) { fair.after = 0.01; scoreGame('race', RACE.name, s.time, formatTime(s.time)); }
+      if (s.over && fair.after === 0) {
+        fair.after = 0.01;
+        // (a time driven on the track that is not in use is not kept: see TRACKS)
+        if (TRACK === 'grove') scoreGame('race', RACE.name, s.time, formatTime(s.time)); else { audio.play('victory'); hud.note(`${formatTime(s.time)} on the ${TRACK} track — a track on trial: its times are not kept.`, 8000); }
+      }
       if (fair.after > 0 && (fair.after += dt) > 3) endGame();
     }
     if (fair.session && input.pressed('KeyE') && !(s.over)) { endGame(); hud.note(fair.kind === 'race' ? 'Race abandoned.' : 'Game left.'); }
@@ -888,11 +897,14 @@ async function boot() {
   const mayFly = () => FEATURES.freeCamera === 'everyone' || who.admin;
   hud.setFreeCamera(mayFly());
   // the administrator: `/admin <key>` in the chat (or #admin=<key> in the address) — the key is checked by the server
-  const adminKey = async (key) => {
+  const adminKey = async (key, loud = false) => {
     key = String(key || '').trim();
+    let why = '';
     if (!key) { store.del('mmf.admin'); who.admin = false; }
     else {
       const answer = await checkAdminKey(key), ok = answer.ok;
+      // (why not, when it is not the key that is wrong)
+      if (!ok) { const api = await hasApi(); why = !api ? 'There is no server behind this page: nobody can be its administrator here.' : api.admin === false ? 'This server has no administrator key: set the secret ADMIN_KEY, then try again.' : answer.dead ? '' : 'The server could not be reached: try again in a moment.'; }
       who.admin = ok;
       who.owner = ok && answer.owner; // (the owner's key, or one handed to an administrator who was named)
       who.key = ok ? key : '';
@@ -904,16 +916,57 @@ async function boot() {
     hud.setAdmin(who.admin);
     pending = who.admin ? (await shop.all(who.key)) || {} : {};
     refreshShop();
-    hud.addChat('✦', 5, who.admin ? `Administrator: on.${Object.values(pending).some((s) => s.draft) ? ' Sponsors await your approval: go and see their panels.' : ''}` : key ? 'That key was not recognised.' : 'Administrator: off.', true);
+    const said = who.admin ? `Administrator: on.${Object.values(pending).some((s) => s.draft) ? ' Sponsors await your approval: go and see their panels.' : ''}` : key ? why || 'That key was not recognised.' : 'Administrator: off.';
+    hud.addChat('✦', 5, said, true);
+    if (loud) hud.note(said, 7000);
     hud.setFreeCamera(mayFly());
     showEmotes();
     app.onAdmin?.(who.admin ? key : '');
   };
-  {
-    const fromHash = /[#&]admin=([^&]+)/.exec(location.hash);
-    if (fromHash) { history.replaceState(null, '', location.pathname + location.search); adminKey(decodeURIComponent(fromHash[1])); }
-    else if (store.get('mmf.admin')) adminKey(store.get('mmf.admin'));
+  // (the key in the address — #admin=… — is read when the page opens, and again whenever it is typed after
+  // the address of a page that is already open: that does not load the page again)
+  const keyFromAddress = () => {
+    const found = /[#&]admin=([^&]*)/.exec(location.hash);
+    if (!found) return false;
+    let key = found[1];
+    try { key = decodeURIComponent(key); } catch { /* a key with a % of its own: taken as it was typed */ }
+    history.replaceState(null, '', location.pathname + location.search);
+    adminKey(key, true);
+    return true;
+  };
+  // The administrator can look at the game as a visitor sees it — no free view, no approvals, no key sent to
+  // the room — and come back (the pill at the top left). It lasts until the tab is closed.
+  const visitorView = (on) => {
+    if (on) {
+      const key = who.key || store.get('mmf.admin') || '';
+      if (!key) return;
+      who.masked = key;
+      try { sessionStorage.setItem('mmf.visitor', '1'); } catch { /* private mode */ }
+      if (state.mode === 'free') toggleCamera();
+      who.admin = false; who.owner = false; who.key = '';
+      presence?.setAdminKey('');
+      hud.setAdmin(false);
+      pending = {};
+      refreshShop();
+      hud.setFreeCamera(mayFly());
+      showEmotes();
+      app.onAdmin?.('');
+      hud.setVisitorView(true);
+      hud.note('You now see the game as a visitor does. The yellow pill, top left, brings the administrator back.', 7000);
+    } else {
+      const key = who.masked || store.get('mmf.admin') || '';
+      who.masked = '';
+      try { sessionStorage.removeItem('mmf.visitor'); } catch { /* private mode */ }
+      hud.setVisitorView(false);
+      adminKey(key, true);
+    }
+  };
+  let asVisitor = false;
+  try { asVisitor = sessionStorage.getItem('mmf.visitor') === '1'; } catch { /* private mode */ }
+  if (!keyFromAddress() && store.get('mmf.admin')) {
+    if (asVisitor) { who.masked = store.get('mmf.admin'); hud.setVisitorView(true); } else adminKey(store.get('mmf.admin'));
   }
+  addEventListener('hashchange', keyFromAddress);
   countVisit(name).then((v) => { who.days = v.days; showEmotes(); if (v.days > 1) setTimeout(() => hud.note(`Day ${v.days} in a row — welcome back!`, 5000), 9000); });
   hud
     .on('camera', toggleCamera)
@@ -922,6 +975,7 @@ async function boot() {
     .on('interact2', () => interact.press(1))
     .on('say', say)
     .on('roster', () => { showRoster(); refreshRoster(); })
+    .on('visitorview', (on) => visitorView(on))
     .on('kick', (id) => { presence?.kick(id); setTimeout(refreshRoster, 500); })
     .on('ban', (id, hours) => { presence?.ban(id, hours); setTimeout(refreshRoster, 800); })
     .on('unban', async ({ kind, key }) => { await callApi(`api/bans?${kind}=${encodeURIComponent(key)}`, { method: 'DELETE', key: who.key }); refreshRoster(); })

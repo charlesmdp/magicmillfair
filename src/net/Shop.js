@@ -12,7 +12,7 @@ async function ask(path, { method = 'GET', body, key } = {}) {
   try {
     const res = await fetch(`${BASE}${path}`, {
       method,
-      headers: { ...(body !== undefined && { 'content-type': 'application/json' }), ...(key && { Authorization: `Bearer ${key}` }) },
+      headers: { ...(body !== undefined && { 'content-type': 'application/json' }), ...(key && { Authorization: `Bearer ${encodeURIComponent(key)}` }) },
       ...(body !== undefined && { body: JSON.stringify(body) }),
     });
     return { ok: res.ok, status: res.status, body: /json/.test(res.headers.get('content-type') || '') ? await res.json() : null };

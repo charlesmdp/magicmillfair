@@ -24,7 +24,7 @@ import { cleanName } from './protocol.js';
  */
 export const BOARDS = {
   sky: { order: 'asc', min: 100_000, max: 6 * 3600_000 }, // the climb: a bot that never misses needs about 150 s
-  race: { order: 'asc', min: 45_000, max: 3600_000 }, // three laps on a quad: a bot that takes every pad needs about 73 s, nobody under 51
+  race: { order: 'asc', min: 42_000, max: 3600_000 }, // three laps on a quad: a bot that never lifts needs about 54 s; boosted all the way round (nobody is) it would take 45
   shoot: { order: 'desc', min: 1, max: 9999, length: 45_000 }, // the shooting gallery
   mole: { order: 'desc', min: 1, max: 9999, length: 45_000 }, // whack-a-mole
   milk: { order: 'desc', min: 1, max: 9999, length: 45_000 }, // milk for the clown

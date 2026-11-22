@@ -20,6 +20,8 @@ const TOP = 20, BOOST = 26.5, OFF = 0.55, ACCEL = 13, BRAKE = 20, BACK = 5, GRIP
 const RAMP = { length: 7, half: 1.9, rise: 2.3 }, PAD = { length: 6, half: 2.2 }, LOG = { radius: 0.27, top: 0.42 };
 const RED = [0.85, 0.12, 0.1], WHITE = [1.45, 1.45, 1.4], STRAW = [1.45, 1.15, 0.5], STEEL = [0.22, 0.24, 0.28];
 const UP = V(0, 1, 0), _n = V(0, 0, 0), _e1 = V(0, 0, 0), _e2 = V(0, 0, 0);
+// what the starts are called, and painted with (see RACE.starts)
+const START_TONES = { Red: '#e23b2e', Blue: '#2f7fe6', Green: '#2fae4f', Yellow: '#f2c14e', Purple: '#9a5be0', Orange: '#f08a24' };
 /** A quad whose front looks towards `want`, whatever the order its corners are given in. */
 const facing = (b, A, B, C, D, want = UP, o = {}) => (_n.crossVectors(_e1.subVectors(B, A), _e2.subVectors(D, A)).dot(want) >= 0 ? b.quad(A, B, C, D, o) : b.quad(A, D, C, B, o));
 
@@ -58,6 +60,17 @@ export class Race {
     this.world = zone.world;
     this.data = zone.data;
     this.session = null;
+    /** The clock the starts are counted on (ms): the game gives it the one everybody shares. */
+    this.clock = () => Date.now();
+  }
+
+  /**
+   * The start a visitor who asks now would leave with: the first one far enough ahead to get on the quad and
+   * see the lights. { name ('Red'…), tone (its colour), wait (seconds until it), at (when, on the clock) }.
+   */
+  nextStart(now = this.clock(), least = 3.2) {
+    const every = RACE.every * 1000, n = Math.ceil((now + least * 1000) / every), name = RACE.starts[((n % RACE.starts.length) + RACE.starts.length) % RACE.starts.length];
+    return { n, name, tone: START_TONES[name] || '#f2c14e', at: n * every, wait: (n * every - now) / 1000 };
   }
 
   build() {
@@ -253,7 +266,7 @@ export class Race {
     {
       const s0 = RACE.jump * L, a = this.at(s0), b = this.at(s0 + RAMP.length), y0 = h(a.x, a.z), y1 = h(b.x, b.z) + RAMP.rise;
       busy.push([s0 - 2, 22]);
-      this.obstacles.push({ s: s0 - 6, pass: 0, reach: 24 });
+      this.obstacles.push({ s: s0 + RAMP.length, pass: 0, reach: 34 });
       const P = (t, l, dy = 0) => V(a.x + (b.x - a.x) * t + a.nx * l, y0 + 0.03 + (y1 - y0 - 0.03) * t + dy, a.z + (b.z - a.z) * t + a.nz * l);
       facing(deck.tint(1.1, 0.95, 0.75, 1), P(0, -RAMP.half), P(0, RAMP.half), P(1, RAMP.half), P(1, -RAMP.half), UP, { tile: 1.2 });
       // (arrows painted on the planks; hazard stripes down its sides; the face under the lip)
@@ -292,11 +305,12 @@ export class Race {
       }
     }
 
-    // ---- chicanes: two walls of bales fourteen metres apart, each from one edge to the middle of the track
+    // ---- chicanes: two walls of bales, each from one edge to the middle of the track, far enough apart
+    // (RACE.gap) for a quad at full speed to go from one side to the other without lifting
     RACE.chicanes.forEach((u, m) => {
       const s0 = u * L;
-      busy.push([s0 + 7, 15]);
-      [0, 14].forEach((d, k) => {
+      busy.push([s0 + RACE.gap / 2, RACE.gap / 2 + 8]);
+      [0, RACE.gap].forEach((d, k) => {
         const g = (k + m) % 2 ? 1 : -1, p = this.at(s0 + d), yaw = Math.atan2(p.tx, p.tz);
         for (let j = 0; j < 4; j++) { const q = c(p, g * (W2 + 0.1 - j * 0.92)); bale(q.x, q.z, yaw, 0.6); }
         const end = c(p, g * 0.3);
@@ -306,7 +320,7 @@ export class Race {
           const a = c(p, g * (W2 + 0.56 - j * 0.46), 0.8), b = c(p, g * (W2 + 0.56 - (j + 1) * 0.46), 0.8), t = j % 2 ? WHITE : RED, y = Math.max(a.y, b.y);
           paint.tint(t[0], t[1], t[2], 1).beam(V(a.x, y + 0.13, a.z), V(b.x, y + 0.13, b.z), 0.2, 0.26);
         }
-        this.obstacles.push({ s: s0 + d, pass: -g * (W2 / 2 + 0.2), reach: 12 });
+        this.obstacles.push({ s: s0 + d, pass: -g * (W2 / 2 + 0.2), reach: 30 });
       });
     });
 
@@ -342,7 +356,7 @@ export class Race {
           const o = c(p, g * (W2 + 1.5));
           bale(o.x, o.z, Math.atan2(p.tx, p.tz), 0.75);
         }
-        if (Math.abs(turn) > 0.42 && arrows >= 9) {
+        if (Math.abs(turn) > 0.24 && arrows >= 15) {
           arrows = 0;
           // a board on the outside, across the way one arrives: three arrows pointing where the track goes
           const o = c(p, g * (W2 + 2.6)), yaw = Math.atan2(-p.tx, -p.tz);
@@ -377,9 +391,69 @@ export class Race {
         cloth.tint(WHITE[0], WHITE[1], WHITE[2], 1).tri(apex, m, e1);
       });
       paint.tint(1.5, 1.1, 0.2, 1).place(apex.x, apex.y - 0.05, apex.z).lathe([[0.0, 0.0], [0.14, 0.08], [0.0, 0.4]], 6).pop();
-      void yaw;
+      // where to stand is written on the ground: a disc under the tent
+      const spot = canvasBoard(512, 512, (ctx, w) => {
+        const c = w / 2, serif = "Georgia, 'Times New Roman', serif";
+        ctx.clearRect(0, 0, w, w);
+        ctx.fillStyle = '#b3261e'; ctx.beginPath(); ctx.arc(c, c, c - 4, 0, 7); ctx.fill();
+        ctx.strokeStyle = '#f6e7b8'; ctx.lineWidth = 14; ctx.beginPath(); ctx.arc(c, c, c - 24, 0, 7); ctx.stroke();
+        ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 5; ctx.setLineDash([16, 12]); ctx.beginPath(); ctx.arc(c, c, c - 50, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#fff3d6'; ctx.font = `900 96px ${serif}`; ctx.fillText('RACE', c, c - 62);
+        ctx.fillStyle = '#f2c14e'; ctx.font = `900 96px ${serif}`; ctx.fillText('HERE', c, c + 36);
+        ctx.fillStyle = '#fff3d6'; ctx.font = '700 34px system-ui, sans-serif'; ctx.fillText('stand here · press E', c, c + 122);
+      }, 4.4, 4.4);
+      spot.mesh.material.transparent = true; spot.mesh.material.depthWrite = false; spot.mesh.material.polygonOffset = true; spot.mesh.material.polygonOffsetFactor = -2; spot.mesh.material.polygonOffsetUnits = -4;
+      spot.mesh.rotation.order = 'YXZ';
+      spot.mesh.rotation.set(-Math.PI / 2, Math.atan2(st.nx * side, st.nz * side), 0); // flat on the ground, read from the valley side
+      spot.mesh.position.set(P.x, h(P.x, P.z) + 0.05, P.z);
+      spot.mesh.name = 'games:race-spot';
+      spot.mesh.renderOrder = 4;
+      zone.group.add(spot.mesh);
+      // an arrow of light over the tent, seen from far: this way to race
+      const top = Q(0, 0, 4.3);
+      paint.tint(STEEL[0], STEEL[1], STEEL[2], 1).rod(Q(0, 0, 3.9), Q(0, 0, 6.2), 0.045, 5);
+      glow.tint(1.0, 0.7, 0.08, 1).place(top.x, top.y + 0.2, top.z, yaw);
+      for (const turn of [0, Math.PI / 2]) {
+        glow.push(new THREE.Matrix4().makeRotationY(turn));
+        for (const dy of [0, 0.62]) for (const sgn of [-1, 1]) for (const f of [1, -1]) facing(glow, V(sgn * 0.7, dy + 1.25, 0), V(0, dy + 0.65, 0), V(0, dy + 0.28, 0), V(sgn * 0.7, dy + 0.88, 0), V(0, 0, f));
+        glow.pop();
+      }
+      glow.pop();
     }
     zone._add(parts, 'race');
+    {
+      // the board of the starts, beside the tent: which start leaves next, and in how long (it reads from both sides)
+      const P = this.paddock, bx = P.x + st.nx * side * 3.4 + st.tx * 1.2, bz = P.z + st.nz * side * 3.4 + st.tz * 1.2, by = h(bx, bz), yaw = Math.atan2(st.nx * side, st.nz * side);
+      const state = { name: '', tone: '#f2c14e', wait: 0, after: '' };
+      const board = canvasBoard(512, 256, (ctx, w, hh) => {
+        const serif = "Georgia, 'Times New Roman', serif";
+        ctx.fillStyle = '#16211b'; ctx.fillRect(0, 0, w, hh);
+        ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 8; ctx.strokeRect(8, 8, w - 16, hh - 16);
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#f6e7b8'; ctx.font = '700 30px system-ui, sans-serif'; ctx.fillText('NEXT START', w / 2, 46);
+        ctx.fillStyle = state.tone; ctx.beginPath(); ctx.arc(74, 136, 38, 0, 7); ctx.fill();
+        ctx.strokeStyle = '#f6e7b8'; ctx.lineWidth = 5; ctx.stroke();
+        ctx.fillStyle = state.tone; ctx.font = `900 96px ${serif}`; ctx.fillText(state.name.toUpperCase(), w / 2 + 12, 134, w - 250);
+        ctx.fillStyle = '#fff3d6'; ctx.font = `900 80px ${serif}`; ctx.textAlign = 'right'; ctx.fillText(`${Math.max(0, Math.ceil(state.wait))}`, w - 34, 136);
+        ctx.textAlign = 'center'; ctx.fillStyle = '#b9c7bd'; ctx.font = '600 25px system-ui, sans-serif'; ctx.fillText(state.after, w / 2, 218, w - 40);
+      }, 2.6, 1.3, { both: true });
+      board.mesh.position.set(bx, by + 2.25, bz);
+      board.mesh.rotation.y = yaw;
+      board.mesh.name = 'games:race-starts';
+      zone.group.add(board.mesh);
+      const post = new Parts(), pw = post.get('paint');
+      for (const g of [-1, 1]) { const qx = bx + Math.cos(yaw) * g * 1.38, qz = bz - Math.sin(yaw) * g * 1.38; pw.tint(STEEL[0], STEEL[1], STEEL[2], 1).box(qx - 0.05, by - 0.3, qz - 0.05, qx + 0.05, by + 2.95, qz + 0.05); zone.colliders.push({ type: 'circle', x: qx, z: qz, r: 0.14 }); }
+      zone._add(post, 'race-starts');
+      /** Called every frame: the board follows the clock (it is painted again when what it says changes). */
+      this.update = (pos) => {
+        if ((pos.x - bx) ** 2 + (pos.z - bz) ** 2 > 70 * 70) return;
+        const s = this.nextStart(), then = RACE.starts[(s.n + 1) % RACE.starts.length], secs = Math.ceil(s.wait);
+        if (s.name === state.name && secs === Math.ceil(state.wait)) return;
+        Object.assign(state, { name: s.name, tone: s.tone, wait: s.wait, after: `then ${then}, every ${RACE.every} seconds — leave together!` });
+        board.redraw();
+      };
+    }
 
     this.board = zone.scoreStand('race', px, pz, Math.atan2(st.nx * side, st.nz * side), { title: RACE.name.toUpperCase(), sub: `${RACE.laps} laps of the track on a quad · best times`, format: formatTime, width: 3.0, pixels: 0.85 });
     return this;
@@ -418,10 +492,19 @@ export class Race {
    * chicanes, onto the ramp. (For whoever drives without eyes: a bot, a ghost.)
    */
   lineAt(s) {
-    const L = this.length;
-    let off = 0, best = 0;
-    for (const o of this.obstacles) { let d = s - o.s; d -= Math.round(d / L) * L; const k = 1 - Math.abs(d) / o.reach; if (k > best) { best = k; off = o.pass; } }
-    return off * Math.min(1, best * 2.5);
+    const L = this.length, list = this.obstacles;
+    if (!list.length) return 0;
+    // the one that has just been passed, the one that comes, and how far each is
+    let p = null, q = null, dp = Infinity, dq = Infinity;
+    for (const o of list) { let d = s - o.s; d -= Math.floor(d / L) * L; if (d < dp) { dp = d; p = o; } if (L - d < dq) { dq = L - d; q = o; } }
+    // Past one, its side is held for a few metres (the quad has to clear the end of the wall), then let go;
+    // the side of the next is taken up from `reach` metres before it — or from where the last one lets go,
+    // when two stand close — and reached a few metres before it.
+    const HOLD = 4, LEAD = 7, TAIL = 16, ease = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+    const tail = p.pass * (1 - ease(HOLD, HOLD + TAIL, dp));
+    const from = Math.min(q.reach, dp + dq - HOLD);
+    const w = from <= LEAD ? (dq <= LEAD ? 1 : 0) : 1 - ease(LEAD, from, dq);
+    return tail + (q.pass - tail) * w;
   }
 
   /** Is (x, z) in the paddock, where a race is asked for? */
@@ -429,15 +512,18 @@ export class Race {
 
   /**
    * A race starts: the player is put on a quad behind the line; three, two, one… `io`: { play(sound, options),
-   * note(text), go() (the clock starts) }. Returns the session — it is also the driver of the player (see
-   * PlayerController.driver): { step(dt, player, control), camera(camera, dt), line, over, time (ms), close() }.
+   * note(text), go() (the clock starts) }. `start`: the start it leaves with ({ name, wait }: see nextStart());
+   * `place`: a number that spreads those who leave together over the grid (four abreast, two rows).
+   * Returns the session — it is also the driver of the player (see PlayerController.driver):
+   * { step(dt, player, control), camera(camera, dt), line, over, time (ms), start, close() }.
    */
-  open(player, io) {
+  open(player, io, start = { name: '', wait: 3.2 }, place = 0) {
     const L = this.length, col = this.world.collision, data = this.data;
-    const grid = this.at(this.start.s - 4.5);
+    const back = 4.5 + 3.2 * (Math.floor(place / 4) % 2), grid0 = this.at(this.start.s - back), off = [-0.9, 0.9, -2.7, 2.7][((place % 4) + 4) % 4];
+    const grid = { ...grid0, x: grid0.x + grid0.nx * off, z: grid0.z + grid0.nz * off };
     const S = {
       x: grid.x, z: grid.z, y: col.groundAt(grid.x, grid.z, 1e4), yaw: Math.atan2(grid.tx, grid.tz), vx: 0, vz: 0, vy: 0, grounded: true,
-      count: 3.2, clock: 0, prog: -4.5, i: grid.i, s: this.start.s - 4.5, good: { s: this.start.s - 4.5 }, lost: 0, laps: 0, lapAt: 0,
+      count: Math.max(0.5, start.wait), clock: 0, prog: -back, i: grid.i, s: this.start.s - back, good: { s: this.start.s - back }, lost: 0, laps: 0, lapAt: 0,
       drift: 0, charge: 0, boost: 0, sound: 0, cam: null, fov: 62, tilt: 0, ru: null,
     };
     const lamps = this.lamps || [], light = (count, clock) => lamps.forEach((m, k) => { m.visible = k < 3 ? count > 0 && count <= 3 - k : count <= 0 && clock < 2.5; });
@@ -447,8 +533,9 @@ export class Race {
       Object.assign(S, { x: g.x, z: g.z, y: col.groundAt(g.x, g.z, 1e4), yaw: Math.atan2(g.tx, g.tz), vx: 0, vz: 0, vy: 0, grounded: true, i: g.i, s: S.good.s, drift: 0, charge: 0, boost: 0, lost: 0 });
       io.play('respawn');
     };
+    const called = start.name ? `${start.name} start` : 'ready';
     const session = {
-      race: this, over: false, time: 0, line: '', laps: 0, state: S,
+      race: this, over: false, time: 0, line: '', laps: 0, state: S, start,
       step: (dt, pl, control) => {
         const inp = pl.input;
         let gas = control ? inp.move.y : 0, steer = control ? inp.move.x : 0;
@@ -456,8 +543,7 @@ export class Race {
         if (S.count > 0) {
           const was = S.count;
           S.count -= dt;
-          if (Math.ceil(S.count) !== Math.ceil(was) && S.count > 0) io.play('tick');
-          if (was > 3.1 && S.count <= 3.1) io.play('tick');
+          if (Math.ceil(S.count) !== Math.ceil(was) && S.count > 0 && S.count <= 3) io.play('tick');
           if (S.count <= 0) { io.play('start'); io.go(); } else { gas = 0; steer = 0; }
         } else if (!session.over) S.clock += dt;
         light(S.count, S.clock);
@@ -541,7 +627,7 @@ export class Race {
         pl.speed = speed; pl.grounded = S.grounded;
         session.speed = speed;
         const lap = Math.min(RACE.laps, S.laps + 1);
-        session.line = S.count > 0 ? `${RACE.name} · ${Math.ceil(S.count) > 3 ? 'ready' : Math.ceil(S.count)}…` : session.over ? `${RACE.name} · ${formatTime(session.time)}` : `Lap ${lap}/${RACE.laps} · ${formatTime(Math.round(S.clock * 1000))} · ${Math.round(speed * 3.6)} km/h${S.boost > 0 ? ' ▲' : ''}`;
+        session.line = S.count > 0 ? `${RACE.name} · ${Math.ceil(S.count) > 3 ? `${called} in ${Math.ceil(S.count)}` : Math.ceil(S.count)}…` : session.over ? `${RACE.name} · ${formatTime(session.time)}` : `Lap ${lap}/${RACE.laps} · ${formatTime(Math.round(S.clock * 1000))} · ${Math.round(speed * 3.6)} km/h${S.boost > 0 ? ' ▲' : ''}`;
       },
       /** The camera of the race: low behind the quad, turning with where it goes rather than where it points. */
       camera: (cam, dt) => {

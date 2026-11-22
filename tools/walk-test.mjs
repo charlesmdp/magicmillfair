@@ -300,6 +300,49 @@ try {
     check('swims along the northern cliffs, through the fall into the cave behind it; the shark stays away', den.swam && den.wall.swimming && den.wall.h < -1 && den.before.swimming && !den.before.cave && den.cave === 'sea' && !den.dead && !den.swimming && Math.abs(den.y - den.floor) < 0.3 && den.d < 2 && den.minFar > 30 && den.modes.join() === 'patrol' && den.hidden && den.seats >= 3 && named === "The Smugglers' Den", JSON.stringify({ ...den, named }));
   }
 
+  // --- the golden cove: swum to along the same cliffs, further up; its beach shelves into the sea, so that
+  // one walks out of the water; the stair across the face of the cliff climbs to the ledge of the golden dog
+  {
+    const gold = await page.evaluate(() => {
+      const app = window.__mmf, { player, input, world } = app, g = world.games, dt = 1 / 30;
+      const go = (dx, dz, n) => { for (let f = 0; f < n; f++) { input.move.x = dx; input.move.y = -dz; input.run = true; input.jump = false; player.update(dt, 0, true); g._tickShark(dt, f * dt, player); } input.move.x = 0; input.move.y = 0; input.run = false; };
+      const out = { minFar: 1e9, modes: new Set(), landed: null };
+      const to = (q, max = 1500, sea = true) => {
+        for (let f = 0; f < max && Math.hypot(q[0] - player.pos.x, q[1] - player.pos.z) > 0.8; f++) {
+          const dx = q[0] - player.pos.x, dz = q[1] - player.pos.z, l = Math.hypot(dx, dz);
+          go(dx / l, dz / l, 1);
+          if (sea) { out.minFar = Math.min(out.minFar, g.seaEdgeDistance(player.pos.x, player.pos.z)); out.modes.add(g.sharkState.mode); }
+          // (where the swimmer finds the bottom and walks: on the beach, well outside the pocket of sand)
+          if (!out.landed && !player.swimming && player.pos.y > 0.3) out.landed = { x: +player.pos.x.toFixed(1), z: +player.pos.z.toFixed(1), y: +player.pos.y.toFixed(2) };
+        }
+      };
+      return import('/src/world/layout/layout.js').then((L) => {
+        const N = L.NORTH, C = N.cove, st = N.stairs[0].points, dog = world.places.crokmou;
+        player.teleport(178, -200, 0);
+        for (let f = 0; f < 60; f++) go(0, 0, 1);
+        out.swam = player.swimming;
+        for (const q of [[192, -215], [203, -232]]) to(q);
+        out.offshore = { swimming: player.swimming, far: +g.seaEdgeDistance(player.pos.x, player.pos.z).toFixed(1) };
+        for (const q of [[210, -246], [215, -256]]) to(q);
+        to([C.x, C.z]);
+        out.sand = { y: +player.pos.y.toFixed(2), swimming: player.swimming, d: +Math.hypot(player.pos.x - C.x, player.pos.z - C.z).toFixed(1) };
+        out.beach = out.landed ? +(Math.hypot((out.landed.x - C.x) / C.rx, (out.landed.z - C.z) / C.rz)).toFixed(2) : 0; // > 1: outside the pocket
+        for (const q of st) to([q[0], q[1]], 1500, false);
+        out.top = { y: +player.pos.y.toFixed(2), want: N.ledge.y };
+        // up to the plinth, as near as it lets one
+        for (let f = 0; f < 300 && Math.hypot(dog.x - player.pos.x, dog.z - player.pos.z) > dog.reach - 0.6; f++) { const dx = dog.x - player.pos.x, dz = dog.z - player.pos.z, l = Math.hypot(dx, dz); go(dx / l, dz / l, 1); }
+        Object.assign(out, { dead: !!player.dead, modes: [...out.modes], minFar: +out.minFar.toFixed(1), dog: +Math.hypot(dog.x - player.pos.x, dog.z - player.pos.z).toFixed(1), reach: dog.reach });
+        return out;
+      });
+    });
+    await frames(30);
+    const seen = await page.evaluate(() => ({ zone: document.querySelector('.hud .zone').textContent, prompts: [...document.querySelectorAll('.prompt.on span')].map((e) => e.textContent) }));
+    check('swims on along the cliffs to the golden cove (the shark stays away), walks out of the sea on its beach, climbs the stair to the golden dog',
+      gold.swam && gold.offshore.swimming && gold.minFar > 30 && gold.modes.join() === 'patrol' && !gold.dead && !!gold.landed && gold.beach > 1.3 && gold.landed.y < 1.0
+      && !gold.sand.swimming && gold.sand.d < 1.5 && Math.abs(gold.sand.y - 1.15) < 0.2 && Math.abs(gold.top.y - gold.top.want) < 0.5 && gold.dog < gold.reach && seen.zone === 'The Golden Cove' && seen.prompts.some((t) => /CROKMOU|Crokmou/.test(t)),
+      JSON.stringify({ ...gold, ...seen }));
+  }
+
   // --- the sky villages: carried there from the Sky Gate, and back through the ring
   {
     const g = await page.evaluate(() => {
@@ -698,20 +741,18 @@ try {
         const ask = [...document.querySelectorAll('.prompt.on span')].map((e) => e.textContent);
         app.playRace();
         const s = app.fair.session, S = s.state, laps = [];
-        let n = 0, air = 0, boost = 0, top = 0, still = 0, stuck = 0, back = 0, flight = 0, run = 0, lamps = 0;
+        let n = 0, air = 0, boost = 0, top = 0, still = 0, flight = 0, run = 0, lamps = 0, slowest = 99, widest = 0, off = 0;
         for (; n < 60 * 200 && app.fair.session === s && !s.over; n++) {
-          // it aims at the clear line the track gives (round the logs, through the chicanes, onto the ramp),
-          // slows before what must be gone round, and backs off whatever it has run into
-          const v = Math.hypot(S.vx, S.vz), look = 5 + v * 0.36, ahead = r.at(S.s + look), off = r.lineAt(S.s + look);
-          const want = Math.atan2(ahead.x + ahead.nx * off - S.x, ahead.z + ahead.nz * off - S.z), err = Math.atan2(Math.sin(want - S.yaw), Math.cos(want - S.yaw));
-          const near = r.obstacles.some((o) => { if (!o.pass) return false; let d = o.s - S.s; d -= Math.round(d / r.length) * r.length; return d > -3 && d < 22; });
-          let gas = Math.abs(err) > 0.8 ? 0.25 : Math.abs(err) > 0.45 ? 0.6 : 1;
-          if (near && v > 12.5) gas = v > 15 ? -1 : 0;
-          if (S.count <= 0 && v < 1.5) stuck++; else if (v > 4) stuck = 0;
-          if (stuck > 40) back = 50;
-          if (back > 0) { back--; gas = -1; stuck = 0; }
-          input.move.x = Math.max(-1, Math.min(1, -err * 2.6)) * (back > 0 ? -1 : 1); input.move.y = gas; input.run = false; input.jump = false; // (a heading grows turning left)
+          // it aims at the clear line the track gives (through the chicanes, onto the ramp) and never lifts:
+          // the track is drawn to be driven flat out
+          const v = Math.hypot(S.vx, S.vz), look = 6 + v * 0.36, ahead = r.at(S.s + look), line = r.lineAt(S.s + look);
+          const want = Math.atan2(ahead.x + ahead.nx * line - S.x, ahead.z + ahead.nz * line - S.z), err = Math.atan2(Math.sin(want - S.yaw), Math.cos(want - S.yaw));
+          input.move.x = Math.max(-1, Math.min(1, -err * 4)); input.move.y = 1; input.run = false; input.jump = false; // (a heading grows turning left)
           app.fairStep(dt);
+          if (S.clock > 3) {
+            slowest = Math.min(slowest, Math.hypot(S.vx, S.vz));
+            if (S.grounded) { const side = Math.abs(r.locate(S.x, S.z, S.i, {}).side); widest = Math.max(widest, side); if (side > r.width / 2 + 0.5) off++; }
+          }
           if (S.count > 0 && Math.hypot(S.vx, S.vz) < 0.01) still++;
           if (S.count > 0 && S.count < 1 && r.lamps.filter((m) => m.visible).length === 3) lamps++;
           if (!S.grounded) { air++; run++; flight = Math.max(flight, run); } else run = 0;
@@ -719,36 +760,13 @@ try {
           if (s.laps !== laps.length) laps.push(+S.clock.toFixed(2));
         }
         input.move.x = 0; input.move.y = 0;
-        const out = { ask, over: s.over, time: s.time, laps, air, boost, top, still, flight, lamps, riding: player.riding, quad: !!player.driver };
+        const out = { ask, start: /^(Red|Blue|Green|Yellow|Purple|Orange)$/.test(s.start.name) && s.start.wait >= 3.2 && s.start.wait <= 8.3, over: s.over, time: s.time, laps, air, boost, top, still, flight, lamps, slowest: +slowest.toFixed(1), widest: +widest.toFixed(2), off, riding: player.riding, quad: !!player.driver };
         for (let k = 0; k < 60 * 4 && app.fair.session; k++) app.fairStep(dt);
         out.after = { closed: !app.fair.session, riding: player.riding, driver: !!player.driver, d: Math.hypot(player.pos.x - r.start.x, player.pos.z - r.start.z) };
         res(out);
       })));
     });
     await frames(20);
-    // a log across half the track: hopped at full speed, a wall for whoever drives into it
-    const hop = await page.evaluate(() => {
-      const app = window.__mmf, { input, world, player } = app, r = world.games.race, dt = 1 / 60;
-      const o = r.obstacles.filter((q) => q.reach === 12 && Math.abs(q.pass) > 2.1)[2], side = -o.pass; // (the log on the last straight; the side it lies on)
-      const run = (jump) => {
-        const s = r.open(player, { play() {}, note() {}, go() {} }), S = s.state, p = r.at(o.s - 14);
-        Object.assign(S, { x: p.x + p.nx * side, z: p.z + p.nz * side, y: world.collision.groundAt(p.x + p.nx * side, p.z + p.nz * side, 1e4), yaw: Math.atan2(p.tx, p.tz), vx: p.tx * 16, vz: p.tz * 16, count: 0, s: o.s - 14, i: p.i });
-        let slowest = 99, done = false, d = 0;
-        for (let n = 0; n < 90; n++) {
-          d = o.s - S.s; d -= Math.round(d / r.length) * r.length;
-          const ahead = r.at(S.s + 6), want = Math.atan2(ahead.x + ahead.nx * side - S.x, ahead.z + ahead.nz * side - S.z), err = Math.atan2(Math.sin(want - S.yaw), Math.cos(want - S.yaw));
-          input.move.x = Math.max(-1, Math.min(1, -err * 2.6)); input.move.y = 1; input.run = false; input.jump = jump && !done && d < 4.6 && d > 0 && S.grounded;
-          if (input.jump) done = true;
-          s.step(dt, player, true);
-          if (d < 3) slowest = Math.min(slowest, Math.hypot(S.vx, S.vz));
-        }
-        input.move.x = 0; input.move.y = 0; input.jump = false;
-        s.close();
-        return { past: -d, slowest };
-      };
-      return { hop: run(true), drive: run(false) };
-    });
-    check('a log across the track: a hop clears it at full speed; without one it is a wall', hop.hop.past > 8 && hop.hop.slowest > 14 && hop.drive.past < 0 && hop.drive.slowest < 4, JSON.stringify(hop));
     // the flying theatre: wings on, a bot flaps through the gaps, then lets itself fall; the flight goes on the board
     const wing = await page.evaluate(() => {
       const app = window.__mmf, g = app.world.games.wing, { player } = app, dt = 1 / 60, real = app.input.consumeClicks.bind(app.input);
@@ -781,7 +799,7 @@ try {
       wing.ask.includes('Play Wing It') && wing.waited === 30 && wing.score === 9 && wing.over && wing.flaps > 12 && wing.top < 5.9 && wing.low > 1.0 && wing.wings && wing.anim === 4 && wing.flyer && wing.line === 'Wing It · 9'
       && wing.after.closed && !wing.after.driver && !wing.after.wings && wing.after.d < 0.5 && wing.after.pitch === 0 && flown === 9, JSON.stringify(wing));
     const best = await page.evaluate(() => window.__mmf.fair.boards.race._local().all[0]?.score || 0);
-    check('the quad race: asked for in the paddock, the lights, three laps against the clock round the logs and through the chicanes, the pads, a real flight off the ramp, the time on the board', race.ask.some((t) => t.startsWith('Race:')) && race.over && race.laps.length === 3 && race.time > 50000 && race.time < 130000 && race.still > 150 && race.lamps > 20 && race.air > 120 && race.flight > 45 && race.boost > 100 && race.top > 24 && race.riding && race.quad && race.after.closed && !race.after.riding && !race.after.driver && best === race.time, JSON.stringify(race));
+    check('the quad race: asked for in the paddock, it leaves with the next start (they have names, one every five seconds), the lights, three laps flat out — the bot never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, the pads, a real flight off the ramp, the time on the board', race.ask.some((t) => /^Race: 3 laps on a quad · (Red|Blue|Green|Yellow|Purple|Orange) start in \d s$/.test(t)) && race.start && race.over && race.laps.length === 3 && race.time > 46000 && race.time < 62000 && race.slowest >= 18 && race.off === 0 && race.widest < 3.75 && race.still > 150 && race.lamps > 20 && race.air > 120 && race.flight > 45 && race.boost > 100 && race.top > 24 && race.riding && race.quad && race.after.closed && !race.after.riding && !race.after.driver && best === race.time, JSON.stringify(race));
   }
 
   // --- the big red button at the top of the island: a show far out at sea, then a quarter of an hour of patience

@@ -19,7 +19,7 @@ import { smoothPath, resample, arcLengths } from '../src/world/layout/spline.js'
 import * as L from '../src/world/layout/layout.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const OUT = path.join(ROOT, 'public/assets/world');
+const OUT = path.join(ROOT, 'public/assets', L.WORLD_DIR); // (each track of the race has its own maps: see TRACKS)
 const PREVIEW = path.join(ROOT, 'tools/preview');
 fs.mkdirSync(OUT, { recursive: true });
 fs.mkdirSync(PREVIEW, { recursive: true });
@@ -543,12 +543,26 @@ const disc = (x, z, r, fn) => {
 
   // --- the golden cove: a pocket of sand at the foot of the sea cliffs, and the ledge of the statue high above.
   // Both are made level (the rock is cut, or built up); round them the cliff is only ever cut back, steeply.
+  // Where the cove looks at the sea its sand shelves into the water — a beach, as at the landing of the island:
+  // one swims in, finds the bottom and walks out (a bank, however low, would keep a swimmer in the water).
   for (const S of [L.NORTH.cove, L.NORTH.ledge]) {
-    disc(S.x, S.z, Math.max(S.rx, S.rz) + 22, (q, d, x, z) => {
+    const beach = S === L.NORTH.cove ? L.NORTH.beach : null;
+    disc(S.x, S.z, Math.max(S.rx, S.rz) + (beach ? beach.reach + 4 : 22), (q, d, x, z) => {
       const e = Math.hypot((x - S.x) / S.rx, (z - S.z) / S.rz); // 1 on its edge
-      if (e < 1) { H.d[q] = S.y + 0.25 * smoothstep(0.55, 1, e) ** 2; locked[q] = 1; detailMask.d[q] = Math.min(detailMask.d[q], 0.35); noTrees.d[q] = 1; }
-      else { const out = (e - 1) * Math.min(S.rx, S.rz); H.d[q] = Math.min(H.d[q], S.y + 0.3 + out * 3.4); if (out < 7) noTrees.d[q] = 1; }
       const off = (e - 1) * Math.min(S.rx, S.rz); // metres outside its edge (negative inside)
+      if (e < 1) { H.d[q] = S.y + 0.25 * smoothstep(0.55, 1, e) ** 2; locked[q] = 1; detailMask.d[q] = Math.min(detailMask.d[q], 0.35); noTrees.d[q] = 1; }
+      else {
+        H.d[q] = Math.min(H.d[q], S.y + 0.3 + off * 3.4); if (off < 7) noTrees.d[q] = 1;
+        if (beach) {
+          // (the face of the beach, then the shelf under the water, then down to the bed of the sea)
+          const sand = off < beach.face ? S.y + 0.25 - off * beach.slope : S.y + 0.25 - beach.face * beach.slope - (off - beach.face) * beach.drop;
+          if (sand > H.d[q] && off < beach.reach) {
+            const a = 1 - smoothstep(beach.reach - 5, beach.reach, off);
+            H.d[q] = lerp(H.d[q], sand, a); detailMask.d[q] = Math.min(detailMask.d[q], 0.3);
+            goldSand.d[q] = Math.max(goldSand.d[q], a);
+          }
+        }
+      }
       goldBare.d[q] = Math.max(goldBare.d[q], 1 - smoothstep(5, 15, off));
       if (S === L.NORTH.cove) goldSand.d[q] = Math.max(goldSand.d[q], 1 - smoothstep(0.2, 2.6, off));
       else goldPad.d[q] = Math.max(goldPad.d[q], 1 - smoothstep(-0.9, 0.5, off));
@@ -1410,8 +1424,9 @@ const trees = [];
   }
 
   // ---- the grove the race track threads: planted close, a corridor left for the track
-  {
-    const G = L.RACE.grove, track = L.PATHS.find((p) => p.id === 'race').points, half = L.RACE.width / 2 + 2.4;
+  if (L.RACE.grove) {
+    // (the corridor is measured from the corners of the line, and a long bend bulges out of them by a metre)
+    const G = L.RACE.grove, track = L.PATHS.find((p) => p.id === 'race').points, half = L.RACE.width / 2 + 3.6;
     const lane = L.PATHS.find((p) => p.id === 'lane').points;
     const near = (pts, x, z, r) => { for (let i = 0; i + 1 < pts.length; i++) { const [ax, az] = pts[i], [bx, bz] = pts[i + 1], ux = bx - ax, uz = bz - az, t = clamp(((x - ax) * ux + (z - az) * uz) / (ux * ux + uz * uz || 1), 0, 1); if (Math.hypot(x - ax - ux * t, z - az - uz * t) < r) return true; } return false; };
     let planted = 0;
@@ -1714,7 +1729,7 @@ fs.writeFileSync(path.join(OUT, 'world.json'), JSON.stringify(meta));
   // villages at each, from the lowest shelf to the highest — see layout/sponsors.js)
   const ys = meta.sky.map((v) => v.y), order = ys.map((_, i) => i).sort((i, j) => ys[i] - ys[j] || i - j), tiers = [];
   order.forEach((i, rank) => { tiers[i] = Math.min(9, Math.floor((rank * 10) / ys.length)); });
-  fs.writeFileSync(path.join(ROOT, 'server/sky-tiers.js'), `// Written by tools/bake-world.mjs: do not edit by hand.\n// The price tier (0 to 9) of each sky village, in the order of the \`sky\` list of world.json.\nexport const SKY_TIERS = ${JSON.stringify(tiers)};\n`);
+  if (L.TRACK === 'grove') fs.writeFileSync(path.join(ROOT, 'server/sky-tiers.js'), `// Written by tools/bake-world.mjs: do not edit by hand.\n// The price tier (0 to 9) of each sky village, in the order of the \`sky\` list of world.json.\nexport const SKY_TIERS = ${JSON.stringify(tiers)};\n`);
 }
 
 // ---------------------------------------------------------------------------

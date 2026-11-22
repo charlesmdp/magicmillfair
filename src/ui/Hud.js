@@ -3,11 +3,12 @@ import { AVATAR_COLORS } from '../player/Character.js';
 import { HATS } from '../player/Cosmetics.js';
 import { TIERS, TIER_ORDER } from '../core/Quality.js';
 import { assetUrl } from '../core/Assets.js';
+import { WORLD_DIR } from '../world/layout/layout.js';
 
 const ICON = {
   gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.9 2.9l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.9-2.9l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.9-2.9l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.9 2.9l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
   // (a little drone: the camera that flies about)
-  cam: '<svg viewBox="0 0 24 24"><path d="M2.5 6.5h6M15.5 6.5h6"/><path d="M5.5 6.5v2.3l3.5 1.9M18.5 6.5v2.3L15 10.7"/><rect x="9" y="9.6" width="6" height="4.6" rx="1.5"/><circle cx="12" cy="17.6" r="2.1"/><path d="M12 14.2v1.3"/></svg>',
+  cam: '<svg viewBox="0 0 24 24"><path d="M1.8 12s3.7-6.6 10.2-6.6S22.2 12 22.2 12s-3.7 6.6-10.2 6.6S1.8 12 1.8 12z"/><circle cx="12" cy="12" r="3.1"/></svg>',
   smile: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 14.5s1.5 2 4 2 4-2 4-2M9 9.5h.01M15 9.5h.01"/></svg>',
   jump: '<svg viewBox="0 0 24 24"><path d="M12 19V6M6 11l6-6 6 6"/></svg>',
   run: '<svg viewBox="0 0 24 24"><path d="M13 5.5a1.6 1.6 0 1 0 0-.01M6 21l3.5-6 3 2 1.5 4M9.5 15l1.5-6 4 2 3 0M11 9l-4 1-1 3"/></svg>',
@@ -122,7 +123,7 @@ export class Hud {
     });
     s.querySelector('.keys').innerHTML = touch
       ? 'Drag on the left to walk, on the right to look around.'
-      : '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / <kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd> or arrows · <kbd>Shift</kbd> run · <kbd>Space</kbd> jump · <kbd>E</kbd> sit, board · <kbd>Enter</kbd> chat · <kbd>T</kbd> emotes · <kbd>F</kbd> free camera · <kbd>M</kbd> map';
+      : '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / <kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd> or arrows · <kbd>Shift</kbd> run · <kbd>Space</kbd> jump · <kbd>E</kbd> sit, board · <kbd>Enter</kbd> chat · <kbd>T</kbd> emotes · <kbd>M</kbd> map';
     return new Promise((resolve) => {
       const go = () => {
         const n = input.value.trim().slice(0, 16) || name;
@@ -142,12 +143,13 @@ export class Hud {
       <div class="top-left">
         <div class="pill zone">The Mill</div>
         <button class="pill players" type="button" title="Who is here"><span class="dot"></span><span class="count">On your own</span></button>
+        <button class="pill as-visitor" type="button" title="Back to the administrator's view" hidden>${ICON.cam}<span>Visitor's view · back to admin</span></button>
       </div>
       <div class="top-right">
         <button class="icon shop-icon" data-act="shop" title="Item shop (O)" aria-label="Item shop">${ICON.bag}</button>
         <button class="icon" data-act="chat" title="Chat (Enter)" aria-label="Chat">${ICON.chat}</button>
         <button class="icon" data-act="emote" title="Emotes (T)" aria-label="Emotes">${ICON.smile}</button>
-        <button class="icon" data-act="camera" title="Flying camera (F)" aria-label="Flying camera" aria-pressed="false">${ICON.cam}</button>
+        <button class="icon" data-act="camera" title="Free view (F)" aria-label="Free view" aria-pressed="false">${ICON.cam}</button>
         <button class="icon" data-act="settings" title="Settings" aria-label="Settings">${ICON.gear}</button>
       </div>
       <div class="toast"><small>Now entering</small><span></span></div>
@@ -178,7 +180,7 @@ export class Hud {
         <div class="sheet"><h2></h2><p class="lead"></p><div class="list"></div><button class="close" type="button">Stay here</button></div>
       </div>
       <div class="roster" role="dialog" aria-label="Visitors">
-        <div class="sheet"><h2>Who is here</h2><p class="lead"></p><div class="body"><div class="list"></div><div class="admins"></div><div class="bans"></div><div class="visitors"></div></div><button class="close" type="button">Close</button></div>
+        <div class="sheet"><h2>Who is here</h2><p class="lead"></p><button class="see-as" type="button" hidden>See the game as a visitor does</button><div class="body"><div class="list"></div><div class="admins"></div><div class="bans"></div><div class="visitors"></div></div><button class="close" type="button">Close</button></div>
       </div>
       <div class="flash" aria-hidden="true"></div>
       <div class="banner" role="alert"></div>
@@ -232,7 +234,7 @@ export class Hud {
     this.megaBtn.onclick = (e) => { e.stopPropagation(); this.setMega(!this.mega); this.megaBtn.blur(); };
     for (const ev of ['mousedown', 'touchstart', 'wheel']) this.bigEl.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
     this.mapImg = new Image();
-    this.mapImg.src = assetUrl('world/map.jpg');
+    this.mapImg.src = assetUrl(`${WORLD_DIR}/map.jpg`);
     h.querySelectorAll('[data-act]').forEach((b) => (b.onclick = () => {
       const act = b.dataset.act;
       if (act === 'settings') this.panel.classList.toggle('on');
@@ -325,6 +327,12 @@ export class Hud {
     this.rosterEl = h.querySelector('.roster');
     h.querySelector('.players').onclick = (e) => { e.currentTarget.blur(); this.emit('roster'); };
     this.rosterEl.querySelector('.close').onclick = () => this.closeRoster();
+    this.rosterEl.querySelector('.see-as').onclick = () => { this.closeRoster(); this.emit('visitorview', true); };
+    h.querySelector('.as-visitor').onclick = (e) => { e.currentTarget.blur(); this.emit('visitorview', false); };
+    // what is said while the page is in the background is still received: the title of the tab counts it, and
+    // a line in the log marks where one had stopped reading
+    this._away = 0;
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) { this._away = 0; document.title = this._title || document.title; } });
     this.rosterEl.onclick = (e) => { if (e.target === this.rosterEl) this.closeRoster(); };
     this.bannerEl = h.querySelector('.banner');
     this.sightEl = h.querySelector('.sight');
@@ -519,6 +527,8 @@ export class Hud {
     this.bigEl.querySelector('.legend span').textContent = on ? 'Administrator: click a spot to go there · outside the map to close' : 'Click anywhere to close';
     this.bigEl.classList.toggle('goto', !!on);
   }
+  /** The administrator is looking at the game as a visitor sees it: a pill says so, and brings them back. */
+  setVisitorView(on) { this.hud.querySelector('.as-visitor').hidden = !on; }
   /** May the visitor fly the camera about? (the button disappears otherwise) */
   setFreeCamera(on) { this.cameraBtn.style.display = on ? '' : 'none'; }
 
@@ -536,6 +546,7 @@ export class Hud {
     const box = this.rosterEl, list = box.querySelector('.list'), bansEl = box.querySelector('.bans'), adminsEl = box.querySelector('.admins'), visitorsEl = box.querySelector('.visitors');
     if (!this.rosterOpen) { this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this.toggleBigMap(false); this.input.exitLock(); }
     box.querySelector('h2').textContent = people.length > 1 ? `Who is here — ${people.length} visitors` : 'Who is here';
+    box.querySelector('.see-as').hidden = !admin;
     box.querySelector('.lead').textContent = mode === 'online' ? (admin ? `You are ${owner ? 'the owner' : 'an administrator'}: you also see where each visitor connects from, can put them out, and can name other administrators.` : 'Everyone in this room.')
       : mode === 'local' ? 'No server here: only the tabs of this browser see each other.' : 'Offline: nobody else can be seen.';
     list.textContent = '';
@@ -699,6 +710,12 @@ export class Hud {
     line.append(document.createTextNode(` ${text}`));
     // (someone reading further up is left where they are)
     const reading = (this.chatOpen || this.chatEl.classList.contains('peek')) && this.chatLog.scrollHeight - this.chatLog.scrollTop - this.chatLog.clientHeight > 40;
+    if (document.hidden && !self) {
+      // (the page is in the background: a mark where the reading stopped, a count in the title of the tab)
+      if (!this._away) { this._title = this._title || document.title; const mark = el('p', 'away'); mark.textContent = 'while you were away'; this.chatLog.append(mark); }
+      this._away++;
+      document.title = `(${this._away}) ${this._title}`;
+    }
     this.chatLog.append(line);
     while (this.chatLog.childElementCount > 200) this.chatLog.firstElementChild.remove();
     if (!reading) this.chatLog.scrollTop = this.chatLog.scrollHeight;
@@ -799,7 +816,7 @@ export class Hud {
     this.megaBtn.setAttribute('aria-pressed', this.mega ? 'true' : 'false');
     this.megaBtn.textContent = this.mega ? 'Valley map' : 'Mega map';
     this.bigEl.querySelector('.legend b').textContent = this.mega ? 'Mega map' : 'Map';
-    if (this.mega && !this.megaImg) { this.megaImg = new Image(); this.megaImg.src = assetUrl('world/megamap.jpg'); }
+    if (this.mega && !this.megaImg) { this.megaImg = new Image(); this.megaImg.src = assetUrl(`${WORLD_DIR}/megamap.jpg`); }
     this._bigSize = '';
   }
 
@@ -867,10 +884,20 @@ export class Hud {
       }
     }
     ctx.font = `600 ${Math.max(mega ? 9 : 11, Math.round(w / (mega ? 86 : 62)))}px Georgia, 'Times New Roman', serif`;
-    for (const zone of this.zones || []) {
-      if (zone.hidden || (mega && zone.r < 30)) continue; // (some places are for those who find them; the mega map only names the large ones)
+    // (names never lie on one another: the larger places are written first, where they are; a name that would
+    // cover another is moved up or down by a line or two — or left out, if there is no room at all)
+    const size = Math.max(mega ? 9 : 11, Math.round(w / (mega ? 86 : 62))), placed = [];
+    const places = (this.zones || []).filter((zone) => !(zone.hidden || (mega && zone.r < 30))).sort((a, b) => b.r - a.r); // (some places are for those who find them; the mega map only names the large ones)
+    for (const zone of places) {
       const half = ctx.measureText(zone.name).width / 2 + 6;
-      const tx = Math.min(w - half, Math.max(half, X(zone.x))), tz = Z(zone.z); // never cut by the edge
+      const tx = Math.min(w - half, Math.max(half, X(zone.x))); // never cut by the edge
+      let tz = null;
+      for (const k of [0, 1, -1, 2, -2]) {
+        const y = Z(zone.z) + k * size * 1.15;
+        if (placed.every((q) => Math.abs(q.x - tx) > q.half + half || Math.abs(q.y - y) > size * 1.05)) { tz = y; break; }
+      }
+      if (tz === null) continue;
+      placed.push({ x: tx, y: tz, half });
       ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(14, 22, 17, 0.8)'; ctx.strokeText(zone.name, tx, tz);
       ctx.fillStyle = '#f6f1e4'; ctx.fillText(zone.name, tx, tz);
     }

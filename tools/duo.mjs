@@ -216,6 +216,28 @@ try {
   check('kicked: Bob is told so and is out; Alice is alone in the room', /put you out/.test(out || '') && !!left, JSON.stringify(out));
   const info = await (await fetch(`http://127.0.0.1:${PORT}/api/presence?room=main`)).json().catch(() => null);
   check('the server counts who is left in the room', !!info && info.room === 'main' && info.players === 1, JSON.stringify(info));
+  // the administrator looks at the game as a visitor sees it, and comes back
+  await alice.page.evaluate(() => document.querySelector('.roster .close').click());
+  await alice.page.evaluate(() => window.__mmf.hud.emit('roster'));
+  const seeAs = await until(() => alice.page.evaluate(() => { const b = document.querySelector('.roster .see-as'); return b && !b.hidden ? b.textContent : null; }), 10000);
+  await alice.page.evaluate(() => document.querySelector('.roster .see-as').click());
+  const masked = await until(() => alice.page.evaluate(() => { const a = window.__mmf, pill = document.querySelector('.pill.as-visitor'); return !a.who.admin && !a.presence.admin && !pill.hidden ? { key: !!localStorage.getItem('mmf.admin'), camera: getComputedStyle(document.querySelector('[data-act="camera"]')).display, pill: pill.textContent } : null; }), 20000);
+  await alice.page.evaluate(() => document.querySelector('.pill.as-visitor').click());
+  const unmasked = await until(() => alice.page.evaluate(() => { const a = window.__mmf; return a.who.admin && a.who.owner && a.presence.admin && document.querySelector('.pill.as-visitor').hidden ? true : null; }), 20000);
+  check('the administrator can see the game as a visitor does (no free view, nothing sent to the room), and come back by the pill', !!seeAs && !!masked && masked.key && masked.camera === 'none' && /back to admin/.test(masked.pill) && !!unmasked, JSON.stringify({ seeAs, masked, unmasked }));
+  // the key in the address: typed after the address of a page that is already open, it is taken (and wiped from the address)
+  await alice.page.keyboard.press('Enter');
+  await alice.page.keyboard.type('/admin');
+  await alice.page.keyboard.press('Enter');
+  await until(() => alice.page.evaluate(() => (!window.__mmf.who.admin && !localStorage.getItem('mmf.admin')) || null), 20000);
+  await alice.page.evaluate((key) => { location.hash = `#admin=${encodeURIComponent(` ${key} `)}`; }, ADMIN_KEY);
+  const byHash = await until(() => alice.page.evaluate(() => { const a = window.__mmf; return a.who.admin && a.who.owner && !location.hash ? localStorage.getItem('mmf.admin') : null; }), 20000);
+  const quiet = logs.length;
+  await alice.page.evaluate(() => { location.hash = '#admin=not%20the%key'; });
+  const wrong = await until(() => alice.page.evaluate(() => (!window.__mmf.who.admin && !location.hash ? [...document.querySelectorAll('.chat .log p')].map((e) => e.textContent).pop() : null)), 20000);
+  // (the browser notes the 403 the server answers a wrong key with: that one is expected)
+  for (let i = logs.length - 1; i >= quiet; i--) if (/403 \(Forbidden\)/.test(logs[i])) logs.splice(i, 1);
+  check('#admin=… in the address of a page already open: the key is taken (spaces round it do not count) and wiped from the address; a wrong one is refused, even one with a % of its own', byHash === ADMIN_KEY && /not recognised/.test(wrong || ''), JSON.stringify({ byHash, wrong }));
 } catch (err) {
   check('scenario ran to the end', false, err.message);
 }

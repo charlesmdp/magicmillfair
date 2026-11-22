@@ -2,8 +2,10 @@
 // and to the CPU (height / water / surface queries for gameplay and scattering).
 import * as THREE from 'three';
 import { G } from '../render/globals.js';
+import { WORLD_DIR } from './layout/layout.js';
 
-const BASE = `${import.meta.env.BASE_URL}assets/world/`;
+const BASE = `${import.meta.env.BASE_URL}assets/${WORLD_DIR}/`; // (the maps of the track in use: see TRACKS)
+const COMMON = `${import.meta.env.BASE_URL}assets/world/`; // (what is the same whatever the track)
 
 async function loadPixels(url) {
   const res = await fetch(url);
@@ -38,7 +40,7 @@ export class WorldData {
     const [meta, treesBuf, statue, ...imgs] = await Promise.all([
       fetch(`${BASE}world.json`).then((r) => r.json()).then((v) => (tick(), v)),
       fetch(`${BASE}trees.bin`).then((r) => r.arrayBuffer()).then((v) => (tick(), v)),
-      fetch(`${BASE}statue.bin`).then((r) => r.arrayBuffer()).then((v) => (tick(), v)), // the golden dog (tools/bake-statue.mjs)
+      fetch(`${COMMON}statue.bin`).then((r) => r.arrayBuffer()).then((v) => (tick(), v)), // the golden dog (tools/bake-statue.mjs)
       ...names.map((n) => loadPixels(`${BASE}${n}.png`).then((v) => (tick(), v))),
     ]);
     const [height, water, normal, splat0, splat1, splat2, tint, backdrop] = imgs;

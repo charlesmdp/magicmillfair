@@ -2,7 +2,7 @@
 // Three shapes, instanced; placed once at load from the baked data (deterministic).
 import * as THREE from 'three';
 import { LAYER } from '../../render/Shadows.js';
-import { CAVES, STAIRWAY, FALLS } from '../layout/layout.js';
+import { CAVES, STAIRWAY, FALLS, NORTH } from '../layout/layout.js';
 
 function hash(n) {
   const s = Math.sin(n * 127.1 + 311.7) * 43758.5453;
@@ -49,10 +49,14 @@ export class Rocks {
     this.colliders = [];
     const data = world.data, meta = data.meta;
     const items = [];
-    // no boulder in front of a cave, at the foot of the stairway, nor on any flight of steps
-    const clear = [...CAVES.map((c) => [c.nodes[0][0], c.nodes[0][1], 8]), [STAIRWAY.points[0][0], STAIRWAY.points[0][1], 6]];
+    // no boulder in front of a cave, at the foot of the stairway, nor on any flight of steps; none on the sand
+    // of the golden cove, on its beach or on the ledge of the statue (one of them used to shut the stair)
+    const clear = [
+      ...CAVES.map((c) => [c.nodes[0][0], c.nodes[0][1], 8]), [STAIRWAY.points[0][0], STAIRWAY.points[0][1], 6],
+      [NORTH.cove.x, NORTH.cove.z, Math.max(NORTH.cove.rx, NORTH.cove.rz) + NORTH.beach.reach - 4], [NORTH.ledge.x, NORTH.ledge.z, Math.max(NORTH.ledge.rx, NORTH.ledge.rz) + 3],
+    ];
     const flights = [];
-    for (const st of [STAIRWAY, ...FALLS.stairs]) for (let k = 0; k + 1 < st.points.length; k++) flights.push([st.points[k], st.points[k + 1], st.width / 2 + 0.9]);
+    for (const st of [STAIRWAY, ...FALLS.stairs, ...NORTH.stairs]) for (let k = 0; k + 1 < st.points.length; k++) flights.push([st.points[k], st.points[k + 1], st.width / 2 + 0.9]);
     const put = (x, z, size, sink = 0.3) => {
       if (!data.inside(x, z, 4)) return;
       for (const [cx, cz, r] of clear) if ((x - cx) ** 2 + (z - cz) ** 2 < r * r) return;

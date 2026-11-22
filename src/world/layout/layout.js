@@ -231,10 +231,15 @@ export const COAST = {
 // northern sea cliffs, a few strokes off their foot, as far as the fall that drops into the sea and a little
 // beyond. (It overlaps the bay of the valley along its southern edge.)
 export const SEA_REACH = [
-  [[108, -145], [176, -145], [207, -170], [221, -206], [222, -242], [199, -243], [196, -235], [190, -225], [183, -216], [177, -208], [171, -202], [165, -194], [157, -186], [150, -178], [141, -168], [127, -158], [112, -148]],
-  // (and on along the cliffs, to the cove of the golden dog)
-  [[199.5, -242], [222, -241], [226, -272], [213, -272], [208, -266.5], [205.5, -258.5], [200.5, -252.5], [197.5, -247]],
+  [[108, -145], [176, -145], [207, -170], [228, -204], [258, -242], [199, -243], [196, -235], [190, -225], [183, -216], [177, -208], [171, -202], [165, -194], [157, -186], [150, -178], [141, -168], [127, -158], [112, -148]],
+  // (and on along the cliffs, to the cove of the golden dog and its beach: the land side of this one runs
+  // through the sand of the cove)
+  [[196.5, -242], [258, -241], [292, -302], [240, -302], [232, -290], [222, -278], [211, -273], [203, -268.5], [199.5, -262.5], [197, -256], [195.5, -249]],
 ];
+// The shark keeps to the open sea: it goes for whoever swims within `SHARK.near` metres of where these
+// stretches end out at sea (and lets go beyond `SHARK.far`). The stretches above are drawn so that someone
+// following the foot of the cliffs — to the fall, to the golden cove — stays well out of its reach.
+export const SHARK = { near: 30, far: 46 };
 // The cove of the golden dog, further up the same coast: a pocket of sand under the cliffs that one only
 // reaches by swimming; a stair cut across the face of the cliff climbs from it to a ledge high over the sea,
 // where a statue stands: a golden Australian shepherd fifteen metres tall, and a plaque.
@@ -244,6 +249,9 @@ export const SEA_REACH = [
 export const NORTH = {
   name: 'The Golden Cove',
   cove: { x: 199.5, z: -262.5, rx: 6.2, rz: 7.2, y: 1.15 },
+  // (its beach: `face` metres of sand going down at `slope`, then the shelf under the water going down at
+  // `drop`; shaped out to `reach` metres from the edge of the cove)
+  beach: { face: 9, slope: 0.2, drop: 0.36, reach: 24 },
   ledge: { x: 226.5, z: -333, rx: 11, rz: 10.5, y: 44.4 },
   stairs: [{ width: 2.3, landing: 1.2, points: [[203.4, -267.6, 1.5], [212, -285, 16.2], [219, -305, 31.2], [227, -322.6, 44.4]] }],
   statue: { x: 225.5, z: -335, yaw: -0.3, height: 15, name: 'CROKMOU', plaque: 'BEST DOG EVER' },
@@ -326,6 +334,43 @@ export function islandPath(u) {
 // ---------------------------------------------------------------------------
 // Roads and paths. kind: asphalt | gravel | dirt | boardwalk
 
+// The race has two tracks, and both are kept. `grove` is the one in use: 400 m drawn to be driven flat out —
+// two long sweepers (the western one through a grove planted for it), esses, two chicanes, a ramp: whoever
+// drives well never has to lift (no bend is tighter than 21 m in the middle of the track; a quad at full
+// speed turns in 12 m, in 17.5 m while a boost lasts). `classic` is the first one: an oval of some 330 m
+// round the wheat field. Each has
+// its own baked maps (assets/world, assets/world-classic: `TRACK=classic npm run bake:world` bakes the second),
+// so that the other one can be tried without rebuilding anything: add ?track=classic to the address. Times
+// driven on the track that is not in use are not kept.
+//   points   the middle of the track, closed (it ends where it starts); one drives the way it is listed
+//   boosts, jump, chicanes, logs   where things stand, as shares of the lap (see RACE)
+//   gap      how far apart the two walls of a chicane stand, metres
+//   grove    a wood planted for the track to thread: centre, half sizes, how many trees (or none)
+export const TRACKS = {
+  grove: {
+    points: [
+      // the straight of the start, westwards; the western sweeper (an arc of 27.5 m round (-116, -132))
+      [-50, -102.5], [-80, -103.5], [-104, -104.5], [-116, -104.5], [-129.75, -108.2], [-139.8, -118.25], [-143.5, -132], [-139.8, -145.75], [-129.75, -155.8], [-116, -159.5],
+      // esses, then a long straight for the ramp; the eastern sweeper (24 m round (3, -129))
+      [-98, -157], [-84, -153.5], [-70, -156.5], [-60, -158], [-44, -157], [-28, -156], [-12, -155], [3, -153], [15, -149.8], [23.8, -141], [27, -129], [23.8, -117], [15, -108.2], [3, -105],
+      // and back to the line
+      [-14, -104], [-32, -103.2], [-50, -102.5],
+    ],
+    boosts: [0.03, 0.3, 0.5, 0.7], jump: 0.56, chicanes: [0.085, 0.9], gap: 24, logs: [],
+    grove: { x: -131, z: -132, rx: 30, rz: 37, trees: 120 },
+  },
+  classic: {
+    points: [[-50, -102.5], [-80, -103.5], [-98, -108.5], [-106, -122], [-106, -142], [-96, -156], [-60, -158.5], [-24, -156.5], [4, -152], [20, -144], [26, -130], [22, -116], [8, -107.5], [-20, -104], [-50, -102.5]],
+    boosts: [0.18, 0.4, 0.84], jump: 0.52, chicanes: [], logs: [],
+    grove: null,
+  },
+};
+const askedTrack = (typeof process !== 'undefined' && process.env && process.env.TRACK) || (typeof location !== 'undefined' && (/[?&]track=([a-z]+)/.exec(location.search) || [])[1]) || '';
+/** The track of this page (of this bake): the one in use unless another is asked for. */
+export const TRACK = Object.hasOwn(TRACKS, askedTrack) ? askedTrack : 'grove';
+/** The folder of the baked maps that go with it (under assets/). */
+export const WORLD_DIR = TRACK === 'grove' ? 'world' : `world-${TRACK}`;
+
 export const PATHS = [
   {
     // The only road into the valley: it comes out of a tunnel under the northern mountains.
@@ -397,13 +442,9 @@ export const PATHS = [
     points: [[4, 49.6], [3.4, 56], [1.9, 63]],
   },
   {
-    // The race track: a loop round the wheat fields (see RACE). Closed: it ends where it starts.
+    // The race track: a loop round the wheat fields (see RACE and TRACKS). Closed: it ends where it starts.
     id: 'race', kind: 'gravel', width: 7.5, cut: 1,
-    points: [
-      [-50, -102.5], [-82, -103.5], [-102, -106.5], [-118, -113], [-128, -124], [-124, -136], [-134, -146], [-130, -156], [-116, -161],
-      [-96, -159], [-78, -152.5], [-62, -158.5], [-40, -157.5], [-12, -155], [6, -150.5], [20, -141], [26, -128], [23, -115], [11, -106.5],
-      [-3, -111], [-11, -123], [-23, -130.5], [-33, -123], [-34, -111], [-41, -104], [-50, -102.5],
-    ],
+    points: TRACKS[TRACK].points,
   },
   {
     // The path that winds round the island.
@@ -513,10 +554,11 @@ export const ACID = { x: -236, z: -82, r: 4.2 };
 // `grove`: a wood planted for the track to thread (centre, half sizes, how many trees); `chicanes`: where
 // two walls of bales, one from each side, make the way zigzag; `logs`: where a log lies across half the track
 // (hop it, or go round). The ramp stands at the end of a funnel of bales: everybody flies.
+// `every`: a race leaves every so many seconds, on a clock everybody shares: friends who ask for the same
+// start leave together. `starts`: the names of the starts, in turn (a colour: it is on the board by the tent).
 export const RACE = {
-  name: 'Quadmania', laps: 3, width: 7.5, start: 0.012, boosts: [0.03, 0.345, 0.5, 0.66], jump: 0.535, paddock: 1,
-  grove: { x: -127, z: -136, rx: 19, rz: 30, trees: 110 },
-  chicanes: [0.1, 0.925], logs: [0.2, 0.3, 0.83],
+  name: 'Quadmania', laps: 3, width: 7.5, start: 0.012, paddock: 1, every: 5, starts: ['Red', 'Blue', 'Green', 'Yellow', 'Purple', 'Orange'],
+  boosts: TRACKS[TRACK].boosts, jump: TRACKS[TRACK].jump, chicanes: TRACKS[TRACK].chicanes, gap: TRACKS[TRACK].gap || 24, logs: TRACKS[TRACK].logs, grove: TRACKS[TRACK].grove,
 };
 // Wing It: a little theatre on the plaza at the foot of the pier, where one flies on the spot while the
 // scenery goes by. (x, z): the middle of the front of its stage; `yaw`: which way the stage looks;
@@ -635,7 +677,7 @@ export const PARK = [
 ];
 
 export const FIELDS = [
-  { crop: 'wheat', outline: [[-102, -150], [-56, -150], [-46, -128], [-52, -104], [-100, -110]] },
+  { crop: 'wheat', outline: [[-102, -147.5], [-56, -147.5], [-46, -128], [-52, -108.5], [-100, -110]] },
   { crop: 'cereal', outline: [[-42, -150], [6, -144], [16, -124], [-2, -112], [-36, -110]] },
   { crop: 'wheat', outline: [[-36, 70], [-12, 60], [10, 57], [26, 66], [30, 98], [6, 114], [-30, 108]] },
 ];
