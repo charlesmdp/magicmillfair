@@ -1,4 +1,14 @@
-# Magic Mill Fair
+# Atomic Oasis
+
+> In the near future, an AI started a nuclear war. It took one afternoon. A handful of humans survived, by
+> moving their minds into small robots. Of the whole planet, only this valley and this beach were spared.
+> So have fun. Get some work done. Take a walk. Enjoy the view. Life goes by so fast anyway.
+>
+> **Welcome to Atomic Oasis.**
+
+That is what the page says as it opens (a click, a key or the end of the story reveals the gate; whoever
+has heard it before is told it faster) — and it is the last sober thing in the game: everything after it is
+bunting, light bulbs and a big wheel. The gap between the two is the point.
 
 A 3D world to explore in the browser: an old mill with its ponds, its mill race and its water wheel, in a
 valley closed by mountains — and, a short walk down the valley, a cove with a promenade, a grand pier and

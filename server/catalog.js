@@ -28,12 +28,12 @@ export function describe(item) {
   if (typeof item !== 'string' || item.length > 60) return null;
   const [type, id, more] = item.split(':');
   if (more !== undefined) return null;
-  if (type === 'jetpack' && id === undefined) return { item, kind: 'own', amount: PRICES.jetpack, monthly: false, name: 'Magic Mill Fair — the jetpack' };
-  if (type === 'hat' && Object.hasOwn(HATS, id)) return { item, kind: 'own', amount: PRICES.hat, monthly: false, name: `Magic Mill Fair — ${HATS[id]}` };
-  if (type === 'board' && Object.hasOwn(BOARDS, id)) return { item, kind: 'slot', amount: PRICES.board, monthly: true, name: `Magic Mill Fair — sponsor of ${BOARDS[id]}` };
-  if (item === 'tarp:shoot') return { item, kind: 'slot', amount: PRICES.tarp, monthly: true, name: 'Magic Mill Fair — the backdrop of Bullseye Alley' };
-  if (type === 'gondola' && /^[1-9]\d?$/.test(id || '') && +id <= GONDOLAS) return { item, kind: 'slot', amount: PRICES.gondola, monthly: true, name: `Magic Mill Fair — gondola ${id} of the big wheel` };
-  if (type === 'village' && VILLAGES.has(id)) { const v = VILLAGES.get(id); return { item, kind: 'slot', amount: VILLAGE_PRICES[v.tier] * 100, monthly: true, name: `Magic Mill Fair — the sky village ${v.name}` }; }
+  if (type === 'jetpack' && id === undefined) return { item, kind: 'own', amount: PRICES.jetpack, monthly: false, name: 'Atomic Oasis — the jetpack' };
+  if (type === 'hat' && Object.hasOwn(HATS, id)) return { item, kind: 'own', amount: PRICES.hat, monthly: false, name: `Atomic Oasis — ${HATS[id]}` };
+  if (type === 'board' && Object.hasOwn(BOARDS, id)) return { item, kind: 'slot', amount: PRICES.board, monthly: true, name: `Atomic Oasis — sponsor of ${BOARDS[id]}` };
+  if (item === 'tarp:shoot') return { item, kind: 'slot', amount: PRICES.tarp, monthly: true, name: 'Atomic Oasis — the backdrop of Bullseye Alley' };
+  if (type === 'gondola' && /^[1-9]\d?$/.test(id || '') && +id <= GONDOLAS) return { item, kind: 'slot', amount: PRICES.gondola, monthly: true, name: `Atomic Oasis — gondola ${id} of the big wheel` };
+  if (type === 'village' && VILLAGES.has(id)) { const v = VILLAGES.get(id); return { item, kind: 'slot', amount: VILLAGE_PRICES[v.tier] * 100, monthly: true, name: `Atomic Oasis — the sky village ${v.name}` }; }
   return null;
 }
 

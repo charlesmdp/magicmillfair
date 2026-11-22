@@ -52,8 +52,32 @@ html, body {
 /* once the world is ready it shows through */
 .splash.glass { background: linear-gradient(180deg, rgba(21, 15, 56, 0.3), rgba(16, 12, 36, 0.66)); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
 .splash.glass::before { display: none; }
+/* ---------- the story, told as the page opens: a few sober lines, then the fair bursts in ---------- */
+.intro {
+  position: absolute; inset: 0; z-index: 2; display: grid; place-content: center; justify-items: center; gap: clamp(12px, 3vh, 30px); cursor: pointer;
+  padding: clamp(52px, 11vh, 120px) 26px 52px; text-align: center; --pace: 1;
+  background: radial-gradient(90% 70% at 50% 45%, #0e0b24, #05040e); transition: opacity 0.9s ease, visibility 0.9s;
+}
+.splash.again .intro { --pace: 0.55; }
+.splash.told .intro { opacity: 0; visibility: hidden; pointer-events: none; }
+.tale { max-width: 44em; display: grid; gap: clamp(7px, 1.6vh, 16px); }
+.tale p { margin: 0; font: italic 400 clamp(15px, min(2.5vw, 3.5vh), 23px) / 1.5 Georgia, 'Iowan Old Style', 'Times New Roman', serif; color: #d6d1c2; opacity: 0; animation: tell 1.6s ease forwards; }
+.tale p:nth-child(1) { animation-delay: calc(var(--pace) * 0.6s); }
+.tale p:nth-child(2) { animation-delay: calc(var(--pace) * 3.2s); }
+.tale p:nth-child(3) { animation-delay: calc(var(--pace) * 5.8s); }
+.tale p:nth-child(4) { animation-delay: calc(var(--pace) * 8.4s); }
+.tale p:nth-child(5) { animation-delay: calc(var(--pace) * 11s); color: #fff3d6; }
+@keyframes tell { from { opacity: 0; transform: translateY(8px); filter: blur(3px); } to { opacity: 1; transform: none; filter: none; } }
+/* …and the welcome: everything the lines above are not */
+.hello { width: min(760px, 100%); opacity: 0; animation: hello 0.9s cubic-bezier(0.2, 1.5, 0.4, 1) forwards; animation-delay: calc(var(--pace) * 13.6s); }
+.hello strong { display: block; margin: 4px 0; font: 900 clamp(24px, min(6.2vw, 8.6vh), 62px) / 1.12 Georgia, 'Iowan Old Style', 'Times New Roman', serif; letter-spacing: 0.04em; text-transform: uppercase; color: #fff3d6; text-shadow: 0 0 26px rgba(242, 193, 78, 0.75), 0 4px 0 #7a0a1c; text-wrap: balance; }
+.hello strong em { font-style: normal; color: var(--accent); white-space: nowrap; }
+.hello .trefoil { width: 0.82em; height: 0.82em; vertical-align: -0.08em; animation: spin 9s linear infinite; filter: drop-shadow(0 0 10px rgba(242, 193, 78, 0.6)); }
+@keyframes hello { from { opacity: 0; transform: scale(0.6) rotate(-2deg); } to { opacity: 1; transform: none; } }
+.intro .skip { position: absolute; right: 18px; bottom: 16px; padding: 7px 15px; border-radius: 999px; border: 1px solid rgba(246, 231, 200, 0.35); background: rgba(255, 255, 255, 0.06); color: var(--ink-soft) !important; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; }
+@media (prefers-reduced-motion: reduce) { .tale p, .hello { animation-duration: 0.01s; } .hello .trefoil { animation: none; } }
 /* bunting across the top */
-.bunting { position: absolute; top: 0; left: 0; width: 100%; height: clamp(64px, 12vh, 120px); pointer-events: none; transform-origin: 50% 0; animation: sway 5.5s ease-in-out infinite alternate; filter: drop-shadow(0 4px 5px rgba(0, 0, 0, 0.4)); }
+.bunting { position: absolute; z-index: 3; top: 0; left: 0; width: 100%; height: clamp(64px, 12vh, 120px); pointer-events: none; transform-origin: 50% 0; animation: sway 5.5s ease-in-out infinite alternate; filter: drop-shadow(0 4px 5px rgba(0, 0, 0, 0.4)); }
 @keyframes sway { from { transform: skewX(-1.3deg); } to { transform: skewX(1.3deg); } }
 /* the booth: a dark panel under a striped awning */
 .card {

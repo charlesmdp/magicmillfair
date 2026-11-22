@@ -1,4 +1,4 @@
-// Magic Mill Fair — production server: static files from dist/ plus the multiplayer presence relay on /ws.
+// Atomic Oasis — production server: static files from dist/ plus the multiplayer presence relay on /ws.
 // The server has no authority over the game: every client shares its own avatar state and the server only
 // batches those states to the other members of the room at a fixed tick.
 // Environment: PORT (8787), HOST (0.0.0.0), TICK_HZ (12), MAX_PLAYERS (250, per room), DIST_DIR (../dist) and
@@ -328,5 +328,5 @@ process.on('SIGINT', shutdown);
 
 server.listen(PORT, HOST, () => {
   const { port } = server.address();
-  console.log(`Magic Mill Fair — http://localhost:${port} (presence: ws://localhost:${port}/ws, ${TICK_HZ} Hz, up to ${MAX_PLAYERS} players per room)`);
+  console.log(`Atomic Oasis — http://localhost:${port} (presence: ws://localhost:${port}/ws, ${TICK_HZ} Hz, up to ${MAX_PLAYERS} players per room)`);
 });

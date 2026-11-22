@@ -82,7 +82,7 @@ export class Hud {
     let s = this.root.querySelector('.splash');
     if (!s) {
       s = el('div', 'splash');
-      s.innerHTML = '<div class="card"><h1 class="title">Magic <em>Mill</em> Fair</h1><div class="bar"><i></i></div><div class="hint load"></div><div class="form"><label for="mmf-name">Your name</label><input id="mmf-name" type="text" maxlength="16" autocomplete="off" spellcheck="false" /><label>Colour</label><div class="swatches"></div><button class="go" type="button">Step right up!</button><div class="keys"></div></div><div class="version"></div></div>';
+      s.innerHTML = '<div class="card"><h1 class="title">Atomic <em>Oasis</em></h1><div class="bar"><i></i></div><div class="hint load"></div><div class="form"><label for="mmf-name">Your name</label><input id="mmf-name" type="text" maxlength="16" autocomplete="off" spellcheck="false" /><label>Colour</label><div class="swatches"></div><button class="go" type="button">Step right up!</button><div class="keys"></div></div><div class="version"></div></div>';
       this.root.append(s);
     }
     this.splash = s;

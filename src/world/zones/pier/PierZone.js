@@ -699,7 +699,7 @@ export class PierZone {
     ctx.fillStyle = '#fff3d6';
     ctx.font = '900 104px Georgia, "Times New Roman", serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('MAGIC MILL FAIR', 512, 100);
+    ctx.fillText('ATOMIC OASIS', 512, 100);
     ctx.fillStyle = '#f2c14e';
     for (let i = 0; i < 34; i++) { ctx.beginPath(); ctx.arc(34 + i * 29, 26, 5, 0, 7); ctx.arc(34 + i * 29, 166, 5, 0, 7); ctx.fill(); }
     const tex = new THREE.CanvasTexture(cv);

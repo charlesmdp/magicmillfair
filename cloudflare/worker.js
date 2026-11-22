@@ -1,4 +1,4 @@
-// Magic Mill Fair on Cloudflare: one Worker. The built site (dist/) is served by Cloudflare's static assets;
+// Atomic Oasis on Cloudflare: one Worker. The built site (dist/) is served by Cloudflare's static assets;
 // this script only answers /ws (multiplayer presence), /api/presence, /api/scores (the leaderboards),
 // /api/npc (the characters one can talk to) and /healthz.
 //

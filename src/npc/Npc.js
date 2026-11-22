@@ -32,6 +32,7 @@ const PERSONAS = {
       [/\b(mushroom|champignon)\b/i, ['Not every opportunity should be eaten, champ, and the red ones with white spots least of all.']],
       [/\b(temple|stairs|stairway|escalier)\b/i, ['The stairway in the west is long, champ, and so is everything worth standing on top of.']],
       [/\b(village|sky gate|teleport)/i, ['Step through the Sky Gate by the lane north of the mill: sometimes the view you need is one decision away.']],
+      [/\b(war|nuclear|bomb|apocalypse|end of the world|robots?|atomic|guerre|nucléaire|bombe)\b/i, ['The world ended and you still showed up, champ: that is a growth mindset in one sentence.', 'Every apocalypse is a pivot, champ: we lost a planet and kept the big wheel.']],
       [/\b(tired|sad|afraid|scared|fatigu|triste|peur)\b/i, ['Sit down for a minute, champ: even the big wheel only goes round because it stops to let people on.']],
       [/\b(meaning|life|why|sens|vie|pourquoi)\b/i, ['The meaning of life is the next small thing done properly, and yes, that does include breakfast.']],
     ],
