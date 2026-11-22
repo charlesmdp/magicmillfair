@@ -1,5 +1,6 @@
 // Signs drawn on a canvas and hung in the world: the scoreboards of the games (four lists: today, this week,
-// this month, all time) and the sponsor panels that go with them ("your brand here" until someone takes it).
+// this month, all time — a marquee of light bulbs, medals for the first three) and the sponsor panels that go
+// with them ("your brand here" until someone takes it).
 import * as THREE from 'three';
 
 const SERIF = "Georgia, 'Times New Roman', serif", SANS = 'system-ui, sans-serif';
@@ -25,38 +26,89 @@ const shrink = (ctx, text, max, size, weight, family) => {
   return text;
 };
 
+const rounded = (ctx, x, y, w, h, r) => { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); };
+const MEDALS = [['#ffe27a', '#d99a12', '#5a3a00'], ['#f4f6fa', '#9aa3b2', '#2c3340'], ['#f0b98a', '#b0622a', '#42200a']]; // gold, silver, bronze: light, dark, ink
+const RIBBONS = { day: ['#e9573f', '#b3261e'], week: ['#2bb3a3', '#14756b'], month: ['#8e6bd8', '#5a3aa6'], all: ['#f6c945', '#c98a10'] };
+
 /**
- * The scoreboard of a game. `lists`: { day, week, month, all }, each [{ name, score }] best first (null while
- * they have not been fetched); `format(score)` writes a score (a time, points).
+ * The scoreboard of a game, in the manner of a fairground marquee: a frame of light bulbs, the name of the
+ * game in gold, four lists (today, this week, this month, all time) with medals for the first three.
+ * `lists`: { day, week, month, all }, each [{ name, score }] best first (null while they have not been
+ * fetched); `format(score)` writes a score (a time, points); `me`: the visitor's own name, picked out.
  */
-export function drawScores(ctx, w, h, { title, sub, lists, format }) {
-  ctx.fillStyle = '#16211b'; ctx.fillRect(0, 0, w, h);
-  ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 8; ctx.strokeRect(8, 8, w - 16, h - 16);
+export function drawScores(ctx, w, h, { title, sub, lists, format, me }) {
+  // the night behind, rays fanning out from the title
+  const sky = ctx.createLinearGradient(0, 0, 0, h);
+  sky.addColorStop(0, '#1b1440'); sky.addColorStop(0.55, '#141a3a'); sky.addColorStop(1, '#0c1226');
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, w, h);
+  ctx.save();
+  ctx.translate(w / 2, 70);
+  for (let k = 0; k < 28; k++) { ctx.rotate((Math.PI * 2) / 28); ctx.fillStyle = k % 2 ? 'rgba(255, 214, 110, 0.055)' : 'rgba(255, 255, 255, 0.02)'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-70, 1100); ctx.lineTo(70, 1100); ctx.closePath(); ctx.fill(); }
+  ctx.restore();
+  // the frame: gold, with a bulb every few fingers
+  const gold = ctx.createLinearGradient(0, 0, w, h);
+  gold.addColorStop(0, '#f9dc7c'); gold.addColorStop(0.5, '#c8901a'); gold.addColorStop(1, '#f6d266');
+  ctx.strokeStyle = gold; ctx.lineWidth = 22; rounded(ctx, 13, 13, w - 26, h - 26, 26); ctx.stroke();
+  ctx.strokeStyle = '#5c3a06'; ctx.lineWidth = 2; rounded(ctx, 25, 25, w - 50, h - 50, 18); ctx.stroke();
+  const bulb = (x, y, k) => {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, 13);
+    g.addColorStop(0, '#fffdf0'); g.addColorStop(0.35, k % 2 ? '#ffe9a6' : '#fff6d6'); g.addColorStop(0.6, 'rgba(255, 196, 70, 0.55)'); g.addColorStop(1, 'rgba(255, 180, 40, 0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 13, 0, 7); ctx.fill();
+  };
+  const nx = Math.round((w - 60) / 46), ny = Math.round((h - 60) / 46);
+  for (let k = 0; k <= nx; k++) { bulb(30 + (k * (w - 60)) / nx, 13, k); bulb(30 + (k * (w - 60)) / nx, h - 13, k + 1); }
+  for (let k = 1; k < ny; k++) { bulb(13, 30 + (k * (h - 60)) / ny, k); bulb(w - 13, 30 + (k * (h - 60)) / ny, k + 1); }
+  // the name of the game, in gold on its shadow, a star on either side
   ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
-  ctx.fillStyle = '#f2c14e';
-  ctx.fillText(shrink(ctx, title, w - 60, 56, 700, SERIF), w / 2, 56);
-  ctx.fillStyle = '#cfc7b2';
-  ctx.fillText(shrink(ctx, sub, w - 60, 26, 600, SANS), w / 2, 102);
-  const top = 134, pw = (w - 24) / 2, ph = (h - top - 14) / 2, rows = 5, lh = (ph - 62) / rows;
+  const text = shrink(ctx, title, w - 250, 66, 900, SERIF), tw = ctx.measureText(text).width;
+  ctx.lineJoin = 'round'; ctx.lineWidth = 10; ctx.strokeStyle = '#5a0d16'; ctx.strokeText(text, w / 2, 76);
+  const tg = ctx.createLinearGradient(0, 44, 0, 108);
+  tg.addColorStop(0, '#fff3b8'); tg.addColorStop(0.5, '#f6c945'); tg.addColorStop(1, '#d08a12');
+  ctx.fillStyle = tg; ctx.fillText(text, w / 2, 76);
+  const star = (x, y, r) => { ctx.beginPath(); for (let k = 0; k < 10; k++) { const a = (k / 10) * Math.PI * 2 - Math.PI / 2, q = k % 2 ? r * 0.45 : r; ctx.lineTo(x + Math.cos(a) * q, y + Math.sin(a) * q); } ctx.closePath(); ctx.fill(); };
+  ctx.fillStyle = '#f6c945';
+  for (const g of [-1, 1]) { star(w / 2 + g * (tw / 2 + 44), 76, 20); star(w / 2 + g * (tw / 2 + 84), 82, 11); }
+  ctx.fillStyle = '#d9d2f0';
+  ctx.fillText(shrink(ctx, sub.toUpperCase(), w - 140, 22, 700, SANS), w / 2, 128);
+  // the four lists
+  const top = 152, gap = 14, pw = (w - 76 - gap) / 2, ph = (h - top - 44 - gap) / 2, rows = 5, head = 46, lh = (ph - head - 14) / rows;
   PERIODS.forEach(([key, label], k) => {
-    const x0 = 12 + (k % 2) * pw, y0 = top + Math.floor(k / 2) * ph;
-    ctx.fillStyle = k === 3 ? '#243a2c' : '#1d2c23'; ctx.fillRect(x0 + 6, y0 + 4, pw - 12, ph - 8);
-    ctx.fillStyle = '#e9785a'; ctx.font = `700 28px ${SANS}`; ctx.textAlign = 'center';
-    ctx.fillText(label, x0 + pw / 2, y0 + 30);
+    const x0 = 38 + (k % 2) * (pw + gap), y0 = top + Math.floor(k / 2) * (ph + gap), [c0, c1] = RIBBONS[key];
+    ctx.fillStyle = key === 'all' ? 'rgba(74, 52, 8, 0.6)' : 'rgba(8, 10, 28, 0.62)'; rounded(ctx, x0, y0, pw, ph, 16); ctx.fill();
+    ctx.strokeStyle = key === 'all' ? 'rgba(246, 201, 69, 0.85)' : 'rgba(255, 255, 255, 0.16)'; ctx.lineWidth = key === 'all' ? 3 : 1.5; rounded(ctx, x0, y0, pw, ph, 16); ctx.stroke();
+    // its ribbon
+    const rg = ctx.createLinearGradient(0, y0, 0, y0 + head);
+    rg.addColorStop(0, c0); rg.addColorStop(1, c1);
+    ctx.fillStyle = rg; rounded(ctx, x0 + 14, y0 - 6, pw - 28, head, 10); ctx.fill();
+    ctx.fillStyle = key === 'all' ? '#3a2600' : '#fff'; ctx.font = `800 26px ${SANS}`; ctx.textAlign = 'center';
+    ctx.fillText(key === 'all' ? `♛  ${label}  ♛` : label, x0 + pw / 2, y0 - 6 + head / 2 + 1);
     const list = lists ? lists[key] : null;
     if (!list || !list.length) {
-      ctx.fillStyle = '#8f9a8c'; ctx.font = `500 24px ${SANS}`;
-      ctx.fillText(list ? (key === 'all' ? 'Be the first!' : 'Nobody yet') : '…', x0 + pw / 2, y0 + ph / 2 + 10);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'; ctx.font = `600 25px ${SANS}`;
+      ctx.fillText(list ? (key === 'all' ? 'Be the first!' : 'Nobody yet — your turn') : '…', x0 + pw / 2, y0 + head + (ph - head) / 2);
       return;
     }
-    ctx.font = `600 31px ${SANS}`;
     list.slice(0, rows).forEach((e, i) => {
-      const y = y0 + 62 + lh * (i + 0.5);
-      ctx.fillStyle = i === 0 ? '#f2c14e' : i < 3 ? '#f6f1e4' : '#cfc7b2';
+      const y = y0 + head + 6 + lh * (i + 0.5), mine = !!me && e.name.toLowerCase() === me.toLowerCase();
+      if (mine) { ctx.fillStyle = 'rgba(246, 201, 69, 0.2)'; rounded(ctx, x0 + 8, y - lh / 2 + 2, pw - 16, lh - 4, 8); ctx.fill(); ctx.strokeStyle = 'rgba(246, 201, 69, 0.7)'; ctx.lineWidth = 1.5; ctx.stroke(); }
+      else if (i % 2 === 0) { ctx.fillStyle = 'rgba(255, 255, 255, 0.045)'; rounded(ctx, x0 + 8, y - lh / 2 + 2, pw - 16, lh - 4, 8); ctx.fill(); }
+      // the rank: a medal for the first three
+      const bx = x0 + 36;
+      if (i < 3) {
+        const [light, dark, ink] = MEDALS[i], mg = ctx.createRadialGradient(bx - 5, y - 6, 2, bx, y, 19);
+        mg.addColorStop(0, light); mg.addColorStop(1, dark);
+        ctx.fillStyle = mg; ctx.beginPath(); ctx.arc(bx, y, 18, 0, 7); ctx.fill();
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)'; ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.fillStyle = ink; ctx.font = `900 22px ${SANS}`; ctx.textAlign = 'center'; ctx.fillText(String(i + 1), bx, y + 1);
+      } else { ctx.fillStyle = 'rgba(255, 255, 255, 0.55)'; ctx.font = `700 22px ${SANS}`; ctx.textAlign = 'center'; ctx.fillText(String(i + 1), bx, y + 1); }
       const score = format(e.score);
-      ctx.textAlign = 'right'; ctx.fillText(score, x0 + pw - 22, y);
-      ctx.textAlign = 'left'; ctx.fillText(`${i + 1}.`, x0 + 20, y);
-      ctx.fillText(fit(ctx, e.name, pw - 100 - ctx.measureText(score).width), x0 + 62, y);
+      ctx.font = `800 ${i === 0 ? 31 : 28}px ${SANS}`; ctx.textAlign = 'right';
+      ctx.fillStyle = i === 0 ? '#ffd95e' : mine ? '#fff3b8' : '#ffffff';
+      ctx.fillText(score, x0 + pw - 20, y + 1);
+      const sw = ctx.measureText(score).width;
+      ctx.font = `${mine || i === 0 ? 800 : 600} ${i === 0 ? 30 : 27}px ${SANS}`; ctx.textAlign = 'left';
+      ctx.fillStyle = i === 0 ? '#fff3b8' : mine ? '#ffe9a6' : '#e8e6f5';
+      ctx.fillText(fit(ctx, e.name, pw - 96 - sw), x0 + 66, y + 1);
     });
   });
 }

@@ -27,7 +27,7 @@ export const BOARDS = {
   shoot: { order: 'desc', min: 1, max: 9999, length: 45_000 }, // the shooting gallery
   mole: { order: 'desc', min: 1, max: 9999, length: 45_000 }, // whack-a-mole
   milk: { order: 'desc', min: 1, max: 9999, length: 45_000 }, // milk for the clown
-  bell: { order: 'desc', min: 1, max: 1000, length: 4_000 }, // the high striker: one blow of the mallet
+  bell: { order: 'desc', min: 1, max: 9999, length: 4_000 }, // the high striker: the best of three blows of the mallet
 };
 export const KEPT = { all: 200, month: 100, week: 100, day: 100 }, SHOWN = 10;
 export const PERIODS = ['day', 'week', 'month', 'all'];

@@ -394,6 +394,11 @@ async function testProtocol(server) {
   await c.wait((m) => m.t === 'e');
   await sleep(TICK);
   check('ws: emotes are relayed to the room only', JSON.stringify(emote) === JSON.stringify({ t: 'e', id: b.id, e: 7 }) && c.msgs.some((m) => m.t === 'e') && ![b, d].some((x) => x.msgs.some((m) => m.t === 'e')), emote);
+  // A score has gone on a board: the room is told which (and nothing else is believed), not more than once every three seconds
+  b.send({ t: 'g', b: 'shoot' }); b.send({ t: 'g', b: 'race' }); b.send({ t: 'g', b: '<script>' });
+  const scored = await a.wait((m) => m.t === 'g');
+  await sleep(TICK * 3);
+  check('ws: "a score of mine went on that board" is passed on to the room, once in a while', JSON.stringify(scored) === JSON.stringify({ t: 'g', id: b.id, b: 'shoot' }) && a.msgs.filter((m) => m.t === 'g').length === 1 && c.msgs.filter((m) => m.t === 'g').length === 1 && !b.msgs.some((m) => m.t === 'g'), a.msgs.filter((m) => m.t === 'g'));
   // Chat: relayed as it comes to the others in the room, cleaned and bounded, never sent back, never stored.
   b.send({ t: 'c', m: '  Hello\u0000  there,\n<b>friends</b>  ' });
   const said = await a.wait((m) => m.t === 'c');

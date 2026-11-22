@@ -19,10 +19,10 @@ const WHITE = [0.97, 0.95, 0.9], WOOD = [0.9, 0.8, 0.66];
 
 /** id (also the board of its scores), name, where it stands on the pier (along, side), its colour, how long a game lasts. */
 export const BOOTHS = [
-  { id: 'shoot', name: 'Bullseye Alley', along: 81, side: -19, color: [0.85, 0.18, 0.14], seconds: 45, how: 'Click the targets: the small ones at the back are worth more, and they all speed up.' },
+  { id: 'shoot', name: 'Bullseye Alley', along: 81, side: -19, color: [0.85, 0.18, 0.14], seconds: 45, how: 'Click the targets as they show: the small ones at the back are worth more. Leave the black ones alone!' },
   { id: 'mole', name: 'Whack-a-Mole', along: 81, side: 19, color: [0.1, 0.6, 0.62], seconds: 45, how: 'Click the moles as they come up. Golden ones are worth three. Leave the rabbits alone!' },
   { id: 'milk', name: 'Feed the Clown', along: 123, side: -18, color: [0.95, 0.66, 0.08], seconds: 45, how: 'Hold the button down and keep the jet of milk in his mouth. He will not stay still.' },
-  { id: 'bell', name: 'Ring the Bell', along: 123, side: 18, color: [0.2, 0.42, 0.85], seconds: 0, how: 'Three blows. Strike when the needle is at the top; the best one counts.' },
+  { id: 'bell', name: 'Ring the Bell', along: 123, side: 18, color: [0.2, 0.42, 0.85], seconds: 0, how: 'Three blows. Strike when the needle is right at the top — it goes through in a blink. The best one counts.' },
 ];
 
 /** A disc facing +Z, of radius 1, in rings of colour (from the rim to the middle). */
@@ -33,6 +33,10 @@ function disc(b, rings, sides = 14) {
     b.tint(c[0], c[1], c[2], 1).poly(pts);
   });
 }
+/** The high striker: what a blow is worth (0 to 9,999) when the needle stands at `g` (0 at the bottom, 1 at the top)… */
+export const STRIKE = (g) => Math.round(9999 * clamp01(g) ** 5);
+/** …and how far up the tower (0 to 1) that sends the puck. */
+const SCALE_INV = (points) => points / 9999;
 const geometry = (fill, material = 'paint') => { const parts = new Parts(); fill(parts.get(material), parts); return parts.get(material).build(); };
 
 export class Booths {
@@ -60,6 +64,7 @@ export class Booths {
       this._shell(parts, def);
       const booth = { ...def, x: ox, y, z: oz, yaw, group: g, dyn: new THREE.Group(), game: null };
       g.add(booth.dyn);
+      booth.bulbs = this._mesh(booth, geometry((b) => { for (let k = 1; k < 16; k += 2) b.tint(1.0, 0.86, 0.5, 1).place(-HALF + 0.1 + k * ((HALF * 2 - 0.2) / 16), 2.9, FRONT + 0.09).lathe([[0.0, -0.06], [0.055, 0.0], [0.0, 0.06]], 6).pop(); }, 'glow'), 'bulbs', 'glow');
       booth.game = this[`_${def.id}`](parts, booth);
       const shell = parts.toMeshes(mats, { name: `booth-${def.id}`, layers: this.zone.cast });
       g.add(shell);
@@ -84,7 +89,7 @@ export class Booths {
       this.zone.colliders.push({ type: 'box', x: cx, z: cz, hw: HALF + 0.12, hl: (FRONT + 0.15 - BACK) / 2 + 0.1, yaw });
       // its board of scores, beside it, and the panel of its sponsor
       const [bx, bz] = world((def.side < 0 ? 1 : -1) * (HALF + 2.1), FRONT - 0.2); // (on the side of the end of the pier)
-      booth.board = this.zone.scoreStand(def.id, bx, bz, yaw, { title: def.name.toUpperCase(), sub: def.seconds ? `Most points in ${def.seconds} seconds` : 'The hardest blow of three', format: (s) => String(s), width: 2.7, y, pixels: 0.75 });
+      booth.board = this.zone.scoreStand(def.id, bx, bz, yaw, { title: def.name.toUpperCase(), sub: def.seconds ? `Most points in ${def.seconds} seconds` : 'The hardest blow of three, out of 9,999', format: (s) => String(s), width: 2.7, y, pixels: 0.75 });
       this.list.push(booth);
     }
     this.group.updateMatrixWorld(true);
@@ -92,27 +97,62 @@ export class Booths {
     return this;
   }
 
-  // The shell of a booth: a counter with a striped front, side walls, a back wall, a striped roof
+  // The shell of a booth: a plank floor, a counter with a striped front between two turned posts, striped
+  // walls, a back wall, a striped roof with a scalloped valance, a row of light bulbs, prizes hung under the
+  // beam, pennants on the ridge.
   _shell(parts, def) {
-    const paint = parts.get('paint'), cloth = parts.get('doubleSided'), wood = parts.get('woodDark'), c = def.color;
-    wood.tint(WOOD[0], WOOD[1], WOOD[2], 1).box(-HALF, 1.0, FRONT - 0.5, HALF, 1.07, FRONT + 0.15, { tile: 1 });
-    for (let s = 0; s < 12; s++) { const k = s % 2 ? WHITE : c; paint.tint(k[0], k[1], k[2], 1).box(-HALF + s * 0.5, 0, FRONT - 0.06, -HALF + (s + 1) * 0.5, 1.0, FRONT, { faces: 'Z' }); }
-    paint.tint(c[0] * 0.55, c[1] * 0.55, c[2] * 0.55, 1);
-    for (const g of [-1, 1]) paint.box(g * HALF - 0.05, 0, BACK, g * HALF + 0.05, 2.95, FRONT, { faces: 'xXZ' });
-    paint.box(-HALF, 0, BACK - 0.08, HALF, 3.1, BACK, { faces: 'zZ' });
-    paint.box(-HALF, 0, FRONT - 0.45, HALF, 1.0, FRONT - 0.06, { faces: 'zY' });
-    paint.tint(WHITE[0], WHITE[1], WHITE[2], 1);
-    for (const [px, pz] of [[-HALF, FRONT], [HALF, FRONT]]) paint.box(px - 0.07, 1.07, pz - 0.07, px + 0.07, 2.95, pz + 0.07);
+    const paint = parts.get('paint'), cloth = parts.get('doubleSided'), wood = parts.get('woodDark'), glow = parts.get('glow'), c = def.color;
+    const dark = [c[0] * 0.5, c[1] * 0.5, c[2] * 0.5], GOLD = [1.5, 1.05, 0.25];
+    // the counter: a thick top, a front of stripes between two gold lines, a star on every other stripe
+    wood.tint(WOOD[0], WOOD[1], WOOD[2], 1).box(-HALF - 0.08, 1.0, FRONT - 0.55, HALF + 0.08, 1.08, FRONT + 0.2, { tile: 1 });
+    for (let s = 0; s < 12; s++) { const k = s % 2 ? WHITE : c; paint.tint(k[0], k[1], k[2], 1).box(-HALF + s * 0.5, 0.1, FRONT - 0.06, -HALF + (s + 1) * 0.5, 0.92, FRONT, { faces: 'Z' }); }
+    paint.tint(GOLD[0], GOLD[1], GOLD[2], 1).box(-HALF, 0.92, FRONT - 0.06, HALF, 1.0, FRONT + 0.015, { faces: 'ZY' }).box(-HALF, 0, FRONT - 0.06, HALF, 0.1, FRONT + 0.015, { faces: 'ZY' });
+    for (let s = 1; s < 12; s += 2) {
+      const pts = [];
+      for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2 + Math.PI / 2, r = i % 2 ? 0.07 : 0.17; pts.push(V(-HALF + (s + 0.5) * 0.5 + Math.cos(a) * r, 0.51 + Math.sin(a) * r, FRONT + 0.006)); }
+      paint.tint(c[0] * 1.1, c[1] * 1.1, c[2] * 1.1, 1);
+      for (let i = 0; i < 10; i++) paint.tri(V(-HALF + (s + 0.5) * 0.5, 0.51, FRONT + 0.006), pts[i], pts[(i + 1) % 10]);
+    }
+    paint.tint(dark[0], dark[1], dark[2], 1).box(-HALF, 0, FRONT - 0.5, HALF, 1.0, FRONT - 0.06, { faces: 'zY' });
+    // the walls: striped outside, dark inside; the back wall
+    for (const g of [-1, 1]) {
+      for (let s = 0; s < 10; s++) { const k = s % 2 ? WHITE : c, z0 = BACK + s * 0.5; paint.tint(k[0], k[1], k[2], 1).box(g * HALF + (g > 0 ? 0.03 : -0.05), 0, z0, g * HALF + (g > 0 ? 0.05 : -0.03), 2.95, z0 + 0.5, { faces: g > 0 ? 'X' : 'x' }); }
+      paint.tint(dark[0], dark[1], dark[2], 1).box(g * HALF - 0.03, 0, BACK, g * HALF + 0.03, 2.95, FRONT, { faces: g > 0 ? 'xZ' : 'XZ' });
+    }
+    paint.tint(dark[0], dark[1], dark[2], 1).box(-HALF, 0, BACK - 0.08, HALF, 3.1, BACK, { faces: 'zZ' });
+    // two turned posts at the corners of the counter, banded like barley sugar, a gold ball on each
+    for (const px of [-HALF, HALF]) {
+      for (let k = 0; k < 8; k++) { const b = k % 2 ? WHITE : c; paint.tint(b[0], b[1], b[2], 1).cylinder(px, 1.08 + k * 0.234, FRONT, 0.085, 0.085, 0.234, 8, { capTop: false, capBottom: false }); }
+      paint.tint(GOLD[0], GOLD[1], GOLD[2], 1).place(px, 3.05, FRONT).lathe([[0.0, 0.0], [0.13, 0.05], [0.15, 0.15], [0.09, 0.26], [0.0, 0.3]], 8).pop();
+      glow.tint(1.0, 0.8, 0.45, 1).place(px, 1.08, FRONT + 0.26).lathe([[0.0, 0.0], [0.1, 0.03], [0.12, 0.16], [0.07, 0.26], [0.0, 0.28]], 7).pop(); // a lamp on the counter
+    }
     wood.tint(WOOD[0], WOOD[1], WOOD[2], 1).box(-HALF - 0.1, 2.93, FRONT - 0.07, HALF + 0.1, 3.05, FRONT + 0.07, { tile: 1 });
+    // light bulbs along the beam (every other one blinks: see update())
+    for (let k = 0; k <= 16; k += 2) glow.tint(1.0, 0.86, 0.5, 1).place(-HALF + 0.1 + k * ((HALF * 2 - 0.2) / 16), 2.9, FRONT + 0.09).lathe([[0.0, -0.06], [0.055, 0.0], [0.0, 0.06]], 6).pop();
+    // prizes hung under the beam: bears, ducks, rabbits
+    const TOYS = [[0.55, 0.36, 0.2], [1.5, 1.2, 0.2], [1.3, 1.25, 1.2], [1.3, 0.5, 0.65], [0.3, 0.55, 1.2]];
+    for (let k = 0; k < 7; k++) {
+      const x = -HALF + 0.55 + k * ((HALF * 2 - 1.1) / 6), t = TOYS[k % TOYS.length], y = 2.52 - (k % 2) * 0.12;
+      wood.tint(0.9, 0.85, 0.7, 1).box(x - 0.008, y + 0.2, FRONT - 0.2, x + 0.008, 2.93, FRONT - 0.184);
+      paint.tint(t[0], t[1], t[2], 1).place(x, y, FRONT - 0.19, 0.3 * (k % 3 - 1));
+      paint.lathe([[0.0, -0.2], [0.12, -0.16], [0.14, -0.02], [0.08, 0.06]], 7).lathe([[0.07, 0.04], [0.11, 0.1], [0.1, 0.2], [0.0, 0.24]], 7); // body, head
+      for (const g of [-1, 1]) paint.box(g * 0.09 - 0.035, k % 5 === 2 ? 0.18 : 0.17, -0.02, g * 0.09 + 0.035, k % 5 === 2 ? 0.38 : 0.25, 0.02).box(g * 0.14 - 0.03, -0.1, -0.03, g * 0.14 + 0.03, 0.0, 0.03); // ears, arms
+      paint.tint(0.03, 0.03, 0.03, 1).box(-0.045, 0.13, 0.085, -0.02, 0.155, 0.1).box(0.02, 0.13, 0.085, 0.045, 0.155, 0.1);
+      paint.pop();
+    }
     if (def.id === 'bell') return;
     // the roof: stripes from the eaves in front up to the ridge and down to the back, a scalloped valance
+    // edged with gold, pennants along the ridge
     const N = 14, x0 = -HALF - 0.35, step = (HALF * 2 + 0.7) / N;
     for (let s = 0; s < N; s++) {
       const k = s % 2 ? WHITE : c, a = x0 + s * step, b = a + step;
       cloth.tint(k[0] * 1.1, k[1] * 1.1, k[2] * 1.1, 1);
       cloth.quad(V(a, 2.9, FRONT + 0.75), V(b, 2.9, FRONT + 0.75), V(b, 3.85, -1.3), V(a, 3.85, -1.3));
       cloth.quad(V(b, 3.1, BACK - 0.15), V(a, 3.1, BACK - 0.15), V(a, 3.85, -1.3), V(b, 3.85, -1.3));
-      cloth.tri(V(a, 2.9, FRONT + 0.75), V((a + b) / 2, 2.62, FRONT + 0.75), V(b, 2.9, FRONT + 0.75));
+      cloth.tri(V(a, 2.9, FRONT + 0.75), V((a + b) / 2, 2.6, FRONT + 0.75), V(b, 2.9, FRONT + 0.75));
+      cloth.tint(GOLD[0], GOLD[1], GOLD[2], 1).tri(V((a + b) / 2 - 0.06, 2.63, FRONT + 0.752), V((a + b) / 2, 2.53, FRONT + 0.752), V((a + b) / 2 + 0.06, 2.63, FRONT + 0.752));
+      const p = s % 2 ? c : GOLD;
+      cloth.tint(p[0] * 1.15, p[1] * 1.15, p[2] * 1.15, 1).tri(V(a + 0.06, 3.87, -1.3), V(b - 0.06, 3.87, -1.3), V((a + b) / 2, 4.22 + 0.1 * (s % 3), -1.3));
     }
     cloth.tint(c[0], c[1], c[2], 1);
     for (const g of [-1, 1]) cloth.tri(V(g * (HALF + 0.35), 2.9, FRONT + 0.75), V(g * (HALF + 0.35), 3.1, BACK - 0.15), V(g * (HALF + 0.35), 3.85, -1.3));
@@ -127,14 +167,23 @@ export class Booths {
   }
 
   // ---------------------------------------------------------------------------
-  // Bullseye Alley: three rows of targets that travel across, faster and faster; a golden one now and then
+  // Bullseye Alley: nothing runs on rails. Targets pop up from behind three rows of painted bushes (the far
+  // ones smaller, and worth more), some sliding along once they are up; others are thrown across the booth,
+  // or swing down from the ceiling on a cord; a golden one flashes past; and a black one must be left alone.
+  // Everything comes quicker and stays less long as the game goes on.
 
   _shoot(parts, booth) {
-    const paint = parts.get('paint'), wood = parts.get('woodDark');
-    const ROWS = [{ y: 1.32, z: -2.3, r: 0.25, pts: 10, dir: 1, speed: 0.85 }, { y: 1.9, z: -2.95, r: 0.2, pts: 20, dir: -1, speed: 1.15 }, { y: 2.46, z: -3.55, r: 0.155, pts: 30, dir: 1, speed: 1.45 }];
-    // the rails the targets ride on, the shelf under them
-    for (const r of ROWS) wood.tint(0.5, 0.42, 0.34, 1).box(-HALF, r.y - r.r - 0.1, r.z - 0.06, HALF, r.y - r.r - 0.04, r.z + 0.06, { tile: 1 });
-    paint.tint(0.16, 0.2, 0.3, 1).box(-HALF, 0, BACK, HALF, 1.0, -1.9, { faces: 'ZY' });
+    const paint = parts.get('paint');
+    const COVER = [{ z: -2.0, top: 1.2, r: 0.25, pts: 10 }, { z: -2.75, top: 1.68, r: 0.2, pts: 20 }, { z: -3.5, top: 2.16, r: 0.155, pts: 30 }];
+    COVER.forEach((cv, k) => {
+      const g = [0.15 + 0.06 * k, 0.5 - 0.07 * k, 0.2 + 0.03 * k];
+      paint.tint(g[0], g[1], g[2], 1).box(-HALF, 0, cv.z - 0.05, HALF, cv.top - 0.13, cv.z, { faces: 'ZY' });
+      for (let i = 0; i < 12; i++) {
+        const x = -HALF + 0.25 + i * 0.5, pts = [];
+        for (let a = 0; a <= 6; a++) pts.push(V(x + Math.cos((Math.PI * a) / 6) * 0.28, cv.top - 0.13 + Math.sin((Math.PI * a) / 6) * (0.13 + 0.04 * ((i + k) % 2)), cv.z + 0.003));
+        paint.tint(g[0] * (0.92 + 0.16 * (i % 2)), g[1] * (0.92 + 0.16 * (i % 2)), g[2], 1).poly(pts);
+      }
+    });
     // the backdrop: a sponsor's tarp
     const state = { sponsor: null };
     const tarp = canvasBoard(1024, 400, (ctx, w, h) => drawSponsor(ctx, w, h, state.sponsor, { what: 'this backdrop' }), 5.7, 2.2);
@@ -144,49 +193,87 @@ export class Booths {
     const [sx, sz] = pierToWorld(booth.along, booth.side + 2.6);
     (this.world.sponsorSlots ||= []).push({ id: 'tarp:shoot', what: 'the backdrop of the shooting gallery', x: sx, y: booth.y, z: sz, reach: 3, set: (sp) => { state.sponsor = sp; tarp.redraw(); } });
 
-    const RED = [0.85, 0.12, 0.1];
-    const geo = geometry((b) => { disc(b, [[1, RED], [0.68, WHITE], [0.36, RED]]); b.tint(0.2, 0.18, 0.16, 1).box(-0.05, -1.6, -0.03, 0.05, -0.9, 0); });
-    const targets = [];
-    ROWS.forEach((row, k) => { for (let i = 0; i < 4; i++) targets.push({ row, x: -HALF + 0.75 + i * 1.6 + k * 0.5, down: 0, tip: 0, phase: i * 1.7 + k }); });
-    const mesh = new THREE.InstancedMesh(geo, this.world.materials.paint, targets.length);
-    mesh.name = 'moving-shoot:targets';
-    mesh.frustumCulled = false;
-    booth.dyn.add(mesh);
+    const RED = [0.85, 0.12, 0.1], MAX = 12, BOMBS = 3;
+    const pool = (geo, n, name) => { const m = new THREE.InstancedMesh(geo, this.world.materials.paint, n); m.name = `moving-shoot:${name}`; m.frustumCulled = false; booth.dyn.add(m); return m; };
+    const discs = pool(geometry((b) => disc(b, [[1, RED], [0.68, WHITE], [0.36, RED]])), MAX, 'targets');
+    const bombs = pool(geometry((b) => { disc(b, [[1, [0.05, 0.05, 0.06]], [0.82, [0.16, 0.16, 0.18]]]); b.tint(1.4, 0.1, 0.08, 1).place(0, 0, 0.03, 0, 0, Math.PI / 4).box(-0.62, -0.1, 0, 0.62, 0.1, 0.01).box(-0.1, -0.62, 0, 0.1, 0.62, 0.01).pop(); }), BOMBS, 'bombs');
     const gold = this._mesh(booth, geometry((b) => disc(b, [[1, [1.5, 1.05, 0.2]], [0.55, [1.7, 1.4, 0.5]]], 10)), 'gold');
-    gold.scale.setScalar(0.12);
-    const G = { x: 9, dir: 1, wait: 6, y: 2.05, z: -3.25 };
+    gold.scale.setScalar(0.11);
+    const slots = Array.from({ length: MAX + BOMBS }, (_, i) => ({ on: false, bomb: i >= MAX, kind: '', x: 0, y: 0, z: 0, r: 0.2, pts: 0, t: 0, life: 0, vx: 0, vy: 0, x0: 0, y0: 0, len: 1, w: 1, ph: 0, top: 0, hit: 0 }));
+    const G = { on: false, t: 0, x0: 0, dir: 1, y: 2.0, wait: 8 };
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s3 = new THREE.Vector3(), p3 = new THREE.Vector3();
+    const rnd = (a, b) => a + Math.random() * (b - a);
+    let gap = 0.5;
+    const spawn = (t) => {
+      const p = t < 0 ? 0 : clamp01(t / 45), r = Math.random();
+      const bomb = t > 9 && r < 0.14, kind = bomb ? 'pop' : t > 6 && r < 0.14 + 0.2 + 0.12 * p ? 'fly' : t > 18 && r < 0.14 + 0.2 + 0.12 * p + 0.16 ? 'swing' : 'pop';
+      const s = slots.find((o) => !o.on && o.bomb === bomb);
+      if (!s) return;
+      Object.assign(s, { on: true, kind, t: 0, hit: 0, vx: 0, vy: 0 });
+      if (kind === 'pop') {
+        const cv = COVER[Math.floor(Math.random() * 3)];
+        let x = 0;
+        for (let k = 0; k < 6; k++) { x = rnd(-2.6, 2.6); if (!slots.some((o) => o.on && o !== s && o.kind === 'pop' && o.z === cv.z && Math.abs(o.x - x) < 0.75)) break; }
+        Object.assign(s, { x, z: cv.z + 0.04, top: cv.top, r: bomb ? cv.r * 0.95 : cv.r, pts: bomb ? -40 : cv.pts, life: (t < 0 ? 1.8 : lerp(1.5, 0.7, p)) * rnd(0.8, 1.25), vx: t > 12 && Math.random() < 0.45 ? rnd(0.5, 1.5) * (Math.random() < 0.5 ? -1 : 1) : 0 });
+      } else if (kind === 'fly') {
+        const dir = Math.random() < 0.5 ? 1 : -1;
+        Object.assign(s, { x0: -dir * (HALF + 0.3), y0: rnd(1.3, 1.9), vx: dir * rnd(2.6, 4.2) * (1 + 0.35 * p), vy: rnd(2.2, 3.6), z: rnd(-3.1, -2.2), r: 0.17, pts: 40, life: 9 });
+      } else Object.assign(s, { x0: rnd(-2.1, 2.1), y0: 3.02, len: rnd(0.9, 1.35), w: rnd(2.2, 3.4) * (1 + 0.3 * p), ph: rnd(0, 6.28), z: -3.15, r: 0.19, pts: 25, life: rnd(3.2, 4.6) });
+    };
     const game = {
       view: { pos: [0, 1.72, 2.5], look: [0, 1.75, -3], fov: 58 }, firstPerson: true, crosshair: true,
-      reset() { game.score = 0; game.streak = 0; game.reload = 0; for (const t of targets) { t.down = 0; } G.x = 9; G.wait = 20; },
-      /** t: seconds played (-1 while nobody plays: the targets idle along), time: the clock of the world */
+      reset() { game.score = 0; game.streak = 0; game.reload = 0; gap = 0.4; for (const s of slots) s.on = false; G.on = false; G.wait = 14; },
+      /** t: seconds played (-1 while nobody plays: a target shows now and then), time: the clock of the world */
       step(dt, t, time, aim, io) {
-        const k = t < 0 ? 0.45 : 1 + 1.35 * (t / 45), bob = t > 14 ? 0.13 * clamp01((t - 14) / 5) : 0;
-        targets.forEach((tg, i) => {
-          tg.x += tg.row.dir * tg.row.speed * k * dt;
-          if (tg.x > HALF + 0.4) tg.x -= HALF * 2 + 0.8; else if (tg.x < -HALF - 0.4) tg.x += HALF * 2 + 0.8;
-          if (tg.down > 0) tg.down -= dt;
-          tg.tip += ((tg.down > 0 ? 1 : 0) - tg.tip) * Math.min(1, dt * 14);
-          tg.y = tg.row.y + bob * Math.sin(time * 3.1 + tg.phase);
-          mesh.setMatrixAt(i, m4.compose(p3.set(tg.x, tg.y, tg.row.z), q.setFromEuler(e.set(-1.5 * tg.tip, 0, 0)), s3.setScalar(tg.row.r)));
-        });
-        mesh.instanceMatrix.needsUpdate = true;
-        if (Math.abs(G.x) <= HALF + 0.3) G.x += G.dir * 3.3 * k * dt;
-        else if (t > 0 && (G.wait -= dt) <= 0) { G.dir = Math.random() < 0.5 ? 1 : -1; G.x = -G.dir * (HALF + 0.29); G.wait = 4 + Math.random() * 4; }
-        gold.visible = Math.abs(G.x) <= HALF + 0.3;
-        gold.position.set(G.x, G.y + 0.1 * Math.sin(time * 5), G.z);
+        const p = t < 0 ? 0 : clamp01(t / 45);
+        if ((gap -= dt) <= 0) { gap = t < 0 ? rnd(1.2, 2.4) : lerp(0.62, 0.27, p) * rnd(0.7, 1.3); spawn(t); }
+        let d = 0, b = 0;
+        for (const s of slots) {
+          let scale = 0, tip = 0;
+          if (s.on) {
+            s.t += dt;
+            if (s.hit > 0) { s.hit -= dt; tip = 1 - s.hit / 0.22; scale = s.r * Math.max(0.2, s.hit / 0.22); if (s.hit <= 0) s.on = false; }
+            else if (s.kind === 'pop') {
+              const up = Math.min(1, s.t / 0.16, (s.life - s.t) / 0.16);
+              if (s.t >= s.life) s.on = false;
+              s.x += s.vx * dt; if (Math.abs(s.x) > 2.7) { s.x = Math.sign(s.x) * 2.7; s.vx = -s.vx; }
+              s.y = s.top - s.r * 1.1 + s.r * 2.05 * Math.max(0, up) ** 0.7;
+              scale = s.r;
+            } else if (s.kind === 'fly') {
+              s.x = s.x0 + s.vx * s.t; s.y = s.y0 + s.vy * s.t - 2.7 * s.t * s.t;
+              if (Math.abs(s.x) > HALF + 0.35 || s.y < 0.9) s.on = false;
+              scale = s.r; tip = 0.25 * Math.sin(s.t * 9);
+            } else {
+              const grow = Math.min(1, s.t / 0.3, (s.life - s.t) / 0.3), a = 0.95 * Math.sin(s.w * s.t + s.ph), len = 0.15 + (s.len - 0.15) * Math.max(0, grow);
+              if (s.t >= s.life) s.on = false;
+              s.x = s.x0 + Math.sin(a) * len; s.y = s.y0 - Math.cos(a) * len;
+              scale = s.r;
+            }
+          }
+          const mesh = s.bomb ? bombs : discs;
+          mesh.setMatrixAt(s.bomb ? b++ : d++, m4.compose(p3.set(s.x, s.y, s.z), q.setFromEuler(e.set(-1.45 * tip, 0, 0)), s3.setScalar(s.on ? scale : 0)));
+        }
+        discs.instanceMatrix.needsUpdate = true; bombs.instanceMatrix.needsUpdate = true;
+        // the golden one: fast, in waves
+        if (G.on) { G.t += dt; if (G.t * 3.6 * (1 + 0.3 * p) > HALF * 2 + 0.7) G.on = false; }
+        else if (t > 0 && (G.wait -= dt) <= 0) { G.on = true; G.t = 0; G.dir = Math.random() < 0.5 ? 1 : -1; G.y = rnd(1.7, 2.5); G.wait = rnd(5, 9); }
+        const gx = G.dir * (-HALF - 0.35 + G.t * 3.6 * (1 + 0.3 * p)), gy = G.y + 0.28 * Math.sin(G.t * 7);
+        gold.visible = G.on;
+        gold.position.set(gx, gy, -3.3);
         if (t < 0 || !aim) return;
         game.reload -= dt;
         if (aim.clicks && game.reload <= 0) {
-          game.reload = 0.26;
+          game.reload = 0.25;
           io.play('shot', { volume: 0.7 });
           const at = (z) => { const u = (z - aim.o.z) / aim.d.z; return [aim.o.x + aim.d.x * u, aim.o.y + aim.d.y * u]; };
           let hit = null, pts = 0;
-          for (const tg of targets) { if (tg.down > 0) continue; const [hx, hy] = at(tg.row.z); if (Math.hypot(hx - tg.x, hy - tg.y) < tg.row.r * 1.12 && (!hit || tg.row.z > hit.row.z)) hit = tg; }
-          if (gold.visible) { const [hx, hy] = at(G.z); if (Math.hypot(hx - G.x, hy - gold.position.y) < 0.17) { pts = 100; G.x = 9; hit = null; } }
-          if (hit) { pts = hit.row.pts; hit.down = Math.max(0.7, 1.4 - 0.6 * (t / 45)); }
-          // (a row of hits pays a little more each time)
-          if (pts) { game.score += pts + Math.min(15, game.streak * 3); game.streak++; io.play(pts === 100 ? 'score' : 'hit'); } else { game.streak = 0; io.play('miss', { volume: 0.4 }); }
+          for (const s of slots) { if (!s.on || s.hit > 0) continue; const [hx, hy] = at(s.z); if (Math.hypot(hx - s.x, hy - s.y) < s.r * 1.12 && (!hit || s.z > hit.z)) hit = s; }
+          if (G.on) { const [hx, hy] = at(-3.3); if (Math.hypot(hx - gx, hy - gy) < 0.17) { pts = 100; G.on = false; hit = null; } }
+          if (hit) { pts = hit.pts; hit.hit = 0.22; }
+          // (a row of hits pays a little more each time; the black one takes points away)
+          if (pts > 0) { game.score += pts + Math.min(15, game.streak * 3); game.streak++; io.play(pts === 100 ? 'score' : 'hit'); }
+          else if (pts < 0) { game.score = Math.max(0, game.score + pts); game.streak = 0; io.play('fail', { volume: 0.7 }); io.note('Not the black one! −40'); }
+          else { game.streak = 0; io.play('miss', { volume: 0.4 }); }
         }
       },
     };
@@ -282,44 +369,86 @@ export class Booths {
   }
 
   // ---------------------------------------------------------------------------
-  // Feed the Clown: a jet of milk, a mouth that slides about
+  // Feed the Clown: a jet of milk, a mouth that slides about. The jet is one smooth stream that bulges as it
+  // flows; in the mouth it disappears with a splash of drops, and a bottle on the wall fills up; anywhere
+  // else it splatters, and runs down.
 
   _milk(parts, booth) {
     const paint = parts.get('paint'), wood = parts.get('woodDark'), Z = -3.2;
-    // a striped wall behind, the rail the clown rides on, the churn and its nozzle on the counter
-    for (let s = 0; s < 12; s++) { const k = s % 2 ? WHITE : [0.85, 0.16, 0.14]; paint.tint(k[0], k[1], k[2], 1).box(-HALF + s * 0.5, 0, BACK, -HALF + (s + 1) * 0.5, 3.05, BACK + 0.04, { faces: 'Z' }); }
+    // behind: a sky with hills and clouds; the rail the clown rides on; the churn and its nozzle on the counter
+    paint.tint(0.35, 0.62, 0.95, 1).box(-HALF, 0, BACK, HALF, 3.1, BACK + 0.04, { faces: 'Z' });
+    for (const [cx, cy, r, k] of [[-2.0, 1.25, 1.5, 0], [0.2, 1.05, 1.9, 1], [2.2, 1.3, 1.4, 0]]) {
+      const pts = [];
+      for (let a = 0; a <= 10; a++) pts.push(V(cx + Math.cos((Math.PI * a) / 10) * r, Math.min(3.05, cy + Math.sin((Math.PI * a) / 10) * r * 0.55), BACK + 0.05 + k * 0.004));
+      paint.tint(0.2 + 0.08 * k, 0.55 + 0.1 * k, 0.24, 1).poly(pts);
+    }
+    for (const [cx, cy] of [[-1.7, 2.55], [1.2, 2.75], [2.5, 2.35]]) for (const [dx, r] of [[-0.3, 0.2], [0, 0.28], [0.32, 0.2]]) {
+      const pts = [];
+      for (let a = 0; a < 10; a++) pts.push(V(cx + dx + Math.cos((Math.PI * 2 * a) / 10) * r, cy + Math.sin((Math.PI * 2 * a) / 10) * r * 0.7, BACK + 0.06));
+      paint.tint(1.5, 1.5, 1.5, 1).poly(pts);
+    }
     wood.tint(0.45, 0.36, 0.28, 1).box(-HALF, 1.02, Z - 0.3, HALF, 1.1, Z - 0.18, { tile: 1 });
-    paint.tint(0.75, 0.78, 0.82, 1).place(0, 1.07, FRONT - 0.2).lathe([[0.2, 0.0], [0.22, 0.3], [0.14, 0.42], [0.14, 0.5], [0.0, 0.5]], 10).pop();
-    paint.tint(0.3, 0.3, 0.34, 1).box(-0.04, 1.3, FRONT - 0.5, 0.04, 1.38, FRONT - 0.2);
+    paint.tint(0.75, 0.78, 0.82, 1).place(0, 1.08, FRONT - 0.2).lathe([[0.2, 0.0], [0.22, 0.3], [0.14, 0.42], [0.14, 0.5], [0.0, 0.5]], 10).pop();
+    paint.tint(0.3, 0.3, 0.34, 1).box(-0.04, 1.31, FRONT - 0.5, 0.04, 1.39, FRONT - 0.2);
+    // a bottle on the wall: it fills as he drinks
+    const BX = -2.45, BY = 1.35, BH = 1.25;
+    paint.tint(0.86, 0.93, 1.0, 1).box(BX - 0.26, BY - 0.04, BACK + 0.07, BX + 0.26, BY + BH + 0.04, BACK + 0.09, { faces: 'Z' });
+    paint.tint(0.86, 0.93, 1.0, 1).box(BX - 0.1, BY + BH + 0.04, BACK + 0.07, BX + 0.1, BY + BH + 0.3, BACK + 0.09, { faces: 'Z' });
+    paint.tint(0.9, 0.2, 0.16, 1).box(BX - 0.12, BY + BH + 0.3, BACK + 0.07, BX + 0.12, BY + BH + 0.38, BACK + 0.1, { faces: 'Z' });
+    const level = this._mesh(booth, geometry((b) => b.tint(1, 1, 0.97, 1).box(-0.22, 0, 0, 0.22, 1, 0.012, { faces: 'Z' }), 'glow'), 'level', 'glow');
+    level.position.set(BX, BY, BACK + 0.09);
     // the clown: a white face, a red nose, hair on both sides, a little hat, and a mouth wide open
     const clown = this._mesh(booth, geometry((b) => {
-      disc(b, [[0.62, [1.3, 1.26, 1.2]]], 16);
+      disc(b, [[0.62, [1.3, 1.26, 1.2]]], 18);
       for (const g of [-1, 1]) {
-        b.tint(1.3, 0.45, 0.1, 1).place(g * 0.62, 0.12, 0.0).lathe([[0.0, -0.26], [0.24, -0.1], [0.26, 0.1], [0.0, 0.28]], 7).pop(); // hair
-        disc(b.place(g * 0.24, 0.2, 0.02), [[0.13, [0.2, 0.5, 1.2]], [0.06, [0.03, 0.03, 0.05]]], 10); b.pop(); // eyes
-        disc(b.place(g * 0.36, -0.1, 0.02), [[0.12, [1.5, 0.55, 0.6]]], 8); b.pop(); // cheeks
+        b.tint(1.3, 0.45, 0.1, 1).place(g * 0.62, 0.12, 0.0).lathe([[0.0, -0.26], [0.2, -0.16], [0.26, 0.0], [0.2, 0.18], [0.0, 0.28]], 8).pop(); // hair
+        disc(b.place(g * 0.24, 0.22, 0.02), [[0.14, [1.5, 1.5, 1.5]], [0.1, [0.2, 0.5, 1.2]], [0.045, [0.03, 0.03, 0.05]]], 12); b.pop(); // eyes
+        b.tint(0.05, 0.05, 0.08, 1).place(g * 0.24, 0.43, 0.02, 0, 0, g * -0.25).box(-0.12, -0.02, 0, 0.12, 0.02, 0.01).pop(); // eyebrows
+        disc(b.place(g * 0.38, -0.08, 0.02), [[0.12, [1.5, 0.55, 0.6]]], 10); b.pop(); // cheeks
       }
-      b.tint(1.5, 0.12, 0.1, 1).place(0, 0.06, 0.06).lathe([[0.0, -0.13], [0.12, -0.06], [0.13, 0.04], [0.0, 0.13]], 8).pop(); // nose
-      disc(b.place(0, -0.3, 0.03), [[0.27, [1.3, 0.14, 0.12]], [0.215, [0.03, 0.01, 0.01]]], 14); b.pop(); // lips, mouth
-      b.tint(0.2, 0.42, 1.2, 1).place(0.12, 0.58, 0.0, 0, 0, -0.3).lathe([[0.3, 0.0], [0.3, 0.04], [0.15, 0.06], [0.11, 0.42], [0.0, 0.44]], 8).pop(); // hat
+      b.tint(1.5, 0.12, 0.1, 1).place(0, 0.07, 0.06).lathe([[0.0, -0.13], [0.09, -0.09], [0.13, 0.0], [0.09, 0.09], [0.0, 0.13]], 9).pop(); // nose
+      disc(b.place(0, -0.3, 0.03), [[0.27, [1.3, 0.14, 0.12]], [0.215, [0.03, 0.01, 0.01]]], 16); b.pop(); // lips, mouth
+      b.tint(0.2, 0.42, 1.2, 1).place(0.12, 0.58, 0.0, 0, 0, -0.3).lathe([[0.3, 0.0], [0.3, 0.04], [0.15, 0.06], [0.11, 0.42], [0.0, 0.44]], 9).pop(); // hat
+      b.tint(1.5, 1.1, 0.2, 1).place(0.25, 1.0, 0.0).lathe([[0.0, -0.07], [0.07, 0.0], [0.0, 0.07]], 6).pop(); // its pompom
     }), 'clown');
     const MOUTH = -0.3, R = 0.215;
-    // the milk: drops along the arc from the nozzle to where it lands
-    const DROPS = 12, drops = new THREE.InstancedMesh(geometry((b) => b.tint(1, 1, 0.96, 1).lathe([[0.0, -0.05], [0.05, 0.0], [0.0, 0.05]], 5), 'glow'), this.world.materials.glow, DROPS);
+    // what fills the mouth while he drinks
+    const gulpDisc = this._mesh(booth, geometry((b) => disc(b, [[1, [1, 1, 0.97]]], 14), 'glow'), 'gulp', 'glow');
+    // the jet: a tube from the nozzle to where it lands, rebuilt every frame (a hundred points)
+    const SEG = 18, SIDES = 6;
+    const tubeGeo = geometry((b) => {
+      b.tint(1, 1, 0.97, 1);
+      for (let i = 0; i <= SEG; i++) for (let j = 0; j < SIDES; j++) b.vert(V(0, 0, 0), V(0, 1, 0), j / SIDES, i / SEG);
+      for (let i = 0; i < SEG; i++) for (let j = 0; j < SIDES; j++) { const a = i * SIDES + j, c = i * SIDES + ((j + 1) % SIDES); b.idx.push(a, c, a + SIDES, c, c + SIDES, a + SIDES); }
+    }, 'glow');
+    tubeGeo.attributes.position.setUsage(THREE.DynamicDrawUsage);
+    const jet = new THREE.Mesh(tubeGeo, this.world.materials.glow);
+    jet.name = 'moving-milk:jet';
+    jet.frustumCulled = false;
+    jet.visible = false;
+    booth.dyn.add(jet);
+    // drops: thrown up where the jet lands (round the mouth, or off the wall), and splatters that run down
+    const DROPS = 14, drops = new THREE.InstancedMesh(geometry((b) => b.tint(1, 1, 0.97, 1).lathe([[0.0, -0.035], [0.03, -0.012], [0.035, 0.012], [0.0, 0.035]], 6), 'glow'), this.world.materials.glow, DROPS);
     drops.name = 'moving-milk:drops';
     drops.frustumCulled = false;
-    drops.visible = false;
     booth.dyn.add(drops);
-    const NOZZLE = V(0, 1.34, FRONT - 0.52), land = V(0, 1.6, Z), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s3 = new THREE.Vector3(), p3 = new THREE.Vector3();
-    const C = { x: 0, y: 1.95, v: 0.9, turn: 2 };
-    let flow = 0, gulp = 0, hiss = 0, full = 0;
+    const SPLATS = 8, splats = new THREE.InstancedMesh(geometry((b) => disc(b, [[1, [1, 1, 0.97]]], 9), 'glow'), this.world.materials.glow, SPLATS);
+    splats.name = 'moving-milk:splats';
+    splats.frustumCulled = false;
+    booth.dyn.add(splats);
+    const drop = Array.from({ length: DROPS }, () => ({ t: 9, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 })), splat = Array.from({ length: SPLATS }, () => ({ t: 9, x: 0, y: 0 }));
+    const NOZZLE = V(0, 1.35, FRONT - 0.52), land = V(0, 1.6, Z), end = V(), c0 = V(), c1 = V(), tan = V(), right = V(), up = V(), UP = V(0, 1, 0);
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s3 = new THREE.Vector3(), p3 = new THREE.Vector3();
+    const C = { x: 0, y: 1.95, v: 1, turn: 2 };
+    let flow = 0, gulp = 0, hiss = 0, full = 0, nextDrop = 0, nextSplat = 0, kd = 0, ks = 0, glug = 0, shown = 0;
+    const centre = (u, out) => { out.copy(NOZZLE).lerp(end, u); out.y += 0.55 * 4 * u * (1 - u); return out; };
     const game = {
       view: { pos: [0, 1.75, 2.45], look: [0, 1.8, -3.2], fov: 58 }, firstPerson: true, crosshair: true,
-      reset() { game.score = 0; full = 0; C.x = 0; C.v = 0.9; C.turn = 2; },
+      reset() { game.score = 0; full = 0; shown = 0; C.x = 0; C.v = 1; C.turn = 2; for (const d of drop) d.t = 9; for (const sp of splat) sp.t = 9; },
       step(dt, t, time, aim, io) {
         const p = t < 0 ? 0 : clamp01(t / 45), speed = t < 0 ? 0.5 : lerp(0.9, 3.3, p);
         C.x += Math.sign(C.v || 1) * speed * dt;
-        if (C.x > 2.05) { C.x = 2.05; C.v = -1; } else if (C.x < -2.05) { C.x = -2.05; C.v = 1; }
+        if (C.x > 2.0) { C.x = 2.0; C.v = -1; } else if (C.x < -1.75) { C.x = -1.75; C.v = 1; }
         if (t > 28 && (C.turn -= dt) <= 0) { C.v = -C.v; C.turn = 0.5 + Math.random() * 1.1; } // he starts changing his mind
         C.y = 1.95 + (t > 14 ? 0.3 * clamp01((t - 14) / 6) * Math.sin(time * 2.7) : 0);
         const on = t >= 0 && aim && aim.down;
@@ -329,21 +458,59 @@ export class Booths {
           const k = 1 - Math.exp(-dt * 6.5); // the jet takes a moment to follow the hand
           land.x += (ax - land.x) * k; land.y += (ay - land.y) * k;
           fed = Math.hypot(land.x - C.x, land.y - (C.y + MOUTH)) < R;
-          if (fed) { full += 50 * dt; game.score = Math.floor(full); if ((gulp -= dt) <= 0) { gulp = 0.42; io.play('gulp', { volume: 0.7 }); } }
-          if ((hiss -= dt) <= 0) { hiss = 0.3; io.play('squirt', { volume: 0.35 }); }
-          flow = (flow + dt * 2.4) % 1;
-          for (let i = 0; i < DROPS; i++) {
-            const w = (i + flow) / DROPS;
-            p3.copy(NOZZLE).lerp(land, w); p3.y += 0.55 * 4 * w * (1 - w);
-            drops.setMatrixAt(i, m4.compose(p3, q, s3.setScalar(0.75 + 0.25 * ((i * 7) % 3))));
+          end.set(land.x, land.y, fed ? Z - 0.1 : Math.hypot(land.x - C.x, land.y - C.y) > 0.66 ? BACK + 0.07 : Z + 0.04); // in his mouth, on his face, or past him on the wall
+          if (fed) {
+            full += 50 * dt; game.score = Math.floor(full);
+            if ((gulp -= dt) <= 0) { gulp = 0.42; io.play('gulp', { volume: 0.7 }); }
           }
-          drops.instanceMatrix.needsUpdate = true;
+          if ((hiss -= dt) <= 0) { hiss = 0.3; io.play('squirt', { volume: 0.35 }); }
+          // the stream
+          flow += dt * 16;
+          const pos = tubeGeo.attributes.position;
+          for (let i = 0; i <= SEG; i++) {
+            const w = i / SEG;
+            centre(w, c0); centre(Math.min(1, w + 0.02), c1);
+            tan.copy(c1).sub(c0).normalize(); right.crossVectors(tan, UP).normalize(); up.crossVectors(right, tan);
+            const r = (0.034 + 0.011 * Math.sin(w * 20 - flow)) * (1 - 0.25 * w) * (i === 0 ? 0.6 : 1);
+            for (let j = 0; j < SIDES; j++) { const a = (j / SIDES) * Math.PI * 2, cs = Math.cos(a) * r, sn = Math.sin(a) * r; pos.setXYZ(i * SIDES + j, c0.x + right.x * cs + up.x * sn, c0.y + right.y * cs + up.y * sn, c0.z + right.z * cs + up.z * sn); }
+          }
+          pos.needsUpdate = true;
+          // drops fly from where it lands; off the mouth it leaves a splatter that runs down
+          if ((nextDrop -= dt) <= 0) {
+            nextDrop = fed ? 0.045 : 0.07;
+            const d = drop[kd++ % DROPS], a = Math.random() * 6.28, v = 0.6 + Math.random() * 1.2;
+            Object.assign(d, { t: 0, x: end.x, y: end.y, z: end.z + 0.05, vx: Math.cos(a) * v, vy: Math.abs(Math.sin(a)) * v + 0.8, vz: 0.5 + Math.random() * 0.9 });
+          }
+          if (!fed && (nextSplat -= dt) <= 0) { nextSplat = 0.11; Object.assign(splat[ks++ % SPLATS], { t: 0, x: end.x + (Math.random() - 0.5) * 0.08, y: end.y, z: end.z + 0.012 + (ks % SPLATS) * 0.0012 }); }
         }
-        drops.visible = !!on;
-        const puff = fed ? 1 + 0.06 * Math.sin(time * 30) : 1;
-        clown.position.set(C.x, C.y, Z);
+        jet.visible = !!on;
+        drop.forEach((d, i) => {
+          d.t += dt;
+          const alive = d.t < 0.55;
+          if (alive) { d.vy -= 7 * dt; d.x += d.vx * dt; d.y += d.vy * dt; d.z += d.vz * dt; }
+          drops.setMatrixAt(i, m4.compose(p3.set(d.x, d.y, d.z), q, s3.setScalar(alive ? 1 - d.t / 0.6 : 0)));
+        });
+        drops.instanceMatrix.needsUpdate = true;
+        splat.forEach((sp, i) => {
+          sp.t += dt;
+          const alive = sp.t < 1.3, k = alive ? 1 - sp.t / 1.3 : 0;
+          splats.setMatrixAt(i, m4.compose(p3.set(sp.x, sp.y - 0.25 * sp.t * sp.t, sp.z ?? Z), q, s3.set(0.11 * k + 0.03 * (alive ? 1 : 0), (0.11 + 0.16 * sp.t) * (alive ? 1 : 0), 1)));
+        });
+        splats.instanceMatrix.needsUpdate = true;
+        // the bottle fills; every three hundred points it empties with a glug and starts again
+        const part = (full % 300) / 300;
+        if (Math.floor(full / 300) > shown) { shown = Math.floor(full / 300); glug = 0.5; if (io) io.play('score', { volume: 0.7 }); }
+        if (glug > 0) glug -= dt;
+        level.scale.set(1, Math.max(0.001, (glug > 0 ? 1 : part) * BH), 1);
+        level.visible = t >= 0 && (part > 0.003 || glug > 0);
+        // he puffs his cheeks and bobs while he drinks, wags his head otherwise
+        const puff = fed ? 1.06 + 0.05 * Math.sin(time * 30) : 1;
+        clown.position.set(C.x, C.y + (fed ? 0.03 * Math.sin(time * 14) : 0), Z);
         clown.scale.set(puff, puff, 1);
-        clown.rotation.z = 0.12 * Math.sin(time * 1.7);
+        clown.rotation.z = fed ? 0.04 * Math.sin(time * 20) : 0.12 * Math.sin(time * 1.7);
+        gulpDisc.visible = fed;
+        gulpDisc.position.set(C.x, clown.position.y + MOUTH * puff, Z + 0.045);
+        gulpDisc.scale.setScalar(R * (0.55 + 0.3 * Math.abs(Math.sin(time * 12))));
       },
     };
     game.reset();
@@ -351,7 +518,9 @@ export class Booths {
   }
 
   // ---------------------------------------------------------------------------
-  // Ring the Bell: the high striker. A needle sweeps a gauge; the blow is as hard as the needle is high.
+  // Ring the Bell: the high striker. A needle sweeps a gauge — slowly at the bottom, in a flash at the top,
+  // never twice at the same pace — and the blow is as hard as the needle is high. The scale goes to 9,999 and
+  // is anything but fair: nine tenths of the way up is worth little more than half. Three blows; the best counts.
 
   _bell(parts, booth) {
     const paint = parts.get('paint'), wood = parts.get('woodDark');
@@ -359,48 +528,54 @@ export class Booths {
     // (this booth has no roof: its tower rises well above the others)
     wood.tint(0.75, 0.6, 0.42, 1).box(TX - 0.45, 0, TZ - 0.12, TX + 0.45, BASE + H + 0.5, TZ, { tile: 1 });
     paint.tint(0.95, 0.93, 0.86, 1).box(TX - 0.3, BASE, TZ, TX + 0.3, BASE + H, TZ + 0.02, { faces: 'Z' });
-    for (let k = 0; k <= 10; k++) {
-      const y = BASE + (k / 10) * H, c = k >= 9 ? [1.5, 0.2, 0.15] : k >= 6 ? [1.5, 0.9, 0.15] : [0.2, 0.5, 0.25];
-      paint.tint(c[0], c[1], c[2], 1).box(TX - 0.3, y - 0.03, TZ + 0.02, TX + 0.3, y + 0.03, TZ + 0.035, { faces: 'Z' });
+    // the marks of the scale: a thousand, two thousand… nine thousand
+    for (let k = 1; k <= 9; k++) {
+      const y = BASE + SCALE_INV(k * 1000) * H, c = k >= 9 ? [1.5, 0.2, 0.15] : k >= 5 ? [1.5, 0.9, 0.15] : [0.2, 0.5, 0.25];
+      paint.tint(c[0], c[1], c[2], 1).box(TX - 0.3, y - 0.025, TZ + 0.02, TX + 0.3, y + 0.025, TZ + 0.035, { faces: 'Z' });
+      for (let d = 0; d < k; d++) paint.box(TX + 0.34 + (d % 5) * 0.05, y - 0.02 + Math.floor(d / 5) * 0.06, TZ + 0.02, TX + 0.37 + (d % 5) * 0.05, y + 0.02 + Math.floor(d / 5) * 0.06, TZ + 0.03, { faces: 'Z' }); // as many pips as thousands
     }
     paint.tint(0.2, 0.2, 0.24, 1).box(TX - 0.03, BASE, TZ + 0.035, TX + 0.03, BASE + H, TZ + 0.06, { faces: 'xXZ' }); // the rail
-    // the bell at the top, the pad one strikes at the bottom
+    // the bell at the top, the pad one strikes at the bottom, a mallet leaning on the tower
     paint.tint(1.5, 1.05, 0.25, 1).place(TX, BASE + H + 0.1, TZ + 0.2).lathe([[0.3, 0.0], [0.26, 0.06], [0.2, 0.3], [0.08, 0.42], [0.0, 0.44]], 10).pop();
     paint.tint(0.5, 0.1, 0.1, 1).box(TX - 0.5, 0, TZ + 0.5, TX + 0.5, 0.24, TZ + 1.5);
     paint.tint(0.9, 0.2, 0.16, 1).place(TX, 0.24, TZ + 1.0).lathe([[0.36, 0.0], [0.36, 0.08], [0.3, 0.12], [0.0, 0.12]], 12).pop();
+    wood.tint(0.9, 0.75, 0.5, 1).place(TX + 0.75, 0, TZ + 0.3, 0, 0, -0.22).box(-0.04, 0, -0.04, 0.04, 1.5, 0.04, { tile: 1 }).pop();
+    paint.tint(0.25, 0.22, 0.2, 1).place(TX + 0.75, 0, TZ + 0.3, 0, 0, -0.22).box(-0.22, 1.5, -0.13, 0.22, 1.82, 0.13).pop();
     // (lights round the top, lit when the bell rings)
-    const lamp = this._mesh(booth, geometry((b) => { for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2; b.tint(1, 0.85, 0.3, 1).box(TX + Math.cos(a) * 0.62 - 0.06, BASE + H + 0.25 + Math.sin(a) * 0.5 - 0.06, TZ + 0.05, TX + Math.cos(a) * 0.62 + 0.06, BASE + H + 0.25 + Math.sin(a) * 0.5 + 0.06, TZ + 0.12); } }, 'glow'), 'lamps', 'glow');
+    const lamp = this._mesh(booth, geometry((b) => { for (let k = 0; k < 10; k++) { const a = (k / 10) * Math.PI * 2; b.tint(1, 0.85, 0.3, 1).box(TX + Math.cos(a) * 0.62 - 0.06, BASE + H + 0.25 + Math.sin(a) * 0.5 - 0.06, TZ + 0.05, TX + Math.cos(a) * 0.62 + 0.06, BASE + H + 0.25 + Math.sin(a) * 0.5 + 0.06, TZ + 0.12); } }, 'glow'), 'lamps', 'glow');
     lamp.visible = false;
     const puck = this._mesh(booth, geometry((b) => b.tint(1.4, 0.3, 0.2, 1).box(-0.16, -0.07, 0, 0.16, 0.07, 0.14)), 'puck');
-    let blows = 3, phase = 0, power = 0, rise = 0, speed = 1.1, flash = 0, clock = 0, start = 0;
+    let blows = 3, phase = 0, power = 0, rise = 0, flash = 0, u = 0, dir = 1, rate = 1.5;
+    const pace = () => (1.45 + 0.6 * (3 - blows)) * (0.82 + 0.36 * Math.random()); // sweeps a second: quicker at each blow, never the same twice
     const game = {
       view: { pos: [1.5, 2.0, 5.7], look: [-0.9, 3.15, -1.6], fov: 62 }, firstPerson: false, crosshair: false, blows: 3,
-      reset() { game.score = 0; blows = 3; phase = 0; rise = 0; speed = 1.1; clock = 0; start = Math.random() * 2; game.gauge = 0; game.left = 3; game.over = false; },
+      reset() { game.score = 0; blows = 3; phase = 0; rise = 0; u = Math.random() * 0.5; dir = 1; rate = pace(); game.gauge = 0; game.left = 3; game.over = false; },
       step(dt, t, time, aim, io) {
-        clock += dt;
         if (flash > 0) flash -= dt;
         lamp.visible = flash > 0 && Math.floor(flash * 10) % 2 === 0;
         if (t < 0) { puck.position.set(TX, BASE + 0.07, TZ + 0.035); game.gauge = null; return; }
         if (phase === 0) {
-          // the needle: up and down, quicker at each blow
-          const u = (start + clock * speed) % 2;
-          game.gauge = u < 1 ? u : 2 - u;
+          // the needle: up and down; its height is the square of where it is in its sweep (it lingers low, and
+          // is through the top in a blink)
+          u += dir * rate * dt;
+          if (u >= 1) { u = 2 - u; dir = -1; rate = pace(); } else if (u <= 0) { u = -u; dir = 1; rate = pace(); }
+          game.gauge = u * u;
           if (aim && aim.clicks) { power = game.gauge; phase = 1; rise = 0; io.play('whack'); io.strike?.(); }
           puck.position.set(TX, BASE + 0.07, TZ + 0.035);
         } else {
           // the puck flies up as far as the blow was hard, then drops back
           rise += dt;
+          const pts = STRIKE(power), top = SCALE_INV(pts);
           const up = Math.min(1, rise / 0.55), fall = clamp01((rise - 0.75) / 0.5), k = (1 - (1 - up) ** 2) * (1 - fall * fall);
-          puck.position.set(TX, BASE + 0.07 + power * (H - 0.14) * k, TZ + 0.035);
+          puck.position.set(TX, BASE + 0.07 + top * (H - 0.14) * k, TZ + 0.035);
           if (phase === 1 && up >= 1) {
             phase = 2;
-            const pts = Math.round(power * 1000);
-            if (pts >= 950) { io.play('bell'); flash = 1.6; io.note(`DING! ${pts}`); } else io.note(`${pts}`);
+            if (pts >= 9000) { io.play('bell'); flash = 1.8; io.note(`DING! ${pts.toLocaleString('en-US')}`); } else io.note(pts.toLocaleString('en-US'));
             if (pts > game.score) game.score = pts;
           }
           if (rise > 1.3) {
             blows--; game.left = blows;
-            if (blows <= 0) { game.over = true; game.gauge = null; } else { phase = 0; speed *= 1.38; clock = 0; start = Math.random() * 2; }
+            if (blows <= 0) { game.over = true; game.gauge = null; } else { phase = 0; u = Math.random() * 0.4; dir = 1; rate = pace(); }
           }
         }
       },
@@ -473,6 +648,7 @@ export class Booths {
     for (const b of this.list) {
       const d2 = (pos.x - b.x) ** 2 + (pos.z - b.z) ** 2;
       b.dyn.visible = d2 < 70 * 70;
+      b.bulbs.visible = Math.floor(time * 2.2 + b.along) % 2 === 0;
       if ((this.session && this.session.booth === b) || d2 > 45 * 45) continue;
       b.game.step(dt, -1, time, null, null);
     }

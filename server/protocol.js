@@ -4,6 +4,7 @@
 //
 // Protocol (JSON text frames)
 //   client → server   {t:'hello',name,color,v:2,dev?}   {t:'s',p:[x,y,z,yaw],a,f}   {t:'e',e}   {t:'c',m,n?}
+//                     {t:'g',b}   a score of mine has just gone on board b (relayed as {t:'g',id,b})
 //                     {t:'ping',c}   {t:'admin',key}   and, from the administrator: {t:'who'}   {t:'kick',id}
 //                     {t:'ban',id,h}
 //   server → client   {t:'welcome',id,now,tick,idle?,near,peers:[{id,name,color,p,a,f}]}   {t:'join',id,name,color}
@@ -187,6 +188,12 @@ export class Room {
     else if (m.t === 'e' && Number.isInteger(m.e) && m.e >= 0 && m.e <= 31) {
       const out = `{"t":"e","id":${p.id},"e":${m.e}}`;
       if (this.crowded) this.around(p, this.range, out); else this.broadcast(out, p);
+    } else if (m.t === 'g' && typeof m.b === 'string' && /^[a-z]{2,8}$/.test(m.b)) {
+      // a game was finished: a score has just gone on that board (the others fetch it from the server — nothing
+      // of it is taken from this message). At most one every three seconds from each visitor.
+      if (p.scored !== undefined && t - p.scored < 3000) return;
+      p.scored = t;
+      this.broadcast(`{"t":"g","id":${p.id},"b":"${m.b}"}`, p);
     } else if (m.t === 'c') this._chat(p, m, t);
     else if (m.t === 'admin') this._admin(p, m);
     else if (p.admin && (m.t === 'who' || m.t === 'kick' || m.t === 'ban')) this._moderate(p, m);

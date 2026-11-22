@@ -157,7 +157,7 @@ room; `?village=name` arrives straight in a sky village.
 |---|---|---|---|
 | Move | WASD, ZQSD or arrows (by the place of the keys) | virtual stick on the left | left stick |
 | Look around | drag the mouse; double-click to capture the pointer | drag on the right | right stick |
-| Run / jump | Shift / Space (Settings → *Run by default* turns Shift into "walk") | buttons on the right | trigger, A button |
+| Run / jump | one runs by default and Shift walks (Settings → *Run by default* to have it the other way round) / Space | buttons on the right | trigger, A button |
 | Zoom | wheel | pinch | |
 | Flying camera | F (Space / C to go up and down, Shift to go faster) | drone button | |
 | Map | M, or click the minimap (click again or Escape to close); its **Mega map** button shows the whole country with the fifty sky villages | tap the minimap | |
@@ -206,21 +206,28 @@ round the ring (50). The emote panel shows where you stand; the administrator ha
   it stops on the summit. Easy at the foot — wide stones, short jumps — and merciless near the top, where
   the stones are a metre across and the take-off must be within half a metre of the edge. No jetpack, no
   quad there; falling costs nothing but the climb. The best times of the day, the week, the month and of
-  all time are on the board by the gate, under the panel of the game's sponsor ("your brand here" until
-  someone takes it). The course was checked by a bot that makes every jump: a perfect climb takes about two
+  all time are on the board by the gate — a marquee of light bulbs, medals for the first three, your own
+  line picked out — under the panel of the game's sponsor ("your brand here" until someone takes it). When
+  somebody in the same room finishes a game, everybody's boards are redrawn at once and a line in the chat
+  says so; a note tells you when they have just beaten your score. The course was checked by a bot that makes every jump: a perfect climb takes about two
   and a half minutes.
 - **The booths of the pier**: four striped booths stand at the corners of the pier head, round the big
   wheel. Step up to a counter and press E; the game takes the pointer (the mouse, or a finger) for
   forty-five seconds, and E or Escape leaves it.
-  - *Bullseye Alley*: three rows of targets travel across — the small ones at the back are worth more — and
-    they all speed up, then start bobbing; a golden one flashes past now and then (100 points). A row of hits
-    pays a little more each time. Its backdrop is a sponsor's tarp.
+  - *Bullseye Alley*: nothing runs on rails. Targets pop up from behind three rows of painted bushes — the
+    small ones at the back are worth more — and some slide along once they are up; others are thrown across
+    the booth, or swing down from the ceiling on a cord; a golden one flashes past now and then (100 points);
+    a black one must be left alone (−40). Everything comes quicker and stays less long as the game goes on.
+    A row of hits pays a little more each time. Its backdrop is a sponsor's tarp.
   - *Whack-a-Mole*: nine holes. Moles come up for less and less time; golden ones are worth three; hitting a
     rabbit costs twenty points.
-  - *Feed the Clown*: hold the button down and keep the jet of milk in his mouth. The jet takes a moment to
-    follow the hand, and he slides about faster and faster, bobs, then starts changing his mind.
-  - *Ring the Bell*: the high striker. A needle sweeps the gauge, quicker at each of three blows; strike
-    when it is at the top. The best blow counts (1,000 is the top of the scale; the bell rings from 950).
+  - *Feed the Clown*: hold the button down and keep the jet of milk in his mouth — one smooth stream that
+    takes a moment to follow the hand, splashes in his mouth and splatters anywhere else. He slides about
+    faster and faster, bobs, then starts changing his mind. A bottle on the wall fills as he drinks.
+  - *Ring the Bell*: the high striker, out of 9,999. A needle sweeps the gauge — slowly at the bottom, in
+    a flash at the top, never twice at the same pace, quicker at each of three blows — and the scale is
+    anything but fair: nine tenths of the way up is worth 5,900. The best blow counts; the bell rings from
+    9,000, which takes a blow given within a hundredth of a second.
 - **Quadmania**: a gravel track loops round the wheat fields, north of the mill. In the paddock by the
   striped arch, press E: you are put on a quad behind the line — three, two, one — for three laps against
   the clock, seen from low behind the quad. Hold the drift button in a bend to slide through it (let go

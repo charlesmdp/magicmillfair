@@ -171,7 +171,7 @@ export class GamesZone {
     const k = width / 3.4;
     const state = { lists: null, sponsor: null };
     // (`pixels`: a smaller board is drawn on a smaller sheet — the same drawing, scaled)
-    const board = canvasBoard(Math.round(1024 * pixels), Math.round(904 * pixels), (ctx) => { ctx.save(); ctx.scale(pixels, pixels); drawScores(ctx, 1024, 904, { title, sub, lists: state.lists, format }); ctx.restore(); }, width, 3.0 * k);
+    const board = canvasBoard(Math.round(1024 * pixels), Math.round(904 * pixels), (ctx) => { ctx.save(); ctx.scale(pixels, pixels); drawScores(ctx, 1024, 904, { title, sub, lists: state.lists, format, me: this.me }); ctx.restore(); }, width, 3.0 * k);
     board.mesh.position.set(x, y + 0.75 + 1.5 * k, z);
     board.mesh.rotation.y = yaw;
     const panel = canvasBoard(Math.round(1024 * pixels), Math.round(316 * pixels), (ctx) => { ctx.save(); ctx.scale(pixels, pixels); drawSponsor(ctx, 1024, 316, state.sponsor, { what }); ctx.restore(); }, width, 1.05 * k);
@@ -185,11 +185,29 @@ export class GamesZone {
       pw.tint(1.1, 1.0, 0.85, 1).box(px - 0.07, y - 0.3, pz - 0.07, px + 0.07, top, pz + 0.07, { tile: 1 });
       paint.tint(1.0, 0.75, 0.12, 1).place(px, top, pz).lathe([[0.0, -0.02], [0.13, 0.1], [0.0, 0.26]], 8).pop();
     }
+    {
+      // a crown for the board: a golden arch from post to post, light bulbs along it, a star at its top
+      const glow = post.get('glow'), W2 = width / 2 + 0.16, rise = 0.62 * k, nx = Math.sin(yaw), nz = Math.cos(yaw), N = 12;
+      const at = (th, r, out) => V(x + ax * Math.cos(th) * W2 * r + nx * out, top - 0.12 + Math.sin(th) * rise * (r === 1 ? 1 : 0.62), z + az * Math.cos(th) * W2 * r + nz * out);
+      for (let i = 0; i < N; i++) {
+        const t0 = (Math.PI * i) / N, t1 = (Math.PI * (i + 1)) / N;
+        paint.tint(1.5, 1.05, 0.25, 1).quad(at(t0, 0.86, 0.05), at(t1, 0.86, 0.05), at(t1, 1, 0.05), at(t0, 1, 0.05)).quad(at(t1, 0.86, -0.05), at(t0, 0.86, -0.05), at(t0, 1, -0.05), at(t1, 1, -0.05));
+        paint.tint(1.1, 0.7, 0.12, 1).quad(at(t0, 1, 0.05), at(t1, 1, 0.05), at(t1, 1, -0.05), at(t0, 1, -0.05));
+        if (i > 0) { const b = at(t0, 0.93, 0.08); glow.tint(1.0, 0.88, 0.55, 1).place(b.x, b.y, b.z).lathe([[0.0, -0.055 * k], [0.05 * k, 0.0], [0.0, 0.055 * k]], 6).pop(); }
+      }
+      const apex = at(Math.PI / 2, 1, 0);
+      for (const g of [1, -1]) for (let i = 0; i < 10; i += 2) {
+        const p = (j, r) => { const a = (j / 10) * Math.PI * 2 + Math.PI / 2; return V(apex.x + ax * Math.cos(a) * r * g, apex.y + 0.3 * k + Math.sin(a) * r, apex.z + az * Math.cos(a) * r * g).add(V(nx * 0.06 * g, 0, nz * 0.06 * g)); };
+        const c = V(apex.x + nx * 0.06 * g, apex.y + 0.3 * k, apex.z + nz * 0.06 * g);
+        paint.tint(1.6, 1.25, 0.3, 1).tri(c, p(i - 1, 0.13 * k), p(i, 0.32 * k)).tri(c, p(i, 0.32 * k), p(i + 1, 0.13 * k));
+      }
+    }
     this._add(post, `stand-${id}`);
     this.colliders.push({ type: 'box', x, z, hw: width / 2 + 0.2, hl: 0.14, yaw });
     const stand = {
       id, board, panel,
       setScores: (lists) => { state.lists = lists; board.redraw(); },
+      redraw: () => board.redraw(),
       setSponsor: (sponsor) => { state.sponsor = sponsor; panel.redraw(); },
     };
     (this.world.sponsorSlots ||= []).push({ id: `board:${id}`, what, x: x + Math.sin(yaw) * 1.4, y, z: z + Math.cos(yaw) * 1.4, reach: 3.2, set: stand.setSponsor });
@@ -317,6 +335,9 @@ export class GamesZone {
 
   /** A flat sign drawn with a canvas: { mesh, redraw() }. */
   _board(w, h, draw, width, height) { return canvasBoard(w, h, draw, width, height); }
+
+  /** Whose name is picked out on the boards (the visitor's own). */
+  setMe(name) { this.me = name; for (const st of Object.values(this.stands || {})) st.redraw(); }
 
   /** The best climbs to show on the board: { day, week, month, all }, each [{ name, score }] best first. */
   setScores(lists) { this.scores = lists; this.stands.sky.setScores(lists); }

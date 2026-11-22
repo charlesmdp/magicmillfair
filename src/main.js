@@ -109,7 +109,8 @@ async function boot() {
   const look = { hat: savedHat > 0 && savedHat < HATS.length && owns(HATS[savedHat].id) ? savedHat : 0, jet: false, bouquet: false, kinds: undefined, quad: false, bighead: false };
   const timers = {}; // cheats that wear off: name → seconds left
   // habits kept from one visit to the next
-  const settings = { run: store.get('mmf.run') === '1', follow: store.get('mmf.follow') === '1' };
+  // (running, and the camera that turns with the character, are on unless the visitor switched them off)
+  const settings = { run: store.get('mmf.run') !== '0', follow: store.get('mmf.follow') !== '0' };
   player.autoRun = settings.run;
   rig.follow = settings.follow;
   // who is visiting: `admin` once the server has recognised the administrator's key; `days`: visits in a row
@@ -145,9 +146,11 @@ async function boot() {
 
   // ---------- presence (other visitors)
   let presence = null, avatars = null;
+  let liveScore = () => {}; // (set once the boards exist)
   const startPresence = () => {
     presence = new Presence({ name, color });
     avatars = new RemoteAvatars({ scene, factory, presence, hud, rank, world });
+    presence.on('score', ({ peer, board }) => liveScore(peer, board));
     presence.on('chat', ({ id, peer, text, near }) => { hud.addChat(peer.name, peer.color, text, false, near); avatars.say(id, text); audio.play('chat'); });
     // what the others do is heard when they are close
     presence.on('emote', ({ id, emote: i }) => {
@@ -294,9 +297,9 @@ async function boot() {
   const lists = (tops) => Object.fromEntries(Object.entries(tops).map(([k, v]) => [k, v])); // (already { name, score })
   // the fair: the four booths of the pier and the quad race, each with its board. While one of them is being
   // played (`fair.session`), it has the pointer, the camera and the clock of the screen.
-  const fair = { boards: { race: new Scores('race') }, session: null, kind: null, fov: null, after: 0, stands: { race: world.games.race.board } };
+  const fair = { boards: { race: new Scores('race') }, session: null, kind: null, fov: null, after: 0, stands: { race: world.games.race.board }, tops: {} };
   for (const b of world.games.booths.list) { fair.boards[b.id] = new Scores(b.id); fair.stands[b.id] = b.board; }
-  Scores.every().then((all) => { world.games.setScores(lists(all.sky)); for (const id in fair.stands) fair.stands[id].setScores(all[id]); });
+  Scores.every().then((all) => { fair.tops = all; world.games.setScores(lists(all.sky)); for (const id in fair.stands) fair.stands[id].setScores(all[id]); });
   const _aim = { origin: new THREE.Vector3(), dir: new THREE.Vector3(), clicks: 0, down: false };
   const fairIo = {
     play: (sound, options) => audio.play(sound, options), note: (text) => hud.note(text, 3000),
@@ -314,10 +317,30 @@ async function boot() {
     rig.snap(player.pos, player.yaw + Math.PI);
     startBlend(0.5);
   };
+  // ---------- the boards, live: when somebody in the room finishes a game, their score is fetched and shown
+  const GAMES = { sky: [CLIMB.name, formatTime], race: [RACE.name, formatTime] };
+  for (const b of world.games.booths.list) GAMES[b.id] = [b.name, (points) => `${points.toLocaleString('en-US')} points`];
+  const boardOf = (id) => (id === 'sky' ? skyScores : fair.boards[id]);
+  const showBoard = (id, tops) => { if (id === 'sky') world.games.setScores(lists(tops)); else fair.stands[id]?.setScores(tops); fair.tops[id] = tops; };
+  const rankOf = (list, who) => (list || []).findIndex((e) => e.name.toLowerCase() === who.toLowerCase());
+  liveScore = async (peer, id) => {
+    if (!GAMES[id] || !peer) return;
+    const before = fair.tops[id], tops = await boardOf(id).tops(), [title, format] = GAMES[id];
+    showBoard(id, tops);
+    const at = rankOf(tops.day, peer.name);
+    if (at < 0) return; // (kept in their browser only, or beaten since)
+    const was = before ? rankOf(before.day, peer.name) : -1, same = was >= 0 && before.day[was].score === tops.day[at].score;
+    if (same) return; // not a better score than the one they had
+    hud.addChat('✦', 5, `${title}: ${peer.name} — ${format(tops.day[at].score)} (#${at + 1} today)`, true);
+    const mine = rankOf(tops.day, name), minePast = before ? rankOf(before.day, name) : -1, theirsPast = was;
+    if (mine >= 0 && at < mine && (theirsPast < 0 || minePast < 0 || theirsPast > minePast)) { hud.note(`${peer.name} just beat your score at ${title}!`, 6000); audio.play('fail', { volume: 0.5 }); }
+    else audio.play('score', { volume: 0.5 });
+  };
   /** The game is over: its score goes on the board (a time for the race, points for a booth). */
   const scoreGame = (id, title, score, text) => {
     fair.boards[id].submit(name, score).then(({ tops, rank: place, best, shared }) => {
-      fair.stands[id].setScores(tops);
+      showBoard(id, tops);
+      if (shared) presence?.sendScore(id);
       const where = place ? `#${place} of all time` : 'not on the board this time';
       hud.note(`${text} — ${best ? where : 'your best stands'}${shared ? '' : ' (kept in this browser only)'}`, 8000);
       if (place && place <= 10 && best) hud.addChat('✦', 5, `${title}: ${name} — ${text} (#${place})`, true);
@@ -382,7 +405,7 @@ async function boot() {
     if (fair.session && input.pressed('KeyE') && !(s.over)) { endGame(); hud.note(fair.kind === 'race' ? 'Race abandoned.' : 'Game left.'); }
   };
   Object.assign(app, { fair, playBooth, playRace, endGame, fairStep });
-  queueMicrotask(() => Object.assign(app, { shop, refreshShop, adminKey }));
+  queueMicrotask(() => Object.assign(app, { shop, refreshShop, adminKey, scoreGame }));
   world.games.events = {
     note: (text) => hud.note(text, 4200),
     run: (text) => hud.setRun(text),
@@ -394,6 +417,8 @@ async function boot() {
       if (!clean) { hud.note(`${formatTime(ms)} — but a cheat was on: not recorded`, 7000); return; }
       skyScores.submit(name, ms).then(({ tops, rank: place, best, shared }) => {
         world.games.setScores(lists(tops));
+        fair.tops.sky = tops;
+        if (shared) presence?.sendScore('sky');
         const where = place ? `#${place} of all time` : 'not on the board this time';
         hud.note(`${formatTime(ms)} — ${best ? where : 'your best time stands'}${shared ? '' : ' (kept in this browser only)'}`, 8000);
         hud.addChat('✦', 5, `${CLIMB.name}: ${name} reached the top in ${formatTime(ms)}${place ? ` (#${place})` : ''}`, true);
@@ -609,7 +634,7 @@ async function boot() {
       rig.follow = settings.follow;
     })
     .on('color', (i) => { color = i; me.setColor(i); presence?.setIdentity(name, color); })
-    .on('name', (n) => { if (!n) return; name = n; presence?.setIdentity(name, color); store.set('mmf.name', name); })
+    .on('name', (n) => { if (!n) return; name = n; presence?.setIdentity(name, color); store.set('mmf.name', name); world.games.setMe(name); })
     .on('quality', (q) => {
       // a tier changes shaders, textures and shadow maps: simplest and safest is a clean restart at the same spot
       if (q === 'auto') store.del('mmf.quality'); else store.set('mmf.quality', q);
@@ -834,6 +859,7 @@ async function boot() {
   } else {
     const who = await hud.welcome({ name, color, touch });
     name = who.name; color = who.color;
+    world.games.setMe(name);
     me.setColor(color);
     hud.setName(name);
     store.set('mmf.name', name); store.set('mmf.color', String(color));

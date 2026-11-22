@@ -129,6 +129,9 @@ export class Presence {
     this._flush(now());
   }
 
+  /** Tells the others that a score of ours has just gone on a board ('sky', 'race', 'shoot'…): they fetch it. */
+  sendScore(board) { if (this._tr && /^[a-z]{2,8}$/.test(board)) this._tr.send({ t: 'g', b: board }); }
+
   /** One-shot emote (0..31) shown to the others. */
   sendEmote(n) {
     const e = int(Math.trunc(n), 31, -1);
@@ -255,6 +258,7 @@ export class Presence {
     } else if (m.t === 'leave') {
       if (this._leave(m.id)) this._changed();
     } else if (m.t === 'e' && this.peers.has(m.id) && int(m.e, 31, -1) >= 0) this._emit('emote', { id: m.id, emote: m.e });
+    else if (m.t === 'g' && this.peers.has(m.id) && typeof m.b === 'string') this._emit('score', { id: m.id, peer: this.peers.get(m.id), board: m.b });
     else if (m.t === 'c' && this.peers.has(m.id)) {
       const text = cleanChat(m.m);
       if (text) this._emit('chat', { id: m.id, peer: this.peers.get(m.id), text, near: !!m.n });

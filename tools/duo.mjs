@@ -49,6 +49,7 @@ const logs = [];
 
 async function visitor(name, swatch) {
   const context = await browser.newContext({ viewport: { width: 960, height: 540 }, deviceScaleFactor: 1 });
+  await context.addInitScript(() => { try { for (const k of ['mmf.run', 'mmf.follow']) if (localStorage.getItem(k) === null) localStorage.setItem(k, '0'); } catch { /* no storage */ } }); // (the tests walk with Shift to run, and turn the camera themselves)
   const page = await context.newPage();
   page.on('console', (m) => { if (m.type() === 'error') logs.push(`[${name}] ${m.text().slice(0, 300)}`); });
   page.on('pageerror', (e) => logs.push(`[${name}] ${e.message}`));
@@ -130,6 +131,13 @@ try {
   await alice.page.keyboard.press('Enter');
   const whisper = await until(() => bob.page.evaluate(() => [...document.querySelectorAll('.chat .log p.near')].map((e) => e.textContent).find((l) => /psst, Bob$/.test(l)) || null), 20000);
   check('a line said to those nearby reaches Bob, marked as such', !!whisper, JSON.stringify(whisper));
+  // a game finished by one is seen by the other at once: a line in the chat, the board redrawn
+  await alice.page.evaluate(() => window.__mmf.fair.boards.bell.start());
+  await new Promise((r) => setTimeout(r, 2600)); // (a game of the striker lasts a few seconds: the server knows)
+  await alice.page.evaluate(() => window.__mmf.scoreGame('bell', 'Ring the Bell', 7777, '7,777 on the scale'));
+  const live = await until(() => bob.page.evaluate(() => [...document.querySelectorAll('.chat .log p')].map((e) => e.textContent).find((l) => /Ring the Bell: Alice — 7,777 points \(#1 today\)/.test(l)) || null), 20000);
+  const shownToBob = await bob.page.evaluate(() => window.__mmf.fair.tops.bell?.day?.[0] || null);
+  check('a score made by Alice is shown to Bob as soon as she finishes: a line in the chat, his board up to date', !!live && shownToBob?.name === 'Alice' && shownToBob.score === 7777, JSON.stringify({ live, shownToBob }));
   // who is here: everybody sees the names; the administrator also sees where from, and can put someone out
   await bob.page.click('.pill.players');
   await frames(bob, 3);

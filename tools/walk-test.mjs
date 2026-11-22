@@ -23,7 +23,10 @@ const server = await createServer({ root: ROOT, logLevel: 'error', server: { por
 await server.listen();
 const port = server.httpServer.address().port;
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--use-gl=angle', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-webgl'] });
-const page = await (await browser.newContext({ viewport: { width: 960, height: 540 }, deviceScaleFactor: 1 })).newPage();
+const context = await browser.newContext({ viewport: { width: 960, height: 540 }, deviceScaleFactor: 1 });
+// (the test runs with Shift and turns the camera itself: as when a visitor has switched both helps off)
+await context.addInitScript(() => { try { for (const k of ['mmf.run', 'mmf.follow']) if (localStorage.getItem(k) === null) localStorage.setItem(k, '0'); } catch { /* no storage */ } });
+const page = await context.newPage();
 const errors = [];
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text().slice(0, 300)); });
 page.on('pageerror', (e) => errors.push(e.message));
@@ -633,7 +636,7 @@ try {
             if (booth.id === 'shoot') {
               const mesh = dyn.children.find((c) => c.isInstancedMesh);
               let best = null, bd = 9; // a target that stands, the nearest to the middle
-              for (let i = 0; i < mesh.count; i++) { mesh.getMatrixAt(i, m); const e = m.elements; if (Math.abs(e[9]) > 0.3 * Math.hypot(e[8], e[9], e[10])) continue; if (Math.abs(e[12]) < bd) { bd = Math.abs(e[12]); best = new T.Vector3(e[12], e[13], e[14]); } }
+              for (let i = 0; i < mesh.count; i++) { mesh.getMatrixAt(i, m); const e = m.elements; if (Math.hypot(e[0], e[1], e[2]) < 0.05 || Math.abs(e[9]) > 0.3 * Math.hypot(e[8], e[9], e[10])) continue; if (Math.abs(e[12]) < bd) { bd = Math.abs(e[12]); best = new T.Vector3(e[12], e[13], e[14]); } }
               if (best && n % 12 === 0) { point(best.applyMatrix4(booth.group.matrixWorld)); input._clicks++; }
             } else if (booth.id === 'mole') {
               const t = dyn.children.find((c) => c.name.endsWith(':mole') && c.visible && c.scale.y > 0.99 && c.geometry.attributes.position.count < 150); // (not a rabbit: its ears make it a bigger mesh)
@@ -656,7 +659,7 @@ try {
     });
     await frames(20);
     const boards = await page.evaluate(() => Object.fromEntries(Object.entries(window.__mmf.fair.boards).map(([k, b]) => [k, b._local().all[0]?.score || 0])));
-    check('the four booths of the pier are offered at their counters and played with the pointer: targets, moles, the clown, the bell', ask.includes(`Play ${offered}`) && fair.shoot.score > 300 && fair.mole.score > 100 && fair.milk.score > 150 && fair.bell.score >= 900 && ['shoot', 'mole', 'milk'].every((id) => fair[id].over && fair[id].sight && fair[id].hidden && fair[id].seconds > 47 && fair[id].closed && fair[id].shown) && fair.bell.over && !fair.bell.sight && fair.bell.closed, JSON.stringify(fair));
+    check('the four booths of the pier are offered at their counters and played with the pointer: targets, moles, the clown, the bell', ask.includes(`Play ${offered}`) && fair.shoot.score > 300 && fair.mole.score > 100 && fair.milk.score > 150 && fair.bell.score >= 4000 && fair.bell.score <= 9999 && ['shoot', 'mole', 'milk'].every((id) => fair[id].over && fair[id].sight && fair[id].hidden && fair[id].seconds > 47 && fair[id].closed && fair[id].shown) && fair.bell.over && !fair.bell.sight && fair.bell.closed, JSON.stringify(fair));
     check('each score goes on the board of its booth', ['shoot', 'mole', 'milk', 'bell'].every((id) => boards[id] === fair[id].score), JSON.stringify(boards));
     // the race
     const race = await page.evaluate(() => {
