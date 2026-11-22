@@ -71,7 +71,8 @@ export class Presence {
     this.id = 0; // own id in the room (0 until connected)
     this.mode = 'offline';
     this.device = deviceId();
-    this.admin = false; // the relay has recognised the administrator's key
+    this.admin = false; // the relay has recognised an administrator's key
+    this.owner = false; // …the owner's
     this.kicked = null; // { ban } once the administrator has put this visitor out
     /**
      * Everybody else in the room. `visible`: drawn (the relay tells us about them in detail); `far`: in the
@@ -142,26 +143,32 @@ export class Presence {
    * One chat line for the room. Returns the text as sent ('' when empty, or when lines come too fast: the
    * relay would not pass them on either). Nothing is stored anywhere: who is not there does not get it.
    */
-  sendChat(text, near = false) {
+  sendChat(text, near = false, important = false) {
     const m = cleanChat(text), t = now();
     this._chat = Math.min(5, this._chat + (t - this._chatAt) / 2000);
     this._chatAt = t;
     if (!m || this._chat < 1) return '';
+    if (important && !this.admin) return ''; // (the relay would not mark it either)
     this._chat -= 1;
-    if (this._tr) this._tr.send(near ? { t: 'c', m, n: 1 } : { t: 'c', m }); // (`near`: only those within 20 m get it)
+    // (`near`: only those within 20 m get it; `important`: an administrator's line, shown to all in another colour)
+    if (this._tr) this._tr.send(important ? { t: 'c', m, i: 1 } : near ? { t: 'c', m, n: 1 } : { t: 'c', m });
     return m;
   }
 
   /** The administrator's key ('' to give it up): the relay answers with an 'admin' event. */
   setAdminKey(key) {
     this._key = String(key || '');
-    if (!this._key) { this.admin = false; return; }
+    if (!this._key) { this.admin = this.owner = false; return; }
     if (this._tr && this.mode === 'online') this._tr.send({ t: 'admin', key: this._key });
   }
   /** The administrator: who is in the room (answered by a 'who' event), put someone out, keep them out. */
   who() { if (this.admin && this._tr) this._tr.send({ t: 'who' }); }
   kick(id) { if (this.admin && this._tr) this._tr.send({ t: 'kick', id }); }
   ban(id, hours = 0) { if (this.admin && this._tr) this._tr.send({ t: 'ban', id, h: hours }); }
+  /** Names that visitor an administrator (their browser is handed a key of its own: a 'promoted' event there). */
+  promote(id) { if (this.admin && this._tr) this._tr.send({ t: 'promote', id }); }
+  /** The owner has taken the title away (see /api/admins): whoever holds that key in this room loses it at once. */
+  demote(key) { if (this.owner && this._tr) this._tr.send({ t: 'demote', key }); }
 
   setIdentity(name, color) {
     this.name = cleanName(name, this.name);
@@ -251,7 +258,8 @@ export class Presence {
     else if (m.t === 'u') this._states(m);
     else if (m.t === 'm') this._far(m);
     else if (m.t === 'w') this._seen = !!m.n;
-    else if (m.t === 'admin') { this.admin = !!m.ok; this._emit('admin', { ok: this.admin }); }
+    else if (m.t === 'admin') { this.admin = !!m.ok; this.owner = this.admin && !!m.owner; this._emit('admin', { ok: this.admin, owner: this.owner, out: !!m.out }); }
+    else if (m.t === 'promoted') { if (typeof m.key === 'string' && m.key) this._emit('promoted', { key: m.key, by: cleanName(m.by || '') }); else this._emit('promoted', { id: m.id }); }
     else if (m.t === 'who') { if (Array.isArray(m.list)) this._emit('who', { list: m.list, now: m.now }); }
     else if (m.t === 'join') {
       if (this._join(m)) this._changed();
@@ -261,7 +269,7 @@ export class Presence {
     else if (m.t === 'g' && this.peers.has(m.id) && typeof m.b === 'string') this._emit('score', { id: m.id, peer: this.peers.get(m.id), board: m.b });
     else if (m.t === 'c' && this.peers.has(m.id)) {
       const text = cleanChat(m.m);
-      if (text) this._emit('chat', { id: m.id, peer: this.peers.get(m.id), text, near: !!m.n });
+      if (text) this._emit('chat', { id: m.id, peer: this.peers.get(m.id), text, near: !!m.n, important: !!m.i });
     }
   }
 
@@ -282,7 +290,7 @@ export class Presence {
     this._changed();
     this._sentKey = ''; this._due = 0; // share our own state right away
     this._seen = true;
-    this.admin = false;
+    this.admin = this.owner = false;
     if (tr && mode === 'online' && this._key) tr.send({ t: 'admin', key: this._key });
     this._flush(now());
   }

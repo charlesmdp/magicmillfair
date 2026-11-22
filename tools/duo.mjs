@@ -155,8 +155,53 @@ try {
   await alice.page.click('.pill.players');
   const seenByAdmin = await until(() => alice.page.evaluate(() => { const more = [...document.querySelectorAll('.roster .more')].map((e) => e.textContent); return more.length === 2 ? { more, acts: [...document.querySelectorAll('.roster .acts button')].map((e) => e.textContent) } : null; }), 20000);
   await alice.page.screenshot({ path: path.join(OUT, 'roster-admin.png') });
-  check('the administrator also sees the address, the browser and the device of each, and can kick or ban', !!seenByAdmin && seenByAdmin.more.every((m) => /127\.0\.0\.1|::1/.test(m) && /Chrome \d+ · /.test(m) && /device /.test(m)) && seenByAdmin.acts.join() === 'Kick,Ban 1 h,Ban 1 day,Ban for good', JSON.stringify(seenByAdmin));
-  await alice.page.click('.roster .acts button'); // Kick (Bob: the only other visitor)
+  check('the administrator also sees the address, the browser and the device of each, and can go to them, name them, kick or ban', !!seenByAdmin && seenByAdmin.more.every((m) => /127\.0\.0\.1|::1/.test(m) && /Chrome \d+ · /.test(m) && /device /.test(m)) && seenByAdmin.acts.join() === 'Go to,Make admin,Kick,Ban 1 h,Ban 1 day,Ban for good', JSON.stringify(seenByAdmin));
+  const act = (who, label) => who.page.evaluate((label) => { const b = [...document.querySelectorAll('.roster .acts button')].find((e) => e.textContent === label); if (b) b.click(); return !!b; }, label);
+  const apart = () => alice.page.evaluate(() => { const a = window.__mmf, o = [...a.presence.peers.values()][0]; return Math.hypot(o.x - a.player.pos.x, o.z - a.player.pos.z); });
+  // the administrator is carried next to a visitor; a click on the large map carries them to that spot
+  await bob.page.evaluate(() => { const a = window.__mmf; a.player.teleport(-60, -30, 0); });
+  await until(async () => ((await apart()) > 30 ? true : null), 20000);
+  const far = await apart();
+  await act(alice, 'Go to');
+  await frames(alice, 4);
+  const close = await apart();
+  await alice.page.keyboard.press('KeyM');
+  await frames(alice, 4);
+  const before = await alice.page.evaluate(() => { const p = window.__mmf.player.pos; return [p.x, p.z]; });
+  const box = await alice.page.evaluate(() => { const r = document.querySelector('.bigmap canvas').getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; });
+  await alice.page.mouse.click(box[0] + box[2] * 0.5, box[1] + box[3] * 0.5);
+  await frames(alice, 4);
+  const after = await alice.page.evaluate(() => { const a = window.__mmf, p = a.player.pos, v = a.hud.mapView; return { at: [p.x, p.z], centre: [(v.x0 + v.x1) / 2, (v.z0 + v.z1) / 2], open: document.querySelector('.bigmap').classList.contains('on') }; });
+  check('the administrator goes where they like: next to a visitor, or to a spot clicked on the large map', far > 30 && close < 3 && !after.open && Math.hypot(after.at[0] - after.centre[0], after.at[1] - after.centre[1]) < 30 && Math.hypot(after.at[0] - before[0], after.at[1] - before[1]) > 5, JSON.stringify({ far, close, before, after }));
+  // an announcement on the "important" channel: everybody gets it, in another colour
+  await alice.page.keyboard.press('Enter');
+  await frames(alice, 2);
+  // (Tab goes round the channels: everyone, nearby, and — an administrator's — important)
+  for (let k = 0; k < 3 && (await alice.page.evaluate(() => document.querySelector('.chat .chan').textContent)) !== 'Important'; k++) await alice.page.keyboard.press('Tab');
+  const channel = await alice.page.evaluate(() => document.querySelector('.chat .chan').textContent);
+  await alice.page.keyboard.type('The fair closes at ten');
+  await alice.page.keyboard.press('Enter');
+  const loud = await until(() => bob.page.evaluate(() => [...document.querySelectorAll('.chat .log p.important')].map((e) => e.textContent).find((l) => /The fair closes at ten$/.test(l)) || null), 20000);
+  const bobChannels = await bob.page.evaluate(() => { const a = window.__mmf; a.hud.toggleChat(true); const b = document.querySelector('.chat .chan'), seen = [b.textContent]; b.click(); seen.push(b.textContent); b.click(); seen.push(b.textContent); a.hud.toggleChat(false); return seen; });
+  check('the "important" channel: an administrator\'s line reaches everyone in another colour; a visitor has no such channel', channel === 'Important' && /important/.test(loud || '') && bobChannels.join() === 'Everyone,Nearby,Everyone', JSON.stringify({ channel, loud, bobChannels }));
+  // naming another administrator: Bob's browser is handed a key of its own; the owner takes the title away
+  await alice.page.click('.pill.players');
+  await until(() => alice.page.evaluate(() => document.querySelectorAll('.roster .more').length === 2 || null), 20000);
+  await act(alice, 'Make admin');
+  const named = await until(() => bob.page.evaluate(() => { const a = window.__mmf; return a.who.admin && !a.who.owner && a.presence.admin && /^adm_/.test(localStorage.getItem('mmf.admin') || '') ? [...document.querySelectorAll('.chat .log p')].map((e) => e.textContent).find((l) => /has made you an administrator/.test(l)) || null : null; }), 20000);
+  await bob.page.click('.pill.players');
+  const bobSees = await until(() => bob.page.evaluate(() => { const rows = [...document.querySelectorAll('.roster .list .who')].map((r) => ({ name: r.querySelector('b').textContent, more: !!r.querySelector('.more'), acts: [...r.querySelectorAll('.acts button')].map((e) => e.textContent).join() })); return rows.length === 2 && rows.every((r) => r.more) && document.querySelector('.roster .admins h3') ? { rows, admins: document.querySelector('.roster .admins').textContent, remove: !!document.querySelector('.roster .admins button') } : null; }), 20000);
+  await bob.page.screenshot({ path: path.join(OUT, 'roster-named-admin.png') });
+  await bob.page.keyboard.press('Escape');
+  const listed = await until(() => alice.page.evaluate(() => { const b = document.querySelector('.roster .admins button'); return b ? document.querySelector('.roster .admins').textContent : null; }), 20000);
+  await alice.page.screenshot({ path: path.join(OUT, 'roster-owner.png') });
+  await alice.page.evaluate(() => document.querySelector('.roster .admins button').click());
+  const unnamed = await until(() => bob.page.evaluate(() => { const a = window.__mmf; return !a.who.admin && !a.presence.admin && !localStorage.getItem('mmf.admin') ? true : null; }), 20000);
+  check('one administrator names another: a key of their own, what administrators see — and the owner alone takes the title away',
+    !!named && !!bobSees && bobSees.rows.find((r) => /^Alice/.test(r.name))?.acts === 'Go to' && /owner/.test(bobSees.rows.find((r) => /^Alice/.test(r.name)).name) && /Bob/.test(bobSees.admins) && !bobSees.remove && /Bob/.test(listed || '') && !!unnamed,
+    JSON.stringify({ named, bobSees, listed, unnamed }));
+  await until(() => alice.page.evaluate(() => ([...document.querySelectorAll('.roster .acts button')].some((e) => e.textContent === 'Kick') && !document.querySelector('.roster .admins button')) || null), 20000);
+  await act(alice, 'Kick'); // (Bob: the only other visitor)
   const out = await until(() => bob.page.evaluate(() => { const b = document.querySelector('.banner'); return b.classList.contains('on') ? b.textContent : null; }), 20000);
   await bob.page.screenshot({ path: path.join(OUT, 'bob-kicked.png') });
   const left = await until(async () => ((await status(alice)).count === 1 ? true : null), 20000);

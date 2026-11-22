@@ -17,7 +17,7 @@ import { Presence, cleanChat } from './net/Presence.js';
 import { Npc } from './npc/Npc.js';
 import { Scores } from './net/Scores.js';
 import { countVisit } from './net/Visits.js';
-import { callApi } from './net/api.js';
+import { callApi, checkAdminKey } from './net/api.js';
 import { formatTime } from './world/zones/games/course.js';
 import { RemoteAvatars } from './net/RemoteAvatars.js';
 import { Benchmark } from './app/Benchmark.js';
@@ -114,7 +114,7 @@ async function boot() {
   player.autoRun = settings.run;
   rig.follow = settings.follow;
   // who is visiting: `admin` once the server has recognised the administrator's key; `days`: visits in a row
-  const who = { admin: false, key: '', days: 1 };
+  const who = { admin: false, owner: false, key: '', days: 1 };
   app.who = who;
   // no jetpack underground, nor where a game forbids it
   player.canFly = (p) => owns('jetpack') && !player.cave && !world.noFly.some((z) => (p.x - z.x) ** 2 + (p.z - z.z) ** 2 < z.r * z.r);
@@ -151,7 +151,17 @@ async function boot() {
     presence = new Presence({ name, color });
     avatars = new RemoteAvatars({ scene, factory, presence, hud, rank, world });
     presence.on('score', ({ peer, board }) => liveScore(peer, board));
-    presence.on('chat', ({ id, peer, text, near }) => { hud.addChat(peer.name, peer.color, text, false, near); avatars.say(id, text); audio.play('chat'); });
+    presence.on('chat', ({ id, peer, text, near, important }) => {
+      hud.addChat(peer.name, peer.color, text, false, important ? 'important' : near ? 'near' : '');
+      avatars.say(id, text);
+      audio.play(important ? 'score' : 'chat');
+      if (important) hud.note(`${peer.name}: ${text}`, 9000); // (an administrator's announcement: on the screen too)
+    });
+    // named an administrator by one of them: the key of our own is kept, and checked like any other
+    presence.on('promoted', ({ key, by, id }) => {
+      if (key) adminKey(key).then(() => { if (who.admin) hud.addChat('✦', 5, `${by || 'An administrator'} has made you an administrator. The list of who is here shows you more, and "Important" is yours in the chat.`, true); });
+      else if (id !== undefined) { hud.note('They are an administrator now.', 4000); refreshRoster(); }
+    });
     // what the others do is heard when they are close
     presence.on('emote', ({ id, emote: i }) => {
       const o = presence.peers.get(id), e = EMOTE_LIST[i];
@@ -162,7 +172,12 @@ async function boot() {
     // put out of the room by the administrator: said plainly, and that is the end of the visit to this room
     presence.on('kicked', ({ ban }) => hud.banner(ban ? 'The administrator has banned you from the fair.' : 'The administrator has put you out of this room. Reload the page to come back in.'));
     presence.on('who', ({ list, now }) => { roster.details = new Map(list.map((p) => [p.id, p])); roster.now = now; if (hud.rosterOpen) showRoster(); });
-    presence.on('admin', ({ ok }) => { if (ok && hud.rosterOpen) presence.who(); });
+    presence.on('admin', ({ ok, out }) => {
+      if (ok && hud.rosterOpen) presence.who();
+      // the title was taken away while we were here (said so by the relay), or the key was not recognised
+      // when the connection came back (then the server is asked again before the key is forgotten)
+      if (!ok && who.admin && !who.owner) (out ? adminKey('') : adminKey(who.key)).then(() => { if (!who.admin) hud.note('You are an administrator no more.', 6000); });
+    });
     if (who.key) presence.setAdminKey(who.key);
     // no toast when the list is merely rebuilt because the connection changed (local <-> online)
     let shownMode = presence.mode;
@@ -175,7 +190,7 @@ async function boot() {
   };
 
   // ---------- who is here (and, for the administrator, where from; putting out, keeping out)
-  const roster = { details: null, bans: null, now: 0 };
+  const roster = { details: null, bans: null, admins: null, visitors: null, now: 0 };
   const showRoster = () => {
     const p = player.pos, zoneOf = (x, z) => { let best = null, bd = 1; for (const zn of ZONES) { if (zn.hidden) continue; const d = Math.hypot(x - zn.x, z - zn.z) / zn.r; if (d < bd) { bd = d; best = zn; } } return best ? best.name : ''; };
     const people = [{ id: presence?.id || 0, name, color, me: true, where: zoneOf(p.x, p.z) }];
@@ -185,12 +200,15 @@ async function boot() {
         people.push({ id: o.id, name: o.name, color: o.color, where: known ? `${d < 1000 ? `${Math.round(d)} m away` : 'far away'}${zoneOf(o.x, o.z) ? ` · ${zoneOf(o.x, o.z)}` : ''}` : '' });
       }
     }
-    hud.showRoster({ people, mode: presence?.mode || 'offline', admin: who.admin && presence?.admin, details: roster.details, bans: roster.bans, now: roster.now });
+    hud.showRoster({ people, mode: presence?.mode || 'offline', admin: who.admin && presence?.admin, owner: who.owner, details: roster.details, bans: roster.bans, admins: roster.admins, visitors: roster.visitors, now: roster.now });
   };
   const refreshRoster = async () => {
     if (!who.admin) return;
     presence?.who();
-    roster.bans = (await callApi('api/bans', { key: who.key }))?.bans || null;
+    const [bans, admins, visitors] = await Promise.all([callApi('api/bans', { key: who.key }), callApi('api/admins', { key: who.key }), callApi('api/visitors', { key: who.key })]);
+    roster.bans = bans?.bans || null;
+    roster.admins = admins?.admins || null;
+    roster.visitors = visitors || null;
     if (hud.rosterOpen) showRoster();
   };
 
@@ -266,14 +284,15 @@ async function boot() {
     tell(secret ? secret() : 'Unknown command.');
   };
   // characters to talk to: near one of them, what is typed goes to it and to nobody else
-  const npcs = world.npcs.map((n) => ({ ...n, brain: new Npc(n.id), tag: hud.tag(`npc-${n.id}`, n.name, 3), met: false }));
+  // (what is said to a character, and what it answers, stays on this screen: nobody else sees or hears it)
+  const npcs = world.npcs.map((n) => { const brain = new Npc(n.id); return { ...n, brain, tag: hud.tag(`npc-${n.id}`, n.name, 3, brain.title), met: false }; });
   let talking = null;
   world.actionSources.push((p) => {
     const n = npcs.find((q) => (q.x - p.pos.x) ** 2 + (q.z - p.pos.z) ** 2 < q.reach * q.reach);
     return n ? { label: `Talk to ${n.name}`, run: () => {
       talking = n;
       hud.toggleChat(true, n.brain.ask || `Say something to ${n.name}…`);
-      if (!n.met) { n.met = true; const hello = n.brain.greeting(); hud.addChat(n.name, 3, hello); hud.say(n.tag, hello); }
+      if (!n.met) { n.met = true; const hello = n.brain.greeting(); hud.addChat(n.name, 3, hello, false, 'private'); hud.say(n.tag, hello); }
     } } : null;
   });
   const say = (text, channel = 'all') => {
@@ -281,15 +300,16 @@ async function boot() {
     if (text.trim().startsWith('/')) { if (state.mode === 'walk') command(text.trim()); return; }
     if (talking) {
       const n = talking, mine = cleanChat(text);
-      hud.addChat(name, color, mine, true);
+      hud.addChat(name, color, mine, true, 'private');
       hud.say(hud.selfTag, mine);
-      n.brain.reply(mine).then((answer) => { hud.addChat(n.name, 3, answer); hud.say(n.tag, answer); });
+      n.brain.reply(mine).then((answer) => { hud.addChat(n.name, 3, answer, false, 'private'); hud.say(n.tag, answer); });
       return;
     }
     const near = channel === 'near'; // (heard within twenty metres only)
-    const sent = presence ? presence.sendChat(text, near) : cleanChat(text);
+    const important = channel === 'important' && who.admin && !!presence?.admin; // (an administrator's announcement)
+    const sent = presence ? presence.sendChat(text, near, important) : cleanChat(text);
     if (!sent) { hud.note('Not so fast: a line every two seconds'); return; }
-    hud.addChat(name, color, sent, true, near);
+    hud.addChat(name, color, sent, true, important ? 'important' : near ? 'near' : '');
     hud.say(hud.selfTag, sent);
   };
   // the climb: a clock while climbing, the board of the best times at the gate
@@ -432,6 +452,32 @@ async function boot() {
     player.teleport(x, z, facing);
     rig.snap(player.pos, facing + Math.PI); // the camera behind, looking the same way
     hud.note(word, 4200);
+    audio.play('teleport');
+  };
+  // The administrator goes where they like: next to a visitor ({ id }), or to a spot of the map ({ x, z }).
+  const goTo = (to) => {
+    if (!who.admin || state.mode !== 'walk' || player.dead) return;
+    let x = to.x, z = to.z, word = 'There you are.';
+    if (to.id !== undefined) {
+      const o = presence?.peers.get(to.id);
+      if (!o || !(o.visible || o.far)) { hud.note('Where they are is not known yet. Try again in a moment.', 4000); return; }
+      const a = Math.random() * Math.PI * 2;
+      x = o.x + Math.cos(a) * 1.4; z = o.z + Math.sin(a) * 1.4; word = `Next to ${o.name}.`;
+    }
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+    const stand = world.collision.walkable.bind(world.collision);
+    if (!stand(x, z)) {
+      // (the nearest place one can stand on)
+      let best = null;
+      for (let r = 1; r <= 90 && !best; r += r < 6 ? 0.7 : 2) for (let k = 0; k < 20; k++) { const a = (k / 20) * Math.PI * 2, qx = x + Math.cos(a) * r, qz = z + Math.sin(a) * r; if (stand(qx, qz)) { best = [qx, qz]; break; } }
+      if (!best) { hud.note('Nowhere to stand around there.', 4000); return; }
+      [x, z] = best;
+    }
+    if (fair.session) endGame();
+    const facing = to.id !== undefined ? Math.atan2(presence.peers.get(to.id).x - x, presence.peers.get(to.id).z - z) : player.yaw;
+    player.teleport(x, z, facing);
+    rig.snap(player.pos, facing + Math.PI);
+    hud.note(word, 3000);
     audio.play('teleport');
   };
   const chooseVillage = () => {
@@ -585,13 +631,16 @@ async function boot() {
     key = String(key || '').trim();
     if (!key) { store.del('mmf.admin'); who.admin = false; }
     else {
-      const ok = (await callApi('api/admin', { key }))?.ok === true;
+      const answer = await checkAdminKey(key), ok = answer.ok;
       who.admin = ok;
+      who.owner = ok && answer.owner; // (the owner's key, or one handed to an administrator who was named)
       who.key = ok ? key : '';
-      if (ok) store.set('mmf.admin', key); else store.del('mmf.admin');
+      // (a key the server refuses is forgotten; one it could not be asked about is kept for the next visit)
+      if (ok) store.set('mmf.admin', key); else if (answer.dead) store.del('mmf.admin');
     }
-    if (!who.admin) who.key = '';
+    if (!who.admin) { who.key = ''; who.owner = false; }
     presence?.setAdminKey(who.key);
+    hud.setAdmin(who.admin);
     pending = who.admin ? (await shop.all(who.key)) || {} : {};
     refreshShop();
     hud.addChat('✦', 5, who.admin ? `Administrator: on.${Object.values(pending).some((s) => s.draft) ? ' Sponsors await your approval: go and see their panels.' : ''}` : key ? 'That key was not recognised.' : 'Administrator: off.', true);
@@ -604,7 +653,7 @@ async function boot() {
     if (fromHash) { history.replaceState(null, '', location.pathname + location.search); adminKey(decodeURIComponent(fromHash[1])); }
     else if (store.get('mmf.admin')) adminKey(store.get('mmf.admin'));
   }
-  countVisit().then((v) => { who.days = v.days; showEmotes(); if (v.days > 1) setTimeout(() => hud.note(`Day ${v.days} in a row — welcome back!`, 5000), 9000); });
+  countVisit(name).then((v) => { who.days = v.days; showEmotes(); if (v.days > 1) setTimeout(() => hud.note(`Day ${v.days} in a row — welcome back!`, 5000), 9000); });
   hud
     .on('camera', toggleCamera)
     .on('emote', emote)
@@ -615,6 +664,9 @@ async function boot() {
     .on('kick', (id) => { presence?.kick(id); setTimeout(refreshRoster, 500); })
     .on('ban', (id, hours) => { presence?.ban(id, hours); setTimeout(refreshRoster, 800); })
     .on('unban', async ({ kind, key }) => { await callApi(`api/bans?${kind}=${encodeURIComponent(key)}`, { method: 'DELETE', key: who.key }); refreshRoster(); })
+    .on('promote', (id) => { presence?.promote(id); })
+    .on('goto', (to) => goTo(to))
+    .on('demote', async (id) => { await callApi(`api/admins?id=${encodeURIComponent(id)}`, { method: 'DELETE', key: who.key }); presence?.demote(id); refreshRoster(); })
     .on('hat', (i) => {
       const h = HATS[i];
       if (!h) return;

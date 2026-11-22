@@ -14,6 +14,16 @@ export function hasApi() {
   return asked;
 }
 
+/** Is this an administrator's key? { ok, owner, dead } — `dead`: the server said no (not merely out of reach). Never throws. */
+export async function checkAdminKey(key) {
+  if (!(await hasApi())) return { ok: false, owner: false, dead: false };
+  try {
+    const res = await fetch(`${import.meta.env.BASE_URL}api/admin`, { headers: { Authorization: `Bearer ${key}` } });
+    const body = res.ok && /json/.test(res.headers.get('content-type') || '') ? await res.json() : null;
+    return { ok: body?.ok === true, owner: body?.owner === true, dead: res.status === 403 };
+  } catch { return { ok: false, owner: false, dead: false }; }
+}
+
 /** A JSON request to the API: the parsed answer when it is a JSON 2xx, else null. Never throws. */
 export async function callApi(path, { method = 'GET', body, key } = {}) {
   if (!(await hasApi())) return null;

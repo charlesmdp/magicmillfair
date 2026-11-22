@@ -19,6 +19,8 @@ import { Room, MAX_FRAME, NEAR, RANGE, cleanRoom, originAllowed, parseOrigins } 
 import { Limiter, LIMITS, BODY_MAX, allowed, parseBody, mayPost, bodyMax } from './api.js';
 import { stripeConfig } from './stripe.js';
 import { route, banned, addBan } from './routes.js';
+import { adminOf, looksNamed, nameAdmin } from './admins.js';
+import { geoFromHeaders } from './visitors.js';
 import { randomId, sameSecret } from './token.js';
 import { NPC_MODEL, cleanTalk, npcReply } from './npc.js';
 
@@ -37,6 +39,9 @@ const HEARTBEAT_MS = 15000;
 const SCORES_FILE = path.resolve(process.env.SCORES_FILE || path.join(ROOT, 'data', 'scores.json'));
 const NPC = { apiKey: process.env.ANTHROPIC_API_KEY || '', model: process.env.NPC_MODEL || NPC_MODEL };
 const ADMIN_KEY = process.env.ADMIN_KEY || '';
+// behind a proxy that says where each visitor comes from (Cloudflare's "visitor location" headers): GEO_HEADERS=1
+const GEO_HEADERS = /^(1|true|yes)$/i.test(process.env.GEO_HEADERS || '');
+const geoOf = (req) => (GEO_HEADERS ? geoFromHeaders((name) => req.headers[name]) : null);
 
 const now = () => Math.round(performance.now());
 const splitUrl = (url) => String(url || '/').split(/\?(.*)/s); // → [path, query]
@@ -196,7 +201,7 @@ async function onApi(req, res, pathname, query) {
   const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() || (req.socket.encrypted ? 'https' : 'http');
   const out = await route({
     method: req.method, path: pathname, query: new URLSearchParams(query), client,
-    body: reading ? null : parseBody(raw, max), admin: sameSecret(bearer, ADMIN_KEY),
+    body: reading ? null : parseBody(raw, max), admin: sameSecret(bearer, ADMIN_KEY), bearer, geo: geoOf(req),
     raw, signature: String(req.headers['stripe-signature'] || ''), site: `${proto}://${host}`,
   }, api);
   if (out.bytes) return reply(req, res, out.status, out.bytes, out.headers);
@@ -240,7 +245,9 @@ const io = {
   // put out by the administrator: closed politely (the reason is delivered), then for good
   kick: (ws, code, reason) => { try { ws.close(code, reason); } catch { /* already closing */ } setTimeout(() => ws.terminate(), 2000).unref(); },
   busy: (ws) => ws.bufferedAmount > 1 << 16,
-  admin: (key) => sameSecret(key, ADMIN_KEY),
+  // whose key: the owner's (ADMIN_KEY), or that of an administrator the owner or another has named
+  admin: (key) => (sameSecret(key, ADMIN_KEY) ? { rank: 'owner', id: '' } : looksNamed(key) ? adminOf(store, '', key) : false),
+  promote: (who) => nameAdmin(store, who, Date.now()),
   ban: (who) => { addBan(api, who).catch((err) => console.error('[ban]', err.message)); },
 };
 
@@ -293,7 +300,7 @@ server.on('upgrade', (req, socket, head) => {
   if (pathname === '/ws' && originAllowed(req.headers.origin, host, ALLOWED_ORIGINS)) {
     // who is knocking: the address, the browser, the name the browser gave itself (what a ban holds on to)
     const q = new URLSearchParams(query);
-    const from = { ip: String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '', ua: String(req.headers['user-agent'] || '') };
+    const from = { ip: String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '', ua: String(req.headers['user-agent'] || ''), ...geoOf(req) };
     return banned(api, from.ip, q.get('dev') || '').catch(() => false).then((out) => {
       from.banned = out;
       wss.handleUpgrade(req, socket, head, (ws) => onConnection(ws, cleanRoom(q.get('room')), from));

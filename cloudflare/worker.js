@@ -22,8 +22,18 @@ import { stripeConfig } from '../server/stripe.js';
 import { route, banned, addBan } from '../server/routes.js';
 import { randomId, sameSecret } from '../server/token.js';
 import { NPC_MODEL, cleanTalk, npcReply } from '../server/npc.js';
+import { adminOf, looksNamed, nameAdmin } from '../server/admins.js';
+import { cleanGeo, packGeo, unpackGeo } from '../server/visitors.js';
 
 const NOTEBOOK = '~api'; // the object that keeps the scores (room names are [a-z0-9_-] only)
+const GEO = 'X-Fair-Geo'; // where a request comes from, as Cloudflare knows it: set by the Worker below, and by nobody else
+// The request, handed on to an object with where it comes from (whatever the caller wrote in that header is dropped).
+const withGeo = (request, url) => {
+  const headers = new Headers(request.headers), cf = request.cf || {};
+  const geo = packGeo(cleanGeo({ cc: cf.country, city: cf.city, region: cf.region }));
+  if (geo) headers.set(GEO, geo); else headers.delete(GEO);
+  return new Request(url || request.url, new Request(request, { headers }));
+};
 
 const PING = '{"t":"ping"}', PONG = '{"t":"pong"}'; // answered without waking the room
 const STALE_MS = 150000; // a connection silent for that long is a ghost (background tabs ping at least once a minute)
@@ -54,8 +64,10 @@ export class Room extends DurableObject {
       now: () => Date.now() - EPOCH,
       send: (ws, text) => { try { ws.send(text); } catch { /* closing */ } },
       drop: (ws, code, reason) => this.drop(ws, code, reason),
-      save: (p) => { try { p.conn.serializeAttachment({ id: p.id, name: p.name, color: p.color, joined: p.joined, state: p.state, ip: p.ip, ua: p.ua, dev: p.dev, admin: p.admin, since: p.since }); } catch { /* closing */ } },
-      admin: (key) => sameSecret(key, env.ADMIN_KEY || ''),
+      save: (p) => { try { p.conn.serializeAttachment({ id: p.id, name: p.name, color: p.color, joined: p.joined, state: p.state, ip: p.ip, ua: p.ua, dev: p.dev, admin: p.admin ? p.rank || 'owner' : false, key: p.key, cc: p.cc, city: p.city, since: p.since }); } catch { /* closing */ } },
+      // whose key: the owner's (the secret ADMIN_KEY), or that of an administrator who was named (the notebook knows them)
+      admin: (key) => (sameSecret(key, env.ADMIN_KEY || '') ? { rank: 'owner', id: '' } : looksNamed(key) ? this.notebook('/admin-key', { key }).then((r) => r?.who || null) : false),
+      promote: (who) => this.notebook('/promote', who).then((r) => r?.made || null),
       // the list of who is kept out is the notebook's (every room asks it)
       ban: (who) => ctx.waitUntil(env.ROOMS.get(env.ROOMS.idFromName(NOTEBOOK)).fetch(new Request('https://notebook/ban', { method: 'POST', body: JSON.stringify(who) })).catch(() => {})),
     });
@@ -67,6 +79,11 @@ export class Room extends DurableObject {
       this.relay.add(ws, known).seen = ctx.getWebSocketAutoResponseTimestamp(ws) ? 0 : this.started;
     }
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(PING, PONG));
+  }
+
+  /** Asks the notebook something only the rooms and the Worker may ask (a path that is not reachable from outside). */
+  async notebook(path, body) {
+    try { return await (await this.env.ROOMS.get(this.env.ROOMS.idFromName(NOTEBOOK)).fetch(new Request(`https://notebook${path}`, { method: 'POST', body: JSON.stringify(body) }))).json(); } catch { return null; }
   }
 
   // The notebook (see the top of this file): what the game keeps, and the rate limits. `client` is the caller's address.
@@ -82,6 +99,8 @@ export class Room extends DurableObject {
     // (asked by the Worker and by the rooms only: these two paths are not reachable from outside)
     if (url.pathname === '/banned') return Response.json({ banned: await banned({ store, now: () => Date.now() }, url.searchParams.get('ip') || '', url.searchParams.get('dev') || '') });
     if (url.pathname === '/ban') return Response.json({ added: await addBan({ store, now: () => Date.now() }, (await request.json().catch(() => null)) || {}) });
+    if (url.pathname === '/admin-key') return Response.json({ who: await adminOf(store, '', ((await request.json().catch(() => null)) || {}).key) });
+    if (url.pathname === '/promote') return Response.json({ made: await nameAdmin(store, (await request.json().catch(() => null)) || {}, Date.now()) });
     const reading = request.method === 'GET' || request.method === 'HEAD';
     let body = null, raw = null;
     if (!reading) {
@@ -104,8 +123,8 @@ export class Room extends DurableObject {
     });
     const bearer = /^Bearer (.+)$/.exec(request.headers.get('Authorization') || '')?.[1] || '';
     const out = await route({
-      method: request.method, path: url.pathname, query: url.searchParams, body, client, admin: sameSecret(bearer, env.ADMIN_KEY || ''),
-      raw, signature: request.headers.get('Stripe-Signature') || '', site: url.origin,
+      method: request.method, path: url.pathname, query: url.searchParams, body, client, admin: sameSecret(bearer, env.ADMIN_KEY || ''), bearer,
+      geo: unpackGeo(request.headers.get(GEO)), raw, signature: request.headers.get('Stripe-Signature') || '', site: url.origin,
     }, ctx);
     if (out.bytes) return new Response(out.bytes, { status: out.status, headers: out.headers });
     return Response.json(out.body, { status: out.status, headers: { 'Cache-Control': 'no-store', ...out.headers } });
@@ -114,7 +133,7 @@ export class Room extends DurableObject {
   // Reached through the Worker below: a WebSocket handshake, a head count, or the notebook.
   async fetch(request) {
     const url = new URL(request.url);
-    if (url.pathname.startsWith('/api/') || url.pathname === '/limit' || url.pathname === '/banned' || url.pathname === '/ban') return this.api(request, url);
+    if (url.pathname.startsWith('/api/') || ['/limit', '/banned', '/ban', '/admin-key', '/promote'].includes(url.pathname)) return this.api(request, url);
     if ((request.headers.get('Upgrade') || '').toLowerCase() !== 'websocket') {
       this.sweep();
       return Response.json({ players: this.relay.joined, ...(this.env.DEBUG ? { up: Date.now() - this.started } : {}) });
@@ -130,7 +149,7 @@ export class Room extends DurableObject {
       return new Response(null, { status: 101, webSocket: client });
     }
     this.ctx.acceptWebSocket(server);
-    const p = this.relay.add(server, undefined, { ip: request.headers.get('CF-Connecting-IP') || '', ua: request.headers.get('User-Agent') || '' });
+    const p = this.relay.add(server, undefined, { ip: request.headers.get('CF-Connecting-IP') || '', ua: request.headers.get('User-Agent') || '', ...unpackGeo(request.headers.get(GEO)) });
     p.seen = Date.now();
     this.relay.io.save(p);
     return new Response(null, { status: 101, webSocket: client });
@@ -204,7 +223,7 @@ export default {
         return new Response(null, { status: 101, webSocket: pair[0] });
       }
       const room = cleanRoom(url.searchParams.get('room'));
-      return env.ROOMS.get(env.ROOMS.idFromName(room)).fetch(request);
+      return env.ROOMS.get(env.ROOMS.idFromName(room)).fetch(withGeo(request));
     }
     if (url.pathname === '/healthz') return new Response('ok');
     if (url.pathname === '/api/presence') {
@@ -225,7 +244,7 @@ export default {
         // everything the game keeps is in the notebook
         const to = new URL(request.url);
         to.searchParams.set('client', client);
-        return notebook.fetch(new Request(to, request));
+        return notebook.fetch(withGeo(request, to));
       }
       if (!post) return json(405, { error: 'Method not allowed.' }, { Allow: 'POST' });
       if (!env.ANTHROPIC_API_KEY) return json(501, { reply: null, error: 'No model is configured for the characters.' });

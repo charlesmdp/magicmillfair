@@ -5,12 +5,16 @@
 // Protocol (JSON text frames)
 //   client → server   {t:'hello',name,color,v:2,dev?}   {t:'s',p:[x,y,z,yaw],a,f}   {t:'e',e}   {t:'c',m,n?}
 //                     {t:'g',b}   a score of mine has just gone on board b (relayed as {t:'g',id,b})
-//                     {t:'ping',c}   {t:'admin',key}   and, from the administrator: {t:'who'}   {t:'kick',id}
-//                     {t:'ban',id,h}
+//                     {t:'ping',c}   {t:'admin',key}   and, from an administrator: {t:'who'}   {t:'kick',id}
+//                     {t:'ban',id,h}   {t:'promote',id} (names that visitor an administrator)   {t:'demote',key}
+//                     (the owner: the administrator whose key has that id is one no more)   {t:'c',m,i:1} (a
+//                     line on the "important" channel: relayed to the whole room, marked as such)
 //   server → client   {t:'welcome',id,now,tick,idle?,near,peers:[{id,name,color,p,a,f}]}   {t:'join',id,name,color}
 //                     {t:'leave',id}   {t:'u',now,s:[[id,x,y,z,yaw,a,f,age]],g?:[id]}   {t:'e',id,e}
 //                     {t:'c',id,m,n?}   {t:'m',p:[id,x,z,…]}   {t:'w',n}   {t:'pong',c,now}   {t:'full'}
-//                     {t:'admin',ok}   {t:'who',list:[{id,name,ip,ua,dev,since}]}   {t:'kicked',ban}
+//                     {t:'admin',ok,owner?,out?} (out: the title was taken away)   {t:'who',list:[{id,name,ip,ua,dev,since,cc,city,admin}]}
+//                     {t:'kicked',ban}   {t:'promoted',key,by} (to who has just been named: the key of their
+//                     own)   {t:'promoted',id} (to who named them)
 //   `c` is a chat line: relayed as it comes, never stored, never sent back to its author; with `n` it only goes
 //   to those within CHAT_NEAR metres of who says it.
 //   `now` is the relay clock (ms). `age` (ms) tells how long before `now` a state was received: clients rebuild
@@ -24,8 +28,11 @@
 // seconds, gives the whereabouts of everybody for the map; `w` tells a visitor whether anyone is close enough
 // to be told about them (nobody: their state may be sent less often).
 //
-// The administrator is whoever sends the right key (the host checks it: io.admin). They may ask who is there
-// (address, browser, device), put someone out (kick) or keep them out (ban: the host keeps the list).
+// An administrator is whoever sends a right key (the host checks it: io.admin — the owner's, or the key of
+// someone the owner or another administrator has named). They may ask who is there (address, browser, device,
+// country), put someone out (kick) or keep them out (ban: the host keeps the list), name another visitor
+// administrator (the host draws the key: io.promote), and speak on the "important" channel. Only the owner
+// takes the title away, and nobody but the owner puts the owner out.
 
 export const MAX_FRAME = 2048; // bytes
 export const RATE = 40, BURST = RATE * 2; // messages per second, averaged over 2 s (token bucket)
@@ -100,7 +107,9 @@ export class Room {
    *   busy(connection)                 optional: true when a reader is too slow for disposable states
    *   save(player)                     optional: called when what a newcomer must know about a player changed
    *   id()                             optional: source of player ids (default: 1, 2, 3… per room)
-   *   admin(key)                       optional: is this the administrator's key? (default: nobody is)
+   *   admin(key)                       optional: whose key is this? false, true or 'owner', 'admin', or
+   *                                    { rank: 'owner' | 'admin', id } — or a promise of one of these (default: nobody's)
+   *   promote({ name, by })            optional: names an administrator; resolves to { key, id } (the key to hand over) or null
    *   ban({ ip, dev, name, hours })    optional: keep someone out from now on (0 hours: for good)
    */
   constructor(io) {
@@ -133,10 +142,13 @@ export class Room {
       state: null, row: '', at: 0, dirty: false, rested: true, // last state, its serialised row, when it came, relay flags
       ver: 0, area: null, sent: null, gone: null, watched: undefined, // (a crowd) version of the state, who they are told about, what was sent
       ip: String((known || from)?.ip || '').slice(0, 64), ua: String((known || from)?.ua || '').slice(0, 220), dev: '', admin: false, tries: 0, since: known?.since || t,
+      // (an administrator: 'owner' or 'admin', and which named key it was; where the connection comes from)
+      rank: '', key: '', cc: String((known || from)?.cc || '').slice(0, 2), city: String((known || from)?.city || '').slice(0, 60),
     };
     if (known) {
       p.name = cleanName(known.name); p.color = int(known.color, 15); p.joined = !!known.joined;
       p.dev = cleanDevice(known.dev); p.admin = !!known.admin;
+      p.rank = !known.admin ? '' : known.admin === 'admin' ? 'admin' : 'owner'; p.key = typeof known.key === 'string' ? known.key.slice(0, 12) : '';
       if (Array.isArray(known.state) && known.state.length === 6 && known.state.every(Number.isFinite)) { p.state = known.state; p.row = `[${p.id},${p.state.join(',')}`; p.ver = 1; }
     }
     if (p.id >= this.nextId) this.nextId = p.id + 1;
@@ -196,7 +208,7 @@ export class Room {
       this.broadcast(`{"t":"g","id":${p.id},"b":"${m.b}"}`, p);
     } else if (m.t === 'c') this._chat(p, m, t);
     else if (m.t === 'admin') this._admin(p, m);
-    else if (p.admin && (m.t === 'who' || m.t === 'kick' || m.t === 'ban')) this._moderate(p, m);
+    else if (p.admin && (m.t === 'who' || m.t === 'kick' || m.t === 'ban' || m.t === 'promote' || m.t === 'demote')) this._moderate(p, m);
   }
 
   _chat(p, m, t) {
@@ -207,26 +219,53 @@ export class Room {
     const text = cleanChat(m.m);
     if (!text) return;
     p.chat -= 1;
-    if (m.n) this.around(p, CHAT_NEAR, JSON.stringify({ t: 'c', id: p.id, m: text, n: 1 }));
+    if (m.i && p.admin) this.broadcast(JSON.stringify({ t: 'c', id: p.id, m: text, i: 1 }), p); // (the "important" channel: an administrator's)
+    else if (m.n) this.around(p, CHAT_NEAR, JSON.stringify({ t: 'c', id: p.id, m: text, n: 1 }));
     else this.broadcast(JSON.stringify({ t: 'c', id: p.id, m: text }), p);
   }
 
   _admin(p, m) {
     if (p.tries >= KEY_TRIES) return this.io.drop(p.conn, 1008, 'key');
-    const ok = typeof m.key === 'string' && m.key.length <= 256 && !!this.io.admin?.(m.key);
-    if (!ok) p.tries++;
-    p.admin = ok;
-    this.io.send(p.conn, `{"t":"admin","ok":${ok}}`);
-    this.io.save?.(p);
+    const done = (answer) => {
+      if (this.players.get(p.conn) !== p) return; // (gone in the meantime)
+      // what a host may answer: false, true or 'owner', 'admin', { rank, id }
+      const who = !answer ? null : answer === true ? { rank: 'owner', id: '' } : typeof answer === 'string' ? { rank: answer === 'admin' ? 'admin' : 'owner', id: '' } : answer;
+      const ok = !!who;
+      if (!ok) p.tries++;
+      p.admin = ok; p.rank = ok ? (who.rank === 'admin' ? 'admin' : 'owner') : ''; p.key = ok ? String(who.id || '').slice(0, 12) : '';
+      this.io.send(p.conn, `{"t":"admin","ok":${ok}${p.rank === 'owner' ? ',"owner":true' : ''}}`);
+      this.io.save?.(p);
+    };
+    let answer = false;
+    try { answer = typeof m.key === 'string' && m.key.length <= 256 ? this.io.admin?.(m.key) : false; } catch { answer = false; }
+    if (answer && typeof answer.then === 'function') answer.then(done, () => done(false)); else done(answer);
   }
 
   _moderate(p, m) {
     if (m.t === 'who') {
-      const list = [...this.players.values()].filter((o) => o.joined).map((o) => ({ id: o.id, name: o.name, ip: o.ip, ua: o.ua, dev: o.dev, since: o.since }));
+      const list = [...this.players.values()].filter((o) => o.joined).map((o) => ({ id: o.id, name: o.name, ip: o.ip, ua: o.ua, dev: o.dev, since: o.since, cc: o.cc, city: o.city, admin: o.rank }));
       return this.io.send(p.conn, JSON.stringify({ t: 'who', now: this.io.now(), list }));
+    }
+    if (m.t === 'demote') {
+      // the owner has taken the title away from whoever holds that key: they are an administrator no more
+      if (p.rank !== 'owner' || typeof m.key !== 'string' || !m.key) return;
+      for (const o of this.players.values()) if (o.rank === 'admin' && o.key === m.key) { o.admin = false; o.rank = o.key = ''; this.io.send(o.conn, '{"t":"admin","ok":false,"out":true}'); this.io.save?.(o); }
+      return;
     }
     const target = [...this.players.values()].find((o) => o.id === m.id);
     if (!target || target === p) return;
+    if (m.t === 'promote') {
+      if (target.admin || !target.joined || !this.io.promote) return;
+      Promise.resolve().then(() => this.io.promote({ name: target.name, by: p.name })).then((made) => {
+        if (!made || !made.key || this.players.get(target.conn) !== target) return;
+        target.admin = true; target.rank = 'admin'; target.key = String(made.id || '').slice(0, 12);
+        this.io.send(target.conn, JSON.stringify({ t: 'promoted', key: made.key, by: p.name }));
+        this.io.save?.(target);
+        if (this.players.get(p.conn) === p) this.io.send(p.conn, `{"t":"promoted","id":${target.id}}`);
+      }).catch(() => {});
+      return;
+    }
+    if (target.rank === 'owner' && p.rank !== 'owner') return; // (nobody but the owner puts the owner out)
     const ban = m.t === 'ban';
     if (ban) this.io.ban?.({ ip: target.ip, dev: target.dev, name: target.name, hours: clamp(Number(m.h) || 0, 0, 87600) });
     this.io.send(target.conn, `{"t":"kicked","ban":${ban}}`);

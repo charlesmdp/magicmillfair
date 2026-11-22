@@ -20,6 +20,29 @@ const ICON = {
 const QUICK = ['wave', 'dance', 'thumbsup', 'yes', 'no', 'punch', 'cheer', 'clap', 'hype', 'rage'];
 const hex = (i) => `#${AVATAR_COLORS[((i % 16) + 16) % 16].toString(16).padStart(6, '0')}`;
 
+// A country, as its two letters say: its flag (an emoji made of the two letters — drawn as a flag wherever
+// the system has them, as the letters themselves elsewhere) and its name in English.
+const FLAGS = (() => {
+  // (does this system draw flags? a flag has colours; two letters in a box have none)
+  try {
+    const c = document.createElement('canvas'); c.width = c.height = 24;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.font = '18px sans-serif'; g.textBaseline = 'top'; g.fillStyle = '#000'; g.fillText('\u{1F1EB}\u{1F1F7}', 0, 2);
+    const d = g.getImageData(0, 0, 24, 24).data;
+    for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 60 && (Math.abs(d[i] - d[i + 1]) > 40 || Math.abs(d[i + 1] - d[i + 2]) > 40)) return true;
+  } catch { /* no canvas */ }
+  return false;
+})();
+const REGIONS = (() => { try { return new Intl.DisplayNames(['en'], { type: 'region' }); } catch { return null; } })();
+export const countryName = (cc) => { if (!/^[A-Z]{2}$/.test(cc || '')) return 'Unknown'; try { return REGIONS?.of(cc) || cc; } catch { return cc; } };
+/** A small element showing the flag of a country (or its two letters in a box). */
+export function flagOf(cc) {
+  const ok = /^[A-Z]{2}$/.test(cc || ''), f = el('span', `flag${ok && FLAGS ? '' : ' code'}`);
+  f.textContent = !ok ? '?' : FLAGS ? String.fromCodePoint(...[...cc].map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65)) : cc;
+  f.title = countryName(cc);
+  return f;
+}
+
 // the version of this build (see vite.config.js)
 const BUILD = typeof __BUILD__ !== 'undefined' ? __BUILD__ : { commit: '', date: '' };
 export const VERSION = `Version ${BUILD.commit || 'local'}${BUILD.date ? ` · built ${BUILD.date} UTC` : ''}`;
@@ -152,7 +175,7 @@ export class Hud {
         <div class="sheet"><h2></h2><p class="lead"></p><div class="list"></div><button class="close" type="button">Stay here</button></div>
       </div>
       <div class="roster" role="dialog" aria-label="Visitors">
-        <div class="sheet"><h2>Who is here</h2><p class="lead"></p><div class="list"></div><div class="bans"></div><button class="close" type="button">Close</button></div>
+        <div class="sheet"><h2>Who is here</h2><p class="lead"></p><div class="body"><div class="list"></div><div class="admins"></div><div class="bans"></div><div class="visitors"></div></div><button class="close" type="button">Close</button></div>
       </div>
       <div class="banner" role="alert"></div>
       <div class="panel" role="dialog" aria-label="Settings">
@@ -191,7 +214,15 @@ export class Hud {
     this.bigEl = h.querySelector('.bigmap');
     this.bigCanvas = this.bigEl.querySelector('canvas');
     this.mapEl.onclick = () => { this.toggleBigMap(true); this.mapEl.blur(); };
-    this.bigEl.onclick = () => this.toggleBigMap(false);
+    // (a click closes it; an administrator's click on the map itself carries them to that spot first)
+    this.bigEl.onclick = (e) => {
+      const v = this._bigView;
+      if (this._admin && v && e.target === this.bigCanvas) {
+        const r = this.bigCanvas.getBoundingClientRect();
+        this.emit('goto', { x: v.x0 + ((e.clientX - r.left) / r.width) * (v.x1 - v.x0), z: v.z0 + ((e.clientY - r.top) / r.height) * (v.z1 - v.z0) });
+      }
+      this.toggleBigMap(false);
+    };
     // the mega map: the whole square kilometre, mountains included, with every sky village (loaded when asked for)
     this.megaBtn = this.bigEl.querySelector('.mega');
     this.megaBtn.onclick = (e) => { e.stopPropagation(); this.setMega(!this.mega); this.megaBtn.blur(); };
@@ -221,12 +252,16 @@ export class Hud {
     this.chatChannel = 'all';
     this.chanBtn = this.chatForm.querySelector('.chan');
     const channel = (to) => {
+      if (to === 'important' && !this._admin) to = 'all';
       this.chatChannel = to;
-      this.chanBtn.textContent = to === 'near' ? 'Nearby' : 'Everyone';
+      this.chanBtn.textContent = to === 'near' ? 'Nearby' : to === 'important' ? 'Important' : 'Everyone';
       this.chanBtn.classList.toggle('near', to === 'near');
-      if (!this._chatTo) this.chatInput.placeholder = to === 'near' ? 'Say something to those within 20 m…' : 'Say something to everyone…';
+      this.chanBtn.classList.toggle('important', to === 'important');
+      if (!this._chatTo) this.chatInput.placeholder = to === 'near' ? 'Say something to those within 20 m…' : to === 'important' ? 'An announcement to everyone, in red…' : 'Say something to everyone…';
     };
-    this.chanBtn.onclick = () => { channel(this.chatChannel === 'near' ? 'all' : 'near'); this.chatInput.focus({ preventScroll: true }); };
+    // (an administrator has a third channel: "important", shown to all in another colour)
+    const nextChannel = () => channel(this.chatChannel === 'all' ? 'near' : this.chatChannel === 'near' && this._admin ? 'important' : 'all');
+    this.chanBtn.onclick = () => { nextChannel(); this.chatInput.focus({ preventScroll: true }); };
     this.chanBtn.addEventListener('mousedown', (e) => e.preventDefault()); // (the field keeps the focus)
     this._channel = channel;
     this.chatForm.addEventListener('submit', (e) => {
@@ -252,7 +287,7 @@ export class Hud {
     this.chatInput.addEventListener('keydown', (e) => {
       if (e.key === 'PageUp' || e.key === 'PageDown') { this.chatLog.scrollTop += (e.key === 'PageUp' ? -1 : 1) * this.chatLog.clientHeight * 0.8; e.preventDefault(); }
       if (e.key === 'Escape') { this.chatInput.value = ''; this.toggleChat(false); }
-      else if (e.key === 'Tab' && !this._chatTo) { e.preventDefault(); channel(this.chatChannel === 'near' ? 'all' : 'near'); }
+      else if (e.key === 'Tab' && !this._chatTo) { e.preventDefault(); nextChannel(); }
       e.stopPropagation();
     });
     this.chatInput.addEventListener('blur', () => { if (!this.chatInput.value) this.toggleChat(false); });
@@ -440,6 +475,13 @@ export class Hud {
   /** { sound, music }, each 0..1. */
   setVolume(volume) { this.hud.querySelectorAll('[data-vol]').forEach((r) => { r.value = String(Math.round((volume[r.dataset.vol] ?? 0) * 100)); }); }
   setSettings(settings) { this.hud.querySelectorAll('[data-set]').forEach((b) => b.setAttribute('aria-pressed', String(!!settings[b.dataset.set]))); }
+  /** An administrator has the "important" channel of the chat. */
+  setAdmin(on) {
+    this._admin = !!on;
+    if (!on && this.chatChannel === 'important') this._channel('all');
+    this.bigEl.querySelector('.legend span').textContent = on ? 'Administrator: click a spot to go there · outside the map to close' : 'Click anywhere to close';
+    this.bigEl.classList.toggle('goto', !!on);
+  }
   /** May the visitor fly the camera about? (the button disappears otherwise) */
   setFreeCamera(on) { this.cameraBtn.style.display = on ? '' : 'none'; }
 
@@ -447,15 +489,17 @@ export class Hud {
   get rosterOpen() { return this.rosterEl.classList.contains('on'); }
   closeRoster() { this.rosterEl.classList.remove('on'); }
   /**
-   * The list of the visitors of the room. people: [{ id, name, color, me, where (a few words) }]; for the
-   * administrator, `details` (id → { ip, ua, dev, since }) and `bans` ([{ kind, key, name, until }]) add what
-   * only they may see and do: 'kick' (id), 'ban' (id, hours) and 'unban' ({ kind, key }) are emitted.
+   * The list of the visitors of the room. people: [{ id, name, color, me, where (a few words) }]; for an
+   * administrator, `details` (id → { ip, ua, dev, since, cc, city, admin }), `bans` ([{ kind, key, name,
+   * until }]), `admins` ([{ id, name, by, at }]: those who were named) and `visitors` (where people come
+   * from: see server/visitors.js) add what only they may see and do: 'kick' (id), 'ban' (id, hours), 'unban'
+   * ({ kind, key }), 'promote' (id) and — the owner only — 'demote' (the id of a named administrator) are emitted.
    */
-  showRoster({ people, mode, admin = false, details = null, bans = null, now = 0 }) {
-    const box = this.rosterEl, list = box.querySelector('.list'), bansEl = box.querySelector('.bans');
+  showRoster({ people, mode, admin = false, owner = false, details = null, bans = null, admins = null, visitors = null, now = 0 }) {
+    const box = this.rosterEl, list = box.querySelector('.list'), bansEl = box.querySelector('.bans'), adminsEl = box.querySelector('.admins'), visitorsEl = box.querySelector('.visitors');
     if (!this.rosterOpen) { this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this.toggleBigMap(false); this.input.exitLock(); }
     box.querySelector('h2').textContent = people.length > 1 ? `Who is here — ${people.length} visitors` : 'Who is here';
-    box.querySelector('.lead').textContent = mode === 'online' ? (admin ? 'You are the administrator: you also see where each visitor connects from, and can put them out.' : 'Everyone in this room.')
+    box.querySelector('.lead').textContent = mode === 'online' ? (admin ? `You are ${owner ? 'the owner' : 'an administrator'}: you also see where each visitor connects from, can put them out, and can name other administrators.` : 'Everyone in this room.')
       : mode === 'local' ? 'No server here: only the tabs of this browser see each other.' : 'Offline: nobody else can be seen.';
     list.textContent = '';
     const ago = (t) => { const m = Math.max(0, Math.round((now - t) / 60000)); return m < 1 ? 'just arrived' : m < 60 ? `here for ${m} min` : `here for ${Math.floor(m / 60)} h ${m % 60} min`; };
@@ -469,21 +513,78 @@ export class Hud {
       row.append(dot, text);
       const d = details?.get(p.id);
       if (admin && d) {
+        if (d.cc) name.prepend(flagOf(d.cc), ' ');
+        if (d.admin) { const badge = el('em', 'rank'); badge.textContent = d.admin === 'owner' ? 'owner' : 'admin'; name.append(' ', badge); }
         const more = el('small', 'more');
-        more.textContent = `${d.ip || 'address unknown'} · ${describeAgent(d.ua)}${d.dev ? ` · device ${d.dev.slice(0, 8)}…` : ''} · ${ago(d.since)}`;
+        more.textContent = `${d.cc ? `${d.city ? `${d.city}, ` : ''}${countryName(d.cc)} · ` : ''}${d.ip || 'address unknown'} · ${describeAgent(d.ua)}${d.dev ? ` · device ${d.dev.slice(0, 8)}…` : ''} · ${ago(d.since)}`;
         more.title = d.ua || '';
         text.append(more);
         if (!p.me) {
           const acts = el('span', 'acts');
-          const act = (label, title, fn) => { const b = el('button'); b.type = 'button'; b.textContent = label; b.title = title; b.onclick = fn; acts.append(b); };
-          act('Kick', 'Put out of the room (they can come back)', () => this.emit('kick', p.id));
-          act('Ban 1 h', 'Keep out for an hour (address and device)', () => this.emit('ban', p.id, 1));
-          act('Ban 1 day', 'Keep out for a day', () => this.emit('ban', p.id, 24));
-          act('Ban for good', 'Keep out until the ban is lifted', () => this.emit('ban', p.id, 0));
+          const act = (label, title, fn, cls = '') => { const b = el('button', cls); b.type = 'button'; b.textContent = label; b.title = title; b.onclick = fn; acts.append(b); };
+          act('Go to', 'Be carried next to them', () => { this.closeRoster(); this.emit('goto', { id: p.id }); }, 'good');
+          if (!d.admin) act('Make admin', 'Name them an administrator: their browser keeps a key of its own', () => this.emit('promote', p.id), 'good');
+          if (d.admin !== 'owner' || owner) { // (nobody but the owner puts the owner out)
+            act('Kick', 'Put out of the room (they can come back)', () => this.emit('kick', p.id));
+            act('Ban 1 h', 'Keep out for an hour (address and device)', () => this.emit('ban', p.id, 1));
+            act('Ban 1 day', 'Keep out for a day', () => this.emit('ban', p.id, 24));
+            act('Ban for good', 'Keep out until the ban is lifted', () => this.emit('ban', p.id, 0));
+          }
           row.append(acts);
         }
       }
       list.append(row);
+    }
+    // the administrators who were named (the owner takes the title away)
+    adminsEl.textContent = '';
+    if (admin && admins && admins.length) {
+      adminsEl.append(el('h3', '', `Administrators — ${admins.length} named`));
+      for (const a of admins) {
+        const row = el('div', 'who');
+        const text = el('span');
+        const name = el('b'); name.textContent = a.name || '?';
+        const what = el('small'); what.textContent = `named by ${a.by || '?'} · ${new Date(a.at).toLocaleDateString()}`;
+        text.append(name, what);
+        row.append(text);
+        if (owner) {
+          const off = el('button'); off.type = 'button'; off.textContent = 'Remove'; off.title = 'They are an administrator no more'; off.onclick = () => this.emit('demote', a.id);
+          const acts = el('span', 'acts'); acts.append(off);
+          row.append(acts);
+        }
+        adminsEl.append(row);
+      }
+    }
+    // where the visitors come from
+    visitorsEl.textContent = '';
+    if (admin && visitors && visitors.days) {
+      const sum = (n) => visitors.days.slice(0, n).reduce((t, d) => t + (d.u || 0), 0), today = visitors.days.find((d) => d.day === visitors.today);
+      visitorsEl.append(el('h3', '', 'Visitors'));
+      const tiles = el('div', 'tiles');
+      for (const [label, value] of [['Today', today?.u || 0], ['7 days', sum(7)], ['30 days', sum(30)], ['Page loads today', today?.n || 0]]) { const t = el('div', 'tile'); t.append(el('b', '', String(value)), el('small', '', label)); tiles.append(t); }
+      visitorsEl.append(tiles);
+      if (visitors.countries?.length) {
+        const top = visitors.countries[0].n || 1, grid = el('div', 'countries');
+        for (const c of visitors.countries.slice(0, 12)) {
+          const row = el('div', 'country'), bar = el('i'), label = el('span');
+          bar.style.width = `${Math.max(3, Math.round((100 * c.n) / top))}%`;
+          label.append(flagOf(c.cc), ` ${countryName(c.cc)}`);
+          row.append(label, el('b', '', String(c.n)), bar);
+          grid.append(row);
+        }
+        visitorsEl.append(el('h3', '', 'Where from (30 days)'), grid);
+      }
+      if (visitors.recent?.length) {
+        visitorsEl.append(el('h3', '', 'Latest visits'));
+        const since = (t) => { const m = Math.max(0, Math.round((visitors.now - t) / 60000)); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.floor(m / 60)} h ago` : `${Math.floor(m / 1440)} d ago`; };
+        for (const r of visitors.recent.slice(0, 40)) {
+          const row = el('div', 'who'), text = el('span'), name = el('b'), what = el('small');
+          name.append(flagOf(r.cc), ` ${r.name || 'Visitor'}`);
+          what.textContent = `${r.cc ? `${r.city ? `${r.city}, ` : ''}${countryName(r.cc)}` : 'place unknown'} · ${since(r.at)}${r.n > 1 ? ` · ${r.n} page loads` : ''} · device ${r.dev}…`;
+          text.append(name, what);
+          row.append(text);
+          visitorsEl.append(row);
+        }
+      }
     }
     bansEl.textContent = '';
     if (admin && bans && bans.length) {
@@ -545,14 +646,19 @@ export class Hud {
     else if (document.activeElement === this.chatInput) this.chatInput.blur();
   }
 
-  /** A line in the chat log (`near`: said to those nearby only). Lines fade away after a while; the log shows again whenever one comes in. */
-  addChat(name, color, text, self = false, near = false) {
-    const line = el('p', `${self ? 'self' : ''}${near ? ' near' : ''}`);
+  /**
+   * A line in the chat log. `kind`: 'near' (said to those nearby only), 'important' (an administrator's
+   * announcement), 'private' (between the visitor and a character: nobody else sees it), or nothing.
+   * Lines fade away after a while; the log shows again whenever one comes in.
+   */
+  addChat(name, color, text, self = false, kind = '') {
+    if (kind === true) kind = 'near';
+    const line = el('p', `${self ? 'self' : ''}${kind ? ` ${kind}` : ''}`);
     const who = el('b');
     who.style.color = hex(color);
     who.textContent = name;
     line.append(who);
-    if (near) { const tag = el('i'); tag.textContent = 'nearby'; line.append(tag); }
+    if (kind) { const tag = el('i'); tag.textContent = kind === 'near' ? 'nearby' : kind === 'important' ? 'important' : 'only you'; line.append(tag); }
     line.append(document.createTextNode(` ${text}`));
     // (someone reading further up is left where they are)
     const reading = (this.chatOpen || this.chatEl.classList.contains('peek')) && this.chatLog.scrollHeight - this.chatLog.scrollTop - this.chatLog.clientHeight > 40;
@@ -636,10 +742,11 @@ export class Hud {
   }
 
   // ---------- name tags
-  tag(id, name, color) {
+  tag(id, name, color, badge = '') {
     const t = el('div', 'tag');
-    t.innerHTML = `<i style="background:${hex(color)}"></i>`;
-    t.append(document.createTextNode(name));
+    if (badge) { const b = el('em', 'badge'); b.textContent = badge; t.append(b); t.classList.add('badged'); }
+    const dot = el('i'); dot.style.background = hex(color);
+    t.append(dot, document.createTextNode(name));
     this.tagsEl.append(t);
     return t;
   }
@@ -696,6 +803,7 @@ export class Hud {
     const mega = this.mega && this.megaImg.complete && this.megaImg.width > 0;
     const v = mega ? this.megaView : this.mapView, img = mega ? this.megaImg : this.mapImg;
     if (!v || !this.bigMapOpen || !img.complete || !img.width) return;
+    this._bigView = v; // (what a click on it means)
     const cv = this.bigCanvas;
     // as large as the window allows, at the density of the screen
     const aspect = (v.x1 - v.x0) / (v.z1 - v.z0);

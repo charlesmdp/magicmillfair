@@ -1,23 +1,26 @@
 // Characters one can talk to. The words come from the server when it has a brain to lend (POST /api/npc, see
 // server/npc.js); otherwise from a handful of lines kept here, so that the character is never mute.
-// Billy the alligator is a life coach: he answers questions, one sentence at a time, and nothing else.
+// Billy the alligator is a life coach: one says anything to him — a question or not — and he answers one
+// sentence at a time. What is said to him, and what he answers, is seen by nobody else.
 import { hasApi, callApi } from '../net/api.js';
 
 const PERSONAS = {
   alligator: {
     name: 'Billy',
-    ask: 'Ask Billy a question…',
+    title: 'Life coach',
+    ask: 'Say anything to Billy (only you two hear it)…',
     greet: [
-      'Welcome, champ! Ask me anything: every answer starts with a question.',
-      'Billy, life coach. One question, one sentence, one breakthrough. What is yours?',
-      'I can see you have potential, champ. Mostly in the legs. What do you want to know?',
-    ],
-    notAQuestion: [
-      'I only coach questions, champ: put a question mark on that dream and ask me again.',
-      'Growth starts with a question mark — where is yours?',
-      'That is a statement; winners ask, so what is your question?',
+      'Welcome, champ! Tell me anything: a question, a dream, a bad day. This stays between us.',
+      'Billy, life coach. One sentence from you, one from me, one breakthrough. What is on your mind?',
+      'I can see you have potential, champ. Mostly in the legs. So, how are we doing today?',
     ],
     rules: [
+      [/^\s*(hi|hello|hey|yo|bonjour|salut|coucou|hola|ciao)\b/i, ['Hello, champ: showing up is half the journey, so what are we working on today?', 'Hey, champ! The best time to say hello was yesterday, and the second best is right now.']],
+      [/\b(thanks?|thank you|merci|cheers)\b/i, ['Gratitude is the compound interest of the soul, champ, and you have just made a deposit.', 'You did the work, champ: I only held the vision board.']],
+      [/\b(bye|goodbye|see you|au revoir|ciao|à plus)\b/i, ['Go get them, champ: the deck will still be here when the world has been conquered.']],
+      [/\b(how are you|ça va|comment vas|how do you do)\b/i, ['Living the dream on a beanbag, champ: the secret is to pick a small dream and a big beanbag.']],
+      [/\b(i won|i did it|i beat|best time|record|gagn[ée]|réussi)\b/i, ['That is what happens when preparation meets a full tank, champ, so which stone is next?']],
+      [/\b(i lost|i died|i fell|fail|failed|perdu|tomb[ée]|rat[ée])\b/i, ['Every champion has a pond they should not have jumped into, champ, so walk round it next time and call that growth.']],
       [/\b(who|what) are you|your name|t'es qui|qui es[- ]tu\b/i, ['I am Billy, and I am the alligator I needed when I was younger.', 'Billy: part alligator, part vision board.']],
       [/\b(waterfall|cascade|chute)\b/i, ['Head west past the great pond, champ: the ones who reach the waterfall are the ones who keep walking upstream.']],
       [/\b(mostly up|climb|stones?|grimp|pierres?)\b/i, ['Success is ninety metres of small jumps, so take them one stone at a time and never look down at your comfort zone.']],
@@ -43,7 +46,6 @@ const PERSONAS = {
 };
 
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
-const isQuestion = (text) => /[?？؟]/.test(text);
 
 export class Npc {
   constructor(id) {
@@ -51,6 +53,7 @@ export class Npc {
     this.persona = PERSONAS[id] || PERSONAS.alligator;
     this.name = this.persona.name;
     this.ask = this.persona.ask;
+    this.title = this.persona.title || '';
   }
 
   greeting() { return pick(this.persona.greet); }
@@ -60,9 +63,8 @@ export class Npc {
     return pick(this.persona.idle);
   }
 
-  /** What the character answers to `text` (never throws). Only a question gets an answer. */
+  /** What the character answers to `text`, a question or not (never throws). */
   async reply(text) {
-    if (!isQuestion(text)) return pick(this.persona.notAQuestion);
     let answer = null;
     // (the server says whether it has a brain to lend: without one, the lines kept here)
     if ((await hasApi())?.npc) {

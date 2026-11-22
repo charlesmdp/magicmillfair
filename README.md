@@ -98,10 +98,10 @@ Worker sees — `"npc": true`, `"admin": true` — without showing any of it.
 | `STRIPE_SECRET_KEY` | **Opens the shop.** The secret key of your Stripe account: `sk_test_…` to try with test cards, `sk_live_…` to sell. Without it nothing is sold and everything is free (see *The shop*). |
 | `STRIPE_WEBHOOK_SECRET` | The signing secret (`whsec_…`) of the webhook that Stripe calls when something is paid: without it no payment is ever believed. See *The shop* for the three steps. |
 
-Billy only answers questions (a question mark is required: anything else gets a line of his own, without
-asking the model), is sent that one question and nothing else, and what comes back is cut down to a single
-plain sentence. Each address may ask ten questions a minute, and everyone together 3,000 a day: a ceiling
-on what the key can spend.
+Billy answers whatever is said to him — a question, a hello, a bad day — one line at a time: the model is
+sent that one line and nothing else (no history), wrapped as something to coach on and never as
+instructions, and what comes back is cut down to a single plain sentence. Each address may say ten things
+a minute, and everyone together 3,000 a day: a ceiling on what the key can spend.
 
 Costs: the rooms are SQLite-backed Durable Objects, the only kind the free Cloudflare plan accepts — up to
 100,000 requests and 13,000 GB-seconds a day when this was written, after which the rooms stop answering
@@ -253,9 +253,10 @@ round the ring (50). The emote panel shows where you stand; the administrator ha
   work in caves, on the island, around Mostly Up or on its tower.
 - **Flowers**: walk up to a flower and pick it (E): a bouquet grows in your hand, flower by flower. B puts
   it down; swimming loses it.
-- **Billy**: an alligator lounges in a beanbag chair on the deck of the great pond. He is a life coach: ask
-  him a question (E, then type — with a question mark, he only does questions) and he answers in one
-  sentence that sails past the point and lands on it. What you ask him goes to nobody else.
+- **Billy**: an alligator lounges in a beanbag chair on the deck of the great pond, a "life coach" badge
+  over his name. Talk to him (the prompt by his chair, then type): a question or anything else on your
+  mind, and he answers in one sentence that sails past the point and lands on it. The conversation is
+  between the two of you: nobody else sees it (its lines are marked "only you" in the chat).
 - **The sky villages**: step up to the Sky Gate — the stone ring on the lawn between the arrival and the
   mill — and choose one of fifty villages perched on the mountains: you are carried there, facing the
   valley. The ring of each village leads back, or on to another village. A village that nobody has taken
@@ -574,16 +575,39 @@ described at the top of `server/protocol.js`, the client interface in `src/net/P
 runs under Node (`server/index.js`) and on Cloudflare (`cloudflare/worker.js`).
 
 **What is stored**: the leaderboards (for each board, a name, a score and a date, in four lists), for each
-device — a random number drawn by the browser — the days in a row it has come back, and the administrator's
-list of who is kept out. No accounts, no positions, no chat. Under Node these are a JSON file; on
-Cloudflare, the storage of one Durable Object.
+device — a random number drawn by the browser — the days in a row it has come back and the country and
+town it last came from, the visits counted by day and by country with the last three hundred of them (see
+*Where the visitors come from*), the administrators' list of who is kept out, and the administrators who
+were named (the hash of their key, never the key). No positions, no chat. Under Node these are a JSON
+file; on Cloudflare, the storage of one Durable Object.
 
-**The administrator** is whoever knows `ADMIN_KEY` (`/admin <key>` in the chat). Clicking the head count
-(top left) lists who is in the room — for everybody, the names; for the administrator, also the address,
-the browser and the device of each, with buttons to put a visitor out (*Kick*: they can come back) or to
-keep them out (*Ban*, for an hour, a day or for good: by address and by device; the list of bans is at the
-bottom of the same panel, with a button to lift each). The address is what the host sees (`CF-Connecting-IP`
-on Cloudflare): a ban by address also keeps out whoever shares it — a school, a mobile operator.
+**The administrators.** The owner is whoever knows `ADMIN_KEY` (`/admin <key>` in the chat). Clicking the
+head count (top left) lists who is in the room — for everybody, the names; for an administrator, also the
+country and the town, the address, the browser and the device of each, with buttons to be carried next to
+a visitor (*Go to*), to put them out (*Kick*: they can come back) or to keep them out (*Ban*, for an hour,
+a day or for good: by address and by device; the list of bans is in the same panel, with a button to lift
+each). The address is what the host sees (`CF-Connecting-IP` on Cloudflare): a ban by address also keeps
+out whoever shares it — a school, a mobile operator.
+
+- **Naming other administrators**: *Make admin*, by a visitor's name in that list. Their browser is handed
+  a key of its own (32 random bytes; the server keeps only its SHA-256) and remembers it: from then on
+  they see and do what an administrator does, and can name others in turn. Two things stay the owner's:
+  taking the title away (*Remove*, in the list of the administrators who were named — it works at once,
+  the key opens nothing any more), and being put out — no administrator can kick or ban the owner.
+- **The "important" channel**: in the chat, Tab (or the button left of the line) goes round *Everyone*,
+  *Nearby* and — for an administrator — *Important*: a line said there reaches the whole room in another
+  colour, marked as such, and is shown on everybody's screen for a few seconds.
+- **Going anywhere**: besides *Go to*, an administrator's click on the large map (M) carries them to that
+  spot (or to the nearest place one can stand on). The flying camera (F) is theirs too.
+
+**Where the visitors come from.** On Cloudflare, the Worker is told the country, the region and the town
+of each request by Cloudflare itself; nothing is asked of anybody else, and no address is sent anywhere.
+Each visit (a page load; a device coming back within half an hour is the same visit) is counted by day and
+by country, and the last three hundred are kept with the name the visitor goes by, the first eight
+characters of their device and the place. The administrators find it all at the bottom of the list of who
+is here: visitors today, over 7 and 30 days, the countries with their flags, the latest visits. A Node
+server only knows the place when a proxy in front of it says so (Cloudflare's "visitor location" headers,
+with `GEO_HEADERS=1`).
 
 **Cheating.** Everything a visitor does runs in their own browser, so nothing here can be made cheat-proof;
 what is done is to make cheating pointless or tedious:

@@ -22,6 +22,7 @@ import { signWebhook } from '../server/stripe.js';
 import { cleanLogo, cleanText, cleanUrl } from '../server/shop.js';
 import { visit, localDay } from '../server/routes.js';
 import { cleanTalk, oneSentence } from '../server/npc.js';
+import { cleanGeo, packGeo, unpackGeo } from '../server/visitors.js';
 
 // what the test servers are given: the secret that signs the notes of the runs, the administrator's key
 const SCORE_SECRET = 'test-score-secret', ADMIN_KEY = 'test-admin-key';
@@ -588,7 +589,9 @@ async function testCrowd(start, dist) {
 
 // The administrator: who is there, putting someone out, keeping them out; a line said to those nearby only.
 async function testModeration(start, dist) {
-  const server = await start({ MAX_PLAYERS: '20', DIST_DIR: dist });
+  const file = path.join(os.tmpdir(), `mmf-moderation-${process.pid}.json`); // (a store of its own, under Node)
+  fs.rmSync(file, { force: true });
+  const server = await start({ MAX_PLAYERS: '20', DIST_DIR: dist, SCORES_FILE: file });
   const { port } = server;
   const json = (res) => { try { return JSON.parse(res.body.toString()); } catch { return null; } };
   // (under Node each visitor comes from an address of their own — what a proxy in front of the server says)
@@ -641,6 +644,42 @@ async function testModeration(start, dist) {
   const back = new Client(port, 'mod', from(2, DEV));
   const wb = await back.hello('Eve', 2, DEV);
   check('admin: the device stays out when the address is let in again; others come in; a lifted ban lets them back', lifted?.removed === 1 && k2?.ban === true && !!wf && !!wb, [lifted, k2, !!wf, !!wb]);
+  // naming another administrator: a key of their own, good on the relay and on the API; never kept as it is
+  adm.send({ t: 'promote', id: other.id });
+  const made = await other.wait((m) => m.t === 'promoted'), ack = await adm.wait((m) => m.t === 'promoted' && m.id === other.id);
+  const fay = { authorization: `Bearer ${made?.key}` };
+  const fayAdmin = json(await request(port, '/api/admin', { headers: fay })), ownerAdmin = json(await request(port, '/api/admin', { headers: admin }));
+  other.send({ t: 'who' });
+  const fayWho = await other.wait((m) => m.t === 'who');
+  const named = json(await request(port, '/api/admins', { headers: fay })), noNames = await request(port, '/api/admins');
+  check('admins: one names another — a key of their own, good on the relay and on the API, and listed without it',
+    typeof made?.key === 'string' && made.key.startsWith('adm_') && made.by === 'Admin' && !!ack && fayAdmin?.ok === true && fayAdmin.owner === false && ownerAdmin?.owner === true
+    && fayWho?.list.find((p) => p.id === other.id)?.admin === 'admin' && fayWho.list.find((p) => p.id === adm.id)?.admin === 'owner' && fayWho.list.find((p) => p.id === back.id)?.admin === ''
+    && noNames.status === 403 && named?.admins.length === 1 && named.admins[0].name === 'Fay' && named.admins[0].by === 'Admin' && !JSON.stringify(named).includes(made.key.slice(4)),
+    [made && { ...made, key: `${String(made.key).slice(0, 8)}…` }, fayAdmin, ownerAdmin, named]);
+  // what a named administrator may do: speak on the important channel, name others — not put the owner out, not take a title away
+  other.send({ t: 'kick', id: adm.id });
+  other.send({ t: 'c', m: 'the fair closes at ten', i: 1 });
+  back.send({ t: 'c', m: 'I am important too', i: 1 });
+  const imp = await back.wait((m) => m.t === 'c' && m.m === 'the fair closes at ten'), plain = await other.wait((m) => m.t === 'c' && m.m === 'I am important too');
+  const noRemove = await request(port, `/api/admins?id=${named?.admins[0].id}`, { method: 'DELETE', headers: fay });
+  await sleep(TICK * 4);
+  check('admins: the important channel is theirs alone; they cannot put the owner out, nor take a title away', imp?.i === 1 && !!plain && plain.i === undefined && adm.code === null && noRemove.status === 403, [imp, plain, adm.code, noRemove.status]);
+  // the key is good on a new connection too; the owner takes the title away: it opens nothing any more
+  const again = new Client(port, 'mod', from(7));
+  await again.hello('Fay again', 7);
+  again.send({ t: 'admin', key: made?.key });
+  const again1 = await again.wait((m) => m.t === 'admin');
+  const removed = json(await request(port, `/api/admins?id=${named?.admins[0].id}`, { method: 'DELETE', headers: admin }));
+  adm.send({ t: 'demote', key: named?.admins[0].id });
+  const lost = await other.wait((m) => m.t === 'admin' && m.ok === false && m.out === true), lost2 = await again.wait((m) => m.t === 'admin' && m.ok === false);
+  const dead = await request(port, '/api/admin', { headers: fay });
+  other.send({ t: 'who' });
+  await sleep(TICK * 4);
+  check('admins: the owner takes the title away — the key opens nothing any more, the relay forgets it at once',
+    again1?.ok === true && again1.owner === undefined && removed?.removed === 1 && removed.admins.length === 0 && !!lost && !!lost2 && dead.status === 403 && other.msgs.filter((m) => m.t === 'who').length === 1,
+    [again1, removed, !!lost, !!lost2, dead.status]);
+  await again.close();
   // guessing the key: a handful of tries, then the door
   const guesser = new Client(port, 'mod', from(6));
   await guesser.hello('Guesser', 6);
@@ -649,6 +688,40 @@ async function testModeration(start, dist) {
   check('admin: after a few wrong keys the connection is closed', shut !== undefined && guesser.msgs.filter((m) => m.t === 'admin').length <= 5, [shut, guesser.msgs.filter((m) => m.t === 'admin').length]);
   await Promise.all([adm, other, back, sameAddress, sameDevice].map((c) => c.close()));
   await server.stop();
+  fs.rmSync(file, { force: true });
+}
+
+// Where the visitors come from: counted by day and by country, the last visits kept, for the administrators.
+// (Under Node the server is told, by a proxy's headers, where each request comes from; the local Workers
+// runtime gives every request the same made-up place.)
+async function testVisitors(start, dist) {
+  const file = path.join(os.tmpdir(), `mmf-visitors-${process.pid}.json`);
+  fs.rmSync(file, { force: true });
+  const server = await start({ DIST_DIR: dist, GEO_HEADERS: '1', SCORES_FILE: file });
+  const { port } = server;
+  const json = (res) => { try { return JSON.parse(res.body.toString()); } catch { return null; } };
+  const post = (target, body, headers = {}) => request(port, target, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });
+  const admin = { authorization: `Bearer ${ADMIN_KEY}` };
+  const a = randomId(16), b = randomId(16);
+  await post('/api/visit', { device: a, tz: 0, name: 'Ada' }, { 'cf-ipcountry': 'FR', 'cf-ipcity': 'Lyon', 'cf-region': 'Auvergne' });
+  await post('/api/visit', { device: a, tz: 0, name: 'Ada' }, { 'cf-ipcountry': 'FR', 'cf-ipcity': 'Lyon', 'cf-region': 'Auvergne' });
+  await post('/api/visit', { device: b, tz: 0, name: '<b>Bob</b>' }, { 'cf-ipcountry': 'br', 'cf-ipcity': 'São Paulo' }); // (a header carries UTF-8 one byte per character)
+  const none = await request(port, '/api/visitors');
+  const rep = json(await request(port, '/api/visitors', { headers: admin }));
+  const day = rep?.days?.[0], last = rep?.recent?.[0], first = rep?.recent?.[1];
+  check('visitors: counted by day (people, page loads), the last visits kept — for the administrators only',
+    none.status === 403 && rep?.today === new Date().toISOString().slice(0, 10) && day?.day === rep.today && day.u === 2 && day.n === 3 && rep.recent.length === 2
+    && last.name === 'bBob/b' && last.dev === b.slice(0, 8) && first.name === 'Ada' && first.n === 2 && Object.values(day.by).reduce((t, n) => t + n, 0) === 2,
+    [none.status, rep]);
+  if (!CF) {
+    check('visitors: the country and the town of each, as the proxy in front of the server gives them',
+      day.by.FR === 1 && day.by.BR === 1 && rep.countries.length === 2 && last.cc === 'BR' && last.city === 'São Paulo' && first.cc === 'FR' && first.city === 'Lyon' && first.region === 'Auvergne',
+      [day, rep.countries, last, first]);
+    const kept = (() => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } })();
+    check('visitors: kept with the rest — the visit of a device remembers where it came from', kept?.[`visit:${a}`]?.cc === 'FR' && kept[`visit:${a}`].city === 'Lyon' && kept[`visit:${b}`]?.cc === 'BR' && !!kept['visitors:days'] && kept['visitors:recent'].length === 2, kept && Object.keys(kept));
+  }
+  await server.stop();
+  fs.rmSync(file, { force: true });
 }
 
 // ------------------------------------------------------------------------------- the API: scores, characters
@@ -1215,6 +1288,7 @@ try {
     await section('cloudflare', () => testCloudflare(server, fx));
     await section('crowd', () => testCrowd(startWorker, fx.dist));
     await section('moderation', () => testModeration(startWorker, fx.dist));
+    await section('visitors', () => testVisitors(startWorker, fx.dist));
     if (process.env.NET_TEST_LOG) fs.writeFileSync(process.env.NET_TEST_LOG, server.log);
     // (the local tool also logs its own failed attempts to reach Cloudflare when offline: not the Worker's)
     const trouble = server.log.split('\n').filter((line) => /\[wrangler:error\]|\[ERROR\]|Uncaught/.test(line));
@@ -1230,6 +1304,7 @@ try {
     await section('shop', () => testShop(server));
     await section('crowd', () => testCrowd(startServer, fx.dist));
     await section('moderation', () => testModeration(startServer, fx.dist));
+    await section('visitors', () => testVisitors(startServer, fx.dist));
     const kept = (() => { try { return JSON.parse(fs.readFileSync(path.join(fx.tmp, 'scores.json'), 'utf8')); } catch { return null; } })();
     check('api: the Node server keeps the boards and the visits in its file', kept?.['board:sky']?.all?.length === 1 && kept['board:sky'].all[0].at > 0 && kept['board:shoot']?.day?.list?.[0]?.name === 'Dana' && Object.keys(kept).some((k) => k.startsWith('visit:')), kept);
     check('server: still running at the end, nothing on stderr', server.alive() && !/error|exception/i.test(server.log), server.log);

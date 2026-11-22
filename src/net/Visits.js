@@ -9,9 +9,9 @@ const get = (k) => { try { return localStorage.getItem(k); } catch { return null
 const set = (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } };
 
 /** Counts today's visit. Resolves to { days (in a row, today included), best, shared (counted by the server) }. Never throws. */
-export async function countVisit() {
+export async function countVisit(name = '') {
   const tz = new Date().getTimezoneOffset();
-  const body = await callApi('api/visit', { method: 'POST', body: { device: deviceId(), tz } });
+  const body = await callApi('api/visit', { method: 'POST', body: { device: deviceId(), tz, ...(name && { name }) } });
   if (body && Number.isInteger(body.days)) { set('mmf.visits', JSON.stringify({ day: body.today, days: body.days, best: body.best })); return { days: body.days, best: body.best, shared: true }; }
   // (offline, or a site of plain files: this browser counts by itself)
   let seen = null;

@@ -6,12 +6,16 @@
 //   GET  /api/status                          → { ok, npc, admin, shop, time }   (what is configured: no secret)
 //   POST /api/visit  { device, tz }           → { days, best, today }             (see visit())
 //   GET | POST | DELETE /api/scores, POST /api/run                                 (see scores.js)
-//   GET  /api/admin                           → { ok }   (with the administrator's key: Authorization: Bearer …)
+//   GET  /api/admin                           → { ok, owner }   (with an administrator's key: Authorization: Bearer …)
+//   GET | DELETE /api/admins                  the administrators the owner and the others have named (admins.js)
+//   GET  /api/visitors                        where the visitors come from, for the administrators (visitors.js)
 //   GET | POST | DELETE /api/bans             the administrator's list of who is kept out (see below)
 //
 //   the shop and the sponsors: /api/shop, /api/checkout, /api/stripe/webhook, /api/sponsor(s), /api/logo (see shop.js)
 //
-// req: { method, path, query (URLSearchParams), body (object | null), client (address), admin (boolean),
+// req: { method, path, query (URLSearchParams), body (object | null), client (address), admin (boolean: the
+//        owner's key came with the request), bearer (the key that came, for those the owner has named),
+//        geo ({ cc, city, region } when the host knows where the request comes from),
 //        raw (the body as text, for the paths that need it), signature (Stripe's), site (https://the.game) }
 // ctx: { store: { get(key), put(key, value), delete(key) } (may be asynchronous), limiter (api.js),
 //        secret(): the signing secret of this deployment, flags: { npc, admin, shop }, now(): ms,
@@ -22,6 +26,8 @@ import { BOARDS, addScore, cleanScore, removeScore, runFits, topsOf } from './sc
 import { randomId, sign, verify } from './token.js';
 import { cleanName } from './protocol.js';
 import { shopRoute } from './shop.js';
+import { adminOf, listAdmins, removeAdmin } from './admins.js';
+import { cleanGeo, noteVisit, visitorsReport } from './visitors.js';
 
 const out = (status, body, headers = {}) => ({ status, body, headers });
 const DAY = 86400_000;
@@ -86,7 +92,28 @@ export async function route(req, ctx) {
 
   if (path === '/api/status') return out(200, { ok: true, ...ctx.flags, time: now });
 
-  if (path === '/api/admin') return req.admin ? out(200, { ok: true }) : out(403, { error: 'Forbidden.' });
+  // who is asking: the owner (the host has recognised its key), an administrator the owner or another has
+  // named (their key is looked up here), or a visitor
+  const owner = !!req.admin;
+  if (!owner && req.bearer) req.admin = !!(await adminOf(ctx.store, '', req.bearer));
+
+  if (path === '/api/admin') return req.admin ? out(200, { ok: true, owner }) : out(403, { error: 'Forbidden.' });
+
+  if (path === '/api/admins') {
+    if (!req.admin) return out(403, { error: 'Forbidden.' });
+    if (method === 'DELETE') {
+      if (!owner) return out(403, { error: 'Only the owner takes the title away.' });
+      return out(200, { removed: await removeAdmin(ctx.store, query.get('id') || '') ? 1 : 0, admins: await listAdmins(ctx.store) });
+    }
+    if (method !== 'GET' && method !== 'HEAD') return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD, DELETE' });
+    return out(200, { owner, admins: await listAdmins(ctx.store) });
+  }
+
+  if (path === '/api/visitors') {
+    if (!req.admin) return out(403, { error: 'Forbidden.' });
+    if (method !== 'GET' && method !== 'HEAD') return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD' });
+    return out(200, await visitorsReport(ctx.store, now));
+  }
 
   if (path === '/api/bans') {
     if (!req.admin) return out(403, { error: 'Forbidden.' });
@@ -109,7 +136,12 @@ export async function route(req, ctx) {
     if (!body || !DEVICE.test(body.device || '')) return out(400, { error: 'Not a visit.' });
     const key = `visit:${body.device}`, today = localDay(now, body.tz);
     const seen = await ctx.store.get(key), next = visit(seen, today);
-    if (!seen || seen.day !== next.day || seen.days !== next.days) await ctx.store.put(key, next);
+    // (where from, when the host knows: kept with the visit, and counted for the administrators)
+    const geo = cleanGeo(req.geo), first = !seen || seen.day !== next.day;
+    if (geo) Object.assign(next, { cc: geo.cc, city: geo.city });
+    else if (seen?.cc) Object.assign(next, { cc: seen.cc, city: seen.city || '' });
+    if (first || seen.days !== next.days || seen.cc !== next.cc || seen.city !== next.city) await ctx.store.put(key, next);
+    await noteVisit(ctx.store, { device: body.device, name: typeof body.name === 'string' ? body.name : '', geo, first }, now);
     return out(200, { days: next.days, best: next.best, today });
   }
 
