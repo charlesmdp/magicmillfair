@@ -1,7 +1,7 @@
 // Coming back day after day: the server counts how many days in a row this device has visited (POST
 // /api/visit, see server/routes.js) — this browser counts by itself when there is no server to ask.
 // The device is a random number drawn here once: it says nothing about who is visiting.
-import { localDay, visit } from '../../server/routes.js';
+import { localDay, visit } from '../../server/visits.js';
 import { deviceId } from './device.js';
 import { callApi } from './api.js';
 

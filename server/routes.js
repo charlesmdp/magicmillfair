@@ -10,6 +10,7 @@
 //   GET | DELETE /api/admins                  the administrators the owner and the others have named (admins.js)
 //   GET  /api/visitors                        where the visitors come from, for the administrators (visitors.js)
 //   GET | POST | DELETE /api/bans             the administrator's list of who is kept out (see below)
+//   GET | POST /api/account                   an account to keep what was bought and earned (accounts.js)
 //
 //   the shop and the sponsors: /api/shop, /api/checkout, /api/stripe/webhook, /api/sponsor(s), /api/logo (see shop.js)
 //
@@ -28,22 +29,12 @@ import { cleanName } from './protocol.js';
 import { shopRoute } from './shop.js';
 import { adminOf, listAdmins, removeAdmin } from './admins.js';
 import { cleanGeo, noteVisit, visitorsReport } from './visitors.js';
+import { accountRoute, visitRecord } from './accounts.js';
+import { localDay, visit } from './visits.js';
 
 const out = (status, body, headers = {}) => ({ status, body, headers });
-const DAY = 86400_000;
 
-/** The calendar day (as a number of days since 1970) at a visitor's place: the server's clock, their time zone. */
-export const localDay = (at, tzMinutes) => Math.floor((at - Math.max(-840, Math.min(840, Number(tzMinutes) || 0)) * 60_000) / DAY);
-
-/**
- * A visit: how many days in a row this device has come (1 on the first day), and its longest run ever.
- * `seen` is what was kept ({ day, days, best }) or nothing. Returns the new record.
- */
-export function visit(seen, day) {
-  const was = seen && Number.isInteger(seen.day) ? seen : null;
-  const days = !was ? 1 : day === was.day ? was.days : day === was.day + 1 ? was.days + 1 : day > was.day ? 1 : was.days;
-  return { day: was ? Math.max(day, was.day) : day, days, best: Math.max(days, was?.best || 0) };
-}
+export { localDay, visit };
 
 const DEVICE = /^[A-Za-z0-9_-]{16,64}$/, ADDRESS = /^[0-9a-fA-F:.]{2,64}$/;
 
@@ -134,13 +125,14 @@ export async function route(req, ctx) {
     if (method !== 'POST') return out(405, { error: 'Method not allowed.' }, { Allow: 'POST' });
     if (limited('visit')) return busy;
     if (!body || !DEVICE.test(body.device || '')) return out(400, { error: 'Not a visit.' });
-    const key = `visit:${body.device}`, today = localDay(now, body.tz);
-    const seen = await ctx.store.get(key), next = visit(seen, today);
+    const today = localDay(now, body.tz);
+    // (the days in a row are those of the account, for a browser that is signed in)
+    const record = await visitRecord(ctx.store, body.device), seen = record.seen, next = visit(seen, today);
     // (where from, when the host knows: kept with the visit, and counted for the administrators)
     const geo = cleanGeo(req.geo), first = !seen || seen.day !== next.day;
     if (geo) Object.assign(next, { cc: geo.cc, city: geo.city });
     else if (seen?.cc) Object.assign(next, { cc: seen.cc, city: seen.city || '' });
-    if (first || seen.days !== next.days || seen.cc !== next.cc || seen.city !== next.city) await ctx.store.put(key, next);
+    if (first || seen.days !== next.days || seen.cc !== next.cc || seen.city !== next.city) await record.save(next);
     await noteVisit(ctx.store, { device: body.device, name: typeof body.name === 'string' ? body.name : '', geo, first }, now);
     return out(200, { days: next.days, best: next.best, today });
   }
@@ -184,6 +176,10 @@ export async function route(req, ctx) {
     await ctx.store.put(`board:${score.board}`, state);
     return out(200, { board: score.board, ...topsOf(state, now), rank, best });
   }
+
+  // an account, to keep things from one browser to the next (accounts.js)
+  const account = await accountRoute(req, ctx, limited);
+  if (account) return account;
 
   // the shop, the sponsors (shop.js)
   const shop = await shopRoute(req, ctx);

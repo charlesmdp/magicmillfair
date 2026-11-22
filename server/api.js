@@ -29,6 +29,7 @@ export const LIMITS = {
   visit: [[10, 60_000], [60, 3600_000]],
   checkout: [[12, 60_000], [60, 3600_000]], // a payment page asked for (a few bids in a row are not a flood)
   sponsor: [[12, 60_000], [40, 3600_000]], // what a sponsor wants shown (a picture each time)
+  account: [[10, 60_000], [40, 3600_000]], // a name and a password tried (creating, signing in, a new password)
   npc: [[10, 60_000], [120, 3600_000]],
   npcDay: [3000, 24 * 3600_000], // everyone together: a ceiling on what the key can spend in a day
 };

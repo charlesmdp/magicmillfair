@@ -200,6 +200,7 @@ export class Hud {
         <button class="open-shop" type="button">Open the item shop</button>
         <h3>Your name</h3>
         <input type="text" maxlength="16" class="name" autocomplete="off" spellcheck="false" />
+        <div class="acct" hidden><h3>Account</h3><p class="acct-info"></p><div class="acct-acts"></div></div>
         <p class="net-info"></p>
         <p class="version">${VERSION}</p>
       </div>`;
@@ -337,6 +338,28 @@ export class Hud {
   }
 
   // ---------- the shop: what the hats and the jetpack cost, while they are sold
+  /**
+   * The account, in the settings: for a guest, what an account is for and the buttons to make one or sign
+   * in; for who is signed in, their name and the way out. `available`: is there a server to keep accounts?
+   * 'account' is emitted with 'create', 'login', 'reset' or 'logout'.
+   */
+  setAccount({ name = null, available = false } = {}) {
+    const box = this.hud.querySelector('.acct'), info = box.querySelector('.acct-info'), acts = box.querySelector('.acct-acts');
+    box.hidden = !available;
+    acts.textContent = '';
+    const act = (label, what, cls = '') => { const b = el('button', cls); b.type = 'button'; b.textContent = label; b.onclick = () => { this.panel.classList.remove('on'); this.emit('account', what); }; acts.append(b); };
+    info.textContent = '';
+    if (name) {
+      info.append('Signed in as ', el('b', '', ''), '. What you buy, your days in a row and the look of your robot follow you to any browser you sign in from.');
+      info.querySelector('b').textContent = name;
+      act('Sign out', 'logout');
+    } else {
+      info.textContent = 'You are playing as a guest: what you buy and earn is kept in this browser only. An account — a name and a password, nothing else — keeps it wherever you sign in.';
+      act('Create an account', 'create', 'main');
+      act('Sign in', 'login');
+      act('Forgot the password', 'reset', 'quiet');
+    }
+  }
   /** Everything that opens over the game is closed (something else is about to take the screen). */
   closeAll() { this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this.toggleBigMap(false); this.closeRoster(); this.toggleChat(false); }
   /** Whoever has the box of fireworks gets a button for it in the emotes. */
@@ -366,6 +389,7 @@ export class Hud {
         const row = el('label'), name = el('span'), input = el('input');
         name.textContent = f.label;
         if (f.type === 'file') { input.type = 'file'; input.accept = 'image/png,image/jpeg,image/webp'; }
+        else if (f.type === 'password') { input.type = 'password'; input.maxLength = 100; input.autocomplete = f.fresh ? 'new-password' : 'current-password'; }
         else { input.type = 'text'; input.maxLength = f.max || 60; input.value = f.value || ''; input.autocomplete = 'off'; input.spellcheck = false; if (f.hint) input.placeholder = f.hint; }
         row.append(name, input);
         list.append(row);
@@ -373,7 +397,9 @@ export class Hud {
       }
       const ok = el('button', 'save');
       ok.type = 'button'; ok.textContent = save;
-      ok.onclick = (e) => { e.stopPropagation(); done(Object.fromEntries(fields.map((f) => [f.key, f.type === 'file' ? inputs[f.key].files[0] || null : inputs[f.key].value.trim()]))); };
+      const send = () => done(Object.fromEntries(fields.map((f) => [f.key, f.type === 'file' ? inputs[f.key].files[0] || null : f.type === 'password' ? inputs[f.key].value : inputs[f.key].value.trim()])));
+      ok.onclick = (e) => { e.stopPropagation(); send(); };
+      for (const f of fields) if (f.type !== 'file') inputs[f.key].addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); send(); } e.stopPropagation(); });
       list.append(ok);
       close.onclick = (e) => { e.stopPropagation(); done(null); };
       box.onclick = (e) => { if (e.target === box) done(null); };

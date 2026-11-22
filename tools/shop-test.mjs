@@ -174,6 +174,48 @@ try {
   await page.waitForSelector('.chooser.on', { timeout: 20000 });
   const cars = await page.evaluate(() => [...document.querySelectorAll('.chooser .list button')].map((b) => b.textContent));
   check('the stand of the wheel lists its twenty-four gondolas, free at $29 a month', stand.includes('The gondolas and their sponsors') && cars.length === 24 && /Gondola 7/.test(cars[6]) && /Free · \$29 a month/.test(cars[6]), JSON.stringify({ stand, cars: cars.slice(5, 8) }));
+  // ---- an account: made from the settings; what was bought, and the look, follow to another browser
+  await page.keyboard.press('Escape');
+  await frames(3);
+  await page.evaluate(() => window.__mmf.equip('hat:crown', true));
+  await page.click('[data-act="settings"]');
+  const guestSays = await page.evaluate(() => document.querySelector('.acct-info').textContent);
+  await page.click('.acct-acts .main');
+  await page.waitForSelector('.chooser.on .fields', { timeout: 20000 });
+  const fields = page.locator('.chooser .fields input');
+  await fields.nth(0).fill('Shop Tester');
+  await fields.nth(1).fill('correct horse battery');
+  await fields.nth(2).fill('correct horse battery');
+  await page.click('.chooser .fields .save');
+  await page.waitForFunction(() => /Write this down/.test(document.querySelector('.chooser h2').textContent) && document.querySelector('.chooser').classList.contains('on'), null, { timeout: 30000 });
+  const code = await page.evaluate(() => document.querySelector('.chooser .list button b, .chooser .list button').textContent);
+  await page.click('.chooser .list button');
+  await page.click('[data-act="settings"]');
+  const signed = await page.evaluate(() => ({ name: window.__mmf.account.name, says: document.querySelector('.acct-info').textContent, acts: [...document.querySelectorAll('.acct-acts button')].map((b) => b.textContent) }));
+  await page.click('[data-act="settings"]');
+  await new Promise((r) => setTimeout(r, 2200)); // (the look is kept a moment after it changes)
+  // another browser: a guest with nothing; signed in, everything is there
+  const other = await browser.newContext({ viewport: { width: 960, height: 560 }, deviceScaleFactor: 1 });
+  const page2 = await other.newPage();
+  page2.on('pageerror', (e) => logs.push(e.message));
+  await page2.goto(`${BASE}/?q=${opt.q || 'low'}`);
+  await page2.waitForSelector('.card.ready', { timeout: 240000 });
+  await page2.click('.go');
+  await page2.waitForFunction(() => window.__mmf && window.__mmf.ready && window.__mmf.player && window.__mmf.shop.open, null, { timeout: 60000 });
+  const asGuest = await page2.evaluate(() => ({ owned: [...window.__mmf.shop.owned], hat: window.__mmf.me.look.hat, account: window.__mmf.account.name }));
+  await page2.click('[data-act="settings"]');
+  await page2.evaluate(() => [...document.querySelectorAll('.acct-acts button')].find((b) => b.textContent === 'Sign in').click());
+  await page2.waitForSelector('.chooser.on .fields', { timeout: 20000 });
+  await page2.locator('.chooser .fields input').nth(0).fill('shop tester');
+  await page2.locator('.chooser .fields input').nth(1).fill('correct horse battery');
+  await page2.locator('.chooser .fields input').nth(1).press('Enter');
+  await page2.waitForFunction(() => window.__mmf.account.name === 'Shop Tester' && window.__mmf.shop.owned.has('hat:crown'), null, { timeout: 30000 });
+  const there = await page2.evaluate(() => { const a = window.__mmf; return { owned: [...a.shop.owned].sort(), hat: a.me.look.hat, tank: a.player.tank, mine: !!a.shop.slots['board:shoot']?.mine }; });
+  await other.close();
+  check('an account is made from the settings (a name, a password, a recovery code shown once): the guest becomes somebody',
+    /guest/.test(guestSays) && /^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}/.test(code) && signed.name === 'Shop Tester' && /Signed in as Shop Tester/.test(signed.says) && signed.acts.join() === 'Sign out', JSON.stringify({ guestSays: guestSays.slice(0, 60), code: `${code.slice(0, 4)}…`, signed }));
+  check('from another browser, signed in: what was bought, the hat that was worn and the panel that is sponsored are all there',
+    !asGuest.owned.length && asGuest.hat === 0 && asGuest.account === null && there.owned.join() === 'hat:crown,jetlite' && there.hat === 6 && Math.abs(there.tank - 0.5) < 0.01 && there.mine, JSON.stringify({ asGuest, there }));
   check('no error in the page', logs.length === 0, logs.join(' | '));
 } catch (err) {
   check('the test ran to its end', false, String(err && err.stack ? err.stack : err).slice(0, 600));

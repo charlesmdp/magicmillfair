@@ -12,8 +12,10 @@
 //   POST   /api/sponsors  { slot, approve } | { slot, set: { title, subtitle, url, logo } }
 //   DELETE /api/sponsors?slot=…                        the administrator frees a place
 //
-// Who is who: a visitor is the random name their browser gave itself (`device`, see src/net/device.js) — there
-// are no accounts. What is paid is only ever learnt from Stripe (the webhook), never from the browser.
+// Who is who: a visitor is the random name their browser gave itself (`device`, see src/net/device.js); one who
+// has signed in to an account (accounts.js) is all the browsers of that account at once: what any of them
+// bought or holds is theirs on each. What is paid is only ever learnt from Stripe (the webhook), never from
+// the browser.
 //
 // What a sponsor sends is not trusted:
 // - nothing is shown before the administrator has approved it;
@@ -36,6 +38,7 @@
 import { allowed } from './api.js';
 import { describe, publicPrices, nextBid, AUCTION, CURRENCY } from './catalog.js';
 import { createCheckout, verifyWebhook, refundPayment } from './stripe.js';
+import { accountOf, addItem, itemsOf, sameOwner } from './accounts.js';
 
 const out = (status, body, headers = {}) => ({ status, body, headers });
 const DEVICE = /^[A-Za-z0-9_-]{16,64}$/;
@@ -88,7 +91,9 @@ export function cleanLogo(base64) {
 
 const bytesOf = (data) => Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
 const slotsOf = async (ctx) => (await ctx.store.get('slots')) || {};
-const ownedBy = async (ctx, device) => ((await ctx.store.get(`own:${device}`)) || {}).items || [];
+const ownedBy = (ctx, device) => itemsOf(ctx.store, device);
+/** The browsers that are this visitor: this one, and the others of its account. */
+const selves = async (ctx, device) => { const acct = DEVICE.test(device || '') ? await accountOf(ctx.store, device) : null; return new Set(acct ? [...acct.devices, device] : device ? [device] : []); };
 const logoUrl = (id, version, draft) => `/api/logo?slot=${encodeURIComponent(id)}${draft ? '&draft=1' : ''}&v=${version}`;
 const shown = (id, s) => ({ title: s.title || '', subtitle: s.subtitle || '', url: s.url || '', logo: s.logo ? logoUrl(id, s.logo) : null });
 
@@ -97,13 +102,12 @@ export async function grant(ctx, item, device, sub = null) {
   const what = describe(item);
   if (!what || !DEVICE.test(device || '')) return false;
   if (what.kind === 'own') {
-    const items = await ownedBy(ctx, device);
-    if (!items.includes(item)) await ctx.store.put(`own:${device}`, { items: [...items, item], at: ctx.now() });
+    await addItem(ctx.store, device, item, ctx.now());
     return true;
   }
   if (what.auction) return false; // (an auctioned place is taken by a bid: takeBid)
   const slots = await slotsOf(ctx);
-  if (slots[item] && slots[item].by !== device) return false; // (somebody else got there first: for the administrator to sort out)
+  if (slots[item] && !(await sameOwner(ctx.store, slots[item].by, device))) return false; // (somebody else got there first: for the administrator to sort out)
   slots[item] = { ...(slots[item] || { state: 'paid', logo: 0 }), by: device, sub: typeof sub === 'string' ? sub : null, at: ctx.now() };
   await ctx.store.put('slots', slots);
   return true;
@@ -140,10 +144,11 @@ export async function takeBid(ctx, cfg, item, device, amount, pay) {
     return false;
   }
   // (who raises their own bid keeps what they show; a newcomer starts from an empty panel)
-  slots[item] = cur && cur.by === device ? { ...cur, bid: amount, pay, at: ctx.now() } : { by: device, sub: null, at: ctx.now(), state: 'paid', logo: 0, bid: amount, pay };
+  const again = !!cur && (await sameOwner(ctx.store, cur.by, device));
+  slots[item] = again ? { ...cur, by: device, bid: amount, pay, at: ctx.now() } : { by: device, sub: null, at: ctx.now(), state: 'paid', logo: 0, bid: amount, pay };
   await ctx.store.put('slots', slots);
   if (cur) {
-    if (cur.by !== device) {
+    if (!again) {
       await ctx.store.delete(`logo:${item}`);
       await ctx.store.delete(`logo:${item}:draft`);
       await leaveNote(ctx, cur.by, `You were outbid on ${what.label}: ${cur.pay ? 'your payment has been refunded in full' : 'the panel has a new sponsor'}.`);
@@ -169,11 +174,11 @@ export async function shopRoute(req, ctx) {
 
   if (path === '/api/shop') {
     if (!reading) return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD' });
-    const device = query.get('device') || '', mine = DEVICE.test(device), slots = await slotsOf(ctx), view = {};
+    const device = query.get('device') || '', mine = DEVICE.test(device), slots = await slotsOf(ctx), view = {}, me = mine ? await selves(ctx, device) : new Set();
     for (const [id, s] of Object.entries(slots)) {
       view[id] = s.state === 'live' ? { state: 'live', ...shown(id, s) } : { state: 'taken' };
       if (describe(id)?.auction) Object.assign(view[id], { bid: s.bid || 0, next: nextBid(s.bid || 0) }); // (what it went for, what beats it)
-      if (mine && s.by === device) Object.assign(view[id], { mine: true, paid: true, draft: s.draft ? { ...s.draft, logo: s.draft.logo > 0 ? logoUrl(id, s.draft.logo, true) : null } : null });
+      if (mine && me.has(s.by)) Object.assign(view[id], { mine: true, paid: true, draft: s.draft ? { ...s.draft, logo: s.draft.logo > 0 ? logoUrl(id, s.draft.logo, true) : null } : null });
     }
     // (what happened while they were away — outbid, refunded — is said once)
     let notes = [];
@@ -226,7 +231,7 @@ export async function shopRoute(req, ctx) {
     if (method !== 'POST') return out(405, { error: 'Method not allowed.' }, { Allow: 'POST' });
     if (limited('sponsor')) return busy;
     const slots = await slotsOf(ctx), id = body?.slot, s = typeof id === 'string' ? slots[id] : null;
-    if (!s || !(req.admin || (DEVICE.test(body.device || '') && s.by === body.device))) return out(403, { error: 'This place is not yours.' });
+    if (!s || !(req.admin || (DEVICE.test(body.device || '') && (await selves(ctx, body.device)).has(s.by)))) return out(403, { error: 'This place is not yours.' });
     const draft = { title: cleanText(body.title, 28), subtitle: cleanText(body.subtitle, 40), url: cleanUrl(body.url), logo: 0 };
     if (!draft.title) return out(400, { error: 'A name is needed.' });
     if (body.url && !draft.url) return out(400, { error: 'The link must start with https://' });
@@ -244,7 +249,7 @@ export async function shopRoute(req, ctx) {
   if (path === '/api/logo') {
     if (!reading) return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD' });
     const id = query.get('slot') || '', draft = query.get('draft') === '1', s = (await slotsOf(ctx))[id];
-    if (!s || (draft ? !(req.admin || s.by === query.get('device')) : s.state !== 'live')) return out(404, { error: 'Not found.' });
+    if (!s || (draft ? !(req.admin || (await selves(ctx, query.get('device') || '')).has(s.by)) : s.state !== 'live')) return out(404, { error: 'Not found.' });
     const logo = await ctx.store.get(draft ? `logo:${id}:draft` : `logo:${id}`);
     if (!logo || !/^image\/(png|jpeg|webp)$/.test(logo.type)) return out(404, { error: 'Not found.' });
     return {

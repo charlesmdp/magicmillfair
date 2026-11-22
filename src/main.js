@@ -13,6 +13,7 @@ import { drawSponsor } from './world/zones/games/Boards.js';
 import { ShopView } from './ui/ShopView.js';
 import { Previewer } from './ui/Preview.js';
 import { Sparks } from './world/effects/Sparks.js';
+import { Account } from './net/Account.js';
 import { Shop, price, logoData, loadImage } from './net/Shop.js';
 import { PlayerController, JET } from './player/PlayerController.js';
 import { CameraRig } from './player/CameraRig.js';
@@ -717,13 +718,68 @@ async function boot() {
     }
     return list;
   };
-  /** What is worn goes on the avatar, is remembered, and is told to the others. */
+  /** What is worn goes on the avatar, is remembered (by the account too, for who has one), and is told to the others. */
   function wear() {
     me.setPaint(kit.paint);
     store.set('mmf.hat', String(look.hat));
     store.set('mmf.kit', JSON.stringify({ paint: PAINTS[kit.paint], trail: TRAILS[kit.trail] }));
     presence?.setIdentity(name, color, packKit(kit));
+    keepProfile();
   }
+  // ---------- an account: not needed to play; it keeps what was bought, the days in a row and the look
+  const account = new Account();
+  const profileNow = () => ({ name, color, hat: HATS[look.hat]?.id || 'none', paint: PAINTS[kit.paint], trail: TRAILS[kit.trail] });
+  let keeping = 0;
+  function keepProfile() { if (!account.name) return; clearTimeout(keeping); keeping = setTimeout(() => account.save(profileNow()), 1500); }
+  /** The look kept by the account comes back on this browser (what is no longer theirs is left off: see refreshShop). */
+  const applyProfile = (p) => {
+    if (!p) return;
+    if (p.name) { name = p.name; store.set('mmf.name', name); hud.setName(name); world.games.setMe(name); }
+    if (Number.isInteger(p.color)) { color = p.color; me.setColor(color); store.set('mmf.color', String(color)); shopView.stale(); }
+    look.hat = Math.max(0, HATS.findIndex((h) => h.id === p.hat));
+    kit.paint = Math.max(0, PAINTS.indexOf(p.paint)); kit.trail = Math.max(0, TRAILS.indexOf(p.trail));
+  };
+  const showAccount = () => hud.setAccount({ name: account.name, available: account.available });
+  /** Signed in (or out): what is owned, the days in a row and the look are asked again. */
+  const accountChanged = async () => {
+    showAccount();
+    await refreshShop();
+    const v = await countVisit(name);
+    who.days = v.days;
+    showEmotes();
+  };
+  const accountAction = async (what) => {
+    if (what === 'logout') { await account.logout(); await accountChanged(); hud.note('Signed out: this browser is a guest again.', 5000); return; }
+    if (what === 'create') {
+      const got = await hud.form('Create an account', 'A name and a password: nothing else is asked. Your purchases, your days in a row and the look of your robot will follow you to any browser you sign in from.',
+        [{ key: 'name', label: 'Account name (3 to 16 letters or digits)', value: /^Visitor \d+$/.test(name) ? '' : name, max: 16 }, { key: 'password', label: 'Password (at least 8 characters)', type: 'password', fresh: true }, { key: 'again', label: 'The password again', type: 'password', fresh: true }], 'Create the account');
+      if (!got) return;
+      if (got.password !== got.again) { hud.note('The two passwords are not the same.', 5000); return; }
+      const made = await account.create(got.name, got.password, profileNow());
+      if (made.error) { hud.note(made.error, 6000); return; }
+      await accountChanged();
+      audio.play('victory');
+      await hud.choose('Write this down', `Your account "${account.name}" is made, and this browser is signed in. If you ever forget the password, this recovery code is the only way back in — it is shown once:`, [{ label: made.recovery, note: 'I have written it down', color: [0.9, 0.7, 0.2] }]);
+      return;
+    }
+    if (what === 'reset') {
+      const got = await hud.form('A new password', 'With the recovery code you were given when the account was made.',
+        [{ key: 'name', label: 'Account name', max: 16 }, { key: 'code', label: 'Recovery code (XXXX-XXXX-XXXX)', max: 20 }, { key: 'password', label: 'New password (at least 8 characters)', type: 'password', fresh: true }], 'Set the password');
+      if (!got) return;
+      const done = await account.reset(got.name, got.code, got.password);
+      if (done.error) { hud.note(done.error, 6000); return; }
+    } else {
+      const got = await hud.form('Sign in', 'What you bought, your days in a row and the look of your robot come back.', [{ key: 'name', label: 'Account name', max: 16 }, { key: 'password', label: 'Password', type: 'password' }], 'Sign in');
+      if (!got) return;
+      const done = await account.login(got.name, got.password);
+      if (done.error) { hud.note(done.error, 6000); return; }
+    }
+    applyProfile(account.profile);
+    await accountChanged();
+    audio.play('victory');
+    hud.note(`Welcome back, ${account.name}!`, 5000);
+  };
+  Object.assign(app, { account, accountAction });
   const equip = (id, on) => {
     const [type, sub] = id.split(':');
     if (type === 'hat') look.hat = on ? Math.max(0, HATS.findIndex((h) => h.id === sub)) : 0;
@@ -737,7 +793,7 @@ async function boot() {
     input.exitLock();
     input.keys.clear(); // (nothing stays pressed behind the shop)
     if (pick) shopView.picked = pick;
-    shopView.open({ items: shopItems(), mode: shop.mode, note: 'It stays yours on this device.' });
+    shopView.open({ items: shopItems(), mode: shop.mode, note: account.name ? `It goes to your account, ${account.name}.` : 'It stays in this browser: an account (Settings) keeps it everywhere.' });
     audio.play('pick');
   };
   shopView
@@ -791,6 +847,7 @@ async function boot() {
     };
     again();
   });
+  account.load().then(showAccount);
   hud.setSettings(settings);
   hud.setVolume(volume);
   showEmotes();
@@ -840,6 +897,7 @@ async function boot() {
     .on('goto', (to) => goTo(to))
     .on('demote', async (id) => { await callApi(`api/admins?id=${encodeURIComponent(id)}`, { method: 'DELETE', key: who.key }); presence?.demote(id); refreshRoster(); })
     .on('shop', () => openShop())
+    .on('account', accountAction)
     .on('firework', lightFirework)
     .on('drop', () => { look.bouquet = false; look.kinds = undefined; })
     .on('volume', (key, value) => {
@@ -854,8 +912,8 @@ async function boot() {
       player.autoRun = settings.run;
       rig.follow = settings.follow;
     })
-    .on('color', (i) => { color = i; me.setColor(i); presence?.setIdentity(name, color); shopView.stale(); })
-    .on('name', (n) => { if (!n) return; name = n; presence?.setIdentity(name, color); store.set('mmf.name', name); world.games.setMe(name); })
+    .on('color', (i) => { color = i; me.setColor(i); presence?.setIdentity(name, color); shopView.stale(); keepProfile(); })
+    .on('name', (n) => { if (!n) return; name = n; presence?.setIdentity(name, color); store.set('mmf.name', name); world.games.setMe(name); keepProfile(); })
     .on('quality', (q) => {
       // a tier changes shaders, textures and shadow maps: simplest and safest is a clean restart at the same spot
       if (q === 'auto') store.del('mmf.quality'); else store.set('mmf.quality', q);

@@ -621,8 +621,21 @@ runs under Node (`server/index.js`) and on Cloudflare (`cloudflare/worker.js`).
 device — a random number drawn by the browser — the days in a row it has come back and the country and
 town it last came from, the visits counted by day and by country with the last three hundred of them (see
 *Where the visitors come from*), the administrators' list of who is kept out, and the administrators who
-were named (the hash of their key, never the key). No positions, no chat. Under Node these are a JSON
+were named (the hash of their key, never the key), and the accounts (a name, the hash of a password and of a recovery
+code, what was bought, the look of the robot). No e-mail, no positions, no chat. Under Node these are a JSON
 file; on Cloudflare, the storage of one Durable Object.
+
+**Accounts.** Nobody needs one: a visitor plays at once, as the random name their browser gave itself, and
+what they buy and earn is kept for that browser. An account (Settings → *Create an account*) is a name and
+a password, nothing else — no e-mail, nothing to confirm. A browser that signs in is attached to the
+account: what it had bought goes with it, and from then on the purchases, the days in a row, the sponsored
+places and the look of the robot (name, colour, hat, paint, trail) are the account's — sign in from another
+browser and it is all there. Signing out makes the browser a guest again, with what it bought itself.
+Passwords are never kept, only a salted PBKDF2-SHA256 of them (100,000 rounds, the most the Workers
+runtime allows); a wrong name and a wrong password get the same answer; ten wrong passwords close an
+account for a quarter of an hour, and an address may try ten a minute. With no e-mail there is no "send me
+a link": a **recovery code** is shown once when the account is made, and sets a new password (*Forgot the
+password*). Lose both and the account is lost — the administrator cannot read a password either.
 
 **The administrators.** The owner is whoever knows `ADMIN_KEY` (`/admin <key>` in the chat). Clicking the
 head count (top left) lists who is in the room — for everybody, the names; for an administrator, also the

@@ -918,6 +918,66 @@ async function testShop({ port }) {
   check('auction: a sponsor taken off by the administrator gets the bid back; the panel is free again, from a dollar',
     off.status === 200 && !bobTold.slots['board:mole'] && stripe.refunds.some((r) => r.pay === 'pi_bob_1') && /refunded in full/.test(bobTold.notes?.[0] || ''), [off.status, bobTold.notes, stripe.refunds.map((r) => r.pay)]);
 }
+// Accounts: nobody needs one; whoever signs in keeps what they bought, their days in a row and their look,
+// from one browser to the next.
+async function testAccounts({ port }) {
+  const json = (res) => { try { return JSON.parse(res.body.toString()); } catch { return null; } };
+  const post = (target, body, headers = {}) => request(port, target, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
+  const hook = async (event) => { const raw = JSON.stringify(event); return post('/api/stripe/webhook', raw, { 'stripe-signature': await signWebhook(STRIPE_HOOK, raw) }); };
+  const paid = (item, device) => ({ type: 'checkout.session.completed', data: { object: { id: 'cs_test_a', payment_status: 'paid', metadata: { item, device } } } });
+  const acct = (body, headers) => post('/api/account', body, headers);
+  const owned = async (device) => json(await request(port, `/api/shop?device=${device}`)).owned.slice().sort().join();
+  const a = randomId(16), b = randomId(16), who = `Ada ${randomId(3).replace(/[^A-Za-z0-9]/g, 'x')}`;
+  const guest = json(await request(port, `/api/account?device=${a}`));
+  const badName = await acct({ action: 'create', device: a, name: 'x', password: 'correct horse' }), shortPw = await acct({ action: 'create', device: a, name: who, password: 'short' });
+  const made = await acct({ action: 'create', device: a, name: who, password: 'correct horse', profile: { name: '<b>Ada</b>', color: 3, hat: 'crown', paint: 'gold', trail: 'x'.repeat(40), evil: '<script>' } });
+  const dup = await acct({ action: 'create', device: b, name: who.toUpperCase(), password: 'another one' });
+  const me = json(await request(port, `/api/account?device=${a}`));
+  check('accounts: nobody needs one; a name and a password make one (a recovery code is given once), and a name is taken only once',
+    guest?.account === null && badName.status === 400 && shortPw.status === 400 && made.status === 200 && /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/.test(json(made).recovery) && json(made).account.name === who
+    && dup.status === 409 && me.account?.name === who && me.account.profile.name === 'bAda/b' && me.account.profile.hat === 'crown' && me.account.profile.trail === 'none' && me.account.profile.evil === undefined && !JSON.stringify(me).includes('correct horse'),
+    [guest, badName.status, shortPw.status, made.status, dup.status, me]);
+  // another browser: what it bought as a guest joins the account when it signs in; what is bought from then on is the account's
+  await hook(paid('hat:cap', b));
+  const wrong = await acct({ action: 'login', device: b, name: who, password: 'wrong horse' });
+  const before = await owned(a);
+  const login = await acct({ action: 'login', device: b, name: who.toLowerCase(), password: 'correct horse' });
+  await hook(paid('trail:bubbles', a));
+  const [ownA, ownB] = [await owned(a), await owned(b)];
+  check('accounts: signing in from another browser brings what was bought on either side',
+    wrong.status === 403 && before === '' && login.status === 200 && json(login).account.profile.hat === 'crown' && json(login).account.devices === 2
+    && ownA === 'hat:cap,trail:bubbles' && ownB === 'hat:cap,trail:bubbles', [wrong.status, login.status, ownA, ownB]);
+  // the days in a row are the account's; the look is kept; a sponsored place held from one browser is theirs on the other
+  const v1 = json(await post('/api/visit', { device: a, tz: 0 })), v2 = json(await post('/api/visit', { device: b, tz: 0 }));
+  const saved = await acct({ action: 'save', device: b, profile: { name: 'Ada', color: 7, hat: 'cap', paint: 'none', trail: 'bubbles' } }), stranger = await acct({ action: 'save', device: randomId(16), profile: { name: 'Eve', color: 1 } });
+  await hook({ type: 'checkout.session.completed', data: { object: { id: 'cs_gondola', payment_status: 'paid', subscription: 'sub_acct_1', metadata: { item: 'gondola:11', device: a } } } });
+  const seenFromB = json(await request(port, `/api/shop?device=${b}`)).slots['gondola:11'], fill = await post('/api/sponsor', { slot: 'gondola:11', device: b, title: 'Ada and Sons' });
+  const look = json(await request(port, `/api/account?device=${a}`)).account.profile;
+  check('accounts: the days in a row, the look and the places held are the same from every browser of the account',
+    v1?.days === 1 && v2?.days === 1 && saved.status === 200 && stranger.status === 403 && look.color === 7 && look.hat === 'cap' && look.trail === 'bubbles' && seenFromB?.mine === true && fill.status === 200,
+    [v1, v2, saved.status, stranger.status, look, seenFromB, fill.status]);
+  // signing out: the browser is a guest again, with what it bought itself; a new password with the recovery code
+  await acct({ action: 'logout', device: b });
+  const out = json(await request(port, `/api/account?device=${b}`)), ownGuest = await owned(b);
+  const badCode = await acct({ action: 'reset', device: b, name: who, code: 'AAAA-BBBB-CCCC', password: 'brand new one' });
+  const reset = await acct({ action: 'reset', device: b, name: who, code: json(made).recovery.toLowerCase().replace(/-/g, ' '), password: 'brand new one' });
+  const old = await acct({ action: 'login', device: a, name: who, password: 'correct horse' }), fresh = await acct({ action: 'login', device: a, name: who, password: 'brand new one' });
+  check('accounts: signed out, a browser keeps only what it bought itself; the recovery code sets a new password, and the old one is dead',
+    out.account === null && ownGuest === 'hat:cap' && badCode.status === 403 && reset.status === 200 && old.status === 403 && fresh.status === 200, [out, ownGuest, badCode.status, reset.status, old.status, fresh.status]);
+  if (!CF) {
+    // (each try from another address: it is the account that closes, not the address)
+    let n = 20;
+    const tries = [];
+    for (let i = 0; i < 10; i++) tries.push((await acct({ action: 'login', device: b, name: who, password: `guess ${i}` }, { 'x-forwarded-for': `10.7.7.${n++}` })).status);
+    const locked = await acct({ action: 'login', device: b, name: who, password: 'brand new one' }, { 'x-forwarded-for': `10.7.7.${n++}` });
+    const nobody = await acct({ action: 'login', device: b, name: 'Nobody Here', password: 'correct horse' }, { 'x-forwarded-for': `10.7.7.${n++}` });
+    let flood = 0;
+    for (let i = 0; i < 12; i++) if ((await acct({ action: 'login', device: b, name: 'Somebody Else', password: 'x'.repeat(9) }, { 'x-forwarded-for': '10.7.8.1' })).status === 429) flood++;
+    check('accounts: ten wrong passwords close an account for a while, even to the right one; a name that does not exist is answered like a wrong password; an address may only try a few a minute',
+      tries.every((t) => t === 403) && nobody.status === 403 && json(nobody).error === json(wrong).error && locked.status === 429 && Number(locked.headers['retry-after']) > 800 && flood === 2, [tries, locked.status, locked.headers['retry-after'], flood]);
+  }
+}
+
 function testShopLogic() {
   const b64 = (text) => Buffer.from(text.padEnd(64)).toString('base64');
   check('shop logic: text is one short line without markup; links are https and carry no name or password',
@@ -1343,6 +1403,7 @@ try {
     await section('presence', () => testPresence(server));
     await section('api', () => testApi(server));
     await section('shop', () => testShop(server));
+    await section('accounts', () => testAccounts(server));
     await section('cloudflare', () => testCloudflare(server, fx));
     await section('crowd', () => testCrowd(startWorker, fx.dist));
     await section('moderation', () => testModeration(startWorker, fx.dist));
@@ -1360,6 +1421,7 @@ try {
     await section('presence', () => testPresence(server));
     await section('api', () => testApi(server));
     await section('shop', () => testShop(server));
+    await section('accounts', () => testAccounts(server));
     await section('crowd', () => testCrowd(startServer, fx.dist));
     await section('moderation', () => testModeration(startServer, fx.dist));
     await section('visitors', () => testVisitors(startServer, fx.dist));
