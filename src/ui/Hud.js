@@ -517,13 +517,12 @@ export class Hud {
     const groups = [
       ['', list.filter((e) => e.clip)],
       ['Cheer on', list.filter((e) => e.move)],
-      ['', ranks],
     ];
+    if (ranks.length) box.insertBefore(this._zoo(ranks, days), held);
     for (const [title, items] of groups) {
       if (!items.length) continue;
       const g = el('div', `group${items[0].rank ? ' rank' : ''}`);
       if (title) g.append(el('h4', '', title));
-      if (items[0].rank) g.append(this._streak(ranks, days));
       const row = el('div', 'set');
       for (const e of items) {
         const b = el('button');
@@ -539,6 +538,48 @@ export class Hud {
       box.insertBefore(g, held);
     }
   }
+  /**
+   * The animals of light: what they are, where the visitor stands, and a tile for each — a picture of those
+   * that are theirs and of the next one to come (still locked); the others are not shown before their day.
+   */
+  _zoo(ranks, days) {
+    const g = el('div', 'group rank'), zoo = el('div', 'zoo');
+    g.append(this._streak(ranks, days));
+    const next = ranks.find((e) => e.locked);
+    this._zooTiles = [];
+    for (const e of ranks) {
+      const known = !e.locked || e === next, b = el('button', `beast${e.locked ? ' locked' : ' owned'}${e === next ? ' next' : ''}${known ? '' : ' unknown'}`);
+      b.type = 'button';
+      const pic = el('span', 'pic');
+      if (!known) pic.textContent = '?';
+      b.append(pic, el('b', '', known ? e.label : '???'), el('small', '', e.locked ? (e === next ? `Day ${e.days} · ${Math.max(1, e.days - days)} to go` : `Day ${e.days}`) : 'Yours · play it'));
+      b.title = e.locked ? (e === next ? `The ${e.label.toLowerCase()} comes on day ${e.days} in a row: ${Math.max(1, e.days - days)} more to go` : `Comes on day ${e.days} in a row`) : `/${e.id}`;
+      b.onclick = () => { this.emit('emote', e.index); this.emotes.classList.remove('on'); };
+      zoo.append(b);
+      if (known) this._zooTiles.push({ kind: e.rank, pic });
+    }
+    g.append(zoo);
+    if (this.emotes.classList.contains('on')) this._zooPictures();
+    return g;
+  }
+  /** The pictures of the tiles, drawn the first time the panel is looked at (the game says how: setRankPicture). */
+  _zooPictures() {
+    if (!this._rankPicture) return;
+    this._rankCanvas ||= new Map();
+    for (const t of this._zooTiles || []) {
+      if (t.pic.firstChild) continue;
+      if (!this._rankCanvas.has(t.kind)) { let c = null; try { c = this._rankPicture(t.kind); } catch { c = null; } this._rankCanvas.set(t.kind, c); }
+      const c = this._rankCanvas.get(t.kind);
+      if (!c) continue;
+      const copy = document.createElement('canvas');
+      copy.width = c.width; copy.height = c.height;
+      copy.getContext('2d').drawImage(c, 0, 0);
+      t.pic.append(copy);
+    }
+  }
+  /** How a picture of an animal of light is had: fn(kind) → a canvas (or null). */
+  setRankPicture(fn) { this._rankPicture = fn; }
+
   // What the animals of light are and how one earns them: the days in a row so far, the next animal, how far along.
   _streak(ranks, days) {
     const box = el('div', 'streak'), count = el('div', 'count'), about = el('div', 'about');
@@ -551,7 +592,7 @@ export class Hud {
     const line = el('p', 'next');
     if (next) { const left = Math.max(1, next.days - days); line.append('Next: the ', el('b', '', next.label), ` on day ${next.days} — come back `, el('b', '', left === 1 ? 'tomorrow' : `${left} more days`), left === 1 ? '' : ' in a row'); }
     else line.append('Every animal is yours. Show them off!');
-    about.append(el('h4', '', 'Animals of light'), el('p', '', 'Visit every day: each day in a row calls a new animal to your side. Miss a day and the count starts again at 1.'), bar, line);
+    about.append(el('h4', '', 'Animals of light'), el('p', '', 'The most beautiful emotes of the fair: a ring of light opens above you and the animal comes alive in it for a few seconds, for everybody around to see. Visit every day: each day in a row calls a new one. Miss a day and the count starts again at 1.'), bar, line);
     box.append(count, about);
     return box;
   }
@@ -791,7 +832,7 @@ export class Hud {
   }
   setName(n) { this.nameInput.value = n; }
   setCameraMode(free) { this.cameraBtn.setAttribute('aria-pressed', String(free)); this.root.classList.toggle('free', free); }
-  toggleEmotes() { this.emotes.classList.toggle('on'); }
+  toggleEmotes() { this.emotes.classList.toggle('on'); if (this.emotes.classList.contains('on')) this._zooPictures(); }
   toggleStats() { const b = this.hud.querySelector('[data-sw="stats"]'); b.click(); }
   setStatsVisible(on) { this.statsOn = on; this.statsEl.classList.toggle('on', on); this.hud.querySelector('[data-sw="stats"]').setAttribute('aria-pressed', String(on)); }
   setStats(text) { if (this.statsOn) this.statsEl.textContent = text; }

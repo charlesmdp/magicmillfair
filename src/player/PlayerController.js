@@ -57,7 +57,7 @@ export class PlayerController {
     this.fuel = this.tank;
     this.gravity = 1; // (cheats)
     this.boost = 1;
-    this.spring = 1; // how high one jumps
+    this.hop = 1; // how high one jumps
     this.grip = 1; // how well the feet hold the ground (below 1: it is ice)
     this.cheat = false; // true while a cheat changes how one moves (the games then keep no record)
     this.autoRun = false; // a setting: run unless Shift is held, instead of the other way round
@@ -355,7 +355,7 @@ export class PlayerController {
         const lim = Math.hypot(pos.x - fromX, pos.z - fromZ) * 2.5 + 0.01, d = ground - this._ground;
         pos.y += d > lim ? lim : d < -lim ? -lim : d;
       }
-      if (control && inp.jump && !this.sliding) { vel.y = JUMP * this.spring * (riding ? 0.75 : 1); this.grounded = false; }
+      if (control && inp.jump && !this.sliding) { vel.y = JUMP * this.hop * (riding ? 0.75 : 1); this.grounded = false; }
       else if (ground < pos.y - 0.45) { this.grounded = false; vel.y = 0; }
       else pos.y += (ground - pos.y) * (1 - Math.exp(-dt * 22));
     } else {

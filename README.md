@@ -212,7 +212,10 @@ six seconds. Everybody around sees them. Ten of them, earned by coming back day 
 blows bubbles (2 days in a row), a squirrel that nibbles a nut (3), a carp that leaps as up a waterfall (5),
 a stag that rears (10), an eagle that spreads its wings (15), a panda that munches bamboo (20), a wolf that
 howls (25), a tiger that leaps through the ring (30), an elephant that trumpets (35) and a dragon that coils
-round the ring (50). The emote panel shows where you stand; the administrator has them all.
+round the ring (50). The emote panel shows where you stand, with a medallion for each animal: a picture of
+those that are yours (click one to play it) and of the next one to come, greyed, with the days still to
+go; the others stay a question mark until their turn. The pictures are drawn by the game's own renderer
+the first time the panel is opened (`rankPicture`). The administrator has them all.
 
 ## Things to do
 
@@ -302,8 +305,10 @@ round the ring (50). The emote panel shows where you stand; the administrator ha
   the game itself. Pick a card: what it is, what it costs, and a button to buy it (or to put it on and take
   it off, once it is yours). On the shelves: two **jetpacks** (the real one, a second and a half of thrust;
   the light one, a third of that), twelve **hats** (crown, wizard hat, top hat, cowboy hat, straw hat,
-  cap, beanie, pirate hat, Viking helmet, chef's hat, a cap whose propeller turns, party hat), four **paint jobs** (gold plating, chrome, an atomic
-  glow that pulses, candy paint that drifts round the rainbow), four **trails** left behind when you run
+  cap, beanie, pirate hat, Viking helmet, chef's hat, a cap whose propeller turns, party hat), four **paint jobs** drawn by the
+  material of the robot itself (gold plating: facets and gold dust that glitters; chrome: a mirror with the
+  sky, the horizon and the grass in it; an atomic glow: a dark shell with green veins that breathe; candy
+  paint: lacquered stripes in five flavours, turning slowly), four **trails** left behind when you run
   (stardust, confetti, bubbles, fallout) and a **box of fireworks** (V: a rocket goes up and bursts).
   Everybody sees what you wear and leave behind you; none of it helps at the games. The first shelf is the
   **Game Pass** (see *The shop*).

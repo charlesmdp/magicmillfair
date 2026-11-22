@@ -18,7 +18,7 @@ import { Shop, price, logoData, loadImage } from './net/Shop.js';
 import { PlayerController, JET } from './player/PlayerController.js';
 import { CameraRig } from './player/CameraRig.js';
 import { Interact } from './player/Interact.js';
-import { RankEmotes } from './player/RankEmotes.js';
+import { RankEmotes, rankPicture } from './player/RankEmotes.js';
 import { Hud, VERSION } from './ui/Hud.js';
 import { Presence, cleanChat } from './net/Presence.js';
 import { Npc } from './npc/Npc.js';
@@ -118,7 +118,7 @@ async function boot() {
   const shop = new Shop();
   const owns = (id) => id !== undefined && (id === 'none' || shop.owns(id === 'jetpack' ? 'jetpack' : `hat:${id}`));
   const savedHat = parseInt(store.get('mmf.hat'), 10);
-  const look = { hat: savedHat > 0 && savedHat < HATS.length && owns(HATS[savedHat].id) ? savedHat : 0, jet: false, bouquet: false, kinds: undefined, quad: false, bighead: false, size: 0, disguise: 0 };
+  const look = { hat: savedHat > 0 && savedHat < HATS.length && owns(HATS[savedHat].id) ? savedHat : 0, jet: false, bouquet: false, kinds: undefined, quad: false, dome: false, size: 0, disguise: 0 };
   // what the avatar shows besides its hat — its paint, its trail — is remembered too, and told to the others
   // as one small number (see server/items.js)
   const kit = { paint: 0, trail: 0, pet: 0 };
@@ -251,6 +251,8 @@ async function boot() {
   // an animal of light is earned by coming back several days in a row (the administrator has them all)
   const unlocked = (e) => !e.rank || who.admin || who.days >= e.days;
   const showEmotes = () => hud.setEmotes(EMOTE_LIST.map((e, i) => ({ index: i, ...e, locked: !unlocked(e) })), who.days);
+  // (the pictures of the animals of light, in the panel of the emotes: drawn by the renderer the first time they are looked at)
+  hud.setRankPicture((kind) => rankPicture(engine.renderer, kind, 168));
   const emote = (i) => {
     const e = EMOTE_LIST[i];
     if (state.mode !== 'walk' || !e || player.dead) return false;
@@ -294,25 +296,25 @@ async function boot() {
   // /cheer…) — and a few secret words, known by their fingerprints only (they are written nowhere in the game).
   const fingerprint = (word) => { let h = 2166136261; for (const c of word) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
   const SECRETS = new Map([
-    [0xd8797277, () => { timers.bighead = 12; return 'Your head feels… roomy.'; }],
+    [0xd8797277, () => { timers.dome = 12; return 'Your head feels… roomy.'; }],
     [0xdb851716, () => {
       if (player.seat || player.swimming || player.cave) return 'Not here!';
       player.riding = true;
       return 'A quad! Shift goes faster, E gets off.';
     }],
-    [0x9b3e5c80, () => { timers.moon = 25; return 'Gravity went for a walk.'; }],
-    [0x58ffc1db, () => { timers.turbo = 20; return 'Legs: upgraded.'; }],
-    [0x26b6b2ab, () => { delete timers.giant; timers.tiny = 20; return 'Everything looks bigger from down here.'; }],
-    [0xb77215b9, () => { timers.disco = 15; return 'Disco!'; }],
-    [0x9c5b13ae, () => { delete timers.tiny; timers.giant = 20; return 'Mind the lamp posts.'; }],
-    [0x3f66406c, () => { timers.spring = 25; return 'Boing.'; }],
+    [0x9b3e5c80, () => { timers.lowg = 25; return 'Gravity went for a walk.'; }],
+    [0x58ffc1db, () => { timers.haste = 20; return 'Legs: upgraded.'; }],
+    [0x26b6b2ab, () => { delete timers.maxi; timers.mini = 20; return 'Everything looks bigger from down here.'; }],
+    [0xb77215b9, () => { timers.strobe = 15; return 'The lights have gone to your head.'; }],
+    [0x9c5b13ae, () => { delete timers.mini; timers.maxi = 20; return 'Mind the lamp posts.'; }],
+    [0x3f66406c, () => { timers.hops = 25; return 'Boing.'; }],
     [0xc4c40e95, () => {
       if (player.seat || player.cave || player.dead) return 'Not here!';
-      timers.rocket = 9; player.launch(34);
+      timers.shot = 9; player.launch(34);
       return 'Lift-off!';
     }],
-    [0xa2793b81, () => { timers.skate = 20; return 'Somebody waxed the valley.'; }],
-    [0x8354f3fc, () => { timers.fisheye = 20; return 'What big eyes you have.'; }],
+    [0xa2793b81, () => { timers.slick = 20; return 'Somebody waxed the valley.'; }],
+    [0x8354f3fc, () => { timers.wide = 20; return 'What big eyes you have.'; }],
     [0x14433f79, () => { disguise = disguise === 1 ? 0 : 1; return disguise ? 'You are a bush. Nobody suspects a thing. (The same word again, and you are yourself.)' : 'You are yourself again.'; }],
     [0x0e46ff87, () => { disguise = disguise === 2 ? 0 : 2; return disguise ? 'You are a tree. Stand very still. (The same word again, and you are yourself.)' : 'You are yourself again.'; }],
   ]);
@@ -433,9 +435,9 @@ async function boot() {
   };
   const playRace = () => {
     if (fair.session || player.dead) return;
-    if (player.cheat || timers.moon || timers.turbo) { hud.note('Not with a cheat on.'); return; }
+    if (player.cheat || timers.lowg || timers.haste) { hud.note('Not with a cheat on.'); return; }
     // (everybody races at the same size, as themselves: no secret word lasts into the race)
-    for (const k of ['tiny', 'giant', 'bighead', 'spring', 'skate', 'rocket', 'fisheye', 'disco']) delete timers[k];
+    for (const k of ['mini', 'maxi', 'dome', 'hops', 'slick', 'shot', 'wide', 'strobe']) delete timers[k];
     // (it leaves with the next start: whoever asks for the same one leaves at the same instant)
     const start = world.games.race.nextStart();
     fair.session = world.games.race.open(player, fairIo, start, presence?.id ?? 0); fair.kind = 'race'; fair.after = 0;
@@ -974,7 +976,7 @@ async function boot() {
     world.sparks.firework(player.pos.x, player.pos.y, player.pos.z);
     presence?.sendEmote(FIREWORK);
   };
-  Object.assign(app, { shop, shopView, openShop, refreshShop, kit, equip, lightFirework });
+  Object.assign(app, { shop, shopView, openShop, refreshShop, kit, equip, lightFirework, showEmotes });
   const toggleCamera = () => { if (state.mode === 'walk') { if (mayFly()) setMode('free'); } else if (state.mode === 'free') setMode('walk'); };
   const savedQuality = store.get('mmf.quality');
   const qualityChoice = params.get('q') && TIERS[params.get('q')] ? params.get('q') : savedQuality && TIERS[savedQuality] ? savedQuality : 'auto';
@@ -1229,14 +1231,14 @@ async function boot() {
     {
       // cheats wear off; what the avatar wears follows what the player does
       for (const k in timers) if ((timers[k] -= dt) <= 0) delete timers[k];
-      player.gravity = timers.moon ? 0.22 : 1;
-      player.boost = timers.turbo ? 2.2 : 1;
-      player.spring = timers.spring ? 2 : 1;
-      player.grip = timers.skate ? 0.09 : 1;
-      player.cheat = !!(timers.moon || timers.turbo || timers.spring || timers.skate || timers.rocket);
+      player.gravity = timers.lowg ? 0.22 : 1;
+      player.boost = timers.haste ? 2.2 : 1;
+      player.hop = timers.hops ? 2 : 1;
+      player.grip = timers.slick ? 0.09 : 1;
+      player.cheat = !!(timers.lowg || timers.haste || timers.hops || timers.slick || timers.shot);
       // (tiny, giant: a secret word for a moment, or the choice of who holds the pass — never in the race)
       const racing = !!fair.session && fair.kind === 'race';
-      look.size = racing ? 0 : timers.tiny ? 1 : timers.giant ? 2 : shop.hasPass ? size : 0;
+      look.size = racing ? 0 : timers.mini ? 1 : timers.maxi ? 2 : shop.hasPass ? size : 0;
       look.disguise = racing ? 0 : disguise;
       me.size = SIZE_SCALE[look.size];
       if (player.noJet) {
@@ -1247,9 +1249,9 @@ async function boot() {
           hud.note(`Your free day with the jetpack is over. The Jetpack Lite is ${price(shop.cost('jetlite'))} in the item shop — and it comes with the ${PASS.name}.`, 7000);
         }
       }
-      const fov = fair.fov ?? (timers.fisheye ? 104 : engine.width < engine.height ? 68 : 55);
+      const fov = fair.fov ?? (timers.wide ? 104 : engine.width < engine.height ? 68 : 55);
       if (Math.abs(camera.fov - fov) > 0.05) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 5); camera.updateProjectionMatrix(); }
-      if (timers.disco) me.setColor(Math.floor(state.time * 6) % 16); else if (me.colorIndex !== color) me.setColor(color);
+      if (timers.strobe) me.setColor(Math.floor(state.time * 6) % 16); else if (me.colorIndex !== color) me.setColor(color);
       // the trail of the avatar, if it has one; the fireworks; the bang of those that burst close by
       const sparks = world.sparks;
       if (kit.trail && mode === 'walk' && !player.swimming && !player.dead) sparks.trail(kit.trail, dt, player.pos.x, player.pos.y, player.pos.z, Math.hypot(player.vel.x, player.vel.z));
@@ -1258,7 +1260,7 @@ async function boot() {
       if (rockets > (sparks._heard || 0)) audio.play('rocket', { volume: 0.7 });
       sparks._heard = sparks.rockets.length;
       if (sparks.burst) { const d = Math.hypot(sparks.burst.x - camera.position.x, sparks.burst.z - camera.position.z); if (d < 260) audio.play('bang', { volume: Math.max(0.12, 1 - d / 260) }); sparks.burst = null; }
-      look.bighead = !!timers.bighead;
+      look.dome = !!timers.dome;
       look.jet = player.jet > 0;
       look.quad = player.riding;
       if (player.swimming && look.bouquet) { look.bouquet = false; look.kinds = undefined; hud.note('The bouquet floats away…'); }

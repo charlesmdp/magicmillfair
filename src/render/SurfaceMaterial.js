@@ -10,7 +10,13 @@ out vec2 vUv;
 out vec3 vWorld;
 out vec3 vNormal;
 out vec4 vColor;
+#ifdef PAINT
+out vec3 vObj; // where the point is on the body at rest: a paint job is drawn there, and does not swim as the body moves
+#endif
 void main() {
+  #ifdef PAINT
+  vObj = position;
+  #endif
   vec3 transformed = position;
   vec3 objectNormal = normal;
   #include <skinbase_vertex>
@@ -63,6 +69,12 @@ uniform vec3 uColor;
 uniform vec4 uParams; // roughness, specular, normal scale, uv scale
 uniform vec3 uEmissive;
 uniform float uAmbient; // ambient light reaching this object (1 in the open, less in a cave)
+#ifdef PAINT
+// A paint job on an avatar — x: which (0 none, 1 gold, 2 chrome, 3 atomic, 4 candy), y: seconds, z: metres
+// per unit of the body at rest. It covers what takes the colour of the player (the alpha of the vertex).
+uniform vec4 uPaint;
+in vec3 vObj;
+#endif
 #ifdef USE_FADE
 uniform sampler2D uNoiseTex;
 #endif
@@ -80,6 +92,32 @@ void main() {
   #endif
   #ifdef USE_MAP
   albedo *= texture(uMap, uv).rgb;
+  #endif
+  float rough = uParams.x, spec = uParams.y;
+  #ifdef PAINT
+  float pk = uPaint.x, pm = vColor.a;
+  vec3 pq = vObj * uPaint.z;
+  float veins = 0.0, hot = 0.0;
+  if (pk > 3.5) {
+    // candy: a swirl of stripes, white and a colour that changes from one to the next, lacquered; it turns slowly
+    float band = pq.y * 11.0 + atan(pq.x, pq.z) * 1.27324 + uPaint.y * 0.22, k = floor(band), f = fract(band);
+    // (the colours of a sweet shop, one after the other: raspberry, lemon, mint, blueberry, bubble gum)
+    float c5 = mod(floor(k * 0.5), 5.0);
+    vec3 hue = c5 < 0.5 ? vec3(0.95, 0.08, 0.22) : c5 < 1.5 ? vec3(1.0, 0.8, 0.1) : c5 < 2.5 ? vec3(0.15, 0.85, 0.6) : c5 < 3.5 ? vec3(0.2, 0.45, 1.0) : vec3(1.0, 0.35, 0.7);
+    vec3 tone = mod(k, 2.0) < 0.5 ? vec3(1.0, 0.98, 0.96) : hue;
+    albedo = mix(albedo, tone * (0.86 + 0.14 * smoothstep(0.0, 0.08, f) * (1.0 - smoothstep(0.92, 1.0, f))), pm);
+    rough = mix(rough, 0.14, pm); spec = mix(spec, 1.0, pm);
+  } else if (pk > 2.5) {
+    // atomic: a dark shell, and under it something that glows — veins of it, hot spots that breathe
+    float t = uPaint.y;
+    vec3 c = pq * 8.5;
+    float n = sin(c.x + 1.7 * sin(c.y * 0.9 + t * 0.6)) * sin(c.y * 1.1 + 1.7 * sin(c.z * 0.8 - t * 0.45)) * sin(c.z + 1.7 * sin(c.x * 1.2 + t * 0.5));
+    veins = 1.0 - smoothstep(0.0, 0.07, abs(n));
+    hot = smoothstep(0.35, 0.95, n) + smoothstep(0.35, 0.95, -n) * 0.5;
+    albedo = mix(albedo, vec3(0.025, 0.06, 0.03), pm);
+    rough = mix(rough, 0.32, pm); spec = mix(spec, 0.7, pm);
+  } else if (pk > 1.5) albedo = mix(albedo, vec3(0.93, 0.95, 0.98), pm);
+  else if (pk > 0.5) albedo = mix(albedo, vec3(1.0, 0.7, 0.26), pm);
   #endif
   vec3 Ng = normalize(vNormal);
   #ifdef DOUBLE_SIDED
@@ -103,7 +141,7 @@ void main() {
   vec3 V = normalize(cameraPosition - vWorld);
   float shadow = sunShadow(vWorld, Ng);
   Surface s;
-  s.albedo = albedo * cav; s.N = N; s.Ng = Ng; s.rough = uParams.x; s.spec = uParams.y; s.sss = 0.0;
+  s.albedo = albedo * cav; s.N = N; s.Ng = Ng; s.rough = rough; s.spec = spec; s.sss = 0.0;
   #if defined(USE_FADE) || defined(TINT_MASK)
   s.ao = uAmbient;
   #else
@@ -122,6 +160,37 @@ void main() {
     float glint = pow(sun, 64.0) * 2.4 + pow(sun, 7.0) * 0.3;
     float fres = pow(1.0 - saturate(dot(N, V)), 4.0);
     col = col * 0.2 + albedo * (env * s.ao * (0.9 + 0.7 * fres) + uSunColor * glint * shadow);
+  }
+  #endif
+  #ifdef PAINT
+  if (pk > 0.5) {
+    vec3 R = reflect(-V, N);
+    float fres = pow(1.0 - saturate(dot(N, V)), 4.0), sun = saturate(dot(R, uSunDir));
+    if (pk < 2.5) {
+      // gold, chrome: polished metal — little of its own colour, a lot of what is round it. Gold: warm ground,
+      // a bright horizon, a soft sky, and a sparkle that runs over it. Chrome: the blue of the sky, a white
+      // horizon, the dark of the ground — a mirror.
+      bool gold = pk < 1.5;
+      float band = exp(-abs(R.y - 0.04) * (gold ? 9.0 : 16.0));
+      // (what is under the horizon: the ground — dark, a little green for a mirror, warm for gold)
+      vec3 env = gold ? mix(vec3(0.07, 0.035, 0.012), vec3(0.62, 0.58, 0.5), smoothstep(-0.15, 0.7, R.y)) + vec3(1.5, 1.3, 0.95) * band
+        : mix(vec3(0.035, 0.06, 0.03), mix(vec3(0.8, 0.9, 1.0), vec3(0.1, 0.26, 0.7), smoothstep(0.0, 0.85, R.y)), smoothstep(-0.03, 0.02, R.y)) + vec3(1.5) * band;
+      float glint = pow(sun, 90.0) * 3.4 + pow(sun, 8.0) * 0.4;
+      // (gold dust: grains that catch the light one after the other as the body or the eye moves)
+      vec3 grain = floor(pq * 190.0);
+      float rnd = fract(sin(dot(grain, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+      float sparkle = gold ? step(0.975, rnd) * pow(saturate(sin(rnd * 97.0 + uPaint.y * 2.4 + dot(V, vec3(9.0, 5.0, 7.0)) * 6.0)), 6.0) * 2.6 : 0.0;
+      vec3 metal = col * 0.06 + albedo * (env * s.ao * (0.85 + 0.9 * fres) + uSunColor * glint * shadow) + vec3(1.0, 0.92, 0.7) * sparkle * (0.35 + 0.65 * shadow);
+      col = mix(col, metal, pm);
+    } else if (pk < 3.5) {
+      // atomic: what glows under the shell, and a rim of it round the body
+      float pulse = 0.62 + 0.38 * sin(uPaint.y * 2.6);
+      vec3 glow = vec3(0.3, 1.0, 0.1) * (veins * 1.5 + hot * 1.1) * pulse + vec3(0.45, 1.0, 0.18) * fres * (1.0 + 0.5 * pulse);
+      col += glow * pm;
+    } else {
+      // candy: a lacquer — the sun in it, a pale rim
+      col += (uSunColor * pow(sun, 70.0) * 1.3 * shadow + vec3(0.22) * fres) * pm;
+    }
   }
   #endif
   #ifdef WATERLINE
@@ -155,7 +224,8 @@ void main() {
 /**
  * @param {object} o map, normalMap (textures), color [r,g,b], rough, spec, normalScale, uvScale, emissive [r,g,b];
  *   fade: the vertex alpha is an opacity (soft-edged ground decals) instead of ambient occlusion;
- *   metal: polished metal, which shows the sky and the ground round it
+ *   metal: polished metal, which shows the sky and the ground round it;
+ *   paint: an avatar's paint jobs (gold, chrome, atomic, candy: the uniform uPaint says which)
  */
 export function surfaceMaterial(o = {}) {
   const defines = {};
@@ -165,6 +235,7 @@ export function surfaceMaterial(o = {}) {
   if (o.fade) defines.USE_FADE = 1;
   if (o.tintMask) defines.TINT_MASK = 1;
   if (o.metal) defines.METAL = 1;
+  if (o.paint) defines.PAINT = 1;
   const mat = makeMaterial({
     ...(o.fade ? { transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor } : {}),
     uniforms: {
@@ -175,6 +246,7 @@ export function surfaceMaterial(o = {}) {
       uParams: { value: new THREE.Vector4(o.rough ?? 0.8, o.spec ?? 0.2, o.normalScale ?? 1, o.uvScale ?? 1) },
       uEmissive: { value: new THREE.Vector3(...(o.emissive || [0, 0, 0])) },
       uAmbient: { value: 1 },
+      ...(o.paint ? { uPaint: { value: new THREE.Vector4(0, 0, 1, 0) } } : {}),
     },
     defines,
     vertexShader: VERT,

@@ -41,7 +41,7 @@ export class Previewer {
     const c = this.character, [type, name] = id.split(':');
     c.setPaint(0);
     c.setColor(color);
-    c.setLook({ hat: 0, jet: false, bouquet: false, quad: false, bighead: false });
+    c.setLook({ hat: 0, jet: false, bouquet: false, quad: false, dome: false });
     if (c.jetpack) c.jetpack.visible = false;
     for (const it of this.sparks.items) it.on = false;
     this.sparks.rockets.length = 0;

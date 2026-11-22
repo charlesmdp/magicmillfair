@@ -194,6 +194,67 @@ class Emote {
   }
 }
 
+/** The instant of its five seconds at which each animal is at its best (for its picture). */
+const PORTRAIT = { goldfish: 2.8, squirrel: 1.8, carp: 2.4, deer: 2.4, eagle: 1.8, panda: 2.3, wolf: 2.9, tiger: 1.3, elephant: 2.9, dragon: 1.8 };
+
+/**
+ * A picture of an animal of light, `size` pixels square, drawn by the game's own renderer: a canvas,
+ * transparent round the animal, which fills it whatever its size and wherever it stands (a first small
+ * picture, taken from afar, says where it is). Null for an animal that does not exist. `at`: the instant of
+ * its five seconds that is shown.
+ */
+export function rankPicture(renderer, kind, size = 168, at = PORTRAIT[kind] ?? 2.3) {
+  if (!BUILDERS[kind]) return null;
+  const UP = 700; // (far above the valley: no fog, nothing else in view)
+  const scene = new THREE.Scene(), target = new THREE.Object3D();
+  target.position.set(0, UP, 0);
+  scene.add(target);
+  const e = new Emote(kind, BUILDERS[kind]());
+  scene.add(e.group);
+  e.start(target);
+  e.step(at);
+  e.ring.visible = false;
+  const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 120);
+  cam.position.set(1.2, UP + RING.y + 1.0, RING.z + 40); // (from the front, a little to one side and from above)
+  cam.lookAt(0, UP + RING.y, RING.z);
+  const was = renderer.getRenderTarget(), color0 = new THREE.Color(), alpha0 = renderer.getClearAlpha();
+  renderer.getClearColor(color0);
+  renderer.setClearColor(0x000000, 0);
+  // draws what lies within `half` of (cx, cy) on the plane of the camera, n pixels square; returns its pixels
+  const take = (cx, cy, half, n, samples) => {
+    cam.left = cx - half; cam.right = cx + half; cam.top = cy + half; cam.bottom = cy - half;
+    cam.updateProjectionMatrix();
+    const rt = new THREE.WebGLRenderTarget(n, n, { samples, depthBuffer: true });
+    renderer.setRenderTarget(rt);
+    renderer.clear();
+    renderer.render(scene, cam);
+    const px = new Uint8Array(n * n * 4);
+    renderer.readRenderTargetPixels(rt, 0, 0, n, n, px);
+    rt.dispose();
+    return px;
+  };
+  // where it is, and how large
+  const N = 72, WIDE = 9, far = take(0, 0, WIDE, N, 0);
+  let x0 = N, x1 = -1, y0 = N, y1 = -1;
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (far[(y * N + x) * 4 + 3] > 12) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  let cx = 0, cy = 0, half = 3;
+  if (x1 >= x0) {
+    const u = (2 * WIDE) / N;
+    cx = -WIDE + ((x0 + x1 + 1) / 2) * u; cy = -WIDE + ((y0 + y1 + 1) / 2) * u; // (rows come bottom first: y grows upwards, as on the plane)
+    half = Math.max(0.6, (Math.max(x1 - x0, y1 - y0) + 2) * u * 0.5 * 1.1);
+  }
+  const px = take(cx, cy, half, size, 4);
+  renderer.setRenderTarget(was);
+  renderer.setClearColor(color0, alpha0);
+  e.animal.material.dispose(); e.ring.material.dispose();
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d'), img = ctx.createImageData(size, size);
+  for (let y = 0; y < size; y++) img.data.set(px.subarray((size - 1 - y) * size * 4, (size - y) * size * 4), y * size * 4); // (rows come bottom first)
+  ctx.putImageData(img, 0, 0);
+  return canvas;
+}
+
 export class RankEmotes {
   constructor(scene) {
     this.scene = scene;

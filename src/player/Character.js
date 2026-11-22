@@ -96,12 +96,12 @@ const REST_HAND = [0.33, 0.74, 0.04]; // about where a hand hangs (gestures ease
 /**
  * What an avatar wears and holds travels in the 16 "flags" bits of its state:
  * bit 0 free camera · bits 1-3 hat (index in HATS, its low bits) · bit 4 jetpack burning · bit 5 bouquet ·
- * bit 6 quad · bit 7 big head · bits 8-9 size (0 normal, 1 tiny, 2 giant) · bits 10-11 disguise (0 none,
+ * bit 6 quad · bit 7 a head twice the size · bits 8-9 size (0 normal, 1 tiny, 2 giant) · bits 10-11 disguise (0 none,
  * 1 a bush, 2 a tree) · bit 12 the fourth bit of the hat
  */
-export const packLook = (o) => (o.free ? 1 : 0) | ((o.hat & 7) << 1) | (o.jet ? 16 : 0) | (o.bouquet ? 32 : 0) | (o.quad ? 64 : 0) | (o.bighead ? 128 : 0)
+export const packLook = (o) => (o.free ? 1 : 0) | ((o.hat & 7) << 1) | (o.jet ? 16 : 0) | (o.bouquet ? 32 : 0) | (o.quad ? 64 : 0) | (o.dome ? 128 : 0)
   | (((o.size || 0) & 3) << 8) | (((o.disguise || 0) & 3) << 10) | (((o.hat >> 3) & 1) << 12);
-const unpackLook = (f) => ({ hat: ((f >> 1) & 7) | (((f >> 12) & 1) << 3), jet: !!(f & 16), bouquet: !!(f & 32), quad: !!(f & 64), bighead: !!(f & 128), size: (f >> 8) & 3, disguise: (f >> 10) & 3 });
+const unpackLook = (f) => ({ hat: ((f >> 1) & 7) | (((f >> 12) & 1) << 3), jet: !!(f & 16), bouquet: !!(f & 32), quad: !!(f & 64), dome: !!(f & 128), size: (f >> 8) & 3, disguise: (f >> 10) & 3 });
 
 const HEIGHT = 1.72;
 // Seated, the hips sit this far behind the feet and the underside of the body this high above them.
@@ -231,7 +231,6 @@ export class CharacterFactory {
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _t = new THREE.Vector3();
 const _u = new THREE.Vector3(), _w = new THREE.Vector3(), _w2 = new THREE.Vector3(), _axis = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _pq = new THREE.Quaternion();
-const _paint = new THREE.Color();
 const clamp1 = (x) => Math.min(1, Math.max(-1, x));
 
 export class Character {
@@ -245,7 +244,8 @@ export class Character {
     this.bones = {};
     const bones = [];
     this.model.traverse((o) => { if (o.isBone) { bones.push(o); this.bones[o.name] = o; } });
-    const main = surfaceMaterial({ rough: 0.45, spec: 0.5, name: 'avatar', tintMask: true });
+    const main = surfaceMaterial({ rough: 0.45, spec: 0.5, name: 'avatar', tintMask: true, paint: true });
+    main.uniforms.uPaint.value.z = factory.scale;
     this.mainMaterial = main;
     this.materials = [main];
     const mesh = new THREE.SkinnedMesh(factory.geometry, main);
@@ -288,7 +288,7 @@ export class Character {
     this.stroke = 0; // phase of the swimming strokes
     this.speed = 0;
     this.ambient = 1;
-    this.look = { hat: 0, jet: false, bouquet: false, quad: false, bighead: false, disguise: 0 };
+    this.look = { hat: 0, jet: false, bouquet: false, quad: false, dome: false, disguise: 0 };
     this.big = 0; // 0..1: how far the head has grown
     this.size = 1; // (tiny, giant: a cheat, or the choice of who holds the Game Pass)
     this.prop = null; // what the avatar is disguised as (a bush, a tree)
@@ -305,8 +305,7 @@ export class Character {
   }
 
   setColor(index) {
-    this.colorIndex = index;
-    if (this.paint) return; // (a paint job covers the colour)
+    this.colorIndex = index; // (a paint job, when there is one, is drawn over it by the material)
     const n = AVATAR_COLORS.length, c = new THREE.Color(AVATAR_COLORS[((index % n) + n) % n]);
     this.mainMaterial.uniforms.uColor.value.set(c.r, c.g, c.b);
   }
@@ -318,14 +317,12 @@ export class Character {
   setPaint(paint = 0) {
     if (paint === (this.paint || 0)) return;
     this.paint = paint;
+    // (the paint itself is drawn by the material: see PAINT in SurfaceMaterial.js)
     const u = this.mainMaterial.uniforms;
-    u.uParams.value.x = 0.45; u.uParams.value.y = 0.5;
+    u.uPaint.value.x = paint;
+    u.uParams.value.x = paint === 1 ? 0.22 : paint === 2 ? 0.08 : 0.45; u.uParams.value.y = paint === 1 || paint === 2 ? 1.0 : 0.5;
     u.uEmissive.value.set(0, 0, 0);
-    if (paint === 1) { u.uColor.value.set(1.0, 0.64, 0.1); u.uParams.value.x = 0.2; u.uParams.value.y = 1.0; u.uEmissive.value.set(0.12, 0.07, 0.0); }
-    else if (paint === 2) { u.uColor.value.set(0.86, 0.9, 0.95); u.uParams.value.x = 0.08; u.uParams.value.y = 1.0; }
-    else if (paint === 3) u.uColor.value.set(0.32, 0.95, 0.22);
-    else if (!paint) this.setColor(this.colorIndex);
-    this._paintT = 0;
+    this._paintT = this._paintT || 0;
   }
 
   _play(name, fade = 0.2) {
@@ -435,7 +432,7 @@ export class Character {
       if (o.quad && !this.quad) { this.quad = makeQuad(); this.root.add(this.quad); }
       if (this.quad) this.quad.visible = o.quad;
     }
-    if (o.bighead !== undefined) l.bighead = o.bighead;
+    if (o.dome !== undefined) l.dome = o.dome;
     if (this._light) { this._light = false; this.setLight(true); } // (what has just been put on is light too)
   }
 
@@ -471,12 +468,7 @@ export class Character {
       this._rising -= dt;
       if (this._rising <= 0 && this.anim === ANIM.idle && !this.emoting) this._play('Idle', 0.2);
     }
-    if (this.paint > 2) {
-      // the paints that move: a green glow that breathes, a colour that drifts round the rainbow
-      const u = this.mainMaterial.uniforms, t = (this._paintT += dt);
-      if (this.paint === 3) { const k = 0.55 + 0.45 * Math.sin(t * 2.3); u.uEmissive.value.set(0.05 * k, 0.5 * k, 0.03 * k); }
-      else { _paint.setHSL((t * 0.07) % 1, 0.9, 0.52); u.uColor.value.set(_paint.r, _paint.g, _paint.b); }
-    }
+    if (this.paint) this.mainMaterial.uniforms.uPaint.value.y = (this._paintT = (this._paintT + dt) % 3600); // (the paints move: a sparkle, a glow that breathes, stripes that turn)
     // (the mixer only rewrites a bone when its animated value changes: put back what was bent by hand first)
     for (let i = 0; i < this._bentN; i++) this._bent[i].bone.quaternion.copy(this._bent[i].q);
     this._bentN = 0;
@@ -511,7 +503,7 @@ export class Character {
     m.position.y = base + (swim ? 0.45 + 0.3 * moving + Math.sin(this.stroke * 2) * 0.03 : 0) + this.recline * 0.3 + (riding ? QUAD.seat - SEAT.under : 0) + P.lift + 0.85 * (1 - Math.cos(this.tip));
     m.position.z = this.recline * 0.86 + (riding ? 0.16 : 0) - 0.85 * Math.sin(this.tip); // lying: the body is centred on the spot, head behind
     // a growing head (and whatever is on it)
-    this.big += ((l.bighead ? 1 : 0) - this.big) * Math.min(1, dt * 5);
+    this.big += ((l.dome ? 1 : 0) - this.big) * Math.min(1, dt * 5);
     this.bones.Head.scale.setScalar(this.headScale * (1 + 1.35 * this.big));
     if (this.root.scale.x !== this.size) this.root.scale.setScalar(this.size);
     if (this.hat?.userData.rotor) this.hat.userData.rotor.rotation.y += dt * (6 + Math.min(18, this.speed * 3)); // the propeller of the cap

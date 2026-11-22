@@ -31,10 +31,10 @@ export const ITEMS = [
   { id: 'hat:propeller', name: 'Propeller cap', price: 999, group: 'hats', rarity: 'rare', blurb: 'The propeller really turns. It lifts nothing but the mood.' },
   { id: 'hat:party', name: 'Party hat', price: 999, group: 'hats', rarity: 'uncommon', blurb: 'A paper cone, a pompom. Every day since the end of the world is somebody\u2019s birthday.' },
 
-  { id: 'paint:gold', name: 'Gold plating', price: 1900, group: 'paint', rarity: 'legendary', blurb: 'Your whole robot, plated in gold. Tasteful? No. Magnificent? Yes.' },
-  { id: 'paint:chrome', name: 'Chrome finish', price: 1500, group: 'paint', rarity: 'epic', blurb: 'Polished like a bumper: the valley, the sea and the big wheel slide over you.' },
-  { id: 'paint:atomic', name: 'Atomic glow', price: 1200, group: 'paint', rarity: 'epic', blurb: 'A healthy green glow that pulses gently. The doctor says it is fine. The doctor glows too.' },
-  { id: 'paint:candy', name: 'Candy paint', price: 900, group: 'paint', rarity: 'rare', blurb: 'Your colour drifts through the whole rainbow, slowly, for ever.' },
+  { id: 'paint:gold', name: 'Gold plating', price: 1900, group: 'paint', rarity: 'legendary', blurb: 'Your whole robot, plated in gold: facets that catch the sky, and gold dust that glitters as you move. Tasteful? No. Magnificent? Yes.' },
+  { id: 'paint:chrome', name: 'Chrome finish', price: 1500, group: 'paint', rarity: 'epic', blurb: 'A mirror on legs: the blue of the sky on your head, the horizon in a white line, the grass under your chin.' },
+  { id: 'paint:atomic', name: 'Atomic glow', price: 1200, group: 'paint', rarity: 'epic', blurb: 'A dark shell, and under it something that glows: green veins that breathe, a rim of light round you. The doctor says it is fine. The doctor glows too.' },
+  { id: 'paint:candy', name: 'Candy paint', price: 900, group: 'paint', rarity: 'rare', blurb: 'Candy-cane stripes in five flavours — raspberry, lemon, mint, blueberry, bubble gum — lacquered, and turning slowly round you.' },
 
   { id: 'trail:fallout', name: 'Fallout trail', price: 1200, group: 'trails', rarity: 'epic', blurb: 'Green sparks float up behind you wherever you run. Perfectly safe. Probably.' },
   { id: 'trail:confetti', name: 'Confetti trail', price: 900, group: 'trails', rarity: 'rare', blurb: 'Every step is a parade: paper of all colours flutters behind you.' },
