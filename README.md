@@ -456,6 +456,10 @@ water one, the 162 Sky Stones five. Of the fifty villages only the halls and the
 (one mesh per sixth of the horizon, 41,000 triangles in all); the furniture of a village (2,500 triangles)
 is only drawn for those who stand in it.
 
+(These tables date from before the booths of the pier, the fifty temple villages and the woods of the
+mountains. They were not measured again; the quick test that walks from the arrival towards the mill counted
+151 draw calls and 474,000 triangles at the lowest tier after them, against 149 and 465,000 before.)
+
 **These are not frames per second.** The development environment had no graphics card: rendering is computed
 in software there, which says nothing about real frame rates. Draw calls and triangles are exact; script time
 is an order of magnitude (out of a budget of 16.7 ms per frame at 60 frames per second) and varies from run
