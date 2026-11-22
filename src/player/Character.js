@@ -219,6 +219,7 @@ export class CharacterFactory {
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _t = new THREE.Vector3();
 const _u = new THREE.Vector3(), _w = new THREE.Vector3(), _axis = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _pq = new THREE.Quaternion();
+const _paint = new THREE.Color();
 const clamp1 = (x) => Math.min(1, Math.max(-1, x));
 
 export class Character {
@@ -291,8 +292,26 @@ export class Character {
 
   setColor(index) {
     this.colorIndex = index;
+    if (this.paint) return; // (a paint job covers the colour)
     const c = new THREE.Color(AVATAR_COLORS[((index % 16) + 16) % 16]);
     this.mainMaterial.uniforms.uColor.value.set(c.r, c.g, c.b);
+  }
+
+  /**
+   * A paint job over the colour of the avatar: 0 none, 1 gold plating, 2 chrome, 3 atomic glow (it pulses),
+   * 4 candy (it drifts through the rainbow) — the numbers of PAINTS in server/items.js.
+   */
+  setPaint(paint = 0) {
+    if (paint === (this.paint || 0)) return;
+    this.paint = paint;
+    const u = this.mainMaterial.uniforms;
+    u.uParams.value.x = 0.45; u.uParams.value.y = 0.5;
+    u.uEmissive.value.set(0, 0, 0);
+    if (paint === 1) { u.uColor.value.set(1.0, 0.64, 0.1); u.uParams.value.x = 0.2; u.uParams.value.y = 1.0; u.uEmissive.value.set(0.12, 0.07, 0.0); }
+    else if (paint === 2) { u.uColor.value.set(0.86, 0.9, 0.95); u.uParams.value.x = 0.08; u.uParams.value.y = 1.0; }
+    else if (paint === 3) u.uColor.value.set(0.32, 0.95, 0.22);
+    else if (!paint) this.setColor(this.colorIndex);
+    this._paintT = 0;
   }
 
   _play(name, fade = 0.2) {
@@ -416,6 +435,12 @@ export class Character {
     if (this._rising > 0) {
       this._rising -= dt;
       if (this._rising <= 0 && this.anim === ANIM.idle && !this.emoting) this._play('Idle', 0.2);
+    }
+    if (this.paint > 2) {
+      // the paints that move: a green glow that breathes, a colour that drifts round the rainbow
+      const u = this.mainMaterial.uniforms, t = (this._paintT += dt);
+      if (this.paint === 3) { const k = 0.55 + 0.45 * Math.sin(t * 2.3); u.uEmissive.value.set(0.05 * k, 0.5 * k, 0.03 * k); }
+      else { _paint.setHSL((t * 0.07) % 1, 0.9, 0.52); u.uColor.value.set(_paint.r, _paint.g, _paint.b); }
     }
     // (the mixer only rewrites a bone when its animated value changes: put back what was bent by hand first)
     for (let i = 0; i < this._bentN; i++) this._bent[i].bone.quaternion.copy(this._bent[i].q);

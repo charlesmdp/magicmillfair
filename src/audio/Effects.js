@@ -54,6 +54,16 @@ const RECIPES = {
     s.tone(t + 0.02, 'sine', 380, 190, 0.08, 0.26, 0.006, 0.05, 0.025);
     s.tone(t + 0.14, 'sine', 210, 330, 0.07, 0.22, 0.006, 0.045, 0.025);
   },
+  // a firework: the rocket leaving with a whistle, then its burst and the crackle that follows
+  rocket(s, t) {
+    s.noise(t, 'white', 'bandpass', 1400, 4200, 2.5, 0.07, 0.01, 0.9, 0.25);
+    s.tone(t, 'sine', 900, 2300, 1.1, 0.05, 0.02, 0.9, 0.2);
+  },
+  bang(s, t) {
+    s.tone(t, 'sine', 150, 46, 0.25, 0.4, 0.002, 0.05, 0.22);
+    s.noise(t, 'pink', 'lowpass', 2600, 500, 0.7, 0.2, 0.002, 0.06, 0.35);
+    for (let i = 0; i < 7; i++) s.noise(t + 0.18 + i * 0.07 + 0.05 * s.rand(), 'white', 'highpass', 3600, 3600, 0.7, 0.045, 0.002, 0.012, 0.05); // the crackle
+  },
   // the big red button: the clunk of the press and a hand-cranked siren winding up…
   press(s, t) {
     s.tone(t, 'sine', 190, 70, 0.07, 0.4, 0.002, 0.02, 0.06);

@@ -53,7 +53,8 @@ export class PlayerController {
     this.driver = null;
     this.pitch = 0; this.roll = 0; // how what is ridden leans (the race)
     this.jet = 0; // seconds of jetpack burn left
-    this.fuel = JET.time;
+    this.tank = JET.time; // seconds of fuel a full tank holds (the light jetpack: a third of it)
+    this.fuel = this.tank;
     this.gravity = 1; // (cheats)
     this.boost = 1;
     this.spring = 1; // how high one jumps
@@ -313,7 +314,7 @@ export class PlayerController {
       this.jet = 0;
       if (ground > pos.y) { pos.y = ground; this.swimming = false; this.grounded = true; }
     } else if (this.grounded) {
-      this.fuel = JET.time;
+      this.fuel = this.tank;
       this.jet = 0;
       this.diving = false;
       this._peak = pos.y;

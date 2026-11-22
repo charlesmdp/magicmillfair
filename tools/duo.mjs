@@ -108,6 +108,14 @@ try {
   await alice.page.keyboard.press('Enter');
   const wolf = await until(() => bob.page.evaluate(() => window.__mmf.rank.active.some((e) => e.kind === 'wolf')), 20000);
   check('Bob sees the wolf Alice summons', !!wolf);
+  // what Alice puts on in the shop (a paint job, a trail), Bob sees on her; a firework she lights goes up on his screen too
+  await alice.page.evaluate(() => { const a = window.__mmf; a.equip('paint:gold', true); a.equip('trail:confetti', true); });
+  const kitSeen = await until(() => bob.page.evaluate(() => { const a = window.__mmf, it = [...a.avatars.items.values()][0]; return it && it.character.paint === 1 && it.trail === 2 ? { paint: it.character.paint, trail: it.trail, kit: it.peer.kit } : null; }), 20000);
+  await alice.page.evaluate(() => window.__mmf.lightFirework());
+  const rocket = await until(() => bob.page.evaluate(() => { const s = window.__mmf.world.sparks; return s.rockets.length || s.count > 20 ? true : null; }), 20000);
+  await alice.page.evaluate(() => { const a = window.__mmf; a.equip('paint:gold', false); a.equip('trail:confetti', false); });
+  const kitOff = await until(() => bob.page.evaluate(() => { const it = [...window.__mmf.avatars.items.values()][0]; return it && !it.character.paint && !it.trail ? true : null; }), 20000);
+  check('Bob sees what Alice wears from the shop — her paint, her trail — and the firework she lights', !!kitSeen && kitSeen.kit === 17 && !!rocket && !!kitOff, JSON.stringify({ kitSeen, rocket, kitOff }));
   // chat
   await alice.page.keyboard.press('Enter');
   await frames(alice, 2);

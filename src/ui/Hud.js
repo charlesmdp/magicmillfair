@@ -14,6 +14,7 @@ const ICON = {
   up: '<svg viewBox="0 0 24 24"><path d="M6 14l6-6 6 6"/></svg>',
   down: '<svg viewBox="0 0 24 24"><path d="M6 10l6 6 6-6"/></svg>',
   chat: '<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>',
+  bag: '<svg viewBox="0 0 24 24"><path d="M5 8h14l-1 12H6z"/><path d="M9 8V7a3 3 0 0 1 6 0v1"/></svg>',
   hand: '<svg viewBox="0 0 24 24"><path d="M8 12V6a1.5 1.5 0 0 1 3 0v5V4.5a1.5 1.5 0 0 1 3 0V11V6a1.5 1.5 0 0 1 3 0v8c0 4-2.5 6.5-6 6.5S5.5 18 4 14l-1-2.6a1.4 1.4 0 0 1 2.5-1.2z"/></svg>',
 };
 // the emotes on the keys 1 to 0: the six gestures of the model, then cheering on (see EMOTE_LIST)
@@ -143,6 +144,7 @@ export class Hud {
         <button class="pill players" type="button" title="Who is here"><span class="dot"></span><span class="count">On your own</span></button>
       </div>
       <div class="top-right">
+        <button class="icon shop-icon" data-act="shop" title="Item shop (O)" aria-label="Item shop">${ICON.bag}</button>
         <button class="icon" data-act="chat" title="Chat (Enter)" aria-label="Chat">${ICON.chat}</button>
         <button class="icon" data-act="emote" title="Emotes (T)" aria-label="Emotes">${ICON.smile}</button>
         <button class="icon" data-act="camera" title="Flying camera (F)" aria-label="Flying camera" aria-pressed="false">${ICON.cam}</button>
@@ -159,6 +161,7 @@ export class Hud {
       <div class="stats"></div>
       <div class="emotes">
         <div class="held"><button data-drop>Put the bouquet down (B)</button></div>
+        <div class="boom"><button data-firework>Light a firework (V)</button></div>
       </div>
       <div class="wasted" aria-live="assertive"><div class="band"><b>WASTED</b><span></span></div></div>
       <div class="sight" aria-hidden="true"></div>
@@ -193,9 +196,8 @@ export class Hud {
         <h3>Controls</h3>
         <div class="row"><span>Run by default <small>(Shift walks)</small></span><button class="switch" data-set="run" aria-pressed="false" aria-label="Run by default"></button></div>
         <div class="row"><span>The camera turns with the character</span><button class="switch" data-set="follow" aria-pressed="false" aria-label="The camera turns with the character"></button></div>
-        <h3>Hat</h3>
-        <div class="hats">${HATS.map((h, i) => `<button data-hat="${i}">${h.name}</button>`).join('')}</div>
-        <button class="buy-jet" type="button" hidden></button>
+        <h3>Hats, jetpacks, paint</h3>
+        <button class="open-shop" type="button">Open the item shop</button>
         <h3>Your name</h3>
         <input type="text" maxlength="16" class="name" autocomplete="off" spellcheck="false" />
         <p class="net-info"></p>
@@ -295,8 +297,8 @@ export class Hud {
     for (const ev of ['mousedown', 'touchstart', 'wheel']) this.chatEl.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
     this.cameraBtn = h.querySelector('[data-act="camera"]');
     this.emotes.querySelector('[data-drop]').onclick = () => { this.emit('drop'); this.emotes.classList.remove('on'); };
-    h.querySelectorAll('[data-hat]').forEach((b) => (b.onclick = () => this.emit('hat', +b.dataset.hat)));
-    h.querySelector('.buy-jet').onclick = () => this.emit('buy', 'jetpack');
+    this.emotes.querySelector('[data-firework]').onclick = () => { this.emit('firework'); this.emotes.classList.remove('on'); };
+    h.querySelector('.open-shop').onclick = () => { this.panel.classList.remove('on'); this.emit('shop'); };
     this.wastedEl = h.querySelector('.wasted');
     h.querySelectorAll('.quality button').forEach((b) => (b.onclick = () => this.emit('quality', b.dataset.q)));
     h.querySelectorAll('[data-vol]').forEach((r) => {
@@ -335,13 +337,12 @@ export class Hud {
   }
 
   // ---------- the shop: what the hats and the jetpack cost, while they are sold
-  /** `tag(id)`: what to write after the name of a hat ('' when it is theirs); `jet`: the line of the jetpack, or null. */
-  setShop(tag, jet) {
-    this.hud.querySelectorAll('[data-hat]').forEach((b) => { const h = HATS[+b.dataset.hat], t = tag(h.id); b.textContent = t ? `${h.name} · ${t}` : h.name; b.classList.toggle('locked', !!t); });
-    const j = this.hud.querySelector('.buy-jet');
-    j.hidden = !jet;
-    if (jet) j.textContent = jet;
-  }
+  /** Everything that opens over the game is closed (something else is about to take the screen). */
+  closeAll() { this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this.toggleBigMap(false); this.closeRoster(); this.toggleChat(false); }
+  /** Whoever has the box of fireworks gets a button for it in the emotes. */
+  setFireworks(on) { this.emotes.classList.toggle('fireworks', !!on); }
+  /** A dot on the icon of the shop while something is sold there. */
+  setShop(open) { this.hud.querySelector('.shop-icon').classList.toggle('selling', !!open); }
 
   /**
    * A few things to fill in. `fields`: [{ key, label, value, max, hint, type: 'text' | 'file' }]. Resolves to
@@ -621,7 +622,7 @@ export class Hud {
   }
 
   // ---------- hats, the bouquet, dying
-  setHat(i) { this.hud.querySelectorAll('[data-hat]').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.hat === i))); }
+  setHat() { /* (the hats are in the shop now: see ShopView.js) */ }
   setHolding(on) { if (on !== this._holding) { this._holding = on; this.emotes.classList.toggle('holding', on); } }
 
   /** The end-of-the-road screen: `cause` is the line under the big word; null takes it away. */

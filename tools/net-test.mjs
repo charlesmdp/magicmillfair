@@ -823,7 +823,7 @@ async function testShop({ port }) {
   // what is sold, and that it is a test shop
   let res = await request(port, `/api/shop?device=${ann}`);
   const shop = json(res), status = json(await request(port, '/api/status'));
-  check('shop: open in test mode; the prices come from the server; nothing owned, nothing sponsored yet', res.status === 200 && shop?.mode === 'test' && status?.shop === 'test' && shop.prices.hat === 999 && shop.prices.jetpack === 3000 && shop.prices.village.join() === '1900,4900,9900,19900,49900,99900,199900,399900,799900,999900' && !shop.owned.length && !Object.keys(shop.slots).length && !JSON.stringify([shop, status]).includes(STRIPE_KEY), [res.status, res.body.toString().slice(0, 200)]);
+  check('shop: open in test mode; the prices come from the server; nothing owned, nothing sponsored yet', res.status === 200 && shop?.mode === 'test' && status?.shop === 'test' && shop.prices.items['hat:crown'] === 999 && shop.prices.items.jetpack === 3000 && shop.prices.items.jetlite === 500 && shop.prices.items['paint:gold'] === 1900 && Object.values(shop.prices.items).every((c) => c >= 500 && c <= 3000) && shop.prices.village.join() === '1900,4900,9900,19900,49900,99900,199900,399900,799900,999900' && !shop.owned.length && !Object.keys(shop.slots).length && !JSON.stringify([shop, status]).includes(STRIPE_KEY), [res.status, res.body.toString().slice(0, 200)]);
   // a payment page: asked of Stripe with the server's price, whatever the browser says
   stripe.asked.length = 0;
   res = await post('/api/checkout', { item: 'hat:crown', device: ann, amount: 1, price: 1 });

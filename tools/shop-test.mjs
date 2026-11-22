@@ -64,28 +64,46 @@ try {
   };
   const frames = (n) => page.evaluate((n) => { const app = window.__mmf; const target = app.frames + n; return new Promise((res) => { const tick = () => (app.frames >= target ? res() : requestAnimationFrame(tick)); tick(); }); }, n);
   const prompts = () => page.evaluate(() => [...document.querySelectorAll('.prompt.on span')].map((e) => e.textContent));
-  const hats = () => page.evaluate(() => [...document.querySelectorAll('[data-hat]')].map((b) => b.textContent));
+  const card = (id) => page.evaluate((id) => { const c = document.querySelector(`.shop .card[data-item="${id}"]`); return c ? { tag: c.querySelector('.price').textContent, cls: c.className, name: c.querySelector('.foot b').textContent, picture: !!c.querySelector('canvas') } : null; }, id);
+  const pick = async (id) => { await page.evaluate((id) => document.querySelector(`.shop .card[data-item="${id}"]`).click(), id); return page.evaluate(() => ({ title: document.querySelector('.shop .detail h3').textContent, acts: [...document.querySelectorAll('.shop .detail .acts button')].map((b) => b.textContent), fine: document.querySelector('.shop .detail .fine').textContent })); };
 
-  // ---- a visitor: hats are for sale; one is bought
+  // ---- a visitor: the item shop — everything that is sold, with its price; a hat is bought
   await enter();
-  await page.waitForFunction(() => document.querySelector('[data-hat="6"]').textContent.includes('$'), null, { timeout: 20000 });
-  const before = await hats(), jet = await page.evaluate(() => document.querySelector('.buy-jet').textContent);
+  await page.waitForFunction(() => document.querySelector('.shop-icon').classList.contains('selling'), null, { timeout: 20000 });
+  await page.click('.shop-icon');
+  await page.waitForSelector('.shop.on', { timeout: 20000 });
+  await frames(3);
+  await page.screenshot({ path: path.join(ROOT, 'tools/preview/shop-screen.png') });
+  const shelves = await page.evaluate(() => ({ titles: [...document.querySelectorAll('.shop .shelf h3')].map((h) => h.textContent), cards: document.querySelectorAll('.shop .card').length, mode: document.querySelector('.shop .mode').textContent }));
+  const crown = await card('hat:crown'), jet = await card('jetpack'), lite = await card('jetlite'), gold = await card('paint:gold'), bubbles = await card('trail:bubbles'), fire = await card('fireworks');
   const device = await page.evaluate(() => localStorage.getItem('mmf.device'));
-  check('the hats carry their price, the jetpack too, while the shop is open', before[0] === 'No hat' && before[6] === 'Crown · $9.99' && jet === 'Jetpack · $30', JSON.stringify({ before, jet }));
-  await page.evaluate(() => document.querySelector('[data-hat="6"]').click());
-  await page.waitForSelector('.chooser.on', { timeout: 20000 });
-  const offer = await page.evaluate(() => [...document.querySelectorAll('.chooser .list button')].map((b) => b.textContent));
-  const worn = await page.evaluate(() => document.querySelector('[data-hat="6"]').getAttribute('aria-pressed'));
-  await Promise.all([page.waitForURL('https://checkout.stripe.test/**', { timeout: 20000 }), page.click('.chooser .list button:nth-child(1)')]);
-  check('a hat that is not theirs is offered for sale, not worn; yes leads to the payment page of Stripe', /Buy it · \$9\.99/.test(offer[0]) && /Test mode/.test(offer[0]) && worn !== 'true' && asked[0]?.get('metadata[item]') === 'hat:crown' && asked[0].get('metadata[device]') === device && asked[0].get('line_items[0][price_data][unit_amount]') === '999', JSON.stringify({ offer, worn, asked: asked[0]?.toString().slice(0, 200) }));
-  // (Stripe says it was paid; the visitor comes back)
+  check('the item shop: its own icon, shelves of cards with a picture and a price — two jetpacks ($30, $5), hats, paints, trails, fireworks',
+    shelves.titles.join() === 'Featured,Gear,Hats,Paint jobs,Trails,Just for fun' && shelves.cards >= 20 && /Test mode/.test(shelves.mode) && crown?.tag === '$9.99' && crown.picture && /legendary/.test(crown.cls)
+    && jet?.tag === '$30' && lite?.tag === '$5' && gold?.tag === '$19' && bubbles?.tag === '$5' && fire?.tag === '$15',
+    JSON.stringify({ shelves, crown, jet, lite, gold, bubbles, fire }));
+  const offer = await pick('hat:crown');
+  const worn = await page.evaluate(() => window.__mmf.me.look?.hat);
+  await Promise.all([page.waitForURL('https://checkout.stripe.test/**', { timeout: 20000 }), page.click('.shop .detail .acts .buy')]);
+  check('a hat that is not theirs can be bought, not worn; the button leads to the payment page of Stripe', offer.title === 'Crown' && offer.acts.join() === 'Buy · $9.99' && /Test mode/.test(offer.fine) && worn === 0 && asked[0]?.get('metadata[item]') === 'hat:crown' && asked[0].get('metadata[device]') === device && asked[0].get('line_items[0][price_data][unit_amount]') === '999' && asked[0].get('mode') === 'payment', JSON.stringify({ offer, worn, asked: String(asked[0]).slice(0, 300) }));
+  // (Stripe says it was paid; the visitor comes back: the hat is on their head at once)
   const hook = await pay('hat:crown', device);
   await enter('&paid=hat%3Acrown');
-  await page.waitForFunction(() => document.querySelector('[data-hat="6"]').textContent === 'Crown', null, { timeout: 30000 });
-  await page.evaluate(() => document.querySelector('[data-hat="6"]').click());
-  await frames(5);
-  const after = await page.evaluate(() => ({ pressed: document.querySelector('[data-hat="6"]').getAttribute('aria-pressed'), hat: window.__mmf.me.look?.hat, url: location.search, others: document.querySelector('[data-hat="5"]').textContent }));
-  check('back from the payment page the hat is theirs and can be worn; the others are still for sale', hook === 200 && after.pressed === 'true' && !/paid/.test(after.url) && after.others === 'Cowboy hat · $9.99', JSON.stringify(after));
+  await page.waitForFunction(() => window.__mmf.me.look?.hat === 6, null, { timeout: 30000 });
+  await page.click('.shop-icon');
+  await page.waitForSelector('.shop.on', { timeout: 20000 });
+  const got = await pick('hat:crown'), crown2 = await card('hat:crown'), cowboy = await card('hat:cowboy');
+  await page.click('.shop .detail .acts button'); // (take it off)
+  await frames(3);
+  const off = await page.evaluate(() => ({ hat: window.__mmf.me.look?.hat, tag: document.querySelector('.shop .card[data-item="hat:crown"] .price').textContent, url: location.search }));
+  // the light jetpack: bought, it flies — a third as long as the real one
+  await pay('jetlite', device);
+  await page.evaluate(() => window.__mmf.refreshShop());
+  const tank = await page.evaluate(() => { const a = window.__mmf; return { tank: a.player.tank, lite: a.shop.owns('jetlite'), full: a.shop.owns('jetpack'), canFly: a.player.canFly(a.player.pos), tag: document.querySelector('.shop .card[data-item="jetlite"] .price').textContent }; });
+  await page.keyboard.press('Escape');
+  await frames(3);
+  const closed = await page.evaluate(() => !document.querySelector('.shop').classList.contains('on'));
+  check('back from the payment page the hat is theirs and on their head; it comes off and goes back on in the shop; the others are still for sale', hook === 200 && got.acts.join() === 'Take it off' && crown2.tag === 'Equipped' && cowboy.tag === '$9.99' && off.hat === 0 && off.tag === 'Owned' && !/paid/.test(off.url) && closed, JSON.stringify({ got, crown2, cowboy, off, closed }));
+  check('the light jetpack flies a third as long as the real one', tank.lite && !tank.full && tank.canFly && Math.abs(tank.tank - 0.5) < 0.01 && tank.tag === 'Owned', JSON.stringify(tank));
 
   // ---- a sponsor: the panel of the shooting gallery
   const slot = await page.evaluate(() => { const m = window.__mmf, s = m.world.sponsorSlots.find((q) => q.id === 'board:shoot'); m.player.teleport(s.x, s.z, 0); return { x: s.x, z: s.z }; });

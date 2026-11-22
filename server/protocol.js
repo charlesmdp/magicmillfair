@@ -3,7 +3,9 @@
 // No authority over the game: every client shares its own avatar state and a room hands those states on.
 //
 // Protocol (JSON text frames)
-//   client → server   {t:'hello',name,color,v:2,dev?}   {t:'s',p:[x,y,z,yaw],a,f}   {t:'e',e}   {t:'c',m,n?}
+//   client → server   {t:'hello',name,color,v:2,dev?,k?}   {t:'s',p:[x,y,z,yaw],a,f}   {t:'e',e}   {t:'c',m,n?}
+//                     (k: the "kit" of the avatar — its paint, its trail… one number from 0 to 255, see items.js;
+//                     it comes back as `k` in `join` and in the peers of `welcome`, when it is not 0)
 //                     {t:'g',b}   a score of mine has just gone on board b (relayed as {t:'g',id,b})
 //                     {t:'n'}     the big red button: answered {t:'n',id,wait} to the whole room when it goes
 //                                 off (wait: ms before the next one), {t:'n',wait} to the sender when it is too soon
@@ -143,7 +145,7 @@ export class Room {
     if (!known && this.players.size >= this.io.max) return null;
     const t = this.io.now();
     const p = {
-      conn: connection, id: known ? known.id : this.io.id ? this.io.id() : this.nextId, name: 'Visitor', color: 0, joined: false,
+      conn: connection, id: known ? known.id : this.io.id ? this.io.id() : this.nextId, name: 'Visitor', color: 0, kit: 0, joined: false,
       alive: true, tokens: BURST, stamp: t, chat: CHAT_BURST, chatAt: t,
       state: null, row: '', at: 0, dirty: false, rested: true, // last state, its serialised row, when it came, relay flags
       ver: 0, area: null, sent: null, gone: null, watched: undefined, // (a crowd) version of the state, who they are told about, what was sent
@@ -152,7 +154,7 @@ export class Room {
       rank: '', key: '', cc: String((known || from)?.cc || '').slice(0, 2), city: String((known || from)?.city || '').slice(0, 60),
     };
     if (known) {
-      p.name = cleanName(known.name); p.color = int(known.color, 15); p.joined = !!known.joined;
+      p.name = cleanName(known.name); p.color = int(known.color, 15); p.kit = int(known.kit, 255); p.joined = !!known.joined;
       p.dev = cleanDevice(known.dev); p.admin = !!known.admin;
       p.rank = !known.admin ? '' : known.admin === 'admin' ? 'admin' : 'owner'; p.key = typeof known.key === 'string' ? known.key.slice(0, 12) : '';
       if (Array.isArray(known.state) && known.state.length === 6 && known.state.every(Number.isFinite)) { p.state = known.state; p.row = `[${p.id},${p.state.join(',')}`; p.ver = 1; }
@@ -290,16 +292,16 @@ export class Room {
   }
 
   _hello(p, m) {
-    const name = cleanName(m.name), color = int(m.color, 15);
+    const name = cleanName(m.name), color = int(m.color, 15), kit = int(m.k, 255);
     if (!p.dev) p.dev = cleanDevice(m.dev);
-    if (p.joined && name === p.name && color === p.color) return;
-    p.name = name; p.color = color;
+    if (p.joined && name === p.name && color === p.color && kit === p.kit) return;
+    p.name = name; p.color = color; p.kit = kit;
     if (!p.joined) {
       p.joined = true;
       // (in a crowd, where the others are comes with the first batch of those around)
       const crowded = this.joined > this.near + 1;
       const peers = [...this.players.values()].filter((o) => o.joined && o !== p)
-        .map((o) => ({ id: o.id, name: o.name, color: o.color, ...(o.state && !crowded && { p: o.state.slice(0, 4), a: o.state[4], f: o.state[5] }) }));
+        .map((o) => ({ id: o.id, name: o.name, color: o.color, ...(o.kit && { k: o.kit }), ...(o.state && !crowded && { p: o.state.slice(0, 4), a: o.state[4], f: o.state[5] }) }));
       const welcome = { t: 'welcome', id: p.id, now: this.io.now(), tick: this.io.tick, near: this.near, peers };
       if (this.io.idle !== undefined) welcome.idle = this.io.idle;
       // (the big red button: how long before it is ready again, how long ago it went off)
@@ -307,7 +309,7 @@ export class Room {
       this.io.send(p.conn, JSON.stringify(welcome));
       this.pending = true; // (the crowd may have just become one)
     }
-    this.broadcast(JSON.stringify({ t: 'join', id: p.id, name, color }), p);
+    this.broadcast(JSON.stringify({ t: 'join', id: p.id, name, color, ...(kit && { k: kit }) }), p);
     this.io.save?.(p);
   }
 

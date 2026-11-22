@@ -175,7 +175,8 @@ room; `?village=name` arrives straight in a sky village.
 | Sit, lie down, board, pick a flower, talk, travel, get up | E when the action is offered (walking away or jumping gets up too) | tap the action shown above the jump button | |
 | Open or close the laptop; second action | L | tap the second action | |
 | Put the bouquet down | B | Emotes → Put the bouquet down | |
-| Hat | Settings → Hat | Settings → Hat | |
+| The item shop (hats, jetpacks, paint, trails) | O, or the bag at the top right | the bag at the top right | |
+| A firework (for who has the box) | V | Emotes → Light a firework | |
 | Chat | Enter, type, Enter (Escape to cancel) | speech-bubble button | |
 | Emotes | T; 1 to 6 for the gestures, 7 to 0 to cheer, clap, jump for joy, rage; or by name in the chat: `/wave`, `/cheer`, `/bow`… | smiley button | |
 | The booths of the pier | E at the counter; then the mouse aims and its button fires (Space fires too); E or Escape leaves | tap or hold where you aim | |
@@ -263,8 +264,14 @@ round the ring (50). The emote panel shows where you stand; the administrator ha
 - **A swan dive**: fall more than ten metres towards water deep enough to swim in, and the robot tips over,
   arms spread, then joined, and goes in head first. The pool of the great waterfall is deep enough: walk off
   the lowest terrace above it.
-- **Hats**: none, cap, straw hat, beanie, top hat, cowboy hat, crown, wizard hat (Settings → Hat). Everybody
-  sees yours.
+- **The item shop** (O, or the bag at the top right): one bright screen with everything a visitor can own,
+  on shelves of cards dressed by rarity — each with a picture of *your* robot wearing the thing, drawn by
+  the game itself. Pick a card: what it is, what it costs, and a button to buy it (or to put it on and take
+  it off, once it is yours). On the shelves: two **jetpacks** (the real one, a second and a half of thrust;
+  the light one, a third of that), seven **hats**, four **paint jobs** (gold plating, chrome, an atomic
+  glow that pulses, candy paint that drifts round the rainbow), four **trails** left behind when you run
+  (stardust, confetti, bubbles, fallout) and a **box of fireworks** (V: a rocket goes up and bursts).
+  Everybody sees what you wear and leave behind you; none of it helps at the games.
 - **Jetpack**: press jump again in the air. A second and a half of thrust, refilled on landing; it does not
   work in caves, on the island, around Mostly Up or on its tower.
 - **Flowers**: walk up to a flower and pick it (E): a bouquet grows in your hand, flower by flower. B puts
@@ -288,19 +295,25 @@ round the ring (50). The emote panel shows where you stand; the administrator ha
 
 ### The shop
 
-While the server has no Stripe key, **nothing is sold and everything is free** — hats, jetpack — as before.
-With a key, the shop opens (`/api/status` then says `"shop": "test"` or `"live"`):
+While the server has no Stripe key, **nothing is sold and everything is free** — hats, jetpacks, paint,
+trails, fireworks: the item shop says so and lets everything be put on. With a key, the shop opens
+(`/api/status` then says `"shop": "test"` or `"live"`) and the bag at the top right carries a gold dot:
 
 | What | Price | |
 |---|---|---|
-| A hat (each of the seven) | $9.99, once | Settings → Hat: a hat that is not yours shows its price; clicking it offers to buy it |
-| The jetpack | $30, once | Settings, under the hats |
+| The jetpack | $30, once | the item shop (O) |
+| The light jetpack (a third of the thrust) | $5, once | the item shop |
+| A hat (each of the seven) | $9.99, once | the item shop |
+| A paint job: gold plating, chrome, atomic glow, candy paint | $19, $15, $12, $9, once | the item shop |
+| A trail: fallout, confetti, stardust, bubbles | $12, $9, $7, $5, once | the item shop |
+| The box of fireworks (never empty) | $15, once | the item shop |
 | The sponsor's panel over the board of a game (six of them) | $49 a month | step up to the board: "Sponsor this game" |
 | The backdrop of the shooting gallery | $99 a month | at the counter side of Bullseye Alley |
 | A gondola of the big wheel (twenty-four) | $29 a month | the red kiosk by the steps of the wheel: "The gondolas and their sponsors" |
 | A sky village (fifty) | $19 to $9,999 a month | at the sign or the board of the village: "Hire …" |
 
-Prices are decided in one file, `server/catalog.js` (and `VILLAGE_PRICES` in
+What a visitor owns is one list, `server/items.js` (id, name, price, shelf, rarity, the words on the card):
+add a line there and it is sold. Prices of the places are in `server/catalog.js` (and `VILLAGE_PRICES` in
 `src/world/layout/sponsors.js` for the villages): the browser is shown them and is never asked what
 something costs. Payment happens on Stripe's own page (the game never sees a card); the visitor comes back
 to the game, and what was paid arrives a few seconds later.

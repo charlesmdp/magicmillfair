@@ -7,8 +7,12 @@ import { World } from './world/World.js';
 import { FreeCamera } from './player/FreeCamera.js';
 import { CharacterFactory, EMOTE_LIST, emoteIndex, packLook } from './player/Character.js';
 import { HATS } from './player/Cosmetics.js';
+import { ITEMS, PAINTS, TRAILS, itemOf, packKit } from '../server/items.js';
+import { ShopView } from './ui/ShopView.js';
+import { Previewer } from './ui/Preview.js';
+import { Sparks } from './world/effects/Sparks.js';
 import { Shop, price, logoData, loadImage } from './net/Shop.js';
-import { PlayerController } from './player/PlayerController.js';
+import { PlayerController, JET } from './player/PlayerController.js';
 import { CameraRig } from './player/CameraRig.js';
 import { Interact } from './player/Interact.js';
 import { RankEmotes } from './player/RankEmotes.js';
@@ -109,6 +113,13 @@ async function boot() {
   const owns = (id) => id !== undefined && (id === 'none' || shop.owns(id === 'jetpack' ? 'jetpack' : `hat:${id}`));
   const savedHat = parseInt(store.get('mmf.hat'), 10);
   const look = { hat: savedHat > 0 && savedHat < HATS.length && owns(HATS[savedHat].id) ? savedHat : 0, jet: false, bouquet: false, kinds: undefined, quad: false, bighead: false };
+  // what the avatar shows besides its hat — its paint, its trail — is remembered too, and told to the others
+  // as one small number (see server/items.js)
+  const kit = { paint: 0, trail: 0, pet: 0 };
+  { const saved = (() => { try { return JSON.parse(store.get('mmf.kit')) || {}; } catch { return {}; } })(); kit.paint = Math.max(0, PAINTS.indexOf(saved.paint)); kit.trail = Math.max(0, TRAILS.indexOf(saved.trail)); }
+  // the small bright things: trails, fireworks (one set of points for everybody)
+  world.sparks = new Sparks();
+  scene.add(world.sparks.mesh);
   const timers = {}; // cheats that wear off: name → seconds left
   // habits kept from one visit to the next
   // (running, and the camera that turns with the character, are on unless the visitor switched them off)
@@ -119,7 +130,8 @@ async function boot() {
   const who = { admin: false, owner: false, key: '', days: 1 };
   app.who = who;
   // no jetpack underground, nor where a game forbids it
-  player.canFly = (p) => owns('jetpack') && !player.cave && !world.noFly.some((z) => (p.x - z.x) ** 2 + (p.z - z.z) ** 2 < z.r * z.r);
+  // (two jetpacks: the real one, and a light one with a third of the tank)
+  player.canFly = (p) => (shop.owns('jetpack') || shop.owns('jetlite')) && !player.cave && !world.noFly.some((z) => (p.x - z.x) ** 2 + (p.z - z.z) ** 2 < z.r * z.r);
   player.onDeath = (cause) => { hud.wasted(cause); audio.play('wasted'); };
   player.onRespawn = () => { hud.wasted(null); rig.snap(player.pos, rig.yaw); audio.play('respawn'); };
   const rank = new RankEmotes(scene);
@@ -150,7 +162,7 @@ async function boot() {
   let presence = null, avatars = null;
   let liveScore = () => {}; // (set once the boards exist)
   const startPresence = () => {
-    presence = new Presence({ name, color });
+    presence = new Presence({ name, color, kit: packKit(kit) });
     avatars = new RemoteAvatars({ scene, factory, presence, hud, rank, world });
     presence.on('score', ({ peer, board }) => liveScore(peer, board));
     presence.on('chat', ({ id, peer, text, near, important }) => {
@@ -169,6 +181,7 @@ async function boot() {
     // what the others do is heard when they are close
     presence.on('emote', ({ id, emote: i }) => {
       const o = presence.peers.get(id), e = EMOTE_LIST[i];
+      if (o && o.visible && i === FIREWORK) { world.sparks.firework(o.x, o.y, o.z); return; } // (somebody lit a firework)
       if (!o || !o.visible || !e) return;
       const d = Math.hypot(o.x - player.pos.x, o.z - player.pos.z);
       if (d < 40) audio.play(e.rank ? 'rank' : e.id === 'cheer' || e.id === 'clap' || e.id === 'hype' || e.id === 'go' ? 'cheer' : e.id === 'rage' ? 'rage' : 'emote', { volume: Math.max(0.15, 1 - d / 40) * 0.8 });
@@ -548,8 +561,15 @@ async function boot() {
   const refreshShop = async () => {
     await shop.load();
     shop.everything = who.admin;
-    if (look.hat && !owns(HATS[look.hat].id)) { look.hat = 0; hud.setHat(0); }
-    hud.setShop((id) => (owns(id) ? '' : price(shop.prices.hat)), shop.open ? (owns('jetpack') ? 'Jetpack: yours' : `Jetpack · ${price(shop.prices.jetpack)}`) : null);
+    // (nothing is worn that is not theirs)
+    if (look.hat && !owns(HATS[look.hat].id)) look.hat = 0;
+    if (kit.paint && !shop.owns(`paint:${PAINTS[kit.paint]}`)) kit.paint = 0;
+    if (kit.trail && !shop.owns(`trail:${TRAILS[kit.trail]}`)) kit.trail = 0;
+    wear();
+    player.tank = shop.owns('jetpack') ? JET.time : JET.time / 3;
+    hud.setShop(shop.open);
+    hud.setFireworks(shop.owns('fireworks'));
+    shopView.refresh(shopItems());
     await applySponsors();
   };
   /** The holder of a place (or the administrator) says what to show there. */
@@ -628,6 +648,57 @@ async function boot() {
     return v.url && near(p, v.sign, 3.4) ? { label: `Visit ${v.name}`, run: () => window.open(v.url, '_blank', 'noopener,noreferrer') } : null;
   });
   Object.assign(app, { travel, sky });
+  // ---------- the item shop: everything that is sold, on one screen (ui/ShopView.js)
+  const FEATURED = ['jetpack', 'paint:gold', 'fireworks', 'hat:crown'], WEARABLE = ['hat', 'paint', 'trail'];
+  const previewer = new Previewer(engine, factory);
+  const shopView = new ShopView(hud.root, (id, w, h) => previewer.shot(id, color, w, h));
+  const wornNow = (type, sub) => (type === 'hat' ? HATS[look.hat]?.id === sub : type === 'paint' ? PAINTS[kit.paint] === sub : type === 'trail' ? TRAILS[kit.trail] === sub : false);
+  const shopItems = () => ITEMS.map((it) => {
+    const [type, sub] = it.id.split(':'), owned = shop.owns(it.id);
+    return {
+      ...it, owned, cost: price(shop.cost(it.id) || it.price), worn: owned && wornNow(type, sub), wearable: WEARABLE.includes(type), featured: FEATURED.includes(it.id),
+      hint: it.id === 'fireworks' ? 'Yours: press V (or the button in the emotes) to light one.' : it.id === 'jetpack' || it.id === 'jetlite' ? 'Yours: jump, then press jump again in the air.' : 'Yours for good: put it on and take it off as you please.',
+    };
+  });
+  /** What is worn goes on the avatar, is remembered, and is told to the others. */
+  function wear() {
+    me.setPaint(kit.paint);
+    store.set('mmf.hat', String(look.hat));
+    store.set('mmf.kit', JSON.stringify({ paint: PAINTS[kit.paint], trail: TRAILS[kit.trail] }));
+    presence?.setIdentity(name, color, packKit(kit));
+  }
+  const equip = (id, on) => {
+    const [type, sub] = id.split(':');
+    if (type === 'hat') look.hat = on ? Math.max(0, HATS.findIndex((h) => h.id === sub)) : 0;
+    else if (type === 'paint') kit.paint = on ? Math.max(0, PAINTS.indexOf(sub)) : 0;
+    else if (type === 'trail') kit.trail = on ? Math.max(0, TRAILS.indexOf(sub)) : 0;
+    wear();
+  };
+  const openShop = (pick) => {
+    if (shopView.isOpen || fair.session) return;
+    hud.closeAll();
+    input.exitLock();
+    input.keys.clear(); // (nothing stays pressed behind the shop)
+    if (pick) shopView.picked = pick;
+    shopView.open({ items: shopItems(), mode: shop.mode, note: 'It stays yours on this device.' });
+    audio.play('pick');
+  };
+  shopView
+    .on('buy', async (id) => { hud.note('Opening the payment page…', 8000); const wrong = await shop.buy(id); if (wrong) hud.note(wrong, 7000); })
+    .on('equip', (id) => { const [type, sub] = id.split(':'); if (!shop.owns(id)) return; equip(id, !wornNow(type, sub)); shopView.refresh(shopItems()); audio.play('pick'); })
+    .on('close', () => { document.getElementById('view')?.focus({ preventScroll: true }); });
+  // a firework (for who has the box): up it goes, and those around see it too
+  const FIREWORK = 31; // (the number it travels under, among the emotes)
+  let fireworkAt = -10;
+  const lightFirework = () => {
+    if (state.mode !== 'walk' || player.dead || fair.session) return;
+    if (!shop.owns('fireworks')) { hud.note('Fireworks are sold in the item shop (O).', 4000); return; }
+    if (state.time - fireworkAt < 2.5) return;
+    fireworkAt = state.time;
+    world.sparks.firework(player.pos.x, player.pos.y, player.pos.z);
+    presence?.sendEmote(FIREWORK);
+  };
+  Object.assign(app, { shopView, openShop, kit, equip, lightFirework });
   const toggleCamera = () => { if (state.mode === 'walk') { if (mayFly()) setMode('free'); } else if (state.mode === 'free') setMode('walk'); };
   const savedQuality = store.get('mmf.quality');
   const qualityChoice = params.get('q') && TIERS[params.get('q')] ? params.get('q') : savedQuality && TIERS[savedQuality] ? savedQuality : 'auto';
@@ -648,7 +719,12 @@ async function boot() {
     let tries = 0;
     const again = async () => {
       await refreshShop();
-      if (shop.owned.has(paid) || shop.slots[paid]?.mine) { audio.play('victory'); hud.note(shop.slots[paid]?.mine ? 'It is yours. Go to it to set it up: your name, your link, your logo.' : 'It is yours. Thank you!', 9000); }
+      if (shop.owned.has(paid) || shop.slots[paid]?.mine) {
+        audio.play('victory');
+        hud.note(shop.slots[paid]?.mine ? 'It is yours. Go to it to set it up: your name, your link, your logo.' : 'It is yours. Thank you!', 9000);
+        // (what can be worn is put on at once)
+        if (itemOf(paid) && WEARABLE.includes(paid.split(':')[0])) { equip(paid, true); shopView.refresh(shopItems()); }
+      }
       else if (++tries < 8) setTimeout(again, 2500);
     };
     again();
@@ -701,13 +777,8 @@ async function boot() {
     .on('promote', (id) => { presence?.promote(id); })
     .on('goto', (to) => goTo(to))
     .on('demote', async (id) => { await callApi(`api/admins?id=${encodeURIComponent(id)}`, { method: 'DELETE', key: who.key }); presence?.demote(id); refreshRoster(); })
-    .on('hat', (i) => {
-      const h = HATS[i];
-      if (!h) return;
-      if (owns(h.id)) { look.hat = i; hud.setHat(i); store.set('mmf.hat', String(i)); }
-      else offer(`hat:${h.id}`, h.name, `${price(shop.prices.hat)}, once: it is yours for good in this browser, and everybody sees you wear it.`, shop.prices.hat, false);
-    })
-    .on('buy', (what) => { if (what === 'jetpack' && !owns('jetpack')) offer('jetpack', 'The jetpack', `${price(shop.prices.jetpack)}, once: press jump again in the air and fly for a second and a half, as often as you like.`, shop.prices.jetpack, false); })
+    .on('shop', () => openShop())
+    .on('firework', lightFirework)
     .on('drop', () => { look.bouquet = false; look.kinds = undefined; })
     .on('volume', (key, value) => {
       volume[key] = value;
@@ -721,7 +792,7 @@ async function boot() {
       player.autoRun = settings.run;
       rig.follow = settings.follow;
     })
-    .on('color', (i) => { color = i; me.setColor(i); presence?.setIdentity(name, color); })
+    .on('color', (i) => { color = i; me.setColor(i); presence?.setIdentity(name, color); shopView.stale(); })
     .on('name', (n) => { if (!n) return; name = n; presence?.setIdentity(name, color); store.set('mmf.name', name); world.games.setMe(name); })
     .on('quality', (q) => {
       // a tier changes shaders, textures and shadow maps: simplest and safest is a clean restart at the same spot
@@ -734,6 +805,8 @@ async function boot() {
   input.on('camera', toggleCamera);
   input.on('perf', () => hud.toggleStats());
   input.on('emote', () => hud.toggleEmotes());
+  input.on('shop', () => { if (state.mode === 'walk') openShop(); });
+  input.on('firework', lightFirework);
   input.on('drop', () => { if (look.bouquet) { look.bouquet = false; look.kinds = undefined; } });
   input.on('chat', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleChat(true, talking ? talking.brain.ask || `Say something to ${talking.name}…` : undefined); });
   input.on('respawn', () => { if (state.mode === 'walk') { endGame(); spawn(); hud.note('Back to the mill'); } });
@@ -838,6 +911,14 @@ async function boot() {
       const fov = fair.fov ?? (timers.fisheye ? 104 : engine.width < engine.height ? 68 : 55);
       if (Math.abs(camera.fov - fov) > 0.05) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 5); camera.updateProjectionMatrix(); }
       if (timers.disco) me.setColor(Math.floor(state.time * 6) % 16); else if (me.colorIndex !== color) me.setColor(color);
+      // the trail of the avatar, if it has one; the fireworks; the bang of those that burst close by
+      const sparks = world.sparks;
+      if (kit.trail && mode === 'walk' && !player.swimming && !player.dead) sparks.trail(kit.trail, dt, player.pos.x, player.pos.y, player.pos.z, Math.hypot(player.vel.x, player.vel.z));
+      const rockets = sparks.rockets.length;
+      sparks.update(dt, camera, engine.height);
+      if (rockets > (sparks._heard || 0)) audio.play('rocket', { volume: 0.7 });
+      sparks._heard = sparks.rockets.length;
+      if (sparks.burst) { const d = Math.hypot(sparks.burst.x - camera.position.x, sparks.burst.z - camera.position.z); if (d < 260) audio.play('bang', { volume: Math.max(0.12, 1 - d / 260) }); sparks.burst = null; }
       look.bighead = !!timers.bighead;
       look.jet = player.jet > 0;
       look.quad = player.riding;

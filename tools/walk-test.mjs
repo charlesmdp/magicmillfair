@@ -450,6 +450,8 @@ try {
     const yBefore = (await state()).y;
     await page.keyboard.press('KeyE');
     await frames(40);
+    // (the wheel turns at its own pace, whatever the frame rate: wait until the car has gone up a little)
+    for (let i = 0; i < 40 && (await page.evaluate((y0) => { const a = window.__mmf; return !!a.player.seat && a.player.pos.y < y0 + 0.35; }, yBefore)); i++) await frames(5);
     const ride = await page.evaluate(() => { const a = window.__mmf; return { seat: !!a.player.seat, y: a.player.pos.y, anim: a.player.anim }; });
     check('boards a car of the big wheel and goes up with it', offer.includes('Board the wheel') && ride.seat && ride.anim === 5 && ride.y > yBefore + 0.3, `from ${yBefore.toFixed(2)} to ${ride.y.toFixed(2)} m`);
     await page.evaluate(() => window.__mmf.player.teleport(0, 4.3, 0)); // (down again)

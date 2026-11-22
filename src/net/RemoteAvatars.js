@@ -1,6 +1,7 @@
 // Draws the other visitors: one avatar and one name tag per peer of the presence layer.
 import * as THREE from 'three';
 import { ANIM, EMOTE_LIST } from '../player/Character.js';
+import { PAINTS, TRAILS, unpackKit } from '../../server/items.js';
 
 const FAR = 240; // m: avatars further away are not drawn
 const TAG_RANGE = 70; // m: name tags fade out with distance
@@ -28,6 +29,7 @@ export class RemoteAvatars {
       const it = this.items.get(peer.id);
       if (!it) return;
       it.character.setColor(peer.color);
+      this._kit(it);
       it.tag.remove();
       it.tag = this.hud.tag(peer.id, peer.name, peer.color);
     });
@@ -47,7 +49,16 @@ export class RemoteAvatars {
     const character = this.factory.create(peer.color);
     character.root.visible = false;
     this.scene.add(character.root);
-    this.items.set(peer.id, { peer, character, tag: this.hud.tag(peer.id, peer.name, peer.color), shown: false });
+    const it = { peer, character, tag: this.hud.tag(peer.id, peer.name, peer.color), shown: false, trail: 0 };
+    this.items.set(peer.id, it);
+    this._kit(it);
+  }
+
+  // What a visitor shows besides its hat: its paint, its trail (the "kit" of server/items.js).
+  _kit(it) {
+    const kit = unpackKit(it.peer.kit || 0);
+    it.character.setPaint(kit.paint < PAINTS.length ? kit.paint : 0);
+    it.trail = kit.trail < TRAILS.length ? kit.trail : 0;
   }
 
   _remove(id) {
@@ -107,6 +118,7 @@ export class RemoteAvatars {
           const cave = this.world.collision.caveAt(peer.x, peer.z, peer.y);
           character.setAmbient(cave ? cave.light(peer.x, peer.z) : 1);
         }
+        if (it.trail && dist < 90 && this.world?.sparks && peer.anim !== ANIM.swim) this.world.sparks.trail(it.trail, dt, peer.x, peer.y, peer.z, peer.speed);
         if (peer.anim === ANIM.swim && dist < 120 && this.world) {
           const level = this.world.data.waterAt(peer.x, peer.z);
           if (level > -500) this.world.ripples.trail(peer.id, this.world.engine.time, dt, peer.x, level, peer.z, peer.speed, true);

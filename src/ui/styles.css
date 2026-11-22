@@ -238,8 +238,6 @@ button.pill.players:hover { border-color: rgba(242, 193, 78, 0.7); }
 .chooser .list.fields input[type="text"] { padding: 9px 11px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.08); color: var(--ink); font: inherit; font-size: 15px; }
 .chooser .list.fields input[type="file"] { font: inherit; color: var(--ink); }
 .chooser .list.fields .save { align-self: flex-start; justify-content: center; padding: 10px 22px; font-weight: 700; background: rgba(242, 193, 78, 0.28); border-color: rgba(242, 193, 78, 0.8); }
-.hats button.locked { opacity: 0.75; }
-.buy-jet { margin-top: 8px; padding: 8px 12px; border-radius: 10px; border: 1px solid rgba(242, 193, 78, 0.7); background: rgba(242, 193, 78, 0.16); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; }
 .chooser .list b { display: block; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chooser .list small { display: block; font-size: 11.5px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chooser .close { align-self: flex-end; margin-top: 12px; padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.08); }
@@ -321,11 +319,9 @@ body.playing canvas { cursor: none; }
 .touch .emotes .streak p:not(.next) { display: none; } /* (a phone has no room for the long version) */
 .chat .say .tip { display: block; margin: 5px 4px 0; font-size: 11.5px; color: var(--ink-soft); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); }
 .row small { color: var(--ink-soft); font-size: 11.5px; }
-.emotes .held { display: none; }
+.emotes .held, .emotes .boom { display: none; }
+.emotes.fireworks .boom { display: flex; }
 .emotes.holding .held { display: flex; }
-.hats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
-.hats button { border: 0; background: rgba(255, 255, 255, 0.08); padding: 7px 2px; border-radius: 9px; font-size: 12px; }
-.hats button[aria-pressed='true'] { background: var(--accent); color: #2a1d05 !important; font-weight: 700; }
 
 /* the end of the road: the picture drains of its colour, a band crosses the screen */
 #view { transition: filter 0.9s ease; }
@@ -352,6 +348,72 @@ body.dead #view { filter: grayscale(1) contrast(1.15) brightness(0.72); }
 .touch .prompts { left: auto; right: calc(16px + var(--safe-r)); bottom: calc(108px + var(--safe-b)); transform: none; flex-direction: column; align-items: flex-end; }
 
 /* chat */
+/* ---------- the item shop: shelves of cards dressed by rarity, a panel for the one that is picked ---------- */
+.shop-icon.selling { position: relative; border-color: rgba(242, 193, 78, 0.8); color: #ffe6a6 !important; }
+.shop-icon.selling::after { content: ''; position: absolute; right: 2px; top: 2px; width: 9px; height: 9px; border-radius: 50%; background: #f2c14e; box-shadow: 0 0 8px #f2c14e; }
+.open-shop { width: 100%; padding: 10px 12px; border-radius: 11px; border: 1px solid rgba(242, 193, 78, 0.7); background: linear-gradient(135deg, rgba(242, 193, 78, 0.28), rgba(232, 85, 78, 0.2)); color: var(--ink); font: inherit; font-weight: 700; letter-spacing: 0.02em; }
+.shop { position: absolute; inset: 0; z-index: 18; display: none; pointer-events: auto; flex-direction: column; overflow: hidden; outline: none; color: #fff;
+  background: radial-gradient(120% 90% at 85% -10%, #7b3ff2 0%, rgba(123, 63, 242, 0) 55%), radial-gradient(90% 80% at -10% 110%, #0fb5e6 0%, rgba(15, 181, 230, 0) 55%), linear-gradient(160deg, #1b1f6b 0%, #2a1a7a 45%, #14104a 100%); }
+.shop.on { display: flex; }
+.shop-rays { position: absolute; inset: -20%; pointer-events: none; opacity: 0.16; background: repeating-linear-gradient(115deg, #fff 0 2px, transparent 2px 90px, #fff 90px 160px, transparent 160px 300px); transform: skewX(-8deg); -webkit-mask: linear-gradient(180deg, #000, transparent 75%); mask: linear-gradient(180deg, #000, transparent 75%); }
+.shop header { position: relative; flex: none; display: flex; align-items: center; gap: 16px; padding: calc(16px + var(--safe-t)) calc(26px + var(--safe-r)) 10px calc(26px + var(--safe-l)); }
+.shop header h2 { margin: 0; font: italic 900 clamp(30px, 5.4vw, 58px) / 0.95 'Arial Black', Impact, 'Helvetica Neue', Arial, sans-serif; letter-spacing: 0.01em; text-transform: uppercase; text-shadow: 0 4px 0 rgba(0, 0, 0, 0.35); transform: skewX(-6deg); }
+.shop header h2 em { font-style: inherit; color: #ffe14d; }
+.shop header .mode { margin-left: auto; padding: 6px 12px; border-radius: 6px; background: #ffe14d; color: #201a05; font-size: 12px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; transform: skewX(-8deg); }
+.shop header .mode:empty { display: none; }
+.shop header .mode:empty + .x { margin-left: auto; }
+.shop header .x { flex: none; padding: 9px 14px; border-radius: 8px; border: 2px solid rgba(255, 255, 255, 0.55); background: rgba(0, 0, 0, 0.25); color: #fff; font: 800 13px/1 system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; }
+.shop header .x kbd { margin-left: 6px; padding: 2px 5px; border-radius: 4px; background: rgba(255, 255, 255, 0.2); font: inherit; font-size: 10px; }
+.shop-body { position: relative; flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) clamp(280px, 30vw, 400px); gap: 18px; padding: 4px calc(26px + var(--safe-r)) calc(18px + var(--safe-b)) calc(26px + var(--safe-l)); }
+.shelves { min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 8px 30px 2px; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.4) transparent; }
+.shelf h3 { display: inline-block; margin: 14px 0 10px; padding: 5px 16px 5px 12px; background: #fff; color: #1a1560; font: italic 900 15px/1.1 'Arial Black', Impact, Arial, sans-serif; letter-spacing: 0.04em; text-transform: uppercase; transform: skewX(-10deg); box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.3); }
+.shelf-featured h3 { background: #ffe14d; color: #201a05; }
+.shelf .row { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.shelf-featured .row { grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); }
+.card { position: relative; aspect-ratio: 4 / 5; padding: 0; border: 3px solid rgba(255, 255, 255, 0.16); border-radius: 6px; overflow: hidden; cursor: pointer; color: #fff; text-align: left; transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease; }
+.card:hover, .card.picked { transform: translateY(-3px) scale(1.025); border-color: #fff; box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45), 0 0 22px rgba(255, 255, 255, 0.28); z-index: 1; }
+.card.picked { border-color: #ffe14d; }
+.card.uncommon, .detail.uncommon .stage { background: linear-gradient(180deg, #7bd957 0%, #2f8f3a 55%, #1c5a2a 100%); }
+.card.rare, .detail.rare .stage { background: linear-gradient(180deg, #4fc3ff 0%, #2470d6 55%, #173d8f 100%); }
+.card.epic, .detail.epic .stage { background: linear-gradient(180deg, #d27bff 0%, #8438d8 55%, #4a1b8f 100%); }
+.card.legendary, .detail.legendary .stage { background: linear-gradient(180deg, #ffc24d 0%, #e8742a 55%, #9a3312 100%); }
+.card .shine, .stage .shine { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(70% 55% at 50% 38%, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0) 70%), repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.08) 0 14px, transparent 14px 44px); }
+.card canvas, .stage canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.35)); }
+.card .rar { position: absolute; left: 8px; top: 7px; font: 800 9.5px/1 system-ui, sans-serif; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255, 255, 255, 0.9); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
+.card .foot { position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 9px 8px; display: flex; align-items: flex-end; justify-content: space-between; gap: 6px; background: linear-gradient(180deg, transparent, rgba(8, 6, 30, 0.82) 46%); }
+.card .foot b { min-width: 0; font: italic 900 14px/1.05 'Arial Black', Impact, Arial, sans-serif; text-transform: uppercase; letter-spacing: 0.01em; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45); }
+.card.big .foot b { font-size: 19px; }
+.card .price { flex: none; padding: 4px 8px; border-radius: 5px; background: #fff; color: #17124f !important; font: 900 12px/1 system-ui, sans-serif; font-style: normal; transform: skewX(-8deg); white-space: nowrap; }
+.card .price.has { background: #5ef08a; color: #06361a !important; }
+.card.worn .price { background: #ffe14d; color: #201a05 !important; }
+.card.worn::after { content: ''; position: absolute; right: 8px; top: 8px; width: 12px; height: 12px; border-radius: 50%; background: #ffe14d; box-shadow: 0 0 10px #ffe14d; }
+.detail { min-height: 0; display: flex; flex-direction: column; border-radius: 8px; overflow: hidden; background: rgba(8, 6, 34, 0.62); border: 2px solid rgba(255, 255, 255, 0.18); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.4); }
+.detail .stage { position: relative; flex: 1 1 46%; min-height: 150px; }
+.detail .about { flex: none; padding: 14px 18px 16px; }
+.detail .rar { font: 800 11px/1 system-ui, sans-serif; letter-spacing: 0.14em; text-transform: uppercase; color: #ffe14d; }
+.detail h3 { margin: 4px 0 6px; font: italic 900 clamp(22px, 2.6vw, 32px) / 1 'Arial Black', Impact, Arial, sans-serif; text-transform: uppercase; }
+.detail .blurb { margin: 0 0 12px; font-size: 14px; line-height: 1.45; color: #e6e4ff; }
+.detail .acts button { width: 100%; padding: 13px 14px; border: 0; border-radius: 6px; font: italic 900 18px/1 'Arial Black', Impact, Arial, sans-serif; letter-spacing: 0.03em; text-transform: uppercase; cursor: pointer; transform: skewX(-4deg); box-shadow: 0 5px 0 rgba(0, 0, 0, 0.35); }
+.detail .acts .buy { background: linear-gradient(180deg, #fff16a, #ffc81f); color: #2a2000 !important; }
+.detail .acts .equip { background: linear-gradient(180deg, #7cf7a2, #27c965); color: #05301a !important; }
+.detail .acts .off { background: rgba(255, 255, 255, 0.16); color: #fff !important; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.5); }
+.detail .acts .yours { background: rgba(94, 240, 138, 0.22); color: #c9ffd9 !important; box-shadow: inset 0 0 0 2px rgba(94, 240, 138, 0.6); cursor: default; }
+.detail .acts button:active { transform: skewX(-4deg) translateY(3px); box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35); }
+.detail .fine { margin: 10px 0 0; font-size: 11.5px; line-height: 1.4; color: rgba(230, 228, 255, 0.75); }
+.nopic { position: absolute; inset: 0; }
+/* narrow screens: the shelves on top, the picked card in a strip at the bottom */
+@media (max-width: 760px), (max-height: 520px) {
+  .shop header { padding-top: calc(10px + var(--safe-t)); padding-bottom: 6px; }
+  .shop-body { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; gap: 8px; padding-left: calc(12px + var(--safe-l)); padding-right: calc(12px + var(--safe-r)); }
+  .shelf .row { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 9px; }
+  .shelf-featured .row { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .detail { flex-direction: row; max-height: 42vh; }
+  .detail .stage { flex: 0 0 30%; min-height: 0; }
+  .detail .about { flex: 1 1 auto; min-width: 0; padding: 10px 12px; overflow-y: auto; }
+  .detail .blurb { font-size: 12.5px; margin-bottom: 8px; }
+  .detail .acts button { padding: 10px; font-size: 15px; }
+  .detail .fine { display: none; }
+}
 .flash { position: absolute; inset: 0; display: none; pointer-events: none !important; background: radial-gradient(circle at 50% 45%, #fff, #fff6dc); z-index: 3; }
 .chat { position: absolute; left: calc(172px + var(--safe-l)); bottom: calc(12px + var(--safe-b)); width: min(380px, 46vw); pointer-events: none !important; }
 .chat .log { max-height: 148px; overflow: hidden; display: flex; flex-direction: column; opacity: 0; transition: opacity 0.6s; scrollbar-width: thin; }

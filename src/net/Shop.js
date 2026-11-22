@@ -25,7 +25,7 @@ export const price = (cents) => { const d = Math.floor(cents / 100), c = cents %
 export class Shop {
   constructor() {
     this.mode = null; // 'test' | 'live' when things are sold
-    this.prices = { hat: 999, jetpack: 3000, board: 4900, tarp: 9900, gondola: 2900, village: [] };
+    this.prices = { board: 4900, tarp: 9900, gondola: 2900, village: [], items: {} };
     this.owned = new Set();
     /** slot → { state: 'live' | 'taken', mine, title, subtitle, url, logo (an address), draft } */
     this.slots = {};
@@ -50,7 +50,7 @@ export class Shop {
   owns(item) { return !this.open || this.everything || this.owned.has(item); }
 
   /** What an item costs, in cents (a village: give its tier). */
-  cost(item, tier = 0) { const type = item.split(':')[0]; return type === 'village' ? this.prices.village[tier] || 0 : this.prices[type] || 0; }
+  cost(item, tier = 0) { const type = item.split(':')[0]; return type === 'village' ? this.prices.village[tier] || 0 : this.prices.items?.[item] ?? this.prices[type] ?? 0; }
 
   /** Off to the payment page. Resolves to an error to show when it could not be opened (otherwise the page leaves). */
   async buy(item) {

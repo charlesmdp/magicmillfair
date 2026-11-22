@@ -55,7 +55,7 @@ function wsUrl(raw, room, dev) {
 
 export class Presence {
   /** @param {{ room?: string, name?: string, color?: number, url?: string }} [options] */
-  constructor({ room, name, color, url } = {}) {
+  constructor({ room, name, color, kit = 0, url } = {}) {
     this._page = typeof location !== 'undefined' ? location : { search: '', pathname: '', protocol: '' };
     this._query = new URLSearchParams(this._page.search);
     this._url = url;
@@ -67,6 +67,7 @@ export class Presence {
     this.shard = 1;
     this.name = cleanName(name ?? stored('mmf.name'), '') || `Visitor ${10 + Math.floor(Math.random() * 90)}`;
     this.color = int(color, 15, int(parseInt(stored('mmf.color'), 10), 15, Math.floor(Math.random() * 16)));
+    this.kit = int(kit, 255); // what the avatar shows besides its hat: its paint, its trail (see server/items.js)
     this._persist();
     this.id = 0; // own id in the room (0 until connected)
     this.mode = 'offline';
@@ -180,7 +181,8 @@ export class Presence {
   /** The owner has taken the title away (see /api/admins): whoever holds that key in this room loses it at once. */
   demote(key) { if (this.owner && this._tr) this._tr.send({ t: 'demote', key }); }
 
-  setIdentity(name, color) {
+  setIdentity(name, color, kit = this.kit) {
+    this.kit = int(kit, 255);
     this.name = cleanName(name, this.name);
     this.color = int(color, 15, this.color);
     this._persist();
@@ -215,7 +217,7 @@ export class Presence {
   _persist() {
     try { localStorage.setItem('mmf.name', this.name); localStorage.setItem('mmf.color', String(this.color)); } catch { /* no storage */ }
   }
-  _hello() { return { t: 'hello', name: this.name, color: this.color, v: 2, dev: this.device }; }
+  _hello() { return { t: 'hello', name: this.name, color: this.color, v: 2, dev: this.device, ...(this.kit && { k: this.kit }) }; }
 
   _handlers(mode) {
     return {
@@ -332,10 +334,10 @@ export class Presence {
   // Adds a peer, or updates the identity of a known one. `stamp` (server time) is only given by a welcome.
   _join(info, stamp) {
     if (!info || !Number.isInteger(info.id) || info.id === this.id) return false;
-    const name = cleanName(info.name), color = int(info.color, 15);
+    const name = cleanName(info.name), color = int(info.color, 15), kit = int(info.k, 255);
     let peer = this.peers.get(info.id);
     const known = !!peer;
-    if (!known) this.peers.set(info.id, (peer = { id: info.id, name, color, x: 0, y: 0, z: 0, yaw: 0, anim: 0, flags: 0, speed: 0, visible: false, far: false }));
+    if (!known) this.peers.set(info.id, (peer = { id: info.id, name, color, kit, x: 0, y: 0, z: 0, yaw: 0, anim: 0, flags: 0, speed: 0, visible: false, far: false }));
     if (!known || stamp !== undefined) {
       // A welcome starts a new timeline (the server clock may have restarted): never reuse an old track.
       const track = new Track(this._interval), t = now();
@@ -345,8 +347,8 @@ export class Presence {
       track.sample(t, peer);
     }
     if (!known) this._emit('join', peer);
-    else if (peer.name !== name || peer.color !== color) {
-      peer.name = name; peer.color = color;
+    else if (peer.name !== name || peer.color !== color || peer.kit !== kit) {
+      peer.name = name; peer.color = color; peer.kit = kit;
       this._emit('identity', peer);
     }
     return true;
