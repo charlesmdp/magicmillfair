@@ -116,6 +116,23 @@ try {
   await alice.page.evaluate(() => { const a = window.__mmf; a.equip('paint:gold', false); a.equip('trail:confetti', false); });
   const kitOff = await until(() => bob.page.evaluate(() => { const it = [...window.__mmf.avatars.items.values()][0]; return it && !it.character.paint && !it.trail ? true : null; }), 20000);
   check('Bob sees what Alice wears from the shop — her paint, her trail — and the firework she lights', !!kitSeen && kitSeen.kit === 17 && !!rocket && !!kitOff, JSON.stringify({ kitSeen, rocket, kitOff }));
+  // her size, a hat of the second dozen, a seat on the ground: all of it reaches Bob (nothing is sold on this
+  // server: everything is everybody's, the sizes of the Game Pass too)
+  await alice.page.evaluate(() => { const a = window.__mmf; a.hud.handlers.size(2); a.equip('hat:party', true); });
+  const big = await until(() => bob.page.evaluate(() => { const it = [...window.__mmf.avatars.items.values()][0]; return it && it.character.size > 2 && it.character.look.hat === 12 ? { size: it.character.size, hat: it.character.look.hat } : null; }), 20000);
+  await alice.page.evaluate(() => { const a = window.__mmf; a.hud.handlers.size(0); a.equip('hat:party', false); a.hud.handlers.sit(); });
+  const onGround = await until(() => bob.page.evaluate(() => { const it = [...window.__mmf.avatars.items.values()][0]; return it && it.peer.anim === 10 && it.character.size === 1 && it.character.look.hat === 0 ? { anim: it.peer.anim } : null; }), 20000);
+  await alice.page.evaluate(() => { window.__mmf.player.cross = false; });
+  check('Bob sees Alice giant with a party hat on, then her usual size, sitting on the ground', !!big && !!onGround, JSON.stringify({ big, onGround }));
+  // a bouquet: Alice holds it out to Bob, who stands right by her — it is in his hands
+  await bob.page.evaluate(() => { const a = window.__mmf, o = [...a.avatars.items.values()][0].peer; a.player.teleport(o.x + 1.2, o.z + 0.4, 0); });
+  await alice.page.evaluate(() => { const a = window.__mmf; a.look.kinds = undefined; a.look.bouquet = true; });
+  const offer = await until(() => alice.page.evaluate(() => [...document.querySelectorAll('.prompt.on span')].map((e) => e.textContent).find((t) => /^Give your bouquet to Bob$/.test(t)) || null), 20000);
+  await alice.page.keyboard.press('KeyE');
+  const given = await until(() => bob.page.evaluate(() => (window.__mmf.look.bouquet ? document.querySelector('.hud .note').textContent : null)), 20000);
+  const emptied = await alice.page.evaluate(() => !window.__mmf.look.bouquet);
+  await bob.page.evaluate(() => { const a = window.__mmf; a.look.bouquet = false; });
+  check('a bouquet held out to somebody close is theirs: Alice gives hers to Bob', !!offer && /Alice gives you a bouquet/.test(given || '') && emptied, JSON.stringify({ offer, given, emptied }));
   // chat
   await alice.page.keyboard.press('Enter');
   await frames(alice, 2);
@@ -163,7 +180,7 @@ try {
   await alice.page.click('.pill.players');
   const seenByAdmin = await until(() => alice.page.evaluate(() => { const more = [...document.querySelectorAll('.roster .more')].map((e) => e.textContent); return more.length === 2 ? { more, acts: [...document.querySelectorAll('.roster .acts button')].map((e) => e.textContent) } : null; }), 20000);
   await alice.page.screenshot({ path: path.join(OUT, 'roster-admin.png') });
-  check('the administrator also sees the address, the browser and the device of each, and can go to them, name them, kick or ban', !!seenByAdmin && seenByAdmin.more.every((m) => /127\.0\.0\.1|::1/.test(m) && /Chrome \d+ · /.test(m) && /device /.test(m)) && seenByAdmin.acts.join() === 'Go to,Make admin,Kick,Ban 1 h,Ban 1 day,Ban for good', JSON.stringify(seenByAdmin));
+  check('the administrator also sees the address, the browser and the device of each, and can go to them, give them a present, name them, kick or ban', !!seenByAdmin && seenByAdmin.more.every((m) => /127\.0\.0\.1|::1/.test(m) && /Chrome \d+ · /.test(m) && /device /.test(m)) && seenByAdmin.acts.join() === 'Go to,Gift,Make admin,Kick,Ban 1 h,Ban 1 day,Ban for good', JSON.stringify(seenByAdmin));
   const act = (who, label) => who.page.evaluate((label) => { const b = [...document.querySelectorAll('.roster .acts button')].find((e) => e.textContent === label); if (b) b.click(); return !!b; }, label);
   const apart = () => alice.page.evaluate(() => { const a = window.__mmf, o = [...a.presence.peers.values()][0]; return Math.hypot(o.x - a.player.pos.x, o.z - a.player.pos.z); });
   // the administrator is carried next to a visitor; a click on the large map carries them to that spot
@@ -206,7 +223,7 @@ try {
   await alice.page.evaluate(() => document.querySelector('.roster .admins button').click());
   const unnamed = await until(() => bob.page.evaluate(() => { const a = window.__mmf; return !a.who.admin && !a.presence.admin && !localStorage.getItem('mmf.admin') ? true : null; }), 20000);
   check('one administrator names another: a key of their own, what administrators see — and the owner alone takes the title away',
-    !!named && !!bobSees && bobSees.rows.find((r) => /^Alice/.test(r.name))?.acts === 'Go to' && /owner/.test(bobSees.rows.find((r) => /^Alice/.test(r.name)).name) && /Bob/.test(bobSees.admins) && !bobSees.remove && /Bob/.test(listed || '') && !!unnamed,
+    !!named && !!bobSees && bobSees.rows.find((r) => /^Alice/.test(r.name))?.acts === 'Go to,Gift' && /owner/.test(bobSees.rows.find((r) => /^Alice/.test(r.name)).name) && /Bob/.test(bobSees.admins) && !bobSees.remove && /Bob/.test(listed || '') && !!unnamed,
     JSON.stringify({ named, bobSees, listed, unnamed }));
   await until(() => alice.page.evaluate(() => ([...document.querySelectorAll('.roster .acts button')].some((e) => e.textContent === 'Kick') && !document.querySelector('.roster .admins button')) || null), 20000);
   await act(alice, 'Kick'); // (Bob: the only other visitor)

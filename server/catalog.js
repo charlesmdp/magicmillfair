@@ -8,10 +8,11 @@
 //   tarp:shoot      the backdrop of the shooting gallery, by the month
 //   gondola:<n>     a gondola of the big wheel (1 to 24), by the month
 //   village:<id>    a sky village, by the month: ten prices, the higher the village the dearer
+//   pass            the Game Pass, by the month (items.js: what it gives)
 //
 // The first are things a visitor owns; the others are places ("slots") that one sponsor holds at a time.
 import { SPONSORS, sponsorId, VILLAGE_PRICES } from '../src/world/layout/sponsors.js';
-import { ITEMS, itemOf } from './items.js';
+import { ITEMS, itemOf, PASS } from './items.js';
 import { SKY_TIERS } from './sky-tiers.js';
 
 export const CURRENCY = 'usd';
@@ -35,6 +36,7 @@ export function describe(item) {
   if (more !== undefined) return null;
   const own = itemOf(item);
   if (own) return { item, kind: 'own', amount: own.price, monthly: false, name: `Atomic Oasis — ${own.name}` };
+  if (item === PASS.id) return { item, kind: 'pass', amount: PASS.price, monthly: true, name: `Atomic Oasis — ${PASS.name}` };
   if (type === 'board' && Object.hasOwn(BOARDS, id)) return { item, kind: 'slot', auction: true, amount: AUCTION.start, monthly: false, label: BOARDS[id], name: `Atomic Oasis — sponsor of ${BOARDS[id]} (your bid)` };
   if (item === 'tarp:shoot') return { item, kind: 'slot', amount: PRICES.tarp, monthly: true, name: 'Atomic Oasis — the backdrop of Bullseye Alley' };
   if (type === 'gondola' && /^[1-9]\d?$/.test(id || '') && +id <= GONDOLAS) return { item, kind: 'slot', amount: PRICES.gondola, monthly: true, name: `Atomic Oasis — gondola ${id} of the big wheel` };
@@ -43,4 +45,4 @@ export function describe(item) {
 }
 
 /** The prices, as the game shows them (in cents). */
-export const publicPrices = () => ({ currency: CURRENCY, ...PRICES, auction: AUCTION, village: VILLAGE_PRICES.map((p) => p * 100), items: Object.fromEntries(ITEMS.map((it) => [it.id, it.price])) });
+export const publicPrices = () => ({ currency: CURRENCY, ...PRICES, pass: PASS.price, auction: AUCTION, village: VILLAGE_PRICES.map((p) => p * 100), items: Object.fromEntries(ITEMS.map((it) => [it.id, it.price])) });

@@ -11,6 +11,7 @@
 //                                 off (wait: ms before the next one), {t:'n',wait} to the sender when it is too soon
 //                     {t:'ping',c}   {t:'admin',key}   and, from an administrator: {t:'who'}   {t:'kick',id}
 //                     {t:'ban',id,h}   {t:'promote',id} (names that visitor an administrator)   {t:'demote',key}
+//                     {t:'gift',id} (that visitor has been given something: their game asks the shop again)
 //                     (the owner: the administrator whose key has that id is one no more)   {t:'c',m,i:1} (a
 //                     line on the "important" channel: relayed to the whole room, marked as such)
 //   server → client   {t:'welcome',id,now,tick,idle?,near,blast?:[ms before the button is ready, ms since it went off],
@@ -19,7 +20,10 @@
 //                     {t:'c',id,m,n?}   {t:'m',p:[id,x,z,…]}   {t:'w',n}   {t:'pong',c,now}   {t:'full'}
 //                     {t:'admin',ok,owner?,out?} (out: the title was taken away)   {t:'who',list:[{id,name,ip,ua,dev,since,cc,city,admin}]}
 //                     {t:'kicked',ban}   {t:'promoted',key,by} (to who has just been named: the key of their
-//                     own)   {t:'promoted',id} (to who named them)
+//                     own)   {t:'promoted',id} (to who named them)   {t:'gift',by} (to who was given something:
+//                     nothing is given by this message — the shop is, and it only believes the administrator)
+//   `color` is a number from 0 to 31 (the last sixteen come with the Game Pass: the shop decides who may wear
+//   them, the relay only carries the number); `f`, the look of the avatar, is 16 bits (see packLook).
 //   `c` is a chat line: relayed as it comes, never stored, never sent back to its author; with `n` it only goes
 //   to those within CHAT_NEAR metres of who says it.
 //   `now` is the relay clock (ms). `age` (ms) tells how long before `now` a state was received: clients rebuild
@@ -77,7 +81,7 @@ export function cleanState(m) {
   if (!Array.isArray(v) || v.length < 4 || !v.slice(0, 4).every(Number.isFinite)) return null;
   return [
     round(clamp(v[0], -2000, 2000), 100), round(clamp(v[1], -100, 500), 100), round(clamp(v[2], -2000, 2000), 100),
-    round(Math.atan2(Math.sin(v[3]), Math.cos(v[3])), 1000), int(m.a, 15), int(m.f, 255),
+    round(Math.atan2(Math.sin(v[3]), Math.cos(v[3])), 1000), int(m.a, 15), int(m.f, 65535),
   ];
 }
 
@@ -154,7 +158,7 @@ export class Room {
       rank: '', key: '', cc: String((known || from)?.cc || '').slice(0, 2), city: String((known || from)?.city || '').slice(0, 60),
     };
     if (known) {
-      p.name = cleanName(known.name); p.color = int(known.color, 15); p.kit = int(known.kit, 255); p.joined = !!known.joined;
+      p.name = cleanName(known.name); p.color = int(known.color, 31); p.kit = int(known.kit, 255); p.joined = !!known.joined;
       p.dev = cleanDevice(known.dev); p.admin = !!known.admin;
       p.rank = !known.admin ? '' : known.admin === 'admin' ? 'admin' : 'owner'; p.key = typeof known.key === 'string' ? known.key.slice(0, 12) : '';
       if (Array.isArray(known.state) && known.state.length === 6 && known.state.every(Number.isFinite)) { p.state = known.state; p.row = `[${p.id},${p.state.join(',')}`; p.ver = 1; }
@@ -217,7 +221,7 @@ export class Room {
     } else if (m.t === 'n') this._blast(p, t);
     else if (m.t === 'c') this._chat(p, m, t);
     else if (m.t === 'admin') this._admin(p, m);
-    else if (p.admin && (m.t === 'who' || m.t === 'kick' || m.t === 'ban' || m.t === 'promote' || m.t === 'demote')) this._moderate(p, m);
+    else if (p.admin && (m.t === 'who' || m.t === 'kick' || m.t === 'ban' || m.t === 'promote' || m.t === 'demote' || m.t === 'gift')) this._moderate(p, m);
   }
 
   // The big red button: one explosion for the whole room, and no other before BLAST_EVERY has gone by.
@@ -272,6 +276,7 @@ export class Room {
       return;
     }
     const target = [...this.players.values()].find((o) => o.id === m.id);
+    if (m.t === 'gift') { if (target && target.joined) this.io.send(target.conn, JSON.stringify({ t: 'gift', by: p.name })); return; } // (to oneself too)
     if (!target || target === p) return;
     if (m.t === 'promote') {
       if (target.admin || !target.joined || !this.io.promote) return;
@@ -292,7 +297,7 @@ export class Room {
   }
 
   _hello(p, m) {
-    const name = cleanName(m.name), color = int(m.color, 15), kit = int(m.k, 255);
+    const name = cleanName(m.name), color = int(m.color, 31), kit = int(m.k, 255);
     if (!p.dev) p.dev = cleanDevice(m.dev);
     if (p.joined && name === p.name && color === p.color && kit === p.kit) return;
     p.name = name; p.color = color; p.kit = kit;

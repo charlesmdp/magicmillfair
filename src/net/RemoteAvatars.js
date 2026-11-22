@@ -126,7 +126,7 @@ export class RemoteAvatars {
           const level = this.world.data.waterAt(peer.x, peer.z);
           if (level > -500) this.world.ripples.trail(peer.id, this.world.engine.time, dt, peer.x, level, peer.z, peer.speed, true);
         }
-        if (dist < TAG_RANGE) {
+        if (dist < TAG_RANGE && !character.look.disguise) {
           _v.set(peer.x, peer.y + 2.05, peer.z).project(camera);
           if (_v.z > -1 && _v.z < 1 && Math.abs(_v.x) < 1.1 && Math.abs(_v.y) < 1.1) {
             tagOn = true;

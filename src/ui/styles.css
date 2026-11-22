@@ -140,7 +140,7 @@ html, body {
   .subtitle { display: none; }
   .bar { margin-top: 12px; }
 }
-@media (min-height: 561px) and (max-height: 780px) {
+@media (min-height: 561px) and (max-height: 860px) {
   /* (short screens: the name of the place and the form; the wheel is on the pier anyway) */
   .card.ready .wheel { display: none; }
   .card.ready { padding-top: 30px; }
@@ -150,6 +150,15 @@ html, body {
   .card.ready .subtitle { display: none; }
   .card.ready .form label { margin: 9px 0 5px; }
   .card.ready .keys { margin-top: 10px; }
+}
+@media (min-width: 900px) and (min-height: 561px) and (max-height: 1100px) {
+  /* (a laptop: wide and not tall — the name, the size and the button on the left, the colours on the right) */
+  .card.ready { width: min(780px, 100%); }
+  .card.ready .form { display: grid; grid-template-columns: 1fr 1fr; column-gap: 30px; align-items: start; }
+  .card.ready .form > * { grid-column: 1; }
+  .card.ready .form > label:nth-of-type(2) { grid-column: 2; grid-row: 1; }
+  .card.ready .form > .swatches { grid-column: 2; grid-row: 2 / span 7; }
+  .card.ready .form > label:first-child { grid-row: 1; margin-top: 9px; }
 }
 @media (prefers-reduced-motion: reduce) { .wheel .turn, .bulbs i, .bunting, .splash::before { animation: none; } }
 .form { display: none; margin-top: 4px; text-align: left; }
@@ -164,6 +173,25 @@ html, body {
 .swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 7px; }
 .swatches button { aspect-ratio: 1; border-radius: 50%; border: 2px solid transparent; padding: 0; outline-offset: 2px; }
 .swatches button[aria-pressed='true'] { border-color: #fff; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35); transform: scale(1.08); }
+/* the two rows of the Game Pass: smaller, under a line that says so; a padlock on them until the pass is held */
+.swatches .passrow { grid-column: 1 / -1; margin: 2px 0 -2px; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); opacity: 0.85; }
+.swatches button.extra { position: relative; display: grid; place-items: center; width: 64%; justify-self: center; border-color: rgba(255, 255, 255, 0.28); }
+.swatches button svg, .sizes button svg { display: none; width: 46%; height: 46%; fill: #fff; stroke: #fff; stroke-width: 2.4; stroke-linecap: round; filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.9)); }
+.swatches button.extra:not(.locked) { width: 86%; }
+.swatches button.locked { opacity: 0.55; cursor: not-allowed; }
+.swatches button.locked svg { display: block; }
+.sizes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.sizes button { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 4px; border-radius: 9px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.07); font-size: 13px; }
+.sizes button svg { width: 13px; height: 13px; }
+.sizes button[aria-pressed='true'] { background: var(--accent); color: #2a1d05; border-color: transparent; font-weight: 700; }
+.sizes button.locked { opacity: 0.6; cursor: not-allowed; }
+.sizes button.locked svg { display: block; }
+.passtag { margin-left: 6px; padding: 1px 6px; border-radius: 6px; background: rgba(242, 193, 78, 0.2); color: var(--accent); font-size: 9.5px; letter-spacing: 0.1em; }
+.passhint { margin: 7px 0 0; font-size: 12px; line-height: 1.4; color: var(--accent); }
+.passhint[hidden] { display: none; }
+.panel .swatches.robot { margin-top: 4px; gap: 6px; }
+.panel .sizes.robot { margin-top: 8px; }
+.emotes .sit button { width: 100%; }
 .go {
   display: block; width: 100%; margin-top: 20px; padding: 14px 18px; border: 0; border-radius: 14px; font-size: 17px; font-weight: 700;
   background: linear-gradient(180deg, #f6cf6a, #eeb53a); color: #2a1d05 !important; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
@@ -408,6 +436,30 @@ body.dead #view { filter: grayscale(1) contrast(1.15) brightness(0.72); }
 .shelves { min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 8px 30px 2px; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.4) transparent; }
 .shelf h3 { display: inline-block; margin: 14px 0 10px; padding: 5px 16px 5px 12px; background: #fff; color: #1a1560; font: italic 900 15px/1.1 'Arial Black', Impact, Arial, sans-serif; letter-spacing: 0.04em; text-transform: uppercase; transform: skewX(-10deg); box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.3); }
 .shelf-featured h3 { background: #ffe14d; color: #201a05; }
+/* the Game Pass: one banner across the shop — its ticket on the left, what it gives beside it */
+.shelf-pass h3 { background: #5ef08a; color: #06361a; }
+.shelf.shelf-pass .row { grid-template-columns: 1fr; }
+.shop .card.passcard { aspect-ratio: auto; width: 100%; height: 138px; background: linear-gradient(100deg, #241057 0%, #5b25c4 42%, #e8742a 100%); }
+.shop .card.passcard canvas { left: 8px; top: 4px; width: 208px; height: 130px; }
+.shop .card.passcard .rar { left: auto; right: 10px; }
+.shop .card.passcard .pitch { position: absolute; left: 236px; right: 120px; top: 20px; display: grid; grid-template-columns: repeat(2, max-content); gap: 5px 26px; font: 700 14px/1.3 system-ui, sans-serif; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
+.shop .card.passcard .pitch i { font-style: normal; white-space: nowrap; }
+.shop .card.passcard .pitch i::before { content: '✓ '; color: #5ef08a; font-weight: 900; }
+.shop .card.passcard .foot { left: 236px; padding: 0 14px 13px 0; background: none; align-items: center; justify-content: space-between; gap: 12px; }
+.shop .card.passcard .foot b { font-size: 24px; }
+.shop .card.passcard .price { padding: 7px 12px; font-size: 15px; }
+@media (max-width: 760px) {
+  .shop .card.passcard { height: 150px; }
+  .shop .card.passcard canvas { width: 118px; height: 74px; top: 8px; }
+  .shop .card.passcard .pitch { left: 134px; right: 8px; top: 24px; grid-template-columns: 1fr; gap: 1px; font-size: 11.5px; }
+  .shop .card.passcard .foot { left: 12px; padding: 0 10px 10px 0; }
+  .shop .card.passcard .foot b { font-size: 17px; }
+  .shop .card.passcard .price { padding: 5px 9px; font-size: 12.5px; }
+}
+.detail .perks { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 5px; font-size: 13.5px; line-height: 1.35; }
+.detail ul.perks li { padding-left: 22px; position: relative; }
+.detail ul.perks li::before { content: '✓'; position: absolute; left: 2px; color: #5ef08a; font-weight: 900; }
+.detail p.perks.why { margin-top: 10px; padding: 9px 11px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); font-style: italic; font-size: 13px; }
 .shelf .row { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
 .shelf-featured .row { grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); }
 .shop .card { position: relative; aspect-ratio: 4 / 5; padding: 0; border: 3px solid rgba(255, 255, 255, 0.16); border-radius: 6px; overflow: hidden; cursor: pointer; color: #fff; text-align: left; transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease; }

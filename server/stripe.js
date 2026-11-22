@@ -55,6 +55,22 @@ export async function createCheckout(cfg, what, device, site, fetcher = fetch, e
 }
 
 /**
+ * The page where a customer looks after what they pay by the month — and stops it (Stripe's "customer
+ * portal": it has to be switched on once in the Stripe dashboard). Resolves to { url }; throws on failure.
+ */
+export async function createPortal(cfg, customer, site, fetcher = fetch) {
+  const form = new URLSearchParams({ customer, return_url: `${site}/` });
+  const res = await fetcher(`${cfg.api}/v1/billing_portal/sessions`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${cfg.key}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: form.toString(),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok || !body || typeof body.url !== 'string') throw new Error(`Stripe: ${body?.error?.message || res.status}`);
+  return { url: body.url };
+}
+
+/**
  * Gives a payment back in full (`pay`: its payment intent). Asking twice refunds once. Throws when Stripe says no
  * (a card payment can be refunded for about six months).
  */

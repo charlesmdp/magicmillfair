@@ -174,8 +174,9 @@ room; `?village=name` arrives straight in a sky village.
 | Jetpack | Space again while in the air: a second and a half of thrust | jump button again | A again |
 | Sit, lie down, board, pick a flower, talk, travel, get up | E when the action is offered (walking away or jumping gets up too) | tap the action shown above the jump button | |
 | Open or close the laptop; second action | L | tap the second action | |
-| Put the bouquet down | B | Emotes → Put the bouquet down | |
-| The item shop (hats, jetpacks, paint, trails) | O, or the bag at the top right | the bag at the top right | |
+| Sit down on the ground, cross-legged, wherever you are | X (or `/sit` in the chat); the first step gets up | Emotes → Sit on the ground | |
+| Put the bouquet down (or give it: see *Flowers*) | B | Emotes → Put the bouquet down | |
+| The item shop (the Game Pass, hats, jetpacks, paint, trails) | O, or the bag at the top right | the bag at the top right | |
 | A firework (for who has the box) | V | Emotes → Light a firework | |
 | Chat | Enter, type, Enter (Escape to cancel) | speech-bubble button | |
 | Emotes | T; 1 to 6 for the gestures, 7 to 0 to cheer, clap, jump for joy, rage; or by name in the chat: `/wave`, `/cheer`, `/bow`… | smiley button | |
@@ -196,15 +197,15 @@ at most, five in a row then one every two seconds). A page left in the backgroun
 is said while it stays connected: the title of the tab counts the lines, and a mark in the log — *while you
 were away* — shows where the reading had stopped (the log holds the last 200 lines; a phone that went to
 sleep was disconnected, and what was said meanwhile is gone). What the game keeps is on your own device: your name,
-your colour, your hat, the quality tier. What the server keeps: the boards of the games (a name and a score) and, for
+your colour, your size, your hat, the quality tier. What the server keeps: the boards of the games (a name and a score) and, for
 a random number drawn by each browser, the days in a row it has visited.
 
 Letter shortcuts (M, F, T, P, R, B…) go by the letter printed on the key, whatever the keyboard; walking goes
 by the place of the keys. Settings also offers *The camera turns with the character*.
 
-**Commands** are typed in the chat and sent to nobody: `/kill`, the emotes by name — and a few secret words
-that do silly things. They are written nowhere: the game only knows their fingerprints (see `main.js`).
-Some of them disqualify a run in a game.
+**Commands** are typed in the chat and sent to nobody: `/kill`, `/sit`, the emotes by name — and a few
+secret words that do silly things. They are written nowhere: the game only knows their fingerprints (see
+`main.js`). None of them works during a game, and a race begins by taking away what they had given.
 
 **Animals of light**: a sun-coloured ring opens above you and a mechanical animal appears in it for five to
 six seconds. Everybody around sees them. Ten of them, earned by coming back day after day: a goldfish that
@@ -300,14 +301,26 @@ round the ring (50). The emote panel shows where you stand; the administrator ha
   on shelves of cards dressed by rarity — each with a picture of *your* robot wearing the thing, drawn by
   the game itself. Pick a card: what it is, what it costs, and a button to buy it (or to put it on and take
   it off, once it is yours). On the shelves: two **jetpacks** (the real one, a second and a half of thrust;
-  the light one, a third of that), seven **hats**, four **paint jobs** (gold plating, chrome, an atomic
+  the light one, a third of that), twelve **hats** (crown, wizard hat, top hat, cowboy hat, straw hat,
+  cap, beanie, pirate hat, Viking helmet, chef's hat, a cap whose propeller turns, party hat), four **paint jobs** (gold plating, chrome, an atomic
   glow that pulses, candy paint that drifts round the rainbow), four **trails** left behind when you run
   (stardust, confetti, bubbles, fallout) and a **box of fireworks** (V: a rocket goes up and bursts).
-  Everybody sees what you wear and leave behind you; none of it helps at the games.
+  Everybody sees what you wear and leave behind you; none of it helps at the games. The first shelf is the
+  **Game Pass** (see *The shop*).
 - **Jetpack**: press jump again in the air. A second and a half of thrust, refilled on landing; it does not
-  work in caves, on the island, around Mostly Up or on its tower.
+  work in caves, on the island, around Mostly Up or on its tower. **Everybody has the light one for a day**:
+  the twenty-four hours that follow a first visit (the shop tags it *Free today* and says how long is
+  left; a line in the chat says so on the first visit). After that, pressing jump in the air says that the free day is over, and that the light jetpack
+  is $5 in the shop or comes with the Game Pass.
+- **Tiny or giant**: the card of the welcome (and Settings → *Your robot*) asks for a size next to the name
+  and the colour — normal, tiny (under half the height) or giant (more than twice). Everybody around sees
+  it. The two sizes, and two more rows of colours (black among them), belong to the Game Pass: without it
+  they carry a padlock. In the quad race everybody is the same size.
+- **Sitting on the ground**: X, anywhere on dry land — the robot sits down cross-legged, hands on its
+  knees, and the others see it. The first step gets up.
 - **Flowers**: walk up to a flower and pick it (E): a bouquet grows in your hand, flower by flower. B puts
-  it down; swimming loses it.
+  it down; swimming loses it. With a bouquet in hand, standing next to another visitor offers to **give it
+  to them** (they take it if their hands are free), and at the feet of the golden dog, to lay it there.
 - **Billy**: an alligator lounges in a beanbag chair on the deck of the great pond, a "life coach" badge
   over his name. Talk to him (the prompt by his chair, then type): a question or anything else on your
   mind, and he answers in one sentence that sails past the point and lands on it. The conversation is
@@ -333,9 +346,10 @@ trails, fireworks: the item shop says so and lets everything be put on. With a k
 
 | What | Price | |
 |---|---|---|
-| The jetpack | $30, once | the item shop (O) |
-| The light jetpack (a third of the thrust) | $5, once | the item shop |
-| A hat (each of the seven) | $9.99, once | the item shop |
+| **The Game Pass**: every hat, the light jetpack, tiny or giant, two more rows of colours | $19 a month | the first shelf of the item shop (O) |
+| The jetpack | $30, once | the item shop |
+| The light jetpack (a third of the thrust; free for the first day) | $5, once | the item shop |
+| A hat (each of the twelve) | $9.99, once | the item shop |
 | A paint job: gold plating, chrome, atomic glow, candy paint | $19, $15, $12, $9, once | the item shop |
 | A trail: fallout, confetti, stardust, bubbles | $12, $9, $7, $5, once | the item shop |
 | The box of fireworks (never empty) | $15, once | the item shop |
@@ -358,6 +372,22 @@ its fee on a payment that is refunded (about 30 cents and 2.9 %: a one-dollar bi
 fair a few cents), and the rules of the auction are three lines of `server/catalog.js` (`AUCTION`,
 `nextBid`).
 
+**The Game Pass** is a subscription ($19 a month, `PASS` in `server/items.js`: the price, the lines of the
+card and its last words — *Atomic Oasis is not made by a multinational, but by a guy on a couch*). For as
+long as it runs, its holder wears every hat of the shop (the cards say *With your pass*; a hat that is
+bought stays after the pass), flies with the light jetpack, may be tiny or giant, and picks the colour of
+the robot among thirty-two instead of sixteen. One line of the card is a promise: the weather of where
+one lives, with its day and its night, is to come. The card of the shop then reads *Look after it, or stop
+it*: it opens Stripe's customer portal (payment method, invoices, cancelling). When Stripe says the
+subscription has ended, the pass goes, the robot takes back a colour of the first sixteen and its normal
+size, and a word is left for the next visit. The pass is kept with the account when there is one, with
+the browser otherwise, and follows a browser that signs in. What it lends is decided by the server
+(`passGives`) and is never asked of the browser.
+
+**The free day** is the server's too: the instant of the first visit is kept (for the browser, then for
+the account), and for twenty-four hours `/api/shop` lends the light jetpack (`TRIAL` in `server/items.js`:
+what, for how long).
+
 What a visitor owns is one list, `server/items.js` (id, name, price, shelf, rarity, the words on the card):
 add a line there and it is sold. Prices of the places are in `server/catalog.js` (and `VILLAGE_PRICES` in
 `src/world/layout/sponsors.js` for the villages): the browser is shown them and is never asked what
@@ -374,6 +404,9 @@ to the game, and what was paid arrives a few seconds later.
    (`whsec_…`) into the secret `STRIPE_WEBHOOK_SECRET`.
 3. Deploy once more, check `https://<your site>/api/status` (`"shop": "test"`), buy a hat with a test card.
    To sell for real, do the same two steps in live mode and replace the two secrets with the live ones.
+4. For the Game Pass: *Settings → Billing → Customer portal*, switch it on once (in test mode, then in
+   live mode). It is the page where a holder changes a card or stops the pass; until it is on, *Look
+   after it, or stop it* answers that the page could not be opened.
 
 To keep both pairs at once, name them `STRIPE_TEST_SECRET_KEY`, `STRIPE_TEST_WEBHOOK_SECRET`,
 `STRIPE_LIVE_SECRET_KEY`, `STRIPE_LIVE_WEBHOOK_SECRET`, and set the variable `STRIPE_MODE` to `test` or
@@ -693,7 +726,7 @@ file; on Cloudflare, the storage of one Durable Object.
 what they buy and earn is kept for that browser. An account (Settings → *Create an account*) is a name and
 a password, nothing else — no e-mail, nothing to confirm. A browser that signs in is attached to the
 account: what it had bought goes with it, and from then on the purchases, the days in a row, the sponsored
-places and the look of the robot (name, colour, hat, paint, trail) are the account's — sign in from another
+places, the Game Pass and the look of the robot (name, colour, size, hat, paint, trail) are the account's — sign in from another
 browser and it is all there. Signing out makes the browser a guest again, with what it bought itself.
 Passwords are never kept, only a salted PBKDF2-SHA256 of them (100,000 rounds, the most the Workers
 runtime allows); a wrong name and a wrong password get the same answer; ten wrong passwords close an
@@ -714,6 +747,10 @@ out whoever shares it — a school, a mobile operator.
   they see and do what an administrator does, and can name others in turn. Two things stay the owner's:
   taking the title away (*Remove*, in the list of the administrators who were named — it works at once,
   the key opens nothing any more), and being put out — no administrator can kick or ban the owner.
+- **Presents**: *Gift*, by a visitor's name in that list — anything of the shop (it is theirs for good),
+  or the Game Pass for thirty days or a year (no card, nothing to stop: it ends by itself). The visitor is
+  told at once — *A gift from the fair: …* — and has it without reloading; somebody who is not there finds
+  the word at their next visit. It goes to their account if they have one, to their browser otherwise.
 - **Seeing the game as a visitor does**: a button at the top of the list of who is here. No free view, no
   approvals, no key sent to the room: exactly what somebody without the key has. A yellow pill at the top
   left says so and brings the administrator back; it lasts until the tab is closed.
@@ -785,13 +822,13 @@ that is the last point. Going further means a referee: the server replaying the 
 |---|---|
 | `npm run bake` | bakes the world, the statue and the textures again |
 | `npm run bake:statue` | sculpts the golden dog again (`-- --preview=dog.png` also draws it from five sides, `-- --cell=0.012` makes a finer mesh) |
-| `npm test` | 175 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures) |
-| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (120 in all) |
-| `npm run test:shop` | the shop in the real game, on the Node server with test keys and a stand-in for Stripe: a hat bought and worn, the panel of a game sponsored, filled in (with a logo) and approved by the administrator, the stand of the gondolas (8 checks) |
+| `npm test` | 181 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents) |
+| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (126 in all) |
+| `npm run test:shop` | the shop in the real game, on the Node server with test keys and a stand-in for Stripe: a hat bought and worn, the panel of a game sponsored, filled in (with a logo) and approved by the administrator, the stand of the gondolas; and a newcomer: the padlocks of the welcome card and the free day of the jetpack, the Game Pass bought as a subscription, what it lends (black, giant, a hat that was never bought), its end and the end of the free day (16 checks) |
 | `npm run test:smoke` | drives the real site: welcome screen, walking, free camera, settings, large map (`-- --mobile` for the touch layout) |
 | `npm run test:audio` | Listens to the sound engine without ears: in headless Chromium it renders a dozen listener scenarios (beach, cliffs, pier, woods, mill, waterfall, cave, sky village, the climb…) and every one-shot effect through an offline audio context, measures level, spectrum, how the loudness moves and how tonal it is, fails on silence or clipping, and times `update()` (about 0.01 ms a frame) |
-| `npm run test:walk` | 44 checks in the real game: pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls and the high clearing above them, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the swim on to the golden cove (the shark stays away; out of the sea on the beach; the stair up to the golden dog), the fifty sky villages (prices, places to sit, the board of one for hire, the one dressed as a demonstration), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the four booths (a bot plays each through the pointer; boards), the quad race (asked for in the paddock, it leaves with the next named start; a bot drives three laps flat out — it never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, and flies off the ramp), the flying theatre (a bot flaps through nine pairs of columns), the acid pond, the shark, change of tier |
-| `npm run test:duo` | 23 checks with two visitors on the production server: they must see each other move, wave, summon an animal, chat and sit down; the administrator's key in the address, the administrator seeing the game as a visitor does (`-- --cloudflare` for the Cloudflare version) |
+| `npm run test:walk` | 45 checks in the real game: pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls and the high clearing above them, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the swim on to the golden cove (the shark stays away; out of the sea on the beach; the stair up to the golden dog), the fifty sky villages (prices, places to sit, the board of one for hire, the one dressed as a demonstration), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, sitting down on the ground, big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the four booths (a bot plays each through the pointer; boards), the quad race (asked for in the paddock, it leaves with the next named start; a bot drives three laps flat out — it never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, and flies off the ramp), the flying theatre (a bot flaps through nine pairs of columns), the acid pond, the shark, change of tier |
+| `npm run test:duo` | 25 checks with two visitors on the production server: they must see each other move, wave, summon an animal, chat and sit down; a giant in a party hat sitting on the ground, a bouquet given from hand to hand; the administrator's key in the address, the administrator seeing the game as a visitor does (`-- --cloudflare` for the Cloudflare version) |
 | `npm run bench` | benchmark tour for each tier (`-- --mobile` for the phone profile) |
 | `npm run profile` | cost of each system (script, draw calls, triangles) at seven viewpoints |
 | `npm run shots -- name=x,y,z,heading,pitch` | screenshots from a viewpoint |

@@ -43,11 +43,14 @@ server.stdout.on('data', (d) => { serverLog += d; });
 server.stderr.on('data', (d) => { serverLog += d; });
 for (let i = 0; i < 300; i++) { try { if ((await fetch(`${BASE}/healthz`)).ok) break; } catch { /* not up yet */ } await new Promise((r) => setTimeout(r, 100)); }
 /** Stripe tells the server that `item` was paid by `device`. */
-const pay = async (item, device, sub = null, bid = null) => {
-  // (`bid`: { amount, pay } for a place that is auctioned — what Stripe says was paid, and the payment to give back one day)
-  const raw = JSON.stringify({ type: 'checkout.session.completed', data: { object: { payment_status: 'paid', subscription: sub, ...(bid && { amount_total: bid.amount, payment_intent: bid.pay }), metadata: { item, device } } } });
+/** Stripe tells the server something (an event of its own). */
+const tell = async (event) => {
+  const raw = JSON.stringify(event);
   return (await fetch(`${BASE}/api/stripe/webhook`, { method: 'POST', headers: { 'content-type': 'application/json', 'stripe-signature': await signWebhook(HOOK, raw) }, body: raw })).status;
 };
+// (`bid`: { amount, pay } for a place that is auctioned — what Stripe says was paid, and the payment to give back one day;
+// `customer`: who pays, for what is paid by the month)
+const pay = (item, device, sub = null, bid = null, customer = null) => tell({ type: 'checkout.session.completed', data: { object: { payment_status: 'paid', subscription: sub, customer, ...(bid && { amount_total: bid.amount, payment_intent: bid.pay }), metadata: { item, device } } } });
 
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--use-gl=angle', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-webgl'] });
 const logs = [];
@@ -79,8 +82,8 @@ try {
   const crown = await card('hat:crown'), jet = await card('jetpack'), lite = await card('jetlite'), gold = await card('paint:gold'), bubbles = await card('trail:bubbles'), fire = await card('fireworks');
   const device = await page.evaluate(() => localStorage.getItem('mmf.device'));
   check('the item shop: its own icon, shelves of cards with a picture and a price — two jetpacks ($30, $5), hats, paints, trails, fireworks',
-    shelves.titles.join() === 'Featured,Gear,Hats,Paint jobs,Trails,Just for fun,Sponsor a game' && shelves.cards >= 20 && /Test mode/.test(shelves.mode) && crown?.tag === '$9.99' && crown.picture && /legendary/.test(crown.cls)
-    && jet?.tag === '$30' && lite?.tag === '$5' && gold?.tag === '$19' && bubbles?.tag === '$5' && fire?.tag === '$15',
+    shelves.titles.join() === 'Game Pass,Featured,Gear,Hats,Paint jobs,Trails,Just for fun,Sponsor a game' && shelves.cards >= 26 && /Test mode/.test(shelves.mode) && crown?.tag === '$9.99' && crown.picture && /legendary/.test(crown.cls)
+    && jet?.tag === '$30' && lite?.tag === 'Free today' && gold?.tag === '$19' && bubbles?.tag === '$5' && fire?.tag === '$15', // (the light jetpack: a taste of it on the first day)
     JSON.stringify({ shelves, crown, jet, lite, gold, bubbles, fire }));
   const offer = await pick('hat:crown');
   const worn = await page.evaluate(() => window.__mmf.me.look?.hat);
@@ -216,6 +219,85 @@ try {
     /guest/.test(guestSays) && /^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}/.test(code) && signed.name === 'Shop Tester' && /Signed in as Shop Tester/.test(signed.says) && signed.acts.join() === 'Sign out', JSON.stringify({ guestSays: guestSays.slice(0, 60), code: `${code.slice(0, 4)}…`, signed }));
   check('from another browser, signed in: what was bought, the hat that was worn and the panel that is sponsored are all there',
     !asGuest.owned.length && asGuest.hat === 0 && asGuest.account === null && there.owned.join() === 'hat:crown,jetlite' && there.hat === 6 && Math.abs(there.tank - 0.5) < 0.01 && there.mine, JSON.stringify({ asGuest, there }));
+  // ---- a newcomer: the free day of the light jetpack, then the Game Pass — bought, held, ended
+  {
+    const third = await browser.newContext({ viewport: { width: 960, height: 560 }, deviceScaleFactor: 1 });
+    await third.route('https://checkout.stripe.test/**', (route) => route.fulfill({ contentType: 'text/html', body: '<title>pay</title>the payment page' }));
+    const p3 = await third.newPage();
+    p3.on('pageerror', (e) => logs.push(e.message));
+    const frames3 = (n) => p3.evaluate((n) => { const app = window.__mmf; const target = app.frames + n; return new Promise((res) => { const tick = () => (app.frames >= target ? res() : requestAnimationFrame(tick)); tick(); }); }, n);
+    const card3 = (id) => p3.evaluate((id) => { const c = document.querySelector(`.shop .card[data-item="${id}"]`); return c ? c.querySelector('.price').textContent : null; }, id);
+    const pick3 = async (id) => { await p3.evaluate((id) => document.querySelector(`.shop .card[data-item="${id}"]`).click(), id); return p3.evaluate(() => ({ acts: [...document.querySelectorAll('.shop .detail .acts button')].map((b) => b.textContent), perks: document.querySelectorAll('.shop .detail ul.perks li').length, why: document.querySelector('.shop .detail p.why')?.textContent || '' })); };
+    await p3.goto(`${BASE}/?q=${opt.q || 'low'}`);
+    await p3.waitForSelector('.card.ready', { timeout: 240000 });
+    // the welcome card: the colours and the sizes of the pass are shown, with a padlock
+    await p3.waitForFunction(() => document.querySelectorAll('.splash .swatches button.locked').length === 16, null, { timeout: 30000 });
+    await p3.click('.splash .swatches button.extra');
+    await p3.click('.splash .sizes button:nth-child(3)');
+    const card0 = await p3.evaluate(() => ({ sizes: document.querySelectorAll('.splash .sizes button.locked').length, picked: [...document.querySelectorAll('.splash .swatches button')].findIndex((b) => b.getAttribute('aria-pressed') === 'true'), size: [...document.querySelectorAll('.splash .sizes button')].findIndex((b) => b.getAttribute('aria-pressed') === 'true'), hint: document.querySelector('.splash .passhint').hidden ? '' : document.querySelector('.splash .passhint').textContent }));
+    await p3.click('.go');
+    await p3.waitForFunction(() => window.__mmf && window.__mmf.ready && window.__mmf.player && window.__mmf.shop.open, null, { timeout: 60000 });
+    const dev3 = await p3.evaluate(() => localStorage.getItem('mmf.device'));
+    const day1 = await p3.evaluate(() => { const a = window.__mmf; return { color: a.me.colorIndex, size: a.me.size, lent: a.shop.lent('jetlite'), has: a.shop.has('jetlite'), canFly: a.player.canFly(a.player.pos), tank: a.player.tank, hours: a.shop.trialLeft('jetlite') / 3600_000, pass: a.shop.hasPass }; });
+    check('a newcomer: the colours and the sizes of the Game Pass are locked on the welcome card (a word says why); the light jetpack is theirs for a day',
+      card0.sizes === 2 && card0.picked < 16 && card0.size === 0 && /Game Pass/.test(card0.hint) && day1.color < 16 && day1.size === 1 && !day1.pass && day1.lent === 'trial' && !day1.has && day1.canFly && Math.abs(day1.tank - 0.5) < 0.01 && day1.hours > 23 && day1.hours <= 24,
+      JSON.stringify({ card0, day1 }));
+    // the pass in the shop: what it gives, what it costs; the button leads to Stripe, by the month
+    await p3.click('.shop-icon');
+    await p3.waitForSelector('.shop.on', { timeout: 20000 });
+    const tag0 = await card3('pass'), liteTag = await card3('jetlite'), offer3 = await pick3('pass');
+    asked.length = 0;
+    await Promise.all([p3.waitForURL('https://checkout.stripe.test/**', { timeout: 20000 }), p3.click('.shop .detail .acts .buy')]);
+    const form3 = asked[0];
+    check('the Game Pass has its own shelf: what it gives, a word from who makes the game, $19 a month — paid on Stripe as a subscription',
+      tag0 === '$19 a month' && liteTag === 'Free today' && offer3.acts.join() === 'Get the pass · $19 a month' && offer3.perks === 5 && /guy on a couch/.test(offer3.why)
+      && form3?.get('mode') === 'subscription' && form3.get('line_items[0][price_data][unit_amount]') === '1900' && form3.get('line_items[0][price_data][recurring][interval]') === 'month' && form3.get('metadata[item]') === 'pass' && form3.get('metadata[device]') === dev3,
+      JSON.stringify({ tag0, liteTag, offer3, form: form3?.toString().slice(0, 220) }));
+    // Stripe says it was paid; back in the game: black, giant, a hat that was never bought
+    const paid3 = await pay('pass', dev3, 'sub_pass_shop', null, 'cus_shop');
+    await p3.goto(`${BASE}/?q=${opt.q || 'low'}&paid=pass`);
+    await p3.waitForSelector('.card.ready', { timeout: 240000 });
+    await p3.waitForFunction(() => document.querySelectorAll('.splash .swatches button.locked').length === 0 && document.querySelectorAll('.splash .sizes button.locked').length === 0, null, { timeout: 30000 });
+    await p3.evaluate(() => document.querySelectorAll('.splash .swatches button')[16].click());
+    await p3.click('.splash .sizes button:nth-child(3)');
+    await p3.click('.go');
+    await p3.waitForFunction(() => window.__mmf && window.__mmf.ready && window.__mmf.player && window.__mmf.shop.pass, null, { timeout: 60000 });
+    await frames3(6);
+    await p3.click('.shop-icon');
+    await p3.waitForSelector('.shop.on', { timeout: 20000 });
+    const hatTag = await card3('hat:viking'), hat3 = await pick3('hat:viking');
+    await p3.evaluate(() => document.querySelector('.shop .detail .acts button').click()); // (Equip)
+    await frames3(3);
+    const passTag = await card3('pass'), held3 = await pick3('pass');
+    await p3.keyboard.press('Escape');
+    await frames3(4);
+    const with3 = await p3.evaluate(() => { const a = window.__mmf; return { color: a.me.colorIndex, size: a.me.size, hat: a.me.look.hat, lite: a.shop.lent('jetlite'), pass: a.shop.hasPass, told: [...document.querySelectorAll('.chat .log p')].map((e) => e.textContent).join(' | ') + ' ' + document.querySelector('.hud .note').textContent }; });
+    check('with the pass: black and giant are picked on the welcome card, every hat can be worn without being bought, the light jetpack is lent; the pass says it is active',
+      paid3 === 200 && with3.color === 16 && with3.size > 2 && hatTag === 'With your pass' && hat3.acts.join() === 'Equip,Keep it · $9.99' && with3.hat === 9 && with3.lite === 'pass' && with3.pass && passTag === 'Active' && /Look after it/.test(held3.acts.join()),
+      JSON.stringify({ paid3, with3: { ...with3, told: with3.told.slice(-160) }, hatTag, hat3, passTag, held3 }));
+    // the subscription ends: back to everybody's colours, the usual size, bare-headed — and they are told
+    const ended3 = await tell({ type: 'customer.subscription.deleted', data: { object: { id: 'sub_pass_shop' } } });
+    await p3.evaluate(() => window.__mmf.refreshShop());
+    await frames3(6);
+    const after3 = await p3.evaluate(() => { const a = window.__mmf; return { color: a.me.colorIndex, size: a.me.size, hat: a.me.look.hat, pass: a.shop.hasPass, lite: a.shop.lent('jetlite'), told: [...document.querySelectorAll('.chat .log p')].map((e) => e.textContent).filter((t) => /has ended/.test(t)).length }; });
+    // …and a day later the taste of the jetpack is over too: asked for in the air, it says where to get one
+    await p3.evaluate(() => { const real = Date.now.bind(Date); Date.now = () => real() + 25 * 3600_000; });
+    await p3.evaluate(() => window.__mmf.refreshShop());
+    await p3.evaluate(() => document.getElementById('view')?.focus());
+    const over3 = await p3.evaluate(() => { const a = window.__mmf; return { lent: a.shop.lent('jetlite'), canFly: a.player.canFly(a.player.pos) }; });
+    // (a jump, then "jump" again in the air: driven frame by frame, as the walk test does)
+    const said3 = await p3.evaluate(() => {
+      const a = window.__mmf, { input, player } = a;
+      for (let k = 0; k < 400 && !player.noJet; k++) { input.jump = k === 0 || (k > 3 && !player.grounded); player.update(1 / 60, 0, true); }
+      return { noJet: player.noJet, grounded: player.grounded };
+    });
+    await frames3(4);
+    const note3 = await p3.evaluate(() => document.querySelector('.hud .note').textContent);
+    await third.close();
+    check('when the subscription ends the pass is handed back (colour, size, hat) and they are told; a day after the first visit the free jetpack is over, and asking for it says where to get one',
+      ended3 === 200 && after3.color === 0 && after3.size === 1 && after3.hat === 0 && !after3.pass && after3.lite === 'trial' && after3.told === 1 && over3.lent === null && !over3.canFly && said3.noJet && /free day with the jetpack is over/.test(note3) && /Jetpack Lite is \$5/.test(note3) && /Game Pass/.test(note3),
+      JSON.stringify({ ended3, after3, over3, said3, note3 }));
+  }
   check('no error in the page', logs.length === 0, logs.join(' | '));
 } catch (err) {
   check('the test ran to its end', false, String(err && err.stack ? err.stack : err).slice(0, 600));

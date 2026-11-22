@@ -3,10 +3,14 @@
 // with what it is, what it costs and the button that buys it (or puts it on, once it is theirs).
 //
 // It knows nothing of payments or of the game: it is told what to show (open()), and says what was asked
-// ('buy' id, 'equip' id, 'close').
+// ('buy' id, 'equip' id, 'manage' id, 'close').
+//
+// An item may be lent rather than owned (`lent`: 'pass' — the Game Pass gives it — or 'trial' — a free day):
+// it can be put on, and still be bought to keep. The Game Pass itself is a card with a list of what it gives
+// (`perks`), a word of its maker (`why`) and, once held, a way to the page where it is stopped (`manage`).
 
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
-const SHELVES = [['featured', 'Featured'], ['gear', 'Gear'], ['hats', 'Hats'], ['paint', 'Paint jobs'], ['trails', 'Trails'], ['fun', 'Just for fun'], ['sponsor', 'Sponsor a game']];
+const SHELVES = [['pass', 'Game Pass'], ['featured', 'Featured'], ['gear', 'Gear'], ['hats', 'Hats'], ['paint', 'Paint jobs'], ['trails', 'Trails'], ['fun', 'Just for fun'], ['sponsor', 'Sponsor a game']];
 const RARITY = { legendary: 'Legendary', epic: 'Epic', rare: 'Rare', uncommon: 'Uncommon' };
 
 export class ShopView {
@@ -89,12 +93,14 @@ export class ShopView {
   stale(prefix = '') { for (const key of [...this.pictures.keys()]) if (key.startsWith(prefix)) this.pictures.delete(key); }
 
   _card(it, big = false) {
-    const b = el('button', `card ${it.rarity}${big ? ' big' : ''}${it.owned ? ' owned' : ''}${it.worn ? ' worn' : ''}`);
+    const wide = it.group === 'pass'; // (the Game Pass: a banner across the shop, its ticket on the left, what it gives beside it)
+    const b = el('button', `card ${it.rarity}${big ? ' big' : ''}${wide ? ' passcard' : ''}${it.owned ? ' owned' : ''}${it.worn ? ' worn' : ''}`);
     b.type = 'button';
     b.dataset.item = it.id;
-    b.append(el('span', 'shine'), this._picture(it.id, 300, 375));
+    b.append(el('span', 'shine'), wide ? this._picture(it.id, 420, 264) : this._picture(it.id, 300, 375));
+    if (wide && it.pitch) { const pitch = el('span', 'pitch'); for (const line of it.pitch) pitch.append(el('i', '', line)); b.append(pitch); }
     const foot = el('span', 'foot');
-    foot.append(el('b', '', it.name), el('i', `price${it.owned ? ' has' : ''}`, it.worn ? 'Equipped' : it.owned ? 'Owned' : it.cost));
+    foot.append(el('b', '', it.name), el('i', `price${it.owned || it.lent ? ' has' : ''}`, it.worn ? 'Equipped' : it.owned ? (it.group === 'pass' ? 'Active' : 'Owned') : it.lent === 'pass' ? 'With your pass' : it.lent === 'trial' ? 'Free today' : it.cost));
     b.append(el('small', 'rar', RARITY[it.rarity] || ''), foot);
     b.onclick = () => this._pick(it.id);
     return b;
@@ -108,7 +114,7 @@ export class ShopView {
       const shelf = el('section', `shelf shelf-${group}`);
       shelf.append(el('h3', '', title));
       const row = el('div', 'row');
-      for (const it of list) row.append(this._card(it, group === 'featured'));
+      for (const it of list) row.append(this._card(it, group === 'featured' || group === 'pass'));
       shelf.append(row);
       this.shelves.append(shelf);
     }
@@ -123,15 +129,28 @@ export class ShopView {
     d.className = `detail ${it.rarity}`;
     const stage = d.querySelector('.stage');
     stage.textContent = '';
-    stage.append(el('span', 'shine'), this._picture(id, 420, 525));
+    stage.append(el('span', 'shine'), it.group === 'pass' ? this._picture(id, 420, 264) : this._picture(id, 420, 525));
     d.querySelector('.rar').textContent = RARITY[it.rarity] || '';
     d.querySelector('h3').textContent = it.name;
     d.querySelector('.blurb').textContent = it.blurb || '';
+    // (what the Game Pass gives, line by line; a word from who makes the game)
+    for (const old of d.querySelectorAll('.perks')) old.remove();
+    if (it.perks) {
+      const list = el('ul', 'perks');
+      for (const p of it.perks) list.append(el('li', '', p));
+      d.querySelector('.blurb').after(list);
+      if (it.why) { const why = el('p', 'perks why', it.why); list.after(why); }
+    }
     const acts = d.querySelector('.acts');
     acts.textContent = '';
     const act = (label, cls, fn) => { const b = el('button', cls, label); b.type = 'button'; b.onclick = fn; acts.append(b); return b; };
-    if (it.act) act(it.act, 'buy', () => this.emit('buy', id)); // (a place to sponsor: a bid)
-    else if (!it.owned) act(`Buy · ${it.cost}`, 'buy', () => this.emit('buy', id));
+    if (it.act) act(it.act, 'buy', () => this.emit('buy', id)); // (a place to sponsor: a bid; the Game Pass: by the month)
+    else if (!it.owned) {
+      // (lent by the pass or by the free day: it can be worn — and bought, to keep it)
+      if (it.lent && it.wearable) act(it.worn ? 'Take it off' : 'Equip', it.worn ? 'off' : 'equip', () => this.emit('equip', id));
+      act(it.lent ? `Keep it · ${it.cost}` : `Buy · ${it.cost}`, it.lent ? 'off' : 'buy', () => this.emit('buy', id));
+    }
+    else if (it.manage) act(it.manage, 'off', () => this.emit('manage', id));
     else if (it.wearable) act(it.worn ? 'Take it off' : 'Equip', it.worn ? 'off' : 'equip', () => this.emit('equip', id));
     else act('Yours', 'yours', () => {}).disabled = true;
     d.querySelector('.fine').textContent = it.fine || (it.owned ? (it.hint || 'It is yours for good.') : `${this.mode === 'test' ? 'Test mode: use the card 4242 4242 4242 4242 — no real money. ' : 'Paid once, on Stripe. '}${this.note}`);

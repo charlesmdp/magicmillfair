@@ -38,8 +38,8 @@ export class Input {
     // Shortcuts go by the letter printed on the key ("M" opens the map on any keyboard: on a French one that
     // key is not where the American M is); walking goes by the place of the keys (see update()). A keyboard
     // without Latin letters falls back on the places.
-    const letters = { f: 'camera', p: 'perf', m: 'map', h: 'help', t: 'emote', r: 'respawn', g: 'photo', b: 'drop', o: 'shop', v: 'firework' };
-    const places = { KeyF: 'camera', KeyP: 'perf', KeyM: 'map', KeyH: 'help', KeyT: 'emote', KeyR: 'respawn', KeyG: 'photo', KeyB: 'drop', KeyO: 'shop', KeyV: 'firework' };
+    const letters = { f: 'camera', p: 'perf', m: 'map', h: 'help', t: 'emote', r: 'respawn', g: 'photo', b: 'drop', o: 'shop', v: 'firework', x: 'sit' };
+    const places = { KeyF: 'camera', KeyP: 'perf', KeyM: 'map', KeyH: 'help', KeyT: 'emote', KeyR: 'respawn', KeyG: 'photo', KeyB: 'drop', KeyO: 'shop', KeyV: 'firework', KeyX: 'sit' };
     const others = { Escape: 'menu', Enter: 'chat', NumpadEnter: 'chat' };
     window.addEventListener('keydown', (e) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;

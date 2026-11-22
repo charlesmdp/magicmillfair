@@ -2,7 +2,12 @@
 // sponsored (the panel of a game, the backdrop of the shooting gallery, a gondola of the wheel, a sky
 // village) and what is shown there. Both hosts answer through shopRoute() (see routes.js).
 //
-//   GET    /api/shop?device=…                          → { mode, prices, owned, slots }
+//   GET    /api/shop?device=…                          → { mode, prices, owned, slots, pass, trial, now }
+//                                                      (pass: null | { since, until?, gift? } — the Game Pass;
+//                                                      trial: { until } — the light jetpack, free for a day
+//                                                      after the first visit; now: the clock of the server)
+//   POST   /api/portal    { device }                   → { url }   Stripe's page to look after — or stop — the pass
+//   POST   /api/gift      { device, item } | { device, pass: days }   the administrator gives something away
 //   POST   /api/checkout  { item, device, bid? }       → { url }   the payment page of Stripe for that item
 //                                                      (bid, in cents: for the panel of a game, which is auctioned)
 //   POST   /api/stripe/webhook                         Stripe tells what was paid (signed: see stripe.js)
@@ -37,8 +42,9 @@
 // at, why, ok, error }].
 import { allowed } from './api.js';
 import { describe, publicPrices, nextBid, AUCTION, CURRENCY } from './catalog.js';
-import { createCheckout, verifyWebhook, refundPayment } from './stripe.js';
-import { accountOf, addItem, itemsOf, sameOwner } from './accounts.js';
+import { createCheckout, createPortal, verifyWebhook, refundPayment } from './stripe.js';
+import { accountOf, addItem, holderOf, itemsOf, passLive, sameOwner } from './accounts.js';
+import { PASS, TRIAL, itemOf } from './items.js';
 
 const out = (status, body, headers = {}) => ({ status, body, headers });
 const DEVICE = /^[A-Za-z0-9_-]{16,64}$/;
@@ -97,12 +103,20 @@ const selves = async (ctx, device) => { const acct = DEVICE.test(device || '') ?
 const logoUrl = (id, version, draft) => `/api/logo?slot=${encodeURIComponent(id)}${draft ? '&draft=1' : ''}&v=${version}`;
 const shown = (id, s) => ({ title: s.title || '', subtitle: s.subtitle || '', url: s.url || '', logo: s.logo ? logoUrl(id, s.logo) : null });
 
-/** What was paid for becomes theirs (called from the webhook; safe to call twice). */
-export async function grant(ctx, item, device, sub = null) {
+/** What was paid for becomes theirs (called from the webhook; safe to call twice). `customer`: who pays, at Stripe. */
+export async function grant(ctx, item, device, sub = null, customer = null) {
   const what = describe(item);
   if (!what || !DEVICE.test(device || '')) return false;
   if (what.kind === 'own') {
     await addItem(ctx.store, device, item, ctx.now());
+    return true;
+  }
+  if (what.kind === 'pass') {
+    // the Game Pass: held for as long as it is paid (the day Stripe says the subscription ended, it is taken back)
+    const holder = await holderOf(ctx.store, device);
+    await holder.save({ pass: { sub: typeof sub === 'string' ? sub : '', customer: typeof customer === 'string' ? customer : '', since: ctx.now() } });
+    // (who holds which subscription: so that its end finds them, on whichever record the pass is kept)
+    if (typeof sub === 'string' && sub) await ctx.store.put(`sub:${sub}`, { device, account: holder.account.toLowerCase(), at: ctx.now() });
     return true;
   }
   if (what.auction) return false; // (an auctioned place is taken by a bid: takeBid)
@@ -183,7 +197,56 @@ export async function shopRoute(req, ctx) {
     // (what happened while they were away — outbid, refunded — is said once)
     let notes = [];
     if (mine) { const rec = await ctx.store.get(`own:${device}`); if (rec?.notes?.length) { notes = rec.notes; await ctx.store.put(`own:${device}`, { ...rec, notes: [] }); } }
-    return out(200, { mode: cfg.mode || null, prices: publicPrices(), owned: mine ? await ownedBy(ctx, device) : [], slots: view, ...(notes.length && { notes }) });
+    // the Game Pass, and the taste of the light jetpack everybody gets for a day after their first visit
+    let pass = null, trial = null;
+    if (mine) {
+      const holder = await holderOf(ctx.store, device);
+      let first = holder.first;
+      if (!first) { first = now; await holder.save({ first }); }
+      if (passLive(holder.pass, now)) pass = { since: holder.pass.since || 0, ...(holder.pass.gift && { gift: true, until: holder.pass.until }), ...(holder.pass.customer && { managed: true }) };
+      trial = { item: TRIAL.item, until: first + TRIAL.ms };
+    }
+    return out(200, { mode: cfg.mode || null, prices: publicPrices(), owned: mine ? await ownedBy(ctx, device) : [], slots: view, pass, trial, now, ...(notes.length && { notes }) });
+  }
+
+  if (path === '/api/gift') {
+    // the administrator gives something away: a thing to keep, or the pass for so many days
+    if (!req.admin) return out(403, { error: 'Forbidden.' });
+    if (method !== 'POST') return out(405, { error: 'Method not allowed.' }, { Allow: 'POST' });
+    const device = body?.device;
+    if (!DEVICE.test(device || '')) return out(400, { error: 'Nobody to give it to.' });
+    if (body.pass !== undefined) {
+      const days = Math.round(Number(body.pass));
+      if (!(days >= 1 && days <= 3660)) return out(400, { error: 'For how many days?' });
+      const holder = await holderOf(ctx.store, device);
+      if (passLive(holder.pass, now) && !holder.pass.gift) return out(409, { error: 'They already pay for the pass.' });
+      // (given again while a gift still runs: the days are added to what is left)
+      const from = passLive(holder.pass, now) ? holder.pass.until : now;
+      await holder.save({ pass: { gift: true, since: holder.pass?.since || now, until: from + days * 86_400_000 } });
+      await leaveNote(ctx, device, `A gift from the fair: the ${PASS.name} for ${days} day${days === 1 ? '' : 's'}. Enjoy!`);
+      return out(200, { ok: true, gave: PASS.id, days });
+    }
+    const it = itemOf(body.item);
+    if (!it) return out(400, { error: 'Nothing of that name can be given.' });
+    const fresh = await addItem(ctx.store, device, it.id, now);
+    if (fresh) await leaveNote(ctx, device, `A gift from the fair: ${it.name}. Enjoy!`);
+    return out(200, { ok: true, gave: it.id, fresh });
+  }
+
+  if (path === '/api/portal') {
+    if (method !== 'POST') return out(405, { error: 'Method not allowed.' }, { Allow: 'POST' });
+    if (!cfg.mode) return out(501, { error: 'The shop is not open.' });
+    if (limited('portal')) return busy;
+    const device = body?.device;
+    if (!DEVICE.test(device || '')) return out(400, { error: 'Not a browser of the game.' });
+    const holder = await holderOf(ctx.store, device);
+    if (!passLive(holder.pass, now) || !holder.pass.customer) return out(404, { error: 'There is no subscription to look after.' });
+    try {
+      return out(200, await createPortal(cfg, holder.pass.customer, req.site || '', ctx.fetch || fetch));
+    } catch (err) {
+      console.error('[shop]', err.message);
+      return out(502, { error: 'That page could not be opened. Try again in a moment.' });
+    }
   }
 
   if (path === '/api/checkout') {
@@ -193,6 +256,7 @@ export async function shopRoute(req, ctx) {
     const what = describe(body?.item), device = body?.device;
     if (!what || !DEVICE.test(device || '')) return out(400, { error: 'Nothing of that name is sold.' });
     if (what.kind === 'own' && (await ownedBy(ctx, device)).includes(what.item)) return out(409, { error: 'You already have it.' });
+    if (what.kind === 'pass') { const holder = await holderOf(ctx.store, device); if (passLive(holder.pass, now) && !holder.pass.gift) return out(409, { error: 'You already have the pass.' }); }
     let extra = {};
     if (what.auction) {
       // an auction: the bid must beat what the place went for (and be a sum Stripe can take)
@@ -218,11 +282,21 @@ export async function shopRoute(req, ctx) {
     const o = event.data?.object || {};
     if (event.type === 'checkout.session.completed' && (o.payment_status === 'paid' || o.payment_status === 'no_payment_required')) {
       if (describe(o.metadata?.item)?.auction) await takeBid(ctx, cfg, o.metadata.item, o.metadata?.device, o.amount_total, o.payment_intent);
-      else await grant(ctx, o.metadata?.item, o.metadata?.device, o.subscription);
+      else await grant(ctx, o.metadata?.item, o.metadata?.device, o.subscription, o.customer);
     } else if (event.type === 'customer.subscription.deleted') {
-      // the subscription ended: the place is free again
+      // the subscription ended: the place is free again — or the Game Pass is handed back
       const slots = await slotsOf(ctx), id = Object.keys(slots).find((k) => slots[k].sub && slots[k].sub === o.id);
       if (id) await release(ctx, slots, id);
+      const held = typeof o.id === 'string' ? await ctx.store.get(`sub:${o.id}`) : null;
+      if (held) {
+        let ended = false;
+        for (const key of [held.account && `acct:${held.account}`, held.device && `own:${held.device}`]) {
+          const rec = key ? await ctx.store.get(key) : null;
+          if (rec?.pass && rec.pass.sub === o.id) { await ctx.store.put(key, { ...rec, pass: null }); ended = true; }
+        }
+        if (ended) await leaveNote(ctx, held.device, `Your ${PASS.name} has ended. Thank you for having held it!`);
+        await ctx.store.delete(`sub:${o.id}`);
+      }
     }
     return out(200, { received: true });
   }

@@ -1,8 +1,9 @@
 // The shop, seen from the game: what this visitor owns, who sponsors what, and the way to the payment page.
 // The server decides everything (server/shop.js, server/catalog.js); while it has no payment key — or when
 // there is no server at all — the shop is closed and everything is free, as before.
-import { hasApi } from './api.js';
+import { hasApi, sharedNow } from './api.js';
 import { deviceId } from './device.js';
+import { passGives } from '../../server/items.js';
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -31,7 +32,18 @@ export class Shop {
     /** slot → { state: 'live' | 'taken', mine, title, subtitle, url, logo (an address), draft } */
     this.slots = {};
     this.everything = false; // the administrator has it all
+    this.pass = null; // the Game Pass, while it is held: { since, gift?, until?, managed? }
+    this.trial = null; // { item, until }: what everybody has for a day after their first visit
   }
+
+  /** Is the Game Pass theirs (or is everything free, or are they the administrator)? */
+  get hasPass() { return !this.open || this.everything || (!!this.pass && (!this.pass.until || this.pass.until > sharedNow())); }
+  /** How long the free day of `item` still lasts, in ms (0: over, or there never was one). */
+  trialLeft(item) { return this.trial && this.trial.item === item ? Math.max(0, this.trial.until - sharedNow()) : 0; }
+  /** Really theirs: bought, given — or everything is free. */
+  has(item) { return !this.open || this.everything || this.owned.has(item); }
+  /** Not theirs, but lent: 'pass' (the Game Pass gives it) or 'trial' (their free day); null otherwise. */
+  lent(item) { return this.has(item) ? null : this.pass && this.hasPass && passGives(item) ? 'pass' : this.trialLeft(item) > 0 ? 'trial' : null; }
 
   get open() { return !!this.mode; }
 
@@ -44,12 +56,14 @@ export class Shop {
       this.owned = new Set(res.body.owned || []);
       this.slots = res.body.slots || {};
       if (Array.isArray(res.body.notes)) this.notes.push(...res.body.notes.map(String));
+      this.pass = res.body.pass && typeof res.body.pass === 'object' ? res.body.pass : null;
+      this.trial = res.body.trial && Number.isFinite(res.body.trial.until) ? { item: String(res.body.trial.item || ''), until: res.body.trial.until } : null;
     }
     return this;
   }
 
-  /** Does this visitor have that item ('jetpack', 'hat:crown')? Everything, while nothing is sold. */
-  owns(item) { return !this.open || this.everything || this.owned.has(item); }
+  /** May this visitor use that item ('jetpack', 'hat:crown')? Theirs, or lent by the pass or the free day. Everything, while nothing is sold. */
+  owns(item) { return this.has(item) || !!this.lent(item); }
 
   /** What an item costs, in cents (a village: give its tier). */
   cost(item, tier = 0) { const type = item.split(':')[0]; return type === 'village' ? this.prices.village[tier] || 0 : this.prices.items?.[item] ?? this.prices[type] ?? 0; }
@@ -65,6 +79,19 @@ export class Shop {
     const res = await ask('api/checkout', { method: 'POST', body: { item, device: deviceId(), ...(bid && { bid }) } });
     if (res.ok && res.body && /^https:\/\//.test(res.body.url || '')) { window.location.assign(res.body.url); return null; }
     return res.body?.error || (res.status === 0 ? 'The shop cannot be reached.' : 'The payment page could not be opened.');
+  }
+
+  /** Off to Stripe's page where the Game Pass is looked after — or stopped. Resolves to an error to show, or the page leaves. */
+  async portal() {
+    const res = await ask('api/portal', { method: 'POST', body: { device: deviceId() } });
+    if (res.ok && res.body && /^https:\/\//.test(res.body.url || '')) { window.location.assign(res.body.url); return null; }
+    return res.body?.error || 'That page could not be opened.';
+  }
+
+  /** The administrator gives something away: `what` = { item } or { pass: days }. Resolves to null, or to what is wrong. */
+  async gift(key, device, what) {
+    const res = await ask('api/gift', { method: 'POST', key, body: { device, ...what } });
+    return res.ok ? null : res.body?.error || 'It could not be given.';
   }
 
   /** The holder of a place says what to show there. Resolves to null, or to what is wrong. */

@@ -7,7 +7,7 @@ import { World } from './world/World.js';
 import { FreeCamera } from './player/FreeCamera.js';
 import { CharacterFactory, EMOTE_LIST, emoteIndex, packLook } from './player/Character.js';
 import { HATS } from './player/Cosmetics.js';
-import { ITEMS, PAINTS, TRAILS, itemOf, packKit } from '../server/items.js';
+import { ITEMS, PAINTS, TRAILS, itemOf, packKit, PASS, SIZES, SIZE_SCALE, FREE_COLORS } from '../server/items.js';
 import { BOARDS as GAME_NAMES } from '../server/catalog.js';
 import { drawSponsor } from './world/zones/games/Boards.js';
 import { ShopView } from './ui/ShopView.js';
@@ -96,7 +96,10 @@ async function boot() {
   // ---------- player and cameras
   const floorAt = (x, z) => Math.max(data.heightAt(x, z), data.waterAt(x, z));
   let color = parseInt(store.get('mmf.color'), 10);
-  if (!(color >= 0 && color < 16)) color = Math.floor(Math.random() * 16);
+  if (!(color >= 0 && color < 32)) color = Math.floor(Math.random() * 16);
+  // (tiny, giant: the choice of who holds the Game Pass; 0 is the usual size)
+  let size = Math.max(0, SIZES.indexOf(store.get('mmf.size') || 'normal'));
+  let disguise = 0; // a bush (1), a tree (2): a secret word of the chat
   let name = (store.get('mmf.name') || '').trim() || `Visitor ${10 + Math.floor(Math.random() * 90)}`;
   const me = factory.create(color);
   scene.add(me.root);
@@ -115,7 +118,7 @@ async function boot() {
   const shop = new Shop();
   const owns = (id) => id !== undefined && (id === 'none' || shop.owns(id === 'jetpack' ? 'jetpack' : `hat:${id}`));
   const savedHat = parseInt(store.get('mmf.hat'), 10);
-  const look = { hat: savedHat > 0 && savedHat < HATS.length && owns(HATS[savedHat].id) ? savedHat : 0, jet: false, bouquet: false, kinds: undefined, quad: false, bighead: false };
+  const look = { hat: savedHat > 0 && savedHat < HATS.length && owns(HATS[savedHat].id) ? savedHat : 0, jet: false, bouquet: false, kinds: undefined, quad: false, bighead: false, size: 0, disguise: 0 };
   // what the avatar shows besides its hat — its paint, its trail — is remembered too, and told to the others
   // as one small number (see server/items.js)
   const kit = { paint: 0, trail: 0, pet: 0 };
@@ -138,7 +141,7 @@ async function boot() {
   player.onDeath = (cause) => { hud.wasted(cause); audio.play('wasted'); };
   player.onRespawn = () => { hud.wasted(null); rig.snap(player.pos, rig.yaw); audio.play('respawn'); };
   const rank = new RankEmotes(scene);
-  Object.assign(app, { player, rig, free, me, rank });
+  Object.assign(app, { player, rig, free, me, rank, look });
 
   const state = { mode: 'intro', time: 0, blend: null };
   const _p = new THREE.Vector3(), _q = new THREE.Quaternion();
@@ -185,12 +188,24 @@ async function boot() {
     presence.on('emote', ({ id, emote: i }) => {
       const o = presence.peers.get(id), e = EMOTE_LIST[i];
       if (o && o.visible && i === FIREWORK) { world.sparks.firework(o.x, o.y, o.z); return; } // (somebody lit a firework)
+      if (o && o.visible && i === BOUQUET) {
+        // somebody holds out their bouquet: whoever stands right by them, hands free, takes it
+        if (Math.hypot(o.x - player.pos.x, o.z - player.pos.z) < 3 && Math.abs(o.y - player.pos.y) < 2 && !look.bouquet && state.mode === 'walk' && !player.dead && !fair.session) {
+          look.kinds = undefined; look.bouquet = true;
+          audio.play('pick');
+          hud.note(`${o.name} gives you a bouquet.`, 5000);
+          world.sparks.glitter(player.pos.x, player.pos.y + 1.2, player.pos.z, 0.7, 24);
+        }
+        return;
+      }
       if (!o || !o.visible || !e) return;
       const d = Math.hypot(o.x - player.pos.x, o.z - player.pos.z);
       if (d < 40) audio.play(e.rank ? 'rank' : e.id === 'cheer' || e.id === 'clap' || e.id === 'hype' || e.id === 'go' ? 'cheer' : e.id === 'rage' ? 'rage' : 'emote', { volume: Math.max(0.15, 1 - d / 40) * 0.8 });
     });
     // put out of the room by the administrator: said plainly, and that is the end of the visit to this room
     presence.on('kicked', ({ ban }) => hud.banner(ban ? 'The administrator has banned you from the fair.' : 'The administrator has put you out of this room. Reload the page to come back in.'));
+    // something was given by an administrator: the shop is asked again (it says what, in the chat)
+    presence.on('gift', () => { refreshShop().then(() => { audio.play('victory'); hud.note('A gift from the fair has just arrived: look in the item shop!', 7000); }); });
     presence.on('who', ({ list, now }) => { roster.details = new Map(list.map((p) => [p.id, p])); roster.now = now; if (hud.rosterOpen) showRoster(); });
     presence.on('admin', ({ ok, out }) => {
       if (ok && hud.rosterOpen) presence.who();
@@ -253,6 +268,12 @@ async function boot() {
   };
   // sitting, lying down, boarding
   const interact = new Interact({ player, world, hud, peers: () => (avatars ? avatars.list : []) });
+  // sitting down on the ground, legs crossed, wherever one stands (X, /sit, or the emotes): a step gets up again
+  const sitDown = () => {
+    if (state.mode !== 'walk' || fair.session || player.dead) return;
+    if (player.cross) { player.cross = false; return; }
+    if (!player.sitOnGround()) hud.note('Not here: find some ground to sit on.', 2600);
+  };
   {
     // picking flowers: looked for a few times a second around the feet
     let flower = null, wait = 0;
@@ -292,16 +313,20 @@ async function boot() {
     }],
     [0xa2793b81, () => { timers.skate = 20; return 'Somebody waxed the valley.'; }],
     [0x8354f3fc, () => { timers.fisheye = 20; return 'What big eyes you have.'; }],
+    [0x14433f79, () => { disguise = disguise === 1 ? 0 : 1; return disguise ? 'You are a bush. Nobody suspects a thing. (The same word again, and you are yourself.)' : 'You are yourself again.'; }],
+    [0x0e46ff87, () => { disguise = disguise === 2 ? 0 : 2; return disguise ? 'You are a tree. Stand very still. (The same word again, and you are yourself.)' : 'You are yourself again.'; }],
   ]);
   const command = (text) => {
     const [word, ...rest] = text.slice(1).trim().split(/\s+/), name = word.toLowerCase();
     const tell = (line) => hud.addChat('✦', 5, line, true);
     if (name === 'kill') { if (!player.dead) player.die('Took the easy way out', [SPAWN.x, SPAWN.z, SPAWN.yaw + Math.PI]); return; }
     if (name === 'admin') { adminKey(rest.join(' ')); return; }
+    if (name === 'sit') { sitDown(); return; }
     const e = emoteIndex(name);
     if (e >= 0) { emote(e); return; }
     const secret = SECRETS.get(fingerprint(word.toUpperCase()));
-    tell(secret ? secret() : 'Unknown command.');
+    // (no secret word while a game is on: the race is the same for everybody)
+    tell(secret ? (fair.session ? 'Not during a game.' : secret()) : 'Unknown command.');
   };
   // characters to talk to: near one of them, what is typed goes to it and to nobody else
   // (what is said to a character, and what it answers, stays on this screen: nobody else sees or hears it)
@@ -409,6 +434,8 @@ async function boot() {
   const playRace = () => {
     if (fair.session || player.dead) return;
     if (player.cheat || timers.moon || timers.turbo) { hud.note('Not with a cheat on.'); return; }
+    // (everybody races at the same size, as themselves: no secret word lasts into the race)
+    for (const k of ['tiny', 'giant', 'bighead', 'spring', 'skate', 'rocket', 'fisheye', 'disco']) delete timers[k];
     // (it leaves with the next start: whoever asks for the same one leaves at the same instant)
     const start = world.games.race.nextStart();
     fair.session = world.games.race.open(player, fairIo, start, presence?.id ?? 0); fair.kind = 'race'; fair.after = 0;
@@ -535,6 +562,22 @@ async function boot() {
   });
   Object.assign(app, { blast, pressButton, bomb });
   // The administrator goes where they like: next to a visitor ({ id }), or to a spot of the map ({ x, z }).
+  // the administrator gives something to a visitor: a thing of the shop to keep, or the Game Pass for a while
+  const giftTo = async (to) => {
+    if (!who.admin || !to?.dev) return;
+    if (!shop.open) { hud.note('The shop is not open: everything is free already.', 5000); return; }
+    const options = [
+      { label: `${PASS.name} — 30 days`, note: 'Every hat, the Jetpack Lite, tiny and giant, the extra colours', what: { pass: 30 }, color: [0.95, 0.76, 0.3] },
+      { label: `${PASS.name} — a year`, note: 'The same, for 365 days', what: { pass: 365 }, color: [0.95, 0.76, 0.3] },
+      ...ITEMS.map((it) => ({ label: it.name, note: `${it.group} · ${price(it.price)} in the shop`, what: { item: it.id } })),
+    ];
+    const pick = await hud.choose(`A gift for ${to.name}`, 'It is theirs at once: a thing to keep for good, or the pass for the days you choose. Their game says it comes from the fair.', options);
+    if (pick === null) return;
+    const wrong = await shop.gift(who.key, to.dev, options[pick].what);
+    if (wrong) { hud.note(wrong, 6000); return; }
+    presence?.gifted(to.id);
+    hud.note(`Given to ${to.name}: ${options[pick].label}.`, 5000);
+  };
   const goTo = (to) => {
     if (!who.admin || state.mode !== 'walk' || player.dead) return;
     let x = to.x, z = to.z, word = 'There you are.';
@@ -591,15 +634,25 @@ async function boot() {
     }
     hud.setVillages(sky.villages, data.meta.size, (v) => (v.forHire ? money(v.price) : v.name));
   };
+  let shopKnown = false; // (has the server said what is theirs yet?)
   const refreshShop = async () => {
     await shop.load();
+    shopKnown = true;
     shop.everything = who.admin;
-    // (nothing is worn that is not theirs)
+    // (nothing is worn that is not theirs — or lent: the Game Pass lends every hat)
     if (look.hat && !owns(HATS[look.hat].id)) look.hat = 0;
+    // (a colour of the pass, a size: back to everybody's when the pass is gone)
+    if (color >= FREE_COLORS && !shop.hasPass) { color -= FREE_COLORS; me.setColor(color); store.set('mmf.color', String(color)); presence?.setIdentity(name, color); }
+    hud.setRobot({ color, size: shop.hasPass ? size : 0, pass: shop.hasPass });
     if (kit.paint && !shop.owns(`paint:${PAINTS[kit.paint]}`)) kit.paint = 0;
     if (kit.trail && !shop.owns(`trail:${TRAILS[kit.trail]}`)) kit.trail = 0;
     wear();
     player.tank = shop.owns('jetpack') ? JET.time : JET.time / 3;
+    // (the free day of the light jetpack: said once, the first time it is found)
+    if (shop.open && shop.lent('jetlite') === 'trial' && !shop.has('jetpack') && !store.get('mmf.trial')) {
+      store.set('mmf.trial', '1');
+      setTimeout(() => hud.addChat('✦', 5, 'A present for your first day: the Jetpack Lite is yours for 24 hours. Jump, then press jump again in the air.', true), 9000);
+    }
     hud.setShop(shop.open);
     hud.setFireworks(shop.owns('fireworks'));
     for (const text of shop.notes.splice(0)) hud.addChat('✦', 5, text, true); // (outbid, refunded: said once)
@@ -673,11 +726,31 @@ async function boot() {
     const c = world.places.crokmou;
     if (!c || Math.abs(p.pos.y - c.y) > 3 || !near(p, [c.x, c.z], c.reach)) return null;
     const name = c.name[0] + c.name.slice(1).toLowerCase();
+    // (with flowers in hand: they are for the dog)
+    if (look.bouquet) return { label: `Lay your bouquet at ${name}'s feet`, run: () => {
+      look.bouquet = false; look.kinds = undefined;
+      audio.play('woof');
+      world.sparks.glitter(c.head.x, c.head.y, c.head.z, 6, 110);
+      world.sparks.glitter(p.pos.x, p.pos.y + 0.4, p.pos.z, 1.2, 40);
+      hud.note(`Woof! Woof! ${name} has never been given flowers before. Best visitor ever.`, 5200);
+    } };
     return { label: `Say hello to ${name}`, run: () => {
       audio.play('woof');
       world.sparks.glitter(c.head.x, c.head.y, c.head.z, 5, 70);
       hud.note(`Woof! ${name} is very pleased to see you.`, 4200);
     } };
+  });
+  // a bouquet in hand and somebody close by: it can be given to them (they take it if their hands are free)
+  world.actionSources.push((p) => {
+    if (!look.bouquet || !avatars) return null;
+    let best = null, bd = 2.6 * 2.6;
+    for (const o of avatars.list) { const d = (o.x - p.pos.x) ** 2 + (o.z - p.pos.z) ** 2; if (d < bd && Math.abs(o.y - p.pos.y) < 2) { bd = d; best = o; } }
+    return best ? { label: `Give your bouquet to ${best.name}`, run: () => {
+      look.bouquet = false; look.kinds = undefined;
+      presence?.sendEmote(BOUQUET);
+      audio.play('pick');
+      hud.note(`You hold out your bouquet to ${best.name}.`, 4000);
+    } } : null;
   });
   // the stand of the wheel: its gondolas, who sponsors them, which are free
   world.actionSources.push((p) => {
@@ -735,16 +808,58 @@ async function boot() {
     drawSponsor(ctx, pw, ph, sponsor, { what: 'this game' });
     return c;
   };
-  const shopView = new ShopView(hud.root, (id, w, h) => (id.startsWith('board:') ? panelPicture(id, w, h) : previewer.shot(id, color, w, h)));
+  const passPicture = (w, h) => {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d'), tw = w * 0.86, th = tw * 0.52;
+    ctx.translate(w / 2, h * 0.46); ctx.rotate(-0.09);
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.45)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 9;
+    const g = ctx.createLinearGradient(-tw / 2, -th / 2, tw / 2, th / 2);
+    g.addColorStop(0, '#ffe08a'); g.addColorStop(0.5, '#f2c14e'); g.addColorStop(1, '#c98d1f');
+    ctx.fillStyle = g;
+    // (a ticket: a rounded card with a bite out of each side)
+    const r = th * 0.1, bite = th * 0.11;
+    ctx.beginPath();
+    ctx.moveTo(-tw / 2 + r, -th / 2); ctx.lineTo(tw / 2 - r, -th / 2); ctx.quadraticCurveTo(tw / 2, -th / 2, tw / 2, -th / 2 + r);
+    ctx.lineTo(tw / 2, -bite); ctx.arc(tw / 2, 0, bite, -Math.PI / 2, Math.PI / 2, true); ctx.lineTo(tw / 2, th / 2 - r); ctx.quadraticCurveTo(tw / 2, th / 2, tw / 2 - r, th / 2);
+    ctx.lineTo(-tw / 2 + r, th / 2); ctx.quadraticCurveTo(-tw / 2, th / 2, -tw / 2, th / 2 - r); ctx.lineTo(-tw / 2, bite); ctx.arc(-tw / 2, 0, bite, Math.PI / 2, -Math.PI / 2, true);
+    ctx.lineTo(-tw / 2, -th / 2 + r); ctx.quadraticCurveTo(-tw / 2, -th / 2, -tw / 2 + r, -th / 2);
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = 'rgba(90, 50, 0, 0.55)'; ctx.lineWidth = Math.max(1.5, w * 0.006); ctx.setLineDash([w * 0.02, w * 0.014]);
+    ctx.strokeRect(-tw / 2 + th * 0.12, -th / 2 + th * 0.1, tw - th * 0.24, th - th * 0.2);
+    ctx.setLineDash([]);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#3a2300';
+    ctx.font = `600 ${Math.round(th * 0.13)}px Georgia, 'Times New Roman', serif`; ctx.fillText('ATOMIC OASIS', 0, -th * 0.27);
+    ctx.font = `900 ${Math.round(th * 0.3)}px Georgia, 'Times New Roman', serif`; ctx.fillText('GAME PASS', 0, 0, tw * 0.8);
+    ctx.font = `italic 600 ${Math.round(th * 0.115)}px Georgia, 'Times New Roman', serif`; ctx.fillText('admit one robot · every day', 0, th * 0.28);
+    return c;
+  };
+  const shopView = new ShopView(hud.root, (id, w, h) => (id === PASS.id ? passPicture(w, h) : id.startsWith('board:') ? panelPicture(id, w, h) : previewer.shot(id, color, w, h)));
   const wornNow = (type, sub) => (type === 'hat' ? HATS[look.hat]?.id === sub : type === 'paint' ? PAINTS[kit.paint] === sub : type === 'trail' ? TRAILS[kit.trail] === sub : false);
   const shopItems = () => {
     const list = ITEMS.map((it) => {
-      const [type, sub] = it.id.split(':'), owned = shop.owns(it.id);
+      const [type, sub] = it.id.split(':'), owned = shop.has(it.id), lent = shop.lent(it.id), left = lent === 'trial' ? shop.trialLeft(it.id) : 0;
       return {
-        ...it, owned, cost: price(shop.cost(it.id) || it.price), worn: owned && wornNow(type, sub), wearable: WEARABLE.includes(type), featured: FEATURED.includes(it.id),
+        ...it, owned, lent, cost: price(shop.cost(it.id) || it.price), worn: (owned || !!lent) && wornNow(type, sub), wearable: WEARABLE.includes(type), featured: FEATURED.includes(it.id),
         hint: it.id === 'fireworks' ? 'Yours: press V (or the button in the emotes) to light one.' : it.id === 'jetpack' || it.id === 'jetlite' ? 'Yours: jump, then press jump again in the air.' : 'Yours for good: put it on and take it off as you please.',
+        ...(lent === 'pass' && { fine: `Yours while you hold the ${PASS.name}. Buy it to keep it for good.` }),
+        ...(lent === 'trial' && { fine: `A taste, on the house: yours for ${left > 3600_000 ? `${Math.ceil(left / 3600_000)} more hours` : `${Math.max(1, Math.ceil(left / 60_000))} more minutes`} — jump, then press jump again in the air. After that it is sold here, and it comes with the ${PASS.name}.` }),
       };
     });
+    // the Game Pass, by the month (only while things are sold)
+    if (shop.open) {
+      const held = !!shop.pass && shop.hasPass, gift = held && shop.pass.gift;
+      list.unshift({
+        id: PASS.id, name: PASS.name, group: 'pass', rarity: 'legendary', owned: held, wearable: false,
+        cost: `${price(shop.prices.pass || PASS.price)} a month`,
+        act: held ? null : `Get the pass · ${price(shop.prices.pass || PASS.price)} a month`,
+        manage: held && shop.pass.managed ? 'Look after it, or stop it' : null,
+        blurb: held ? (gift ? `A gift of the fair: yours until ${new Date(shop.pass.until).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.` : 'It is yours. Thank you — truly.') : 'One pass, by the month, and the fair opens a little wider.',
+        perks: PASS.perks, why: PASS.why, pitch: ['Every hat', 'Jetpack Lite', 'Tiny or giant', '16 more colours'],
+        fine: held ? (gift ? 'When the gift ends, nothing is charged: the pass simply stops.' : 'Paid by the month on Stripe. Stop whenever you like: it lasts until the end of the month you paid for.') : 'Paid by the month on Stripe; stop whenever you like. What you bought before stays yours, pass or no pass.',
+      });
+    }
     // the panel over the board of each game, to the highest bidder (only while things are sold)
     if (shop.open) for (const [game, title] of Object.entries(GAME_NAMES)) {
       const id = `board:${game}`, view = shop.slots[id], least = shop.least(id), mine = !!view?.mine;
@@ -769,7 +884,7 @@ async function boot() {
   }
   // ---------- an account: not needed to play; it keeps what was bought, the days in a row and the look
   const account = new Account();
-  const profileNow = () => ({ name, color, hat: HATS[look.hat]?.id || 'none', paint: PAINTS[kit.paint], trail: TRAILS[kit.trail] });
+  const profileNow = () => ({ name, color, hat: HATS[look.hat]?.id || 'none', paint: PAINTS[kit.paint], trail: TRAILS[kit.trail], size: SIZES[size] });
   let keeping = 0;
   function keepProfile() { if (!account.name) return; clearTimeout(keeping); keeping = setTimeout(() => account.save(profileNow()), 1500); }
   /** The look kept by the account comes back on this browser (what is no longer theirs is left off: see refreshShop). */
@@ -779,6 +894,7 @@ async function boot() {
     if (Number.isInteger(p.color)) { color = p.color; me.setColor(color); store.set('mmf.color', String(color)); shopView.stale(); }
     look.hat = Math.max(0, HATS.findIndex((h) => h.id === p.hat));
     kit.paint = Math.max(0, PAINTS.indexOf(p.paint)); kit.trail = Math.max(0, TRAILS.indexOf(p.trail));
+    if (SIZES.includes(p.size)) { size = SIZES.indexOf(p.size); store.set('mmf.size', SIZES[size]); }
   };
   const showAccount = () => hud.setAccount({ name: account.name, available: account.available });
   /** Signed in (or out): what is owned, the days in a row and the look are asked again. */
@@ -845,9 +961,10 @@ async function boot() {
       if (wrong) hud.note(wrong, 7000);
     })
     .on('equip', (id) => { const [type, sub] = id.split(':'); if (!shop.owns(id)) return; equip(id, !wornNow(type, sub)); shopView.refresh(shopItems()); audio.play('pick'); })
+    .on('manage', async () => { hud.note('Opening the page of your subscription…', 8000); const wrong = await shop.portal(); if (wrong) hud.note(wrong, 7000); })
     .on('close', () => { document.getElementById('view')?.focus({ preventScroll: true }); });
   // a firework (for who has the box): up it goes, and those around see it too
-  const FIREWORK = 31; // (the number it travels under, among the emotes)
+  const FIREWORK = 31, BOUQUET = 30; // (the numbers they travel under, among the emotes: a firework lit, a bouquet held out)
   let fireworkAt = -10;
   const lightFirework = () => {
     if (state.mode !== 'walk' || player.dead || fair.session) return;
@@ -857,7 +974,7 @@ async function boot() {
     world.sparks.firework(player.pos.x, player.pos.y, player.pos.z);
     presence?.sendEmote(FIREWORK);
   };
-  Object.assign(app, { shopView, openShop, kit, equip, lightFirework });
+  Object.assign(app, { shop, shopView, openShop, refreshShop, kit, equip, lightFirework });
   const toggleCamera = () => { if (state.mode === 'walk') { if (mayFly()) setMode('free'); } else if (state.mode === 'free') setMode('walk'); };
   const savedQuality = store.get('mmf.quality');
   const qualityChoice = params.get('q') && TIERS[params.get('q')] ? params.get('q') : savedQuality && TIERS[savedQuality] ? savedQuality : 'auto';
@@ -878,9 +995,9 @@ async function boot() {
     let tries = 0;
     const again = async () => {
       await refreshShop();
-      if (shop.owned.has(paid) || shop.slots[paid]?.mine) {
+      if (shop.owned.has(paid) || shop.slots[paid]?.mine || (paid === PASS.id && shop.pass)) {
         audio.play('victory');
-        hud.note(shop.slots[paid]?.mine ? 'It is yours. Go to it to set it up: your name, your link, your logo.' : 'It is yours. Thank you!', 9000);
+        hud.note(paid === PASS.id ? `The ${PASS.name} is yours. Thank you — it keeps the lights on! Pick a size and a colour in the settings.` : shop.slots[paid]?.mine ? 'It is yours. Go to it to set it up: your name, your link, your logo.' : 'It is yours. Thank you!', 9000);
         // (what can be worn is put on at once)
         if (itemOf(paid) && WEARABLE.includes(paid.split(':')[0])) { equip(paid, true); shopView.refresh(shopItems()); }
       }
@@ -998,7 +1115,10 @@ async function boot() {
       player.autoRun = settings.run;
       rig.follow = settings.follow;
     })
-    .on('color', (i) => { color = i; me.setColor(i); presence?.setIdentity(name, color); shopView.stale(); keepProfile(); })
+    .on('color', (i) => { if (i >= FREE_COLORS && !shop.hasPass) return; color = i; me.setColor(i); store.set('mmf.color', String(color)); presence?.setIdentity(name, color); shopView.stale(); keepProfile(); })
+    .on('size', (i) => { if (i && !shop.hasPass) return; size = i; store.set('mmf.size', SIZES[size]); keepProfile(); })
+    .on('sit', () => sitDown())
+    .on('gift', (to) => giftTo(to))
     .on('name', (n) => { if (!n) return; name = n; presence?.setIdentity(name, color); store.set('mmf.name', name); world.games.setMe(name); keepProfile(); })
     .on('quality', (q) => {
       // a tier changes shaders, textures and shadow maps: simplest and safest is a clean restart at the same spot
@@ -1013,6 +1133,7 @@ async function boot() {
   input.on('emote', () => hud.toggleEmotes());
   input.on('shop', () => { if (state.mode === 'walk') openShop(); });
   input.on('firework', lightFirework);
+  input.on('sit', () => sitDown());
   input.on('drop', () => { if (look.bouquet) { look.bouquet = false; look.kinds = undefined; } });
   input.on('chat', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleChat(true, talking ? talking.brain.ask || `Say something to ${talking.name}…` : undefined); });
   input.on('respawn', () => { if (state.mode === 'walk') { endGame(); spawn(); hud.note('Back to the mill'); } });
@@ -1113,7 +1234,19 @@ async function boot() {
       player.spring = timers.spring ? 2 : 1;
       player.grip = timers.skate ? 0.09 : 1;
       player.cheat = !!(timers.moon || timers.turbo || timers.spring || timers.skate || timers.rocket);
-      me.size = timers.tiny ? 0.45 : timers.giant ? 2.3 : 1;
+      // (tiny, giant: a secret word for a moment, or the choice of who holds the pass — never in the race)
+      const racing = !!fair.session && fair.kind === 'race';
+      look.size = racing ? 0 : timers.tiny ? 1 : timers.giant ? 2 : shop.hasPass ? size : 0;
+      look.disguise = racing ? 0 : disguise;
+      me.size = SIZE_SCALE[look.size];
+      if (player.noJet) {
+        player.noJet = false;
+        // (a jetpack was asked for and there is none: the free day is over — where to get one)
+        if (shop.open && !shop.owns('jetpack') && !shop.owns('jetlite') && mode === 'walk' && !fair.session && state.time - (app.toldJet || -99) > 8) {
+          app.toldJet = state.time;
+          hud.note(`Your free day with the jetpack is over. The Jetpack Lite is ${price(shop.cost('jetlite'))} in the item shop — and it comes with the ${PASS.name}.`, 7000);
+        }
+      }
       const fov = fair.fov ?? (timers.fisheye ? 104 : engine.width < engine.height ? 68 : 55);
       if (Math.abs(camera.fov - fov) > 0.05) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 5); camera.updateProjectionMatrix(); }
       if (timers.disco) me.setColor(Math.floor(state.time * 6) % 16); else if (me.colorIndex !== color) me.setColor(color);
@@ -1246,8 +1379,9 @@ async function boot() {
     hud.splash.classList.add('done');
     hud.hud.classList.add('on');
   } else {
-    const who = await hud.welcome({ name, color, touch });
-    name = who.name; color = who.color;
+    const who = await hud.welcome({ name, color, touch, size: shopKnown && shop.hasPass ? size : 0, pass: shopKnown && shop.hasPass });
+    name = who.name; color = who.color >= FREE_COLORS && !shop.hasPass ? who.color - FREE_COLORS : who.color;
+    if (shop.hasPass) { size = who.size || 0; store.set('mmf.size', SIZES[size]); }
     world.games.setMe(name);
     me.setColor(color);
     hud.setName(name);

@@ -1,9 +1,13 @@
 // DOM interface: welcome screen, heads-up display, settings, touch controls, name tags.
 import { AVATAR_COLORS } from '../player/Character.js';
+import { FREE_COLORS } from '../../server/items.js';
 import { HATS } from '../player/Cosmetics.js';
 import { TIERS, TIER_ORDER } from '../core/Quality.js';
 import { assetUrl } from '../core/Assets.js';
 import { WORLD_DIR } from '../world/layout/layout.js';
+
+// (a padlock: on what comes with the Game Pass, for who does not hold it)
+const LOCK = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none"/></svg>';
 
 const ICON = {
   gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.9 2.9l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.9-2.9l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.9-2.9l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.9 2.9l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
@@ -84,7 +88,7 @@ export class Hud {
     let s = this.root.querySelector('.splash');
     if (!s) {
       s = el('div', 'splash');
-      s.innerHTML = '<div class="card"><h1 class="title">Atomic <em>Oasis</em></h1><div class="bar"><i></i></div><div class="hint load"></div><div class="form"><label for="mmf-name">Your name</label><input id="mmf-name" type="text" maxlength="16" autocomplete="off" spellcheck="false" /><label>Colour</label><div class="swatches"></div><button class="go" type="button">Step right up!</button><div class="keys"></div></div><div class="version"></div></div>';
+      s.innerHTML = '<div class="card"><h1 class="title">Atomic <em>Oasis</em></h1><div class="bar"><i></i></div><div class="hint load"></div><div class="form"><label for="mmf-name">Your name</label><input id="mmf-name" type="text" maxlength="16" autocomplete="off" spellcheck="false" /><label>Colour</label><div class="swatches"></div><label>Size <small class="passtag">Game Pass</small></label><div class="sizes"></div><p class="passhint" hidden></p><button class="go" type="button">Step right up!</button><div class="keys"></div></div><div class="version"></div></div>';
       this.root.append(s);
     }
     this.splash = s;
@@ -103,33 +107,72 @@ export class Hud {
     this.loadHint.style.color = '#ffb4a2';
   }
 
+  /**
+   * The colours and the sizes a robot can have, as buttons in `colours` and `sizes` (two elements): the first
+   * sixteen colours are everybody's; the two rows after them, and the sizes other than the usual one, come
+   * with the Game Pass — without it they are shown with a padlock and cannot be picked (`hint` then says why).
+   * Emits 'color' (its number) and 'size' (0 normal, 1 tiny, 2 giant). Kept in step by setRobot().
+   */
+  _robotUI(colours, sizes, hint) {
+    const ui = { colours: [], sizes: [], hint };
+    const locked = (b) => b.classList.contains('locked');
+    const why = () => { if (hint) { hint.hidden = false; hint.textContent = 'That comes with the Game Pass ($19 a month, in the item shop): two more rows of colours, tiny and giant, every hat, the Jetpack Lite.'; } this.emit('wantpass'); };
+    colours.textContent = '';
+    AVATAR_COLORS.forEach((c, i) => {
+      const b = el('button');
+      b.type = 'button';
+      b.style.background = `#${c.toString(16).padStart(6, '0')}`;
+      b.setAttribute('aria-label', `Colour ${i + 1}${i >= FREE_COLORS ? ' (Game Pass)' : ''}`);
+      if (i >= FREE_COLORS) { b.classList.add('extra'); b.innerHTML = LOCK; }
+      if (i === FREE_COLORS) colours.append(el('small', 'passrow', 'With the Game Pass'));
+      b.onclick = () => { if (locked(b)) { why(); return; } this.setRobot({ color: i }); this.emit('color', i); };
+      colours.append(b);
+      ui.colours.push(b);
+    });
+    sizes.textContent = '';
+    ['Normal', 'Tiny', 'Giant'].forEach((label, i) => {
+      const b = el('button');
+      b.type = 'button';
+      b.innerHTML = i ? `${LOCK}<span>${label}</span>` : `<span>${label}</span>`;
+      b.onclick = () => { if (locked(b)) { why(); return; } this.setRobot({ size: i }); this.emit('size', i); };
+      sizes.append(b);
+      ui.sizes.push(b);
+    });
+    (this._robotUIs ||= []).push(ui);
+    this.setRobot({});
+  }
+
+  /** What the robot of this visitor is like — { color, size } — and whether the Game Pass is theirs (`pass`): any of them. */
+  setRobot({ color, size, pass } = {}) {
+    const r = (this._robot ||= { color: 0, size: 0, pass: false });
+    if (color !== undefined) r.color = color;
+    if (size !== undefined) r.size = size;
+    if (pass !== undefined) r.pass = !!pass;
+    for (const ui of this._robotUIs || []) {
+      ui.colours.forEach((b, i) => { b.setAttribute('aria-pressed', String(i === r.color)); b.classList.toggle('locked', i >= FREE_COLORS && !r.pass); });
+      ui.sizes.forEach((b, i) => { b.setAttribute('aria-pressed', String(i === r.size)); b.classList.toggle('locked', i > 0 && !r.pass); });
+      if (ui.hint && r.pass) ui.hint.hidden = true;
+    }
+  }
+
   /** Show name / colour form; resolves when the visitor presses "Explore". */
-  welcome({ name, color, touch }) {
+  welcome({ name, color, touch, size = 0, pass = false }) {
     const s = this.splash;
     s.classList.add('glass');
     s.querySelector('.card').classList.add('ready');
     const input = s.querySelector('#mmf-name');
     input.value = name;
-    const sw = s.querySelector('.swatches');
-    let chosen = color;
-    AVATAR_COLORS.forEach((c, i) => {
-      const b = el('button');
-      b.type = 'button';
-      b.style.background = `#${c.toString(16).padStart(6, '0')}`;
-      b.setAttribute('aria-label', `Colour ${i + 1}`);
-      b.setAttribute('aria-pressed', String(i === chosen));
-      b.onclick = () => { chosen = i; sw.querySelectorAll('button').forEach((x, k) => x.setAttribute('aria-pressed', String(k === i))); this.emit('color', i); };
-      sw.append(b);
-    });
+    this._robotUI(s.querySelector('.swatches'), s.querySelector('.sizes'), s.querySelector('.passhint'));
+    this.setRobot({ color, size, pass });
     s.querySelector('.keys').innerHTML = touch
       ? 'Drag on the left to walk, on the right to look around.'
-      : '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / <kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd> or arrows · <kbd>Shift</kbd> run · <kbd>Space</kbd> jump · <kbd>E</kbd> sit, board · <kbd>Enter</kbd> chat · <kbd>T</kbd> emotes · <kbd>M</kbd> map';
+      : '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / <kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd> or arrows · <kbd>Shift</kbd> run · <kbd>Space</kbd> jump · <kbd>E</kbd> sit, board · <kbd>Enter</kbd> chat · <kbd>T</kbd> emotes · <kbd>X</kbd> sit down · <kbd>M</kbd> map';
     return new Promise((resolve) => {
       const go = () => {
         const n = input.value.trim().slice(0, 16) || name;
         s.classList.add('done');
         this.hud.classList.add('on');
-        resolve({ name: n, color: chosen });
+        resolve({ name: n, color: this._robot.color, size: this._robot.size });
       };
       s.querySelector('.go').onclick = go;
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); e.stopPropagation(); });
@@ -162,6 +205,7 @@ export class Hud {
       </div>
       <div class="stats"></div>
       <div class="emotes">
+        <div class="sit"><button data-sit>Sit on the ground (X)</button></div>
         <div class="held"><button data-drop>Put the bouquet down (B)</button></div>
         <div class="boom"><button data-firework>Light a firework (V)</button></div>
       </div>
@@ -200,6 +244,10 @@ export class Hud {
         <div class="row"><span>The camera turns with the character</span><button class="switch" data-set="follow" aria-pressed="false" aria-label="The camera turns with the character"></button></div>
         <h3>Hats, jetpacks, paint</h3>
         <button class="open-shop" type="button">Open the item shop</button>
+        <h3>Your robot</h3>
+        <div class="swatches robot"></div>
+        <div class="sizes robot"></div>
+        <p class="passhint" hidden></p>
         <h3>Your name</h3>
         <input type="text" maxlength="16" class="name" autocomplete="off" spellcheck="false" />
         <div class="acct" hidden><h3>Account</h3><p class="acct-info"></p><div class="acct-acts"></div></div>
@@ -300,8 +348,10 @@ export class Hud {
     for (const ev of ['mousedown', 'touchstart', 'wheel']) this.chatEl.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
     this.cameraBtn = h.querySelector('[data-act="camera"]');
     this.emotes.querySelector('[data-drop]').onclick = () => { this.emit('drop'); this.emotes.classList.remove('on'); };
+    this.emotes.querySelector('[data-sit]').onclick = () => { this.emit('sit'); this.emotes.classList.remove('on'); };
     this.emotes.querySelector('[data-firework]').onclick = () => { this.emit('firework'); this.emotes.classList.remove('on'); };
     h.querySelector('.open-shop').onclick = () => { this.panel.classList.remove('on'); this.emit('shop'); };
+    this._robotUI(h.querySelector('.swatches.robot'), h.querySelector('.sizes.robot'), h.querySelector('.panel .passhint'));
     this.wastedEl = h.querySelector('.wasted');
     h.querySelectorAll('.quality button').forEach((b) => (b.onclick = () => this.emit('quality', b.dataset.q)));
     h.querySelectorAll('[data-vol]').forEach((r) => {
@@ -571,6 +621,7 @@ export class Hud {
           const acts = el('span', 'acts');
           const act = (label, title, fn, cls = '') => { const b = el('button', cls); b.type = 'button'; b.textContent = label; b.title = title; b.onclick = fn; acts.append(b); };
           act('Go to', 'Be carried next to them', () => { this.closeRoster(); this.emit('goto', { id: p.id }); }, 'good');
+          if (d.dev) act('Gift', 'Give them something from the shop, or the Game Pass for a while', () => { this.closeRoster(); this.emit('gift', { id: p.id, name: p.name, dev: d.dev }); }, 'good');
           if (!d.admin) act('Make admin', 'Name them an administrator: their browser keeps a key of its own', () => this.emit('promote', p.id), 'good');
           if (d.admin !== 'owner' || owner) { // (nobody but the owner puts the owner out)
             act('Kick', 'Put out of the room (they can come back)', () => this.emit('kick', p.id));

@@ -9,6 +9,10 @@
 //
 // Nothing here changes how well anybody plays against the others: the two jetpacks are for wandering (the
 // games do without them), the rest is for show.
+//
+// The Game Pass (PASS) is not owned: it is held by the month. While it lasts its holder has every hat (those
+// that come later too) and the light jetpack, may be tiny or giant, and picks their colour among two more
+// rows. And everybody has the light jetpack for a day after their first visit (TRIAL): a taste of it.
 export const ITEMS = [
   { id: 'jetpack', name: 'Jetpack', price: 3000, group: 'gear', rarity: 'legendary', blurb: 'Jump again in the air and fly: a second and a half of thrust, refilled every time you land. For the rooftops, the cliffs and the showing off.' },
   { id: 'jetlite', name: 'Jetpack Lite', price: 500, group: 'gear', rarity: 'rare', blurb: 'The same idea with a third of the tank: half a second of thrust. Enough for a ledge, a wall, a second thought.' },
@@ -21,6 +25,11 @@ export const ITEMS = [
   { id: 'hat:straw', name: 'Straw hat', price: 999, group: 'hats', rarity: 'uncommon', blurb: 'The beach is the last one on Earth: dress for it.' },
   { id: 'hat:cap', name: 'Cap', price: 999, group: 'hats', rarity: 'uncommon', blurb: 'A cap. It is a good cap.' },
   { id: 'hat:beanie', name: 'Beanie', price: 999, group: 'hats', rarity: 'uncommon', blurb: 'Warm ears on a robot: pure luxury.' },
+  { id: 'hat:pirate', name: 'Pirate hat', price: 999, group: 'hats', rarity: 'epic', blurb: 'A tricorn with a skull on it. The sea is right there, and so is the shark: mind your manners.' },
+  { id: 'hat:viking', name: 'Viking helmet', price: 999, group: 'hats', rarity: 'epic', blurb: 'Iron, two horns. Historians say the horns are a myth. Historians were not asked.' },
+  { id: 'hat:chef', name: "Chef's hat", price: 999, group: 'hats', rarity: 'rare', blurb: 'Tall, white, pleated. You cannot cook, you have no mouth, and you look magnificent.' },
+  { id: 'hat:propeller', name: 'Propeller cap', price: 999, group: 'hats', rarity: 'rare', blurb: 'The propeller really turns. It lifts nothing but the mood.' },
+  { id: 'hat:party', name: 'Party hat', price: 999, group: 'hats', rarity: 'uncommon', blurb: 'A paper cone, a pompom. Every day since the end of the world is somebody\u2019s birthday.' },
 
   { id: 'paint:gold', name: 'Gold plating', price: 1900, group: 'paint', rarity: 'legendary', blurb: 'Your whole robot, plated in gold. Tasteful? No. Magnificent? Yes.' },
   { id: 'paint:chrome', name: 'Chrome finish', price: 1500, group: 'paint', rarity: 'epic', blurb: 'Polished like a bumper: the valley, the sea and the big wheel slide over you.' },
@@ -32,6 +41,28 @@ export const ITEMS = [
   { id: 'trail:stardust', name: 'Stardust trail', price: 700, group: 'trails', rarity: 'rare', blurb: 'A wake of golden sparkles, like a comet with legs.' },
   { id: 'trail:bubbles', name: 'Bubble trail', price: 500, group: 'trails', rarity: 'uncommon', blurb: 'Soap bubbles drift up behind you. Nobody can stay grumpy near bubbles.' },
 ];
+
+/** The Game Pass: held by the month. `perks`: what the shop says it gives (the order of the card). */
+export const PASS = {
+  id: 'pass', name: 'Game Pass', price: 1900,
+  perks: [
+    'Every hat of the shop — and every hat to come',
+    'The Jetpack Lite, for as long as you hold the pass',
+    'Be tiny or be giant, whenever you like',
+    'Two more rows of colours for your robot, black included',
+    'Coming: the weather of where you live, with its day and its night',
+  ],
+  why: 'It keeps the servers on and pays one entrepreneur: Atomic Oasis is not made by a multinational, but by a guy on a couch. Thank you for real.',
+};
+/** What a holder of the pass has without owning it. */
+export const passGives = (id) => id === 'jetlite' || (typeof id === 'string' && id.startsWith('hat:'));
+/** The sizes a holder of the pass may take (the number travels in the look of the avatar: see Character.js). */
+export const SIZES = ['normal', 'tiny', 'giant'];
+export const SIZE_SCALE = [1, 0.45, 2.3];
+/** Everybody has this for a while after their first visit (ms): a taste. */
+export const TRIAL = { item: 'jetlite', ms: 24 * 3600_000 };
+/** How many colours a robot can be: the first sixteen are everybody's, the others come with the pass. */
+export const COLORS = 32, FREE_COLORS = 16;
 
 const BY_ID = new Map(ITEMS.map((it) => [it.id, it]));
 /** The item of that id, or undefined. */

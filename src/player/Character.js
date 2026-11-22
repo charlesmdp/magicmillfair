@@ -6,21 +6,29 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { surfaceMaterial, skinnedDepthMaterial } from '../render/SurfaceMaterial.js';
 import { LAYER } from '../render/Shadows.js';
 import { assetUrl } from '../core/Assets.js';
-import { HATS, makeHat, makeBouquet, makeJetpack, makeQuad, QUAD, wings as makeWings } from './Cosmetics.js';
+import { HATS, makeHat, makeBouquet, makeJetpack, makeQuad, makeDisguise, QUAD, wings as makeWings } from './Cosmetics.js';
+import { SIZE_SCALE } from '../../server/items.js';
 
-/** Body colours offered to players (index is what travels over the network). */
+/**
+ * Body colours offered to players (index is what travels over the network; never reorder). The first sixteen
+ * are everybody's; the two rows after them come with the Game Pass (server/items.js: FREE_COLORS).
+ */
 export const AVATAR_COLORS = [
   0xf2a03d, 0xe8554e, 0x3fa7d6, 0x59c173, 0xb07cd8, 0xf2d24b, 0xff8fb1, 0x2ec4b6,
   0xe76f51, 0x6c8ef5, 0x9ccc65, 0xd4a373, 0xef476f, 0x48cae4, 0xf4f1de, 0x8d99ae,
+  // black, charcoal, snow, crimson, royal blue, forest, deep purple, chocolate
+  0x141416, 0x474b55, 0xffffff, 0x9d0208, 0x1d3ac9, 0x1b5e20, 0x5a189a, 0x5d4037,
+  // acid green, hot pink, electric cyan, gold, lavender, mint, peach, midnight
+  0x7dff2a, 0xff2d95, 0x00e5ff, 0xffc300, 0xcdb4db, 0xa8f0d0, 0xffb4a2, 0x14213d,
 ];
 
 /** Animation ids exchanged over the network. */
-export const ANIM = { idle: 0, walk: 1, run: 2, jump: 3, swim: 4, sit: 5, lie: 6, work: 7, dead: 8, dive: 9 };
-const CLIP_OF = ['Idle', 'Walking', 'Running', 'Jump', 'Running', 'Sitting', 'Idle', 'Sitting', 'Death', 'Idle'];
+export const ANIM = { idle: 0, walk: 1, run: 2, jump: 3, swim: 4, sit: 5, lie: 6, work: 7, dead: 8, dive: 9, cross: 10 };
+const CLIP_OF = ['Idle', 'Walking', 'Running', 'Jump', 'Running', 'Sitting', 'Idle', 'Sitting', 'Death', 'Idle', 'Sitting'];
 /** Emotes played by the avatar itself; the ones after them (RANK_EMOTES) summon an animal of light. */
 export const EMOTES = ['Wave', 'Dance', 'ThumbsUp', 'Yes', 'No', 'Punch'];
 export const RANK_EMOTES = ['deer', 'wolf', 'tiger', 'dragon'];
-export const isResting = (anim) => anim === ANIM.sit || anim === ANIM.lie || anim === ANIM.work;
+export const isResting = (anim) => anim === ANIM.sit || anim === ANIM.lie || anim === ANIM.work || anim === ANIM.cross;
 
 /**
  * Every emote, in the order of the numbers that travel over the network (never reorder: append).
@@ -86,10 +94,14 @@ const MOVES = {
 const REST_HAND = [0.33, 0.74, 0.04]; // about where a hand hangs (gestures ease in from there)
 
 /**
- * What an avatar wears and holds travels in the 8 "flags" bits of its state:
- * bit 0 free camera · bits 1-3 hat (index in HATS) · bit 4 jetpack burning · bit 5 bouquet · bit 6 quad · bit 7 big head
+ * What an avatar wears and holds travels in the 16 "flags" bits of its state:
+ * bit 0 free camera · bits 1-3 hat (index in HATS, its low bits) · bit 4 jetpack burning · bit 5 bouquet ·
+ * bit 6 quad · bit 7 big head · bits 8-9 size (0 normal, 1 tiny, 2 giant) · bits 10-11 disguise (0 none,
+ * 1 a bush, 2 a tree) · bit 12 the fourth bit of the hat
  */
-export const packLook = (o) => (o.free ? 1 : 0) | ((o.hat & 7) << 1) | (o.jet ? 16 : 0) | (o.bouquet ? 32 : 0) | (o.quad ? 64 : 0) | (o.bighead ? 128 : 0);
+export const packLook = (o) => (o.free ? 1 : 0) | ((o.hat & 7) << 1) | (o.jet ? 16 : 0) | (o.bouquet ? 32 : 0) | (o.quad ? 64 : 0) | (o.bighead ? 128 : 0)
+  | (((o.size || 0) & 3) << 8) | (((o.disguise || 0) & 3) << 10) | (((o.hat >> 3) & 1) << 12);
+const unpackLook = (f) => ({ hat: ((f >> 1) & 7) | (((f >> 12) & 1) << 3), jet: !!(f & 16), bouquet: !!(f & 32), quad: !!(f & 64), bighead: !!(f & 128), size: (f >> 8) & 3, disguise: (f >> 10) & 3 });
 
 const HEIGHT = 1.72;
 // Seated, the hips sit this far behind the feet and the underside of the body this high above them.
@@ -217,7 +229,7 @@ export class CharacterFactory {
 }
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _t = new THREE.Vector3();
-const _u = new THREE.Vector3(), _w = new THREE.Vector3(), _axis = new THREE.Vector3();
+const _u = new THREE.Vector3(), _w = new THREE.Vector3(), _w2 = new THREE.Vector3(), _axis = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _pq = new THREE.Quaternion();
 const _paint = new THREE.Color();
 const clamp1 = (x) => Math.min(1, Math.max(-1, x));
@@ -276,9 +288,11 @@ export class Character {
     this.stroke = 0; // phase of the swimming strokes
     this.speed = 0;
     this.ambient = 1;
-    this.look = { hat: 0, jet: false, bouquet: false, quad: false, bighead: false };
+    this.look = { hat: 0, jet: false, bouquet: false, quad: false, bighead: false, disguise: 0 };
     this.big = 0; // 0..1: how far the head has grown
-    this.size = 1; // (a cheat shrinks the avatar)
+    this.size = 1; // (tiny, giant: a cheat, or the choice of who holds the Game Pass)
+    this.prop = null; // what the avatar is disguised as (a bush, a tree)
+    this.cross = 0; // 0..1: how far it has sat down on the ground, legs crossed
     this.move = null; // a gesture made by hand: { fn, t, T } (see MOVES)
     this.tip = 0; // radians the body has tipped forward in a dive
     this.diveT = 0;
@@ -293,7 +307,7 @@ export class Character {
   setColor(index) {
     this.colorIndex = index;
     if (this.paint) return; // (a paint job covers the colour)
-    const c = new THREE.Color(AVATAR_COLORS[((index % 16) + 16) % 16]);
+    const n = AVATAR_COLORS.length, c = new THREE.Color(AVATAR_COLORS[((index % n) + n) % n]);
     this.mainMaterial.uniforms.uColor.value.set(c.r, c.g, c.b);
   }
 
@@ -386,8 +400,16 @@ export class Character {
 
   /** What the avatar wears and holds: the "flags" of its state (see packLook), or an object with the same fields. */
   setLook(look) {
-    const o = typeof look === 'number' ? { hat: (look >> 1) & 7, jet: !!(look & 16), bouquet: !!(look & 32), quad: !!(look & 64), bighead: !!(look & 128) } : look;
+    const o = typeof look === 'number' ? unpackLook(look) : look;
     const l = this.look;
+    // (the size of somebody else comes with their look; one's own is set by the game)
+    if (typeof look === 'number') this.size = SIZE_SCALE[o.size] || 1;
+    if (o.disguise !== undefined && o.disguise !== l.disguise) {
+      l.disguise = o.disguise;
+      if (this.prop) { this.prop.removeFromParent(); this.prop = null; }
+      if (o.disguise) { this.prop = makeDisguise(o.disguise === 2 ? 'tree' : 'bush'); this.root.add(this.prop); }
+      this.model.visible = !o.disguise;
+    }
     if (o.hat !== undefined && o.hat !== l.hat) {
       l.hat = o.hat;
       if (this.hat) { this.hat.removeFromParent(); this.hat = null; }
@@ -458,6 +480,7 @@ export class Character {
     // (the mixer only rewrites a bone when its animated value changes: put back what was bent by hand first)
     for (let i = 0; i < this._bentN; i++) this._bent[i].bone.quaternion.copy(this._bent[i].q);
     this._bentN = 0;
+    if (this._feet && this._feet.length) { const f = this._feet; for (let i = 0; i < f.length; i += 4) f[i].position.set(f[i + 1], f[i + 2], f[i + 3]); f.length = 0; }
     this.mixer.update(dt);
     const l = this.look, k = Math.min(1, dt * 6), base = -this.factory.footY * this.factory.scale;
     const swim = this.swimming, moving = swim ? Math.min(1, this.speed / 2.2) : 0;
@@ -491,6 +514,15 @@ export class Character {
     this.big += ((l.bighead ? 1 : 0) - this.big) * Math.min(1, dt * 5);
     this.bones.Head.scale.setScalar(this.headScale * (1 + 1.35 * this.big));
     if (this.root.scale.x !== this.size) this.root.scale.setScalar(this.size);
+    if (this.hat?.userData.rotor) this.hat.userData.rotor.rotation.y += dt * (6 + Math.min(18, this.speed * 3)); // the propeller of the cap
+    // sitting on the ground, legs crossed: the body comes down until it rests, the knees go out, the feet tuck in
+    this.cross += ((this.anim === ANIM.cross ? 1 : 0) - this.cross) * Math.min(1, dt * 7);
+    if (this.cross > 0.01) this._crossLegs(this.cross);
+    if (l.disguise) {
+      // (a bush has no hat, no jetpack and no quad: nothing shows but the bush)
+      for (const o of [this.jetpack, this.bouquet, this.quad, this.laptop, this.wings]) if (o) o.visible = false;
+      return;
+    }
     // wings (the flying theatre): they beat a little all the time, and hard on a flap
     if (this.wings && this.wings.visible) {
       this._wingT = (this._wingT || 0) + dt;
@@ -507,7 +539,7 @@ export class Character {
     const holding = l.bouquet && this.bouquet && !this.resting && !swim && this.anim !== ANIM.dead;
     if (this.bouquet) this.bouquet.visible = !!holding;
     const gesture = this.move && (P.L || P.R || P.head || P.nod || P.bend);
-    const hands = swim || holding || riding || this.anim === ANIM.work || diving || gesture;
+    const hands = swim || holding || riding || this.anim === ANIM.work || this.anim === ANIM.cross || diving || gesture;
     if (!hands) return;
     // hands put where they belong: the arms are bent to reach
     this.root.updateMatrixWorld(true);
@@ -542,6 +574,9 @@ export class Character {
       // typing: the hands hover over the keyboard, never quite still
       const t = (this.stroke += dt * 9);
       this._reach('L', _t.set(0.085, 0.455 + 0.012 * Math.sin(t), -0.03)); this._reach('R', _t.set(-0.085, 0.455 + 0.012 * Math.sin(t * 1.31 + 1), -0.03));
+    } else if (this.anim === ANIM.cross) {
+      // (a hand on each knee)
+      this._reach('L', _t.set(0.27, 0.36, 0.2)); this._reach('R', _t.set(-0.27, 0.36, 0.2));
     } else if (holding) {
       this._reach('R', _t.set(-0.23, 0.76, 0.2));
     }
@@ -556,6 +591,11 @@ export class Character {
     if (!upper || !lower || !end) return;
     this._keep(upper); this._keep(lower);
     if (inBody) { const k = this.factory.scale; target.set(target.x / k, target.y / k + this.factory.footY, target.z / k); this.model.localToWorld(target); } else this.root.localToWorld(target);
+    this._ik(upper, lower, end, target);
+  }
+
+  /** Two bones (`upper`, `lower`) bent so that `end` — a point carried by the second — reaches `target` (world space). */
+  _ik(upper, lower, end, target) {
     upper.getWorldPosition(_a); lower.getWorldPosition(_b); end.getWorldPosition(_c);
     const l1 = _a.distanceTo(_b), l2 = _b.distanceTo(_c);
     const d = Math.min(_a.distanceTo(target), (l1 + l2) * 0.995);
@@ -575,6 +615,37 @@ export class Character {
     upper.parent.getWorldQuaternion(_pq);
     upper.quaternion.premultiply(_pq).premultiply(_q).premultiply(_pq.invert());
     upper.updateWorldMatrix(false, true);
+  }
+
+  /**
+   * The seated pose, brought down to the ground with the legs crossed (k: 0..1 how far). The clip sits the
+   * robot as on a chair, its feet in front of it; here the body is lowered until it rests, each thigh turned
+   * outwards, each foot brought under the opposite knee.
+   */
+  _crossLegs(k) {
+    const m = this.model;
+    m.position.y -= SEAT.under * 0.92 * k;
+    m.position.z -= 0.06 * k;
+    this.root.updateMatrixWorld(true);
+    const up = _axis.set(0, 1, 0);
+    for (const [side, sx] of [['L', 1], ['R', -1]]) {
+      const thigh = this.bones[`UpperLeg${side}`], shin = this.bones[`LowerLeg${side}`], foot = this.bones[`Foot${side}`];
+      if (!thigh || !foot) return;
+      const tip = this.bones[`LowerLeg${side}_end`];
+      // the foot: a bone of its own in this model (it does not hang from the leg) — tucked in front of the
+      // body, on the other side: the legs cross
+      _t.set(-sx * 0.11, 0.075, 0.16 + (sx > 0 ? 0.07 : 0));
+      this.root.localToWorld(_t);
+      _u.copy(_t); // (where the leg has to end, in the world)
+      foot.parent.worldToLocal(_t);
+      (this._feet || (this._feet = [])).push(foot, foot.position.x, foot.position.y, foot.position.z);
+      foot.position.lerp(_t, k);
+      // the leg: the thigh swung outwards (the knee points away from the body), then bent to reach the foot
+      this._keep(thigh);
+      this._turn(thigh, up.set(0, 1, 0).applyQuaternion(this.root.quaternion), sx * 1.0 * k);
+      thigh.updateWorldMatrix(false, true);
+      if (shin && tip && k > 0.5) { this._keep(shin); _w2.copy(_u); _w2.y += 0.03; this._ik(thigh, shin, tip, _w2); }
+    }
   }
 
   /** Rotates a bone about an axis given in world space. */

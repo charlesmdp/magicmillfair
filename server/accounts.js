@@ -16,10 +16,13 @@
 // wrong passwords in a row close an account for a quarter of an hour; an address may try a handful a minute.
 //
 // Kept: `acct:<name in lower case>` → { name, salt, hash, code, created, devices: [device…], items: [what was
-// bought], visit: { day, days, best }, profile: { name, color, hat, paint, trail }, fails, lock };
-// `dev:<device>` → { acct } (the account a browser is attached to).
+// bought], visit: { day, days, best }, profile: { name, color, hat, paint, trail, size }, fails, lock,
+// pass: the Game Pass ({ sub, customer, since } — or { gift: true, until }), first: when they first came (ms) };
+// `dev:<device>` → { acct } (the account a browser is attached to). A browser without an account keeps the
+// same `pass` and `first` in its own record, `own:<device>` (see shop.js).
 import { randomId, sameSecret } from './token.js';
 import { cleanName } from './protocol.js';
+import { COLORS, SIZES } from './items.js';
 
 const enc = new TextEncoder();
 const ROUNDS = 100_000, DEVICES = 12, FAILS = 10, LOCK = 15 * 60_000;
@@ -43,7 +46,7 @@ const goodPassword = (p) => typeof p === 'string' && p.length >= 8 && p.length <
 function cleanProfile(p) {
   if (!p || typeof p !== 'object') return null;
   const word = (v) => (typeof v === 'string' && /^[a-z]{1,16}$/.test(v) ? v : 'none');
-  return { name: cleanName(p.name || ''), color: Number.isInteger(p.color) && p.color >= 0 && p.color <= 15 ? p.color : 0, hat: word(p.hat), paint: word(p.paint), trail: word(p.trail) };
+  return { name: cleanName(p.name || ''), color: Number.isInteger(p.color) && p.color >= 0 && p.color < COLORS ? p.color : 0, hat: word(p.hat), paint: word(p.paint), trail: word(p.trail), size: SIZES.includes(p.size) ? p.size : 'normal' };
 }
 // (a code to write down: twelve characters that cannot be mistaken for one another)
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -90,6 +93,20 @@ export async function addItem(store, device, item, now) {
   return true;
 }
 
+/**
+ * What is kept about a visitor besides what they own — their Game Pass, when they first came: on the account
+ * of a browser that is signed in, on the browser's own record otherwise. Returns { pass, first, save(fields) }.
+ */
+export async function holderOf(store, device) {
+  const acct = await accountOf(store, device);
+  if (acct) return { pass: acct.pass || null, first: acct.first || 0, account: acct.name, save: (fields) => store.put(keyOf(acct.name), { ...acct, ...fields }) };
+  const rec = (await store.get(`own:${device}`)) || { items: [] };
+  return { pass: rec.pass || null, first: rec.first || 0, account: '', save: (fields) => store.put(`own:${device}`, { ...rec, ...fields }) };
+}
+
+/** Is this pass in force at `now`? (One that is paid by the month lasts until Stripe says it ended; a gift, until its day.) */
+export const passLive = (pass, now) => !!pass && (pass.gift ? pass.until > now : true);
+
 /** The days in a row of a browser are those of its account, when it has one: reads / writes the right record. */
 export async function visitRecord(store, device) {
   const acct = await accountOf(store, device);
@@ -99,13 +116,18 @@ export async function visitRecord(store, device) {
 
 // A browser joins an account: what it had (bought, its days in a row) goes with it.
 async function attach(store, acct, device, now) {
-  const own = ((await store.get(`own:${device}`)) || {}).items || [], seen = await store.get(`visit:${device}`);
+  const mine = (await store.get(`own:${device}`)) || {}, own = mine.items || [], seen = await store.get(`visit:${device}`);
   const devices = [...(acct.devices || []).filter((d) => d !== device), device];
   for (const gone of devices.splice(0, Math.max(0, devices.length - DEVICES))) await store.delete(`dev:${gone}`); // (the oldest browsers are let go)
   const visit = !acct.visit || (seen && (seen.day > acct.visit.day || (seen.day === acct.visit.day && seen.days > acct.visit.days))) ? seen || acct.visit || null : acct.visit;
-  const next = { ...acct, devices, items: [...new Set([...(acct.items || []), ...own])], visit: visit ? { ...visit, best: Math.max(visit.best || 0, acct.visit?.best || 0, seen?.best || 0) } : null, fails: 0, lock: 0, seen: now };
+  // (a pass paid from this browser follows it; the earliest first visit of the two is the account's)
+  const pass = passLive(acct.pass, now) ? acct.pass : passLive(mine.pass, now) ? mine.pass : null;
+  const first = Math.min(acct.first || Infinity, mine.first || Infinity, acct.created || Infinity);
+  const next = { ...acct, devices, items: [...new Set([...(acct.items || []), ...own])], visit: visit ? { ...visit, best: Math.max(visit.best || 0, acct.visit?.best || 0, seen?.best || 0) } : null, fails: 0, lock: 0, seen: now, pass, first: Number.isFinite(first) ? first : now };
   await store.put(keyOf(acct.name), next);
   await store.put(`dev:${device}`, { acct: acct.name.toLowerCase(), at: now });
+  // (a pass that came with this browser: its subscription is now the account's too)
+  if (pass && pass.sub && pass === mine.pass) await store.put(`sub:${pass.sub}`, { device, account: acct.name.toLowerCase(), at: now });
   return next;
 }
 const shown = (acct) => ({ name: acct.name, profile: acct.profile || null, devices: (acct.devices || []).length });

@@ -64,6 +64,8 @@ export class PlayerController {
     this.diving = false; // head first into deep water, from high up
     this._peak = 0; // the highest the feet have been since they left the ground
     this._plunge = 0; // seconds under water left after a dive
+    this.cross = false; // sitting on the ground, legs crossed (anywhere: see sitOnGround)
+    this.noJet = false; // "jump" was pressed in the air and no jetpack answered (read and cleared by the game)
     this._sink = 0; // …and how fast one is still going down
     /** May the jetpack be used here? Set by the game (caves and some places say no). */
     this.canFly = () => true;
@@ -74,6 +76,7 @@ export class PlayerController {
 
   teleport(x, z, yaw = 0) {
     this.seat = null;
+    this.cross = false;
     this.pos.set(x, this.collision.spawnHeight(x, z), z);
     this.vel.set(0, 0, 0);
     this.yaw = yaw;
@@ -206,11 +209,31 @@ export class PlayerController {
    * @param camYaw heading of the camera (radians), movement is relative to it
    * @param control false while something else reads the inputs (free camera): the character just stands
    */
+  /** Sits down on the ground where it stands, legs crossed. Any step or jump gets up again. */
+  sitOnGround() {
+    if (this.dead || this.seat || this.driver || this.riding || this.swimming || !this.grounded || this.sliding) return false;
+    this.cross = true;
+    this.vel.set(0, 0, 0);
+    return true;
+  }
+
   update(dt, camYaw, control = true) {
-    if (this.dead) return this._dying(dt);
-    if (this.seat) return this._seated(dt, control);
-    if (this.driver) return this._driven(dt, control);
+    if (this.dead) { this.cross = false; return this._dying(dt); }
+    if (this.seat) { this.cross = false; return this._seated(dt, control); }
+    if (this.driver) { this.cross = false; return this._driven(dt, control); }
     const inp = this.input;
+    if (this.cross) {
+      // seated on the ground: nothing moves until a step or a jump is asked for
+      if (control && (Math.abs(inp.move.x) > 0.2 || Math.abs(inp.move.y) > 0.2 || inp.jump)) this.cross = false;
+      else {
+        this.speed = 0;
+        this.anim = ANIM.cross;
+        this.character.setAnim(this.anim, 0);
+        this.character.update(dt);
+        this._sync();
+        return;
+      }
+    }
     const pos = this.pos, vel = this.vel;
     // desired horizontal velocity, relative to where the camera looks
     const f = control ? inp.move.y : 0, s = control ? inp.move.x : 0;
@@ -338,6 +361,7 @@ export class PlayerController {
     } else {
       // a second press of "jump" in the air lights the jetpack, for as long as its fuel lasts
       if (control && inp.jump && this.jet <= 0 && this.fuel > 0.1 && !riding && this.canFly(pos)) { this.jet = this.fuel; this.fuel = 0; vel.y = Math.max(vel.y, 2.5); }
+      else if (control && inp.jump && this.jet <= 0 && !riding && !this.swimming) this.noJet = true;
       if (this.jet > 0) {
         this.jet -= dt;
         if (!this.canFly(pos)) this.jet = 0;

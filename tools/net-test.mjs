@@ -28,7 +28,7 @@ import { cleanGeo, packGeo, unpackGeo } from '../server/visitors.js';
 const SCORE_SECRET = 'test-score-secret', ADMIN_KEY = 'test-admin-key';
 const STRIPE_KEY = 'sk_test_magicmillfairtests', STRIPE_HOOK = 'whsec_magicmillfairtests';
 // A stand-in for Stripe: it hands out payment pages and remembers what it was asked.
-const stripe = { asked: [], refunds: [], port: 0, server: null };
+const stripe = { asked: [], refunds: [], portals: [], port: 0, server: null };
 async function startStripe() {
   stripe.port = await freePort();
   stripe.server = http.createServer((req, res) => {
@@ -42,6 +42,11 @@ async function startStripe() {
         if (!old) stripe.refunds.push({ pay, key: req.headers['idempotency-key'], why: form.get('metadata[why]') });
         res.writeHead(old ? 400 : 200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify(old ? { error: { message: 'This payment is too old to be refunded.' } } : { id: `re_test_${stripe.refunds.length}` }));
+      }
+      if (req.url === '/v1/billing_portal/sessions' && req.headers.authorization === `Bearer ${STRIPE_KEY}`) {
+        stripe.portals.push({ customer: form.get('customer'), back: form.get('return_url') });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ id: `bps_test_${stripe.portals.length}`, url: `https://billing.stripe.test/p/session/${stripe.portals.length}` }));
       }
       stripe.asked.push({ url: req.url, auth: req.headers.authorization, form });
       res.writeHead(ok ? 200 : 401, { 'Content-Type': 'application/json' });
@@ -376,6 +381,11 @@ async function testProtocol(server) {
   a.send({ t: 's', p: [-1e9, -1e9, 0, 0], a: 99, f: -1 });
   const low = await c.wait((m) => m.t === 'u' && m.s.some((r) => r[0] === a.id && r[1] === -2000));
   check('ws: out-of-range values are clamped or reset', !!low && JSON.stringify(low.s.find((r) => r[0] === a.id).slice(1, 7)) === '[-2000,-100,0,0,0,0]', low);
+  a.send({ t: 's', p: [5, 1, 5, 0], a: 10, f: 0x1a42 });
+  const wide = await c.wait((m) => m.t === 'u' && m.s.some((r) => r[0] === a.id && r[1] === 5));
+  a.send({ t: 's', p: [6, 1, 5, 0], a: 16, f: 70000 });
+  const over = await c.wait((m) => m.t === 'u' && m.s.some((r) => r[0] === a.id && r[1] === 6));
+  check('ws: the look of an avatar is sixteen bits (a size, a disguise, more hats), an animation one of sixteen; beyond that, nothing', wide?.s.find((r) => r[0] === a.id)?.slice(5, 7).join() === `10,${0x1a42}` && over?.s.find((r) => r[0] === a.id)?.slice(5, 7).join() === '0,0', [wide, over]);
 
   // Two players moving in the same tick: one batch for the third, each of them only gets the other one.
   let both = null;
@@ -664,6 +674,12 @@ async function testModeration(start, dist) {
     && fayWho?.list.find((p) => p.id === other.id)?.admin === 'admin' && fayWho.list.find((p) => p.id === adm.id)?.admin === 'owner' && fayWho.list.find((p) => p.id === back.id)?.admin === ''
     && noNames.status === 403 && named?.admins.length === 1 && named.admins[0].name === 'Fay' && named.admins[0].by === 'Admin' && !JSON.stringify(named).includes(made.key.slice(4)),
     [made && { ...made, key: `${String(made.key).slice(0, 8)}…` }, fayAdmin, ownerAdmin, named]);
+  // a gift: the administrator tells a visitor's game that the shop has something for them (the shop gives, not this message)
+  adm.send({ t: 'gift', id: back.id });
+  const told = await back.wait((m) => m.t === 'gift');
+  back.send({ t: 'gift', id: adm.id });
+  const notTold = await adm.wait((m) => m.t === 'gift', 400);
+  check('admin: "something was given to you" reaches that visitor only, and only an administrator can say it', told?.by === 'Admin' && !notTold, [told, notTold]);
   // what a named administrator may do: speak on the important channel, name others — not put the owner out, not take a title away
   other.send({ t: 'kick', id: adm.id });
   other.send({ t: 'c', m: 'the fair closes at ten', i: 1 });
@@ -849,6 +865,52 @@ async function testShop({ port }) {
   const mine = json(await request(port, `/api/shop?device=${ann}`)), theirs = json(await request(port, `/api/shop?device=${bob}`));
   const again = await post('/api/checkout', { item: 'hat:crown', device: ann });
   check('shop: what Stripe says was paid is theirs — once, and theirs only; it is not sold to them twice', ok1.status === 200 && ok2.status === 200 && ok3.status === 200 && mine.owned.join() === 'hat:crown,jetpack' && !theirs.owned.length && again.status === 409, [mine.owned, theirs.owned, again.status]);
+  // the Game Pass: by the month. Whoever holds it is lent every hat and the light jetpack; Stripe's word ends it.
+  {
+    const cat = randomId(16), dan = randomId(16), eli = randomId(16), far = { 'x-forwarded-for': '10.6.6.1' }; // (an address of their own: these do not count against what the other checks may ask)
+    const fresh = json(await request(port, `/api/shop?device=${cat}`)), again2 = json(await request(port, `/api/shop?device=${cat}`));
+    stripe.asked.length = 0;
+    // (what an address may ask is counted: on the Cloudflare target, where every request of the tests comes from
+    // the same one, the payment page of the pass and the account are left to the Node run)
+    const page = CF ? null : await post('/api/checkout', { item: 'pass', device: cat }, far), form = stripe.asked[0]?.form;
+    const passPaid = (device, sub, customer) => ({ type: 'checkout.session.completed', data: { object: { id: `cs_${sub}`, payment_status: 'paid', subscription: sub, customer, metadata: { item: 'pass', device } } } });
+    await hook(passPaid(cat, 'sub_pass_1', 'cus_cat'));
+    const held = json(await request(port, `/api/shop?device=${cat}`)), none = json(await request(port, `/api/shop?device=${dan}`));
+    const twice = CF ? null : await post('/api/checkout', { item: 'pass', device: cat }, far);
+    stripe.portals.length = 0;
+    const portal = await post('/api/portal', { device: cat }, far), noPortal = await post('/api/portal', { device: dan }, far);
+    check('pass: everybody has the light jetpack for a day after their first visit (counted from the first, not the last)',
+      fresh.pass === null && fresh.trial?.item === 'jetlite' && Math.abs(fresh.trial.until - fresh.now - 24 * 3600_000) < 3000 && again2.trial.until === fresh.trial.until && !fresh.owned.includes('jetlite'), [fresh.trial, again2.trial, fresh.now]);
+    check('pass: sold by the month at the price of the catalogue; held by who paid and nobody else; not sold twice; its holder is sent to Stripe to look after it',
+      fresh.prices.pass === 1900 && (CF || (page.status === 200 && form?.get('mode') === 'subscription' && form.get('line_items[0][price_data][unit_amount]') === '1900' && form.get('line_items[0][price_data][recurring][interval]') === 'month' && form.get('metadata[item]') === 'pass' && form.get('subscription_data[metadata][device]') === cat))
+      && held.pass?.managed === true && !held.pass.gift && held.pass.since > 0 && none.pass === null && (CF || twice.status === 409)
+      && portal.status === 200 && /^https:\/\/billing\.stripe\.test\//.test(json(portal)?.url || '') && stripe.portals[0]?.customer === 'cus_cat' && noPortal.status === 404,
+      [page?.status, form?.toString().slice(0, 200), held.pass, none.pass, twice?.status, portal.status, stripe.portals, noPortal.status]);
+    // an account takes the pass with it to another browser; the end of the subscription takes it back from both
+    const acct = (body) => post('/api/account', body, far);
+    const who = `Pass${randomId(4).replace(/[^A-Za-z0-9]/g, 'x')}`;
+    const made = CF ? null : await acct({ action: 'create', device: cat, name: who, password: 'a good password' });
+    const login = CF ? null : await acct({ action: 'login', device: eli, name: who, password: 'a good password' });
+    const onOther = json(await request(port, `/api/shop?device=${eli}`));
+    const ended = await hook({ type: 'customer.subscription.deleted', data: { object: { id: 'sub_pass_1' } } });
+    const afterCat = json(await request(port, `/api/shop?device=${cat}`)), afterEli = json(await request(port, `/api/shop?device=${eli}`));
+    check('pass: an account takes it to its other browsers; when the subscription ends it is handed back everywhere, and its holder is told',
+      (CF || (made.status === 200 && login.status === 200 && onOther.pass?.managed === true)) && ended.status === 200 && afterCat.pass === null && afterEli.pass === null && /has ended/.test((afterCat.notes || []).join(' ')),
+      [made?.status, login?.status, onOther.pass, ended.status, afterCat.pass, afterEli.pass, afterCat.notes]);
+    // gifts: the administrator's alone — a thing for good, the pass for so many days
+    const noGift = await post('/api/gift', { device: dan, item: 'jetpack' });
+    const g1 = await post('/api/gift', { device: dan, item: 'jetpack' }, admin), g1b = await post('/api/gift', { device: dan, item: 'jetpack' }, admin);
+    const g2 = await post('/api/gift', { device: dan, pass: 30 }, admin), g3 = await post('/api/gift', { device: dan, pass: 10 }, admin);
+    const bad = [await post('/api/gift', { device: dan, item: 'hat:invisible' }, admin), await post('/api/gift', { device: dan, pass: 0 }, admin), await post('/api/gift', { device: 'x', item: 'jetpack' }, admin), await post('/api/gift', { device: dan, item: 'village:eagle-rest' }, admin)];
+    const got = json(await request(port, `/api/shop?device=${dan}`)), giftPortal = await post('/api/portal', { device: dan }, far);
+    stripe.asked.length = 0;
+    const paysAnyway = CF ? null : await post('/api/checkout', { item: 'pass', device: dan }, far);
+    check('gifts: only the administrator gives; a thing is theirs for good (once), the pass for the days given (added up); they are told; a gift is not a subscription',
+      noGift.status === 403 && g1.status === 200 && json(g1)?.fresh === true && json(g1b)?.fresh === false && g2.status === 200 && g3.status === 200 && bad.every((r) => r.status === 400)
+      && got.owned.includes('jetpack') && got.pass?.gift === true && !got.pass.managed && Math.abs(got.pass.until - got.now - 40 * 86_400_000) < 5000
+      && (got.notes || []).length === 3 && got.notes.every((n) => /gift from the fair/.test(n)) && giftPortal.status === 404 && (CF || paysAnyway.status === 200),
+      [noGift.status, g1.status, g2.status, g3.status, bad.map((r) => r.status), got.owned, got.pass, got.notes, giftPortal.status, paysAnyway?.status]);
+  }
   // a place to sponsor: paid, then filled in by its holder, then approved by the administrator
   await hook(paid('tarp:shoot', bob, 'sub_test_1'));
   const taken = await post('/api/checkout', { item: 'tarp:shoot', device: ann });
@@ -1209,10 +1271,10 @@ async function testPresence(server) {
   fake.on('connection', (ws) => {
     ws.on('message', () => {
       for (const g of garbage) ws.send(g);
-      ws.send(JSON.stringify({ t: 'welcome', id: 5, now: 1000, tick: 'fast', peers: [null, 3, { id: 'x' }, { id: 5, name: 'moi' }, { id: 7, name: { toString: 1 }, color: 'red', p: [1, 2, 3], a: 'x' }, { id: 8, name: '<Huit>', color: 2, p: [4, 5, 6, 7], a: 3, f: 300 }] }));
+      ws.send(JSON.stringify({ t: 'welcome', id: 5, now: 1000, tick: 'fast', peers: [null, 3, { id: 'x' }, { id: 5, name: 'moi' }, { id: 7, name: { toString: 1 }, color: 'red', p: [1, 2, 3], a: 'x' }, { id: 8, name: '<Huit>', color: 2, p: [4, 5, 6, 7], a: 3, f: 70000 }] }));
       for (const g of garbage) ws.send(g);
       ws.send(Buffer.from([1, 2, 3]));
-      ws.send(JSON.stringify({ t: 'u', now: 1100, s: [[8, 5, 5, 6, 7, 3, 300, 'age'], [9, 0, 0, 0, 0, 0, 0]] }));
+      ws.send(JSON.stringify({ t: 'u', now: 1100, s: [[8, 5, 5, 6, 7, 3, 70000, 'age'], [9, 0, 0, 0, 0, 0, 0]] }));
       ws.send(JSON.stringify({ t: 'e', id: 8, e: 3 }));
     });
   });

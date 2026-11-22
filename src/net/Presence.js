@@ -66,7 +66,7 @@ export class Presence {
     this.baseRoom = this.room;
     this.shard = 1;
     this.name = cleanName(name ?? stored('mmf.name'), '') || `Visitor ${10 + Math.floor(Math.random() * 90)}`;
-    this.color = int(color, 15, int(parseInt(stored('mmf.color'), 10), 15, Math.floor(Math.random() * 16)));
+    this.color = int(color, 31, int(parseInt(stored('mmf.color'), 10), 31, Math.floor(Math.random() * 16)));
     this.kit = int(kit, 255); // what the avatar shows besides its hat: its paint, its trail (see server/items.js)
     this._persist();
     this.id = 0; // own id in the room (0 until connected)
@@ -178,13 +178,15 @@ export class Presence {
   }
   /** Names that visitor an administrator (their browser is handed a key of its own: a 'promoted' event there). */
   promote(id) { if (this.admin && this._tr) this._tr.send({ t: 'promote', id }); }
+  /** Tells that visitor's game that the shop has something new for them (a gift of the administrator: see /api/gift). */
+  gifted(id) { if (this.admin && this._tr) this._tr.send({ t: 'gift', id }); }
   /** The owner has taken the title away (see /api/admins): whoever holds that key in this room loses it at once. */
   demote(key) { if (this.owner && this._tr) this._tr.send({ t: 'demote', key }); }
 
   setIdentity(name, color, kit = this.kit) {
     this.kit = int(kit, 255);
     this.name = cleanName(name, this.name);
-    this.color = int(color, 15, this.color);
+    this.color = int(color, 31, this.color);
     this._persist();
     if (this._tr) this._tr.send(this._hello());
   }
@@ -271,6 +273,7 @@ export class Presence {
     else if (m.t === 'm') this._far(m);
     else if (m.t === 'w') this._seen = !!m.n;
     else if (m.t === 'admin') { this.admin = !!m.ok; this.owner = this.admin && !!m.owner; this._emit('admin', { ok: this.admin, owner: this.owner, out: !!m.out }); }
+    else if (m.t === 'gift') this._emit('gift', { by: cleanName(m.by || '') });
     else if (m.t === 'promoted') { if (typeof m.key === 'string' && m.key) this._emit('promoted', { key: m.key, by: cleanName(m.by || '') }); else this._emit('promoted', { id: m.id }); }
     else if (m.t === 'who') { if (Array.isArray(m.list)) this._emit('who', { list: m.list, now: m.now }); }
     else if (m.t === 'join') {
@@ -334,7 +337,7 @@ export class Presence {
   // Adds a peer, or updates the identity of a known one. `stamp` (server time) is only given by a welcome.
   _join(info, stamp) {
     if (!info || !Number.isInteger(info.id) || info.id === this.id) return false;
-    const name = cleanName(info.name), color = int(info.color, 15), kit = int(info.k, 255);
+    const name = cleanName(info.name), color = int(info.color, 31), kit = int(info.k, 255);
     let peer = this.peers.get(info.id);
     const known = !!peer;
     if (!known) this.peers.set(info.id, (peer = { id: info.id, name, color, kit, x: 0, y: 0, z: 0, yaw: 0, anim: 0, flags: 0, speed: 0, visible: false, far: false }));
@@ -343,7 +346,7 @@ export class Presence {
       const track = new Track(this._interval), t = now();
       this._tracks.set(peer.id, track);
       // The state the server knows is of unknown age: date it one interval back so that live states follow it.
-      if (Array.isArray(info.p)) track.push(stamp - this._interval, t, info.p[0], info.p[1], info.p[2], info.p[3], int(info.a, 15), int(info.f, 255));
+      if (Array.isArray(info.p)) track.push(stamp - this._interval, t, info.p[0], info.p[1], info.p[2], info.p[3], int(info.a, 15), int(info.f, 65535));
       track.sample(t, peer);
     }
     if (!known) this._emit('join', peer);
@@ -380,7 +383,7 @@ export class Presence {
       if (!track) continue;
       const peer = this.peers.get(r[0]);
       if (peer) peer.far = false;
-      track.push(base - (r[7] > 0 ? r[7] : 0), t, r[1], r[2], r[3], r[4], int(r[5], 15), int(r[6], 255));
+      track.push(base - (r[7] > 0 ? r[7] : 0), t, r[1], r[2], r[3], r[4], int(r[5], 15), int(r[6], 65535));
     }
     if (Array.isArray(m.g)) {
       for (const id of m.g) {
@@ -411,7 +414,7 @@ export class Presence {
     const every = this._seen ? this._interval : Math.max(this._interval, UNSEEN_MS); // (nobody near: no hurry)
     this._due = Math.max(this._due + every, t + every / 2);
     const p = [round(l[0], 100), round(l[1], 100), round(l[2], 100), round(wrapAngle(l[3]), 1000)];
-    const a = int(Math.trunc(l[4]), 15), f = int(Math.trunc(l[5]), 255);
+    const a = int(Math.trunc(l[4]), 15), f = int(Math.trunc(l[5]), 65535);
     const key = `${p}|${a}|${f}`;
     if (key !== this._sentKey) this._repeats = 0;
     else if (this._repeats >= 2 && (!this._keepalive || t - this._sentAt < this._keepalive)) return;

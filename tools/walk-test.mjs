@@ -802,6 +802,18 @@ try {
     check('the quad race: asked for in the paddock, it leaves with the next start (they have names, one every five seconds), the lights, three laps flat out — the bot never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, the pads, a real flight off the ramp, the time on the board', race.ask.some((t) => /^Race: 3 laps on a quad · (Red|Blue|Green|Yellow|Purple|Orange) start in \d s$/.test(t)) && race.start && race.over && race.laps.length === 3 && race.time > 46000 && race.time < 62000 && race.slowest >= 18 && race.off === 0 && race.widest < 3.75 && race.still > 150 && race.lamps > 20 && race.air > 120 && race.flight > 45 && race.boost > 100 && race.top > 24 && race.riding && race.quad && race.after.closed && !race.after.riding && !race.after.driver && best === race.time, JSON.stringify(race));
   }
 
+  // --- sitting down on the ground, anywhere: X; the first step gets up again
+  {
+    await place(-40, 6, 90);
+    await frames(6);
+    await page.keyboard.press('KeyX');
+    await frames(24);
+    const sat = await page.evaluate(() => { const a = window.__mmf; return { cross: a.player.cross, anim: a.player.anim, legs: +a.me.cross.toFixed(2), y: a.player.pos.y }; });
+    await walk(14);
+    const up = await page.evaluate(() => { const a = window.__mmf; return { cross: a.player.cross, anim: a.player.anim }; });
+    check('X sits down on the ground, legs crossed, wherever one stands; the first step gets up again', sat.cross && sat.anim === 10 && sat.legs > 0.5 && !up.cross && up.anim !== 10, JSON.stringify({ sat, up }));
+  }
+
   // --- the big red button at the top of the island: a show far out at sea, then a quarter of an hour of patience
   {
     const red = await page.evaluate(() => new Promise((res) => {
