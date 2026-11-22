@@ -429,6 +429,8 @@ const acidMask = new Grid(N, N);
 const terraceMask = new Grid(N, N); // the terraces above the great waterfall
 const skyMask = new Grid(N, N); // the shelves of the sky villages
 const skyPaved = new Grid(N, N); // under their halls and pavilions
+const skyGreen = new Grid(N, N); // round them: woods and meadows hold on, however high (1 near a village, 0 far from all)
+const gladeMask = new Grid(N, N); // the meadow of the high clearing
 const skySites = []; // { x, z, y, yaw }
 let acidLevel = 0;
 const disc = (x, z, r, fn) => {
@@ -526,6 +528,16 @@ const disc = (x, z, r, fn) => {
     }
   });
 
+  // --- the high clearing: its shelf is evened out (a shallow bowl round the lake), the slopes round it eased
+  {
+    const G = L.GLADE;
+    disc(G.x, G.z, Math.max(G.rx, G.rz) + 16, (q, d, x, z) => {
+      const e = Math.hypot((x - G.x) / G.rx, (z - G.z) / G.rz); // 1 on its edge
+      if (e < 1) { H.d[q] = lerp(H.d[q], G.y + 0.5 * smoothstep(0.35, 1, e) ** 2, 0.94); detailMask.d[q] = Math.min(detailMask.d[q], 0.5); noTrees.d[q] = 1; gladeMask.d[q] = 1 - smoothstep(0.82, 1, e); }
+      else { const out = (e - 1) * Math.min(G.rx, G.rz); H.d[q] = clamp(H.d[q], G.y + 0.5 - out * 0.9, G.y + 0.5 + out * 1.1); }
+    });
+  }
+
   // --- stairways: flights of steps with a level landing at each corner. The rock is cut to them (or built
   // up under them): steep faces on both sides. The long one climbs to the temple; three short ones go up
   // beside the falls, from terrace to terrace.
@@ -568,7 +580,7 @@ const disc = (x, z, r, fn) => {
       for (let k = 1; k < n; k++) { const t = k / n; if (hAt(x + (tx - x) * t, z + (tz - z) * t) > y + 2.5 + (ty + 10 - y - 2.5) * t) return false; }
       return true;
     };
-    const taken = [[L.VILLAGE.square.x, L.VILLAGE.square.z, 95], ...L.STAIRWAY.points.map((p) => [p[0], p[1], 60]), ...FL.levels.map((t) => [t.bank[0][0], t.bank[0][1], 80]), [seaFall.x, seaFall.z, 70]];
+    const taken = [[L.VILLAGE.square.x, L.VILLAGE.square.z, 95], ...L.STAIRWAY.points.map((p) => [p[0], p[1], 60]), ...FL.levels.map((t) => [t.bank[0][0], t.bank[0][1], 80]), [seaFall.x, seaFall.z, 70], [L.GLADE.x, L.GLADE.z, 84]];
     const cands = [];
     for (let z = -474; z <= 474; z += 6) for (let x = -474; x <= 474; x += 6) {
       const q = idx(Math.round(gi(x)), Math.round(gi(z))), d = boundsSDF.d[q];
@@ -606,6 +618,8 @@ const disc = (x, z, r, fn) => {
       });
       // which way it looks: at the valley
       p.yaw = Math.atan2(-60 - p.x, 10 - p.z);
+      // (round it the mountain stays green: see the land cover)
+      disc(p.x, p.z, 200, (q, d) => { skyGreen.d[q] = Math.max(skyGreen.d[q], 1 - smoothstep(105, 200, d)); });
       // (the floors of its hall and of its pavilions: nothing grows there)
       const c = Math.cos(p.yaw), sn = Math.sin(p.yaw);
       for (const [lx, lz, hw, hl] of [[S.hall.x, S.hall.z, S.hall.hw + 0.9, S.hall.hl + 1.2], ...S.pavilions.map((v) => [v.x, v.z, v.h + 0.2, v.h + 0.2])]) {
@@ -1022,7 +1036,10 @@ for (let q = 0; q < N * N; q++) {
   const d = boundsSDF.d[q];
   if (d <= 0) continue;
   const i = q % N, j = (q / N) | 0;
-  cover.d[q] = lerp(cover.d[q], woods(wx(i), wx(j), H.d[q], SLOPE.d[q]) * (H.d[q] > 0.8 ? 1 : 0), smoothstep(0, 12, d));
+  let w = woods(wx(i), wx(j), H.d[q], SLOPE.d[q]);
+  // round the sky villages groves hold on above the tree line (not on crags, not on the shelves themselves)
+  if (skyGreen.d[q] > 0) w = Math.max(w, skyGreen.d[q] * 0.8 * smoothstep(-0.08, 0.2, fbm(wx(i) / 58, wx(j) / 58, { seed: 311, octaves: 3 }) + 0.06) * (1 - smoothstep(0.9, 1.3, SLOPE.d[q])));
+  cover.d[q] = lerp(cover.d[q], w * (H.d[q] > 0.8 ? 1 : 0), smoothstep(0, 12, d));
 }
 const parkMask = new Grid(N, N);
 for (const poly of L.PARK) {
@@ -1142,9 +1159,10 @@ for (let j = 0; j < N; j++) {
     // --- mountains: the grass gets shorter and paler with altitude
     const mount = boundsSDF.d[q] > 0 ? smoothstep(0, 30, boundsSDF.d[q]) : 0;
     if (mount > 0) {
-      const alt = smoothstep(50, 150, h);
+      const alt = smoothstep(50, 150, h) * (1 - 0.7 * skyGreen.d[q]);
       gh = lerp(gh, 0.34 - 0.12 * alt, mount);
       mulTint(q, 1 + 0.16 * alt, 1 + 0.06 * alt, 1 - 0.06 * alt, mount);
+      if (gladeMask.d[q] > 0) { const a = gladeMask.d[q]; gh = lerp(gh, 0.44 + 0.08 * nA, a); mulTint(q, 0.9, 1.1, 0.78, a); } // the meadow of the high clearing: tall and lush
     }
 
     // --- the village (gravel lanes, short grass), the camp (trodden earth under the trees)
@@ -1170,7 +1188,8 @@ for (let j = 0; j < N; j++) {
     const dirtS = smoothstep(0.86, 1.2, slope + 0.12 * nB);
     const rockS = smoothstep(1.05, 1.5, slopeWide.d[q] + 0.15 * nB) * smoothstep(0.7, 1.0, slope);
     over(q, 3, dirtS * 0.9 * (1 - 0.7 * mount));
-    over(q, 4, Math.max(rockS, mount * Math.max(smoothstep(0.8, 1.15, slope + 0.12 * nB), smoothstep(TREE_LINE + 20, TREE_LINE + 90, h + 30 * nA) * 0.75)));
+    // (bare rock takes over with altitude — except round the sky villages, where alpine meadows hold on)
+    over(q, 4, Math.max(rockS, mount * Math.max(smoothstep(0.8, 1.15, slope + 0.12 * nB), smoothstep(TREE_LINE + 20, TREE_LINE + 90, h + 30 * nA) * 0.75 * (1 - 0.92 * skyGreen.d[q]))));
     gh *= 1 - smoothstep(0.8, 1.2, slope);
 
     // --- sea cliffs: whatever can hold on to them is green. (The renderer paints steep ground as rock, except
@@ -1356,6 +1375,20 @@ const trees = [];
     add(x, z, sp, scale, radius);
   }
 
+  // ---- the woods that ring the high clearing
+  {
+    const G = L.GLADE;
+    for (let k = 0; k < 420; k++) {
+      const a = rng() * Math.PI * 2, f = 1.07 + 0.5 * rng() * rng(), px = G.x + Math.cos(a) * G.rx * f, pz = G.z + Math.sin(a) * G.rz * f;
+      const q = idx(Math.round(gi(px)), Math.round(gi(pz)));
+      if (noTrees.d[q] > 0 || SLOPE.d[q] > 1.3 || waterNear.d[q] < 1.6) continue;
+      const r = rng(), sp = r < 0.4 ? 'beech' : r < 0.66 ? 'pine' : r < 0.86 ? 'birch' : 'oak';
+      const scale = 0.85 + 0.45 * rng(), radius = (sp === 'pine' || sp === 'birch' ? 4.4 : 5.6) * scale;
+      if (tooClose(px, pz, radius)) continue;
+      add(px, pz, sp, scale, radius);
+    }
+  }
+
   // ---- the woods of the mountains
   for (let z = -HALF + 4; z < HALF - 4; z += 6.4) {
     for (let x = -HALF + 4; x < HALF - 4; x += 6.4) {
@@ -1366,7 +1399,7 @@ const trees = [];
       if (h < 1.2 || SLOPE.d[q] > 1.36 || waterNear.d[q] < 1.4 || coastD.d[q] < 3 || pathClear.d[q] < 0 || noTrees.d[q] > 0) continue;
       const r = rng();
       const sp = h > 96 ? (r < 0.85 ? 'pine' : 'birch') : h > 48 ? (r < 0.58 ? 'pine' : r < 0.84 ? 'beech' : 'birch') : (r < 0.36 ? 'pine' : r < 0.66 ? 'oak' : r < 0.9 ? 'beech' : 'birch');
-      const scale = (0.78 + 0.5 * rng()) * (1 - 0.3 * smoothstep(70, TREE_LINE, h)); // smaller towards the tree line
+      const scale = (0.78 + 0.5 * rng()) * (1 - 0.3 * smoothstep(70, TREE_LINE, h)) * (1 - 0.12 * smoothstep(TREE_LINE, 230, h)); // smaller towards the tree line, and above it
       const radius = (sp === 'pine' || sp === 'birch' ? 5.0 : 6.6) * scale;
       if (tooClose(px, pz, radius)) continue;
       add(px, pz, sp, scale, radius);

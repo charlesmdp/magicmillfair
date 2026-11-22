@@ -127,7 +127,10 @@ export const STREAMS = [
     fill: false, smooth: 1.2, // no levelled flood plain, and keep the steps of the bed sharp
     points: [
       // (down the mountain in leaps; then three pools, one above the other, each spilling into the next)
-      [-372, 158.6, 82, 2.0], [-356, 152, 68, 2.0], [-345.2, 147.5, 57.4, 2.4], [-342.2, 146.3, 46.4, 4.5],
+      // (it rises in the lake of the high clearing — see GLADE —, leaves it northwards, tumbles down beside the
+      // last flight of steps)
+      [-368.5, 195, 68.95, 11], [-362.5, 188.5, 68.95, 13], [-357.5, 181, 68.9, 4.2], [-352, 170, 68.4, 2.6], [-348.5, 159, 63.5, 2.4],
+      [-345.2, 147.5, 57.4, 2.4], [-342.2, 146.3, 46.4, 4.5],
       [-338.5, 144.8, 46.3, 9], [-331.1, 141.7, 46.2, 9], [-328.2, 140.5, 46.0, 3.4], [-325.4, 139.4, 36.5, 4.5],
       [-321.9, 137.9, 36.4, 8.5], [-314.5, 134.9, 36.3, 8.5], [-311.5, 133.7, 36.1, 3.4], [-308.7, 132.5, 27.2, 4.5],
       [-305.2, 131.1, 27.1, 9], [-298.8, 128.4, 27.0, 9], [-294.1, 126.5, 26.7, 4.6],
@@ -399,6 +402,8 @@ export const FALLS = {
     { width: 2.2, landing: 1.4, points: [[-277.5, 114.2, 12.8], [-280.5, 105.5, 15.5], [-297.5, 108.5, 21.6], [-301.5, 120.5, 27.45]] },
     { width: 2.2, landing: 1.4, points: [[-304.5, 123.4, 27.45], [-319.5, 127.2, 36.75]] },
     { width: 2.2, landing: 1.4, points: [[-322.5, 129.2, 36.75], [-337.5, 133.4, 46.65]] },
+    // (and on, from the top terrace, through a cleft in the rock up to the high clearing)
+    { width: 2.2, landing: 1.4, points: [[-346.5, 141, 46.65], [-357.5, 150, 54.8], [-360.5, 164, 62.8], [-368.5, 175.5, 69.3]] },
   ],
   levels: [
     { y: 27.45, bank: [[-291.5, 119.5], [-306.5, 117.5], [-311, 127.5], [-309, 137], [-296.5, 133], [-290, 129]] },
@@ -408,6 +413,11 @@ export const FALLS = {
   // on the top terrace: a bench that looks down the three falls to the valley
   seat: { x: -341.5, z: 134.6, yaw: 1.2 },
 };
+
+// The high clearing, above and behind the falls: a meadow ringed by woods on a shelf of the mountain, the lake
+// the torrent rises in, a fire, benches. Reached by the last flight of FALLS.stairs. (x, z): its middle; rx,
+// rz: its half sizes; y: its level.
+export const GLADE = { x: -357, z: 193, rx: 27, rz: 21, y: 69.3, fire: [-348.5, 199], name: 'The High Clearing' };
 
 // The pool at the foot of the great waterfall is dug deep between these two points (`r` metres around the
 // line, `depth` metres under the water): one can leap into it from the lowest terrace, sixteen metres up.
@@ -651,6 +661,7 @@ export const ZONES = [
   { id: 'stairway', name: 'The Stairway', x: -312, z: 60, r: 40 },
   { id: 'village', name: 'The Lost Temple', x: -380, z: 36, r: 40 },
   { id: 'terraces', name: 'Above the Falls', x: -318, z: 132, r: 30 },
+  { id: 'glade', name: GLADE.name, x: GLADE.x, z: GLADE.z, r: 30 },
   { id: 'cove', name: 'The Secret Cove', x: COVE.x, z: COVE.z + 2, r: 36, hidden: true }, // (not named on the map)
   { id: 'camp', name: 'The Camp', x: CAMP.x, z: CAMP.z, r: 26 },
   { id: 'climb', name: CLIMB.name, x: CLIMB.x, z: CLIMB.z, r: 24 },

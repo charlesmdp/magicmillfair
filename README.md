@@ -361,6 +361,10 @@ mountain, under the rock, out at sea.
   each with a pool of the torrent and its own fall. Wade in the pools, sit on the bench of the top one —
   or walk off the brink of the lowest and dive into the pool of the great fall, sixteen metres below (it
   is deep, with banks to walk out on).
+- **The High Clearing**: from the top terrace a last flight of steps climbs through a cleft in the rock,
+  beside the cascades, to a meadow ringed by woods on a shelf of the mountain, 69 m up: the lake the
+  torrent rises in (shallow: wade across), a fire with four logs, three benches that look at the water,
+  two hammocks at the edge of the wood — sixteen places to sit.
 - **Caves**: the waterfall shoots clear of the rock — walk through its pool, behind the falling water, into
   a grotto lit by crystals; a narrow passage leads on to a second, hidden room. Two more caves open at the
   foot of the northern mountains (behind the fields) and of the southern ones (near the old tree). All have
@@ -385,6 +389,9 @@ mountain, under the rock, out at sea.
   a flag, its sign and a ring to go back through — twenty places to sit. They are reached from the Sky Gate
   only. Their sites are chosen by the world baker (places that see the valley); the **Mega map** shows them
   all.
+  Round them the mountains stay green however high they are: groves of pines and birches hold on above
+  the tree line, alpine meadows take the place of bare rock, and near one village in four a torrent comes
+  down a slope in sight of it.
 - **Places to rest**: a camp in the woods north of the great pond (six hammocks, logs round a fire, two
   tents); beanbags of all colours under a sail at the north end of the beach, and on a deck on stilts over
   the great pond. Sitting on a beanbag brings a laptop onto your knees.
@@ -625,12 +632,12 @@ that is the last point. Going further means a referee: the server replaying the 
 | Command | What it does |
 |---|---|
 | `npm run bake` | bakes the world and the textures again |
-| `npm test` | 157 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures) |
-| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (106 in all) |
+| `npm test` | 158 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures) |
+| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (107 in all) |
 | `npm run test:shop` | the shop in the real game, on the Node server with test keys and a stand-in for Stripe: a hat bought and worn, the panel of a game sponsored, filled in (with a logo) and approved by the administrator, the stand of the gondolas (8 checks) |
 | `npm run test:smoke` | drives the real site: welcome screen, walking, free camera, settings, large map (`-- --mobile` for the touch layout) |
 | `npm run test:audio` | Listens to the sound engine without ears: in headless Chromium it renders a dozen listener scenarios (beach, cliffs, pier, woods, mill, waterfall, cave, sky village, the climb…) and every one-shot effect through an offline audio context, measures level, spectrum, how the loudness moves and how tonal it is, fails on silence or clipping, and times `update()` (about 0.01 ms a frame) |
-| `npm run test:walk` | 39 checks in the real game: pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the fifty sky villages (prices, places to sit, the board of one for hire), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the four booths (a bot plays each through the pointer; boards), the quad race (a bot drives three laps), the acid pond, the shark, change of tier |
+| `npm run test:walk` | 40 checks in the real game: pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls and the high clearing above them, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the fifty sky villages (prices, places to sit, the board of one for hire), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the four booths (a bot plays each through the pointer; boards), the quad race (a bot drives three laps), the acid pond, the shark, change of tier |
 | `npm run test:duo` | two visitors on the production server: they must see each other move, wave, summon an animal, chat and sit down (`-- --cloudflare` for the Cloudflare version) |
 | `npm run bench` | benchmark tour for each tier (`-- --mobile` for the phone profile) |
 | `npm run profile` | cost of each system (script, draw calls, triangles) at seven viewpoints |

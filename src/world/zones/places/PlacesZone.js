@@ -13,7 +13,7 @@ import { buildTemple } from './Temple.js';
 import { fallsRibbon } from '../../water/Falls.js';
 import { seatAt } from '../../../player/PlayerController.js';
 import { ANIM } from '../../../player/Character.js';
-import { STAIRWAY, VILLAGE, FALLS, COVE, ISLAND, islandPath, CAMP, BEACH_LOUNGE, POND_DECK, LEVELS, CAVES } from '../../layout/layout.js';
+import { STAIRWAY, VILLAGE, FALLS, COVE, ISLAND, islandPath, CAMP, BEACH_LOUNGE, POND_DECK, LEVELS, CAVES, GLADE } from '../../layout/layout.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 // hammock and tent cloths
@@ -155,6 +155,7 @@ export class PlacesZone {
     this._stairs(STAIRWAY, 'stairway', { stones: true });
     this._temple();
     this._terraces();
+    this._glade();
     this._cove();
     this._seaFall();
     this._island();
@@ -177,7 +178,7 @@ export class PlacesZone {
     const k = this.world.engine.tier.phone ? 0.6 : 1; // furniture goes sooner on a phone
     this._cull = distanceCuller(this.group, [
       [/^temple:(slate|matte|paint|granite)$/, Infinity], [/^temple:/, 420 * k], [/^stairway:rock$/, Infinity], [/^stairway:/, 420 * k],
-      [/^terraces:rock$/, 600 * k], [/^terraces:/, 260 * k], [/^cove:/, 260 * k], [/^seafall/, Infinity],
+      [/^terraces:rock$/, 600 * k], [/^terraces:/, 260 * k], [/^glade:/, 240 * k], [/^cove:/, 260 * k], [/^seafall/, Infinity],
       [/^cave-\w+:cave$/, 170 * k], [/^cave-/, 80 * k], [/^island:/, 340 * k], [/^camp/, 230 * k], [/^beach:/, 280 * k], [/^deck:(woodDeck|woodWet)$/, 520 * k], [/^deck:/, 240 * k],
     ]);
     return this;
@@ -304,6 +305,40 @@ export class PlacesZone {
     const S = FALLS.seat;
     this._bench(parts.get('granite'), S.x, FALLS.levels[2].y, S.z, S.yaw);
     this._add('terraces', parts);
+  }
+
+  // ---------------------------------------------------------------------------
+  // The high clearing, above and behind the falls: a meadow ringed by woods, the lake the torrent rises in.
+  // A fire with logs round it, benches that look at the water, two hammocks at the edge of the wood.
+
+  _glade() {
+    const G = GLADE, parts = new Parts(), wood = parts.get('woodDark'), rock = parts.get('rock');
+    // where one walks: the whole meadow, its lake included (it is shallow)
+    const edge = [];
+    for (let k = 0; k < 28; k++) { const a = (k / 28) * Math.PI * 2; edge.push([G.x + Math.cos(a) * G.rx * 0.97, G.z + Math.sin(a) * G.rz * 0.97]); }
+    this.areas.push(new Polygon(edge, { name: 'glade' }));
+    // the fire: a ring of stones, four logs to sit on
+    const [cx, cz] = G.fire, cy = this.ground(cx, cz);
+    for (let k = 0; k < 9; k++) { const a = (k / 9) * Math.PI * 2; rock.tint(0.82 + 0.06 * (k % 2), 0.8, 0.76, 1).place(cx + Math.cos(a) * 0.8, cy - 0.05, cz + Math.sin(a) * 0.8, a * 1.7).cube(0, 0.1, 0, 0.34, 0.26, 0.28, { tile: 1 }).pop(); }
+    wood.tint(0.26, 0.22, 0.2, 1);
+    for (let k = 0; k < 4; k++) { const a = (k / 4) * Math.PI + 0.4; wood.rod(V(cx - Math.cos(a) * 0.5, cy + 0.08, cz - Math.sin(a) * 0.5), V(cx + Math.cos(a) * 0.5, cy + 0.3, cz + Math.sin(a) * 0.5), 0.085, 6); }
+    parts.get('glow').tint(1, 0.5, 0.14, 1).cylinder(cx, cy + 0.12, cz, 0.27, 0.02, 0.7, 6, { capTop: false });
+    this.colliders.push({ type: 'circle', x: cx, z: cz, r: 0.95 });
+    for (let k = 0; k < 4; k++) {
+      const a = 0.5 + (k / 4) * Math.PI * 2, lx = cx + Math.sin(a) * 2.5, lz = cz + Math.cos(a) * 2.5, ly = this.ground(lx, lz), tx = Math.cos(a), tz = -Math.sin(a);
+      wood.tint(0.62, 0.52, 0.4, 1).rod(V(lx - tx * 0.95, ly + 0.2, lz - tz * 0.95), V(lx + tx * 0.95, ly + 0.2, lz + tz * 0.95), 0.2, 8);
+      for (const o of [-0.45, 0.45]) this.seats.push(seatAt(lx + tx * o, ly + 0.4, lz + tz * o, a + Math.PI));
+      this.colliders.push({ type: 'box', x: lx, z: lz, hw: 0.95, hl: 0.2, yaw: a, y0: ly - 1, y1: ly + 0.45 });
+    }
+    // benches by the lake, looking at it
+    const stone = parts.get('granite'), lake = [-364, 190.5];
+    for (const [bx, bz] of [[-353.6, 189.6], [-358.4, 200.2], [-371.5, 183.0]]) this._bench(stone, bx, this.ground(bx, bz), bz, Math.atan2(lake[0] - bx, lake[1] - bz));
+    // two hammocks at the edge of the wood, lanterns where the steps arrive and by the fire
+    this._hammock(parts, -338.6, 196.5, 0.3, POUF[2]);
+    this._hammock(parts, -345.5, 207.2, 1.35, POUF[5]);
+    const top = FALLS.stairs[FALLS.stairs.length - 1].points.at(-1);
+    for (const [lx, lz] of [[top[0] + 2.6, top[1] + 1.6], [cx + 3.4, cz - 2.6], [-361.5, 203.5]]) { lantern(parts, lx, this.ground(lx, lz), lz, 2.0); this.colliders.push({ type: 'circle', x: lx, z: lz, r: 0.14 }); }
+    this._add('glade', parts);
   }
 
   // ---------------------------------------------------------------------------

@@ -10,6 +10,7 @@ import { staticCaster, LAYER } from '../../../render/Shadows.js';
 import { mergeStatic, distanceCuller } from '../../props/StaticBatch.js';
 import { makeMaterial, GLSL_COMMON, GLSL_LIGHTING } from '../../../render/globals.js';
 import { Polygon } from '../../Areas.js';
+import { fallsMaterial } from '../../water/Falls.js';
 import { seatAt } from '../../../player/PlayerController.js';
 import { SKY } from '../../layout/layout.js';
 import { SPONSORS, sponsorId, VILLAGE_PRICES, VILLAGE_PERKS, money } from '../../layout/sponsors.js';
@@ -107,10 +108,11 @@ export class SkyZone {
     this._buildPortals();
     this._buildSigns();
     this._buildPerks();
+    this._torrents();
     this.group.updateMatrixWorld(true);
     this.group.traverse((o) => { if (o.isMesh) o.layers.disable(LAYER.REFLECT); });
     const k = this.world.engine.tier.phone ? 0.6 : 1;
-    this._cull = distanceCuller(this.group, [[/^sky\d:matte$/, 1300], [/^sky\d:/, 420 * k], [/^skyv\d+:/, 150], [/^skygate:/, 600 * k], [/^sky-(portals|signs|perks)$/, Infinity]]);
+    this._cull = distanceCuller(this.group, [[/^sky\d:matte$/, 1300], [/^sky\d:/, 420 * k], [/^skyv\d+:/, 150], [/^skygate:/, 600 * k], [/^sky-(portals|signs|perks|torrents)$/, Infinity]]);
     return this;
   }
 
@@ -356,6 +358,72 @@ export class SkyZone {
     this._paintSign?.(index);
     const perks = this.group.getObjectByName('sky-perks'), k = this._perks.findIndex((p) => p.i === index);
     if (perks && k >= 0) { const pos = perks.geometry.attributes.position; for (let q = 0; q < 4; q++) pos.setXYZ(k * 4 + q, 0, -1000, 0); pos.needsUpdate = true; }
+  }
+
+  // White water on the mountains, to be seen from the villages: near one village in two a torrent comes down a
+  // slope that the village looks at, for as long as the slope lasts. All of them are one mesh.
+  _torrents() {
+    const water = this.world.water;
+    if (!water || !water.shared || !water.shared.uFoam) return;
+    const data = this.data, h = (x, z) => data.heightAt(x, z), bd = data.meta.bounds || [];
+    const inValley = (x, z) => { let inside = false; for (let i = 0, j = bd.length - 1; i < bd.length; j = i++) if ((bd[j][1] > z) !== (bd[i][1] > z) && x < ((bd[i][0] - bd[j][0]) * (z - bd[j][1])) / (bd[i][1] - bd[j][1]) + bd[j][0]) inside = !inside; return inside; };
+    const blocked = (x, z) => Math.abs(x) > 500 || Math.abs(z) > 500 || inValley(x, z) || this.villages.some((v) => (x - v.x) ** 2 + (z - v.z) ** 2 < 25 * 25);
+    const pos = [], uv = [], fade = [], idx = [];
+    this.villages.forEach((v, i) => {
+      if (i % 2 !== 1) return;
+      // from the village, which of the slopes round it shows the longest run of water? (a torrent comes down the
+      // steepest way, three metres at a time, until the ground levels out)
+      const trace = (x, z) => {
+        const out = [V(x, h(x, z) + 0.14, z)];
+        for (let n = 0; n < 52; n++) {
+          const gx = (h(x + 2, z) - h(x - 2, z)) / 4, gz = (h(x, z + 2) - h(x, z - 2)) / 4, g = Math.hypot(gx, gz);
+          if (g < 0.12) break;
+          x -= (gx / g) * 3; z -= (gz / g) * 3;
+          if (blocked(x, z) || data.waterAt(x, z) > -500) break;
+          out.push(V(x, h(x, z) + 0.14, z));
+        }
+        return out;
+      };
+      const eye = V(v.x, v.y + 2.2, v.z);
+      const seen = (p) => { for (let k = 1; k < 10; k++) { const t = k / 10; if (h(eye.x + (p.x - eye.x) * t, eye.z + (p.z - eye.z) * t) > eye.y + (p.y - eye.y) * t + 0.6) return false; } return true; };
+      let pts = null, best = 4;
+      for (let k = 0; k < 20; k++) for (const r of [48, 72, 100]) {
+        const a = (k / 20) * Math.PI * 2, x = v.x + Math.cos(a) * r, z = v.z + Math.sin(a) * r;
+        if (blocked(x, z)) continue;
+        const path = trace(x, z);
+        if (path.length < 12) continue;
+        let score = 0;
+        for (let q = 0; q < path.length; q += 2) if (seen(path[q])) score++;
+        if (score > best) { best = score; pts = path; }
+      }
+      if (!pts) return;
+      v.torrent = pts[pts.length >> 1].toArray(); // (where to look for it)
+      const n = pts.length;
+      if (n < 12) return;
+      const base = pos.length / 3;
+      let along = 0;
+      for (let k = 0; k < n; k++) {
+        const a = pts[Math.max(0, k - 1)], b = pts[Math.min(n - 1, k + 1)], l = Math.hypot(b.x - a.x, b.z - a.z) || 1, sx = -(b.z - a.z) / l, sz = (b.x - a.x) / l;
+        if (k) along += pts[k].distanceTo(pts[k - 1]);
+        const w = (3.2 + 2.8 * (k / n)) / 2, f = Math.min(1, k / 3, (n - 1 - k) / 4); // (wide: it is seen from far)
+        for (const g of [-1, 1]) { pos.push(pts[k].x + sx * w * g, pts[k].y, pts[k].z + sz * w * g); uv.push(g > 0 ? 1 : 0, along); fade.push(Math.max(0, f)); }
+        if (k + 1 < n) { const q = base + k * 2; idx.push(q, q + 2, q + 1, q + 1, q + 2, q + 3); }
+      }
+    });
+    if (!idx.length) return;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setAttribute('aFade', new THREE.Float32BufferAttribute(fade, 1));
+    geo.setIndex(idx);
+    geo.computeBoundingSphere();
+    const mesh = new THREE.Mesh(geo, fallsMaterial(water.shared.uFoam));
+    mesh.name = 'sky-torrents';
+    mesh.renderOrder = 12;
+    mesh.matrixAutoUpdate = false;
+    mesh.frustumCulled = false;
+    this.group.add(mesh);
+    this.torrents = idx.length / 6;
   }
 
   // The boards of the villages for hire: the same face for all (one small sheet, one mesh)

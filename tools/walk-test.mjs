@@ -215,6 +215,12 @@ try {
           const end = st.points.at(-1);
           out.flights.push({ from: start, want0: st.points[0][2], to: player.pos.y, want: end[2], off: Math.hypot(end[0] - player.pos.x, end[1] - player.pos.z) });
         }
+        // from the last flight, into the high clearing: its meadow, its lake (shallow), its fire
+        {
+          const G = L.GLADE, legs = [];
+          for (const q of [[G.fire[0] - 3, G.fire[1] - 3], [-362.5, 189], [G.x + G.rx + 12, G.z]]) { for (let f = 0; f < 700 && Math.hypot(q[0] - player.pos.x, q[1] - player.pos.z) > 0.7; f++) { const dx = q[0] - player.pos.x, dz = q[1] - player.pos.z, l = Math.hypot(dx, dz); go(dx / l, dz / l, 1); } legs.push({ x: player.pos.x, y: player.pos.y, z: player.pos.z, swimming: player.swimming, wading: !!player.wading }); }
+          out.glade = { legs, y: G.y, edge: Math.hypot((player.pos.x - G.x) / G.rx, (player.pos.z - G.z) / G.rz), seats: world.seats.filter((s) => Math.hypot(s.x - G.x, s.z - G.z) < 32).length, zone: L.ZONES.find((z) => z.id === 'glade')?.name, torrents: world.sky.torrents || 0 };
+        }
         // wading in the top pool
         const pool = world.data.meta.streams.find((s) => s.id === 'torrent').samples.find((q) => Math.abs(q[2] - 46.25) < 0.12 && q[3] > 7);
         player.teleport(pool[0], pool[1], 0);
@@ -236,7 +242,8 @@ try {
       });
     });
     const okFlights = up.flights.every((f) => Math.abs(f.from - f.want0) < 0.35 && Math.abs(f.to - f.want) < 0.35 && f.off < 1.2);
-    check('climbs the steps beside the falls, from terrace to terrace', okFlights && up.flights.length === 3 && Math.abs(up.flights[2].to - up.levels[2]) < 0.4, up.flights.map((f) => `${f.from.toFixed(1)} → ${f.to.toFixed(1)} (${f.want})`).join(', '));
+    check('climbs the steps beside the falls, from terrace to terrace', okFlights && up.flights.length === 4 && Math.abs(up.flights[2].to - up.levels[2]) < 0.4, up.flights.map((f) => `${f.from.toFixed(1)} → ${f.to.toFixed(1)} (${f.want})`).join(', '));
+    check('the last flight leads to the high clearing: a meadow to walk, a lake to wade in, a wood that holds one in, places to sit', Math.abs(up.glade.legs[0].y - up.glade.y) < 0.9 && !up.glade.legs[0].swimming && up.glade.legs[1].wading && !up.glade.legs[1].swimming && up.glade.edge < 1.02 && up.glade.edge > 0.8 && up.glade.seats >= 14 && up.glade.zone === 'The High Clearing' && up.glade.torrents > 100, JSON.stringify(up.glade));
     check('wades in the top pool, leaps from the lowest terrace into the pool of the great fall', up.pool.water > 45.5 && up.pool.y < up.pool.water && (up.pool.wading || up.pool.swimming) && Math.abs(up.leap.y0 - up.levels[0]) < 0.3 && up.leap.y < 13.5 && up.leap.x > -288 && up.leap.walkable && !up.leap.cave, JSON.stringify({ pool: up.pool, leap: up.leap }));
     check('the leap ends in a swan dive into deep water; one walks out of the pool where the steps start', up.leap.dived && up.leap.swam && up.leap.y < up.leap.water && !up.ashore.swimming && up.ashore.y > 12.3 && Math.hypot(up.ashore.x + 277.5, up.ashore.z - 114.6) < 1, JSON.stringify({ leap: up.leap, ashore: up.ashore }));
   }
