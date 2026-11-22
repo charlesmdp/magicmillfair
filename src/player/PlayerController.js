@@ -177,16 +177,17 @@ export class PlayerController {
     if (this.pitch || this.roll || r.rotation.x || r.rotation.z) { r.rotation.order = 'YXZ'; r.rotation.set(this.pitch, this.yaw, this.roll); } else r.rotation.y = this.yaw;
   }
 
-  // In a race: the quad is driven by the game of the race, which reads the keys itself
+  // In a game that moves the player itself — the race (on a quad: the game reads the keys), the flying
+  // theatre (`driver.riding` false, `driver.anim`: how the avatar holds itself)
   _driven(dt, control) {
     this.driver.step(dt, this, control);
     this.vel.set(0, 0, 0);
     this.swimming = this.wading = this.sliding = this.diving = false;
     this.cave = null;
-    this.riding = true;
+    this.riding = this.driver.riding !== false;
     this.jet = 0;
     this._peak = this.pos.y;
-    this.anim = ANIM.sit;
+    this.anim = this.driver.anim ?? ANIM.sit;
     this.character.setAnim(this.anim, this.speed);
     this.character.update(dt);
     this._sync();

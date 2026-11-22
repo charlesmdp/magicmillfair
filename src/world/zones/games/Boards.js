@@ -6,14 +6,20 @@ import * as THREE from 'three';
 const SERIF = "Georgia, 'Times New Roman', serif", SANS = 'system-ui, sans-serif';
 export const PERIODS = [['day', 'TODAY'], ['week', 'THIS WEEK'], ['month', 'THIS MONTH'], ['all', 'ALL TIME']];
 
-/** A flat sign drawn with a canvas: { mesh, redraw(), canvas }. `draw(ctx, w, h)` paints it. */
-export function canvasBoard(w, h, draw, width, height) {
+/**
+ * A flat sign drawn with a canvas: { mesh, redraw(), canvas }. `draw(ctx, w, h)` paints it. `both`: it reads
+ * the right way round from behind too (a second face, back to back with the first: what stands in the open
+ * and is walked round — a banner over a track, a board of scores). Without it the back shows the front
+ * through, as in a mirror: for what has its back to a wall.
+ */
+export function canvasBoard(w, h, draw, width, height, { both = false } = {}) {
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 4;
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide, toneMapped: false }));
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: texture, side: both ? THREE.FrontSide : THREE.DoubleSide, toneMapped: false }));
+  if (both) { const back = new THREE.Mesh(mesh.geometry, mesh.material); back.rotation.y = Math.PI; back.position.z = -0.03; mesh.add(back); }
   const redraw = () => { draw(canvas.getContext('2d'), w, h); texture.needsUpdate = true; };
   redraw();
   return { mesh, redraw, canvas };

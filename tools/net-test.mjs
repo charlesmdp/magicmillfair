@@ -790,7 +790,7 @@ async function testApi({ port }) {
   check('api: a ninth POST within the minute is turned away; the board is unchanged', limited === 429 && json(res)?.tops.all.length === 2 && json(res).tops.all[0].name === 'Bob', [limited, res.body.toString().slice(0, 160)]);
   res = await request(port, '/api/scores?board=all');
   const every = json(res)?.boards || {};
-  check('api: every board in one request (the four booths, the race, the climb)', res.status === 200 && ['sky', 'race', 'shoot', 'mole', 'milk', 'bell'].every((id) => every[id] && ['day', 'week', 'month', 'all'].every((p) => Array.isArray(every[id].tops[p]))) && every.sky.tops.all[0].name === 'Bob' && every.shoot.tops.all[0].score === 120 && !every.race.tops.all.length, [res.status, res.body.toString().slice(0, 200)]);
+  check('api: every board in one request (the four booths, the race, the climb, the flying theatre)', res.status === 200 && ['sky', 'race', 'wing', 'shoot', 'mole', 'milk', 'bell'].every((id) => every[id] && ['day', 'week', 'month', 'all'].every((p) => Array.isArray(every[id].tops[p]))) && every.sky.tops.all[0].name === 'Bob' && every.shoot.tops.all[0].score === 120 && !every.race.tops.all.length, [res.status, res.body.toString().slice(0, 200)]);
   res = await request(port, '/api/scores?board=nope');
   const put = await request(port, '/api/scores', { method: 'PUT' });
   check('api: unknown board → 404, other methods → 405', res.status === 404 && put.status === 405, [res.status, put.status]);
@@ -978,6 +978,15 @@ async function testAccounts({ port }) {
   }
 }
 
+// Points that take time to make (the flying theatre: a pair of columns every 0.8 s at the very best): a score
+// cannot arrive sooner than its points could have been made.
+function testScoreLogic() {
+  const now = Date.now(), at = (ago) => ({ b: 'wing', t: now - ago, n: 'x' });
+  check('score logic: points that take time — fifty columns cannot be flown in five seconds, three can; a minute is enough for fifty',
+    runFits(at(5000), { board: 'wing', score: 50 }, now) === 'too soon' && runFits(at(5000), { board: 'wing', score: 3 }, now) === '' && runFits(at(60000), { board: 'wing', score: 50 }, now) === '' && runFits(at(60000), { board: 'shoot', score: 50 }, now) !== '',
+    [runFits(at(5000), { board: 'wing', score: 50 }, now), runFits(at(5000), { board: 'wing', score: 3 }, now), runFits(at(60000), { board: 'wing', score: 50 }, now)]);
+}
+
 function testShopLogic() {
   const b64 = (text) => Buffer.from(text.padEnd(64)).toString('base64');
   check('shop logic: text is one short line without markup; links are https and carry no name or password',
@@ -988,6 +997,7 @@ function testShopLogic() {
 
 async function testApiLogic() {
   testShopLogic();
+  testScoreLogic();
   const D = Date.UTC(2026, 10, 21, 12); // a Saturday
   check('scores: the day, the ISO week and the month of a date', JSON.stringify(periodKeys(D)) === '{"day":"2026-11-21","week":"2026-W47","month":"2026-11","all":"all"}' && periodKeys(Date.UTC(2027, 0, 1)).week === '2026-W53' && periodKeys(Date.UTC(2024, 11, 30)).week === '2025-W01', periodKeys(D));
   let st = addScore(undefined, 'sky', { name: 'A', score: 200000 }, D).state;

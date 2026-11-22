@@ -9,7 +9,8 @@ import { makeMaterial, GLSL_COMMON, GLSL_LIGHTING } from '../../../render/global
 import { cosmeticMaterial } from '../../../player/Cosmetics.js';
 import { Booths } from './Booths.js';
 import { Race } from './Race.js';
-import { CLIMB, ACID, BOULDER, ISLAND, islandPath, islandAt, ISLAND_LENGTH, SEA_REACH } from '../../layout/layout.js';
+import { Wing } from './Wing.js';
+import { CLIMB, ACID, BOULDER, ISLAND, islandPath, islandAt, ISLAND_LENGTH, SEA_REACH, PONDS } from '../../layout/layout.js';
 import { climbCourse, stoneDepth, formatTime } from './course.js';
 import { canvasBoard, drawScores, drawSponsor } from './Boards.js';
 
@@ -69,6 +70,7 @@ export class GamesZone {
     this.booths = new Booths(this).build();
     this.group.add(this.booths.group);
     this.race = new Race(this).build();
+    this.wing = new Wing(this).build(); // the theatre of the plaza
     this.group.updateMatrixWorld(true);
     return this;
   }
@@ -149,9 +151,9 @@ export class GamesZone {
       ctx.fillStyle = '#f6e7b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.font = `700 ${h * 0.56}px Georgia, 'Times New Roman', serif`;
       ctx.fillText(C.name.toUpperCase(), w / 2, h * 0.52);
-    }, 4.4, 0.82);
+    }, 4.4, 0.82, { both: true });
     sign.mesh.position.set(gx, gy + 3.2, gz);
-    sign.mesh.rotation.y = Math.atan2(first.x - gx, first.z - gz) + Math.PI; // read from outside
+    sign.mesh.rotation.y = Math.atan2(first.x - gx, first.z - gz) + Math.PI; // read from outside (and from inside)
     this.group.add(sign.mesh);
     // the board of the best climbs, to the right of the gate, under the panel of whoever sponsors the game
     this.scores = null; // not asked yet
@@ -171,10 +173,11 @@ export class GamesZone {
     const k = width / 3.4;
     const state = { lists: null, sponsor: null, offer: '' };
     // (`pixels`: a smaller board is drawn on a smaller sheet — the same drawing, scaled)
-    const board = canvasBoard(Math.round(1024 * pixels), Math.round(904 * pixels), (ctx) => { ctx.save(); ctx.scale(pixels, pixels); drawScores(ctx, 1024, 904, { title, sub, lists: state.lists, format, me: this.me }); ctx.restore(); }, width, 3.0 * k);
+    // (the board and the panel read from both sides: one walks round a stand)
+    const board = canvasBoard(Math.round(1024 * pixels), Math.round(904 * pixels), (ctx) => { ctx.save(); ctx.scale(pixels, pixels); drawScores(ctx, 1024, 904, { title, sub, lists: state.lists, format, me: this.me }); ctx.restore(); }, width, 3.0 * k, { both: true });
     board.mesh.position.set(x, y + 0.75 + 1.5 * k, z);
     board.mesh.rotation.y = yaw;
-    const panel = canvasBoard(Math.round(1024 * pixels), Math.round(316 * pixels), (ctx) => { ctx.save(); ctx.scale(pixels, pixels); drawSponsor(ctx, 1024, 316, state.sponsor, { what, price: state.offer }); ctx.restore(); }, width, 1.05 * k);
+    const panel = canvasBoard(Math.round(1024 * pixels), Math.round(316 * pixels), (ctx) => { ctx.save(); ctx.scale(pixels, pixels); drawSponsor(ctx, 1024, 316, state.sponsor, { what, price: state.offer }); ctx.restore(); }, width, 1.05 * k, { both: true });
     panel.mesh.position.set(x, y + 0.75 + 3.0 * k + 0.08 + 0.525 * k, z);
     panel.mesh.rotation.y = yaw;
     this.group.add(board.mesh, panel.mesh);
@@ -248,14 +251,25 @@ export class GamesZone {
     // --- what holds people in: the shaft, the wall of the stair (open at the door, and at the top landing),
     // the rail of the deck, the rail between the top landing and the well of the stair
     this.colliders.push({ type: 'circle', x: T.x, z: T.z, r: R0 });
-    const ring = (r, n, band) => {
+    // The diving boards: three planks out over the splash pool, on the side away from the stones — a third of
+    // the way up, two thirds, and at the very top. The wall of the stair and the rail of the deck open at each.
+    const UB = (14 / 24) * TAU, UT = (16 / 28) * TAU, TIP = RD + 5.0, BW = 0.82; // where they leave the stair, the deck; how far out; half width
+    const boards = [4, 8].map((k) => ({ u: UB, y: base + P * k + rise(UB), r0: R1 - 0.1, turn: k }));
+    boards.push({ u: UT, y: top, r0: RD - 0.2, turn: -1 });
+    const ring = (r, n, bands) => {
       for (let i = 0; i < n; i++) {
-        const u = ((i + 0.5) / n) * TAU, q = pt(u, r, 0), [y0, y1] = band(u);
-        this.colliders.push({ type: 'box', x: q.x, z: q.z, hw: r * Math.tan(Math.PI / n) + 0.06, hl: 0.1, yaw: face + u - LAND / 2, y0, y1 });
+        const u = ((i + 0.5) / n) * TAU, q = pt(u, r, 0);
+        for (const [y0, y1] of bands(u, i)) this.colliders.push({ type: 'box', x: q.x, z: q.z, hw: r * Math.tan(Math.PI / n) + 0.06, hl: 0.1, yaw: face + u - LAND / 2, y0, y1 });
       }
     };
-    ring(RW + 0.1, 24, (u) => (u < LAND ? [base + 3.2, top - 0.9] : [base - 2, top + 6]));
-    ring(RD, 28, () => [top - 0.6, top + 6]);
+    ring(RW + 0.1, 24, (u, i) => {
+      if (u < LAND) return [[base + 3.2, top - 0.9]];
+      if (i !== 13 && i !== 14) return [[base - 2, top + 6]];
+      const [a, b] = boards; // (the two that leave the stair)
+      return [[base - 2, a.y - 0.3], [a.y + 2.3, b.y - 0.3], [b.y + 2.3, top + 6]];
+    });
+    ring(RD, 28, (u, i) => (i === 15 || i === 16 ? [] : [[top - 0.6, top + 6]]));
+    for (const b of boards) this.platforms.push({ type: 'slab', x: pt(b.u, (b.r0 + TIP) / 2, 0).x, z: pt(b.u, (b.r0 + TIP) / 2, 0).z, hw: BW, hl: (TIP - b.r0) / 2, yaw: face + b.u - LAND / 2, y: b.y });
     {
       const q = pt(LAND + 0.04, (R0 + RW) / 2, 0);
       this.colliders.push({ type: 'box', x: q.x, z: q.z, hw: (RW - R0) / 2 + 0.1, hl: 0.08, yaw: face + LAND / 2 + 0.04 + Math.PI / 2, y0: top - 0.5, y1: top + 6 });
@@ -296,14 +310,86 @@ export class GamesZone {
         deck.tint(0.6, 0.55, 0.48, 1).quad(pt(a, R0, ya - 0.05), pt(b, R0, yb - 0.05), pt(b, R1, yb - 0.05), pt(a, R1, ya - 0.05), { tile: 1.2 }); // seen from below
         fascia(a, b, ya, yb, R1, 0.34);
       }
-      rail(LAND, TAU, R1 - 0.04, y0 + sh, y0 + P, 10);
+      if (boards.some((b) => b.turn === k)) {
+        const yAt = (u) => y0 + sh + ((P - sh) * (u - LAND)) / (TAU - LAND), W = 0.26;
+        rail(LAND, UB - W, R1 - 0.04, yAt(LAND), yAt(UB - W), 5);
+        rail(UB + W, TAU, R1 - 0.04, yAt(UB + W), yAt(TAU), 4);
+      } else rail(LAND, TAU, R1 - 0.04, y0 + sh, y0 + P, 10);
     }
     // --- the deck at the top, its rails, the tent roof on its posts, a pennant
     flat(0, TAU, R1, RD, top, 24);
     flat(0, LAND, R0, R1, top, 4);
     fascia(0, TAU / 2, top, top, RD, 0.3); fascia(TAU / 2, TAU, top, top, RD, 0.3);
-    rail(0, TAU, RD - 0.06, top, top, 24);
+    rail(UT + 0.21, UT - 0.21 + TAU, RD - 0.06, top, top, 23);
     rail(LAND + 0.06, TAU - 0.75, R1 + 0.06, top, top, 8);
+    // --- the diving boards: a plank with a red tip, beams under it, braces back to the tower, a rail to start with
+    const NAMES = ['THE TOE DIP', 'THE BELLY FLOP', 'THE LEAP OF FAITH'];
+    const pool = PONDS.find((p) => p.id === 'dive'), poolX = pool.outline.reduce((s, q) => s + q[0], 0) / pool.outline.length, poolZ = pool.outline.reduce((s, q) => s + q[1], 0) / pool.outline.length;
+    boards.forEach((b, i) => {
+      const yaw = face + b.u - LAND / 2, hl = (TIP - b.r0) / 2, mid = pt(b.u, (b.r0 + TIP) / 2, b.y);
+      deck.tint(PLANK[0], PLANK[1], PLANK[2], 1).place(mid.x, mid.y, mid.z, yaw).box(-BW, -0.1, -hl, BW, 0, hl - 1.1, { tile: 1.2 }).pop();
+      paint.place(mid.x, mid.y, mid.z, yaw);
+      paint.tint(0.95, 0.93, 0.88, 1).box(-BW, -0.1, hl - 1.1, BW, 0.003, hl - 0.85);
+      paint.tint(0.82, 0.1, 0.08, 1).box(-BW, -0.1, hl - 0.85, BW, 0.003, hl);
+      paint.tint(TEAL[0], TEAL[1], TEAL[2], 1);
+      for (const s of [-1, 1]) {
+        paint.box(s * (BW - 0.3) - 0.07, -0.32, -hl, s * (BW - 0.3) + 0.07, -0.1, hl - 0.5);
+        paint.beam(V(s * (BW - 0.3), -6.9, -hl - (b.turn < 0 ? 1.55 : 0.05)), V(s * (BW - 0.3), -0.3, hl * 0.1), 0.13, 0.13);
+        // (a rail along the first steps: after that, nothing)
+        for (const z of [-hl + 0.25, -hl + 1.4, -hl + 2.55]) paint.rod(V(s * (BW - 0.04), 0, z), V(s * (BW - 0.04), 1.05, z), 0.032, 5, { caps: false });
+        paint.beam(V(s * (BW - 0.04), 1.05, -hl + 0.25), V(s * (BW - 0.04), 1.05, -hl + 2.55), 0.07, 0.06);
+      }
+      paint.pop();
+      // its name and how high it is over the water, on a board across the way in (it reads from both sides)
+      const sign = this._board(384, 160, (ctx, w, h) => {
+        ctx.fillStyle = '#16211b'; ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 7; ctx.strokeRect(7, 7, w - 14, h - 14);
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#f6e7b8'; ctx.font = "900 80px Georgia, 'Times New Roman', serif"; ctx.fillText(`${Math.round(b.y - pool.level)} m`, w / 2, 62);
+        ctx.fillStyle = '#f2c14e'; ctx.font = '700 27px system-ui, sans-serif'; ctx.fillText(NAMES[i], w / 2, 124, w - 30);
+      }, 1.5, 0.625);
+      const sp = pt(b.u, b.r0 + 0.5, b.y + 2.62), out = V(Math.sin(yaw), 0, Math.cos(yaw));
+      sign.mesh.position.copy(sp).addScaledVector(out, 0.012);
+      sign.mesh.rotation.y = yaw;
+      sign.mesh.name = 'games:dive';
+      const back = sign.mesh.clone();
+      back.position.copy(sp).addScaledVector(out, -0.012);
+      back.rotation.y = yaw + Math.PI;
+      this.group.add(sign.mesh, back);
+      paint.tint(TEAL[0], TEAL[1], TEAL[2], 1);
+      for (const s of [-1, 1]) { const q = sp.clone().addScaledVector(V(Math.cos(yaw), 0, -Math.sin(yaw)), s * 0.8); paint.rod(V(q.x, b.y, q.z), V(q.x, b.y + 2.95, q.z), 0.04, 6, { caps: false }); }
+    });
+    {
+      // the splash pool: a big ring of red and white floats in the middle to aim for, and a sign on the bank
+      const n = 16, r = 1.7, y = pool.level - 0.04;
+      for (let k = 0; k < n; k++) {
+        const a0 = (k / n) * TAU, a1 = ((k + 1) / n) * TAU, c = k % 2 ? [0.95, 0.93, 0.88] : [0.85, 0.1, 0.08];
+        paint.tint(c[0], c[1], c[2], 1).rod(V(poolX + Math.cos(a0) * r, y, poolZ + Math.sin(a0) * r), V(poolX + Math.cos(a1) * r, y, poolZ + Math.sin(a1) * r), 0.26, 8, { caps: false });
+      }
+      const dx = T.x - poolX, dz = T.z - poolZ, dl = Math.hypot(dx, dz), sx = poolX + (dx / dl) * 8.6 + (dz / dl) * 4.2, sz = poolZ + (dz / dl) * 8.6 - (dx / dl) * 4.2, sy = this.ground(sx, sz);
+      const yaw = Math.atan2(C.x - sx, C.z - sz), W = 2.3, H = 1.15;
+      const sign = this._board(640, 320, (ctx, w, h) => {
+        const serif = "Georgia, 'Times New Roman', serif";
+        ctx.fillStyle = '#0f3a52'; ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 8; ctx.strokeRect(10, 10, w - 20, h - 20);
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#fff3d6'; ctx.font = `900 74px ${serif}`; ctx.fillText('THE SPLASH POOL', w / 2, 84, w - 50);
+        ctx.fillStyle = '#f2c14e'; ctx.font = `700 36px ${serif}`; ctx.fillText('Three boards up the tower.', w / 2, 164, w - 60);
+        ctx.fillStyle = '#d9ecf5'; ctx.font = `italic 600 32px ${serif}`; ctx.fillText('Aim for the ring. The water is deep there,', w / 2, 220, w - 60); ctx.fillText('and only there.', w / 2, 262, w - 60);
+      }, W, H);
+      sign.mesh.position.set(sx, sy + 1.15 + H / 2, sz);
+      sign.mesh.rotation.y = yaw;
+      sign.mesh.name = 'games:dive';
+      this.group.add(sign.mesh);
+      const wood = parts.get('woodDark');
+      wood.tint(0.95, 0.9, 0.8, 1).place(sx, sy, sz, yaw);
+      wood.box(-W / 2, 1.1, -0.05, W / 2, 1.2 + H, -0.012, { tile: 1 });
+      for (const g of [-1, 1]) wood.box(g * (W / 2 + 0.07) - 0.06, -0.3, -0.09, g * (W / 2 + 0.07) + 0.06, 1.3 + H, 0.03, { tile: 1 });
+      wood.pop();
+      this.colliders.push({ type: 'box', x: sx, z: sz, hw: W / 2 + 0.15, hl: 0.12, yaw });
+      /** The boards and the pool (for whoever wants to send someone there). */
+      this.dive = { pool: { x: poolX, z: poolZ, y: pool.level }, boards: boards.map((b) => { const q = pt(b.u, TIP - 0.6, b.y); return { x: q.x, y: b.y, z: q.z }; }) };
+    }
     for (let i = 0; i < 8; i++) paint.tint(0.93, 0.9, 0.82, 1).rod(pt((i / 8) * TAU, RD - 0.06, top + 1.08), pt((i / 8) * TAU, RD - 0.06, top + 3.2), 0.07, 6, { caps: false });
     const apex = V(T.x, top + 5.9, T.z), eave = top + 3.1, ROOF = 16;
     for (let i = 0; i < ROOF; i++) {
@@ -336,7 +422,7 @@ export class GamesZone {
   }
 
   /** A flat sign drawn with a canvas: { mesh, redraw() }. */
-  _board(w, h, draw, width, height) { return canvasBoard(w, h, draw, width, height); }
+  _board(w, h, draw, width, height, options) { return canvasBoard(w, h, draw, width, height, options); }
 
   /** Whose name is picked out on the boards (the visitor's own). */
   setMe(name) { this.me = name; for (const st of Object.values(this.stands || {})) st.redraw(); }
@@ -610,6 +696,7 @@ export class GamesZone {
       const a = this.acid, p = player.pos;
       if (!player.dead && (p.x - a.x) ** 2 + (p.z - a.z) ** 2 < a.r * a.r && p.y < a.y + 0.1) player.die('Dissolved in acid', [a.x + a.r + 7, a.z + 3, -Math.PI / 2], 0.4);
       this.booths.update(dt, time, p, camera);
+      this.wing.update(dt, time, p);
     }
     if (camera) this._cull(camera.position);
   }

@@ -28,7 +28,7 @@ import { callApi, checkAdminKey } from './net/api.js';
 import { formatTime } from './world/zones/games/course.js';
 import { RemoteAvatars } from './net/RemoteAvatars.js';
 import { Benchmark } from './app/Benchmark.js';
-import { SPAWN, ZONES, CLIMB, RACE } from './world/layout/layout.js';
+import { SPAWN, ZONES, CLIMB, RACE, WING } from './world/layout/layout.js';
 import { VILLAGE_PERKS, VILLAGE_PITCH, money } from './world/layout/sponsors.js';
 import { FEATURES } from './app/config.js';
 import { Soundscape } from './audio/Soundscape.js';
@@ -335,15 +335,16 @@ async function boot() {
   // the climb: a clock while climbing, the board of the best times at the gate
   const skyScores = new Scores('sky');
   const lists = (tops) => Object.fromEntries(Object.entries(tops).map(([k, v]) => [k, v])); // (already { name, score })
-  // the fair: the four booths of the pier and the quad race, each with its board. While one of them is being
-  // played (`fair.session`), it has the pointer, the camera and the clock of the screen.
-  const fair = { boards: { race: new Scores('race') }, session: null, kind: null, fov: null, after: 0, stands: { race: world.games.race.board }, tops: {} };
+  // the fair: the four booths of the pier, the quad race and the flying theatre, each with its board. While
+  // one of them is being played (`fair.session`), it has the pointer, the camera and the clock of the screen.
+  const fair = { boards: { race: new Scores('race'), wing: new Scores('wing') }, session: null, kind: null, fov: null, after: 0, stands: { race: world.games.race.board, wing: world.games.wing.board }, tops: {} };
   for (const b of world.games.booths.list) { fair.boards[b.id] = new Scores(b.id); fair.stands[b.id] = b.board; }
   Scores.every().then((all) => { fair.tops = all; world.games.setScores(lists(all.sky)); for (const id in fair.stands) fair.stands[id].setScores(all[id]); });
   const _aim = { origin: new THREE.Vector3(), dir: new THREE.Vector3(), clicks: 0, down: false };
   const fairIo = {
     play: (sound, options) => audio.play(sound, options), note: (text) => hud.note(text, 3000),
     strike: () => emote(emoteIndex('punch')), go: () => fair.boards.race.start(),
+    feathers: (x, y, z, n) => world.sparks.feathers(x, y, z, n),
   };
   const endGame = () => {
     const s = fair.session;
@@ -351,6 +352,13 @@ async function boot() {
     s.close();
     fair.session = null; fair.fov = null;
     if (fair.kind === 'race') { player.driver = null; player.riding = false; player.vel.set(0, 0, 0); }
+    if (fair.kind === 'wing') {
+      // (down from the stage, the wings handed back)
+      const spot = world.games.wing.spot;
+      player.driver = null; player.riding = false; player.vel.set(0, 0, 0);
+      me.setWings(false);
+      player.teleport(spot.x, spot.z, spot.yaw);
+    }
     me.root.visible = true;
     document.body.classList.remove('playing');
     hud.setRun(null); hud.setSight(null); hud.setGauge(null);
@@ -358,7 +366,7 @@ async function boot() {
     startBlend(0.5);
   };
   // ---------- the boards, live: when somebody in the room finishes a game, their score is fetched and shown
-  const GAMES = { sky: [CLIMB.name, formatTime], race: [RACE.name, formatTime] };
+  const GAMES = { sky: [CLIMB.name, formatTime], race: [RACE.name, formatTime], wing: [WING.name, (n) => `${n} column${n === 1 ? '' : 's'}`] };
   for (const b of world.games.booths.list) GAMES[b.id] = [b.name, (points) => `${points.toLocaleString('en-US')} points`];
   const boardOf = (id) => (id === 'sky' ? skyScores : fair.boards[id]);
   const showBoard = (id, tops) => { if (id === 'sky') world.games.setScores(lists(tops)); else fair.stands[id]?.setScores(tops); fair.tops[id] = tops; };
@@ -406,16 +414,29 @@ async function boot() {
     hud.note(touch ? 'Three laps! The stick steers; hold Run to drift, Jump to hop.' : 'Three laps! Arrows or WASD · Shift: drift (a boost when you let go) · Space: hop · E: give up', 7000);
     startBlend(0.6);
   };
+  // the flying theatre: up on the stage with a pair of wings; the game holds the flyer, the scenery goes by
+  const playWing = () => {
+    if (fair.session || player.dead) return;
+    fair.boards.wing.start();
+    fair.session = world.games.wing.open(player, fairIo); fair.kind = 'wing'; fair.after = 0;
+    player.riding = false;
+    player.driver = fair.session.driver;
+    me.setWings(true);
+    input.consumeClicks();
+    hud.note(touch ? 'Tap to flap, and fly through the gaps!' : 'Click or press Space to flap, and fly through the gaps! · E: give up', 6500);
+    startBlend(0.6);
+  };
   world.actionSources.push((p) => {
     const booth = world.games.booths.near(p.pos.x, p.pos.z);
     if (booth) return { label: `Play ${booth.name}`, run: () => playBooth(booth) };
+    if (world.games.wing.near(p.pos.x, p.pos.z)) return { label: `Play ${WING.name}`, run: playWing };
     return world.games.race.near(p.pos.x, p.pos.z) ? { label: `Race: ${RACE.laps} laps on a quad`, run: playRace } : null;
   });
   // one frame of the game being played
   const fairStep = (dt) => {
     const s = fair.session;
     if (player.dead) { endGame(); return; }
-    if (fair.kind === 'booth') {
+    if (fair.kind === 'booth' || fair.kind === 'wing') {
       const P = input.pointer, view = s.view, tall = engine.width < engine.height;
       camera.position.copy(view.pos); camera.lookAt(view.look);
       fair.fov = Math.min(96, view.fov * (tall ? 1.5 : 1));
@@ -432,7 +453,7 @@ async function boot() {
       if (s.over && fair.after === 0) {
         fair.after = 0.01;
         audio.play(s.score > 0 ? 'victory' : 'fail');
-        if (s.score > 0) scoreGame(s.booth.id, s.booth.name, s.score, `${s.score} ${s.booth.seconds ? 'points' : 'on the scale'}`); else hud.note('Nothing this time. Have another go!', 4000);
+        if (s.score > 0) scoreGame(s.booth.id, s.booth.name, s.score, `${s.score} ${s.booth.unit ? (s.score === 1 ? s.booth.unit.replace(/s$/, '') : s.booth.unit) : s.booth.seconds ? 'points' : 'on the scale'}`); else hud.note('Nothing this time. Have another go!', 4000);
       }
       if (fair.after > 0 && (fair.after += dt) > 1.6) endGame();
     } else {
@@ -444,7 +465,7 @@ async function boot() {
     }
     if (fair.session && input.pressed('KeyE') && !(s.over)) { endGame(); hud.note(fair.kind === 'race' ? 'Race abandoned.' : 'Game left.'); }
   };
-  Object.assign(app, { fair, playBooth, playRace, endGame, fairStep });
+  Object.assign(app, { fair, playBooth, playRace, playWing, endGame, fairStep });
   queueMicrotask(() => Object.assign(app, { shop, refreshShop, adminKey, scoreGame }));
   world.games.events = {
     note: (text) => hud.note(text, 4200),
@@ -638,6 +659,17 @@ async function boot() {
     for (const sl of world.sponsorSlots || []) if (Math.abs(p.pos.y - sl.y) < 2.5 && near(p, [sl.x, sl.z], sl.reach)) return placeActions(sl.id)[1] || null;
     return null;
   });
+  // the golden dog above its cove: say hello at the foot of the plinth, and it answers
+  world.actionSources.push((p) => {
+    const c = world.places.crokmou;
+    if (!c || Math.abs(p.pos.y - c.y) > 3 || !near(p, [c.x, c.z], c.reach)) return null;
+    const name = c.name[0] + c.name.slice(1).toLowerCase();
+    return { label: `Say hello to ${name}`, run: () => {
+      audio.play('woof');
+      world.sparks.glitter(c.head.x, c.head.y, c.head.z, 5, 70);
+      hud.note(`Woof! ${name} is very pleased to see you.`, 4200);
+    } };
+  });
   // the stand of the wheel: its gondolas, who sponsors them, which are free
   world.actionSources.push((p) => {
     if (!world.pier.sponsorBooth || !near(p, world.pier.sponsorBooth, 2.6)) return null;
@@ -669,7 +701,7 @@ async function boot() {
       if (view?.mine || (who.admin && (pending[id]?.draft || view))) { const acts = placeActions(id); if (acts.length) return acts[0]; }
       if (v.forHire && !view) return { label: `Buy ${v.name} · ${money(v.price)} a month`, run: () => hireVillage(v) };
     }
-    return v.url && near(p, v.sign, 3.4) ? { label: `Visit ${v.name}`, run: () => window.open(v.url, '_blank', 'noopener,noreferrer') } : null;
+    return v.url && (near(p, v.sign, 3.4) || (!v.forHire && near(p, v.board, 3.2))) ? { label: `Visit ${v.name}`, run: () => window.open(v.url, '_blank', 'noopener,noreferrer') } : null;
   });
   Object.assign(app, { travel, sky });
   // ---------- the item shop: everything that is sold, on one screen (ui/ShopView.js)

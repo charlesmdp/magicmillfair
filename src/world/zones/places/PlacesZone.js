@@ -1,6 +1,7 @@
 // Places reached from the valley: the stairway cut in the rock and the temple high above, the terraces over
 // the great waterfall, the island and its winding path, the camp and its hammocks, the beanbags of the beach
-// and of the deck on the pond, the secret cove and the fall that drops from the cliffs into the sea.
+// and of the deck on the pond, the secret cove and the fall that drops from the cliffs into the sea, the
+// golden cove further up the coast and the dog that sits above it.
 // Each place is merged into one mesh per material and hidden when too far to matter.
 import * as THREE from 'three';
 import { Parts } from '../../props/MeshBuilder.js';
@@ -14,7 +15,8 @@ import { fallsRibbon } from '../../water/Falls.js';
 import { canvasBoard } from '../games/Boards.js';
 import { seatAt } from '../../../player/PlayerController.js';
 import { ANIM } from '../../../player/Character.js';
-import { STAIRWAY, VILLAGE, FALLS, COVE, ISLAND, islandPath, CAMP, BEACH_LOUNGE, POND_DECK, LEVELS, CAVES, GLADE } from '../../layout/layout.js';
+import { statueGeometry, goldMaterial } from './GoldenDog.js';
+import { STAIRWAY, VILLAGE, FALLS, COVE, ISLAND, islandPath, CAMP, BEACH_LOUNGE, POND_DECK, LEVELS, CAVES, GLADE, NORTH } from '../../layout/layout.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 // hammock and tent cloths
@@ -158,6 +160,7 @@ export class PlacesZone {
     this._terraces();
     this._glade();
     this._cove();
+    this._north();
     this._seaFall();
     this._island();
     this._camp();
@@ -180,6 +183,7 @@ export class PlacesZone {
     this._cull = distanceCuller(this.group, [
       [/^temple:(slate|matte|paint|granite)$/, Infinity], [/^temple:/, 420 * k], [/^stairway:rock$/, Infinity], [/^stairway:/, 420 * k],
       [/^terraces:rock$/, 600 * k], [/^terraces:/, 260 * k], [/^glade:/, 240 * k], [/^cove:/, 260 * k], [/^seafall/, Infinity],
+      [/^golden:(rock|granite)$/, 700 * k], [/^golden:/, 300 * k], // (the dog itself is a landmark: never hidden)
       [/^cave-\w+:cave$/, 170 * k], [/^cave-/, 80 * k], [/^island:/, 340 * k], [/^camp/, 230 * k], [/^beach:/, 280 * k], [/^deck:(woodDeck|woodWet)$/, 520 * k], [/^deck:/, 240 * k],
     ]);
     return this;
@@ -340,6 +344,143 @@ export class PlacesZone {
     const top = FALLS.stairs[FALLS.stairs.length - 1].points.at(-1);
     for (const [lx, lz] of [[top[0] + 2.6, top[1] + 1.6], [cx + 3.4, cz - 2.6], [-361.5, 203.5]]) { lantern(parts, lx, this.ground(lx, lz), lz, 2.0); this.colliders.push({ type: 'circle', x: lx, z: lz, r: 0.14 }); }
     this._add('glade', parts);
+  }
+
+
+  // ---------------------------------------------------------------------------
+  // The golden cove (see NORTH): a pocket of sand under the sea cliffs that one swims to, a stair cut across
+  // the face of the cliff, and on the ledge at its top a golden dog fifteen metres tall, sitting on a round
+  // plinth, looking out over the bay. Its name is on the plinth.
+
+  _north() {
+    const N = NORTH, S = N.statue, parts = new Parts();
+    const stone = parts.get('granite'), wood = parts.get('woodDark'), paint = parts.get('paint'), dry = parts.get('stone');
+    const GOLD = [1.5, 1.05, 0.25];
+    const ellipse = (E, k, n = 28) => Array.from({ length: n }, (_, i) => { const a = (i / n) * Math.PI * 2; return [E.x + Math.cos(a) * E.rx * k, E.z + Math.sin(a) * E.rz * k]; });
+    // where one walks: the sand, the stair (see _stairs), the ledge
+    this.areas.push(new Polygon(ellipse(N.cove, 0.97), { name: 'golden' }), new Polygon(ellipse(N.ledge, 0.955), { name: 'golden' }));
+    N.stairs.forEach((st) => this._stairs(st, 'golden'));
+    const st = N.stairs[0];
+    let steps = 0;
+    // a rope on the side of the drop, from post to post, all the way up; a lantern against the rock at each landing
+    for (let k = 0; k + 1 < st.points.length; k++) {
+      const [ax, az, ay] = st.points[k], [bx, bz, by] = st.points[k + 1];
+      const len = Math.hypot(bx - ax, bz - az), tx = (bx - ax) / len, tz = (bz - az) / len, run = len - 2 * st.landing;
+      steps += Math.round((by - ay) / 0.19);
+      const mx = (ax + bx) / 2, mz = (az + bz) / 2, o = st.width / 2 + 2.2;
+      const side = this.ground(mx - tz * o, mz + tx * o) < this.ground(mx + tz * o, mz - tx * o) ? 1 : -1; // the side that falls away
+      const sx = -tz * side, sz = tx * side, off = st.width / 2 + 0.1, n = Math.max(2, Math.round(run / 2.7));
+      let prev = null;
+      for (let i = 0; i <= n; i++) {
+        const d = st.landing + (run * i) / n, p = V(ax + tx * d + sx * off, ay + (by - ay) * (i / n), az + tz * d + sz * off);
+        wood.tint(0.8, 0.72, 0.6, 1).box(p.x - 0.06, p.y - 0.6, p.z - 0.06, p.x + 0.06, p.y + 1.05, p.z + 0.06, { tile: 1 });
+        if (prev) {
+          wood.tint(1.5, 1.3, 0.95, 1);
+          let q0 = prev.clone().setY(prev.y + 0.98);
+          for (let j = 1; j <= 4; j++) { const q = prev.clone().lerp(p, j / 4); q.y += 0.98 - Math.sin((j / 4) * Math.PI) * 0.14; wood.rod(q0, q, 0.022, 4, { caps: false }); q0 = q; }
+        }
+        prev = p;
+      }
+      if (k + 2 < st.points.length) lantern(parts, bx - sx * (st.landing + 0.55), by, bz - sz * (st.landing + 0.55), 2.0);
+    }
+    {
+      // on the sand: the prints of four very large paws, from the water to the foot of the stair; a sign there
+      const C = N.cove, y = C.y + 0.012, [fx, fz] = st.points[0];
+      const from = [C.x + 3.4, C.z + 5.6], to = [fx - 1.5, fz + 1.7], dx = to[0] - from[0], dz = to[1] - from[1], l = Math.hypot(dx, dz), ux = dx / l, uz = dz / l;
+      paint.tint(GOLD[0], GOLD[1], GOLD[2], 1);
+      for (let k = 0; k < 5; k++) {
+        const s = k % 2 ? 0.62 : -0.62, px = from[0] + dx * (k / 4) - uz * s, pz = from[1] + dz * (k / 4) + ux * s;
+        paint.place(px, y, pz, Math.atan2(ux, uz));
+        paint.cylinder(0, 0, 0, 0.34, 0.34, 0.012, 12);
+        for (const [tx, tz] of [[-0.36, 0.3], [-0.13, 0.5], [0.13, 0.5], [0.36, 0.3]]) paint.cylinder(tx, 0, tz, 0.125, 0.125, 0.012, 9);
+        paint.pop();
+      }
+      const sgx = fx + 2.3, sgz = fz + 1.3, yaw = Math.atan2(C.x - sgx, C.z - sgz), W = 1.7, H = 1.0;
+      const sign = canvasBoard(512, 300, (ctx, w, h) => {
+        const serif = "Georgia, 'Times New Roman', serif";
+        ctx.fillStyle = '#3b2616'; ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#e9b949'; ctx.lineWidth = 7; ctx.strokeRect(12, 12, w - 24, h - 24);
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#f6d98a'; ctx.font = `900 92px ${serif}`; ctx.fillText(`${steps} STEPS`, w / 2, 100, w - 60);
+        ctx.fillStyle = '#f3e6c8'; ctx.font = `italic 600 44px ${serif}`; ctx.fillText('to the best dog ever', w / 2, 182, w - 50);
+        ctx.fillStyle = '#e9b949'; ctx.font = `700 46px ${serif}`; ctx.fillText('▲', w / 2, 246);
+      }, W, H);
+      const sy = this.ground(sgx, sgz);
+      sign.mesh.position.set(sgx, sy + 1.25 + H / 2, sgz);
+      sign.mesh.rotation.y = yaw;
+      sign.mesh.name = 'golden:sign';
+      this.group.add(sign.mesh);
+      wood.tint(0.55, 0.42, 0.3, 1).place(sgx, sy, sgz, yaw).box(-W / 2 - 0.05, 1.2, -0.06, W / 2 + 0.05, 1.3 + H, -0.012, { tile: 1 }).box(-0.07, -0.4, -0.16, 0.07, 1.3 + H, -0.06, { tile: 1 }).pop();
+      this.colliders.push({ type: 'circle', x: sgx, z: sgz, r: 0.3 });
+    }
+    // ---- the ledge: a round plinth, the dog on it, its name on a tablet at the front
+    const E = N.ledge, y0 = E.y, PH = 2.0, PR = 7.05;
+    stone.tint(0.88, 0.86, 0.82, 1).place(S.x, y0, S.z, S.yaw);
+    stone.lathe([[PR + 0.3, -0.7], [PR + 0.3, 0.3], [PR, 0.44], [PR, PH - 0.4], [PR + 0.22, PH - 0.28], [PR + 0.22, PH - 0.06], [PR + 0.05, PH], [0, PH]], 44, { tile: 2 });
+    // (the tablet: a block that stands out of the drum, a moulding over it)
+    stone.tint(0.8, 0.78, 0.74, 1).box(-2.5, -0.3, PR - 0.6, 2.5, PH - 0.22, PR + 0.42, { tile: 2 });
+    stone.tint(0.9, 0.88, 0.84, 1).box(-2.66, PH - 0.22, PR - 0.6, 2.66, PH + 0.02, PR + 0.56, { tile: 2 });
+    stone.pop();
+    const fx = Math.sin(S.yaw), fz = Math.cos(S.yaw); // the way it looks
+    this.colliders.push({ type: 'circle', x: S.x, z: S.z, r: PR + 0.42 }, { type: 'box', x: S.x + fx * (PR + 0.1), z: S.z + fz * (PR + 0.1), hw: 2.75, hl: 0.55, yaw: S.yaw });
+    const plaque = canvasBoard(1024, 400, (ctx, w, h) => {
+      const serif = "Georgia, 'Times New Roman', serif";
+      // bronze, darker at the edges; a raised border; letters of polished gold
+      const bg = ctx.createLinearGradient(0, 0, 0, h); bg.addColorStop(0, '#5b3d1c'); bg.addColorStop(0.5, '#6f4c22'); bg.addColorStop(1, '#3f2a12');
+      ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = '#2a1b0a'; ctx.lineWidth = 16; ctx.strokeRect(8, 8, w - 16, h - 16);
+      ctx.strokeStyle = '#e2b24a'; ctx.lineWidth = 6; ctx.strokeRect(24, 24, w - 48, h - 48);
+      ctx.strokeStyle = '#a9792a'; ctx.lineWidth = 2; ctx.strokeRect(36, 36, w - 72, h - 72);
+      const gold = (y0g, y1g) => { const g = ctx.createLinearGradient(0, y0g, 0, y1g); g.addColorStop(0, '#fff3b0'); g.addColorStop(0.45, '#f6c64e'); g.addColorStop(0.55, '#d99a1c'); g.addColorStop(1, '#f9dd7c'); return g; };
+      const paw = (cx, cy, r) => { ctx.beginPath(); ctx.ellipse(cx, cy + r * 0.35, r * 0.62, r * 0.5, 0, 0, 7); ctx.fill(); for (const [ox, oy] of [[-0.66, -0.18], [-0.24, -0.62], [0.24, -0.62], [0.66, -0.18]]) { ctx.beginPath(); ctx.ellipse(cx + ox * r, cy + oy * r, r * 0.21, r * 0.27, ox * 0.5, 0, 7); ctx.fill(); } };
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `900 190px ${serif}`;
+      ctx.fillStyle = '#231505'; ctx.fillText(S.name, w / 2 + 5, 158 + 6, w - 300);
+      ctx.fillStyle = gold(70, 240); ctx.fillText(S.name, w / 2, 158, w - 300);
+      ctx.fillStyle = '#e2b24a'; ctx.fillRect(w / 2 - 250, 262, 500, 4);
+      ctx.font = `700 74px ${serif}`;
+      ctx.fillStyle = '#231505'; ctx.fillText(S.plaque.split('').join(' '), w / 2 + 3, 322 + 4, w - 200);
+      ctx.fillStyle = gold(288, 356); ctx.fillText(S.plaque.split('').join(' '), w / 2, 322, w - 200);
+      ctx.fillStyle = '#e9bd55'; paw(96, 150, 44); paw(w - 96, 150, 44);
+    }, 4.6, 1.8);
+    plaque.mesh.position.set(S.x + fx * (PR + 0.435), y0 + 0.86, S.z + fz * (PR + 0.435));
+    plaque.mesh.rotation.y = S.yaw;
+    plaque.mesh.name = 'golden:plaque';
+    this.group.add(plaque.mesh);
+    // the dog itself (its mesh is baked: see GoldenDog.js), and its shadow across the ledge
+    const dog = new THREE.Mesh(statueGeometry(this.data.statue, S.height), goldMaterial());
+    dog.name = 'golden-dog';
+    dog.position.set(S.x, y0 + PH, S.z);
+    dog.rotation.y = S.yaw;
+    dog.matrixAutoUpdate = false;
+    dog.updateMatrix();
+    for (const l of this.cast) dog.layers.enable(l);
+    this.group.add(dog);
+    {
+      // a parapet of dry stone wherever the ledge ends in a drop (not where the stair arrives), lanterns at its ends
+      const [tx, tz] = st.points[st.points.length - 1], entry = Math.atan2(tz - E.z, tx - E.x), runs = [];
+      let cur = null;
+      for (let d = -180; d <= 180; d += 6) {
+        const a = (d * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a);
+        let da = Math.abs(a - entry); if (da > Math.PI) da = 2 * Math.PI - da;
+        const open = da > 0.3 && this.ground(E.x + c * (E.rx + 2.6), E.z + s * (E.rz + 2.6)) < y0 - 1.2;
+        if (open) { if (!cur) runs.push((cur = [])); cur.push([E.x + c * (E.rx + 0.12), E.z + s * (E.rz + 0.12)]); } else cur = null;
+      }
+      for (const line of runs) {
+        if (line.length < 3) continue;
+        dry.tint(1, 1, 1, 1); stone.tint(0.84, 0.83, 0.8, 1);
+        wall(dry, line.map(([x, z]) => [x, z, y0 + 0.95]), { thickness: 0.5, groundAt: this.ground, depth: 1.4, tile: 2, cap: stone });
+        for (const [x, z] of [line[0], line[line.length - 1]]) lantern(parts, x + (E.x - x) * 0.06, y0, z + (E.z - z) * 0.06, 2.0);
+      }
+      // two benches by the parapet, turned towards the dog
+      for (const d of [14, 42]) {
+        const a = (d * Math.PI) / 180, bx = E.x + Math.cos(a) * E.rx * 0.8, bz = E.z + Math.sin(a) * E.rz * 0.8;
+        this._bench(stone, bx, y0 + 0.02, bz, Math.atan2(S.x - bx, S.z - bz));
+      }
+    }
+    /** Where one says hello to it (at the tablet), and where its head is. */
+    this.crokmou = { name: S.name, x: S.x + fx * (PR + 2.2), y: y0, z: S.z + fz * (PR + 2.2), reach: 4.2, head: { x: S.x + fx * S.height * 0.2, y: y0 + PH + S.height * 0.82, z: S.z + fz * S.height * 0.2 } };
+    this._add('golden', parts);
   }
 
   // ---------------------------------------------------------------------------

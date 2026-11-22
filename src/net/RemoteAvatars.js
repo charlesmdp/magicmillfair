@@ -109,6 +109,9 @@ export class RemoteAvatars {
       if (seen) {
         character.setAnim(peer.anim, peer.speed);
         character.setLook(peer.flags);
+        // (whoever flies on the stage of the theatre has wings on)
+        const winged = peer.anim === ANIM.swim && !!this.world?.games?.wing?.inside(peer.x, peer.y, peer.z);
+        if (winged || character.wings?.visible) { character.setWings(winged); if (winged) character.wingBeat = 0.35; }
         character.setLight(dist > full);
         // near avatars animate every frame, the others every other frame, far ones at a quarter of the frame rate
         const every = dist <= full ? 1 : dist < 90 ? 2 : 4;

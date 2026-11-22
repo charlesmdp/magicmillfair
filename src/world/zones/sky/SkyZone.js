@@ -14,6 +14,7 @@ import { fallsMaterial } from '../../water/Falls.js';
 import { seatAt } from '../../../player/PlayerController.js';
 import { SKY } from '../../layout/layout.js';
 import { SPONSORS, sponsorId, VILLAGE_PRICES, VILLAGE_PERKS, VILLAGE_PITCH, money } from '../../layout/sponsors.js';
+import { drawEmblem } from './emblems.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const STONE = [1.05, 1.02, 0.96], WALL = [1.75, 1.66, 1.46], DARK = [0.2, 0.2, 0.24], WOOD = [0.62, 0.44, 0.28];
@@ -74,6 +75,55 @@ void main() {
 }
 `;
 
+/**
+ * An orca leaping out of a round basin: the fountain of a village that has one. Built at the local origin of
+ * the builders (stone, skin, fins, water); it leaps towards the local direction `turn`.
+ */
+function orcaFountain(stone, skin, fins, water, cx, cz, turn) {
+  stone.tint(STONE[0], STONE[1], STONE[2], 1).place(cx, 0, cz).lathe([[1.3, -0.3], [1.3, 0.36], [1.2, 0.44], [1.06, 0.44], [1.02, 0.26], [0.0, 0.26]], 16).pop();
+  water.tint(0.07, 0.24, 0.42, 1).cylinder(cx, 0.3, cz, 1.03, 1.03, 0.02, 16);
+  const BLACK = [0.035, 0.04, 0.055, 1], WHITE = [0.96, 0.96, 0.94, 1], L = 2.7, N = 14, S = 12;
+  // the spine: it comes out of the water almost upright and arcs over; `t` runs from the tail stock to the snout
+  const spine = [];
+  let py = 0.05, pz = -0.35;
+  for (let k = 0; k <= N; k++) {
+    const t = k / N, th = 1.42 - 1.0 * t; // how steeply it rises there
+    spine.push({ t, p: V(0, py, pz), T: V(0, Math.sin(th), Math.cos(th)), U: V(0, Math.cos(th), -Math.sin(th)) }); // (U: towards its back)
+    py += (Math.sin(th) * L) / N; pz += (Math.cos(th) * L) / N;
+  }
+  const radius = (t) => 0.4 * Math.sin(Math.PI * (0.1 + t * 0.855)) ** 0.62; // (a blunt head, a narrow tail stock)
+  const at = (k, a) => { const s = spine[k], r = radius(s.t); return V(Math.cos(a) * r, 0, 0).addScaledVector(s.U, Math.sin(a) * r * 1.08).add(s.p); };
+  // (black above, white below: the belly, the throat, the chin)
+  const tone = (k, a) => (Math.sin(a) < -0.3 && spine[k].t > 0.1 ? WHITE : BLACK);
+  skin.place(cx, 0, cz, turn);
+  for (let k = 0; k < N; k++) for (let j = 0; j < S; j++) {
+    const a0 = (j / S) * Math.PI * 2, a1 = ((j + 1) / S) * Math.PI * 2, am = (a0 + a1) / 2;
+    skin.quad(at(k, a0), at(k, a1), at(k + 1, a1), at(k + 1, a0), { color: tone(k, am), tile: 1 });
+  }
+  // the snout closed, the white patch behind each eye
+  for (let j = 0; j < S; j++) { const a0 = (j / S) * Math.PI * 2, a1 = ((j + 1) / S) * Math.PI * 2; skin.tri(at(N, a0), at(N, a1), spine[N].p.clone().addScaledVector(spine[N].T, 0.1), { color: tone(N, (a0 + a1) / 2), tile: 1 }); }
+  for (const g of [-1, 1]) {
+    const s = spine[Math.round(N * 0.82)], r = radius(s.t), c = V(g * Math.cos(0.5) * r * 0.96, 0, 0).addScaledVector(s.U, Math.sin(0.5) * r * 1.02).add(s.p);
+    const m = new THREE.Matrix4().makeBasis(s.T, s.U, V(-1, 0, 0)).setPosition(c).multiply(new THREE.Matrix4().makeScale(0.16, 0.07, 0.035));
+    skin.tint(WHITE[0], WHITE[1], WHITE[2], 1).push(m).lathe([[0.0, -1], [0.7, -0.7], [1.0, 0.0], [0.7, 0.7], [0.0, 1]], 8, { tile: 1 }).pop();
+  }
+  skin.pop();
+  // the fins (thin: seen from both sides): the tall one on its back, a paddle on each side
+  fins.place(cx, 0, cz, turn).tint(BLACK[0], BLACK[1], BLACK[2], 1);
+  {
+    const a = spine[Math.round(N * 0.62)], b = spine[Math.round(N * 0.42)];
+    const A = a.p.clone().addScaledVector(a.U, radius(a.t) * 1.0), B = b.p.clone().addScaledVector(b.U, radius(b.t) * 1.0);
+    fins.tri(A, B, B.clone().addScaledVector(b.U, 0.62).addScaledVector(b.T, -0.06));
+    for (const g of [-1, 1]) {
+      const s = spine[Math.round(N * 0.7)], r = radius(s.t), root = V(g * r * 0.92, 0, 0).addScaledVector(s.U, -r * 0.35).add(s.p);
+      fins.tri(root.clone().addScaledVector(s.T, 0.2), root.clone().addScaledVector(s.T, -0.2), root.clone().add(V(g * 0.5, 0, 0)).addScaledVector(s.U, -0.2).addScaledVector(s.T, -0.36));
+    }
+  }
+  fins.pop();
+  // white water where it breaks the surface
+  for (let k = 0; k < 7; k++) { const a = k * 0.9 + turn; water.tint(0.42, 0.47, 0.52, 1).place(cx + Math.sin(a) * 0.36, 0.3, cz + Math.cos(a) * 0.36 - 0.2).lathe([[0.0, 0.0], [0.15, 0.03], [0.11, 0.12], [0.0, 0.2 + 0.07 * (k % 3)]], 6).pop(); }
+}
+
 export class SkyZone {
   constructor(world) {
     this.world = world;
@@ -94,6 +144,7 @@ export class SkyZone {
     this._portals = []; // quads to merge: [centre, right, up]
     this._signs = [];
     this._perks = [];
+    this._brands = []; // the boards of the villages that have something to say of themselves (see sponsors.js: pitch)
   }
 
   build() {
@@ -108,11 +159,12 @@ export class SkyZone {
     this._buildPortals();
     this._buildSigns();
     this._buildPerks();
+    this._buildBrands();
     this._torrents();
     this.group.updateMatrixWorld(true);
     this.group.traverse((o) => { if (o.isMesh) o.layers.disable(LAYER.REFLECT); });
     const k = this.world.engine.tier.phone ? 0.6 : 1;
-    this._cull = distanceCuller(this.group, [[/^sky\d:matte$/, 1300], [/^sky\d:/, 420 * k], [/^skyv\d+:/, 150], [/^skygate:/, 600 * k], [/^sky-(portals|signs|perks|torrents)$/, Infinity]]);
+    this._cull = distanceCuller(this.group, [[/^sky\d:matte$/, 1300], [/^sky\d:/, 420 * k], [/^skyv\d+:/, 150], [/^skygate:/, 600 * k], [/^sky-(portals|signs|perks|torrents)$/, Infinity], [/^sky-brand$/, 260]]);
     return this;
   }
 
@@ -197,12 +249,22 @@ export class SkyZone {
 
     // ---- before the ring: six cushions round an incense burner
     {
-      const bz = 4.6;
-      n.tint(STONE[0] * 0.9, STONE[1] * 0.9, STONE[2] * 0.9, 1).place(0, 0, bz).lathe([[0.3, -0.3], [0.3, 0.1], [0.14, 0.2], [0.14, 0.42]], 7).pop();
-      n.tint(BRONZE[0], BRONZE[1], BRONZE[2], 1).place(0, 0.42, bz).lathe([[0.12, 0.0], [0.36, 0.14], [0.4, 0.3], [0.33, 0.33], [0.0, 0.3]], 9).pop();
-      glow.tint(1.0, 0.55, 0.2, 1).cylinder(0, 0.73, bz, 0.2, 0.02, 0.16, 6, { capBottom: false });
-      circle(0, bz, 0.5);
-      for (let k = 0; k < 6; k++) { const a = Math.PI / 6 + (k / 6) * Math.PI * 2; cushion(Math.sin(a) * 2.0, bz + Math.cos(a) * 2.0, a + Math.PI, k); }
+      const bz = 4.6, fountain = who.centre === 'orca';
+      if (fountain) {
+        // (its skin shines: a material of its own, for this village only)
+        const skin = close.get('paint'), fins = close.get('doubleSided');
+        skin.place(x, y, z, yaw);
+        orcaFountain(n, skin, fins, glow, 0, bz, 1.25);
+        skin.pop();
+        circle(0, bz, 1.4);
+      } else {
+        n.tint(STONE[0] * 0.9, STONE[1] * 0.9, STONE[2] * 0.9, 1).place(0, 0, bz).lathe([[0.3, -0.3], [0.3, 0.1], [0.14, 0.2], [0.14, 0.42]], 7).pop();
+        n.tint(BRONZE[0], BRONZE[1], BRONZE[2], 1).place(0, 0.42, bz).lathe([[0.12, 0.0], [0.36, 0.14], [0.4, 0.3], [0.33, 0.33], [0.0, 0.3]], 9).pop();
+        glow.tint(1.0, 0.55, 0.2, 1).cylinder(0, 0.73, bz, 0.2, 0.02, 0.16, 6, { capBottom: false });
+        circle(0, bz, 0.5);
+      }
+      const ring = fountain ? 2.45 : 2.0;
+      for (let k = 0; k < 6; k++) { const a = Math.PI / 6 + (k / 6) * Math.PI * 2; cushion(Math.sin(a) * ring, bz + Math.cos(a) * ring, a + Math.PI, k); }
     }
 
     // ---- at the edge: three stone benches that look down on the valley, lanterns between them
@@ -241,6 +303,7 @@ export class SkyZone {
     };
     this._signs.push(board(-5.6, 5.6, 0.75, 3.0, 1.5, 1.1));
     if (who.forHire) this._perks.push(board(5.6, 5.6, -0.75, 2.3, 2.3, 0.7));
+    else if (who.pitch || who.emblem) this._brands.push(board(5.6, 5.6, -0.75, 2.3, 2.3, 0.7));
     for (const b of all) b.pop();
 
     // the ring one arrives through, its back to the hall
@@ -255,6 +318,7 @@ export class SkyZone {
     this.villages.push({
       index: i, id: sponsorId(who), name: who.name, motto: who.forHire ? `For sale · ${money(price)} a month` : who.motto || '', url: /^https:\/\//.test(who.url || '') ? who.url : null, color: col,
       forHire: !!who.forHire, tier, price, x, y, z, yaw, arrive: [ax, az, yaw], ring: [rx, rz], sign: [gx, gz], board: [px, pz], // (one arrives looking at the valley)
+      emblem: who.emblem || null, pitch: who.pitch || null, demo: !!who.demo,
     });
     // six sectors round the valley, so that what is behind the camera is not drawn
     const sector = Math.floor(((Math.atan2(z, x + 60) + Math.PI) / (2 * Math.PI)) * 6) % 6;
@@ -312,14 +376,16 @@ export class SkyZone {
       const rgb = v.color.map((q) => Math.round(Math.min(1, q * 1.15) * 255));
       ctx.fillStyle = '#f6f1e4'; ctx.fillRect(cx, cy, CW, CH);
       ctx.fillStyle = `rgb(${rgb})`; ctx.fillRect(cx, cy, CW, 30); ctx.fillRect(cx, cy + CH - 12, CW, 12);
+      // (an emblem takes the left of the sign; the name and the line under it share what is left)
+      const mark = v.emblem && !v.forHire && drawEmblem(ctx, v.emblem, cx + 70, cy + 104, 116, `rgb(${rgb})`), mid = cx + (mark ? 264 : CW / 2), room = mark ? CW - 150 : CW - 36;
       ctx.fillStyle = '#1b2a22'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       let size = 62;
-      do { ctx.font = `700 ${size}px Georgia, 'Times New Roman', serif`; size -= 2; } while (ctx.measureText(v.name).width > CW - 36 && size > 20);
-      ctx.fillText(v.name, cx + CW / 2, cy + (v.motto ? 96 : 110));
+      do { ctx.font = `700 ${size}px Georgia, 'Times New Roman', serif`; size -= 2; } while (ctx.measureText(v.name).width > room && size > 20);
+      ctx.fillText(v.name, mid, cy + (v.motto ? 96 : 110));
       if (v.motto) {
         size = 26;
-        do { ctx.font = `500 ${size}px system-ui, sans-serif`; size -= 1; } while (ctx.measureText(v.motto).width > CW - 30 && size > 12);
-        ctx.fillStyle = '#5a5140'; ctx.fillText(v.motto, cx + CW / 2, cy + 150);
+        do { ctx.font = `500 ${size}px system-ui, sans-serif`; size -= 1; } while (ctx.measureText(v.motto).width > room + 6 && size > 12);
+        ctx.fillStyle = '#5a5140'; ctx.fillText(v.motto, mid, cy + 150);
       }
     };
     this._signs.forEach((sg, k) => {
@@ -427,6 +493,49 @@ export class SkyZone {
   }
 
   // The boards of the villages for hire: the same face for all (one small sheet, one mesh)
+  // The boards of the villages that say something of themselves: their emblem, their name, a few lines.
+  // One sheet each (there are few of them), all in one mesh per board.
+  _buildBrands() {
+    const up = V(0, 1, 0);
+    for (const sg of this._brands) {
+      const v = this.villages[sg.i], S = 512, canvas = document.createElement('canvas');
+      canvas.width = S; canvas.height = S;
+      const ctx = canvas.getContext('2d'), rgb = `rgb(${v.color.map((q) => Math.round(Math.min(1, q * 1.15) * 255))})`;
+      ctx.fillStyle = '#f8f5ec'; ctx.fillRect(0, 0, S, S);
+      ctx.fillStyle = rgb; ctx.fillRect(0, 0, S, 16); ctx.fillRect(0, S - 62, S, 62);
+      const lines = v.pitch || [], top = v.emblem && drawEmblem(ctx, v.emblem, S / 2, 112, 176, rgb) ? 214 : 40;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#101a2c';
+      let size = 60;
+      do { ctx.font = `800 ${size}px system-ui, sans-serif`; size -= 2; } while (ctx.measureText(v.name).width > S - 60 && size > 24);
+      ctx.fillText(v.name, S / 2, top + 30);
+      ctx.fillStyle = rgb; ctx.fillRect(S / 2 - 40, top + 66, 80, 5);
+      lines.slice(0, 4).forEach((line, k) => {
+        ctx.fillStyle = k ? '#39445a' : '#101a2c'; ctx.font = `${k ? 500 : 700} ${k ? 24 : 27}px system-ui, sans-serif`;
+        ctx.fillText(line, S / 2, top + 100 + k * 36, S - 44);
+      });
+      ctx.fillStyle = '#ffffff'; ctx.font = '700 23px system-ui, sans-serif';
+      ctx.fillText(v.url ? `${v.url.replace(/^https:\/\//, '')} — step up to visit` : v.name, S / 2, S - 40, S - 30);
+      if (v.demo) { ctx.fillStyle = 'rgba(255,255,255,0.82)'; ctx.font = '500 15px system-ui, sans-serif'; ctx.fillText('A demonstration village: yours could look like this', S / 2, S - 15, S - 30); }
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 4;
+      const pos = new Float32Array(12), uv = new Float32Array(8);
+      [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([a, b], q) => {
+        const p = sg.centre.clone().addScaledVector(sg.right, (a * sg.w) / 2).addScaledVector(up, (b * sg.h) / 2);
+        pos.set([p.x, p.y, p.z], q * 3);
+        uv.set([(a + 1) / 2, (b + 1) / 2], q * 2);
+      });
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      geo.setIndex([0, 1, 2, 0, 2, 3]);
+      const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
+      mesh.name = 'sky-brand';
+      this.group.add(mesh);
+    }
+  }
+
   _buildPerks() {
     if (!this._perks.length) return;
     const S = 512, canvas = document.createElement('canvas');

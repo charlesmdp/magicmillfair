@@ -34,14 +34,16 @@ export class WorldData {
   async load(onProgress = () => {}) {
     const names = ['height', 'water', 'normal', 'splat0', 'splat1', 'splat2', 'tint', 'backdrop'];
     let done = 0;
-    const tick = () => onProgress(++done / (names.length + 2));
-    const [meta, treesBuf, ...imgs] = await Promise.all([
+    const tick = () => onProgress(++done / (names.length + 3));
+    const [meta, treesBuf, statue, ...imgs] = await Promise.all([
       fetch(`${BASE}world.json`).then((r) => r.json()).then((v) => (tick(), v)),
       fetch(`${BASE}trees.bin`).then((r) => r.arrayBuffer()).then((v) => (tick(), v)),
+      fetch(`${BASE}statue.bin`).then((r) => r.arrayBuffer()).then((v) => (tick(), v)), // the golden dog (tools/bake-statue.mjs)
       ...names.map((n) => loadPixels(`${BASE}${n}.png`).then((v) => (tick(), v))),
     ]);
     const [height, water, normal, splat0, splat1, splat2, tint, backdrop] = imgs;
     this.meta = meta;
+    this.statue = statue;
     const N = (this.size = meta.size);
     this.half = N / 2;
     const [hMin, hMax] = meta.heightRange;

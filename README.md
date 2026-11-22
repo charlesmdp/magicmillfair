@@ -240,15 +240,35 @@ round the ring (50). The emote panel shows where you stand; the administrator ha
     a flash at the top, never twice at the same pace, quicker at each of three blows — and the scale is
     anything but fair: nine tenths of the way up is worth 5,900. The best blow counts; the bell rings from
     9,000, which takes a blow given within a hundredth of a second.
-- **Quadmania**: a gravel track loops round the wheat fields, north of the mill. In the paddock by the
-  striped arch, press E: you are put on a quad behind the line — three, two, one — for three laps against
-  the clock, seen from low behind the quad. Hold the drift button in a bend to slide through it (let go
-  after a good slide and the quad leaps forward), hop with the jump button, take the three pads of light
-  (a second of extra speed each) and the ramp, or go round it. Leaving the track for the grass is slow;
-  cutting across the fields does not count. A bot that never drifts needs about forty-five seconds.
+- **Quadmania**: 412 m of gravel track north of the mill — up a long straight, an S through a grove
+  planted for it (the trunks stand a couple of metres from the track), back along the foot of the crags,
+  round the wheat field and through a hairpin to the line. In the paddock under the striped tent, press E:
+  you are put on a quad behind the line, under the gantry — three red lights, then green — for three laps
+  against the clock, seen from low behind the quad. Hold the drift button in a bend to slide through it
+  (let go after a good slide and the quad leaps forward) and hop with the jump button. On the way: four
+  **pads** of running chevrons of light, each between two posts topped with arrows of light (a second of
+  extra speed); two **chicanes** (two walls of bales, one from each side); three **logs** lying across half
+  the track (hop them at full speed, or go round: driven into, a log is a wall); and the **ramp**, at the
+  end of a funnel of bales that brings every quad onto it: taken at speed, right after its pad, it throws
+  the quad five metres up for more than a second. Red and white kerbs mark the inside of the bends, bales
+  the outside, boards of arrows the sharp ones. Leaving the track for the grass is slow; cutting across
+  the fields does not count. There is a stand with an awning beside the straight (eighteen places to sit
+  and watch). A bot that never drifts and goes round every log needs about 73 seconds.
+- **Wing It**: the little theatre on the plaza at the foot of the pier. Step up before its stage and press
+  E: a pair of wings is strapped on your back and you are hung in the middle of the stage, in front of
+  everybody. Click, tap or press Space to flap; the rest of the time you fall. You do not travel: the
+  scenery does — painted clouds and hills scroll behind, three rows of waves rock at the bottom, and
+  candy-striped columns come by in pairs, one hanging from the flies, one standing in the waves, with a
+  gap to fly through. Each pair passed is a point; they come faster and the gap narrows as the flight
+  goes on. Touch a column or the waves: feathers, a splash, and the flight is on the board beside the
+  theatre. When nobody is flying the scenery idles along for the passers-by.
 - **The Grandstand**: the striped tower behind the lawn. Its stair winds round it for twelve turns, with a
   landing on each that faces the climb, up to a deck 84 m above the lawn: the place to watch friends climb
   and cheer them on (Cheer, Clap, Jump for joy, Go! Go!). Nobody gets from the tower into the game.
+- **The diving boards**: on the other side of the tower, three planks with a red tip stick out over the
+  Splash Pool — *The Toe Dip* (32 m above the water), *The Belly Flop* (60 m) and, off the top deck, *The
+  Leap of Faith* (84 m). Walk off the end and let go of the keys: one falls head first, like a swan. A
+  ring of red and white floats marks the middle of the pool; the water is deep there, and only there.
 - **The big red button**: at the top of the island, beside a sign that says *FREE NUCLEAR EXPLOSION! —
   Everything is destroyed already anyway, so enjoy the show!* Press it: a siren winds up, the screen
   whitens, and far out at sea a fireball rises into a mushroom cloud that everybody in the room sees, from
@@ -381,6 +401,15 @@ A village is hired through the shop (see above): its holder then names it, at it
 administrator approves. Without the shop, a village is given to a company by editing its line in
 `src/world/layout/sponsors.js` (name, motto, colours, web address): it then stops being for hire.
 
+**A demonstration.** One village is dressed as an example of what a brand can do with one: the lowest of
+the south-east, over the beach, taken by *orka.chat* (`?village=orka` goes straight there). Besides the
+name, the motto, the colours of the roofs and of the flag and the link, a line of `sponsors.js` can give a
+village an **emblem** (drawn on its sign and on its board: shapes kept in `zones/sky/emblems.js`), a
+**pitch** (up to four lines, on a board of its own where the "for sale" board stood, with the link offered
+there too) and a **centre** (what stands in the middle of its cushions instead of the incense burner: here
+a fountain with an orca leaping out of it). The emblem of the demonstration — an orca in a speech bubble —
+was drawn for this game: it is not the company's own logo, which this project does not have.
+
 ## The world
 
 The valley floor is about 530 m by 360 m, the cove included — some 15 hectares (the terrain itself is
@@ -423,6 +452,12 @@ mountain, under the rock, out at sea.
   round it, ten beanbag chairs facing the sea, three hammocks, low tables, lanterns, a chest — and what is
   left of a party: a crate and a keg of OIL, empties in the sand (these are robots). Twenty-one places to
   sit. The sea can also be swum northwards along the cliffs, as far as the fall that drops into it.
+- **The Golden Cove**: not on the map either. Swim on northwards past the fall: a pocket of sand under the
+  cliffs, the prints of four very large paws in it, and a stair of 225 steps cut across the face of the
+  cliff, a rope on the side of the drop. It climbs to a ledge 44 m above the sea where a dog of polished
+  gold, fifteen metres tall, sits on a round plinth and looks out over the bay — an Australian shepherd,
+  its ball by its foot. The tablet on the plinth says who it is. Step up to it and say hello: it answers.
+  (It is seen from the open sea, from the island and from the end of the pier.)
 - **The island**: a rock 35 m high, about 80 m off the beach (swim across from the north end of the cove).
   A path winds two and a quarter times round it up to a flat top with a ring of standing stones. Along the
   way: nine hollows cut in the rock on the inner side and, on the outer side, eight timber walkways out over
@@ -572,6 +607,12 @@ foliage, flowers): there is not a single photograph in the project, everything i
 
 To change the world: edit `layout.js`, run `npm run bake:world` again, reload the page.
 
+The golden dog of the cove is baked too: `tools/bake-statue.mjs` describes it as a blend of some fifty
+rounded shapes (a signed distance field: eggs, limbs, flaps for the ears, a ring for the collar), turns the
+field into a smooth mesh (surface nets, the normals and the light kept by the hollows taken from the field
+itself) and writes about ten thousand vertices to `public/assets/world/statue.bin` (224 KB, loaded with the
+maps). To change the sculpture: edit the shapes, run `npm run bake:statue -- --preview=dog.png`, look.
+
 ### Adding a zone or a game
 
 1. Describe its footprint in `layout.js` (level areas in `PADS`, paths in `PATHS`, an entry in `ZONES`;
@@ -603,7 +644,14 @@ Building blocks added with the places and the games (`zones/places/PlacesZone.js
 - **Something to do on the spot**: `world.actionSources.push((player) => near ? { label, run } : null)`
   offers an action (E, or L for a second one); `hud.choose(title, lead, items)` asks to pick from a list.
 - **A game with a leaderboard**: add its id to `BOARDS` in `server/scores.js`, then `new Scores(id)` in the
-  game: `top()` and `submit(name, ms)`.
+  game: `top()` and `submit(name, ms)`. (`each`: for points that take time to make — a score cannot arrive
+  sooner than its points could have been made.)
+- **A game that moves the player itself**: `player.driver = { step(dt, player), anim, riding }` — the game
+  writes the position, the heading, the pitch every frame; `anim` is how the avatar holds itself (the race
+  sits it on a quad; the flying theatre, in `zones/games/Wing.js`, hangs it in the air in the pose of a
+  swimmer, wings on: `character.setWings(true)`).
+- **Polished metal**: `surfaceMaterial({ metal: true, color })` shows the sky, the horizon and the ground
+  in the colour of the metal (the gold of the statue, `zones/places/GoldenDog.js`).
 
 ### Multiplayer
 
@@ -716,13 +764,14 @@ that is the last point. Going further means a referee: the server replaying the 
 
 | Command | What it does |
 |---|---|
-| `npm run bake` | bakes the world and the textures again |
-| `npm test` | 158 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures) |
-| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (107 in all) |
+| `npm run bake` | bakes the world, the statue and the textures again |
+| `npm run bake:statue` | sculpts the golden dog again (`-- --preview=dog.png` also draws it from five sides, `-- --cell=0.012` makes a finer mesh) |
+| `npm test` | 175 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures) |
+| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (120 in all) |
 | `npm run test:shop` | the shop in the real game, on the Node server with test keys and a stand-in for Stripe: a hat bought and worn, the panel of a game sponsored, filled in (with a logo) and approved by the administrator, the stand of the gondolas (8 checks) |
 | `npm run test:smoke` | drives the real site: welcome screen, walking, free camera, settings, large map (`-- --mobile` for the touch layout) |
 | `npm run test:audio` | Listens to the sound engine without ears: in headless Chromium it renders a dozen listener scenarios (beach, cliffs, pier, woods, mill, waterfall, cave, sky village, the climb…) and every one-shot effect through an offline audio context, measures level, spectrum, how the loudness moves and how tonal it is, fails on silence or clipping, and times `update()` (about 0.01 ms a frame) |
-| `npm run test:walk` | 41 checks in the real game: pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls and the high clearing above them, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the fifty sky villages (prices, places to sit, the board of one for hire), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the four booths (a bot plays each through the pointer; boards), the quad race (a bot drives three laps), the acid pond, the shark, change of tier |
+| `npm run test:walk` | 44 checks in the real game: pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls and the high clearing above them, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the fifty sky villages (prices, places to sit, the board of one for hire, the one dressed as a demonstration), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the four booths (a bot plays each through the pointer; boards), the quad race (a bot drives three laps round the logs and through the chicanes, and flies off the ramp), a log hopped at full speed, the flying theatre (a bot flaps through nine pairs of columns), the acid pond, the shark, change of tier |
 | `npm run test:duo` | two visitors on the production server: they must see each other move, wave, summon an animal, chat and sit down (`-- --cloudflare` for the Cloudflare version) |
 | `npm run bench` | benchmark tour for each tier (`-- --mobile` for the phone profile) |
 | `npm run profile` | cost of each system (script, draw calls, triangles) at seven viewpoints |

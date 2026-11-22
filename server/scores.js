@@ -19,15 +19,17 @@ import { cleanName } from './protocol.js';
 
 /**
  * board id → what a score is. order 'asc': a time in ms, the lower the better, and the run lasted about that
- * long; order 'desc': points, and the game lasts `length` ms (never less). min / max: what is believed.
+ * long; order 'desc': points, and the game lasts `length` ms (never less), plus `each` ms for every point
+ * where points take time to make. min / max: what is believed.
  */
 export const BOARDS = {
   sky: { order: 'asc', min: 100_000, max: 6 * 3600_000 }, // the climb: a bot that never misses needs about 150 s
-  race: { order: 'asc', min: 30_000, max: 3600_000 }, // three laps on a quad: a bot that takes every pad needs about 45 s
+  race: { order: 'asc', min: 45_000, max: 3600_000 }, // three laps on a quad: a bot that takes every pad needs about 73 s, nobody under 51
   shoot: { order: 'desc', min: 1, max: 9999, length: 45_000 }, // the shooting gallery
   mole: { order: 'desc', min: 1, max: 9999, length: 45_000 }, // whack-a-mole
   milk: { order: 'desc', min: 1, max: 9999, length: 45_000 }, // milk for the clown
   bell: { order: 'desc', min: 1, max: 9999, length: 4_000 }, // the high striker: the best of three blows of the mallet
+  wing: { order: 'desc', min: 1, max: 2000, each: 800 }, // the flying theatre: a point for each pair of columns passed, and no pair comes in less than 0.8 s
 };
 export const KEPT = { all: 200, month: 100, week: 100, day: 100 }, SHOWN = 10;
 export const PERIODS = ['day', 'week', 'month', 'all'];
@@ -116,5 +118,5 @@ export function runFits(note, { board, score }, at = Date.now()) {
   if (elapsed < 0 || elapsed > rule.max + 3600_000) return 'expired';
   // (a run may well have lasted longer than its clock says — the game stops while its tab is hidden — never less)
   if (rule.order === 'asc') return elapsed >= score - SLACK ? '' : 'the time does not match the run';
-  return elapsed >= (rule.length || 0) - 2000 ? '' : 'too soon';
+  return elapsed >= (rule.length || 0) + (rule.each || 0) * score - 2000 ? '' : 'too soon';
 }

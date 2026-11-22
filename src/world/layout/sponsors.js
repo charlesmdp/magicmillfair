@@ -8,6 +8,10 @@
 //   url    optional: a web address offered to visitors by the sign ("Visit …"); https only
 //   id     optional: what goes in the address of the game to arrive there directly (?village=id);
 //          by default the name in lower case, with dashes
+//   emblem optional: a drawing for its sign and its board (one of the names of zones/sky/emblems.js)
+//   pitch  optional: up to four short lines for its board, which stands where the "for sale" board stood
+//   centre optional: what stands in the middle of its cushions instead of the incense burner ('orca': a fountain)
+//   demo   optional: true for a village dressed as an example of what a brand can do with one
 //
 // Until a village is taken it carries a made-up name and says so (`forHire`), with what it costs.
 //
@@ -41,6 +45,13 @@ export const SPONSORS = names.map((name, i) => ({ name, motto: FOR_HIRE, color: 
 
 // Example — a village that has been taken:
 // SPONSORS[0] = { name: 'Acme Robotics', motto: 'Friendly machines since 1999', color: [0.1, 0.4, 0.8], url: 'https://example.com', id: 'acme' };
+
+// A demonstration: the lowest village of the south-east, over the beach, dressed for a customer-support tool.
+SPONSORS[31] = {
+  name: 'orka.chat', motto: 'Live chat · Help center · AI agent', color: [0.07, 0.33, 0.8], url: 'https://orka.chat', id: 'orka',
+  emblem: 'orca', centre: 'orca', demo: true,
+  pitch: ['Customer support, all in one place', 'A live chat on your website', 'A help center for your answers', 'An AI agent that knows them by heart'],
+};
 
 /** The id of a village: given, or made from its name. */
 export const sponsorId = (s) => (s.id || s.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');

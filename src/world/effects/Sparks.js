@@ -91,6 +91,19 @@ export class Sparks {
     }
   }
 
+  /** Feathers: `n` pale scraps thrown out of (x, y, z), drifting down as they turn. */
+  feathers(x, y, z, n) {
+    for (let k = 0; k < n; k++) this._spawn({ x: x + rnd(-0.3, 0.3), y: y + rnd(-0.2, 0.4), z: z + rnd(-0.3, 0.3), vx: rnd(-2.2, 2.2), vy: rnd(0.5, 3.2), vz: rnd(-2.2, 2.2), life: rnd(1.3, 2.4), r: 1.0, g: 0.96, b: 0.84, size: rnd(0.1, 0.17), kind: 1, grav: 2.0, drag: 2.2, sway: rnd(3, 7) });
+  }
+
+  /** Gold dust: `n` glints that appear within `r` m of (x, y, z) and drift down. */
+  glitter(x, y, z, r, n) {
+    for (let k = 0; k < n; k++) {
+      const u = rnd(-1, 1), a = rnd(0, Math.PI * 2), s = Math.sqrt(1 - u * u), d = r * Math.cbrt(Math.random());
+      this._spawn({ x: x + s * Math.cos(a) * d, y: y + u * d * 0.7, z: z + s * Math.sin(a) * d, vx: rnd(-0.5, 0.5), vy: rnd(-0.4, 1.4), vz: rnd(-0.5, 0.5), life: rnd(1.4, 2.8), r: 1.0, g: 0.8, b: 0.3, glow: 2.4, size: rnd(0.3, 0.6), grav: 1.3, drag: 0.8, sway: rnd(1, 3) });
+    }
+  }
+
   /** A rocket leaves from (x, y, z), climbs, and bursts. */
   firework(x, y, z) {
     if (this.rockets.length >= 12) return;

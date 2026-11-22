@@ -110,6 +110,20 @@ void main() {
   s.ao = vColor.a * uAmbient;
   #endif
   vec3 col = shadeSurface(s, vWorld, V, shadow);
+  #ifdef METAL
+  {
+    // polished metal: little of its own colour, a lot of what is round it, in the colour of the metal — dark
+    // and warm below, a bright band at the horizon, the softer light of the sky above — and the sun, wherever
+    // it catches
+    vec3 R = reflect(-V, N);
+    float band = exp(-abs(R.y - 0.05) * 6.5);
+    vec3 env = mix(vec3(0.075, 0.05, 0.03), vec3(0.46, 0.47, 0.5), smoothstep(-0.1, 0.5, R.y)) + vec3(0.8, 0.74, 0.62) * band;
+    float sun = saturate(dot(R, uSunDir));
+    float glint = pow(sun, 64.0) * 2.4 + pow(sun, 7.0) * 0.3;
+    float fres = pow(1.0 - saturate(dot(N, V)), 4.0);
+    col = col * 0.2 + albedo * (env * s.ao * (0.9 + 0.7 * fres) + uSunColor * glint * shadow);
+  }
+  #endif
   #ifdef WATERLINE
   {
     // darken and tint whatever stands in the water
@@ -140,7 +154,8 @@ void main() {
 
 /**
  * @param {object} o map, normalMap (textures), color [r,g,b], rough, spec, normalScale, uvScale, emissive [r,g,b];
- *   fade: the vertex alpha is an opacity (soft-edged ground decals) instead of ambient occlusion
+ *   fade: the vertex alpha is an opacity (soft-edged ground decals) instead of ambient occlusion;
+ *   metal: polished metal, which shows the sky and the ground round it
  */
 export function surfaceMaterial(o = {}) {
   const defines = {};
@@ -149,6 +164,7 @@ export function surfaceMaterial(o = {}) {
   if (o.waterline) defines.WATERLINE = 1;
   if (o.fade) defines.USE_FADE = 1;
   if (o.tintMask) defines.TINT_MASK = 1;
+  if (o.metal) defines.METAL = 1;
   const mat = makeMaterial({
     ...(o.fade ? { transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor } : {}),
     uniforms: {

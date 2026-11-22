@@ -6,7 +6,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { surfaceMaterial, skinnedDepthMaterial } from '../render/SurfaceMaterial.js';
 import { LAYER } from '../render/Shadows.js';
 import { assetUrl } from '../core/Assets.js';
-import { HATS, makeHat, makeBouquet, makeJetpack, makeQuad, QUAD } from './Cosmetics.js';
+import { HATS, makeHat, makeBouquet, makeJetpack, makeQuad, QUAD, wings as makeWings } from './Cosmetics.js';
 
 /** Body colours offered to players (index is what travels over the network). */
 export const AVATAR_COLORS = [
@@ -362,6 +362,19 @@ export class Character {
     }
   }
 
+  /** A pair of wings on the back (the flying theatre), or off again. `wingBeat` (0 to 1) makes them beat harder. */
+  setWings(on) {
+    if (on && !this.wings) {
+      const s = this.factory.scale;
+      this.wings = makeWings();
+      this.wings.scale.setScalar(1.3 / s);
+      this.wings.position.set(0, (1.08 + this.factory.footY * s) / s, -0.2 / s);
+      this.model.add(this.wings);
+    }
+    if (this.wings) this.wings.visible = on;
+    if (!on) this.wingBeat = 0;
+  }
+
   _setLaptop(on) {
     if (on && !this.laptop) {
       this.laptop = laptop();
@@ -478,6 +491,13 @@ export class Character {
     this.big += ((l.bighead ? 1 : 0) - this.big) * Math.min(1, dt * 5);
     this.bones.Head.scale.setScalar(this.headScale * (1 + 1.35 * this.big));
     if (this.root.scale.x !== this.size) this.root.scale.setScalar(this.size);
+    // wings (the flying theatre): they beat a little all the time, and hard on a flap
+    if (this.wings && this.wings.visible) {
+      this._wingT = (this._wingT || 0) + dt;
+      // (held up in a V; a flap brings them down hard, then they come back up)
+      const a = 0.85 + Math.sin(this._wingT * 11) * 0.16 - (this.wingBeat || 0) * 1.15, [left, right] = this.wings.userData.sides;
+      right.rotation.y = a; left.rotation.y = -a;
+    }
     // the jetpack stays on the back a moment after it has burnt out
     if (this.jetpack && this.jetpack.visible) {
       const f = this.jetpack.userData.flames;

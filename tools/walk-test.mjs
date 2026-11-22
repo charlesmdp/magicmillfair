@@ -350,7 +350,23 @@ try {
     await page.keyboard.press('KeyE');
     await frames(20);
     const home = await page.evaluate(() => { const m = window.__mmf, p = m.player.pos; return { d: Math.hypot(p.x - m.sky.gate.x, p.z - m.sky.gate.z), village: m.sky.villageAt(p.x, p.z), byId: m.sky.find('eagle-rest')?.name, byNumber: m.sky.find('50')?.name }; });
-    check('fifty villages: ten prices, five villages at each, the higher the dearer; twenty places to sit in each; the board of one for hire says what it costs', g.n === 50 && g.tiers.join() === '19,49,99,199,499,999,1999,3999,7999,9999' && g.each.every((k) => k === 5) && g.rising && g.seats >= 20 && g.hire === 50 && board.some((b) => b.startsWith(`Buy ${hire.name}`) && b.includes('a month')) && /^For sale · \$[\d,]+ a month$/.test(hire.motto), JSON.stringify({ tiers: g.tiers, each: g.each, rising: g.rising, seats: g.seats, hire, board }));
+    check('fifty villages: ten prices, five villages at each, the higher the dearer; twenty places to sit in each; the board of one for hire says what it costs', g.n === 50 && g.tiers.join() === '19,49,99,199,499,999,1999,3999,7999,9999' && g.each.every((k) => k === 5) && g.rising && g.seats >= 20 && g.hire === 49 && board.some((b) => b.startsWith(`Buy ${hire.name}`) && b.includes('a month')) && /^For sale · \$[\d,]+ a month$/.test(hire.motto), JSON.stringify({ tiers: g.tiers, each: g.each, rising: g.rising, seats: g.seats, hire, board }));
+    // a village that has been taken (the demonstration one): its name and its emblem, its link at the sign and at its board
+    const taken = await page.evaluate(() => {
+      const m = window.__mmf, v = m.sky.find('orka');
+      if (!v) return null;
+      m.player.teleport(v.sign[0] + Math.sin(v.yaw) * 1.5, v.sign[1] + Math.cos(v.yaw) * 1.5, v.yaw);
+      return { name: v.name, motto: v.motto, url: v.url, forHire: v.forHire, emblem: v.emblem, pitch: (v.pitch || []).length, board: v.board, yaw: v.yaw, brand: !!m.world.sky.group.getObjectByName('sky-brand') };
+    });
+    await frames(6);
+    const atSign = await prompt();
+    await page.evaluate((v) => { const m = window.__mmf; m.player.teleport(v.board[0] + Math.sin(v.yaw) * 1.5, v.board[1] + Math.cos(v.yaw) * 1.5, v.yaw); }, taken);
+    await frames(6);
+    const atBoard = await prompt();
+    check('a village that has been taken: its name, its emblem and its board; its link is offered at the sign and at the board; it is not for sale',
+      taken && taken.name === 'orka.chat' && taken.url === 'https://orka.chat' && !taken.forHire && taken.emblem === 'orca' && taken.pitch >= 3 && taken.brand && atSign.includes('Visit orka.chat') && atBoard.includes('Visit orka.chat') && !atBoard.some((b) => b.startsWith('Buy')), JSON.stringify({ taken, atSign, atBoard }));
+    await page.evaluate(() => { const m = window.__mmf; m.player.teleport(m.sky.gate.x + 2, m.sky.gate.z + 2, 0); });
+    await frames(4);
     check('the Sky Gate offers fifty villages; one is carried to the one chosen, facing the valley', offered.includes('Travel to a sky village') && g.n === 50 && listed.length === 50 && there.village === listed[7] && Math.abs(there.y - there.want) < 0.5 && there.grounded && there.zone === there.village && !there.open && there.facing > 0.5 && there.walkable, JSON.stringify({ offered, there }));
     check('nobody walks off a village; its ring leads back to the valley', back.edge < 12.6 && Math.abs(back.y - back.vy) < 0.6 && ring.includes('Back to the valley') && ring.includes('Another village') && home.d < 4 && !home.village && home.byId === 'Eagle Rest' && home.byNumber === g.names[49], JSON.stringify({ back, ring, home }));
   }
@@ -682,25 +698,90 @@ try {
         const ask = [...document.querySelectorAll('.prompt.on span')].map((e) => e.textContent);
         app.playRace();
         const s = app.fair.session, S = s.state, laps = [];
-        let n = 0, air = 0, boost = 0, top = 0, still = 0;
-        for (; n < 60 * 150 && app.fair.session === s && !s.over; n++) {
-          const ahead = r.at(S.s + 7 + Math.hypot(S.vx, S.vz) * 0.45), want = Math.atan2(ahead.x - S.x, ahead.z - S.z), err = Math.atan2(Math.sin(want - S.yaw), Math.cos(want - S.yaw));
-          input.move.x = Math.max(-1, Math.min(1, -err * 2.4)); input.move.y = Math.abs(err) > 0.9 ? 0.3 : 1; input.run = false; input.jump = false; // (a heading grows turning left)
+        let n = 0, air = 0, boost = 0, top = 0, still = 0, stuck = 0, back = 0, flight = 0, run = 0, lamps = 0;
+        for (; n < 60 * 200 && app.fair.session === s && !s.over; n++) {
+          // it aims at the clear line the track gives (round the logs, through the chicanes, onto the ramp),
+          // slows before what must be gone round, and backs off whatever it has run into
+          const v = Math.hypot(S.vx, S.vz), look = 5 + v * 0.36, ahead = r.at(S.s + look), off = r.lineAt(S.s + look);
+          const want = Math.atan2(ahead.x + ahead.nx * off - S.x, ahead.z + ahead.nz * off - S.z), err = Math.atan2(Math.sin(want - S.yaw), Math.cos(want - S.yaw));
+          const near = r.obstacles.some((o) => { if (!o.pass) return false; let d = o.s - S.s; d -= Math.round(d / r.length) * r.length; return d > -3 && d < 22; });
+          let gas = Math.abs(err) > 0.8 ? 0.25 : Math.abs(err) > 0.45 ? 0.6 : 1;
+          if (near && v > 12.5) gas = v > 15 ? -1 : 0;
+          if (S.count <= 0 && v < 1.5) stuck++; else if (v > 4) stuck = 0;
+          if (stuck > 40) back = 50;
+          if (back > 0) { back--; gas = -1; stuck = 0; }
+          input.move.x = Math.max(-1, Math.min(1, -err * 2.6)) * (back > 0 ? -1 : 1); input.move.y = gas; input.run = false; input.jump = false; // (a heading grows turning left)
           app.fairStep(dt);
           if (S.count > 0 && Math.hypot(S.vx, S.vz) < 0.01) still++;
-          if (!S.grounded) air++; if (S.boost > 0) boost++; top = Math.max(top, Math.hypot(S.vx, S.vz));
+          if (S.count > 0 && S.count < 1 && r.lamps.filter((m) => m.visible).length === 3) lamps++;
+          if (!S.grounded) { air++; run++; flight = Math.max(flight, run); } else run = 0;
+          if (S.boost > 0) boost++; top = Math.max(top, Math.hypot(S.vx, S.vz));
           if (s.laps !== laps.length) laps.push(+S.clock.toFixed(2));
         }
         input.move.x = 0; input.move.y = 0;
-        const out = { ask, over: s.over, time: s.time, laps, air, boost, top, still, riding: player.riding, quad: !!player.driver };
+        const out = { ask, over: s.over, time: s.time, laps, air, boost, top, still, flight, lamps, riding: player.riding, quad: !!player.driver };
         for (let k = 0; k < 60 * 4 && app.fair.session; k++) app.fairStep(dt);
         out.after = { closed: !app.fair.session, riding: player.riding, driver: !!player.driver, d: Math.hypot(player.pos.x - r.start.x, player.pos.z - r.start.z) };
         res(out);
       })));
     });
     await frames(20);
+    // a log across half the track: hopped at full speed, a wall for whoever drives into it
+    const hop = await page.evaluate(() => {
+      const app = window.__mmf, { input, world, player } = app, r = world.games.race, dt = 1 / 60;
+      const o = r.obstacles.filter((q) => q.reach === 12 && Math.abs(q.pass) > 2.1)[2], side = -o.pass; // (the log on the last straight; the side it lies on)
+      const run = (jump) => {
+        const s = r.open(player, { play() {}, note() {}, go() {} }), S = s.state, p = r.at(o.s - 14);
+        Object.assign(S, { x: p.x + p.nx * side, z: p.z + p.nz * side, y: world.collision.groundAt(p.x + p.nx * side, p.z + p.nz * side, 1e4), yaw: Math.atan2(p.tx, p.tz), vx: p.tx * 16, vz: p.tz * 16, count: 0, s: o.s - 14, i: p.i });
+        let slowest = 99, done = false, d = 0;
+        for (let n = 0; n < 90; n++) {
+          d = o.s - S.s; d -= Math.round(d / r.length) * r.length;
+          const ahead = r.at(S.s + 6), want = Math.atan2(ahead.x + ahead.nx * side - S.x, ahead.z + ahead.nz * side - S.z), err = Math.atan2(Math.sin(want - S.yaw), Math.cos(want - S.yaw));
+          input.move.x = Math.max(-1, Math.min(1, -err * 2.6)); input.move.y = 1; input.run = false; input.jump = jump && !done && d < 4.6 && d > 0 && S.grounded;
+          if (input.jump) done = true;
+          s.step(dt, player, true);
+          if (d < 3) slowest = Math.min(slowest, Math.hypot(S.vx, S.vz));
+        }
+        input.move.x = 0; input.move.y = 0; input.jump = false;
+        s.close();
+        return { past: -d, slowest };
+      };
+      return { hop: run(true), drive: run(false) };
+    });
+    check('a log across the track: a hop clears it at full speed; without one it is a wall', hop.hop.past > 8 && hop.hop.slowest > 14 && hop.drive.past < 0 && hop.drive.slowest < 4, JSON.stringify(hop));
+    // the flying theatre: wings on, a bot flaps through the gaps, then lets itself fall; the flight goes on the board
+    const wing = await page.evaluate(() => {
+      const app = window.__mmf, g = app.world.games.wing, { player } = app, dt = 1 / 60, real = app.input.consumeClicks.bind(app.input);
+      player.teleport(g.spot.x, g.spot.z, g.spot.yaw);
+      return new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(() => {
+        const ask = [...document.querySelectorAll('.prompt.on span')].map((e) => e.textContent);
+        g.seed = 20240607;
+        app.playWing();
+        const s = app.fair.session, S = s.state, goal = 9;
+        let k = 0, flaps = 0, top = 0, low = 99, waited = 0;
+        // (before the first flap: it hovers, and no column is on the stage)
+        for (let q = 0; q < 30; q++) { app.input.consumeClicks = () => 0; app.fairStep(dt); if (!S.flying && g.pairs.every((p) => p.x > 5.4)) waited++; }
+        for (; k < 60 * 120 && app.fair.session === s && !s.over; k++) {
+          const ahead = g.pairs.filter((p) => p.x > -3.3).sort((a, b) => a.x - b.x)[0], target = (ahead && ahead.x < 6 ? ahead.y : 3.3) - 0.3;
+          const flap = S.fallen || s.score >= goal ? 0 : (!S.flying || (S.y < target && S.vy < 1.2) ? 1 : 0);
+          app.input.consumeClicks = () => flap;
+          app.fairStep(dt);
+          flaps += flap; top = Math.max(top, S.y); if (!S.fallen) low = Math.min(low, S.y);
+        }
+        app.input.consumeClicks = real;
+        const out = { ask, score: s.score, over: s.over, flaps, frames: k, top, low, waited, wings: !!player.character.wings?.visible, anim: player.anim, flyer: g.inside(player.pos.x, player.pos.y + 1, player.pos.z), line: s.line };
+        for (let q = 0; q < 60 * 4 && app.fair.session; q++) app.fairStep(dt);
+        out.after = { closed: !app.fair.session, driver: !!player.driver, wings: !!player.character.wings?.visible, d: Math.hypot(player.pos.x - g.spot.x, player.pos.z - g.spot.z), pitch: player.pitch };
+        res(out);
+      })));
+    });
+    await frames(20);
+    const flown = await page.evaluate(() => window.__mmf.fair.boards.wing._local().all[0]?.score || 0);
+    check('the flying theatre: asked for before the stage; wings on, a bot flaps through nine pairs of columns, falls into the waves, and the flight goes on the board',
+      wing.ask.includes('Play Wing It') && wing.waited === 30 && wing.score === 9 && wing.over && wing.flaps > 12 && wing.top < 5.9 && wing.low > 1.0 && wing.wings && wing.anim === 4 && wing.flyer && wing.line === 'Wing It · 9'
+      && wing.after.closed && !wing.after.driver && !wing.after.wings && wing.after.d < 0.5 && wing.after.pitch === 0 && flown === 9, JSON.stringify(wing));
     const best = await page.evaluate(() => window.__mmf.fair.boards.race._local().all[0]?.score || 0);
-    check('the quad race: asked for in the paddock, three laps against the clock, the pads and the ramp on the way, the time on the board', race.ask.some((t) => t.startsWith('Race:')) && race.over && race.laps.length === 3 && race.time > 35000 && race.time < 90000 && race.still > 150 && race.air > 30 && race.boost > 100 && race.top > 24 && race.riding && race.quad && race.after.closed && !race.after.riding && !race.after.driver && best === race.time, JSON.stringify(race));
+    check('the quad race: asked for in the paddock, the lights, three laps against the clock round the logs and through the chicanes, the pads, a real flight off the ramp, the time on the board', race.ask.some((t) => t.startsWith('Race:')) && race.over && race.laps.length === 3 && race.time > 50000 && race.time < 130000 && race.still > 150 && race.lamps > 20 && race.air > 120 && race.flight > 45 && race.boost > 100 && race.top > 24 && race.riding && race.quad && race.after.closed && !race.after.riding && !race.after.driver && best === race.time, JSON.stringify(race));
   }
 
   // --- the big red button at the top of the island: a show far out at sea, then a quarter of an hour of patience

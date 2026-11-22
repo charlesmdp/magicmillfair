@@ -197,6 +197,20 @@ const RECIPES = {
     s.tone(t, 'reed', 119, 91, 0.6, 0.45, 0.03, 0.5, 0.05, throat);
     s.tone(t + 0.62, 'sine', 140, 70, 0.08, 0.25, 0.004, 0.03, 0.04);
   },
+  flap(s, t) {
+    // a wing beat: a soft gust that rises and is gone
+    s.noise(t, 'pink', 'bandpass', 380, 1250, 1.1, 0.075, 0.012, 0.05, 0.04);
+    s.tone(t, 'sine', 150, 210, 0.07, 0.06, 0.01, 0.04, 0.03);
+  },
+  woof(s, t) {
+    // a very large dog, twice: a reed that drops through a throat, a thump under it, breath round it
+    for (const [dt, f, level] of [[0, 150, 0.5], [0.3, 132, 0.42]]) {
+      const throat = s.throat(540, 1.6);
+      s.tone(t + dt, 'reed', f * 1.55, f, 0.08, level, 0.006, 0.1, 0.04, throat);
+      s.tone(t + dt, 'sine', f * 0.8, f * 0.5, 0.1, level * 0.45, 0.005, 0.09, 0.045);
+      s.noise(t + dt, 'pink', 'bandpass', 950, 520, 1.2, 0.06, 0.004, 0.07, 0.03);
+    }
+  },
   coin(s, t) {
     s.tone(t, 'sine', 2637, 2637, 0, 0.11, 0.001, 0.004, 0.035);
     s.tone(t, 'sine', 3951, 3951, 0, 0.06, 0.001, 0.004, 0.03);

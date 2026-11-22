@@ -44,6 +44,31 @@ function mesh(builder, mat = cosmeticMaterial()) {
 }
 
 // ---------------------------------------------------------------------------
+// Wings: cardboard feathers on a harness, for the flying theatre. A group with its two wings in
+// userData.sides ([left, right]): each turns about the spine (its own y) to beat.
+
+let wingGeometry = null;
+export function wings() {
+  if (!wingGeometry) {
+    const b = new MeshBuilder();
+    // (the right wing: five feathers fanned out from the shoulder, the longest on top; cream, tipped with gold)
+    for (let i = 0; i < 5; i++) {
+      const a = 0.62 - i * 0.3, len = 0.98 - i * 0.12, w = 0.2, c = Math.cos(a), s = Math.sin(a), z = -0.004 * i;
+      const root = V(0.06, 0, z), mid = V(0.06 + c * len * 0.55, s * len * 0.55, z), tip = V(0.06 + c * len, s * len, z), nx = -s * w * 0.5, ny = c * w * 0.5;
+      b.tint(1.25, 1.18, 1.02, 1).quad(V(root.x - nx * 0.5, root.y - ny * 0.5, z), V(mid.x - nx, mid.y - ny, z), V(mid.x + nx, mid.y + ny, z), V(root.x + nx * 0.5, root.y + ny * 0.5, z));
+      b.tint(1.5, 1.05, 0.3, 1).tri(V(mid.x - nx, mid.y - ny, z), tip, V(mid.x + nx, mid.y + ny, z));
+    }
+    b.tint(0.5, 0.36, 0.24, 1).box(-0.02, -0.16, -0.03, 0.12, 0.2, 0.01); // the strap it hangs from
+    wingGeometry = b.build();
+  }
+  const g = new THREE.Group(), right = mesh({ build: () => wingGeometry }), left = mesh({ build: () => wingGeometry });
+  left.scale.x = -1;
+  g.add(left, right);
+  g.userData.sides = [left, right];
+  return g;
+}
+
+// ---------------------------------------------------------------------------
 // Hats. Modelled for a head of radius 1 whose top is at the origin (y up, the face towards +Z): the avatar
 // scales them to its own head.
 

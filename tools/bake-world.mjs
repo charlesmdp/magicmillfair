@@ -422,6 +422,9 @@ const noTrees = new Grid(N, N); // 1 = nothing is planted here
 const islandMask = new Grid(N, N); // the island: its rock, above the water and just under it
 const islandSand = new Grid(N, N); // its little landing beach
 const stairMask = new Grid(N, N);
+const goldBare = new Grid(N, N); // round the golden cove, its stair and its ledge: bare rock (the green of the sea cliffs is scraped off)
+const goldSand = new Grid(N, N); // the sand of the golden cove
+const goldPad = new Grid(N, N); // the ledge of the statue: a hard floor
 const campMask = new Grid(N, N);
 const caveMouth = new Grid(N, N);
 const climbMask = new Grid(N, N);
@@ -538,10 +541,24 @@ const disc = (x, z, r, fn) => {
     });
   }
 
+  // --- the golden cove: a pocket of sand at the foot of the sea cliffs, and the ledge of the statue high above.
+  // Both are made level (the rock is cut, or built up); round them the cliff is only ever cut back, steeply.
+  for (const S of [L.NORTH.cove, L.NORTH.ledge]) {
+    disc(S.x, S.z, Math.max(S.rx, S.rz) + 22, (q, d, x, z) => {
+      const e = Math.hypot((x - S.x) / S.rx, (z - S.z) / S.rz); // 1 on its edge
+      if (e < 1) { H.d[q] = S.y + 0.25 * smoothstep(0.55, 1, e) ** 2; locked[q] = 1; detailMask.d[q] = Math.min(detailMask.d[q], 0.35); noTrees.d[q] = 1; }
+      else { const out = (e - 1) * Math.min(S.rx, S.rz); H.d[q] = Math.min(H.d[q], S.y + 0.3 + out * 3.4); if (out < 7) noTrees.d[q] = 1; }
+      const off = (e - 1) * Math.min(S.rx, S.rz); // metres outside its edge (negative inside)
+      goldBare.d[q] = Math.max(goldBare.d[q], 1 - smoothstep(5, 15, off));
+      if (S === L.NORTH.cove) goldSand.d[q] = Math.max(goldSand.d[q], 1 - smoothstep(0.2, 2.6, off));
+      else goldPad.d[q] = Math.max(goldPad.d[q], 1 - smoothstep(-0.9, 0.5, off));
+    });
+  }
+
   // --- stairways: flights of steps with a level landing at each corner. The rock is cut to them (or built
   // up under them): steep faces on both sides. The long one climbs to the temple; three short ones go up
   // beside the falls, from terrace to terrace.
-  for (const ST of [L.STAIRWAY, ...FL.stairs]) {
+  for (const ST of [L.STAIRWAY, ...FL.stairs, ...L.NORTH.stairs]) {
     const sw = ST.width / 2;
     const samples = [];
     for (let k = 0; k + 1 < ST.points.length; k++) {
@@ -554,19 +571,32 @@ const disc = (x, z, r, fn) => {
     }
     const sf = polylineField(samples, 18);
     const ys = samples.map((q) => q[2]);
+    // (the stair of the golden cove runs across the face of a sea cliff: which of its sides falls away to the sea?)
+    const north = L.NORTH.stairs.includes(ST);
+    let seaSide = 0;
+    if (north) {
+      const m = samples.length >> 1, [mx, mz] = samples[m], tx = samples[m + 1][0] - mx, tz = samples[m + 1][1] - mz, tl = Math.hypot(tx, tz);
+      seaSide = hAt(mx + (tz / tl) * 6, mz - (tx / tl) * 6) < hAt(mx - (tz / tl) * 6, mz + (tx / tl) * 6) ? 1 : -1;
+    }
     for (let q = 0; q < N * N; q++) {
       const d = sf.dist[q];
       if (d > 16) continue;
       const y = interp(ys, sf.pos[q]) - 0.16; // the ground lies just under the steps
-      const e = d - sw - 0.15;
+      // (on the cliff the bed is cut wider than the steps: at this grain of relief a wall cut closer would bite into them)
+      const e = d - sw - (north ? 1.25 : 0.15);
       // (a terrace is never built up, but the steps that arrive on it are cut into its edge)
       if (e <= 0) { H.d[q] = locked[q] ? Math.min(H.d[q], y) : y; detailMask.d[q] = 0; stairMask.d[q] = 1; }
       else {
-        H.d[q] = locked[q] ? Math.min(H.d[q], y + e * 2.8) : clamp(H.d[q], y - e * 1.5, y + e * 2.8);
+        // Across the face of a sea cliff: towards the cliff the rock is cut back steeply, a notch and not a
+        // valley; towards the sea nothing is left standing higher than the steps (no fin of rock between them
+        // and the drop), and a bank of rock holds them up.
+        const up = north ? (sf.side[q] === seaSide ? -0.3 + Math.max(0, e - 3) * 2 : e * 4.5) : e * 2.8;
+        H.d[q] = locked[q] ? Math.min(H.d[q], y + up) : clamp(H.d[q], y - e * 1.5, y + Math.max(up, -e * 1.5));
         stairMask.d[q] = Math.max(stairMask.d[q], 1 - smoothstep(0, 1.3, e));
         if (e < 1) detailMask.d[q] = Math.min(detailMask.d[q], 0.4);
       }
       if (d < sw + (ST === L.STAIRWAY ? 3.5 : 6.5)) noTrees.d[q] = 1;
+      if (north) goldBare.d[q] = Math.max(goldBare.d[q], 1 - smoothstep(3.5, 11, e));
     }
   }
 
@@ -580,7 +610,7 @@ const disc = (x, z, r, fn) => {
       for (let k = 1; k < n; k++) { const t = k / n; if (hAt(x + (tx - x) * t, z + (tz - z) * t) > y + 2.5 + (ty + 10 - y - 2.5) * t) return false; }
       return true;
     };
-    const taken = [[L.VILLAGE.square.x, L.VILLAGE.square.z, 95], ...L.STAIRWAY.points.map((p) => [p[0], p[1], 60]), ...FL.levels.map((t) => [t.bank[0][0], t.bank[0][1], 80]), [seaFall.x, seaFall.z, 70], [L.GLADE.x, L.GLADE.z, 84]];
+    const taken = [[L.VILLAGE.square.x, L.VILLAGE.square.z, 95], ...L.STAIRWAY.points.map((p) => [p[0], p[1], 60]), ...FL.levels.map((t) => [t.bank[0][0], t.bank[0][1], 80]), [seaFall.x, seaFall.z, 70], [L.NORTH.ledge.x, L.NORTH.ledge.z, 90], [L.GLADE.x, L.GLADE.z, 84]];
     const cands = [];
     for (let z = -474; z <= 474; z += 6) for (let x = -474; x <= 474; x += 6) {
       const q = idx(Math.round(gi(x)), Math.round(gi(z))), d = boundsSDF.d[q];
@@ -1195,7 +1225,7 @@ for (let j = 0; j < N; j++) {
     // --- sea cliffs: whatever can hold on to them is green. (The renderer paints steep ground as rock, except
     // where the tint is this lush green: there, moss and grass hang on the face.)
     if (seaCliff.d[q] > 0 && h > 1.2) {
-      const a = seaCliff.d[q] * smoothstep(1.2, 5, h);
+      const a = seaCliff.d[q] * smoothstep(1.2, 5, h) * (1 - goldBare.d[q]);
       setTint(q, 0.5 + 0.1 * nA, 1.3 + 0.08 * nB, 0.34, a * 0.92);
       gh = lerp(gh, 0.5 * (1 - smoothstep(0.6, 1.0, slope)), a);
     }
@@ -1227,6 +1257,10 @@ for (let j = 0; j < N; j++) {
       gh = h > 1.5 ? 0.3 * (1 - rock) * (1 - pd) : 0;
     }
     if (stairMask.d[q] > 0) { over(q, 4, stairMask.d[q]); gh *= 1 - stairMask.d[q]; setTint(q, 1.02, 1.0, 0.97, stairMask.d[q] * 0.8); }
+    // --- the golden cove: bare rock round it, pale sand at the foot of the cliff; the ledge of the statue is a hard floor
+    if (goldBare.d[q] > 0) { const a = goldBare.d[q]; over(q, 4, a * 0.85); gh *= 1 - a; }
+    if (goldSand.d[q] > 0) { const a = goldSand.d[q] * (1 - smoothstep(2.4, 3.6, h)); over(q, 5, a); gh *= 1 - a; setTint(q, 1.06, 1.0, 0.9, a); }
+    if (goldPad.d[q] > 0) { over(q, 6, goldPad.d[q]); gh *= 1 - goldPad.d[q]; setTint(q, 1.1, 1.03, 0.92, goldPad.d[q]); }
 
     // --- banks and beds of fresh water
     if (wl > 0.5 && (above < 0.05 || waterNear.d[q] < 2.2)) {
@@ -1373,6 +1407,26 @@ const trees = [];
     const radius = (sp === 'pine' || sp === 'birch' || sp === 'cypress' ? 5.0 : 6.6) * scale;
     if (tooClose(x, z, radius)) continue;
     add(x, z, sp, scale, radius);
+  }
+
+  // ---- the grove the race track threads: planted close, a corridor left for the track
+  {
+    const G = L.RACE.grove, track = L.PATHS.find((p) => p.id === 'race').points, half = L.RACE.width / 2 + 2.4;
+    const lane = L.PATHS.find((p) => p.id === 'lane').points;
+    const near = (pts, x, z, r) => { for (let i = 0; i + 1 < pts.length; i++) { const [ax, az] = pts[i], [bx, bz] = pts[i + 1], ux = bx - ax, uz = bz - az, t = clamp(((x - ax) * ux + (z - az) * uz) / (ux * ux + uz * uz || 1), 0, 1); if (Math.hypot(x - ax - ux * t, z - az - uz * t) < r) return true; } return false; };
+    let planted = 0;
+    for (let k = 0; k < G.trees * 14 && planted < G.trees; k++) {
+      const a = rng() * Math.PI * 2, f = Math.sqrt(rng()), px = G.x + Math.cos(a) * G.rx * f, pz = G.z + Math.sin(a) * G.rz * f;
+      if (near(track, px, pz, half) || near(lane, px, pz, 4.2)) continue;
+      const q = idx(Math.round(gi(px)), Math.round(gi(pz)));
+      if (SLOPE.d[q] > 1.3 || waterNear.d[q] < 1.6) continue;
+      const r = rng(), sp = r < 0.34 ? 'beech' : r < 0.6 ? 'pine' : r < 0.82 ? 'birch' : 'oak';
+      const scale = 0.8 + 0.4 * rng(), radius = (sp === 'pine' || sp === 'birch' ? 3.1 : 3.9) * scale;
+      if (tooClose(px, pz, radius)) continue;
+      add(px, pz, sp, scale, radius);
+      planted++;
+    }
+    log(`the grove of the track: ${planted} trees`);
   }
 
   // ---- the woods that ring the high clearing

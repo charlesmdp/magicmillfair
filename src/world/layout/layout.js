@@ -110,6 +110,19 @@ export const PONDS = [
     ],
     islands: [],
   },
+  {
+    // The pool one dives into from the boards of the tower (see CLIMB.tower): cut into the foot of the hill
+    // behind it, on the side away from the climb.
+    id: 'dive',
+    name: 'The Splash Pool',
+    level: 8.0,
+    depth: 3.8,
+    bank: 0.3,
+    shelf: 1.5,
+    margin: 2.2, cutSlope: 1.7,
+    outline: Array.from({ length: 12 }, (_, k) => { const a = (k / 12) * Math.PI * 2; return [Math.round((-14.9 + Math.cos(a) * 6.6) * 10) / 10, Math.round((112.9 + Math.sin(a) * 6.6) * 10) / 10]; }),
+    islands: [],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -219,7 +232,22 @@ export const COAST = {
 // beyond. (It overlaps the bay of the valley along its southern edge.)
 export const SEA_REACH = [
   [[108, -145], [176, -145], [207, -170], [221, -206], [222, -242], [199, -243], [196, -235], [190, -225], [183, -216], [177, -208], [171, -202], [165, -194], [157, -186], [150, -178], [141, -168], [127, -158], [112, -148]],
+  // (and on along the cliffs, to the cove of the golden dog)
+  [[199.5, -242], [222, -241], [226, -272], [213, -272], [208, -266.5], [205.5, -258.5], [200.5, -252.5], [197.5, -247]],
 ];
+// The cove of the golden dog, further up the same coast: a pocket of sand under the cliffs that one only
+// reaches by swimming; a stair cut across the face of the cliff climbs from it to a ledge high over the sea,
+// where a statue stands: a golden Australian shepherd fifteen metres tall, and a plaque.
+//   cove, ledge   level places: centre, half sizes, height (the rock is cut — or built up — to them)
+//   stairs        the flights, from the sand to the ledge (see STAIRWAY)
+//   statue        where it sits and which way it looks (0: south, towards +Z); `plaque`: what it says
+export const NORTH = {
+  name: 'The Golden Cove',
+  cove: { x: 199.5, z: -262.5, rx: 6.2, rz: 7.2, y: 1.15 },
+  ledge: { x: 226.5, z: -333, rx: 11, rz: 10.5, y: 44.4 },
+  stairs: [{ width: 2.3, landing: 1.2, points: [[203.4, -267.6, 1.5], [212, -285, 16.2], [219, -305, 31.2], [227, -322.6, 44.4]] }],
+  statue: { x: 225.5, z: -335, yaw: -0.3, height: 15, name: 'CROKMOU', plaque: 'BEST DOG EVER' },
+};
 // Where the capes are rock, the land stands high right at the water: sea cliffs, fluted and green, of about
 // `height` metres (more or less along the coast). They only exist outside the playable valley.
 export const SEA_CLIFFS = { height: 52, vary: 20, flute: 4.2, every: 11 };
@@ -371,7 +399,11 @@ export const PATHS = [
   {
     // The race track: a loop round the wheat fields (see RACE). Closed: it ends where it starts.
     id: 'race', kind: 'gravel', width: 7.5, cut: 1,
-    points: [[-50, -102.5], [-80, -103.5], [-98, -108.5], [-106, -122], [-106, -142], [-96, -156], [-60, -158.5], [-24, -156.5], [4, -152], [20, -144], [26, -130], [22, -116], [8, -107.5], [-20, -104], [-50, -102.5]],
+    points: [
+      [-50, -102.5], [-82, -103.5], [-102, -106.5], [-118, -113], [-128, -124], [-124, -136], [-134, -146], [-130, -156], [-116, -161],
+      [-96, -159], [-78, -152.5], [-62, -158.5], [-40, -157.5], [-12, -155], [6, -150.5], [20, -141], [26, -128], [23, -115], [11, -106.5],
+      [-3, -111], [-11, -123], [-23, -130.5], [-33, -123], [-34, -111], [-41, -104], [-50, -102.5],
+    ],
   },
   {
     // The path that winds round the island.
@@ -478,7 +510,18 @@ export const ACID = { x: -236, z: -82, r: 4.2 };
 // path is listed); `boosts` and `jump`: where the pads and the ramp are, the same way.
 // `paddock`: on which side of the line one asks to race, and the board stands (1: on the right of the way
 // the track is listed turned a quarter… in short: the side of the valley).
-export const RACE = { name: 'Quadmania', laps: 3, width: 7.5, start: 0.012, boosts: [0.18, 0.4, 0.84], jump: 0.52, paddock: 1 };
+// `grove`: a wood planted for the track to thread (centre, half sizes, how many trees); `chicanes`: where
+// two walls of bales, one from each side, make the way zigzag; `logs`: where a log lies across half the track
+// (hop it, or go round). The ramp stands at the end of a funnel of bales: everybody flies.
+export const RACE = {
+  name: 'Quadmania', laps: 3, width: 7.5, start: 0.012, boosts: [0.03, 0.345, 0.5, 0.66], jump: 0.535, paddock: 1,
+  grove: { x: -127, z: -136, rx: 19, rz: 30, trees: 110 },
+  chicanes: [0.1, 0.925], logs: [0.2, 0.3, 0.83],
+};
+// Wing It: a little theatre on the plaza at the foot of the pier, where one flies on the spot while the
+// scenery goes by. (x, z): the middle of the front of its stage; `yaw`: which way the stage looks;
+// `width`, `height`: the opening of the stage.
+export const WING = { name: 'Wing It', x: -7.2, z: 12.6, yaw: Math.PI * 0.75, width: 12, height: 5.2 };
 // The boulder of the island: it rolls down the whole path, again and again (seconds; metres per second).
 export const BOULDER = { radius: 1.55, speed: 7.2, period: 52 };
 
@@ -672,6 +715,7 @@ export const ZONES = [
   { id: 'north', name: 'Echo Cave', x: -34, z: -190, r: 17 },
   { id: 'south', name: 'Hollow of the Old Tree', x: -126, z: 201, r: 16 },
   { id: 'sea', name: "The Smugglers' Den", x: 150, z: -217, r: 17, hidden: true }, // (nor is this one)
+  { id: 'golden', name: NORTH.name, x: 212, z: -296, r: 52, hidden: true }, // (nor this)
 ];
 
 // The playable area (closed polygon). On land it is the foot of the mountains; at sea, how far one can swim.

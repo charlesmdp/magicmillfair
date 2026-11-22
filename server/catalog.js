@@ -21,7 +21,7 @@ export const PRICES = { tarp: 9900, gondola: 2900 };
 export const AUCTION = { start: 100, max: 1_000_000 };
 /** The least that beats `bid` (cents): one dollar more, or a tenth more when that is larger (in whole dollars). */
 export const nextBid = (bid = 0) => (bid > 0 ? bid + Math.max(100, Math.ceil(bid / 1000) * 100) : AUCTION.start);
-export const BOARDS = { sky: 'Mostly Up', race: 'Quadmania', shoot: 'Bullseye Alley', mole: 'Whack-a-Mole', milk: 'Feed the Clown', bell: 'Ring the Bell' };
+export const BOARDS = { sky: 'Mostly Up', race: 'Quadmania', wing: 'Wing It', shoot: 'Bullseye Alley', mole: 'Whack-a-Mole', milk: 'Feed the Clown', bell: 'Ring the Bell' };
 export const GONDOLAS = 24;
 const VILLAGES = new Map(SPONSORS.map((s, i) => [sponsorId(s), { name: s.name, tier: SKY_TIERS[i] ?? 0 }]));
 

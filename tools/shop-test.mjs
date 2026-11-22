@@ -140,7 +140,7 @@ try {
     && bidAsked?.get('metadata[item]') === 'board:shoot' && bidAsked.get('metadata[bid]') === '300' && bidAsked.get('line_items[0][price_data][unit_amount]') === '300' && bidAsked.get('mode') === 'payment' && mine.includes('Set up your panel'),
     JSON.stringify({ free, bidForm, asked: String(bidAsked).slice(0, 200), mine, slot }));
   check('the shop has a shelf to sponsor a game: the panel of each, what it went for, a button to bid',
-    shelf.title === 'Sponsor a game' && shelf.cards.length === 6 && shelf.cards.includes('Bullseye Alley|Owned') && shelf.cards.includes('Whack-a-Mole|From $1') && moleAct.join() === 'Bid · from $1', JSON.stringify({ shelf, moleAct }));
+    shelf.title === 'Sponsor a game' && shelf.cards.length === 7 && shelf.cards.includes('Wing It|From $1') && shelf.cards.includes('Bullseye Alley|Owned') && shelf.cards.includes('Whack-a-Mole|From $1') && moleAct.join() === 'Bid · from $1', JSON.stringify({ shelf, moleAct }));
   await page.keyboard.press('KeyE');
   await page.waitForSelector('.chooser.on .fields', { timeout: 20000 });
   const inputs = page.locator('.chooser .fields input');
