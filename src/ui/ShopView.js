@@ -6,7 +6,7 @@
 // ('buy' id, 'equip' id, 'close').
 
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
-const SHELVES = [['featured', 'Featured'], ['gear', 'Gear'], ['hats', 'Hats'], ['paint', 'Paint jobs'], ['trails', 'Trails'], ['fun', 'Just for fun']];
+const SHELVES = [['featured', 'Featured'], ['gear', 'Gear'], ['hats', 'Hats'], ['paint', 'Paint jobs'], ['trails', 'Trails'], ['fun', 'Just for fun'], ['sponsor', 'Sponsor a game']];
 const RARITY = { legendary: 'Legendary', epic: 'Epic', rare: 'Rare', uncommon: 'Uncommon' };
 
 export class ShopView {
@@ -85,8 +85,8 @@ export class ShopView {
     return copy;
   }
 
-  /** Forget the pictures (the robot changed colour). */
-  stale() { this.pictures.clear(); }
+  /** Forget the pictures (the robot changed colour) — or only those whose item starts with `prefix`. */
+  stale(prefix = '') { for (const key of [...this.pictures.keys()]) if (key.startsWith(prefix)) this.pictures.delete(key); }
 
   _card(it, big = false) {
     const b = el('button', `card ${it.rarity}${big ? ' big' : ''}${it.owned ? ' owned' : ''}${it.worn ? ' worn' : ''}`);
@@ -130,9 +130,10 @@ export class ShopView {
     const acts = d.querySelector('.acts');
     acts.textContent = '';
     const act = (label, cls, fn) => { const b = el('button', cls, label); b.type = 'button'; b.onclick = fn; acts.append(b); return b; };
-    if (!it.owned) act(`Buy · ${it.cost}`, 'buy', () => this.emit('buy', id));
+    if (it.act) act(it.act, 'buy', () => this.emit('buy', id)); // (a place to sponsor: a bid)
+    else if (!it.owned) act(`Buy · ${it.cost}`, 'buy', () => this.emit('buy', id));
     else if (it.wearable) act(it.worn ? 'Take it off' : 'Equip', it.worn ? 'off' : 'equip', () => this.emit('equip', id));
     else act('Yours', 'yours', () => {}).disabled = true;
-    d.querySelector('.fine').textContent = it.owned ? (it.hint || 'It is yours for good.') : `${this.mode === 'test' ? 'Test mode: use the card 4242 4242 4242 4242 — no real money. ' : 'Paid once, on Stripe. '}${this.note}`;
+    d.querySelector('.fine').textContent = it.fine || (it.owned ? (it.hint || 'It is yours for good.') : `${this.mode === 'test' ? 'Test mode: use the card 4242 4242 4242 4242 — no real money. ' : 'Paid once, on Stripe. '}${this.note}`);
   }
 }

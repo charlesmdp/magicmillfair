@@ -29,7 +29,7 @@ export function stripeConfig(env = {}) {
  * Asks Stripe for a payment page. `what`: { item, name, amount (cents), monthly, currency }, `device`: who buys,
  * `site`: the address of the game (the visitor comes back to it). Resolves to { id, url }; throws on failure.
  */
-export async function createCheckout(cfg, what, device, site, fetcher = fetch) {
+export async function createCheckout(cfg, what, device, site, fetcher = fetch, extra = {}) {
   const form = new URLSearchParams();
   form.set('mode', what.monthly ? 'subscription' : 'payment');
   form.set('line_items[0][quantity]', '1');
@@ -40,6 +40,7 @@ export async function createCheckout(cfg, what, device, site, fetcher = fetch) {
   form.set('client_reference_id', device);
   form.set('metadata[item]', what.item);
   form.set('metadata[device]', device);
+  for (const [k, v] of Object.entries(extra)) form.set(`metadata[${k}]`, String(v));
   if (what.monthly) { form.set('subscription_data[metadata][item]', what.item); form.set('subscription_data[metadata][device]', device); }
   form.set('success_url', `${site}/?paid=${encodeURIComponent(what.item)}`);
   form.set('cancel_url', `${site}/?paid=`);
@@ -51,6 +52,23 @@ export async function createCheckout(cfg, what, device, site, fetcher = fetch) {
   const body = await res.json().catch(() => null);
   if (!res.ok || !body || typeof body.url !== 'string') throw new Error(`Stripe: ${body?.error?.message || res.status}`);
   return { id: String(body.id || ''), url: body.url };
+}
+
+/**
+ * Gives a payment back in full (`pay`: its payment intent). Asking twice refunds once. Throws when Stripe says no
+ * (a card payment can be refunded for about six months).
+ */
+export async function refundPayment(cfg, pay, why = '', fetcher = fetch) {
+  const form = new URLSearchParams({ payment_intent: pay, reason: 'requested_by_customer' });
+  if (why) form.set('metadata[why]', why);
+  const res = await fetcher(`${cfg.api}/v1/refunds`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${cfg.key}`, 'Content-Type': 'application/x-www-form-urlencoded', 'Idempotency-Key': `refund-${pay}` },
+    body: form.toString(),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok || !body || body.error) throw new Error(`Stripe: ${body?.error?.message || res.status}`);
+  return { id: String(body.id || '') };
 }
 
 /**

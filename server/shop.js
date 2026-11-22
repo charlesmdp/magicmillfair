@@ -3,7 +3,8 @@
 // village) and what is shown there. Both hosts answer through shopRoute() (see routes.js).
 //
 //   GET    /api/shop?device=…                          → { mode, prices, owned, slots }
-//   POST   /api/checkout  { item, device }             → { url }   the payment page of Stripe for that item
+//   POST   /api/checkout  { item, device, bid? }       → { url }   the payment page of Stripe for that item
+//                                                      (bid, in cents: for the panel of a game, which is auctioned)
 //   POST   /api/stripe/webhook                         Stripe tells what was paid (signed: see stripe.js)
 //   POST   /api/sponsor   { slot, device, title, subtitle, url, logo }   the holder of a place says what to show
 //   GET    /api/logo?slot=…                            the picture of a place (draft=1: the one awaiting approval)
@@ -21,12 +22,20 @@
 //   and 1024 pixels a side; it is served as that kind of picture and nothing else (no sniffing, no scripts,
 //   never as a page), and the game only ever paints it on a sign.
 //
-// Kept: `own:<device>` → { items: [...] }; `slots` → { <slot>: { by, sub, at, state: 'paid' | 'live', title,
-// subtitle, url, logo (a version number, 0: none), draft: { title, subtitle, url, logo } } };
-// `logo:<slot>` and `logo:<slot>:draft` → { type, data (base64) }.
+// The panel of a game is auctioned (catalog.js). A bid is one payment; the highest holds the panel until
+// somebody pays more: the newcomer takes the place (what was shown there goes), and the one who held it gets
+// the whole of their payment back from Stripe, without anybody lifting a finger. A bid that arrives too late
+// (somebody else paid more in the meantime) is refunded the same way. Every refund is written down; one that
+// Stripe refuses (a payment older than about six months) is kept for the administrator to settle by hand.
+//
+// Kept: `own:<device>` → { items: [...], notes: [what happened while they were away] }; `slots` → { <slot>:
+// { by, sub, at, state: 'paid' | 'live', title, subtitle, url, logo (a version number, 0: none), draft: { title,
+// subtitle, url, logo }, bid (cents) and pay (the payment to give back): for an auctioned place } };
+// `logo:<slot>` and `logo:<slot>:draft` → { type, data (base64) }; `refunds` → the last hundred, [{ pay, amount,
+// at, why, ok, error }].
 import { allowed } from './api.js';
-import { describe, publicPrices, CURRENCY } from './catalog.js';
-import { createCheckout, verifyWebhook } from './stripe.js';
+import { describe, publicPrices, nextBid, AUCTION, CURRENCY } from './catalog.js';
+import { createCheckout, verifyWebhook, refundPayment } from './stripe.js';
 
 const out = (status, body, headers = {}) => ({ status, body, headers });
 const DEVICE = /^[A-Za-z0-9_-]{16,64}$/;
@@ -92,10 +101,55 @@ export async function grant(ctx, item, device, sub = null) {
     if (!items.includes(item)) await ctx.store.put(`own:${device}`, { items: [...items, item], at: ctx.now() });
     return true;
   }
+  if (what.auction) return false; // (an auctioned place is taken by a bid: takeBid)
   const slots = await slotsOf(ctx);
   if (slots[item] && slots[item].by !== device) return false; // (somebody else got there first: for the administrator to sort out)
   slots[item] = { ...(slots[item] || { state: 'paid', logo: 0 }), by: device, sub: typeof sub === 'string' ? sub : null, at: ctx.now() };
   await ctx.store.put('slots', slots);
+  return true;
+}
+
+/** A word for a visitor who is not there: they are told the next time their browser asks about the shop. */
+async function leaveNote(ctx, device, text) {
+  if (!DEVICE.test(device || '')) return;
+  const rec = (await ctx.store.get(`own:${device}`)) || { items: [] };
+  await ctx.store.put(`own:${device}`, { ...rec, notes: [...(rec.notes || []), text].slice(-5) });
+}
+
+/** Gives a payment back, and writes it down (a refund that fails is kept for the administrator). */
+async function refund(ctx, cfg, pay, amount, why) {
+  const entry = { pay, amount, at: ctx.now(), why, ok: true };
+  try { await refundPayment(cfg, pay, why, ctx.fetch || fetch); } catch (err) { entry.ok = false; entry.error = String(err.message || err).slice(0, 160); console.error('[shop] refund', entry.error); }
+  await ctx.store.put('refunds', [...((await ctx.store.get('refunds')) || []), entry].slice(-100));
+  return entry.ok;
+}
+
+/**
+ * A bid has been paid for an auctioned place: the highest takes it, the other is refunded. `pay`: the payment
+ * (so that it can be given back one day), `amount`: what Stripe says was paid, in cents. Safe to call twice.
+ */
+export async function takeBid(ctx, cfg, item, device, amount, pay) {
+  const what = describe(item);
+  if (!what?.auction || !DEVICE.test(device || '') || !Number.isInteger(amount) || amount <= 0 || typeof pay !== 'string' || !pay) return false;
+  const slots = await slotsOf(ctx), cur = slots[item];
+  if (cur && cur.pay === pay) return true; // (Stripe said it twice)
+  if (cur && amount <= (cur.bid || 0)) {
+    // somebody paid more while this one was at the payment page: it is given back at once
+    await refund(ctx, cfg, pay, amount, `too late for ${item}`);
+    await leaveNote(ctx, device, `Somebody bid more for ${what.label} just before you: your payment has been refunded.`);
+    return false;
+  }
+  // (who raises their own bid keeps what they show; a newcomer starts from an empty panel)
+  slots[item] = cur && cur.by === device ? { ...cur, bid: amount, pay, at: ctx.now() } : { by: device, sub: null, at: ctx.now(), state: 'paid', logo: 0, bid: amount, pay };
+  await ctx.store.put('slots', slots);
+  if (cur) {
+    if (cur.by !== device) {
+      await ctx.store.delete(`logo:${item}`);
+      await ctx.store.delete(`logo:${item}:draft`);
+      await leaveNote(ctx, cur.by, `You were outbid on ${what.label}: ${cur.pay ? 'your payment has been refunded in full' : 'the panel has a new sponsor'}.`);
+    }
+    if (cur.pay) await refund(ctx, cfg, cur.pay, cur.bid || 0, `outbid on ${item}`);
+  }
   return true;
 }
 
@@ -118,9 +172,13 @@ export async function shopRoute(req, ctx) {
     const device = query.get('device') || '', mine = DEVICE.test(device), slots = await slotsOf(ctx), view = {};
     for (const [id, s] of Object.entries(slots)) {
       view[id] = s.state === 'live' ? { state: 'live', ...shown(id, s) } : { state: 'taken' };
+      if (describe(id)?.auction) Object.assign(view[id], { bid: s.bid || 0, next: nextBid(s.bid || 0) }); // (what it went for, what beats it)
       if (mine && s.by === device) Object.assign(view[id], { mine: true, paid: true, draft: s.draft ? { ...s.draft, logo: s.draft.logo > 0 ? logoUrl(id, s.draft.logo, true) : null } : null });
     }
-    return out(200, { mode: cfg.mode || null, prices: publicPrices(), owned: mine ? await ownedBy(ctx, device) : [], slots: view });
+    // (what happened while they were away — outbid, refunded — is said once)
+    let notes = [];
+    if (mine) { const rec = await ctx.store.get(`own:${device}`); if (rec?.notes?.length) { notes = rec.notes; await ctx.store.put(`own:${device}`, { ...rec, notes: [] }); } }
+    return out(200, { mode: cfg.mode || null, prices: publicPrices(), owned: mine ? await ownedBy(ctx, device) : [], slots: view, ...(notes.length && { notes }) });
   }
 
   if (path === '/api/checkout') {
@@ -130,9 +188,17 @@ export async function shopRoute(req, ctx) {
     const what = describe(body?.item), device = body?.device;
     if (!what || !DEVICE.test(device || '')) return out(400, { error: 'Nothing of that name is sold.' });
     if (what.kind === 'own' && (await ownedBy(ctx, device)).includes(what.item)) return out(409, { error: 'You already have it.' });
-    if (what.kind === 'slot' && (await slotsOf(ctx))[what.item]) return out(409, { error: 'Somebody already has it.' });
+    let extra = {};
+    if (what.auction) {
+      // an auction: the bid must beat what the place went for (and be a sum Stripe can take)
+      const bid = Math.round(Number(body.bid)), least = nextBid((await slotsOf(ctx))[what.item]?.bid || 0);
+      if (!Number.isFinite(bid) || bid < least) return out(409, { error: `The bid must be at least $${(least / 100).toFixed(2).replace(/\.00$/, '')}.`, next: least });
+      if (bid > AUCTION.max) return out(400, { error: 'That is more than can be bid here.' });
+      what.amount = bid;
+      extra = { bid };
+    } else if (what.kind === 'slot' && (await slotsOf(ctx))[what.item]) return out(409, { error: 'Somebody already has it.' });
     try {
-      const session = await createCheckout(cfg, { ...what, currency: CURRENCY }, device, req.site || '', ctx.fetch || fetch);
+      const session = await createCheckout(cfg, { ...what, currency: CURRENCY }, device, req.site || '', ctx.fetch || fetch, extra);
       return out(200, { url: session.url });
     } catch (err) {
       console.error('[shop]', err.message);
@@ -146,7 +212,8 @@ export async function shopRoute(req, ctx) {
     if (!event) return out(400, { error: 'Not from Stripe.' });
     const o = event.data?.object || {};
     if (event.type === 'checkout.session.completed' && (o.payment_status === 'paid' || o.payment_status === 'no_payment_required')) {
-      await grant(ctx, o.metadata?.item, o.metadata?.device, o.subscription);
+      if (describe(o.metadata?.item)?.auction) await takeBid(ctx, cfg, o.metadata.item, o.metadata?.device, o.amount_total, o.payment_intent);
+      else await grant(ctx, o.metadata?.item, o.metadata?.device, o.subscription);
     } else if (event.type === 'customer.subscription.deleted') {
       // the subscription ended: the place is free again
       const slots = await slotsOf(ctx), id = Object.keys(slots).find((k) => slots[k].sub && slots[k].sub === o.id);
@@ -222,10 +289,13 @@ export async function shopRoute(req, ctx) {
     } else if (method === 'DELETE') {
       const id = query.get('slot') || '';
       if (!slots[id]) return out(404, { error: 'No such place.' });
+      // (a sponsor the administrator takes off an auctioned panel gets their bid back)
+      if (slots[id].pay) { const gone = slots[id]; await refund(ctx, cfg, gone.pay, gone.bid || 0, `removed from ${id}`); await leaveNote(ctx, gone.by, 'The fair took your panel down: your payment has been refunded in full.'); }
       await release(ctx, slots, id);
     } else if (!reading) return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD, POST, DELETE' });
     return out(200, {
-      slots: Object.fromEntries(Object.entries(slots).map(([id, s]) => [id, { state: s.state, by: s.by, sub: !!s.sub, at: s.at, ...shown(id, s), draft: s.draft ? { ...s.draft, logo: s.draft.logo > 0 ? logoUrl(id, s.draft.logo, true) : null } : null }])),
+      refunds: ((await ctx.store.get('refunds')) || []).slice(-30).reverse(),
+      slots: Object.fromEntries(Object.entries(slots).map(([id, s]) => [id, { state: s.state, by: s.by, sub: !!s.sub, at: s.at, ...(s.bid && { bid: s.bid }), ...shown(id, s), draft: s.draft ? { ...s.draft, logo: s.draft.logo > 0 ? logoUrl(id, s.draft.logo, true) : null } : null }])),
     });
   }
   return null;

@@ -307,10 +307,24 @@ trails, fireworks: the item shop says so and lets everything be put on. With a k
 | A paint job: gold plating, chrome, atomic glow, candy paint | $19, $15, $12, $9, once | the item shop |
 | A trail: fallout, confetti, stardust, bubbles | $12, $9, $7, $5, once | the item shop |
 | The box of fireworks (never empty) | $15, once | the item shop |
-| The sponsor's panel over the board of a game (six of them) | $49 a month | step up to the board: "Sponsor this game" |
+| The sponsor's panel over the board of a game (six of them) | an auction, from $1 (see below) | step up to the board ("Sponsor this game · from $1"), or the shelf *Sponsor a game* of the item shop |
 | The backdrop of the shooting gallery | $99 a month | at the counter side of Bullseye Alley |
 | A gondola of the big wheel (twenty-four) | $29 a month | the red kiosk by the steps of the wheel: "The gondolas and their sponsors" |
 | A sky village (fifty) | $19 to $9,999 a month | at the sign or the board of the village: "Hire …" |
+
+**Sponsoring a game is an auction.** The panel over the scores of each game goes to the highest bidder. The
+first bid is one dollar; to take a panel that somebody holds, bid at least a dollar more than they paid (a
+tenth more once the bids pass ten dollars). A bid is paid once, on Stripe, and holds the panel until
+somebody bids more: that day the newcomer takes the place (the panel starts empty again) and the one who
+held it gets **the whole of their payment back, automatically** — the server asks Stripe for the refund and
+leaves them a word, shown the next time they open the game. A bid that arrives too late (somebody paid more
+while they were on the payment page) is refunded at once in the same way; so is a sponsor the administrator
+takes off a panel. Every refund is written down, and the administrator sees the last thirty with the
+sponsors (`GET /api/sponsors`): one that Stripe refuses — a card payment can only be refunded for about six
+months — is marked there, to be settled by hand. Two things to know before selling for real: Stripe keeps
+its fee on a payment that is refunded (about 30 cents and 2.9 %: a one-dollar bid that is outbid costs the
+fair a few cents), and the rules of the auction are three lines of `server/catalog.js` (`AUCTION`,
+`nextBid`).
 
 What a visitor owns is one list, `server/items.js` (id, name, price, shelf, rarity, the words on the card):
 add a line there and it is sold. Prices of the places are in `server/catalog.js` (and `VILLAGE_PRICES` in

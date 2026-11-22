@@ -28,7 +28,7 @@ import { cleanGeo, packGeo, unpackGeo } from '../server/visitors.js';
 const SCORE_SECRET = 'test-score-secret', ADMIN_KEY = 'test-admin-key';
 const STRIPE_KEY = 'sk_test_magicmillfairtests', STRIPE_HOOK = 'whsec_magicmillfairtests';
 // A stand-in for Stripe: it hands out payment pages and remembers what it was asked.
-const stripe = { asked: [], port: 0, server: null };
+const stripe = { asked: [], refunds: [], port: 0, server: null };
 async function startStripe() {
   stripe.port = await freePort();
   stripe.server = http.createServer((req, res) => {
@@ -36,6 +36,13 @@ async function startStripe() {
     req.on('data', (d) => { text += d; });
     req.on('end', () => {
       const form = new URLSearchParams(text), ok = req.headers.authorization === `Bearer ${STRIPE_KEY}` && req.url === '/v1/checkout/sessions';
+      if (req.url === '/v1/refunds' && req.headers.authorization === `Bearer ${STRIPE_KEY}`) {
+        // a refund: written down; one payment is "too old" and cannot be given back
+        const pay = form.get('payment_intent'), old = pay === 'pi_too_old';
+        if (!old) stripe.refunds.push({ pay, key: req.headers['idempotency-key'], why: form.get('metadata[why]') });
+        res.writeHead(old ? 400 : 200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify(old ? { error: { message: 'This payment is too old to be refunded.' } } : { id: `re_test_${stripe.refunds.length}` }));
+      }
       stripe.asked.push({ url: req.url, auth: req.headers.authorization, form });
       res.writeHead(ok ? 200 : 401, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(ok ? { id: `cs_test_${stripe.asked.length}`, url: `https://checkout.stripe.test/pay/cs_test_${stripe.asked.length}` } : { error: { message: 'Invalid API Key' } }));
@@ -843,25 +850,25 @@ async function testShop({ port }) {
   const again = await post('/api/checkout', { item: 'hat:crown', device: ann });
   check('shop: what Stripe says was paid is theirs — once, and theirs only; it is not sold to them twice', ok1.status === 200 && ok2.status === 200 && ok3.status === 200 && mine.owned.join() === 'hat:crown,jetpack' && !theirs.owned.length && again.status === 409, [mine.owned, theirs.owned, again.status]);
   // a place to sponsor: paid, then filled in by its holder, then approved by the administrator
-  await hook(paid('board:shoot', bob, 'sub_test_1'));
-  const taken = await post('/api/checkout', { item: 'board:shoot', device: ann });
+  await hook(paid('tarp:shoot', bob, 'sub_test_1'));
+  const taken = await post('/api/checkout', { item: 'tarp:shoot', device: ann });
   const seen = json(await request(port, `/api/shop?device=${ann}`)), held = json(await request(port, `/api/shop?device=${bob}`));
-  check('shop: a sponsored place is held by who paid; others only see that it is taken', taken.status === 409 && seen.slots['board:shoot']?.state === 'taken' && !seen.slots['board:shoot'].mine && held.slots['board:shoot']?.mine === true, [taken.status, seen.slots, held.slots]);
-  const intruder = await post('/api/sponsor', { slot: 'board:shoot', device: ann, title: 'Mine now' });
-  const html = await post('/api/sponsor', { slot: 'board:shoot', device: bob, title: '<script>alert(1)</script> Acme   Robotics & Sons of the North Pole', subtitle: 'Friendly\nmachines <b>since</b> 1999', url: 'javascript:alert(1)', logo: PNG });
-  const svg = await post('/api/sponsor', { slot: 'board:shoot', device: bob, title: 'Acme', logo: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><script>alert(1)</script></svg>'.padEnd(64)).toString('base64') });
-  const page = await post('/api/sponsor', { slot: 'board:shoot', device: bob, title: 'Acme', logo: Buffer.from('<!doctype html><html><script>alert(1)</script></html>'.padEnd(64)).toString('base64') });
-  const liar = await post('/api/sponsor', { slot: 'board:shoot', device: bob, title: 'Acme', logo: Buffer.concat([Buffer.from(PNG, 'base64').subarray(0, 8), Buffer.from('<script>alert(1)</script>'.padEnd(60))]).toString('base64') });
-  const fine = await post('/api/sponsor', { slot: 'board:shoot', device: bob, title: '<script>alert(1)</script> Acme   Robotics & Sons of the North Pole', subtitle: 'Friendly\nmachines <b>since</b> 1999', url: 'https://acme.example/robots?x=1', logo: PNG });
-  const notYet = json(await request(port, `/api/shop?device=${ann}`)).slots['board:shoot'], noLogo = await request(port, '/api/logo?slot=board:shoot');
+  check('shop: a sponsored place is held by who paid; others only see that it is taken', taken.status === 409 && seen.slots['tarp:shoot']?.state === 'taken' && !seen.slots['tarp:shoot'].mine && held.slots['tarp:shoot']?.mine === true, [taken.status, seen.slots, held.slots]);
+  const intruder = await post('/api/sponsor', { slot: 'tarp:shoot', device: ann, title: 'Mine now' });
+  const html = await post('/api/sponsor', { slot: 'tarp:shoot', device: bob, title: '<script>alert(1)</script> Acme   Robotics & Sons of the North Pole', subtitle: 'Friendly\nmachines <b>since</b> 1999', url: 'javascript:alert(1)', logo: PNG });
+  const svg = await post('/api/sponsor', { slot: 'tarp:shoot', device: bob, title: 'Acme', logo: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><script>alert(1)</script></svg>'.padEnd(64)).toString('base64') });
+  const page = await post('/api/sponsor', { slot: 'tarp:shoot', device: bob, title: 'Acme', logo: Buffer.from('<!doctype html><html><script>alert(1)</script></html>'.padEnd(64)).toString('base64') });
+  const liar = await post('/api/sponsor', { slot: 'tarp:shoot', device: bob, title: 'Acme', logo: Buffer.concat([Buffer.from(PNG, 'base64').subarray(0, 8), Buffer.from('<script>alert(1)</script>'.padEnd(60))]).toString('base64') });
+  const fine = await post('/api/sponsor', { slot: 'tarp:shoot', device: bob, title: '<script>alert(1)</script> Acme   Robotics & Sons of the North Pole', subtitle: 'Friendly\nmachines <b>since</b> 1999', url: 'https://acme.example/robots?x=1', logo: PNG });
+  const notYet = json(await request(port, `/api/shop?device=${ann}`)).slots['tarp:shoot'], noLogo = await request(port, '/api/logo?slot=tarp:shoot');
   check('shop: only the holder fills a place in; a link must be https; what is not a picture is refused', intruder.status === 403 && html.status === 400 && svg.status === 400 && page.status === 400 && liar.status === 400 && fine.status === 200 && json(fine)?.state === 'pending', [intruder.status, html.status, svg.status, page.status, liar.status, fine.status]);
   check('shop: nothing a sponsor sends is shown before it is approved', notYet.state === 'taken' && !notYet.title && noLogo.status === 404, [notYet, noLogo.status]);
   const noAdmin = await request(port, '/api/sponsors'), list = json(await request(port, '/api/sponsors', { headers: admin }));
-  const draft = list?.slots?.['board:shoot']?.draft;
+  const draft = list?.slots?.['tarp:shoot']?.draft;
   const peek = await request(port, draft?.logo || '/nowhere'), look = await request(port, draft?.logo || '/nowhere', { headers: admin });
   check('shop: the administrator sees what awaits approval — text made harmless, the picture for their eyes only', noAdmin.status === 403 && draft && !/[<>]/.test(draft.title + draft.subtitle) && draft.title.length <= 28 && draft.subtitle === 'Friendly machines b since /b 1999' && draft.url === 'https://acme.example/robots?x=1' && peek.status === 404 && look.status === 200 && look.headers['content-type'] === 'image/png', [noAdmin.status, draft, peek.status, look.status, look.headers['content-type']]);
-  const approve = await post('/api/sponsors', { slot: 'board:shoot', approve: true }, admin), sneaky = await post('/api/sponsors', { slot: 'board:shoot', approve: true });
-  const live = json(await request(port, `/api/shop?device=${ann}`)).slots['board:shoot'];
+  const approve = await post('/api/sponsors', { slot: 'tarp:shoot', approve: true }, admin), sneaky = await post('/api/sponsors', { slot: 'tarp:shoot', approve: true });
+  const live = json(await request(port, `/api/shop?device=${ann}`)).slots['tarp:shoot'];
   const logo = await request(port, live?.logo || '/nowhere');
   check('shop: once approved it is shown to everyone; the picture is served as a picture and nothing else', approve.status === 200 && sneaky.status === 403 && live.state === 'live' && live.url === 'https://acme.example/robots?x=1' && logo.status === 200 && logo.headers['content-type'] === 'image/png' && logo.headers['x-content-type-options'] === 'nosniff' && /sandbox/.test(logo.headers['content-security-policy'] || '') && logo.body.equals(Buffer.from(PNG, 'base64')), [approve.status, sneaky.status, live, logo.status, logo.headers]);
   // the administrator fills a place by hand; a subscription that ends frees its place
@@ -870,9 +877,47 @@ async function testShop({ port }) {
   const ended = await hook({ type: 'customer.subscription.deleted', data: { object: { id: 'sub_test_1' } } });
   const after = json(await request(port, `/api/shop?device=${bob}`)), gone = await request(port, live?.logo || '/nowhere');
   const freed = await request(port, '/api/sponsors?slot=gondola:7', { method: 'DELETE', headers: admin });
-  check('shop: the administrator can fill a place by hand and free it; a subscription that ends frees its place and its picture', byHand.status === 200 && g7?.state === 'live' && g7.title === 'Seven Seas Ice Cream' && g7logo.status === 200 && g7logo.headers['content-type'] === 'image/jpeg' && ended.status === 200 && !after.slots['board:shoot'] && gone.status === 404 && freed.status === 200 && !json(freed).slots['gondola:7'], [byHand.status, g7, g7logo.status, ended.status, Object.keys(after.slots), gone.status, freed.status]);
+  check('shop: the administrator can fill a place by hand and free it; a subscription that ends frees its place and its picture', byHand.status === 200 && g7?.state === 'live' && g7.title === 'Seven Seas Ice Cream' && g7logo.status === 200 && g7logo.headers['content-type'] === 'image/jpeg' && ended.status === 200 && !after.slots['tarp:shoot'] && gone.status === 404 && freed.status === 200 && !json(freed).slots['gondola:7'], [byHand.status, g7, g7logo.status, ended.status, Object.keys(after.slots), gone.status, freed.status]);
+  // the panel of a game is auctioned: a dollar to start; whoever bids more takes it, and the other is refunded
+  const bidPaid = (item, device, amount, pay) => ({ type: 'checkout.session.completed', data: { object: { id: `cs_${pay}`, payment_status: 'paid', amount_total: amount, payment_intent: pay, metadata: { item, device, bid: String(amount) } } } });
+  stripe.asked.length = 0; stripe.refunds.length = 0;
+  const low = await post('/api/checkout', { item: 'board:mole', device: ann, bid: 50 }), first = await post('/api/checkout', { item: 'board:mole', device: ann, bid: 100 });
+  const firstForm = stripe.asked[0]?.form;
+  await hook(bidPaid('board:mole', ann, 100, 'pi_ann_1'));
+  const held1 = json(await request(port, `/api/shop?device=${bob}`)).slots['board:mole'], prices = json(await request(port, '/api/shop')).prices;
+  check('auction: the panel of a game starts at one dollar, paid once; who paid holds it, and everybody sees what it went for',
+    low.status === 409 && json(low).next === 100 && first.status === 200 && firstForm?.get('mode') === 'payment' && firstForm.get('line_items[0][price_data][unit_amount]') === '100' && firstForm.get('metadata[bid]') === '100'
+    && held1?.state === 'taken' && held1.bid === 100 && held1.next === 200 && !held1.mine && prices.auction.start === 100 && prices.board === undefined,
+    [low.status, first.status, held1, prices.auction]);
+  // Ann shows something; Bob bids more: the panel is his (and empty again), Ann is refunded in full, once, and told so
+  await post('/api/sponsor', { slot: 'board:mole', device: ann, title: 'Ann & Co', logo: PNG });
+  await post('/api/sponsors', { slot: 'board:mole', approve: true }, admin);
+  const shownBefore = await request(port, '/api/logo?slot=board:mole');
+  const same = await post('/api/checkout', { item: 'board:mole', device: bob, bid: 100 }), more = await post('/api/checkout', { item: 'board:mole', device: bob, bid: 500 });
+  await hook(bidPaid('board:mole', bob, 500, 'pi_bob_1'));
+  await hook(bidPaid('board:mole', bob, 500, 'pi_bob_1')); // (Stripe says it twice: counted once)
+  const annSees = json(await request(port, `/api/shop?device=${ann}`)), annAgain = json(await request(port, `/api/shop?device=${ann}`)), bobSees = json(await request(port, `/api/shop?device=${bob}`));
+  const oldLogo = await request(port, '/api/logo?slot=board:mole');
+  check('auction: a higher bid takes the panel — the one who held it is refunded in full, once, and told so; what they showed is gone',
+    shownBefore.status === 200 && same.status === 409 && more.status === 200 && bobSees.slots['board:mole']?.mine === true && bobSees.slots['board:mole'].bid === 500 && bobSees.slots['board:mole'].next === 600 && bobSees.slots['board:mole'].state === 'taken'
+    && !annSees.slots['board:mole'].mine && stripe.refunds.length === 1 && stripe.refunds[0].pay === 'pi_ann_1' && stripe.refunds[0].key === 'refund-pi_ann_1' && /outbid/.test(annSees.notes?.[0] || '') && /refunded in full/.test(annSees.notes[0]) && !annAgain.notes && oldLogo.status === 404,
+    [same.status, more.status, bobSees.slots['board:mole'], stripe.refunds, annSees.notes, oldLogo.status]);
+  // a bid that arrives too late (somebody paid more meanwhile) is refunded at once; a refund Stripe refuses is kept for the administrator
+  await hook(bidPaid('board:mole', ann, 300, 'pi_ann_2'));
+  const late = json(await request(port, `/api/shop?device=${ann}`));
+  await hook(bidPaid('board:bell', ann, 100, 'pi_too_old'));
+  await hook(bidPaid('board:bell', bob, 200, 'pi_bob_2'));
+  const book = json(await request(port, '/api/sponsors', { headers: admin }));
+  check('auction: a bid that arrives too late is refunded at once; every refund is written down — a refused one too, for the administrator',
+    !late.slots['board:mole'].mine && late.slots['board:mole'].bid === 500 && /refunded/.test(late.notes?.[0] || '') && stripe.refunds.some((r) => r.pay === 'pi_ann_2') && book.slots['board:bell'].bid === 200
+    && book.refunds.length === 3 && book.refunds[0].pay === 'pi_too_old' && book.refunds[0].ok === false && /too old/.test(book.refunds[0].error) && book.refunds.find((r) => r.pay === 'pi_ann_1')?.ok === true && book.refunds.find((r) => r.pay === 'pi_ann_1').amount === 100,
+    [late.slots['board:mole'], late.notes, book.refunds]);
+  // the administrator takes a sponsor off an auctioned panel: their bid goes back to them
+  const off = await request(port, '/api/sponsors?slot=board:mole', { method: 'DELETE', headers: admin });
+  const bobTold = json(await request(port, `/api/shop?device=${bob}`));
+  check('auction: a sponsor taken off by the administrator gets the bid back; the panel is free again, from a dollar',
+    off.status === 200 && !bobTold.slots['board:mole'] && stripe.refunds.some((r) => r.pay === 'pi_bob_1') && /refunded in full/.test(bobTold.notes?.[0] || ''), [off.status, bobTold.notes, stripe.refunds.map((r) => r.pay)]);
 }
-
 function testShopLogic() {
   const b64 = (text) => Buffer.from(text.padEnd(64)).toString('base64');
   check('shop logic: text is one short line without markup; links are https and carry no name or password',

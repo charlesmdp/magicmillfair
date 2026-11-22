@@ -8,6 +8,8 @@ import { FreeCamera } from './player/FreeCamera.js';
 import { CharacterFactory, EMOTE_LIST, emoteIndex, packLook } from './player/Character.js';
 import { HATS } from './player/Cosmetics.js';
 import { ITEMS, PAINTS, TRAILS, itemOf, packKit } from '../server/items.js';
+import { BOARDS as GAME_NAMES } from '../server/catalog.js';
+import { drawSponsor } from './world/zones/games/Boards.js';
 import { ShopView } from './ui/ShopView.js';
 import { Previewer } from './ui/Preview.js';
 import { Sparks } from './world/effects/Sparks.js';
@@ -569,6 +571,10 @@ async function boot() {
     player.tank = shop.owns('jetpack') ? JET.time : JET.time / 3;
     hud.setShop(shop.open);
     hud.setFireworks(shop.owns('fireworks'));
+    for (const text of shop.notes.splice(0)) hud.addChat('✦', 5, text, true); // (outbid, refunded: said once)
+    // (the empty panel over a board says how to take it)
+    for (const sl of world.sponsorSlots || []) sl.offer?.(shop.open ? `from ${price(shop.least(sl.id))} · step up and bid` : '');
+    shopView.stale('board:');
     shopView.refresh(shopItems());
     await applySponsors();
   };
@@ -592,6 +598,20 @@ async function boot() {
   };
   let pending = {}; // the administrator: every place as the server keeps it (drafts included)
   /** What can be done about the place `id`, for who stands by it: [{ label, run }] */
+  /** A bid for the panel of a game: how much, then off to the payment page. */
+  const bidFor = async (id) => {
+    if (!shop.open) { hud.note('The shop is not open yet. Come back soon!', 5200); return; }
+    const place = places.get(id), view = shop.slots[id], least = shop.least(id);
+    const got = await hud.form(`Sponsor ${GAME_NAMES[id.split(':')[1]] || place.what}`,
+      `${view ? `Its sponsor paid ${price(view.bid || 0)}: bid at least ${price(least)} and the panel is yours.` : `Nobody sponsors it yet: the first bid is ${price(least)}.`} You pay once and keep the panel — your name, a line, your logo, a link — until somebody bids more. That day you are refunded in full, automatically, and they take your place.`,
+      [{ key: 'bid', label: `Your bid, in US dollars (at least ${price(least)})`, value: String(least / 100), max: 9 }], 'Go to payment');
+    if (!got) return;
+    const bid = Math.round(Number(String(got.bid).replace(',', '.').replace(/[^0-9.]/g, '')) * 100);
+    if (!Number.isFinite(bid) || bid < least) { hud.note(`The bid must be at least ${price(least)}.`, 5000); return; }
+    hud.note('Opening the payment page…', 8000);
+    const wrong = await shop.buy(id, bid);
+    if (wrong) { hud.note(wrong, 7000); refreshShop(); }
+  };
   const placeActions = (id) => {
     const place = places.get(id), view = shop.slots[id], out = [];
     const cents = shop.cost(id, place.village?.tier);
@@ -603,7 +623,10 @@ async function boot() {
     }
     if (view?.mine || (who.admin && shop.open)) out.push({ label: view?.mine ? (view.draft ? 'Change what you sent' : 'Set up your panel') : 'Fill this place in (administrator)', run: () => fillPlace(id) });
     if (view?.state === 'live' && view.url) out.push({ label: `Visit ${view.title}`, run: () => window.open(view.url, '_blank', 'noopener,noreferrer') });
-    if (!view && shop.open && !out.length) out.push({ label: `Sponsor ${place.what} · ${price(cents)} a month`, run: () => offer(id, `Sponsor ${place.what}`, `${price(cents)} a month, for as long as you like: your name, a line under it, your logo and a link, shown to every visitor. It appears once the fair has approved it.`, cents, true) });
+    if (id.startsWith('board:')) {
+      // the panel of a game goes to the highest bidder: from one dollar; whoever is outbid is refunded
+      if (shop.open && !view?.mine && out.length < 2) out.push({ label: view ? `Outbid the sponsor · from ${price(shop.least(id))}` : `Sponsor ${place.what} · from ${price(shop.least(id))}`, run: () => bidFor(id) });
+    } else if (!view && shop.open && !out.length) out.push({ label: `Sponsor ${place.what} · ${price(cents)} a month`, run: () => offer(id, `Sponsor ${place.what}`, `${price(cents)} a month, for as long as you like: your name, a line under it, your logo and a link, shown to every visitor. It appears once the fair has approved it.`, cents, true) });
     return out;
   };
   world.actionSources.push((p) => {
@@ -651,15 +674,49 @@ async function boot() {
   // ---------- the item shop: everything that is sold, on one screen (ui/ShopView.js)
   const FEATURED = ['jetpack', 'paint:gold', 'fireworks', 'hat:crown'], WEARABLE = ['hat', 'paint', 'trail'];
   const previewer = new Previewer(engine, factory);
-  const shopView = new ShopView(hud.root, (id, w, h) => previewer.shot(id, color, w, h));
+  // (the picture of a place to sponsor: its panel as it stands over the board, under the name of the game)
+  const panelPicture = (id, w, h) => {
+    const c = document.createElement('canvas'), view = shop.slots[id], game = GAME_NAMES[id.split(':')[1]] || '';
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d'), pw = w * 0.9, ph = pw * 0.31;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fff'; ctx.font = `italic 900 ${Math.round(h * 0.085)}px 'Arial Black', Impact, Arial, sans-serif`;
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.45)'; ctx.shadowOffsetY = 3; ctx.shadowBlur = 0;
+    ctx.fillText(game.toUpperCase(), w / 2, h * 0.2, w * 0.92);
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.4)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 8;
+    ctx.translate(w / 2, h * 0.47); ctx.rotate(-0.05);
+    ctx.fillStyle = '#000'; ctx.fillRect(-pw / 2, -ph / 2, pw, ph);
+    ctx.shadowColor = 'transparent';
+    ctx.translate(-pw / 2, -ph / 2);
+    ctx.beginPath(); ctx.rect(0, 0, pw, ph); ctx.clip();
+    const sponsor = view?.state === 'live' ? { title: view.title, subtitle: view.subtitle, logo: null } : null;
+    drawSponsor(ctx, pw, ph, sponsor, { what: 'this game' });
+    return c;
+  };
+  const shopView = new ShopView(hud.root, (id, w, h) => (id.startsWith('board:') ? panelPicture(id, w, h) : previewer.shot(id, color, w, h)));
   const wornNow = (type, sub) => (type === 'hat' ? HATS[look.hat]?.id === sub : type === 'paint' ? PAINTS[kit.paint] === sub : type === 'trail' ? TRAILS[kit.trail] === sub : false);
-  const shopItems = () => ITEMS.map((it) => {
-    const [type, sub] = it.id.split(':'), owned = shop.owns(it.id);
-    return {
-      ...it, owned, cost: price(shop.cost(it.id) || it.price), worn: owned && wornNow(type, sub), wearable: WEARABLE.includes(type), featured: FEATURED.includes(it.id),
-      hint: it.id === 'fireworks' ? 'Yours: press V (or the button in the emotes) to light one.' : it.id === 'jetpack' || it.id === 'jetlite' ? 'Yours: jump, then press jump again in the air.' : 'Yours for good: put it on and take it off as you please.',
-    };
-  });
+  const shopItems = () => {
+    const list = ITEMS.map((it) => {
+      const [type, sub] = it.id.split(':'), owned = shop.owns(it.id);
+      return {
+        ...it, owned, cost: price(shop.cost(it.id) || it.price), worn: owned && wornNow(type, sub), wearable: WEARABLE.includes(type), featured: FEATURED.includes(it.id),
+        hint: it.id === 'fireworks' ? 'Yours: press V (or the button in the emotes) to light one.' : it.id === 'jetpack' || it.id === 'jetlite' ? 'Yours: jump, then press jump again in the air.' : 'Yours for good: put it on and take it off as you please.',
+      };
+    });
+    // the panel over the board of each game, to the highest bidder (only while things are sold)
+    if (shop.open) for (const [game, title] of Object.entries(GAME_NAMES)) {
+      const id = `board:${game}`, view = shop.slots[id], least = shop.least(id), mine = !!view?.mine;
+      list.push({
+        id, name: title, group: 'sponsor', rarity: view ? 'epic' : 'rare', owned: mine, wearable: false,
+        cost: mine ? 'Yours' : view ? `Beat ${price(view.bid || 0)}` : `From ${price(least)}`,
+        act: mine ? null : `Bid · from ${price(least)}`,
+        blurb: `Your name, a line under it, your logo and a link, on the panel over the scores of ${title}: where everybody who plays looks. ${view ? (mine ? 'It is yours until somebody bids more.' : `Its sponsor paid ${price(view.bid || 0)}: bid ${price(least)} or more and it is yours.`) : `Nobody has it yet: the first bid is ${price(least)}.`}`,
+        hint: 'Yours: go to the board of the game and set up your panel.',
+        fine: mine ? 'Yours: go to the board of the game to set up your panel. Outbid, you are refunded in full.' : 'An auction: you pay your bid once and hold the panel until somebody bids more — then you are refunded in full, automatically.',
+      });
+    }
+    return list;
+  };
   /** What is worn goes on the avatar, is remembered, and is told to the others. */
   function wear() {
     me.setPaint(kit.paint);
@@ -684,7 +741,12 @@ async function boot() {
     audio.play('pick');
   };
   shopView
-    .on('buy', async (id) => { hud.note('Opening the payment page…', 8000); const wrong = await shop.buy(id); if (wrong) hud.note(wrong, 7000); })
+    .on('buy', async (id) => {
+      if (id.startsWith('board:')) { shopView.close(); bidFor(id); return; } // (a place to sponsor: how much?)
+      hud.note('Opening the payment page…', 8000);
+      const wrong = await shop.buy(id);
+      if (wrong) hud.note(wrong, 7000);
+    })
     .on('equip', (id) => { const [type, sub] = id.split(':'); if (!shop.owns(id)) return; equip(id, !wornNow(type, sub)); shopView.refresh(shopItems()); audio.play('pick'); })
     .on('close', () => { document.getElementById('view')?.focus({ preventScroll: true }); });
   // a firework (for who has the box): up it goes, and those around see it too

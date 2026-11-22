@@ -27,8 +27,8 @@ export const LIMITS = {
   scores: [[8, 60_000], [90, 3600_000]], // a climb takes minutes, a game at a booth less than one
   run: [[30, 60_000], [400, 3600_000]], // a note for each start (the start plate of the climb is left often)
   visit: [[10, 60_000], [60, 3600_000]],
-  checkout: [[6, 60_000], [40, 3600_000]], // a payment page asked for
-  sponsor: [[6, 60_000], [30, 3600_000]], // what a sponsor wants shown (a picture each time)
+  checkout: [[12, 60_000], [60, 3600_000]], // a payment page asked for (a few bids in a row are not a flood)
+  sponsor: [[12, 60_000], [40, 3600_000]], // what a sponsor wants shown (a picture each time)
   npc: [[10, 60_000], [120, 3600_000]],
   npcDay: [3000, 24 * 3600_000], // everyone together: a ceiling on what the key can spend in a day
 };

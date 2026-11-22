@@ -25,7 +25,8 @@ export const price = (cents) => { const d = Math.floor(cents / 100), c = cents %
 export class Shop {
   constructor() {
     this.mode = null; // 'test' | 'live' when things are sold
-    this.prices = { board: 4900, tarp: 9900, gondola: 2900, village: [], items: {} };
+    this.prices = { tarp: 9900, gondola: 2900, village: [], items: {}, auction: { start: 100, max: 1_000_000 } };
+    this.notes = []; // what happened while the visitor was away (outbid, refunded): said once
     this.owned = new Set();
     /** slot → { state: 'live' | 'taken', mine, title, subtitle, url, logo (an address), draft } */
     this.slots = {};
@@ -42,6 +43,7 @@ export class Shop {
       Object.assign(this.prices, res.body.prices || {});
       this.owned = new Set(res.body.owned || []);
       this.slots = res.body.slots || {};
+      if (Array.isArray(res.body.notes)) this.notes.push(...res.body.notes.map(String));
     }
     return this;
   }
@@ -52,9 +54,15 @@ export class Shop {
   /** What an item costs, in cents (a village: give its tier). */
   cost(item, tier = 0) { const type = item.split(':')[0]; return type === 'village' ? this.prices.village[tier] || 0 : this.prices.items?.[item] ?? this.prices[type] ?? 0; }
 
-  /** Off to the payment page. Resolves to an error to show when it could not be opened (otherwise the page leaves). */
-  async buy(item) {
-    const res = await ask('api/checkout', { method: 'POST', body: { item, device: deviceId() } });
+  /** The least that can be bid for an auctioned place, in cents: what beats its sponsor, or the first bid. */
+  least(slot) { return this.slots[slot]?.next || this.prices.auction?.start || 100; }
+
+  /**
+   * Off to the payment page (`bid`, in cents: for a place that is auctioned). Resolves to an error to show when
+   * it could not be opened (otherwise the page leaves).
+   */
+  async buy(item, bid) {
+    const res = await ask('api/checkout', { method: 'POST', body: { item, device: deviceId(), ...(bid && { bid }) } });
     if (res.ok && res.body && /^https:\/\//.test(res.body.url || '')) { window.location.assign(res.body.url); return null; }
     return res.body?.error || (res.status === 0 ? 'The shop cannot be reached.' : 'The payment page could not be opened.');
   }

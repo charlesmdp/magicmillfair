@@ -445,15 +445,19 @@ try {
   {
     await place(places.wheel[0], places.wheel[1], 270);
     await frames(3);
-    let offer = await prompt();
-    for (let i = 0; i < 80 && !offer.includes('Board the wheel'); i++) { await frames(2); offer = await prompt(); }
-    const yBefore = (await state()).y;
-    await page.keyboard.press('KeyE');
-    await frames(40);
-    // (the wheel turns at its own pace, whatever the frame rate: wait until the car has gone up a little)
-    for (let i = 0; i < 40 && (await page.evaluate((y0) => { const a = window.__mmf; return !!a.player.seat && a.player.pos.y < y0 + 0.35; }, yBefore)); i++) await frames(5);
-    const ride = await page.evaluate(() => { const a = window.__mmf; return { seat: !!a.player.seat, y: a.player.pos.y, anim: a.player.anim }; });
-    check('boards a car of the big wheel and goes up with it', offer.includes('Board the wheel') && ride.seat && ride.anim === 5 && ride.y > yBefore + 0.3, `from ${yBefore.toFixed(2)} to ${ride.y.toFixed(2)} m`);
+    // (a car is only at the platform for a moment: it is boarded the very frame it is offered, and followed up)
+    const ride = await page.evaluate(() => new Promise((res) => {
+      const app = window.__mmf, t0 = performance.now(), out = { offered: false, y0: app.player.pos.y };
+      const tick = () => {
+        const p = [...document.querySelectorAll('.prompt.on span')].map((e) => e.textContent);
+        if (!app.player.seat && p.includes('Board the wheel')) { out.offered = true; out.y0 = app.player.pos.y; app.hud.emit('interact'); }
+        const up = !!app.player.seat && app.player.pos.y > out.y0 + 0.35;
+        if (up || performance.now() - t0 > 120000) return res({ ...out, seat: !!app.player.seat, y: app.player.pos.y, anim: app.player.anim });
+        requestAnimationFrame(tick);
+      };
+      tick();
+    }));
+    check('boards a car of the big wheel and goes up with it', ride.offered && ride.seat && ride.anim === 5 && ride.y > ride.y0 + 0.3, `from ${ride.y0.toFixed(2)} to ${ride.y.toFixed(2)} m`);
     await page.evaluate(() => window.__mmf.player.teleport(0, 4.3, 0)); // (down again)
   }
 

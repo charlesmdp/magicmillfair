@@ -169,12 +169,12 @@ export class GamesZone {
    */
   scoreStand(id, x, z, yaw, { title, sub, format, what = 'this game', width = 3.4, y = this.ground(x, z), pixels = 1 }) {
     const k = width / 3.4;
-    const state = { lists: null, sponsor: null };
+    const state = { lists: null, sponsor: null, offer: '' };
     // (`pixels`: a smaller board is drawn on a smaller sheet — the same drawing, scaled)
     const board = canvasBoard(Math.round(1024 * pixels), Math.round(904 * pixels), (ctx) => { ctx.save(); ctx.scale(pixels, pixels); drawScores(ctx, 1024, 904, { title, sub, lists: state.lists, format, me: this.me }); ctx.restore(); }, width, 3.0 * k);
     board.mesh.position.set(x, y + 0.75 + 1.5 * k, z);
     board.mesh.rotation.y = yaw;
-    const panel = canvasBoard(Math.round(1024 * pixels), Math.round(316 * pixels), (ctx) => { ctx.save(); ctx.scale(pixels, pixels); drawSponsor(ctx, 1024, 316, state.sponsor, { what }); ctx.restore(); }, width, 1.05 * k);
+    const panel = canvasBoard(Math.round(1024 * pixels), Math.round(316 * pixels), (ctx) => { ctx.save(); ctx.scale(pixels, pixels); drawSponsor(ctx, 1024, 316, state.sponsor, { what, price: state.offer }); ctx.restore(); }, width, 1.05 * k);
     panel.mesh.position.set(x, y + 0.75 + 3.0 * k + 0.08 + 0.525 * k, z);
     panel.mesh.rotation.y = yaw;
     this.group.add(board.mesh, panel.mesh);
@@ -209,8 +209,10 @@ export class GamesZone {
       setScores: (lists) => { state.lists = lists; board.redraw(); },
       redraw: () => board.redraw(),
       setSponsor: (sponsor) => { state.sponsor = sponsor; panel.redraw(); },
+      /** What the empty panel says about taking it ("from $1 · step up and bid"), or nothing. */
+      setOffer: (text) => { if (text !== state.offer) { state.offer = text; if (!state.sponsor) panel.redraw(); } },
     };
-    (this.world.sponsorSlots ||= []).push({ id: `board:${id}`, what, x: x + Math.sin(yaw) * 1.4, y, z: z + Math.cos(yaw) * 1.4, reach: 3.2, set: stand.setSponsor });
+    (this.world.sponsorSlots ||= []).push({ id: `board:${id}`, what, x: x + Math.sin(yaw) * 1.4, y, z: z + Math.cos(yaw) * 1.4, reach: 3.2, set: stand.setSponsor, offer: stand.setOffer });
     (this.stands ||= {})[id] = stand;
     return stand;
   }

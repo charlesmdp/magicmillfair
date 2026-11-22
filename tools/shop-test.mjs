@@ -43,8 +43,9 @@ server.stdout.on('data', (d) => { serverLog += d; });
 server.stderr.on('data', (d) => { serverLog += d; });
 for (let i = 0; i < 300; i++) { try { if ((await fetch(`${BASE}/healthz`)).ok) break; } catch { /* not up yet */ } await new Promise((r) => setTimeout(r, 100)); }
 /** Stripe tells the server that `item` was paid by `device`. */
-const pay = async (item, device, sub = null) => {
-  const raw = JSON.stringify({ type: 'checkout.session.completed', data: { object: { payment_status: 'paid', subscription: sub, metadata: { item, device } } } });
+const pay = async (item, device, sub = null, bid = null) => {
+  // (`bid`: { amount, pay } for a place that is auctioned — what Stripe says was paid, and the payment to give back one day)
+  const raw = JSON.stringify({ type: 'checkout.session.completed', data: { object: { payment_status: 'paid', subscription: sub, ...(bid && { amount_total: bid.amount, payment_intent: bid.pay }), metadata: { item, device } } } });
   return (await fetch(`${BASE}/api/stripe/webhook`, { method: 'POST', headers: { 'content-type': 'application/json', 'stripe-signature': await signWebhook(HOOK, raw) }, body: raw })).status;
 };
 
@@ -78,7 +79,7 @@ try {
   const crown = await card('hat:crown'), jet = await card('jetpack'), lite = await card('jetlite'), gold = await card('paint:gold'), bubbles = await card('trail:bubbles'), fire = await card('fireworks');
   const device = await page.evaluate(() => localStorage.getItem('mmf.device'));
   check('the item shop: its own icon, shelves of cards with a picture and a price — two jetpacks ($30, $5), hats, paints, trails, fireworks',
-    shelves.titles.join() === 'Featured,Gear,Hats,Paint jobs,Trails,Just for fun' && shelves.cards >= 20 && /Test mode/.test(shelves.mode) && crown?.tag === '$9.99' && crown.picture && /legendary/.test(crown.cls)
+    shelves.titles.join() === 'Featured,Gear,Hats,Paint jobs,Trails,Just for fun,Sponsor a game' && shelves.cards >= 20 && /Test mode/.test(shelves.mode) && crown?.tag === '$9.99' && crown.picture && /legendary/.test(crown.cls)
     && jet?.tag === '$30' && lite?.tag === '$5' && gold?.tag === '$19' && bubbles?.tag === '$5' && fire?.tag === '$15',
     JSON.stringify({ shelves, crown, jet, lite, gold, bubbles, fire }));
   const offer = await pick('hat:crown');
@@ -105,15 +106,41 @@ try {
   check('back from the payment page the hat is theirs and on their head; it comes off and goes back on in the shop; the others are still for sale', hook === 200 && got.acts.join() === 'Take it off' && crown2.tag === 'Equipped' && cowboy.tag === '$9.99' && off.hat === 0 && off.tag === 'Owned' && !/paid/.test(off.url) && closed, JSON.stringify({ got, crown2, cowboy, off, closed }));
   check('the light jetpack flies a third as long as the real one', tank.lite && !tank.full && tank.canFly && Math.abs(tank.tank - 0.5) < 0.01 && tank.tag === 'Owned', JSON.stringify(tank));
 
-  // ---- a sponsor: the panel of the shooting gallery
+  // ---- a sponsor: the panel of the shooting gallery goes to the highest bidder, from a dollar
   const slot = await page.evaluate(() => { const m = window.__mmf, s = m.world.sponsorSlots.find((q) => q.id === 'board:shoot'); m.player.teleport(s.x, s.z, 0); return { x: s.x, z: s.z }; });
   await frames(8);
   const free = await prompts();
-  await pay('board:shoot', device, 'sub_shoptest_1');
-  await page.evaluate(() => window.__mmf.refreshShop());
+  await page.keyboard.press('KeyE');
+  await page.waitForSelector('.chooser.on .fields', { timeout: 20000 });
+  const bidForm = await page.evaluate(() => ({ title: document.querySelector('.chooser h2').textContent, lead: document.querySelector('.chooser .lead').textContent, value: document.querySelector('.chooser .fields input').value, save: document.querySelector('.chooser .fields .save').textContent }));
+  await page.locator('.chooser .fields input').first().fill('3');
+  asked.length = 0;
+  await Promise.all([page.waitForURL('https://checkout.stripe.test/**', { timeout: 20000 }), page.click('.chooser .fields .save')]);
+  const bidAsked = asked[0];
+  // (Stripe says the bid was paid; the visitor comes back: the panel is theirs)
+  await pay('board:shoot', device, null, { amount: 300, pay: 'pi_shoptest_1' });
+  await enter('&paid=board%3Ashoot');
+  await page.waitForFunction(() => window.__mmf.shop.slots['board:shoot']?.mine, null, { timeout: 30000 });
+  await page.evaluate(() => { const m = window.__mmf, s = m.world.sponsorSlots.find((q) => q.id === 'board:shoot'); m.player.teleport(s.x, s.z, 0); });
   await frames(8);
   const mine = await prompts();
-  check('by the board of a game: "Sponsor … · $49 a month" while it is free, "Set up your panel" once it is theirs', free.some((t) => /^Sponsor this game · \$49 a month$/.test(t)) && mine.includes('Set up your panel'), JSON.stringify({ free, mine, slot }));
+  // the same auction from the shop: a shelf with the panel of every game
+  await page.click('.shop-icon');
+  await page.waitForSelector('.shop.on', { timeout: 20000 });
+  const shelf = await page.evaluate(() => ({ title: [...document.querySelectorAll('.shop .shelf h3')].map((h) => h.textContent).pop(), cards: [...document.querySelectorAll('.shop .shelf-sponsor .card')].map((c) => `${c.querySelector('.foot b').textContent}|${c.querySelector('.price').textContent}`) }));
+  await page.evaluate(() => document.querySelector('.shop .card[data-item="board:mole"]').click());
+  await page.evaluate(() => { const sh = document.querySelector('.shop .shelves'); sh.scrollTop = sh.scrollHeight; });
+  await frames(2);
+  await page.screenshot({ path: path.join(ROOT, 'tools/preview/shop-sponsors.png') });
+  const moleAct = await page.evaluate(() => [...document.querySelectorAll('.shop .detail .acts button')].map((b) => b.textContent));
+  await page.keyboard.press('Escape');
+  await frames(3);
+  check('the panel of a game is auctioned: "Sponsor … · from $1" at its board, a bid typed in, paid once on Stripe; then "Set up your panel"',
+    free.includes('Sponsor this game · from $1') && /Bullseye Alley/.test(bidForm.title) && /refunded in full/.test(bidForm.lead) && bidForm.value === '1' && bidForm.save === 'Go to payment'
+    && bidAsked?.get('metadata[item]') === 'board:shoot' && bidAsked.get('metadata[bid]') === '300' && bidAsked.get('line_items[0][price_data][unit_amount]') === '300' && bidAsked.get('mode') === 'payment' && mine.includes('Set up your panel'),
+    JSON.stringify({ free, bidForm, asked: String(bidAsked).slice(0, 200), mine, slot }));
+  check('the shop has a shelf to sponsor a game: the panel of each, what it went for, a button to bid',
+    shelf.title === 'Sponsor a game' && shelf.cards.length === 6 && shelf.cards.includes('Bullseye Alley|Owned') && shelf.cards.includes('Whack-a-Mole|From $1') && moleAct.join() === 'Bid · from $1', JSON.stringify({ shelf, moleAct }));
   await page.keyboard.press('KeyE');
   await page.waitForSelector('.chooser.on .fields', { timeout: 20000 });
   const inputs = page.locator('.chooser .fields input');
