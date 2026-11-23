@@ -10,6 +10,7 @@ export const EXTRAS = {
   slide: { name: 'Mostly Down — the water slide', load: () => import('./slide.js') },
   oak: { name: 'Out on a Limb — the Great Oak', load: () => import('./oak.js') },
   caves: { name: 'The caves are safe places: nearby chat only', load: () => import('./caves.js') },
+  stats: { name: 'The game in figures: counters, the page /opendata', load: () => import('./stats.js') },
 };
 
 /** Switches on what `on` says ({ id: true }); returns what was built, by id. One that fails leaves the others alone. */
