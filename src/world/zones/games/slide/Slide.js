@@ -259,7 +259,7 @@ export class Slide {
       if (inHelix(p.s) || since < 15) continue;
       const u = under(p), g = ground(p.x, p.z);
       if (u.y - g < 0.9) continue;
-      if (!clearOf(V(p.x, g - 0.6, p.z), V(u.x, u.y - 0.25, u.z), p.s)) continue;
+      if (!clearOf(V(p.x, g - 0.6, p.z), V(u.x, u.y - 0.25, u.z), p.s, R + 1.7)) continue;
       since = 0;
       const tall = u.y - g, r = clamp(0.2 + tall * 0.006, 0.22, 0.6);
       lb.tint(...CREAM, 1).rod(V(p.x, g - 0.6, p.z), V(u.x, u.y - 0.25, u.z), r, 8, { caps: false, r1: r * 0.7 });
