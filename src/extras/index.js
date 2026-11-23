@@ -8,6 +8,8 @@
 // An extra is a module with `attach(app)`, which returns what it built (kept in app.extras[id]).
 export const EXTRAS = {
   slide: { name: 'Mostly Down — the water slide', load: () => import('./slide.js') },
+  oak: { name: 'Out on a Limb — the Great Oak', load: () => import('./oak.js') },
+  caves: { name: 'The caves are safe places: nearby chat only', load: () => import('./caves.js') },
 };
 
 /** Switches on what `on` says ({ id: true }); returns what was built, by id. One that fails leaves the others alone. */
