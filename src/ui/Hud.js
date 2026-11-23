@@ -449,6 +449,7 @@ export class Hud {
         const row = el('label'), name = el('span'), input = el('input');
         name.textContent = f.label;
         if (f.type === 'file') { input.type = 'file'; input.accept = 'image/png,image/jpeg,image/webp'; }
+        else if (f.type === 'color') { input.type = 'color'; input.value = /^#[0-9a-f]{6}$/i.test(f.value || '') ? f.value : '#fbf7ec'; }
         else if (f.type === 'password') { input.type = 'password'; input.maxLength = 100; input.autocomplete = f.fresh ? 'new-password' : 'current-password'; }
         else { input.type = 'text'; input.maxLength = f.max || 60; input.value = f.value || ''; input.autocomplete = 'off'; input.spellcheck = false; if (f.hint) input.placeholder = f.hint; }
         row.append(name, input);

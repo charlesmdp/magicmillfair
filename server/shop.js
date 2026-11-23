@@ -14,7 +14,7 @@
 //   POST   /api/sponsor   { slot, device, title, subtitle, url, logo }   the holder of a place says what to show
 //   GET    /api/logo?slot=…                            the picture of a place (draft=1: the one awaiting approval)
 //   GET    /api/sponsors                               the administrator: every place, drafts included
-//   POST   /api/sponsors  { slot, approve } | { slot, set: { title, subtitle, url, logo } }
+//   POST   /api/sponsors  { slot, approve } | { slot, set: { title, subtitle, url, logo, bg } }   (bg: the colour of the panel, #rrggbb)
 //   DELETE /api/sponsors?slot=…                        the administrator frees a place
 //
 // Who is who: a visitor is the random name their browser gave itself (`device`, see src/net/device.js); one who
@@ -53,6 +53,9 @@ const SIDE_MAX = 1024;
 
 /** Text someone typed, made fit to show: one line, no markup, at most `max` characters. */
 export const cleanText = (text, max) => String(text ?? '').normalize('NFKC').replace(/[\u0000-\u001f\u007f-\u009f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+
+/** A colour someone chose, as #rrggbb; '' otherwise. */
+export const cleanColor = (text) => { const t = String(text ?? '').trim().toLowerCase(); return /^#[0-9a-f]{6}$/.test(t) ? t : ''; };
 
 /** A web address someone gave: https, nobody's name or password in it; '' otherwise. */
 export function cleanUrl(text) {
@@ -101,7 +104,7 @@ const ownedBy = (ctx, device) => itemsOf(ctx.store, device);
 /** The browsers that are this visitor: this one, and the others of its account. */
 const selves = async (ctx, device) => { const acct = DEVICE.test(device || '') ? await accountOf(ctx.store, device) : null; return new Set(acct ? [...acct.devices, device] : device ? [device] : []); };
 const logoUrl = (id, version, draft) => `/api/logo?slot=${encodeURIComponent(id)}${draft ? '&draft=1' : ''}&v=${version}`;
-const shown = (id, s) => ({ title: s.title || '', subtitle: s.subtitle || '', url: s.url || '', logo: s.logo ? logoUrl(id, s.logo) : null });
+const shown = (id, s) => ({ title: s.title || '', subtitle: s.subtitle || '', url: s.url || '', logo: s.logo ? logoUrl(id, s.logo) : null, ...(s.bg && { bg: s.bg }) });
 
 /** What was paid for becomes theirs (called from the webhook; safe to call twice). `customer`: who pays, at Stripe. */
 export async function grant(ctx, item, device, sub = null, customer = null) {
@@ -347,6 +350,7 @@ export async function shopRoute(req, ctx) {
         if (!title) return out(400, { error: 'A name is needed.' });
         const s = (slots[id] ||= { by: 'admin', sub: null, at: now, logo: 0 });
         Object.assign(s, { state: 'live', title, subtitle: cleanText(body.set.subtitle, 40), url: cleanUrl(body.set.url), draft: null });
+        if (body.set.bg !== undefined) s.bg = cleanColor(body.set.bg); // (the colour behind it: the administrator's choice, never the sponsor's)
         if (body.set.logo) {
           const logo = cleanLogo(body.set.logo);
           if (!logo) return out(400, { error: 'The picture must be a PNG, a JPEG or a WebP of at most 90 KB.' });

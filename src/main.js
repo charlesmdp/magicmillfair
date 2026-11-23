@@ -5,12 +5,13 @@ import { Input } from './core/Input.js';
 import { isMobile, TIERS } from './core/Quality.js';
 import { World } from './world/World.js';
 import { FreeCamera } from './player/FreeCamera.js';
-import { CharacterFactory, EMOTE_LIST, emoteIndex, packLook } from './player/Character.js';
+import { CharacterFactory, EMOTE_LIST, AVATAR_COLORS, emoteIndex, packLook } from './player/Character.js';
 import { HATS } from './player/Cosmetics.js';
 import { ITEMS, PAINTS, TRAILS, itemOf, packKit, PASS, SIZES, SIZE, SIZE_SCALE, sizeOf, FREE_COLORS } from '../server/items.js';
 import { BOARDS as GAME_NAMES } from '../server/catalog.js';
 import { drawSponsor } from './world/zones/games/Boards.js';
 import { ShopView } from './ui/ShopView.js';
+import { Arcade } from './ui/Arcade.js';
 import { Previewer } from './ui/Preview.js';
 import { Sparks } from './world/effects/Sparks.js';
 import { Account } from './net/Account.js';
@@ -28,7 +29,7 @@ import { callApi, checkAdminKey, hasApi, sharedNow } from './net/api.js';
 import { formatTime } from './world/zones/games/course.js';
 import { RemoteAvatars } from './net/RemoteAvatars.js';
 import { Benchmark } from './app/Benchmark.js';
-import { SPAWN, ZONES, CLIMB, RACE, WING, TRACK } from './world/layout/layout.js';
+import { SPAWN, ZONES, CLIMB, RACE, WING, TRACK, PIER } from './world/layout/layout.js';
 import { VILLAGE_PERKS, VILLAGE_PITCH, money } from './world/layout/sponsors.js';
 import { FEATURES, skyGateOpen } from './app/config.js';
 import { Soundscape } from './audio/Soundscape.js';
@@ -53,6 +54,7 @@ window.__mmf = app;
 const input = new Input(canvas);
 input.enabled = false;
 const hud = new Hud(ui, { input, isTouch: touch });
+const arcade = new Arcade(ui); // (the screen of the cabinet of the pier: shown while one plays)
 if (SHOT && !params.has('ui')) ui.style.display = 'none';
 
 // The view the welcome screen floats over: a slow arc above the mill and its pond.
@@ -375,6 +377,7 @@ async function boot() {
   // one of them is being played (`fair.session`), it has the pointer, the camera and the clock of the screen.
   const fair = { boards: { race: new Scores('race'), wing: new Scores('wing') }, session: null, kind: null, fov: null, after: 0, stands: { race: world.games.race.board, wing: world.games.wing.board }, tops: {} };
   for (const b of world.games.booths.list) { fair.boards[b.id] = new Scores(b.id); fair.stands[b.id] = b.board; }
+  fair.boards.run = new Scores('run'); fair.stands.run = world.games.notices.arcade.board; // (the arcade cabinet)
   Scores.every().then((all) => { fair.tops = all; world.games.setScores(lists(all.sky)); for (const id in fair.stands) fair.stands[id].setScores(all[id]); });
   const _aim = { origin: new THREE.Vector3(), dir: new THREE.Vector3(), clicks: 0, down: false };
   const fairIo = {
@@ -402,8 +405,8 @@ async function boot() {
     startBlend(0.5);
   };
   // ---------- the boards, live: when somebody in the room finishes a game, their score is fetched and shown
-  const GAMES = { sky: [CLIMB.name, formatTime], race: [RACE.name, formatTime], wing: [WING.name, (n) => `${n} column${n === 1 ? '' : 's'}`] };
-  for (const b of world.games.booths.list) GAMES[b.id] = [b.name, (points) => `${points.toLocaleString('en-US')} points`];
+  const GAMES = { sky: [CLIMB.name, formatTime], race: [RACE.name, formatTime], wing: [WING.name, (n) => `${n} column${n === 1 ? '' : 's'}`], run: [GAME_NAMES.run, (m) => `${m.toLocaleString('en-US')} m`] };
+  for (const b of world.games.booths.list) GAMES[b.id] = [b.name, b.format || ((points) => `${points.toLocaleString('en-US')} points`)];
   const boardOf = (id) => (id === 'sky' ? skyScores : fair.boards[id]);
   const showBoard = (id, tops) => { if (id === 'sky') world.games.setScores(lists(tops)); else fair.stands[id]?.setScores(tops); fair.tops[id] = tops; };
   const rankOf = (list, who) => (list || []).findIndex((e) => e.name.toLowerCase() === who.toLowerCase());
@@ -466,6 +469,22 @@ async function boot() {
     hud.note(touch ? 'Tap to flap, and fly through the gaps!' : 'Click or press Space to flap, and fly through the gaps! · E: give up', 6500);
     startBlend(0.6);
   };
+  // the arcade cabinet: its game is played on a screen of its own, laid over this one
+  const playArcade = () => {
+    if (fair.session || player.dead) return;
+    const spot = world.games.notices.arcade;
+    fair.boards.run.start();
+    fair.session = arcade.open(fairIo, `#${AVATAR_COLORS[color].toString(16).padStart(6, '0')}`); fair.kind = 'arcade'; fair.after = 0;
+    player.riding = false;
+    player.teleport(spot.x, spot.z, spot.yaw);
+    input.consumeClicks();
+    hud.note(touch ? 'Tap the top of the screen to jump, hold the bottom to duck.' : 'Space or ↑ jumps (hold it to jump higher), ↓ or S ducks.', 6500);
+  };
+  world.actionSources.unshift((p) => { // (before the flowers and the rest: by the cabinet, the first thing to do is to play)
+    const cab = world.games.notices.arcade;
+    if (Math.abs(p.pos.y - PIER.deckY) < 2 && near(p, [cab.x, cab.z], cab.reach)) return { label: `Play ${GAME_NAMES.run}`, run: playArcade };
+    return null;
+  });
   world.actionSources.push((p) => {
     const booth = world.games.booths.near(p.pos.x, p.pos.z);
     if (booth) return { label: `Play ${booth.name}`, run: () => playBooth(booth) };
@@ -479,7 +498,20 @@ async function boot() {
   const fairStep = (dt) => {
     const s = fair.session;
     if (player.dead) { endGame(); return; }
-    if (fair.kind === 'booth' || fair.kind === 'wing') {
+    if (fair.kind === 'arcade') {
+      // (its own little screen: what is pressed, on the keys or on the picture)
+      const P = input.pointer, zone = P.down ? arcade.zone(P.x, P.y) : null, K = input.keys;
+      const keys = { jump: K.has('Space') || K.has('ArrowUp') || K.has('KeyW') || zone === 'jump', duck: K.has('ArrowDown') || K.has('KeyS') || zone === 'duck' };
+      input.consumeClicks();
+      player.update(dt, rig.heading, false);
+      if (s.over) {
+        if (fair.after === 0) { fair.after = 0.01; if (s.score > 0) scoreGame('run', GAME_NAMES.run, s.score, `${s.score.toLocaleString('en-US')} m`); }
+        else if ((fair.after += dt) > 0.7 && keys.jump && !fair.heldJump) { fair.boards.run.start(); s.restart(); fair.after = 0; } // (another run)
+      }
+      fair.heldJump = keys.jump;
+      s.step(dt, keys);
+      hud.setRun(s.line);
+    } else if (fair.kind === 'booth' || fair.kind === 'wing') {
       const P = input.pointer, view = s.viewAt ? s.viewAt(engine.width / engine.height) : s.view, tall = engine.width < engine.height;
       camera.position.copy(view.pos); camera.lookAt(view.look);
       fair.fov = s.viewAt ? view.fov : Math.min(96, view.fov * (tall ? 1.5 : 1)); // (a game that frames itself says how wide it looks)
@@ -496,7 +528,7 @@ async function boot() {
       if (s.over && fair.after === 0) {
         fair.after = 0.01;
         audio.play(s.score > 0 ? 'victory' : 'fail');
-        if (s.score > 0) scoreGame(s.booth.id, s.booth.name, s.score, `${s.score} ${s.booth.unit ? (s.score === 1 ? s.booth.unit.replace(/s$/, '') : s.booth.unit) : s.booth.seconds ? 'points' : 'on the scale'}`); else hud.note('Nothing this time. Have another go!', 4000);
+        if (s.score > 0) scoreGame(s.booth.id, s.booth.name, s.score, s.booth.format ? s.booth.format(s.score) : `${s.score} ${s.booth.unit ? (s.score === 1 ? s.booth.unit.replace(/s$/, '') : s.booth.unit) : s.booth.seconds ? 'points' : 'on the scale'}`); else hud.note('Nothing this time. Have another go!', 4000);
       }
       if (fair.after > 0 && (fair.after += dt) > 1.6) endGame();
     } else {
@@ -510,9 +542,9 @@ async function boot() {
       }
       if (fair.after > 0 && (fair.after += dt) > 3) endGame();
     }
-    if (fair.session && input.pressed('KeyE') && !(s.over)) { endGame(); hud.note(fair.kind === 'race' ? 'Race abandoned.' : 'Game left.'); }
+    if (fair.session && input.pressed('KeyE') && (!s.over || fair.kind === 'arcade')) { endGame(); hud.note(fair.kind === 'race' ? 'Race abandoned.' : 'Game left.'); }
   };
-  Object.assign(app, { fair, playBooth, playRace, playWing, endGame, fairStep });
+  Object.assign(app, { fair, playBooth, playRace, playWing, playArcade, endGame, fairStep });
   queueMicrotask(() => Object.assign(app, { shop, refreshShop, adminKey, scoreGame }));
   world.games.events = {
     note: (text) => hud.note(text, 4200),
@@ -640,12 +672,13 @@ async function boot() {
   const shown = new Map(); // what is painted where: id → the address of its picture + its words
   const applySponsors = async () => {
     for (const [id, place] of places) {
-      const view = shop.slots[id], live = view && view.state === 'live', key = live ? `${view.title}|${view.subtitle}|${view.logo}` : '';
+      const view = shop.slots[id], live = view && view.state === 'live', key = live ? `${view.title}|${view.subtitle}|${view.logo}|${view.bg || ''}` : '';
       if ((shown.get(id) || '') === key) continue;
       shown.set(id, key);
-      place.set(live ? { title: view.title, subtitle: view.subtitle, url: view.url, logo: await loadImage(view.logo) } : null);
+      place.set(live ? { title: view.title, subtitle: view.subtitle, url: view.url, bg: view.bg || '', logo: await loadImage(view.logo) } : null);
     }
     hud.setVillages(sky.villages, data.meta.size, villageLabel);
+    world.games.notices.ads.set(adRows()); // (the board of the booth of the sponsors)
   };
   let shopKnown = false; // (has the server said what is theirs yet?)
   const refreshShop = async () => {
@@ -678,18 +711,19 @@ async function boot() {
   /** The holder of a place (or the administrator) says what to show there. */
   const fillPlace = async (id) => {
     const place = places.get(id), view = shop.slots[id] || {}, was = view.draft || view, isVillage = !!place.village;
-    const got = await hud.form(isVillage ? 'Your village' : 'Your panel', 'It is shown once the fair has looked at it. Keep it short: it is painted on a sign.', [
+    const byHand = who.admin && !view.mine; // (the administrator fills a place in for a sponsor: shown at once)
+    const got = await hud.form(isVillage ? 'Your village' : byHand ? 'This panel' : 'Your panel', byHand ? 'What you save is shown to everyone at once. The colour behind it is yours to choose.' : 'It is shown once the fair has looked at it. Keep it short: it is painted on a sign.', [
       { key: 'title', label: isVillage ? 'Its name (22 letters at most)' : 'Your name (28 letters at most)', value: was.title || '', max: isVillage ? 22 : 28 },
       { key: 'subtitle', label: isVillage ? 'A line under it (34 letters at most)' : 'A line under it (40 letters at most)', value: was.subtitle || '', max: isVillage ? 34 : 40 },
       { key: 'url', label: 'Your website (https://…)', value: was.url || '', max: 200, hint: 'https://' },
       ...(isVillage ? [] : [{ key: 'logo', label: 'Your logo (PNG, JPEG or WebP) — leave empty to keep the one you sent', type: 'file' }]),
-    ], 'Send it');
+      ...(byHand && !isVillage ? [{ key: 'bg', label: 'The colour of the panel behind it', type: 'color', value: view.bg || '#fbf7ec' }] : []),
+    ], byHand ? 'Save' : 'Send it');
     if (!got) return;
     if (!got.title) { hud.note('A name is needed.', 4000); return; }
     let logo = null;
     if (got.logo) { logo = await logoData(got.logo); if (!logo) { hud.note('That picture cannot be used: a PNG, a JPEG or a WebP, please.', 6000); return; } }
-    const byHand = who.admin && !view.mine; // (the administrator fills a place in for a sponsor: shown at once)
-    const wrong = byHand ? await shop.set(id, { title: got.title, subtitle: got.subtitle, url: got.url, logo }, who.key) : await shop.fill(id, { title: got.title, subtitle: got.subtitle, url: got.url, logo });
+    const wrong = byHand ? await shop.set(id, { title: got.title, subtitle: got.subtitle, url: got.url, logo, ...(got.bg !== undefined && { bg: got.bg }) }, who.key) : await shop.fill(id, { title: got.title, subtitle: got.subtitle, url: got.url, logo });
     hud.note(wrong || (byHand ? 'Done: it is shown to everyone.' : 'Sent. It will be shown as soon as it is approved.'), 7000);
     if (!wrong) { await refreshShop(); if (who.admin) pending = (await shop.all(who.key)) || {}; }
   };
@@ -764,6 +798,19 @@ async function boot() {
       audio.play('pick');
       hud.note(`You hold out your bouquet to ${best.name}.`, 4000);
     } } : null;
+  });
+  // the booth of the sponsors, on the way to the mill: every game, who sponsors it, and the way to take its panel
+  const boardIds = () => Object.keys(GAME_NAMES).map((k) => `board:${k}`).filter((id) => places.has(id));
+  const sponsorLine = (id) => { const v = shop.slots[id], d = who.admin && pending[id]?.draft; return d ? `Awaiting approval: ${d.title}` : v?.mine ? 'Yours: set it up' : v?.state === 'live' ? v.title : v ? 'Taken' : shop.open ? `Free · from ${price(shop.least(id))}` : 'Free'; };
+  const adRows = () => boardIds().map((id) => { const v = shop.slots[id]; return { game: GAME_NAMES[id.split(':')[1]], sponsor: v?.state === 'live' ? v.title : '', offer: shop.open ? `from ${price(shop.least(id))}` : 'free' }; });
+  world.actionSources.unshift((p) => { // (the first thing to do at the booth, whatever grows at its foot)
+    const ads = world.games.notices.ads;
+    if (!near(p, [ads.x, ads.z], ads.reach)) return null;
+    return { label: 'The games and their sponsors', run: () => {
+      const ids = boardIds();
+      hud.choose('Sponsor a game', 'Your name, a line, your logo and a link over the board of scores of a game, in sight of everybody who plays it. The highest bid holds the panel; whoever is outbid is refunded in full.', ids.map((id) => ({ label: GAME_NAMES[id.split(':')[1]], note: sponsorLine(id), color: shop.slots[id]?.state === 'live' ? [0.9, 0.7, 0.2] : [0.5, 0.55, 0.6] })))
+        .then((i) => { if (i === null) return; const acts = placeActions(ids[i]); if (acts.length) acts[0].run(); else hud.note(shop.open ? 'That one is taken.' : 'The shop is not open yet. Come back soon!', 4000); });
+    } };
   });
   // the stand of the wheel: its gondolas, who sponsors them, which are free
   world.actionSources.push((p) => {
@@ -1107,7 +1154,7 @@ async function boot() {
   hud
     .on('camera', toggleCamera)
     .on('emote', emote)
-    .on('interact', () => { if (fair.session) { if (!fair.session.over) { endGame(); hud.note('Game left.'); } } else interact.press(0); })
+    .on('interact', () => { if (fair.session) { if (!fair.session.over || fair.kind === 'arcade') { endGame(); hud.note('Game left.'); } } else interact.press(0); })
     .on('interact2', () => interact.press(1))
     .on('say', say)
     .on('roster', () => { showRoster(); refreshRoster(); })
@@ -1156,7 +1203,7 @@ async function boot() {
   input.on('drop', () => { if (look.bouquet) { look.bouquet = false; look.kinds = undefined; } });
   input.on('chat', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleChat(true, talking ? talking.brain.ask || `Say something to ${talking.name}…` : undefined); });
   input.on('respawn', () => { if (state.mode === 'walk') { endGame(); spawn(); hud.note('Back to the mill'); } });
-  input.on('menu', () => { if (fair.session && !fair.session.over) { endGame(); hud.note('Game left.'); } hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); hud.toggleChat(false); hud.closeChoice(); hud.closeRoster(); });
+  input.on('menu', () => { if (fair.session && (!fair.session.over || fair.kind === 'arcade')) { endGame(); hud.note('Game left.'); } hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); hud.toggleChat(false); hud.closeChoice(); hud.closeRoster(); });
   input.on('map', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleBigMap(); });
   hud.setMap(data.meta.map, PLACES);
   hud.setVillages(world.sky.villages, data.meta.size, villageLabel);
@@ -1233,7 +1280,7 @@ async function boot() {
     }
     camera.updateMatrixWorld();
     interact.update(mode === 'walk' && !fair.session);
-    if (fair.session && mode === 'walk') hud.setPrompt(0, fair.session.over ? null : fair.kind === 'race' ? 'Give up the race' : 'Leave the game');
+    if (fair.session && mode === 'walk') hud.setPrompt(0, fair.kind === 'arcade' ? 'Walk away' : fair.session.over ? null : fair.kind === 'race' ? 'Give up the race' : 'Leave the game');
     // the name of the characters one can talk to floats over them; walking away ends the conversation
     for (const n of npcs) {
       const d2 = (n.x - player.pos.x) ** 2 + (n.z - player.pos.z) ** 2;
@@ -1344,7 +1391,7 @@ async function boot() {
     }
     world.update(dt, camera);
     const t0 = world.profile ? performance.now() : 0;
-    engine.renderer.render(scene, camera);
+    if (!arcade.isOpen || app.frames % 4 === 0) engine.renderer.render(scene, camera); // (behind the screen of the arcade, the world is drawn one frame in four)
     if (world.profile) { world.profile.mainPass = (world.profile.mainPass || 0) + performance.now() - t0; world.profile.frames = (world.profile.frames || 0) + 1; }
 
     // interface, a few times per second

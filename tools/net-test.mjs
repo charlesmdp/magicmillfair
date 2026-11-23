@@ -17,7 +17,7 @@ import { Track, wrapAngle } from '../src/net/interp.js';
 import { Presence, cleanName, cleanRoom } from '../src/net/Presence.js';
 import { sleep, until, freePort, request, Client } from './lib/net.mjs';
 import { sign, verify, randomId } from '../server/token.js';
-import { addScore, topsOf, periodKeys, runFits } from '../server/scores.js';
+import { addScore, topsOf, periodKeys, runFits, cleanScore } from '../server/scores.js';
 import { signWebhook } from '../server/stripe.js';
 import { cleanLogo, cleanText, cleanUrl } from '../server/shop.js';
 import { visit, localDay } from '../server/routes.js';
@@ -936,6 +936,13 @@ async function testShop({ port }) {
   // the administrator fills a place by hand; a subscription that ends frees its place
   const byHand = await post('/api/sponsors', { slot: 'gondola:7', set: { title: 'Seven Seas Ice Cream', subtitle: 'on the pier since ever', url: 'https://ice.example', logo: JPEG } }, admin);
   const g7 = json(await request(port, '/api/shop')).slots['gondola:7'], g7logo = await request(port, g7?.logo || '/nowhere');
+  // the colour behind a panel: the administrator's choice (a plain #rrggbb), kept with the place; the sponsor cannot send one
+  const tinted = await post('/api/sponsors', { slot: 'gondola:7', set: { title: 'Seven Seas Ice Cream', subtitle: 'on the pier since ever', url: 'https://ice.example', bg: '#102A43' } }, admin);
+  const g7b = json(await request(port, '/api/shop')).slots['gondola:7'];
+  const sneakBg = await post('/api/sponsors', { slot: 'gondola:7', set: { title: 'Seven Seas Ice Cream', bg: 'red;background:url(https://evil.example/x)' } }, admin);
+  const g7c = json(await request(port, '/api/shop')).slots['gondola:7'];
+  check('shop: the colour behind a panel is the administrator\'s — a plain #rrggbb, kept with the place (the picture stays); anything else is dropped',
+    tinted.status === 200 && g7b?.bg === '#102a43' && !!g7b.logo && g7b.title === 'Seven Seas Ice Cream' && sneakBg.status === 200 && !g7c?.bg && !!g7c?.logo, [tinted.status, g7b, sneakBg.status, g7c]);
   const ended = await hook({ type: 'customer.subscription.deleted', data: { object: { id: 'sub_test_1' } } });
   const after = json(await request(port, `/api/shop?device=${bob}`)), gone = await request(port, live?.logo || '/nowhere');
   const freed = await request(port, '/api/sponsors?slot=gondola:7', { method: 'DELETE', headers: admin });
@@ -1047,6 +1054,15 @@ function testScoreLogic() {
   check('score logic: points that take time — fifty columns cannot be flown in five seconds, three can; a minute is enough for fifty',
     runFits(at(5000), { board: 'wing', score: 50 }, now) === 'too soon' && runFits(at(5000), { board: 'wing', score: 3 }, now) === '' && runFits(at(60000), { board: 'wing', score: 50 }, now) === '' && runFits(at(60000), { board: 'shoot', score: 50 }, now) !== '',
     [runFits(at(5000), { board: 'wing', score: 50 }, now), runFits(at(5000), { board: 'wing', score: 3 }, now), runFits(at(60000), { board: 'wing', score: 50 }, now)]);
+  // the booths of the walk of the pier, the arcade: what is believed of each
+  const note = (b, ago) => ({ b, t: now - ago, n: 'x' });
+  const scram = [runFits(note('scram', 3000), { board: 'scram', score: 210 }, now), runFits(note('scram', 15000), { board: 'scram', score: 210 }, now)];
+  const stack = [runFits(note('stack', 3500), { board: 'stack', score: 300 }, now), runFits(note('stack', 9000), { board: 'stack', score: 300 }, now)];
+  const run = [runFits(note('run', 5000), { board: 'run', score: 2000 }, now), runFits(note('run', 60000), { board: 'run', score: 2000 }, now)];
+  const bounds = [cleanScore({ board: 'scram', name: 'Ada', score: 90 }), cleanScore({ board: 'scram', name: 'Ada', score: 190 })?.score, cleanScore({ board: 'run', name: 'Ada', score: 70000 }), cleanScore({ board: 'cups', name: 'Ada', score: 160 })?.score];
+  check('score logic: five alarms take their time (an average of reaction times cannot come three seconds after the start, and nobody answers in 90 ms); a tower, a run of two kilometres are not made in a few seconds',
+    scram[0] !== '' && scram[1] === '' && stack[0] === 'too soon' && stack[1] === '' && run[0] === 'too soon' && run[1] === '' && bounds[0] === null && bounds[1] === 190 && bounds[2] === null && bounds[3] === 160,
+    { scram, stack, run, bounds });
 }
 
 function testShopLogic() {

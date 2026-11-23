@@ -19,8 +19,9 @@ import { cleanName } from './protocol.js';
 
 /**
  * board id → what a score is. order 'asc': a time in ms, the lower the better, and the run lasted about that
- * long; order 'desc': points, and the game lasts `length` ms (never less), plus `each` ms for every point
- * where points take time to make. min / max: what is believed.
+ * long (or `length` ms at least, where the time is not that of the whole run); order 'desc': points, and the
+ * game lasts `length` ms (never less), plus `each` ms for every point where points take time to make.
+ * min / max: what is believed.
  */
 export const BOARDS = {
   sky: { order: 'asc', min: 100_000, max: 6 * 3600_000 }, // the climb: a bot that never misses needs about 150 s
@@ -30,6 +31,14 @@ export const BOARDS = {
   milk: { order: 'desc', min: 1, max: 9999, length: 45_000 }, // milk for the clown
   bell: { order: 'desc', min: 1, max: 9999, length: 4_000 }, // the high striker: the best of three blows of the mallet
   wing: { order: 'desc', min: 1, max: 2000, each: 800 }, // the flying theatre: a point for each pair of columns passed, and no pair comes in less than 0.8 s
+  // the six booths along the walk of the pier (see src/world/zones/games/Stalls.js)
+  hoop: { order: 'desc', min: 1, max: 9999, length: 45_000 }, // baskets in 45 seconds
+  stack: { order: 'desc', min: 1, max: 9999, length: 3_000, each: 10 }, // a tower: 35 points a floor at the very most, and no floor can be dropped in less than 0.4 s
+  geiger: { order: 'desc', min: 1, max: 9999, length: 4_000, each: 30 }, // a sequence remembered: it has to be shown, then repeated
+  fish: { order: 'desc', min: 1, max: 9999, length: 45_000 }, // fish brought up in 45 seconds
+  scram: { order: 'asc', min: 130, max: 3000, length: 9_000 }, // the average of five reaction times, in ms: nobody is under 130 — and five alarms take their time
+  cups: { order: 'desc', min: 1, max: 9999, length: 5_000, each: 25 }, // the cup that hides the core: every round has to be watched
+  run: { order: 'desc', min: 1, max: 60_000, length: 2_000, each: 12 }, // the arcade cabinet: metres run (52 a second at the fastest), and 25 for an isotope now and then
 };
 export const KEPT = { all: 200, month: 100, week: 100, day: 100 }, SHOWN = 10;
 export const PERIODS = ['day', 'week', 'month', 'all'];
@@ -117,6 +126,6 @@ export function runFits(note, { board, score }, at = Date.now()) {
   const elapsed = at - note.t;
   if (elapsed < 0 || elapsed > rule.max + 3600_000) return 'expired';
   // (a run may well have lasted longer than its clock says — the game stops while its tab is hidden — never less)
-  if (rule.order === 'asc') return elapsed >= score - SLACK ? '' : 'the time does not match the run';
+  if (rule.order === 'asc') return elapsed >= Math.max(score - SLACK, (rule.length || 0) - 2000) ? '' : 'the time does not match the run';
   return elapsed >= (rule.length || 0) + (rule.each || 0) * score - 2000 ? '' : 'too soon';
 }

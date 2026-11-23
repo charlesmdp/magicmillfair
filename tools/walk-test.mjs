@@ -694,15 +694,73 @@ try {
     const offered = await page.evaluate(() => { const m = window.__mmf, b = m.world.games.booths.list[0]; m.player.teleport(b.stand[0], b.stand[1], b.stand[2]); return b.name; });
     await frames(6);
     const ask = await prompt();
-    const fair = await page.evaluate(() => {
+    const fair = await page.evaluate(async () => {
       const app = window.__mmf, { input, world, engine } = app, cam = engine.camera, T = app.THREE, g = world.games, out = {};
+      // ---- the bots of the six booths of the walk: each does what a visitor would, from what is seen on the stage
+      const stall = async (booth, s, n, bot, dyn, point) => {
+        const G = booth.game, M = booth.group.matrixWorld, at = (x, y, z) => new T.Vector3(x, y, z).applyMatrix4(M);
+        const named = (re) => dyn.children.filter((c) => re.test(c.name));
+        if (booth.id === 'hoop') {
+          // the hoop rests a moment at each end: from the last rests, when and where the next one will be;
+          // wind up so as to let go half a second before it gets there (the ball takes a second)
+          const hoop = named(/:hoop$/)[0], x = G.at, v = bot.x === undefined ? 0 : x - bot.x, still = Math.abs(v) < 1e-5 && Math.abs(x) > 0.2;
+          bot.x = x;
+          if (still && !bot.still) { if (bot.left !== undefined) bot.travel = n - bot.left; bot.ends = [...(bot.ends || []), x].slice(-2); bot.stopped = n; bot.plan = null; }
+          if (!still && bot.still) { bot.dwell = n - bot.stopped; bot.left = n; }
+          bot.still = still;
+          if (still && !bot.plan && bot.dwell && bot.travel && bot.ends.length === 2) {
+            const [was, now] = bot.ends, grow = Math.max(0, Math.abs(now) - Math.abs(was));
+            bot.plan = { press: bot.stopped + bot.dwell + bot.travel - 15 - Math.round((G.sweet / 0.8) * 30), x: -Math.sign(now) * (Math.abs(now) + grow), held: false, done: false };
+          }
+          const P = bot.plan;
+          if (P && !P.done && n >= P.press) {
+            point(at(P.x, hoop.position.y, hoop.position.z));
+            if (!P.held || s.gauge === null || s.gauge < G.sweet) { input.pointer.down = true; P.held = true; } else P.done = true; // (let go at the green)
+          }
+        } else if (booth.id === 'stack') {
+          // twelve floors dropped just right, then one beside the tower
+          const v = bot.at === undefined ? 0 : G.at - bot.at, floors = +(s.line.match(/(\d+) floor/) || [0, 0])[1];
+          bot.at = G.at;
+          if (floors < 12 ? Math.abs(G.at + v - G.goal) < 0.04 : Math.abs(G.at - G.goal) > 2.05) input._clicks++;
+        } else if (booth.id === 'geiger') {
+          // the lamps that light while the sequence is shown are written down, then clicked in that order; after six rounds, the wrong ones
+          const lit = [0, 1, 2, 3].map((k) => named(new RegExp(`:lit${k}$`))[0]), stage = +(s.line.match(/round (\d+)/) || [0, 1])[1];
+          if (G.phase === 'show') { if (bot.phase !== 'show') bot.seq = []; lit.forEach((m, k) => { if (m.visible && !bot.was?.[k]) bot.seq.push(k); }); }
+          if (G.phase === 'input') {
+            if (bot.phase !== 'input') bot.i = 0;
+            if (n % 5 === 0 && bot.seq && bot.i < bot.seq.length) { const k = stage <= 6 ? bot.seq[bot.i] : (bot.seq[bot.i] + 1) % 4; point(at(lit[k].position.x, lit[k].position.y, lit[k].position.z)); input._clicks++; bot.i++; }
+          }
+          bot.phase = G.phase; bot.was = lit.map((m) => m.visible);
+        } else if (booth.id === 'fish') {
+          // to the nearest fish; once one is on the hook, straight up
+          const hook = named(/:hook$/)[0], fish = named(/:f\d$/).filter((c) => c.visible);
+          bot.prev ||= new Map();
+          if (G.carry) point(at(hook.position.x, 2.9, hook.position.z));
+          else {
+            let best = null, bd = 99;
+            for (const f of fish) { const d = Math.hypot(f.position.x - hook.position.x, (f.position.y - hook.position.y) * 1.4); if (d < bd && Math.abs(f.position.x) < 2.5) { bd = d; best = f; } }
+            if (best) { const vx = (best.position.x - (bot.prev.get(best) ?? best.position.x)) * 30; point(at(best.position.x + vx * 0.25, best.position.y + 0.12, best.position.z)); }
+          }
+          for (const f of fish) bot.prev.set(f, f.position.x);
+        } else if (booth.id === 'scram') {
+          // the red: a real fifth of a second, then the click (never on the blue, never before)
+          if (G.phase === 'alarm' && !bot.seen) { bot.seen = true; await new Promise((r) => setTimeout(r, 185)); input._clicks++; }
+          if (G.phase !== 'alarm') bot.seen = false;
+        } else if (booth.id === 'cups') {
+          // the cup that was lifted is followed with the eyes (it is the same cup all along); after five rounds, another one
+          const cups = named(/:cup\d$/).filter((c) => c.visible), stage = +(s.line.match(/round (\d+)/) || [0, 1])[1];
+          if (G.phase === 'reveal') { const up = cups.reduce((a, b) => (b.position.y > a.position.y ? b : a)); if (up.position.y > 1.2) bot.mine = up; }
+          if (G.phase === 'pick' && n % 6 === 0 && bot.mine) { const c = stage <= 5 ? bot.mine : cups.find((q) => q !== bot.mine); point(at(c.position.x, c.position.y + 0.3, c.position.z)); input._clicks++; }
+        }
+      };
       const v = new T.Vector3(), m = new T.Matrix4(), dt = 1 / 30;
       const point = (w) => { v.copy(w).project(cam); input.pointer.x = (v.x * 0.5 + 0.5) * window.innerWidth; input.pointer.y = (-v.y * 0.5 + 0.5) * window.innerHeight; };
       for (const booth of g.booths.list) {
         app.playBooth(booth);
         const s = app.fair.session, dyn = booth.dyn;
         let n = 0, sight = false, hidden = false;
-        for (; n < 30 * 70 && app.fair.session === s && !s.over; n++) {
+        const bot = {};
+        for (; n < 30 * 150 && app.fair.session === s && !s.over; n++) {
           input.pointer.down = false;
           if (s.t >= 0) {
             if (booth.id === 'shoot') {
@@ -717,7 +775,8 @@ try {
               const clown = dyn.children.find((c) => c.name.endsWith(':clown'));
               point(new T.Vector3(clown.position.x, clown.position.y - 0.3, clown.position.z).applyMatrix4(booth.group.matrixWorld));
               input.pointer.down = true;
-            } else if (s.gauge !== null && s.gauge > 0.9) input._clicks++;
+            } else if (booth.id === 'bell') { if (s.gauge !== null && s.gauge > 0.9) input._clicks++; }
+            else await stall(booth, s, n, bot, dyn, point);
           }
           app.fairStep(dt);
           if (n === 150) { sight = document.querySelector('.sight').classList.contains('on'); hidden = !app.me.root.visible; }
@@ -732,7 +791,48 @@ try {
     await frames(20);
     const boards = await page.evaluate(() => Object.fromEntries(Object.entries(window.__mmf.fair.boards).map(([k, b]) => [k, b._local().all[0]?.score || 0])));
     check('the four booths of the pier are offered at their counters and played with the pointer: targets, moles, the clown, the bell', ask.includes(`Play ${offered}`) && fair.shoot.score > 300 && fair.mole.score > 100 && fair.milk.score > 150 && fair.bell.score >= 4000 && fair.bell.score <= 9999 && ['shoot', 'mole', 'milk'].every((id) => fair[id].over && fair[id].sight && fair[id].hidden && fair[id].seconds > 47 && fair[id].closed && fair[id].shown) && fair.bell.over && !fair.bell.sight && fair.bell.closed, JSON.stringify(fair));
-    check('each score goes on the board of its booth', ['shoot', 'mole', 'milk', 'bell'].every((id) => boards[id] === fair[id].score), JSON.stringify(boards));
+    check('each score goes on the board of its booth', ['shoot', 'mole', 'milk', 'bell', 'hoop', 'stack', 'geiger', 'fish', 'scram', 'cups'].every((id) => boards[id] === fair[id].score), JSON.stringify(boards));
+    const walk6 = Object.fromEntries(['hoop', 'stack', 'geiger', 'fish', 'scram', 'cups'].map((id) => [id, { score: fair[id].score, over: fair[id].over, closed: fair[id].closed, seconds: +fair[id].seconds.toFixed(1), line: fair[id].line }]));
+    check('the six booths along the walk of the pier, each played by a bot that does what a visitor would: baskets shot where the hoop is going to be, twelve floors stacked just right, a sequence of lamps remembered for six rounds, fish brought up, five alarms answered in about a fifth of a second, the cup followed for five rounds',
+      fair.hoop.score >= 20 && fair.hoop.over && fair.hoop.seconds > 47 && fair.stack.score >= 300 && fair.stack.over && fair.geiger.score >= 270 && fair.geiger.over && fair.fish.score >= 40 && fair.fish.over && fair.fish.seconds > 47
+      && fair.scram.over && fair.scram.score >= 150 && fair.scram.score <= 700 && fair.cups.over && fair.cups.score >= 150 && ['hoop', 'stack', 'geiger', 'fish', 'scram', 'cups'].every((id) => fair[id].closed && fair[id].shown), JSON.stringify(walk6));
+    // the arcade cabinet at the top of the ramp of the pier: a bot runs — over what stands on the road, under what flies low
+    {
+      await page.evaluate(() => { const m = window.__mmf, c = m.world.games.notices.arcade; m.player.teleport(c.x, c.z, c.yaw); });
+      await frames(6);
+      const askRun = await prompt();
+      const run = await page.evaluate(() => {
+        const app = window.__mmf, { input } = app, K = input.keys, dt = 1 / 60, screen = document.querySelector('.arcade');
+        app.playArcade();
+        const s = app.fair.session, open = screen.classList.contains('on');
+        let n = 0, jumps = 0, ducks = 0, wasJump = false, wasDuck = false;
+        for (; n < 60 * 120 && app.fair.session === s && !s.over; n++) {
+          const { speed, things } = s.peek(), next = things.filter((o) => o.gap + o.wide > -20).sort((a, b) => a.gap - b.gap)[0];
+          let jump = false, duck = false;
+          if (next && s.score < 320) { // (after that it runs on without a thought, and meets what comes)
+            if (next.kind === 'drone') duck = next.gap < 40 && next.gap + next.wide > -24;
+            else if (next.kind !== 'high') jump = next.gap < speed * 0.27 - next.wide / 2 - 9 && next.gap > -4; // (a hop whose top is over the thing, let go once over it)
+          }
+          if (jump) K.add('Space'); else K.delete('Space');
+          if (duck) K.add('ArrowDown'); else K.delete('ArrowDown');
+          if (jump && !wasJump) jumps++;
+          if (duck && !wasDuck) ducks++;
+          wasJump = jump; wasDuck = duck;
+          app.fairStep(dt);
+        }
+        K.delete('Space'); K.delete('ArrowDown');
+        const out = { open, score: s.score, over: s.over, seconds: +(n * dt).toFixed(1), jumps, ducks, line: s.line };
+        for (let k = 0; k < 20; k++) app.fairStep(dt);
+        out.still = !!app.fair.session; // (a run that is over leaves the screen up: another go is one jump away)
+        app.endGame();
+        out.closed = !app.fair.session && !screen.classList.contains('on');
+        return out;
+      });
+      await frames(12);
+      const kept = await page.evaluate(() => window.__mmf.fair.boards.run._local().all[0]?.score || 0);
+      check('the arcade cabinet of the pier: Meltdown Run is played on a screen of its own — a bot jumps what stands on the road and ducks what flies low for three hundred metres —, the run goes on its board, and one walks away',
+        askRun.includes('Play Meltdown Run') && run.open && run.over && run.score >= 300 && run.score < 900 && run.jumps > 5 && run.still && run.closed && kept === run.score, JSON.stringify({ askRun, run, kept }));
+    }
     // the race
     const race = await page.evaluate(() => {
       const app = window.__mmf, { input, world, player } = app, r = world.games.race, dt = 1 / 60;

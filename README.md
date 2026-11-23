@@ -230,7 +230,7 @@ the first time the panel is opened (`rankPicture`). The administrator has them a
   says so; a note tells you when they have just beaten your score. The course was checked by a bot that makes every jump: a perfect climb takes about two
   and a half minutes.
 - **The booths of the pier**: four striped booths stand at the corners of the pier head, round the big
-  wheel. Step up to a counter and press E; the game takes the pointer (the mouse, or a finger) for
+  wheel (and six more line the walk that leads there: see below). Step up to a counter and press E; the game takes the pointer (the mouse, or a finger) for
   forty-five seconds, and E or Escape leaves it.
   - *Bullseye Alley*: nothing runs on rails. Targets pop up from behind three rows of painted bushes — the
     small ones at the back are worth more — and some slide along once they are up; others are thrown across
@@ -247,6 +247,37 @@ the first time the panel is opened (`rankPicture`). The administrator has them a
     a flash at the top, never twice at the same pace, quicker at each of three blows — and the scale is
     anything but fair: nine tenths of the way up is worth 5,900. The best blow counts; the bell rings from
     9,000, which takes a blow given within a hundredth of a second.
+- **Six more booths along the walk of the pier**, three a side, each asking something else of whoever
+  plays (their games are in `Stalls.js`; they are built and opened like the four above):
+  - *Buzzer Beater* — an arm and an eye. Hold the button: a needle climbs a meter on the wall (the green is
+    about right); let go, and the ball leaves towards where you point. It takes a second to get there, and
+    the hoop slides from side to side, resting a moment at each end — less and less as the 45 seconds go
+    by: send the ball where the hoop is going to be. The board is there to be used; a row of baskets pays
+    more each time.
+  - *Stack It* — timing. A floor slides over the tower; a click drops it. What sticks out is cut off, and
+    the next floor is as wide as what stayed; dropped just right it keeps its width (three such in a row
+    and it grows back a little). Each floor comes faster. Miss the tower and it is over.
+  - *Geiger Says* — memory. Four great lamps light in a sequence, each with its note; click them in the
+    same order. One more each round, shown a little faster; three mistakes and it is over.
+  - *Hook, Line & Sinker* — patience. The sea in a box: the hook goes where you point, no faster than a
+    hook can; a fish it touches is caught, and counts once brought up to the surface. The big ones swim
+    deep and are slow to bring up; a golden one hurries by now and then; drums of something that glows
+    sink through the water (touch one: the fish is lost, and fifteen points).
+  - *SCRAM!* — reflexes. The core of a reactor behind a round window; the instant it turns red, click.
+    Five alarms; their average, in milliseconds, goes on the board — the lower the better. A click before
+    the red costs 300 ms; so does a click on the blue flash the core gives now and then, just to see.
+  - *Shell Shock* — attention. Three lead cups, a glowing core under one; they change places, more often
+    and faster each round (a fourth cup joins at the fourth round, a fifth at the eighth; later two pairs
+    move at once). Which one? Three mistakes and it is over.
+- **Arrows of light**: over each of the ten booths a great arrow hangs from a mast and points down at the
+  counter, lights running round it — three meshes for all of them together.
+- **Meltdown Run**, the arcade cabinet at the top of the ramp of the pier (its board stands across the
+  walk): press E and its game is laid over this one, on a small screen with square pixels. The robot of
+  the fair — in your colour — runs away from a reactor that is giving up: jump the drums and the pools of
+  something green (hold the jump to go higher), duck under the drones that fly low, run under those that
+  fly high; an isotope picked up on the way is worth 25 metres. It gets faster. Space or ↑ jumps, ↓ or S
+  ducks; on a touch screen, the top of the picture jumps and the bottom ducks. After a crash, a jump
+  starts another run; E walks away. (While it is played the world behind is drawn one frame in four.)
 - **Quadmania**: 400 m of gravel track north of the mill, drawn to be driven **flat out**: whoever
   drives well never has to lift. The straight of the start, a long sweeper through a grove planted for it
   (the trunks stand a few metres from the track), esses along the foot of the crags, a straight for the
@@ -372,7 +403,7 @@ trails, fireworks: the item shop says so and lets everything be put on. With a k
 | A paint job: gold plating, chrome, atomic glow, candy paint | $19, $15, $12, $9, once | the item shop |
 | A trail: fallout, confetti, stardust, bubbles | $12, $9, $7, $5, once | the item shop |
 | The box of fireworks (never empty) | $15, once | the item shop |
-| The sponsor's panel over the board of a game (six of them) | an auction, from $1 (see below) | step up to the board ("Sponsor this game · from $1"), or the shelf *Sponsor a game* of the item shop |
+| The sponsor's panel over the board of a game (fourteen of them) | an auction, from $1 (see below) | step up to the board ("Sponsor this game · from $1"), or the shelf *Sponsor a game* of the item shop |
 | The backdrop of the shooting gallery | $99 a month | at the counter side of Bullseye Alley |
 | A gondola of the big wheel (twenty-four) | $29 a month | the red kiosk by the steps of the wheel: "The gondolas and their sponsors" |
 | A sky village (fifty) | $19 to $9,999 a month | at the sign or the board of the village: "Hire …" |
@@ -436,7 +467,16 @@ subscription runs (when it ends, Stripe says so and the place is free again). It
 game — "Set up your panel" — and gives a name, a line under it, a link and a logo. **Nothing is shown before
 the administrator has approved it**: with the administrator's key on, the chat says when something awaits,
 and standing by the place offers "Approve …" and "Refuse it". The administrator can also fill a place in
-by hand, for a sponsor who paid some other way ("Fill this place in").
+by hand, for a sponsor who paid some other way ("Fill this place in") — and there chooses **the colour of
+the panel** behind the sponsor's name and logo (a logo made for a dark ground, a brand with its own
+colour: the words are written light on a dark panel, dark on a light one). Over the board of a game, a
+panel that has a sponsor wears a ribbon along its top: *OUR AWESOME SPONSOR*.
+
+**The booth of the sponsors** stands by the lane where the mill comes into view: a red and white kiosk
+under a board that lists every game of the fair with who sponsors it, or what the first bid is. Step up
+to its counter — *The games and their sponsors* — to pick a game and bid for its panel, without walking
+to each board. And a few steps from the arrival, **the board of what is new** says what the latest
+updates brought (its lines are `src/app/news.js`: rewrite them with each update).
 
 **What a sponsor sends cannot harm the site or its visitors**: text is cut to one short line and loses
 anything that looks like markup; a link must start with `https://` and opens in a new tab; a logo is
@@ -637,7 +677,9 @@ src/
     zones/places/          stairways, the temple (Temple.js), the terraces, the island, the camp, the beanbags,
                            the secret cove, the fall into the sea; Caves.js builds a cave
     zones/games/           the Sky Stones (course.js works out the stones), the boulder, the acid pond, the shark;
-                           Booths.js: the four booths of the pier; Race.js: the quad race; Boards.js: score boards and sponsor panels
+                           Booths.js: the four booths of the pier head (and the arrows of light of all ten); Stalls.js: the six
+                           booths of the walk; kit.js: what booths share; Notices.js: the board of what is new, the booth of the
+                           sponsors, the arcade cabinet; Race.js: the quad race; Boards.js: score boards and sponsor panels
     zones/sky/             the fifty sky villages and the Sky Gate
   player/                  animated avatar and its poses, controller (walk, swim, jump, sit, fly, die), cameras,
                            Interact.js (what can be done here), RankEmotes.js (the animals of light),
@@ -841,12 +883,12 @@ that is the last point. Going further means a referee: the server replaying the 
 |---|---|
 | `npm run bake` | bakes the world, the statue and the textures again |
 | `npm run bake:statue` | sculpts the golden dog again (`-- --preview=dog.png` also draws it from five sides, `-- --cell=0.012` makes a finer mesh) |
-| `npm test` | 181 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents) |
-| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (126 in all) |
+| `npm test` | 183 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents) |
+| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (127 in all) |
 | `npm run test:shop` | the shop in the real game, on the Node server with test keys and a stand-in for Stripe: a hat bought and worn, the panel of a game sponsored, filled in (with a logo) and approved by the administrator, the stand of the gondolas; and a newcomer: the padlocks of the welcome card and the free day of the jetpack, the Game Pass bought as a subscription, what it lends (black, the largest size, a hat that was never bought), its end and the end of the free day (16 checks) |
 | `npm run test:smoke` | drives the real site: welcome screen, walking, free camera, settings, large map (`-- --mobile` for the touch layout) |
 | `npm run test:audio` | Listens to the sound engine without ears: in headless Chromium it renders a dozen listener scenarios (beach, cliffs, pier, woods, mill, waterfall, cave, sky village, the climb…) and every one-shot effect through an offline audio context, measures level, spectrum, how the loudness moves and how tonal it is, fails on silence or clipping, and times `update()` (about 0.01 ms a frame) |
-| `npm run test:walk` | 46 checks in the real game: pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls and the high clearing above them, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the swim on to the golden cove (the shark stays away; out of the sea on the beach; the stair up to the golden dog), the fifty sky villages (prices, places to sit, the board of one for hire, the one dressed as a demonstration), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, sitting down on the ground, the two jetpacks (which is on; the light one's fifteen seconds), big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the four booths (a bot plays each through the pointer; boards), the quad race (asked for in the paddock, it leaves with the next named start; a bot drives three laps flat out — it never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, and flies off the ramp), the flying theatre (a bot flaps through nine pairs of columns), the acid pond, the shark, change of tier |
+| `npm run test:walk` | 48 checks in the real game: pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls and the high clearing above them, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the swim on to the golden cove (the shark stays away; out of the sea on the beach; the stair up to the golden dog), the fifty sky villages (prices, places to sit, the board of one for hire, the one dressed as a demonstration), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, sitting down on the ground, the two jetpacks (which is on; the light one's fifteen seconds), big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the four booths of the pier head and the six of the walk (a bot plays each through the pointer, as a visitor would: baskets shot where the hoop is going to be, a tower stacked, a sequence of lamps remembered, fish brought up, alarms answered in a fifth of a second, a cup followed; boards), the arcade cabinet (a bot runs three hundred metres), the quad race (asked for in the paddock, it leaves with the next named start; a bot drives three laps flat out — it never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, and flies off the ramp), the flying theatre (a bot flaps through nine pairs of columns), the acid pond, the shark, change of tier |
 | `npm run test:duo` | 25 checks with two visitors on the production server: they must see each other move, wave, summon an animal, chat and sit down; the largest size and a party hat, sitting on the ground, a bouquet given from hand to hand; the administrator's key in the address, the administrator seeing the game as a visitor does (`-- --cloudflare` for the Cloudflare version) |
 | `npm run bench` | benchmark tour for each tier (`-- --mobile` for the phone profile) |
 | `npm run profile` | cost of each system (script, draw calls, triangles) at seven viewpoints |

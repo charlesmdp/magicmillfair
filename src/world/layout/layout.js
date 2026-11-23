@@ -728,6 +728,15 @@ export const HERO_TREES = [
     .map(([u, species, scale, off]) => { const p = islandPath(u); return [Math.round((p.x + p.nx * off) * 10) / 10, Math.round((p.z + p.nz * off) * 10) / 10, species, scale]; }),
 ];
 
+// What stands on the way for visitors to read (zones/games/Notices.js): the board of what is new, a few steps
+// from the arrival; the booth of the sponsors, by the lane, where the mill comes into view; and the arcade
+// cabinet at the top of the ramp of the pier (in the frame of the pier), its board of scores across the walk.
+export const NOTICES = {
+  news: { x: -116.4, z: -51, yaw: -2.6 },
+  ads: { x: -113.8, z: -29.5, yaw: -Math.PI / 2 },
+  arcade: { along: 17.6, side: -6.7 },
+};
+
 // Where visitors arrive: on the lane, facing the mill (yaw is the camera heading).
 export const SPAWN = { x: -121.8, z: -60, yaw: 3.21 };
 

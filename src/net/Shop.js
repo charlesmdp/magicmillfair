@@ -101,8 +101,8 @@ export class Shop {
   }
 
   /** The administrator fills a place by hand (shown at once). Resolves to null, or to what is wrong. */
-  async set(slot, { title, subtitle, url, logo }, key) {
-    const res = await ask('api/sponsors', { method: 'POST', key, body: { slot, set: { title, subtitle, url, ...(logo && { logo }) } } });
+  async set(slot, { title, subtitle, url, logo, bg }, key) {
+    const res = await ask('api/sponsors', { method: 'POST', key, body: { slot, set: { title, subtitle, url, ...(logo && { logo }), ...(bg !== undefined && { bg }) } } });
     return res.ok ? null : res.body?.error || 'It could not be saved.';
   }
 
