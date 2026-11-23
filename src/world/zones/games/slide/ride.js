@@ -205,10 +205,12 @@ export function rideProgress(st) {
  * A rider that steers by itself — the proof that the course can be ridden, and the times to beat. `how`:
  *   careful  steers round what lies ahead, brakes before a low side, never takes a shortcut
  *   bold     the same, lying back wherever the trough has both its sides, through every shortcut and strip of light
+ *   { bold, cuts }  the two choices apart (lying back or not; the shortcuts or not)
  * Returns the input for stepRide.
  */
 export function botInput(st, how = 'careful', out = { steer: 0, tuck: false, brake: false }) {
-  const course = st.course, R = SLIDE.radius, bold = how === 'bold', line = lineOf(course, st.line), p = lineAt(line, st.s, _q);
+  const course = st.course, R = SLIDE.radius, cfg = typeof how === 'string' ? { bold: how !== 'careful', cuts: how === 'bold' } : how;
+  const bold = cfg.bold, line = lineOf(course, st.line), p = lineAt(line, st.s, _q);
   const gp = RIDE.g * Math.sqrt(Math.max(0, 1 - p.ty * p.ty));
   // where the rider would settle without steering, here and a little further on
   const rest = (pp, v) => Math.atan2(v * v * pp.k, gp) - pp.bank;
@@ -222,11 +224,6 @@ export function botInput(st, how = 'careful', out = { steer: 0, tuck: false, bra
     tuck = false;
     brake = settle > SLIDE.low + 0.12 || st.v > (bold ? 19 : 16.5);
   }
-  // a shortcut ahead: the bold rider goes for its side, the careful one keeps well away
-  if (st.line < 0) for (const f of course.forks) {
-    const d = f.from - st.s;
-    if (d > 0 && d < st.v * 1.6) { want = bold ? f.side * 0.5 : -f.side * 0.25; if (!bold) tuck = false; }
-  }
   // what lies ahead in the trough: the nearest buoys push the line aside, a strip of light draws it (the bold only)
   const list = thingsOf(course, st.line), reach = st.v * (bold ? 1.25 : 1.6) + 4;
   const buoys = [];
@@ -238,7 +235,7 @@ export function botInput(st, how = 'careful', out = { steer: 0, tuck: false, bra
   if (buoys.length) {
     // the row of buoys that comes first: aim for the middle of the widest way through, nearest to what was wanted
     const s0 = buoys[0].s, row = buoys.filter((b) => b.s - s0 < 3).map((b) => b.a).sort((x, y) => x - y);
-    const lim = low ? SLIDE.low - 0.12 : SLIDE.rim - 0.15, edges = [-lim, ...row, lim], need = (row.length ? buoys[0].r + RIDE.body : 0) / R + 0.06;
+    const lim = low ? SLIDE.low - 0.12 : SLIDE.rim - 0.15, edges = [-lim, ...row, lim], need = (row.length ? buoys[0].r + RIDE.body : 0) / R + 0.1;
     let best = null;
     for (let i = 0; i + 1 < edges.length; i++) {
       const lo = edges[i] + (i === 0 ? 0 : need), hi = edges[i + 1] - (i + 1 === edges.length - 1 ? 0 : need);
@@ -249,9 +246,22 @@ export function botInput(st, how = 'careful', out = { steer: 0, tuck: false, bra
     if (best) want = best.aim;
     if (!bold && buoys[0].s - st.s < st.v * 0.9 && Math.abs(want - st.a) > 0.3) brake = true;
   }
+  // a shortcut ahead: whatever lies in the trough, the bold rider is on its side when it leaves, the careful one
+  // well on the other
+  if (st.line < 0) for (const f of course.forks) {
+    const d = f.from - st.s;
+    if (d > -1 && d < st.v * 2.2 + 6) {
+      if (cfg.cuts) {
+        want = f.side * Math.max(0.3, want * f.side);
+        // (too fast, a bend throws one away from the inside, where a shortcut leaves: slow down until it can be reached)
+        const A = want + p.bank, needed = Math.abs(gp * Math.sin(A) - st.v * st.v * p.k * Math.cos(A)) / (R * RIDE.steer);
+        if (needed > 0.8 || (st.a * f.side < 0.12 && d < st.v * 0.9)) { brake = true; tuck = false; }
+      } else { want = -f.side * Math.max(0.24, -want * f.side); if (!bold) tuck = false; }
+    }
+  }
   // steer: what holds the rider at `want` against the bend, plus what closes the gap
   const A = want + (ahead.bank + p.bank) / 2, hold = (gp * Math.sin(A) - st.v * st.v * p.k * Math.cos(A)) / (R * RIDE.steer);
-  out.steer = clamp(hold + (want - st.a) * 3.2 - st.w * 0.9, -1, 1);
+  out.steer = clamp(hold + (want - st.a) * 5 - st.w * 1.1, -1, 1);
   out.tuck = tuck && !brake; out.brake = brake;
   return out;
 }

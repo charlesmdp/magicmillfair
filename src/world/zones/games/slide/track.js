@@ -1,5 +1,5 @@
 // The course of the water slide ("Mostly Down"): a trough of running water that leaves the rim of the cliffs
-// above the golden dog, a hundred and forty metres up, winds round the statue, corkscrews over the sea,
+// above the golden dog, a hundred and fifty metres up, winds round the statue, corkscrews over the sea,
 // runs along the cliffs through the fall that drops from them, and ends in a basin on the beach where one
 // asked to ride.
 //
@@ -15,7 +15,7 @@ export const SLIDE = {
   // where one asks to ride, on the sand at the north end of the beach, and which way the gate looks
   gate: { x: 63.5, z: -133.5, yaw: 1.05 },
   // the top: the deck on the rim of the cliff above the statue, and the way the trough leaves it
-  top: { x: 188, z: -303, y: 143.4, yaw: Math.PI / 2 },
+  top: { x: 189.5, z: -315.5, y: 154.6, yaw: 1.3324 },
   radius: 1.85, // of the trough (a half pipe): what one slides in
   rim: 1.14, // how far up its sides one may ride (radians from the bottom of the pipe)
   low: 0.56, // …and how far where the outer side of a bend is cut low: beyond, one flies out
@@ -161,8 +161,8 @@ export function frameAt(p, out = { side: [0, 0, 0], up: [0, 0, 0] }) {
  * turn inside a helix, that leaves it `at` turns in and comes back to it a whole turn further down.
  */
 const COURSE = [
-  { name: 'The Launch', line: [line(12, 0.5), line(40, 8.7)] },
-  { name: 'Round the Dog', line: [helix(1.75, 27, 36), line(46, 6)] },
+  { name: 'The Launch', line: [line(12, 0.4), line(33.66, 10.7)] },
+  { name: 'Round the Dog', line: [helix(1.788, 26, 41.3), line(46, 10)] },
   { name: 'The Corkscrew', line: [helix(1.426, 24, 29.6), helix(0.5, 24, 10.4, { open: true })], shortcut: { at: 0.3, name: 'The Needle' } },
   { name: 'The Balcony', line: [line(20, 5), line(11, 0.4), line(19, 5.4), line(11, 0.4), line(20, 5), line(18.6, 1.8)] },
   { name: 'Through the Fall', line: [line(25, 2.3), bend(-34.9, 38, 2.1, { open: true }), line(35.9, 3.1)] },
@@ -233,45 +233,6 @@ export function slideCourse() {
     }
   }
 
-  // where one is put back: the start, then every so often — never in a fork, nor where the side is low
-  const marks = [{ s: 0 }];
-  for (let s = SLIDE.checkpoint; s < main.length - 75; s += SLIDE.checkpoint) {
-    let at = s;
-    const bad = (v) => forks.some((f) => (v > f.from - 14 && v < f.from + 20) || (v > f.to - 20 && v < f.to + 14)) || open.some((o) => v > o.from - 12 && v < o.to + 6);
-    for (let n = 0; n < 40 && bad(at); n++) at += 4;
-    if (at < main.length - 65 && at - marks[marks.length - 1].s > 40) marks.push({ s: at });
-  }
-
-  // what lies in the trough. It thickens as one goes down: nothing on the launch, then buoys to steer round —
-  // one, then two with a gap to thread — and strips of light that throw one forward, off the easy line
-  const things = [], rnd = mulberry32(90210);
-  const free = (line, s) => (line === main
-    ? !forks.some((f) => Math.abs(s - f.from) < 16 || Math.abs(s - f.to) < 16) && !marks.some((m) => m.s > 0 && Math.abs(s - m.s) < 9)
-    : s > 14 && s < line.length - 14);
-  const strew = (line, from, to, hard) => {
-    let s = from;
-    while (s < to) {
-      const u = (s - from) / Math.max(1, to - from), level = clamp(hard(u), 0, 1);
-      s += lerp(34, 13, level) * (0.8 + 0.4 * rnd());
-      if (s >= to || !free(line, s)) continue;
-      const p = lineAt(line, s), roll = rnd();
-      if (roll < 0.24) {
-        // a strip of light, on the inside of the bend when there is one (where nobody drifts by chance)
-        const inside = Math.abs(p.k) > 0.01 ? (p.k > 0 ? -1 : 1) : (rnd() < 0.5 ? -1 : 1);
-        things.push({ kind: 'boost', line: line.id, s, a: inside * lerp(0.3, 0.52, rnd()), half: 0.3, length: 5 });
-      } else if (roll < 0.24 + lerp(0.5, 0.3, level)) {
-        things.push({ kind: 'buoy', line: line.id, s, a: lerp(-0.66, 0.66, rnd()), r: BUOY });
-      } else {
-        // two buoys abreast: the way through is between them, or outside one of them
-        const mid = lerp(-0.22, 0.22, rnd()), gap = lerp(0.66, 0.58, level);
-        things.push({ kind: 'buoy', line: line.id, s, a: mid - gap, r: BUOY }, { kind: 'buoy', line: line.id, s, a: mid + gap, r: BUOY });
-      }
-    }
-  };
-  const total = main.length - 13.5;
-  strew(main, 70, total - 46, (u) => 0.1 + 0.9 * ((70 + u * (total - 116)) / total) ** 1.25);
-  for (const f of forks) strew(f, 12, f.length - 12, () => 0.95); // the short way is the hard way
-
   // how far up each side of the trough one may ride, at every sample: [left, right] (radians, both positive).
   // The rim, as a rule; less where the outer side is cut low (it comes down and goes back up over a few
   // metres); and where a shortcut leaves or joins, the ridge between the two troughs — they are two pipes that
@@ -294,6 +255,52 @@ export function slideCourse() {
       if (n > f.points.length - 31) p.rim[theirs] = Math.min(p.rim[theirs], ridge(near(P.slice(b0, b1 + 1), p)));
     });
   }
+
+  // where one is put back: the start, then every so often — never in a fork, nor where the side is low
+  const marks = [{ s: 0 }];
+  for (let s = SLIDE.checkpoint; s < main.length - 75; s += SLIDE.checkpoint) {
+    let at = s;
+    const bad = (v) => forks.some((f) => (v > f.from - 14 && v < f.from + 20) || (v > f.to - 20 && v < f.to + 14)) || open.some((o) => v > o.from - 12 && v < o.to + 6);
+    for (let n = 0; n < 40 && bad(at); n++) at += 4;
+    if (at < main.length - 65 && at - marks[marks.length - 1].s > 40) marks.push({ s: at });
+  }
+
+  // what lies in the trough. It thickens as one goes down: nothing on the launch, then buoys to steer round —
+  // one, then two with a gap to thread — and strips of light that throw one forward, off the easy line
+  const things = [], rnd = mulberry32(90210);
+  const free = (line, s) => (line === main
+    // (nothing on the way into a shortcut: which side to take is choice enough)
+    ? !forks.some((f) => (s > f.from - 44 && s < f.from + 16) || Math.abs(s - f.to) < 16) && !marks.some((m) => m.s > 0 && Math.abs(s - m.s) < 9)
+    : s > 14 && s < line.length - 14);
+  const strew = (line, from, to, hard) => {
+    let s = from;
+    while (s < to) {
+      const u = (s - from) / Math.max(1, to - from), level = clamp(hard(u), 0, 1);
+      s += lerp(34, 13, level) * (0.8 + 0.4 * rnd());
+      if (s >= to || !free(line, s)) continue;
+      const p = lineAt(line, s), roll = rnd();
+      if (roll < 0.24) {
+        // a strip of light, on the inside of the bend when there is one (where nobody drifts by chance)
+        const inside = Math.abs(p.k) > 0.01 ? (p.k > 0 ? -1 : 1) : (rnd() < 0.5 ? -1 : 1);
+        things.push({ kind: 'boost', line: line.id, s, a: inside * lerp(0.3, 0.52, rnd()), half: 0.3, length: 5 });
+      } else {
+        // how far to each side a buoy may float here (less where a side is low, or the ridge of a shortcut near)
+        const room = (side) => Math.min(...[-2, 0, 2].map((d) => line.points[clamp(Math.round((s + d) / line.step), 0, line.points.length - 1)].rim[side])) - BUOY / SLIDE.radius - 0.06;
+        const left = room(0), right = room(1);
+        if (left < 0.25 || right < 0.25) continue;
+        if (roll < 0.24 + lerp(0.5, 0.3, level) || left < 0.7 || right < 0.7) {
+          things.push({ kind: 'buoy', line: line.id, s, a: clamp(lerp(-0.66, 0.66, rnd()), -left, right), r: BUOY });
+        } else {
+          // two buoys abreast: the way through is between them, or outside one of them
+          const mid = lerp(-0.22, 0.22, rnd()), gap = lerp(0.66, 0.58, level);
+          things.push({ kind: 'buoy', line: line.id, s, a: mid - gap, r: BUOY }, { kind: 'buoy', line: line.id, s, a: mid + gap, r: BUOY });
+        }
+      }
+    }
+  };
+  const total = main.length - 13.5;
+  strew(main, 70, total - 46, (u) => 0.1 + 0.9 * ((70 + u * (total - 116)) / total) ** 1.25);
+  for (const f of forks) strew(f, 12, f.length - 12, () => 0.95); // the short way is the hard way
 
   // the helices: what they turn round (a mast stands there), between which metres, and how high
   const helices = [];

@@ -97,9 +97,14 @@ function pipeNormal(f, a, inward, out = V(0, 0, 0)) {
 }
 
 export class Slide {
-  /** @param world the world: its scene, its ground (data), its materials, its water (for the foam), its engine */
-  constructor(world) {
+  /**
+   * @param world the world: its scene, its ground (data), its materials, its water (for the foam), its engine
+   * @param {{ board?: boolean }} [o] board: false when the game hangs its own board of scores at `boardSpot`
+   *   (GamesZone.scoreStand) instead of the plain one built here
+   */
+  constructor(world, { board = true } = {}) {
     this.world = world;
+    this.ownBoard = board;
     this.data = world.data;
     this.course = slideCourse();
     this.group = new THREE.Group();
@@ -339,13 +344,18 @@ export class Slide {
     paint.tint(...CREAM, 1).cylinder(0, 0.03, 0, 1.55, 1.55, 0.05, 28);
     paint.pop();
     hang(sign(SLIDE.name.toUpperCase(), 'THE WATER SLIDE · STAND HERE TO BE TAKEN TO THE TOP', 4.3, 1.15), G.x, gy + 4.05, G.z, G.yaw);
-    // the board: this visitor's best, and the times of the bot to beat (a real board of scores comes with the server)
-    this.board = canvasBoard(768, 512, (ctx, w, h) => this._drawBoard(ctx, w, h), 3.0, 2.0, { both: true });
-    this.board.mesh.position.set(G.x + -gfz * 4.4 + gfx * 0.4, gy + 1.75, G.z + gfx * 4.4 + gfz * 0.4);
-    this.board.mesh.rotation.y = G.yaw + 0.5;
-    this.board.mesh.name = 'slide-board';
-    this.group.add(this.board.mesh);
-    for (const sx of [-1.3, 1.3]) { const c = Math.cos(G.yaw + 0.5), s = Math.sin(G.yaw + 0.5), px = this.board.mesh.position.x + c * sx, pz = this.board.mesh.position.z - s * sx; paint.tint(...CREAM, 1).cylinder(px, data.heightAt(px, pz) - 0.2, pz, 0.08, 0.08, 1.2 + (gy - data.heightAt(px, pz)) + 0.2, 6); }
+    // the board of the times stands to the right of the gate, turned a little towards who arrives
+    this.boardSpot = { x: G.x - gfz * 4.4 + gfx * 0.4, z: G.z + gfx * 4.4 + gfz * 0.4, yaw: G.yaw + 0.5 };
+    if (this.ownBoard) {
+      // (a plain one: this visitor's best, and the times of the bots to beat — the lab has no board of scores)
+      const B = this.boardSpot;
+      this.board = canvasBoard(768, 512, (ctx, w, h) => this._drawBoard(ctx, w, h), 3.0, 2.0, { both: true });
+      this.board.mesh.position.set(B.x, gy + 1.75, B.z);
+      this.board.mesh.rotation.y = B.yaw;
+      this.board.mesh.name = 'slide-board';
+      this.group.add(this.board.mesh);
+      for (const sx of [-1.3, 1.3]) { const c = Math.cos(B.yaw), sn = Math.sin(B.yaw), px = B.x + c * sx, pz = B.z - sn * sx, g0 = data.heightAt(px, pz); paint.tint(...CREAM, 1).cylinder(px, g0 - 0.2, pz, 0.08, 0.08, 1.2 + (gy - g0) + 0.2, 6); }
+    }
 
     this.group.add(parts.toMeshes(mats, { name: 'slide-ends', layers: cast }), arches.toMeshes(mats, { name: 'slide-arches', layers: cast }));
   }
