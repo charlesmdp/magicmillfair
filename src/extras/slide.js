@@ -1,14 +1,14 @@
-// The lab's way of trying the water slide: it is plugged into the running game from outside, through what the
-// game exposes (window.__mmf), so that no file of the game is changed. Once the slide is part of the game
-// itself (see INTEGRATION.md) this file is no longer needed.
-import { Slide } from '../../src/world/zones/games/slide/Slide.js';
-import { SLIDE } from '../../src/world/zones/games/slide/track.js';
-import { botRun } from '../../src/world/zones/games/slide/ride.js';
+// The water slide ("Mostly Down") as an extra: it is plugged into the running game from outside, through what
+// the game exposes (window.__mmf), so that no file of the game is changed and the game without it is exactly
+// the game as it was. See index.js (the switches) and lab/slide/INTEGRATION.md (the board of scores).
+import { Slide } from '../world/zones/games/slide/Slide.js';
+import { SLIDE } from '../world/zones/games/slide/track.js';
+import { botRun } from '../world/zones/games/slide/ride.js';
 
 const KEY = 'mmf.slide.best';
 
 /** Builds the slide in the world of `app` (the game, once it runs) and lets the player ride it. Returns the slide. */
-export function attachSlide(app) {
+export function attach(app) {
   const { world, player, hud } = app;
   const slide = new Slide(world).build();
   world.bakeShadows(); // (the slide was not there when the shadows of what never moves were drawn)
@@ -73,10 +73,3 @@ export function attachSlide(app) {
   Object.assign(app, { slide, rideSlide: start, leaveSlide: leave, slideRide: () => ride });
   return slide;
 }
-
-// On the lab page, or when this module is loaded into the running game: wait for the game, then plug in.
-const wait = () => {
-  const app = window.__mmf;
-  if (app && app.ready && app.world && app.player && app.fair) { if (!app.slide) attachSlide(app); } else setTimeout(wait, 120);
-};
-wait();
