@@ -62,9 +62,12 @@ player — `{ step(dt, player, control), camera(camera, dt), line, over, time (m
   (checked at 30, 60 and 144 frames a second).
 - **A ride that steers by itself**: `session.auto = 'careful' | 'bold'` (a demonstration, the tests);
   `session.jump(s)` puts the rider at metre `s` (such a ride has no time).
-- **Cost**: about 90,000 triangles in 60-odd meshes, drawn once each (they cast their shadow in the map baked
-  at load only: no real-time shadow pass, no mirror image in the sea). What is out of sight or too far is
-  hidden (`Slide.update`).
+- **Cost**: 14 KB of code once compressed, no image, no model. Built in under a tenth of a second on a desktop
+  computer; about 7 MB of memory (3 of geometry, 4 of signs). The trough exists twice: in full (60,000
+  triangles) for the stretches within 150 m of the camera, and plainly (7,000) for the rest. From most of the
+  valley that is 14 draw calls and 13,000 triangles more (3 %) — the engine draws it even behind a hill; from
+  the beach by the gate, 27 draw calls and 44,000 triangles (19 %). What never moves casts its shadow in the
+  map baked at load only: no real-time shadow pass, no mirror image in the sea.
 - **The top is outside the map** (`MAP_VIEW`): the round map goes dark up there.
 - **Nobody walks on the deck or in the trough**: neither has a collider. Someone who flies there falls through.
 - **The site of the deck** was chosen between the trees of the rim; the baker knows nothing of the slide, so a

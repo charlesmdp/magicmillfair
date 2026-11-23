@@ -116,15 +116,21 @@ export class Slide {
 
   build() {
     const world = this.world, mats = world.materials, tier = world.engine.tier, cast = [LAYER.STATIC_CASTER], course = this.course;
-    // the trough, a stretch of some fifty metres at a time (what is out of sight is not drawn)
+    // the trough, a stretch at a time, each twice: as it is seen from near, and far more plainly (a fifteenth of
+    // the triangles) for when it is far — which it is from most of the valley, whether or not a hill hides it
     const lines = [course.main, ...course.forks];
+    this._stretches = [];
     lines.forEach((line, li) => {
-      const pts = line.points, CHUNK = 56;
+      const pts = line.points, CHUNK = 150;
       for (let from = 0; from < pts.length - 1; from += CHUNK) {
-        const parts = new Parts();
-        this._trough(parts.get('paint'), line, from, Math.min(pts.length - 1, from + CHUNK));
-        const g = parts.toMeshes(mats, { name: `slide-trough${li}-${from}`, layers: cast });
-        this.group.add(g);
+        const to = Math.min(pts.length - 1, from + CHUNK), near = new Parts(), far = new Parts();
+        this._trough(near.get('paint'), line, from, to);
+        this._trough(far.get('paint'), line, from, to, 4, 4);
+        const a = near.toMeshes(mats, { name: `slide-trough${li}-${from}`, layers: cast }), b = far.toMeshes(mats, { name: `slide-far${li}-${from}`, layers: [] });
+        const sphere = a.children[0].geometry.boundingSphere;
+        b.visible = false;
+        this._stretches.push({ near: a, far: b, x: sphere.center.x, y: sphere.center.y, z: sphere.center.z, r: sphere.radius });
+        this.group.add(a, b);
       }
     });
     this._water(lines);
@@ -133,18 +139,22 @@ export class Slide {
     this._things(mats);
     this.group.updateMatrixWorld(true);
     const far = tier.phone ? 0.6 : 1;
-    this._cull = distanceCuller(this.group, [[/^slide-water/, 260 * far], [/^slide-things/, 240 * far], [/^slide-arches/, 420 * far], [/^slide-trough/, 1500], [/^slide-legs/, 1200], [/./, 900]]);
+    this._near = 150 * far; // within that distance a stretch of the trough is drawn in full
+    this._cull = distanceCuller(this.group, [[/^slide-(trough|far)/, Infinity], [/^slide-water/, 170 * far], [/^slide-things/, 160 * far], [/^slide-(sign|board)/, 150 * far], [/^slide-arches/, 260 * far], [/^slide-legs/, 1200], [/./, 900]]);
     world.scene.add(this.group);
     return this;
   }
 
-  /** The trough of a line between two samples: its inside, its outside and its two lips. */
-  _trough(b, line, i0, i1) {
-    const pts = line.points, R = SLIDE.radius, N = 10, fork = line.id >= 0;
+  /**
+   * The trough of a line between two samples: its inside, its outside and its two lips. `N`: how many faces
+   * across; `stride`: one sample in so many (the plain version seen from far has few of both).
+   */
+  _trough(b, line, i0, i1, N = 10, stride = 1) {
+    const pts = line.points, R = SLIDE.radius, fork = line.id >= 0;
     const palette = (p) => (fork ? WARN : BANDS[(p.tag.stretch ?? 0) % BANDS.length]);
     const a = V(0, 0, 0), n = V(0, 0, 0);
     let prev = null;
-    for (let i = i0; i <= i1; i++) {
+    for (let i = i0; i <= i1; i = i < i1 ? Math.min(i1, i + stride) : i + 1) {
       const p = pts[i], f = frameAt(p, _f), lo = -(p.rim[0] + 0.07), hi = p.rim[1] + 0.07;
       const tone = palette(p)[Math.floor(p.s / BAND) % 2], low = p.rim[0] < SLIDE.rim - 0.2 || p.rim[1] < SLIDE.rim - 0.2;
       const ring = { in: [], out: [], lipL: [], lipR: [] };
@@ -291,7 +301,7 @@ export class Slide {
       const x = T.x - fx * 3.2 + rx * ox + fx * oz, z = T.z - fz * 3.2 + rz * ox + fz * oz, g = data.heightAt(x, z);
       if (T.y - 0.4 - g > 0.2) wood.tint(0.8, 0.8, 0.8, 1).rod(V(x, g - 0.4, z), V(x, T.y - 0.4, z), 0.16, 6, { caps: false });
     }
-    const sign = (text, sub, w, h, tone = '#7a1420') => canvasBoard(1024, Math.round((1024 * h) / w), (ctx, cw, ch) => {
+    const sign = (text, sub, w, h, tone = '#7a1420') => canvasBoard(512, Math.round((512 * h) / w), (ctx, cw, ch) => {
       ctx.fillStyle = tone; ctx.fillRect(0, 0, cw, ch);
       ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = ch * 0.05; ctx.strokeRect(ch * 0.05, ch * 0.05, cw - ch * 0.1, ch - ch * 0.1);
       ctx.fillStyle = '#f6e7b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -535,8 +545,16 @@ export class Slide {
     return mesh;
   }
 
-  /** Every frame: what is too far to be seen is not drawn. */
-  update(dt, time, camera) { if (camera && this._cull) this._cull(camera.position); }
+  /** Every frame: what is too far to be seen is not drawn, and the trough is drawn plainly where it is far. */
+  update(dt, time, camera) {
+    if (!camera || !this._cull) return;
+    const c = camera.position;
+    for (const t of this._stretches) {
+      const near = Math.hypot(c.x - t.x, c.y - t.y, c.z - t.z) - t.r < this._near;
+      if (t.near.visible !== near) { t.near.visible = near; t.far.visible = !near; }
+    }
+    this._cull(c);
+  }
 }
 
 export { lowSide, RIDE };
