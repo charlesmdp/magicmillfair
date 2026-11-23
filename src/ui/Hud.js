@@ -401,9 +401,10 @@ export class Hud {
   /**
    * The account, in the settings: for a guest, what an account is for and the buttons to make one or sign
    * in; for who is signed in, their name and the way out. `available`: is there a server to keep accounts?
-   * 'account' is emitted with 'create', 'login', 'reset' or 'logout'.
+   * 'account' is emitted with 'create', 'login', 'reset', 'logout' — or 'email' (`mail`: the server can send
+   * e-mails; `email`: the address of the account, most of it hidden).
    */
-  setAccount({ name = null, available = false } = {}) {
+  setAccount({ name = null, available = false, mail = false, email = '' } = {}) {
     const box = this.hud.querySelector('.acct'), info = box.querySelector('.acct-info'), acts = box.querySelector('.acct-acts');
     box.hidden = !available;
     acts.textContent = '';
@@ -413,6 +414,10 @@ export class Hud {
       info.append('Signed in as ', el('b', '', ''), '. What you buy, your days in a row and the look of your robot follow you to any browser you sign in from.');
       info.querySelector('b').textContent = name;
       act('Sign out', 'logout');
+      if (mail) {
+        info.append(email ? ` If you forget the password, a code can be mailed to ${email}.` : ' No e-mail is kept for it: with one, a code can be mailed to you if you forget the password.');
+        act(email ? 'Change the e-mail' : 'Add an e-mail', 'email', 'quiet');
+      }
     } else {
       info.textContent = 'You are playing as a guest: what you buy and earn is kept in this browser only. An account — a name and a password, nothing else — keeps it wherever you sign in.';
       act('Create an account', 'create', 'main');

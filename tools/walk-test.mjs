@@ -341,6 +341,22 @@ try {
       gold.swam && gold.offshore.swimming && gold.minFar > 30 && gold.modes.join() === 'patrol' && !gold.dead && !!gold.landed && gold.beach > 1.3 && gold.landed.y < 1.0
       && !gold.sand.swimming && gold.sand.d < 1.5 && Math.abs(gold.sand.y - 1.15) < 0.2 && Math.abs(gold.top.y - gold.top.want) < 0.5 && gold.dog < gold.reach && seen.zone === 'The Golden Cove' && seen.prompts.some((t) => /CROKMOU|Crokmou/.test(t)),
       JSON.stringify({ ...gold, ...seen }));
+    // round the drum of the plinth: the plaques of the companions. Their picture exists because somebody is up
+    // here; in front of whoever stands by the drum is a column of two plates (none in front of the tablet)
+    const plates = await page.evaluate(() => {
+      const m = window.__mmf, q = m.world.places.plaques, dog = m.world.places.crokmou, w = q.where(10), g = m.world.places.group;
+      const out = { count: q.count, painted: q.painted, tablet: q.columnAt(dog.x, dog.z), column: q.columnAt(w.sx, w.sz), ids: q.ids(q.columnAt(w.sx, w.sz) ?? 0).map((p) => `${p.id} ${p.row}`).join(), mesh: !!g.getObjectByName('golden:plaques')?.visible, sign: !!g.getObjectByName('golden:companions'), away: q.columnAt(w.sx + (w.sx - w.x) * 3, w.sz + (w.sz - w.z) * 3) };
+      m.player.teleport(w.sx, w.sz, 0);
+      out.stands = { walkable: m.world.collision.walkable(w.sx, w.sz), y: +m.player.pos.y.toFixed(1) };
+      return out;
+    });
+    await frames(6);
+    await page.evaluate(() => window.__mmf.player.teleport(98, 0, 0));
+    await frames(8);
+    const platesGone = await page.evaluate(() => { const m = window.__mmf, q = m.world.places.plaques; return { painted: q.painted, mesh: !!m.world.places.group.getObjectByName('golden:plaques')?.visible }; });
+    check('round the plinth of the golden dog, the plaques of the companions: seventy-two plates in two rows, a column of two in front of whoever stands by the drum; their picture is made for who climbs up there and thrown away behind them',
+      plates.count === 72 && plates.painted && plates.mesh && plates.sign && plates.tablet === null && plates.column === 9 && plates.ids === 'plaque:10 upper,plaque:46 lower' && plates.away === null && plates.stands.walkable && Math.abs(plates.stands.y - gold.top.want) < 0.5
+      && !platesGone.painted && !platesGone.mesh, JSON.stringify({ plates, platesGone }));
   }
 
   // --- the sky villages: carried there from the Sky Gate, and back through the ring

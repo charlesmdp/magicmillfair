@@ -4,6 +4,7 @@
 export const NEWS = {
   date: 'November 2026',
   items: [
+    ['Plaques for good companions', 'Round the golden dog, above its cove: a brass plate for your own pet — a name, a few words, a picture.'],
     ['Six new booths on the pier', 'Buzzer Beater, Stack It, Geiger Says, Hook Line & Sinker, SCRAM! and Shell Shock — each with its board of scores.'],
     ['An arcade cabinet', 'Meltdown Run, at the foot of the pier: run, jump the barrels, duck the drones. One more go?'],
     ['The Game Pass', 'Every hat, the Jetpack Lite, four sizes of robot, sixteen more colours. In the item shop (O).'],

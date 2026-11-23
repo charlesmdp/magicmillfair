@@ -3,7 +3,7 @@
 // and what is switched on. The Node server and the notebook of the Cloudflare Worker both answer through
 // route(); the characters one talks to (npc.js) call a model and are answered by the hosts themselves.
 //
-//   GET  /api/status                          → { ok, npc, admin, shop, time }   (what is configured: no secret)
+//   GET  /api/status                          → { ok, npc, admin, shop, mail, time }   (what is configured: no secret)
 //   POST /api/visit  { device, tz }           → { days, best, today }             (see visit())
 //   GET | POST | DELETE /api/scores, POST /api/run                                 (see scores.js)
 //   GET  /api/admin                           → { ok, owner }   (with an administrator's key: Authorization: Bearer …)
@@ -19,8 +19,9 @@
 //        geo ({ cc, city, region } when the host knows where the request comes from),
 //        raw (the body as text, for the paths that need it), signature (Stripe's), site (https://the.game) }
 // ctx: { store: { get(key), put(key, value), delete(key) } (may be asynchronous), limiter (api.js),
-//        secret(): the signing secret of this deployment, flags: { npc, admin, shop }, now(): ms,
-//        stripe: what is configured for payments (stripe.js) }
+//        secret(): the signing secret of this deployment, flags: { npc, admin, shop, mail }, now(): ms,
+//        stripe: what is configured for payments (stripe.js),
+//        mail: async ({ to, subject, text, html }) → sends an e-mail, or null where none can be sent (mail.js) }
 // An answer is { status, body, headers }, or { status, bytes, headers } for a picture.
 import { allowed } from './api.js';
 import { BOARDS, addScore, cleanScore, removeScore, runFits, topsOf } from './scores.js';

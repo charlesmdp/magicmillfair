@@ -26,7 +26,7 @@ export const price = (cents) => { const d = Math.floor(cents / 100), c = cents %
 export class Shop {
   constructor() {
     this.mode = null; // 'test' | 'live' when things are sold
-    this.prices = { tarp: 9900, gondola: 2900, village: [], items: {}, auction: { start: 100, max: 1_000_000 } };
+    this.prices = { tarp: 9900, gondola: 2900, plaque: 2000, village: [], items: {}, auction: { start: 100, max: 1_000_000 } };
     this.notes = []; // what happened while the visitor was away (outbid, refunded): said once
     this.owned = new Set();
     /** slot → { state: 'live' | 'taken', mine, title, subtitle, url, logo (an address), draft } */
@@ -34,6 +34,9 @@ export class Shop {
     this.everything = false; // the administrator has it all
     this.pass = null; // the Game Pass, while it is held: { since, gift?, until?, managed? }
     this.trial = null; // { item, until }: what everybody has for a day after their first visit
+    this.pk = ''; // Stripe's publishable key, where the payment form can be shown inside the game
+    /** (item, secret) → true once the form is shown inside the game, false when it cannot be (set by the game). */
+    this.onEmbed = null;
   }
 
   /** Is the Game Pass theirs (or is everything free, or are they the administrator)? */
@@ -58,6 +61,7 @@ export class Shop {
       if (Array.isArray(res.body.notes)) this.notes.push(...res.body.notes.map(String));
       this.pass = res.body.pass && typeof res.body.pass === 'object' ? res.body.pass : null;
       this.trial = res.body.trial && Number.isFinite(res.body.trial.until) ? { item: String(res.body.trial.item || ''), until: res.body.trial.until } : null;
+      this.pk = typeof res.body.pk === 'string' && /^pk_(test|live)_/.test(res.body.pk) ? res.body.pk : '';
     }
     return this;
   }
@@ -72,10 +76,17 @@ export class Shop {
   least(slot) { return this.slots[slot]?.next || this.prices.auction?.start || 100; }
 
   /**
-   * Off to the payment page (`bid`, in cents: for a place that is auctioned). Resolves to an error to show when
-   * it could not be opened (otherwise the page leaves).
+   * Off to the payment (`bid`, in cents: for a place that is auctioned): Stripe's form inside the game where
+   * that can be, Stripe's own page otherwise. Resolves to an error to show when it could not be opened, to
+   * null otherwise (the form is up, or the page leaves).
    */
   async buy(item, bid) {
+    if (this.pk && this.onEmbed) {
+      const here = await ask('api/checkout', { method: 'POST', body: { item, device: deviceId(), ...(bid && { bid }), embed: true } });
+      if (here.ok && typeof here.body?.secret === 'string') { if (await this.onEmbed(item, here.body.secret)) return null; }
+      else if (here.status >= 400 && here.status < 500 && here.body?.error) return here.body.error; // (refused: Stripe's page would be refused too)
+      // (the form could not be shown here: Stripe's own page, as before)
+    }
     const res = await ask('api/checkout', { method: 'POST', body: { item, device: deviceId(), ...(bid && { bid }) } });
     if (res.ok && res.body && /^https:\/\//.test(res.body.url || '')) { window.location.assign(res.body.url); return null; }
     return res.body?.error || (res.status === 0 ? 'The shop cannot be reached.' : 'The payment page could not be opened.');
@@ -112,30 +123,53 @@ export class Shop {
   async decide(slot, approve, key) { return (await ask('api/sponsors', { method: 'POST', key, body: { slot, approve } })).ok; }
 }
 
-/** A picture the visitor chose, redrawn small on a canvas (so that only pixels leave this browser): base64 PNG, or null. */
-export async function logoData(file, side = 256) {
+/**
+ * A picture the visitor chose, redrawn small on a canvas (so that only pixels leave this browser): base64, or
+ * null. A logo stays whole, as a PNG (it may be see-through); a `photo` is cut square about its middle and
+ * sent as a JPEG, which is what suits a photograph.
+ */
+export async function logoData(file, side = 256, photo = false) {
   if (!file || !/^image\/(png|jpeg|webp)$/.test(file.type) || file.size > 8_000_000) return null;
   try {
     const bitmap = await createImageBitmap(file);
     for (const s of [side, 192, 128, 96]) {
-      const k = Math.min(1, s / Math.max(bitmap.width, bitmap.height)), w = Math.max(1, Math.round(bitmap.width * k)), h = Math.max(1, Math.round(bitmap.height * k));
-      const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h);
-      const data = canvas.toDataURL('image/png').split(',')[1] || '';
+      const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d');
+      if (photo) {
+        const cut = Math.min(bitmap.width, bitmap.height), px = Math.max(1, Math.min(s, cut));
+        canvas.width = px; canvas.height = px;
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, px, px);
+        ctx.drawImage(bitmap, (bitmap.width - cut) / 2, (bitmap.height - cut) / 2, cut, cut, 0, 0, px, px);
+      } else {
+        const k = Math.min(1, s / Math.max(bitmap.width, bitmap.height)), w = Math.max(1, Math.round(bitmap.width * k)), h = Math.max(1, Math.round(bitmap.height * k));
+        canvas.width = w; canvas.height = h;
+        ctx.drawImage(bitmap, 0, 0, w, h);
+      }
+      const data = (photo ? canvas.toDataURL('image/jpeg', 0.86) : canvas.toDataURL('image/png')).split(',')[1] || '';
       if (data && data.length * 0.75 < 88_000) return data;
     }
   } catch { /* not a picture after all */ }
   return null;
 }
 
-/** A picture from the server, ready to be painted on a sign (null if it cannot be had). */
-export function loadImage(url) {
+/** The address of a picture of theirs that awaits approval, as this browser may ask for it. */
+export const ownDraft = (url) => (url ? `${url}&device=${deviceId()}` : null);
+
+/**
+ * A picture from the server, ready to be painted on a sign (null if it cannot be had). `key`: the
+ * administrator's, for a picture only they may see yet — sent with the request, never in an address.
+ */
+export function loadImage(url, key = '') {
   return new Promise((resolve) => {
     if (!url || !/^\/api\/logo\?/.test(url)) { resolve(null); return; }
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
-    img.src = `${BASE}${url.slice(1)}`;
+    const img = new Image(), src = `${BASE}${url.slice(1)}`;
+    let made = '';
+    const done = (v) => { if (made) URL.revokeObjectURL(made); resolve(v); };
+    img.onload = () => done(img);
+    img.onerror = () => done(null);
+    if (!key) { img.src = src; return; }
+    fetch(src, { headers: { Authorization: `Bearer ${encodeURIComponent(key)}` } })
+      .then((res) => (res.ok ? res.blob() : null))
+      .then((blob) => { if (!blob) { resolve(null); return; } made = URL.createObjectURL(blob); img.src = made; })
+      .catch(() => resolve(null));
   });
 }

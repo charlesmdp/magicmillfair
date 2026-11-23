@@ -16,6 +16,8 @@ import { canvasBoard } from '../games/Boards.js';
 import { seatAt } from '../../../player/PlayerController.js';
 import { ANIM } from '../../../player/Character.js';
 import { statueGeometry, goldMaterial } from './GoldenDog.js';
+import { buildPlaques } from './Plaques.js';
+import { PLAQUE_COUNT } from '../../layout/sponsors.js';
 import { STAIRWAY, VILLAGE, FALLS, COVE, ISLAND, islandPath, CAMP, BEACH_LOUNGE, POND_DECK, LEVELS, CAVES, GLADE, NORTH } from '../../layout/layout.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -447,6 +449,35 @@ export class PlacesZone {
     plaque.mesh.rotation.y = S.yaw;
     plaque.mesh.name = 'golden:plaque';
     this.group.add(plaque.mesh);
+    // round the drum of the plinth: the plaques of the companions (see Plaques.js), and a sign that says what they are
+    this.plaques = buildPlaques({ x: S.x, y: y0, z: S.z, yaw: S.yaw, r: PR }, PLAQUE_COUNT);
+    this.group.add(this.plaques.mesh);
+    {
+      // (to the right of who comes up the stair, by the parapet: clear of the ring where one walks round the
+      // plates, and of what one sees of them from the top of the stair)
+      const a = 38 * (Math.PI / 180), lx = Math.sin(a) * (PR + 4.7), lz = Math.cos(a) * (PR + 4.7), c = Math.cos(S.yaw), s = Math.sin(S.yaw);
+      const gx = S.x + lx * c + lz * s, gz = S.z - lx * s + lz * c, [tx, tz] = st.points[st.points.length - 1], yaw = Math.atan2(tx - gx, tz - gz), W = 1.7, H = 1.06;
+      const sign = canvasBoard(544, 340, (ctx, w, h) => {
+        const serif = "Georgia, 'Times New Roman', serif";
+        const bg = ctx.createLinearGradient(0, 0, 0, h); bg.addColorStop(0, '#5b3d1c'); bg.addColorStop(0.5, '#6f4c22'); bg.addColorStop(1, '#3f2a12');
+        ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#2a1b0a'; ctx.lineWidth = 12; ctx.strokeRect(6, 6, w - 12, h - 12);
+        ctx.strokeStyle = '#e2b24a'; ctx.lineWidth = 4; ctx.strokeRect(18, 18, w - 36, h - 36);
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#f6d98a'; ctx.font = `900 46px ${serif}`; ctx.fillText('THE GOOD COMPANIONS', w / 2, 74, w - 70);
+        ctx.fillStyle = '#e2b24a'; ctx.fillRect(w / 2 - 150, 108, 300, 3);
+        ctx.fillStyle = '#f3e6c8'; ctx.font = `italic 600 25px ${serif}`;
+        ['Round the best dog ever,', 'the best friends of everybody else.'].forEach((t, i) => ctx.fillText(t, w / 2, 146 + i * 32, w - 60));
+        ctx.fillStyle = '#ffe9a6'; ctx.font = `700 24px ${serif}`;
+        ['A plate for yours, for good:', 'step up to one that is still bare.'].forEach((t, i) => ctx.fillText(t, w / 2, 236 + i * 31, w - 60));
+      }, W, H, { both: true });
+      sign.mesh.position.set(gx, y0 + 1.0 + H / 2, gz);
+      sign.mesh.rotation.y = yaw;
+      sign.mesh.name = 'golden:companions';
+      this.group.add(sign.mesh);
+      wood.tint(0.55, 0.42, 0.3, 1).place(gx, y0, gz, yaw).box(-W / 2 - 0.05, 0.95, -0.024, W / 2 + 0.05, 1.05 + H, -0.006, { tile: 1 }).box(-0.07, -0.3, -0.1, 0.07, 1.0, -0.03, { tile: 1 }).pop();
+      this.colliders.push({ type: 'circle', x: gx, z: gz, r: 0.3 });
+    }
     // the dog itself (its mesh is baked: see GoldenDog.js), and its shadow across the ledge
     const dog = new THREE.Mesh(statueGeometry(this.data.statue, S.height), goldMaterial());
     dog.name = 'golden-dog';
@@ -1085,6 +1116,6 @@ export class PlacesZone {
 
   update(dt, time, camera) {
     for (const a of this.animated) a(dt, time);
-    if (camera) this._cull(camera.position);
+    if (camera) { this._cull(camera.position); this.plaques?.update(camera.position); }
   }
 }

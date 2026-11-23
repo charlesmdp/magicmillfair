@@ -8,28 +8,40 @@
 //   STRIPE_TEST_SECRET_KEY, STRIPE_TEST_WEBHOOK_SECRET
 //   STRIPE_LIVE_SECRET_KEY, STRIPE_LIVE_WEBHOOK_SECRET
 //   STRIPE_MODE = test | live                                   (by default: live when the live key is there)
+// and, to show the payment form inside the game instead of sending the visitor to Stripe's page:
+//   STRIPE_PUBLISHABLE_KEY (or STRIPE_TEST_PUBLISHABLE_KEY, STRIPE_LIVE_PUBLISHABLE_KEY)   pk_test_… / pk_live_…
+//   (it is not a secret — Stripe means it to be read by browsers — but it must be the one of the same mode)
 import { sameSecret } from './token.js';
+
+/** The version of Stripe's API a payment form shown inside the game is asked with (the one this was written against). */
+export const EMBED_VERSION = '2025-03-31.basil';
 
 const enc = new TextEncoder();
 const hex = (bytes) => [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, '0')).join('');
 
-/** What is configured: { mode: 'test' | 'live' | null, key, webhook, api }. `env`: the variables of the host. */
+/** What is configured: { mode: 'test' | 'live' | null, key, webhook, api, publishable }. `env`: the variables of the host. */
 export function stripeConfig(env = {}) {
   const one = env.STRIPE_SECRET_KEY || '', test = env.STRIPE_TEST_SECRET_KEY || '', live = env.STRIPE_LIVE_SECRET_KEY || '';
   const kind = (key) => (/^(sk|rk)_live_/.test(key) ? 'live' : /^(sk|rk)_test_/.test(key) ? 'test' : null);
   let mode = String(env.STRIPE_MODE || '').toLowerCase();
   if (mode !== 'test' && mode !== 'live') mode = live ? 'live' : test ? 'test' : kind(one);
   const key = mode === 'live' ? live || (kind(one) === 'live' ? one : '') : mode === 'test' ? test || (kind(one) === 'test' ? one : '') : '';
-  if (!key) return { mode: null, key: '', webhook: '', api: '' };
+  if (!key) return { mode: null, key: '', webhook: '', api: '', publishable: '' };
   const webhook = (mode === 'live' ? env.STRIPE_LIVE_WEBHOOK_SECRET : env.STRIPE_TEST_WEBHOOK_SECRET) || env.STRIPE_WEBHOOK_SECRET || '';
-  return { mode, key, webhook, api: String(env.STRIPE_API || 'https://api.stripe.com').replace(/\/+$/, '') };
+  // (the publishable key counts only if it is one, and of the mode that is on)
+  const pub = String((mode === 'live' ? env.STRIPE_LIVE_PUBLISHABLE_KEY : env.STRIPE_TEST_PUBLISHABLE_KEY) || env.STRIPE_PUBLISHABLE_KEY || '').trim();
+  const publishable = pub.startsWith(`pk_${mode}_`) && /^[A-Za-z0-9_]{12,200}$/.test(pub) ? pub : '';
+  return { mode, key, webhook, api: String(env.STRIPE_API || 'https://api.stripe.com').replace(/\/+$/, ''), publishable };
 }
 
 /**
  * Asks Stripe for a payment page. `what`: { item, name, amount (cents), monthly, currency }, `device`: who buys,
  * `site`: the address of the game (the visitor comes back to it). Resolves to { id, url }; throws on failure.
+ * `embed`: the form is to be shown inside the game (Stripe's "embedded" Checkout) — resolves to { id, secret }
+ * then: what Stripe's script needs to show it. Nobody leaves the game, unless the way of paying needs a page
+ * of its own (a bank's): the visitor then comes back the same way as from the payment page.
  */
-export async function createCheckout(cfg, what, device, site, fetcher = fetch, extra = {}) {
+export async function createCheckout(cfg, what, device, site, fetcher = fetch, extra = {}, embed = false) {
   const form = new URLSearchParams();
   form.set('mode', what.monthly ? 'subscription' : 'payment');
   form.set('line_items[0][quantity]', '1');
@@ -42,16 +54,22 @@ export async function createCheckout(cfg, what, device, site, fetcher = fetch, e
   form.set('metadata[device]', device);
   for (const [k, v] of Object.entries(extra)) form.set(`metadata[${k}]`, String(v));
   if (what.monthly) { form.set('subscription_data[metadata][item]', what.item); form.set('subscription_data[metadata][device]', device); }
-  form.set('success_url', `${site}/?paid=${encodeURIComponent(what.item)}`);
-  form.set('cancel_url', `${site}/?paid=`);
+  if (embed) {
+    form.set('ui_mode', 'embedded');
+    form.set('redirect_on_completion', 'if_required');
+    form.set('return_url', `${site}/?paid=${encodeURIComponent(what.item)}`);
+  } else {
+    form.set('success_url', `${site}/?paid=${encodeURIComponent(what.item)}`);
+    form.set('cancel_url', `${site}/?paid=`);
+  }
   const res = await fetcher(`${cfg.api}/v1/checkout/sessions`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${cfg.key}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: { Authorization: `Bearer ${cfg.key}`, 'Content-Type': 'application/x-www-form-urlencoded', ...(embed && { 'Stripe-Version': EMBED_VERSION }) },
     body: form.toString(),
   });
   const body = await res.json().catch(() => null);
-  if (!res.ok || !body || typeof body.url !== 'string') throw new Error(`Stripe: ${body?.error?.message || res.status}`);
-  return { id: String(body.id || ''), url: body.url };
+  if (!res.ok || !body || typeof (embed ? body.client_secret : body.url) !== 'string') throw new Error(`Stripe: ${body?.error?.message || res.status}`);
+  return embed ? { id: String(body.id || ''), secret: body.client_secret } : { id: String(body.id || ''), url: body.url };
 }
 
 /**

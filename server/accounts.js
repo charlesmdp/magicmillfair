@@ -9,7 +9,13 @@
 //        login   { name, password }                          → { account }
 //        logout  {}                                          → { account: null }
 //        save    { profile }                                 → { account }             (the look, kept for other browsers)
-//        reset   { name, code, password }                    → { account }             (a new password, with the recovery code)
+//        reset   { name, code, password }                    → { account }             (a new password, with the recovery code
+//                                                                                       — or with the code that was mailed)
+//   and, where the host can send e-mail (mail.js) — elsewhere no address is ever kept:
+//        create  { …, email? }                               the account carries an address
+//        email   { email, password }                         → { account }   (signed in: the address is given, changed, or — '' — taken away)
+//        mailcode { name }                                   → { ok }        (a code is mailed to the address of that account, if it has
+//                                                                            one: good for half an hour, once. The answer never tells.)
 //
 // Passwords are never kept: only a salted PBKDF2-SHA256 of them (100,000 rounds — the most the Workers
 // runtime allows), compared without telling where they differ. The recovery code is kept the same way. Ten
@@ -17,15 +23,19 @@
 //
 // Kept: `acct:<name in lower case>` → { name, salt, hash, code, created, devices: [device…], items: [what was
 // bought], visit: { day, days, best }, profile: { name, color, hat, paint, trail, size }, fails, lock,
-// pass: the Game Pass ({ sub, customer, since } — or { gift: true, until }), first: when they first came (ms) };
+// pass: the Game Pass ({ sub, customer, since } — or { gift: true, until }), first: when they first came (ms),
+// email (an address, when one was given), mail: { code, until } (the code that was mailed), mailed: [when] };
 // `dev:<device>` → { acct } (the account a browser is attached to). A browser without an account keeps the
 // same `pass` and `first` in its own record, `own:<device>` (see shop.js).
 import { randomId, sameSecret } from './token.js';
 import { cleanName } from './protocol.js';
 import { COLORS, sizeOf } from './items.js';
+import { cleanEmail, maskEmail, codeMail } from './mail.js';
 
 const enc = new TextEncoder();
 const ROUNDS = 100_000, DEVICES = 12, FAILS = 10, LOCK = 15 * 60_000;
+/** A code that was mailed lasts `MAIL_CODE`; an account is sent one every `MAIL_GAP` at the most, `MAIL_DAY` a day. */
+const MAIL_CODE = 30 * 60_000, MAIL_GAP = 2 * 60_000, MAIL_DAY = 5;
 const DEVICE = /^[A-Za-z0-9_-]{16,64}$/;
 const b64 = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const out = (status, body, headers = {}) => ({ status, body, headers });
@@ -130,7 +140,7 @@ async function attach(store, acct, device, now) {
   if (pass && pass.sub && pass === mine.pass) await store.put(`sub:${pass.sub}`, { device, account: acct.name.toLowerCase(), at: now });
   return next;
 }
-const shown = (acct) => ({ name: acct.name, profile: acct.profile || null, devices: (acct.devices || []).length });
+const shown = (acct) => ({ name: acct.name, profile: acct.profile || null, devices: (acct.devices || []).length, ...(acct.email && { email: maskEmail(acct.email) }) });
 
 /** Answers /api/account; returns nothing for any other path. `limited(name)`: has this address asked too often? */
 export async function accountRoute(req, ctx, limited) {
@@ -158,8 +168,39 @@ export async function accountRoute(req, ctx, limited) {
     await store.put(keyOf(acct.name), next);
     return out(200, { account: shown(next) });
   }
-  if (action !== 'create' && action !== 'login' && action !== 'reset') return out(400, { error: 'Unknown action.' });
+  if (action !== 'create' && action !== 'login' && action !== 'reset' && action !== 'email' && action !== 'mailcode') return out(400, { error: 'Unknown action.' });
   if (limited('account')) return out(429, { error: 'Too many tries: wait a minute.' }, { 'Retry-After': '60' });
+  if (action === 'email') {
+    // the address of an account: given, changed or taken away from a browser that is signed in — with the password
+    const acct = await accountOf(store, device);
+    if (!acct) return out(403, { error: 'Sign in first.' });
+    if (!ctx.mail) return out(501, { error: 'This server sends no e-mail.' });
+    const email = body.email ? cleanEmail(body.email) : '';
+    if (body.email && !email) return out(400, { error: 'That does not look like an e-mail address.' });
+    if (acct.lock > now) return out(429, { error: 'Too many wrong tries: this account is closed for a quarter of an hour.' }, { 'Retry-After': String(Math.ceil((acct.lock - now) / 1000)) });
+    const pw = String(body.password || '');
+    if (!pw || pw.length > 100 || !sameSecret(await hashOf(pw, acct.salt), acct.hash)) {
+      const fails = (acct.fails || 0) + 1;
+      await store.put(keyOf(acct.name), { ...acct, fails: fails >= FAILS ? 0 : fails, lock: fails >= FAILS ? now + LOCK : 0 });
+      return out(403, { error: 'Wrong password.' });
+    }
+    const { email: _was, mail: _code, ...rest } = acct; // (a code mailed to the old address dies with it)
+    const next = { ...rest, ...(email && { email }), fails: 0, lock: 0 };
+    await store.put(keyOf(acct.name), next);
+    return out(200, { account: shown(next) });
+  }
+  if (action === 'mailcode') {
+    // a code to set a new password, mailed to the address of the account. The answer is the same whether there
+    // is such an account, whether it has an address, whether a message left: nobody learns anything by asking.
+    const who = accountName(body.name), acct = who ? await store.get(keyOf(who)) : null, said = out(200, { ok: true });
+    if (!ctx.mail || !acct?.email) { await hashOf('nobody', 'nobody'); return said; }
+    const sent = (acct.mailed || []).filter((t) => now - t < 24 * 3600_000);
+    if (sent.length >= MAIL_DAY || (sent.length && now - sent[sent.length - 1] < MAIL_GAP)) { await hashOf('nobody', 'nobody'); return said; }
+    const code = recoveryCode();
+    await store.put(keyOf(who), { ...acct, mail: { code: await hashOf(cleanCode(code), acct.salt), until: now + MAIL_CODE }, mailed: [...sent, now] });
+    try { await ctx.mail({ to: acct.email, ...codeMail(req.site || '', acct.name, code, MAIL_CODE / 60_000) }); } catch (err) { console.error('[mail]', String(err?.message || err).slice(0, 160)); }
+    return said;
+  }
   const name = accountName(body.name);
   if (!name) return out(400, { error: 'A name is 3 to 16 letters or digits.' });
   const found = await store.get(keyOf(name));
@@ -167,8 +208,11 @@ export async function accountRoute(req, ctx, limited) {
   if (action === 'create') {
     if (!goodPassword(body.password)) return out(400, { error: 'The password needs at least 8 characters.' });
     if (found) return out(409, { error: 'That name is taken.' });
+    // (an address is only kept where it can be of use: on a host that sends e-mail)
+    const email = ctx.mail && body.email ? cleanEmail(body.email) : '';
+    if (ctx.mail && body.email && !email) return out(400, { error: 'That does not look like an e-mail address.' });
     const salt = randomId(16), code = recoveryCode();
-    const acct = { name, salt, hash: await hashOf(body.password, salt), code: await hashOf(cleanCode(code), salt), created: now, devices: [], items: [], visit: null, profile: cleanProfile(body.profile), fails: 0, lock: 0 };
+    const acct = { name, salt, hash: await hashOf(body.password, salt), code: await hashOf(cleanCode(code), salt), created: now, devices: [], items: [], visit: null, profile: cleanProfile(body.profile), fails: 0, lock: 0, ...(email && { email }) };
     return out(200, { account: shown(await attach(store, acct, device, now)), recovery: code });
   }
   // (the same answer whether the name or the password is wrong: nobody learns which names exist)
@@ -176,7 +220,10 @@ export async function accountRoute(req, ctx, limited) {
   if (!found) { await hashOf(String(body.password || body.code || ''), 'nobody'); return wrong; }
   if (found.lock > now) return out(429, { error: 'Too many wrong tries: this account is closed for a quarter of an hour.' }, { 'Retry-After': String(Math.ceil((found.lock - now) / 1000)) });
   const secret = action === 'login' ? String(body.password || '') : cleanCode(body.code), kept = action === 'login' ? found.hash : found.code;
-  if (!secret || secret.length > 100 || !sameSecret(await hashOf(secret, found.salt), kept)) {
+  const given = secret && secret.length <= 100 ? await hashOf(secret, found.salt) : '';
+  // (a new password can also be set with the code that was mailed, while it lasts)
+  const byMail = action === 'reset' && !!given && !!found.mail && found.mail.until > now && sameSecret(given, found.mail.code);
+  if (!given || !(sameSecret(given, kept) || byMail)) {
     const fails = (found.fails || 0) + 1;
     await store.put(keyOf(name), { ...found, fails: fails >= FAILS ? 0 : fails, lock: fails >= FAILS ? now + LOCK : 0 });
     return wrong;
@@ -184,7 +231,7 @@ export async function accountRoute(req, ctx, limited) {
   let acct = found;
   if (action === 'reset') {
     if (!goodPassword(body.password)) return out(400, { error: 'The password needs at least 8 characters.' });
-    acct = { ...found, hash: await hashOf(body.password, found.salt) };
+    acct = { ...found, hash: await hashOf(body.password, found.salt), mail: null }; // (the code that was mailed is spent)
   }
   return out(200, { account: shown(await attach(store, acct, device, now)) });
 }

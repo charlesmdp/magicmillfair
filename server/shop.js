@@ -1,15 +1,19 @@
 // The shop and the sponsors: what a visitor owns (hats, the jetpack), who holds each place that can be
 // sponsored (the panel of a game, the backdrop of the shooting gallery, a gondola of the wheel, a sky
-// village) and what is shown there. Both hosts answer through shopRoute() (see routes.js).
+// village) and what is shown there — and the plaques of the companions round the golden dog, which are
+// places like the others, paid once and kept. Both hosts answer through shopRoute() (see routes.js).
 //
-//   GET    /api/shop?device=…                          → { mode, prices, owned, slots, pass, trial, now }
+//   GET    /api/shop?device=…                          → { mode, prices, owned, slots, pass, trial, now, pk? }
+//                                                      (pk: Stripe's publishable key, where the payment form can
+//                                                      be shown inside the game)
 //                                                      (pass: null | { since, until?, gift? } — the Game Pass;
 //                                                      trial: { until } — the light jetpack, free for a day
 //                                                      after the first visit; now: the clock of the server)
 //   POST   /api/portal    { device }                   → { url }   Stripe's page to look after — or stop — the pass
 //   POST   /api/gift      { device, item } | { device, pass: days }   the administrator gives something away
-//   POST   /api/checkout  { item, device, bid? }       → { url }   the payment page of Stripe for that item
-//                                                      (bid, in cents: for the panel of a game, which is auctioned)
+//   POST   /api/checkout  { item, device, bid?, embed? } → { url }   the payment page of Stripe for that item
+//                                                      (bid, in cents: for the panel of a game, which is auctioned;
+//                                                      embed: the form inside the game, where it can be → { secret })
 //   POST   /api/stripe/webhook                         Stripe tells what was paid (signed: see stripe.js)
 //   POST   /api/sponsor   { slot, device, title, subtitle, url, logo }   the holder of a place says what to show
 //   GET    /api/logo?slot=…                            the picture of a place (draft=1: the one awaiting approval)
@@ -105,6 +109,8 @@ const ownedBy = (ctx, device) => itemsOf(ctx.store, device);
 const selves = async (ctx, device) => { const acct = DEVICE.test(device || '') ? await accountOf(ctx.store, device) : null; return new Set(acct ? [...acct.devices, device] : device ? [device] : []); };
 const logoUrl = (id, version, draft) => `/api/logo?slot=${encodeURIComponent(id)}${draft ? '&draft=1' : ''}&v=${version}`;
 const shown = (id, s) => ({ title: s.title || '', subtitle: s.subtitle || '', url: s.url || '', logo: s.logo ? logoUrl(id, s.logo) : null, ...(s.bg && { bg: s.bg }) });
+/** What awaits approval, as it is told: its picture is an address (`keep`: no new picture — the one already shown stays). */
+const draftOf = (id, s) => (s.draft ? { ...s.draft, logo: s.draft.logo > 0 ? logoUrl(id, s.draft.logo, true) : null, ...(s.draft.logo === -1 && { keep: true }) } : null);
 
 /** What was paid for becomes theirs (called from the webhook; safe to call twice). `customer`: who pays, at Stripe. */
 export async function grant(ctx, item, device, sub = null, customer = null) {
@@ -195,7 +201,7 @@ export async function shopRoute(req, ctx) {
     for (const [id, s] of Object.entries(slots)) {
       view[id] = s.state === 'live' ? { state: 'live', ...shown(id, s) } : { state: 'taken' };
       if (describe(id)?.auction) Object.assign(view[id], { bid: s.bid || 0, next: nextBid(s.bid || 0) }); // (what it went for, what beats it)
-      if (mine && me.has(s.by)) Object.assign(view[id], { mine: true, paid: true, draft: s.draft ? { ...s.draft, logo: s.draft.logo > 0 ? logoUrl(id, s.draft.logo, true) : null } : null });
+      if (mine && me.has(s.by)) Object.assign(view[id], { mine: true, paid: true, draft: draftOf(id, s) });
     }
     // (what happened while they were away — outbid, refunded — is said once)
     let notes = [];
@@ -209,7 +215,7 @@ export async function shopRoute(req, ctx) {
       if (passLive(holder.pass, now)) pass = { since: holder.pass.since || 0, ...(holder.pass.gift && { gift: true, until: holder.pass.until }), ...(holder.pass.customer && { managed: true }) };
       trial = { item: TRIAL.item, until: first + TRIAL.ms };
     }
-    return out(200, { mode: cfg.mode || null, prices: publicPrices(), owned: mine ? await ownedBy(ctx, device) : [], slots: view, pass, trial, now, ...(notes.length && { notes }) });
+    return out(200, { mode: cfg.mode || null, prices: publicPrices(), owned: mine ? await ownedBy(ctx, device) : [], slots: view, pass, trial, now, ...(notes.length && { notes }), ...(cfg.publishable && { pk: cfg.publishable }) });
   }
 
   if (path === '/api/gift') {
@@ -270,8 +276,9 @@ export async function shopRoute(req, ctx) {
       extra = { bid };
     } else if (what.kind === 'slot' && (await slotsOf(ctx))[what.item]) return out(409, { error: 'Somebody already has it.' });
     try {
-      const session = await createCheckout(cfg, { ...what, currency: CURRENCY }, device, req.site || '', ctx.fetch || fetch, extra);
-      return out(200, { url: session.url });
+      const embed = body.embed === true && !!cfg.publishable; // (the form inside the game: only where its key was given)
+      const session = await createCheckout(cfg, { ...what, currency: CURRENCY }, device, req.site || '', ctx.fetch || fetch, extra, embed);
+      return out(200, embed ? { secret: session.secret } : { url: session.url });
     } catch (err) {
       console.error('[shop]', err.message);
       return out(502, { error: 'The payment page could not be opened. Try again in a moment.' });
@@ -309,9 +316,10 @@ export async function shopRoute(req, ctx) {
     if (limited('sponsor')) return busy;
     const slots = await slotsOf(ctx), id = body?.slot, s = typeof id === 'string' ? slots[id] : null;
     if (!s || !(req.admin || (DEVICE.test(body.device || '') && (await selves(ctx, body.device)).has(s.by)))) return out(403, { error: 'This place is not yours.' });
-    const draft = { title: cleanText(body.title, 28), subtitle: cleanText(body.subtitle, 40), url: cleanUrl(body.url), logo: 0 };
+    const plaque = !!describe(id)?.plaque; // (a plaque for a companion: a name, a few words, a picture — never a link)
+    const draft = { title: cleanText(body.title, 28), subtitle: cleanText(body.subtitle, 40), url: plaque ? '' : cleanUrl(body.url), logo: 0 };
     if (!draft.title) return out(400, { error: 'A name is needed.' });
-    if (body.url && !draft.url) return out(400, { error: 'The link must start with https://' });
+    if (!plaque && body.url && !draft.url) return out(400, { error: 'The link must start with https://' });
     if (body.logo) {
       const logo = cleanLogo(body.logo);
       if (!logo) return out(400, { error: 'The picture must be a PNG, a JPEG or a WebP of at most 90 KB.' });
@@ -349,7 +357,7 @@ export async function shopRoute(req, ctx) {
         const title = cleanText(body.set.title, 28);
         if (!title) return out(400, { error: 'A name is needed.' });
         const s = (slots[id] ||= { by: 'admin', sub: null, at: now, logo: 0 });
-        Object.assign(s, { state: 'live', title, subtitle: cleanText(body.set.subtitle, 40), url: cleanUrl(body.set.url), draft: null });
+        Object.assign(s, { state: 'live', title, subtitle: cleanText(body.set.subtitle, 40), url: describe(id).plaque ? '' : cleanUrl(body.set.url), draft: null });
         if (body.set.bg !== undefined) s.bg = cleanColor(body.set.bg); // (the colour behind it: the administrator's choice, never the sponsor's)
         if (body.set.logo) {
           const logo = cleanLogo(body.set.logo);
@@ -378,7 +386,7 @@ export async function shopRoute(req, ctx) {
     } else if (!reading) return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD, POST, DELETE' });
     return out(200, {
       refunds: ((await ctx.store.get('refunds')) || []).slice(-30).reverse(),
-      slots: Object.fromEntries(Object.entries(slots).map(([id, s]) => [id, { state: s.state, by: s.by, sub: !!s.sub, at: s.at, ...(s.bid && { bid: s.bid }), ...shown(id, s), draft: s.draft ? { ...s.draft, logo: s.draft.logo > 0 ? logoUrl(id, s.draft.logo, true) : null } : null }])),
+      slots: Object.fromEntries(Object.entries(slots).map(([id, s]) => [id, { state: s.state, by: s.by, sub: !!s.sub, at: s.at, ...(s.bid && { bid: s.bid }), ...shown(id, s), draft: draftOf(id, s) }])),
     });
   }
   return null;

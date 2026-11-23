@@ -12,10 +12,12 @@ import { BOARDS as GAME_NAMES } from '../server/catalog.js';
 import { drawSponsor } from './world/zones/games/Boards.js';
 import { ShopView } from './ui/ShopView.js';
 import { Arcade } from './ui/Arcade.js';
+import { AccountView } from './ui/AccountView.js';
+import { PayView } from './ui/PayView.js';
 import { Previewer } from './ui/Preview.js';
 import { Sparks } from './world/effects/Sparks.js';
 import { Account } from './net/Account.js';
-import { Shop, price, logoData, loadImage } from './net/Shop.js';
+import { Shop, price, logoData, loadImage, ownDraft } from './net/Shop.js';
 import { PlayerController, JET, JET_LITE } from './player/PlayerController.js';
 import { CameraRig } from './player/CameraRig.js';
 import { Interact } from './player/Interact.js';
@@ -55,6 +57,8 @@ const input = new Input(canvas);
 input.enabled = false;
 const hud = new Hud(ui, { input, isTouch: touch });
 const arcade = new Arcade(ui); // (the screen of the cabinet of the pier: shown while one plays)
+const accountView = new AccountView(ui); // (the card of the account: signing in, making one)
+const payView = new PayView(ui); // (the payment form, when it can be shown inside the game)
 if (SHOT && !params.has('ui')) ui.style.display = 'none';
 
 // The view the welcome screen floats over: a slow arc above the mill and its pond.
@@ -669,13 +673,21 @@ async function boot() {
   for (const sl of world.sponsorSlots || []) places.set(sl.id, { what: sl.what, spot: sl, set: sl.set });
   for (let n = 1; n <= (world.pier.gondolas || 0); n++) places.set(`gondola:${n}`, { what: `gondola ${n} of the big wheel`, set: (sp) => world.pier.setGondola(n, sp) });
   for (const v of sky.villages) places.set(`village:${v.id}`, { what: `the sky village ${v.name}`, village: v, set: (sp) => { if (sp) sky.setSponsor(v.index, { name: sp.title, motto: sp.subtitle, url: sp.url }); } });
+  const plaques = world.places.plaques; // (the plaques of the companions, round the plinth of the golden dog: places paid once)
+  for (let n = 1; n <= (plaques?.count || 0); n++) places.set(`plaque:${n}`, { what: 'a plaque round the golden dog', plaque: n, set: (sp) => plaques.set(n, sp) });
   const shown = new Map(); // what is painted where: id → the address of its picture + its words
   const applySponsors = async () => {
     for (const [id, place] of places) {
-      const view = shop.slots[id], live = view && view.state === 'live', key = live ? `${view.title}|${view.subtitle}|${view.logo}|${view.bg || ''}` : '';
+      const view = shop.slots[id], live = view && view.state === 'live';
+      // (what awaits approval is painted where it would go for the administrator, who has to see it to say yes
+      // or no — and for the holder of a plaque, who sees theirs as it will be)
+      const d = (who.admin && !place.village && pending[id]?.draft) || (place.plaque && view?.mine && view.draft) || null;
+      const key = d ? `?${d.title}|${d.subtitle}|${d.logo}|${d.keep ? 1 : 0}` : live ? `${view.title}|${view.subtitle}|${view.logo}|${view.bg || ''}` : view && place.plaque ? `taken${view.mine ? '!' : ''}` : '';
       if ((shown.get(id) || '') === key) continue;
       shown.set(id, key);
-      place.set(live ? { title: view.title, subtitle: view.subtitle, url: view.url, bg: view.bg || '', logo: await loadImage(view.logo) } : null);
+      if (d) place.set({ title: d.title, subtitle: d.subtitle, url: d.url, bg: view?.bg || '', pending: true, logo: d.logo ? await loadImage(who.admin ? d.logo : ownDraft(d.logo), who.admin ? who.key : '') : d.keep && live ? await loadImage(view.logo) : null });
+      else if (place.plaque) place.set(live ? { title: view.title, subtitle: view.subtitle, logo: view.logo } : view ? { taken: true, mine: !!view.mine } : null); // (its picture is fetched when the plate is painted)
+      else place.set(live ? { title: view.title, subtitle: view.subtitle, url: view.url, bg: view.bg || '', logo: await loadImage(view.logo) } : null);
     }
     hud.setVillages(sky.villages, data.meta.size, villageLabel);
     world.games.notices.ads.set(adRows()); // (the board of the booth of the sponsors)
@@ -710,22 +722,23 @@ async function boot() {
   };
   /** The holder of a place (or the administrator) says what to show there. */
   const fillPlace = async (id) => {
-    const place = places.get(id), view = shop.slots[id] || {}, was = view.draft || view, isVillage = !!place.village;
+    const place = places.get(id), view = shop.slots[id] || {}, was = view.draft || view, isVillage = !!place.village, isPlaque = !!place.plaque;
     const byHand = who.admin && !view.mine; // (the administrator fills a place in for a sponsor: shown at once)
-    const got = await hud.form(isVillage ? 'Your village' : byHand ? 'This panel' : 'Your panel', byHand ? 'What you save is shown to everyone at once. The colour behind it is yours to choose.' : 'It is shown once the fair has looked at it. Keep it short: it is painted on a sign.', [
-      { key: 'title', label: isVillage ? 'Its name (22 letters at most)' : 'Your name (28 letters at most)', value: was.title || '', max: isVillage ? 22 : 28 },
-      { key: 'subtitle', label: isVillage ? 'A line under it (34 letters at most)' : 'A line under it (40 letters at most)', value: was.subtitle || '', max: isVillage ? 34 : 40 },
-      { key: 'url', label: 'Your website (https://…)', value: was.url || '', max: 200, hint: 'https://' },
-      ...(isVillage ? [] : [{ key: 'logo', label: 'Your logo (PNG, JPEG or WebP) — leave empty to keep the one you sent', type: 'file' }]),
-      ...(byHand && !isVillage ? [{ key: 'bg', label: 'The colour of the panel behind it', type: 'color', value: view.bg || '#fbf7ec' }] : []),
-    ], byHand ? 'Save' : 'Send it');
+    const got = await hud.form(isPlaque ? (byHand ? 'This plaque' : 'Their plaque') : isVillage ? 'Your village' : byHand ? 'This panel' : 'Your panel',
+      isPlaque ? (byHand ? 'What you save is engraved at once, for everyone to read.' : 'Their name, a few words — and their picture, if you have one you like. It is engraved once the fair has looked at it.') : byHand ? 'What you save is shown to everyone at once. The colour behind it is yours to choose.' : 'It is shown once the fair has looked at it. Keep it short: it is painted on a sign.', [
+        { key: 'title', label: isPlaque ? 'Their name (22 letters at most)' : isVillage ? 'Its name (22 letters at most)' : 'Your name (28 letters at most)', value: was.title || '', max: isVillage || isPlaque ? 22 : 28 },
+        { key: 'subtitle', label: isPlaque ? 'A few words (40 letters at most)' : isVillage ? 'A line under it (34 letters at most)' : 'A line under it (40 letters at most)', value: was.subtitle || '', max: isVillage ? 34 : 40 },
+        ...(isPlaque ? [] : [{ key: 'url', label: 'Your website (https://…)', value: was.url || '', max: 200, hint: 'https://' }]),
+        ...(isVillage ? [] : [{ key: 'logo', label: isPlaque ? 'Their picture (PNG, JPEG or WebP) — leave empty to keep the one you sent' : 'Your logo (PNG, JPEG or WebP) — leave empty to keep the one you sent', type: 'file' }]),
+        ...(byHand && !isVillage && !isPlaque ? [{ key: 'bg', label: 'The colour of the panel behind it', type: 'color', value: view.bg || '#fbf7ec' }] : []),
+      ], byHand ? 'Save' : 'Send it');
     if (!got) return;
     if (!got.title) { hud.note('A name is needed.', 4000); return; }
     let logo = null;
-    if (got.logo) { logo = await logoData(got.logo); if (!logo) { hud.note('That picture cannot be used: a PNG, a JPEG or a WebP, please.', 6000); return; } }
+    if (got.logo) { logo = await logoData(got.logo, 256, isPlaque); if (!logo) { hud.note('That picture cannot be used: a PNG, a JPEG or a WebP, please.', 6000); return; } }
     const wrong = byHand ? await shop.set(id, { title: got.title, subtitle: got.subtitle, url: got.url, logo, ...(got.bg !== undefined && { bg: got.bg }) }, who.key) : await shop.fill(id, { title: got.title, subtitle: got.subtitle, url: got.url, logo });
-    hud.note(wrong || (byHand ? 'Done: it is shown to everyone.' : 'Sent. It will be shown as soon as it is approved.'), 7000);
-    if (!wrong) { await refreshShop(); if (who.admin) pending = (await shop.all(who.key)) || {}; }
+    hud.note(wrong || (byHand ? 'Done: it is shown to everyone.' : isPlaque ? 'Sent. Their plaque will be engraved as soon as the fair has looked at it.' : 'Sent. It will be shown as soon as it is approved.'), 7000);
+    if (!wrong) { if (who.admin) pending = (await shop.all(who.key)) || {}; await refreshShop(); }
   };
   let pending = {}; // the administrator: every place as the server keeps it (drafts included)
   /** What can be done about the place `id`, for who stands by it: [{ label, run }] */
@@ -743,13 +756,20 @@ async function boot() {
     const wrong = await shop.buy(id, bid);
     if (wrong) { hud.note(wrong, 7000); refreshShop(); }
   };
-  const placeActions = (id) => {
+  const placeActions = (id, row = '') => {
     const place = places.get(id), view = shop.slots[id], out = [];
     const cents = shop.cost(id, place.village?.tier);
     if (who.admin && pending[id]?.draft) {
       const d = pending[id].draft;
       out.push({ label: `Approve "${d.title}"`, run: async () => { await shop.decide(id, true, who.key); pending = (await shop.all(who.key)) || {}; await refreshShop(); hud.note('Approved: it is shown to everyone.', 5000); } });
-      out.push({ label: 'Refuse it', run: async () => { await shop.decide(id, false, who.key); pending = (await shop.all(who.key)) || {}; hud.note('Refused.', 4000); } });
+      out.push({ label: 'Refuse it', run: async () => { await shop.decide(id, false, who.key); pending = (await shop.all(who.key)) || {}; await applySponsors(); hud.note('Refused.', 4000); } });
+      return out;
+    }
+    if (place.plaque) {
+      // a plaque for a companion: paid once; its holder has it engraved (and may change it); the administrator may fill one in
+      if (view?.mine) out.push({ label: view.draft ? 'Change what you sent for your plaque' : view.state === 'live' ? 'Change your plaque' : 'Have your plaque engraved', run: () => fillPlace(id) });
+      else if (who.admin && shop.open) out.push({ label: `Fill the ${row} plaque in (administrator)`, run: () => fillPlace(id) });
+      else if (!view && shop.open) out.push({ label: `The ${row} plate, for your companion · ${price(cents)}`, run: () => offer(id, 'A plaque for a companion', `${price(cents)}, once, and this plate is theirs for as long as the fair stands: their name, a few words and their picture if you like, at the feet of the best dog ever. You write it right after paying; it is engraved as soon as the fair has looked at it.`, cents, false) });
       return out;
     }
     if (view?.mine || (who.admin && shop.open)) out.push({ label: view?.mine ? (view.draft ? 'Change what you sent' : 'Set up your panel') : 'Fill this place in (administrator)', run: () => fillPlace(id) });
@@ -768,6 +788,26 @@ async function boot() {
     for (const sl of world.sponsorSlots || []) if (Math.abs(p.pos.y - sl.y) < 2.5 && near(p, [sl.x, sl.z], sl.reach)) return placeActions(sl.id)[1] || null;
     return null;
   });
+  // the plaques of the companions: the two plates in front of whoever stands by the plinth (the upper, then the lower)
+  const plaqueActions = (p) => {
+    if (!plaques || Math.abs(p.pos.y - plaques.y) > 2.5) return [];
+    const col = plaques.columnAt(p.pos.x, p.pos.z);
+    if (col === null) return [];
+    const two = plaques.ids(col), out = [];
+    // (with flowers in hand: they can be left under a plate that has a name on it)
+    const named = two.find((q) => shop.slots[q.id]?.state === 'live');
+    if (look.bouquet && named) out.push({ label: `Lay your bouquet for ${shop.slots[named.id].title}`, run: () => {
+      const w = plaques.where(named.n);
+      look.bouquet = false; look.kinds = undefined;
+      audio.play('pick');
+      world.sparks.glitter(w.x, w.y, w.z, 0.9, 50);
+      hud.note(`For ${shop.slots[named.id].title}. Good companions are never very far.`, 5200);
+    } });
+    for (const q of two) out.push(...placeActions(q.id, q.row));
+    return out;
+  };
+  world.actionSources.push((p) => plaqueActions(p)[0] || null);
+  world.actionSources.push((p) => plaqueActions(p)[1] || null);
   // the golden dog above its cove: say hello at the foot of the plinth, and it answers
   world.actionSources.push((p) => {
     const c = world.places.crokmou;
@@ -956,7 +996,7 @@ async function boot() {
     kit.paint = Math.max(0, PAINTS.indexOf(p.paint)); kit.trail = Math.max(0, TRAILS.indexOf(p.trail));
     if (p.size) { size = SIZES.indexOf(sizeOf(p.size)); store.set('mmf.size', SIZES[size]); }
   };
-  const showAccount = () => hud.setAccount({ name: account.name, available: account.available });
+  const showAccount = () => hud.setAccount({ name: account.name, available: account.available, mail: account.mail, email: account.email });
   /** Signed in (or out): what is owned, the days in a row and the look are asked again. */
   const accountChanged = async () => {
     showAccount();
@@ -965,38 +1005,44 @@ async function boot() {
     who.days = v.days;
     showEmotes();
   };
+  // the account, on its card (ui/AccountView.js): signing in, making one, a new password with the recovery code
   const accountAction = async (what) => {
     if (what === 'logout') { await account.logout(); await accountChanged(); hud.note('Signed out: this browser is a guest again.', 5000); return; }
-    if (what === 'create') {
-      const got = await hud.form('Create an account', 'A name and a password: nothing else is asked. Your purchases, your days in a row and the look of your robot will follow you to any browser you sign in from.',
-        [{ key: 'name', label: 'Account name (3 to 16 letters or digits)', value: /^Visitor \d+$/.test(name) ? '' : name, max: 16 }, { key: 'password', label: 'Password (at least 8 characters)', type: 'password', fresh: true }, { key: 'again', label: 'The password again', type: 'password', fresh: true }], 'Create the account');
+    if (what === 'email') {
+      // the address of the account: only ever used to mail a code when the password is forgotten
+      const got = await hud.form('The e-mail of your account', 'It is only used to send you a code if you forget the password. Leave it empty to take it away. Your password is asked for, so that nobody changes it behind your back.',
+        [{ key: 'email', label: 'E-mail', max: 120, hint: 'you@example.org' }, { key: 'password', label: 'Your password', type: 'password' }], 'Save');
       if (!got) return;
-      if (got.password !== got.again) { hud.note('The two passwords are not the same.', 5000); return; }
-      const made = await account.create(got.name, got.password, profileNow());
-      if (made.error) { hud.note(made.error, 6000); return; }
-      await accountChanged();
-      audio.play('victory');
-      await hud.choose('Write this down', `Your account "${account.name}" is made, and this browser is signed in. If you ever forget the password, this recovery code is the only way back in — it is shown once:`, [{ label: made.recovery, note: 'I have written it down', color: [0.9, 0.7, 0.2] }]);
+      const done = await account.setEmail(got.email, got.password);
+      hud.note(done.error || (got.email ? 'Saved: a code can be sent there if you forget the password.' : 'Taken away: no e-mail is kept for this account.'), 6000);
+      showAccount();
       return;
     }
-    if (what === 'reset') {
-      const got = await hud.form('A new password', 'With the recovery code you were given when the account was made.',
-        [{ key: 'name', label: 'Account name', max: 16 }, { key: 'code', label: 'Recovery code (XXXX-XXXX-XXXX)', max: 20 }, { key: 'password', label: 'New password (at least 8 characters)', type: 'password', fresh: true }], 'Set the password');
-      if (!got) return;
-      const done = await account.reset(got.name, got.code, got.password);
-      if (done.error) { hud.note(done.error, 6000); return; }
-    } else {
-      const got = await hud.form('Sign in', 'What you bought, your days in a row and the look of your robot come back.', [{ key: 'name', label: 'Account name', max: 16 }, { key: 'password', label: 'Password', type: 'password' }], 'Sign in');
-      if (!got) return;
-      const done = await account.login(got.name, got.password);
-      if (done.error) { hud.note(done.error, 6000); return; }
-    }
-    applyProfile(account.profile);
-    await accountChanged();
-    audio.play('victory');
-    hud.note(`Welcome back, ${account.name}!`, 5000);
+    hud.closeAll();
+    input.exitLock();
+    input.keys.clear(); // (nothing stays pressed behind the card)
+    accountView.open({ mode: what === 'create' ? 'create' : what === 'reset' ? 'reset' : 'login', name: what === 'create' && !/^Visitor \d+$/.test(name) ? name : '', mail: account.mail });
   };
-  Object.assign(app, { account, accountAction });
+  accountView
+    .on('submit', async (mode, d) => {
+      if (mode === 'create') {
+        const made = await account.create(d.name, d.password, profileNow(), d.email);
+        if (made.error) return { error: made.error };
+        await accountChanged();
+        audio.play('victory');
+        return { recovery: made.recovery, name: account.name };
+      }
+      const done = mode === 'reset' ? await account.reset(d.name, d.code, d.password) : await account.login(d.name, d.password);
+      if (done.error) return { error: done.error };
+      applyProfile(account.profile);
+      await accountChanged();
+      audio.play('victory');
+      hud.note(`Welcome back, ${account.name}!`, 5000);
+      return {};
+    })
+    .on('mailcode', (who) => account.mailCode(who))
+    .on('close', () => { document.getElementById('view')?.focus({ preventScroll: true }); });
+  Object.assign(app, { account, accountAction, accountView, payView });
   const equip = (id, on) => {
     const [type, sub] = id.split(':');
     if (type === 'jetpack' || type === 'jetlite') {
@@ -1051,26 +1097,40 @@ async function boot() {
   hud.setHat(look.hat);
   // where the shop stands. Back from the payment page, what was bought may take a few seconds to arrive
   // (the server only believes what Stripe tells it).
-  refreshShop().then(() => {
-    const paid = params.get('paid');
-    if (paid === null) return;
-    params.delete('paid');
-    history.replaceState(null, '', location.pathname + (params.toString() ? `?${params}` : '') + location.hash);
-    if (!paid) { hud.note('Nothing was paid.', 4000); return; }
+  const arrived = (paid) => {
     hud.note('Thank you! It will be here in a moment…', 6000);
     let tries = 0;
     const again = async () => {
       await refreshShop();
       if (shop.owned.has(paid) || shop.slots[paid]?.mine || (paid === PASS.id && shop.pass)) {
         audio.play('victory');
-        hud.note(paid === PASS.id ? `The ${PASS.name} is yours. Thank you — it keeps the lights on! Pick a size and a colour in the settings.` : shop.slots[paid]?.mine ? 'It is yours. Go to it to set it up: your name, your link, your logo.' : 'It is yours. Thank you!', 9000);
+        const plate = paid.startsWith('plaque:') && shop.slots[paid]?.mine;
+        hud.note(paid === PASS.id ? `The ${PASS.name} is yours. Thank you — it keeps the lights on! Pick a size and a colour in the settings.` : plate ? 'The plate is theirs, for good. Thank you!' : shop.slots[paid]?.mine ? 'It is yours. Go to it to set it up: your name, your link, your logo.' : 'It is yours. Thank you!', 9000);
+        // (what goes on a plaque is asked for right away — the plate itself is a swim and a climb away —, once they are in the world)
+        if (plate && !shop.slots[paid].draft && shop.slots[paid].state !== 'live') { const ask = () => { if (state.mode === 'walk') fillPlace(paid); else setTimeout(ask, 900); }; ask(); }
         // (what can be worn is put on at once)
         if (itemOf(paid) && WEARABLE.includes(paid.split(':')[0])) { equip(paid, true); shopView.refresh(shopItems()); }
       }
       else if (++tries < 8) setTimeout(again, 2500);
     };
     again();
+  };
+  refreshShop().then(() => {
+    const paid = params.get('paid');
+    if (paid === null) return;
+    params.delete('paid');
+    history.replaceState(null, '', location.pathname + (params.toString() ? `?${params}` : '') + location.hash);
+    if (!paid) { hud.note('Nothing was paid.', 4000); return; }
+    arrived(paid);
   });
+  // paying without leaving the game, where the server has Stripe's publishable key: their form on a card
+  // (ui/PayView.js). When it cannot be shown, the shop sends the visitor to Stripe's page as before.
+  shop.onEmbed = (item, secret) => {
+    hud.closeAll();
+    input.exitLock();
+    input.keys.clear();
+    return payView.open(shop.pk, secret, { title: 'Payment', test: shop.mode === 'test', paid: () => arrived(item) });
+  };
   account.load().then(showAccount);
   hud.setSettings(settings);
   hud.setVolume(volume);
@@ -1203,7 +1263,7 @@ async function boot() {
   input.on('drop', () => { if (look.bouquet) { look.bouquet = false; look.kinds = undefined; } });
   input.on('chat', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleChat(true, talking ? talking.brain.ask || `Say something to ${talking.name}…` : undefined); });
   input.on('respawn', () => { if (state.mode === 'walk') { endGame(); spawn(); hud.note('Back to the mill'); } });
-  input.on('menu', () => { if (fair.session && (!fair.session.over || fair.kind === 'arcade')) { endGame(); hud.note('Game left.'); } hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); hud.toggleChat(false); hud.closeChoice(); hud.closeRoster(); });
+  input.on('menu', () => { accountView.close(); payView.close(); if (fair.session && (!fair.session.over || fair.kind === 'arcade')) { endGame(); hud.note('Game left.'); } hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); hud.toggleChat(false); hud.closeChoice(); hud.closeRoster(); });
   input.on('map', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleBigMap(); });
   hud.setMap(data.meta.map, PLACES);
   hud.setVillages(world.sky.villages, data.meta.size, villageLabel);

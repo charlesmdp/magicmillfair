@@ -107,6 +107,7 @@ Worker sees — `"npc": true`, `"admin": true` — without showing any of it.
 | `SCORE_SECRET` | Optional: signs the notes of the game runs (see "Cheating"). The notebook draws one by itself otherwise. |
 | `STRIPE_SECRET_KEY` | **Opens the shop.** The secret key of your Stripe account: `sk_test_…` to try with test cards, `sk_live_…` to sell. Without it nothing is sold and everything is free (see *The shop*). |
 | `STRIPE_WEBHOOK_SECRET` | The signing secret (`whsec_…`) of the webhook that Stripe calls when something is paid: without it no payment is ever believed. See *The shop* for the three steps. |
+| `STRIPE_PUBLISHABLE_KEY` | Optional: Stripe's *publishable* key (`pk_test_…` / `pk_live_…`, of the same mode as the secret key). With it the payment form is shown **inside the game**, on a card, instead of sending the visitor to Stripe's page (see *The shop*, step 5). It is not a secret — browsers are meant to read it — but adding it as one makes it survive deployments. |
 
 Billy answers whatever is said to him — a question, a hello, a bad day — one line at a time: the model is
 sent that one line and nothing else (no history), wrapped as something to coach on and never as
@@ -406,6 +407,7 @@ trails, fireworks: the item shop says so and lets everything be put on. With a k
 | The sponsor's panel over the board of a game (fourteen of them) | an auction, from $1 (see below) | step up to the board ("Sponsor this game · from $1"), or the shelf *Sponsor a game* of the item shop |
 | The backdrop of the shooting gallery | $99 a month | at the counter side of Bullseye Alley |
 | A gondola of the big wheel (twenty-four) | $29 a month | the red kiosk by the steps of the wheel: "The gondolas and their sponsors" |
+| A plaque for a companion, round the plinth of the golden dog (seventy-two) | $20, once, for good | step up to a bare plate: "The upper plate, for your companion · $20" |
 | A sky village (fifty) | $19 to $9,999 a month | at the sign or the board of the village: "Hire …" |
 
 **Sponsoring a game is an auction.** The panel over the scores of each game goes to the highest bidder. The
@@ -442,7 +444,8 @@ What a visitor owns is one list, `server/items.js` (id, name, price, shelf, rari
 add a line there and it is sold. Prices of the places are in `server/catalog.js` (and `VILLAGE_PRICES` in
 `src/world/layout/sponsors.js` for the villages): the browser is shown them and is never asked what
 something costs. Payment happens on Stripe's own page (the game never sees a card); the visitor comes back
-to the game, and what was paid arrives a few seconds later.
+to the game, and what was paid arrives a few seconds later. (With Stripe's publishable key, the same form
+is shown on a card inside the game and nobody leaves: step 5 below.)
 
 **Switching it on** (Stripe dashboard, then the secrets of the Worker — never in a file):
 
@@ -457,16 +460,30 @@ to the game, and what was paid arrives a few seconds later.
 4. For the Game Pass: *Settings → Billing → Customer portal*, switch it on once (in test mode, then in
    live mode). It is the page where a holder changes a card or stops the pass; until it is on, *Look
    after it, or stop it* answers that the page could not be opened.
+5. Optional — **the payment form inside the game.** *Developers → API keys* again: copy the **publishable
+   key** (`pk_test_…`, or `pk_live_…` when selling for real — the one of the same mode as the secret key)
+   into `STRIPE_PUBLISHABLE_KEY`, and deploy. From then on *Buy* opens Stripe's form on a card laid over
+   the game (their "embedded Checkout": still a frame of Stripe's, the game never sees a card): the visitor
+   pays there, the card closes, and what was bought arrives — the page never left. Stripe's script
+   (`js.stripe.com`) is fetched the first time somebody buys something, never before. Whenever the form
+   cannot be shown (the script blocked by an extension, anything unexpected) the visitor is sent to
+   Stripe's page as before; a way of paying that needs a page of its own (a bank's) comes back the same
+   way as from that page. Take the key away and everything is as it was. (The form is asked of Stripe with
+   the version of its API this was written against: `EMBED_VERSION` in `server/stripe.js`.)
 
 To keep both pairs at once, name them `STRIPE_TEST_SECRET_KEY`, `STRIPE_TEST_WEBHOOK_SECRET`,
-`STRIPE_LIVE_SECRET_KEY`, `STRIPE_LIVE_WEBHOOK_SECRET`, and set the variable `STRIPE_MODE` to `test` or
+`STRIPE_LIVE_SECRET_KEY`, `STRIPE_LIVE_WEBHOOK_SECRET` (and `STRIPE_TEST_PUBLISHABLE_KEY`,
+`STRIPE_LIVE_PUBLISHABLE_KEY` for the form inside the game), and set the variable `STRIPE_MODE` to `test` or
 `live` (without it, live wins as soon as its key is there).
 
 **Sponsors.** A place that can be sponsored is held by one sponsor at a time, for as long as the
 subscription runs (when it ends, Stripe says so and the place is free again). Its holder goes to it in the
 game — "Set up your panel" — and gives a name, a line under it, a link and a logo. **Nothing is shown before
 the administrator has approved it**: with the administrator's key on, the chat says when something awaits,
-and standing by the place offers "Approve …" and "Refuse it". The administrator can also fill a place in
+and standing by the place offers "Approve …" and "Refuse it" — **what awaits is painted there for the
+administrator's eyes only**, words and picture, so that the yes or the no is given with the thing in sight
+(a picture that awaits approval is asked for with the administrator's key, never by an address anyone could
+open). The administrator can also fill a place in
 by hand, for a sponsor who paid some other way ("Fill this place in") — and there chooses **the colour of
 the panel** behind the sponsor's name and logo (a logo made for a dark ground, a brand with its own
 colour: the words are written light on a dark panel, dark on a light one). Over the board of a game, a
@@ -485,10 +502,19 @@ a JPEG or a WebP (told by its bytes, not by its name), of at most 90 KB and 1024
 as that kind of picture and nothing else (no guessing of types, no scripts, never as a page), and the game
 only ever paints it on a sign.
 
-**Who owns what.** There are no accounts: a purchase belongs to the browser that made it (the random name
-it gave itself, kept in its storage). Clearing the storage of the browser, or playing on another device,
-loses sight of it — the administrator can fill a sponsored place in again by hand; a lost hat cannot be
-given back from the game.
+**The plaques of the companions.** A plate round the plinth of the golden dog is a place like the others
+(`plaque:1` … `plaque:72`, `PLAQUE_COUNT` in `src/world/layout/sponsors.js`), except that it is paid once
+and kept: no subscription ends it. Back from the payment page the buyer is asked at once for what goes on
+it — their companion's name, a few words, a picture if they like (cut square and made small in the
+browser; the same rules as a logo on the server) — and never a link. Until the administrator has approved
+it the plate reads "being engraved…" to everybody else, while its holder sees it as it will be, marked
+*awaiting approval*. Its holder can change it later (the change is approved again). The pictures of the
+plates are fetched only when the plates are painted, by whoever climbs up there.
+
+**Who owns what.** A purchase belongs to the browser that made it (the random name it gave itself, kept in
+its storage) — or, for who has signed in, to their account (see *Accounts*). A guest who clears the
+storage of the browser, or plays on another device, loses sight of what they bought: the administrator can
+give a thing again (a present), or fill a sponsored place in again by hand.
 
 ### Sky villages for hire
 
@@ -564,6 +590,11 @@ mountain, under the rock, out at sea.
   gold, fifteen metres tall, sits on a round plinth and looks out over the bay — an Australian shepherd,
   its ball by its foot. The tablet on the plinth says who it is. Step up to it and say hello: it answers.
   (It is seen from the open sea, from the island and from the end of the pier.)
+  Round the drum of the plinth run **the plaques of the companions**: seventy-two brass plates in two rows,
+  one for each pet somebody wanted remembered up here — a name, a few words, a picture (see *The shop*).
+  A plate that is nobody's yet is bare bronze; step up to one to take it. With a bouquet in hand, it can be
+  laid under a plate that carries a name. (All the plates are one mesh painted from one picture, which is
+  only made when somebody comes up to the ledge and is thrown away when they have gone.)
 - **The island**: a rock 35 m high, about 80 m off the beach (swim across from the north end of the cove).
   A path winds two and a quarter times round it up to a flat top with a ring of standing stones. Along the
   way: nine hollows cut in the rock on the inner side and, on the outer side, eight timber walkways out over
@@ -761,7 +792,8 @@ Building blocks added with the places and the games (`zones/places/PlacesZone.js
   sits it on a quad; the flying theatre, in `zones/games/Wing.js`, hangs it in the air in the pose of a
   swimmer, wings on: `character.setWings(true)`).
 - **Polished metal**: `surfaceMaterial({ metal: true, color })` shows the sky, the horizon and the ground
-  in the colour of the metal (the gold of the statue, `zones/places/GoldenDog.js`).
+  in the colour of the metal (the gold of the statue, `zones/places/GoldenDog.js`; the plates round its
+  plinth are `zones/places/Plaques.js`).
 
 ### Multiplayer
 
@@ -780,20 +812,45 @@ device — a random number drawn by the browser — the days in a row it has com
 town it last came from, the visits counted by day and by country with the last three hundred of them (see
 *Where the visitors come from*), the administrators' list of who is kept out, and the administrators who
 were named (the hash of their key, never the key), and the accounts (a name, the hash of a password and of a recovery
-code, what was bought, the look of the robot). No e-mail, no positions, no chat. Under Node these are a JSON
+code, what was bought, the look of the robot — and an e-mail address, for an account that was given one where
+e-mails can be sent: see *E-mails*). No positions, no chat. Under Node these are a JSON
 file; on Cloudflare, the storage of one Durable Object.
 
 **Accounts.** Nobody needs one: a visitor plays at once, as the random name their browser gave itself, and
 what they buy and earn is kept for that browser. An account (Settings → *Create an account*) is a name and
-a password, nothing else — no e-mail, nothing to confirm. A browser that signs in is attached to the
+a password, nothing else — nothing to confirm (an e-mail address may be added where the server can send
+e-mails: see below). It is made, and signed in to, on a card of its
+own (`src/ui/AccountView.js`): two tabs (*Sign in*, *Create an account*), what is wrong said under the
+field it is about as it is typed (the name, the password weighed on a small gauge and typed twice), a
+button to see what one types, and the recovery code shown once on its own, with a button to copy it. A browser that signs in is attached to the
 account: what it had bought goes with it, and from then on the purchases, the days in a row, the sponsored
 places, the Game Pass and the look of the robot (name, colour, size, hat, paint, trail) are the account's — sign in from another
 browser and it is all there. Signing out makes the browser a guest again, with what it bought itself.
 Passwords are never kept, only a salted PBKDF2-SHA256 of them (100,000 rounds, the most the Workers
 runtime allows); a wrong name and a wrong password get the same answer; ten wrong passwords close an
-account for a quarter of an hour, and an address may try ten a minute. With no e-mail there is no "send me
-a link": a **recovery code** is shown once when the account is made, and sets a new password (*Forgot the
-password*). Lose both and the account is lost — the administrator cannot read a password either.
+account for a quarter of an hour, and an address may try ten a minute. A **recovery code** is shown once
+when the account is made, and sets a new password (*Forgot the password*). Without an e-mail address, lose
+both and the account is lost — the administrator cannot read a password either.
+
+**E-mails.** The game sends one kind of e-mail, and only where it has been given the means: a code to set
+a new password, to an account that carries an address. Where the server can send e-mails
+(`/api/status` says `"mail": true`), the card of the account offers an optional *E-mail* field, *Forgot
+the password* offers *Send me a code by e-mail* (a code good for half an hour, once; one message every
+two minutes and five a day per account at the most; the answer is the same whether or not the account
+exists or has an address), and the settings let who is signed in add, change or take away the address
+(with the password). The address is kept with the account, shown to its owner with most of it hidden
+(`j•••@e•••.org`) and to nobody else; where no e-mail can be sent, none is ever asked for or kept. To
+switch it on at Cloudflare (their Email Service — on the Workers Paid plan — sends to any address):
+
+1. In the Cloudflare dashboard, onboard the domain of the game to *Email Service* (sending): it adds the
+   DNS records that let Cloudflare send in its name.
+2. In `wrangler.jsonc`, add the binding `"send_email": [{ "name": "EMAIL" }]` and, in `"vars"`,
+   `"MAIL_FROM": "hello@your-domain"` (any address of that domain). They are not there by default: a
+   binding the account cannot honour makes a deployment fail.
+3. Deploy, and check `/api/status`. Make an account with your own address and ask for a code.
+
+On the Node server no e-mail is sent; `MAIL_FILE=/some/file` writes each message to that file instead (to
+try things out — the tests use it). `server/mail.js` holds the message and what an address must look like.
 
 **The administrators.** The owner is whoever knows `ADMIN_KEY` (`/admin <key>` in the chat). Clicking the
 head count (top left) lists who is in the room — for everybody, the names; for an administrator, also the
@@ -883,12 +940,12 @@ that is the last point. Going further means a referee: the server replaying the 
 |---|---|
 | `npm run bake` | bakes the world, the statue and the textures again |
 | `npm run bake:statue` | sculpts the golden dog again (`-- --preview=dog.png` also draws it from five sides, `-- --cell=0.012` makes a finer mesh) |
-| `npm test` | 183 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents) |
-| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (127 in all) |
-| `npm run test:shop` | the shop in the real game, on the Node server with test keys and a stand-in for Stripe: a hat bought and worn, the panel of a game sponsored, filled in (with a logo) and approved by the administrator, the stand of the gondolas; and a newcomer: the padlocks of the welcome card and the free day of the jetpack, the Game Pass bought as a subscription, what it lends (black, the largest size, a hat that was never bought), its end and the end of the free day (16 checks) |
+| `npm test` | 188 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password) |
+| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (131 in all) |
+| `npm run test:shop` | the shop in the real game, on the Node server with test keys and a stand-in for Stripe: a hat bought and worn, the panel of a game sponsored, filled in (with a logo) and approved by the administrator, the stand of the gondolas, a plaque for a companion (bought at a bare plate, engraved with a picture, approved), an account made and signed in to on its card, the payment form inside the game (and Stripe's page when it cannot be shown); and a newcomer: the padlocks of the welcome card and the free day of the jetpack, the Game Pass bought as a subscription, what it lends (black, the largest size, a hat that was never bought), its end and the end of the free day (19 checks) |
 | `npm run test:smoke` | drives the real site: welcome screen, walking, free camera, settings, large map (`-- --mobile` for the touch layout) |
 | `npm run test:audio` | Listens to the sound engine without ears: in headless Chromium it renders a dozen listener scenarios (beach, cliffs, pier, woods, mill, waterfall, cave, sky village, the climb…) and every one-shot effect through an offline audio context, measures level, spectrum, how the loudness moves and how tonal it is, fails on silence or clipping, and times `update()` (about 0.01 ms a frame) |
-| `npm run test:walk` | 48 checks in the real game: pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls and the high clearing above them, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the swim on to the golden cove (the shark stays away; out of the sea on the beach; the stair up to the golden dog), the fifty sky villages (prices, places to sit, the board of one for hire, the one dressed as a demonstration), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, sitting down on the ground, the two jetpacks (which is on; the light one's fifteen seconds), big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the four booths of the pier head and the six of the walk (a bot plays each through the pointer, as a visitor would: baskets shot where the hoop is going to be, a tower stacked, a sequence of lamps remembered, fish brought up, alarms answered in a fifth of a second, a cup followed; boards), the arcade cabinet (a bot runs three hundred metres), the quad race (asked for in the paddock, it leaves with the next named start; a bot drives three laps flat out — it never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, and flies off the ramp), the flying theatre (a bot flaps through nine pairs of columns), the acid pond, the shark, change of tier |
+| `npm run test:walk` | 49 checks in the real game: pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls and the high clearing above them, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the swim on to the golden cove (the shark stays away; out of the sea on the beach; the stair up to the golden dog; the plaques round its plinth, painted for who climbs up there), the fifty sky villages (prices, places to sit, the board of one for hire, the one dressed as a demonstration), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, sitting down on the ground, the two jetpacks (which is on; the light one's fifteen seconds), big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the four booths of the pier head and the six of the walk (a bot plays each through the pointer, as a visitor would: baskets shot where the hoop is going to be, a tower stacked, a sequence of lamps remembered, fish brought up, alarms answered in a fifth of a second, a cup followed; boards), the arcade cabinet (a bot runs three hundred metres), the quad race (asked for in the paddock, it leaves with the next named start; a bot drives three laps flat out — it never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, and flies off the ramp), the flying theatre (a bot flaps through nine pairs of columns), the acid pond, the shark, change of tier |
 | `npm run test:duo` | 25 checks with two visitors on the production server: they must see each other move, wave, summon an animal, chat and sit down; the largest size and a party hat, sitting on the ground, a bouquet given from hand to hand; the administrator's key in the address, the administrator seeing the game as a visitor does (`-- --cloudflare` for the Cloudflare version) |
 | `npm run bench` | benchmark tour for each tier (`-- --mobile` for the phone profile) |
 | `npm run profile` | cost of each system (script, draw calls, triangles) at seven viewpoints |
@@ -961,10 +1018,14 @@ Game and multiplayer
   time the server finds believable. The cheat codes of the game itself disqualify a run; nothing more.
 - **The boulder, the shark** follow each visitor's own clock: two visitors standing side by side see the
   boulder in the same place only as far as their devices agree on the time (usually within a second).
+- **No e-mail was ever sent for real**: the Node server only writes them to a file, and the three lines
+  of the Worker that hand a message to Cloudflare's Email Service were written from its documentation —
+  the first code mailed to your own address is the test.
 - **The shop was never run against the real Stripe**: its tests use a stand-in that answers like Stripe
   (payment page, signed webhook, forged and stale ones). The first real purchase, with a test key, is yours
-  to make. There are no accounts (a purchase belongs to a browser), no refunds or invoices in the game
-  (Stripe's dashboard has them), and a subscription is ended from Stripe, not from the game.
+  to make — and the form inside the game (step 5 of *The shop*) even more so: its test plays Stripe's
+  script with a stand-in, so try it with test keys before giving it the live one. There are no invoices in the game (Stripe's dashboard has them); the only refunds the game makes
+  itself are those of the auctions; a subscription is ended on Stripe's page, which the game opens.
 - **Sky villages**: all fifty are built and reachable; they carry made-up names until `sponsors.js` is
   edited. A village is a sign, a flag and roofs in the company's colours — no logo image yet, and the temple
   is the same fifty times. They are small dots from the valley.
@@ -975,9 +1036,10 @@ Game and multiplayer
 - The temple's buildings cannot be entered. On the big wheel one cannot stand up or walk in the car.
 - Seats are taken on a first-come basis decided by each client: two people pressing at the same instant can
   end up on the same seat.
-- Multiplayer: presence, emotes and chat. The chat is not moderated (no filter, no mute, no report) and not
-  stored; there are no accounts and no anti-cheat. 48 visitors per room, more rooms as needed. Not tested
-  with real latency, nor with a real crowd.
+- Multiplayer: presence, emotes and chat. The chat is not moderated (no filter, no mute, no report — an
+  administrator can put somebody out, or keep them out) and not stored: what was said while one was away
+  is not shown on coming back. 250 visitors per room, more rooms as needed. Not tested with real latency,
+  nor with a real crowd.
 - Cloudflare: the Cloudflare version is tested in the official runtime locally (protocol, rooms going to
   sleep, leaderboards, two browsers) and deployed by the workflow on every push — but **multiplayer and the
   leaderboard on Cloudflare's real network have not been observed from here**. Cloudflare's own push trigger

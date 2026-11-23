@@ -18,7 +18,7 @@ import { Presence, cleanName, cleanRoom } from '../src/net/Presence.js';
 import { sleep, until, freePort, request, Client } from './lib/net.mjs';
 import { sign, verify, randomId } from '../server/token.js';
 import { addScore, topsOf, periodKeys, runFits, cleanScore } from '../server/scores.js';
-import { signWebhook } from '../server/stripe.js';
+import { signWebhook, stripeConfig } from '../server/stripe.js';
 import { cleanLogo, cleanText, cleanUrl } from '../server/shop.js';
 import { visit, localDay } from '../server/routes.js';
 import { cleanTalk, oneSentence } from '../server/npc.js';
@@ -26,7 +26,10 @@ import { cleanGeo, packGeo, unpackGeo } from '../server/visitors.js';
 
 // what the test servers are given: the secret that signs the notes of the runs, the administrator's key
 const SCORE_SECRET = 'test-score-secret', ADMIN_KEY = 'test-admin-key';
-const STRIPE_KEY = 'sk_test_magicmillfairtests', STRIPE_HOOK = 'whsec_magicmillfairtests';
+const STRIPE_KEY = 'sk_test_magicmillfairtests', STRIPE_HOOK = 'whsec_magicmillfairtests', STRIPE_PK = 'pk_test_magicmillfairtests';
+// (where the Node server writes the e-mails it would send)
+const MAIL_FILE = path.join(os.tmpdir(), `mmf-net-test-mail-${process.pid}.jsonl`);
+process.on('exit', () => { try { fs.rmSync(MAIL_FILE, { force: true }); } catch { /* nothing to remove */ } });
 // A stand-in for Stripe: it hands out payment pages and remembers what it was asked.
 const stripe = { asked: [], refunds: [], portals: [], port: 0, server: null };
 async function startStripe() {
@@ -48,14 +51,16 @@ async function startStripe() {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ id: `bps_test_${stripe.portals.length}`, url: `https://billing.stripe.test/p/session/${stripe.portals.length}` }));
       }
-      stripe.asked.push({ url: req.url, auth: req.headers.authorization, form });
+      stripe.asked.push({ url: req.url, auth: req.headers.authorization, version: req.headers['stripe-version'] || '', form });
       res.writeHead(ok ? 200 : 401, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(ok ? { id: `cs_test_${stripe.asked.length}`, url: `https://checkout.stripe.test/pay/cs_test_${stripe.asked.length}` } : { error: { message: 'Invalid API Key' } }));
+      // (a form to show inside the game has no page: Stripe gives a secret for its script instead)
+      const session = form.get('ui_mode') === 'embedded' ? { id: `cs_test_${stripe.asked.length}`, client_secret: `cs_test_secret_${stripe.asked.length}`, url: null } : { id: `cs_test_${stripe.asked.length}`, url: `https://checkout.stripe.test/pay/cs_test_${stripe.asked.length}` };
+      res.end(JSON.stringify(ok ? session : { error: { message: 'Invalid API Key' } }));
     });
   });
   await new Promise((resolve) => stripe.server.listen(stripe.port, '127.0.0.1', resolve));
 }
-const shopEnv = () => ({ STRIPE_SECRET_KEY: STRIPE_KEY, STRIPE_WEBHOOK_SECRET: STRIPE_HOOK, STRIPE_API: `http://127.0.0.1:${stripe.port}` });
+const shopEnv = () => ({ STRIPE_SECRET_KEY: STRIPE_KEY, STRIPE_WEBHOOK_SECRET: STRIPE_HOOK, STRIPE_PUBLISHABLE_KEY: STRIPE_PK, STRIPE_API: `http://127.0.0.1:${stripe.port}` });
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CF = process.argv.includes('--cloudflare');
@@ -78,7 +83,7 @@ function check(name, ok, detail) {
 async function startServer(env = {}, port = 0) {
   port = port || (await freePort());
   const proc = spawn(process.execPath, [path.join(ROOT, 'server/index.js')], {
-    env: { ...process.env, ALLOWED_ORIGINS: '', MAX_PLAYERS: '', DIST_DIR: '', HOST: '127.0.0.1', TICK_HZ: '20', ANTHROPIC_API_KEY: '', NPC_MODEL: '', SCORE_SECRET, ADMIN_KEY, ...shopEnv(), ...env, PORT: String(port) },
+    env: { ...process.env, ALLOWED_ORIGINS: '', MAX_PLAYERS: '', DIST_DIR: '', HOST: '127.0.0.1', TICK_HZ: '20', ANTHROPIC_API_KEY: '', NPC_MODEL: '', SCORE_SECRET, ADMIN_KEY, MAIL_FILE, ...shopEnv(), ...env, PORT: String(port) },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   const server = { port, proc, log: '', alive: () => proc.exitCode === null && proc.signalCode === null };
@@ -856,6 +861,18 @@ async function testShop({ port }) {
   const sub = stripe.asked[1]?.form;
   const nothing = await post('/api/checkout', { item: 'hat:invisible', device: ann }), nobody = await post('/api/checkout', { item: 'jetpack', device: 'x' });
   check('shop: a village is a subscription by the month, at the price of its height; what is not sold is refused', res.status === 200 && sub?.get('mode') === 'subscription' && sub.get('line_items[0][price_data][recurring][interval]') === 'month' && Number(sub.get('line_items[0][price_data][unit_amount]')) >= 1900 && sub.get('subscription_data[metadata][item]') === 'village:eagle-rest' && nothing.status === 400 && nobody.status === 400, [res.status, sub?.toString().slice(0, 200), nothing.status, nobody.status]);
+  // the payment form inside the game: where the publishable key was given, Stripe is asked for a form to embed
+  stripe.asked.length = 0;
+  const inGame = await post('/api/checkout', { item: 'hat:cowboy', device: ann, embed: true });
+  const emb = stripe.asked[0];
+  const keys = [stripeConfig({ STRIPE_SECRET_KEY: 'sk_test_abc' }), stripeConfig({ STRIPE_SECRET_KEY: 'sk_test_abc', STRIPE_PUBLISHABLE_KEY: 'pk_live_abcdefghijklmnop' }), stripeConfig({ STRIPE_SECRET_KEY: 'sk_test_abc', STRIPE_PUBLISHABLE_KEY: 'sk_test_abcdefghijklmnop' }),
+    stripeConfig({ STRIPE_SECRET_KEY: 'sk_test_abc', STRIPE_PUBLISHABLE_KEY: 'pk_test_abcdefghijklmnop' }), stripeConfig({ STRIPE_LIVE_SECRET_KEY: 'sk_live_abc', STRIPE_TEST_SECRET_KEY: 'sk_test_abc', STRIPE_LIVE_PUBLISHABLE_KEY: 'pk_live_abcdefghijklmnop', STRIPE_TEST_PUBLISHABLE_KEY: 'pk_test_abcdefghijklmnop' })];
+  check('shop: with Stripe\'s publishable key the payment form can be shown inside the game — the game is told the key, and Stripe is asked for a form to embed (a secret for its script, no page), at the price of the catalogue; a key of the wrong kind or mode does not count',
+    shop.pk === STRIPE_PK && inGame.status === 200 && /^cs_test_secret_/.test(json(inGame)?.secret || '') && !json(inGame).url
+    && emb?.form.get('ui_mode') === 'embedded' && emb.form.get('redirect_on_completion') === 'if_required' && emb.form.get('return_url').endsWith('/?paid=hat%3Acowboy') && !emb.form.get('success_url') && !emb.form.get('cancel_url')
+    && emb.form.get('line_items[0][price_data][unit_amount]') === '999' && emb.form.get('metadata[item]') === 'hat:cowboy' && emb.form.get('metadata[device]') === ann && emb.version === '2025-03-31.basil' && stripe.asked.length === 1
+    && keys[0].publishable === '' && keys[1].publishable === '' && keys[2].publishable === '' && keys[3].publishable === 'pk_test_abcdefghijklmnop' && keys[4].mode === 'live' && keys[4].publishable === 'pk_live_abcdefghijklmnop',
+    [shop.pk, inGame.status, inGame.body.toString().slice(0, 120), emb?.form.toString().slice(0, 300), emb?.version, keys.map((k) => k.publishable)]);
   // only Stripe's word counts
   const forged = await hook(paid('jetpack', ann), 'whsec_somebody_else'), stale = await hook(paid('jetpack', ann), STRIPE_HOOK, Date.now() - 3600_000);
   const unsigned = await post('/api/stripe/webhook', JSON.stringify(paid('jetpack', ann)));
@@ -947,6 +964,40 @@ async function testShop({ port }) {
   const after = json(await request(port, `/api/shop?device=${bob}`)), gone = await request(port, live?.logo || '/nowhere');
   const freed = await request(port, '/api/sponsors?slot=gondola:7', { method: 'DELETE', headers: admin });
   check('shop: the administrator can fill a place by hand and free it; a subscription that ends frees its place and its picture', byHand.status === 200 && g7?.state === 'live' && g7.title === 'Seven Seas Ice Cream' && g7logo.status === 200 && g7logo.headers['content-type'] === 'image/jpeg' && ended.status === 200 && !after.slots['tarp:shoot'] && gone.status === 404 && freed.status === 200 && !json(freed).slots['gondola:7'], [byHand.status, g7, g7logo.status, ended.status, Object.keys(after.slots), gone.status, freed.status]);
+  // a plaque for a companion, round the golden dog: paid once, engraved by who paid, shown once approved — and never a link
+  {
+    const away = { 'x-forwarded-for': '10.6.6.2' }; // (an address of its own: see above)
+    stripe.asked.length = 0;
+    const page = CF ? null : await post('/api/checkout', { item: 'plaque:5', device: ann }, away), form = stripe.asked[0]?.form;
+    const none = CF ? [] : [await post('/api/checkout', { item: 'plaque:0', device: ann }, away), await post('/api/checkout', { item: 'plaque:73', device: ann }, away), await post('/api/checkout', { item: 'plaque:x', device: ann }, away), await post('/api/checkout', { item: 'plaque:05', device: ann }, away)];
+    await hook(paid('plaque:5', ann));
+    const taken = CF ? null : await post('/api/checkout', { item: 'plaque:5', device: bob }, away);
+    const mine = json(await request(port, `/api/shop?device=${ann}`)), seen = json(await request(port, `/api/shop?device=${bob}`));
+    const fill = await post('/api/sponsor', { slot: 'plaque:5', device: ann, title: 'Milou', subtitle: '2009 – 2024 · he loved the sea', url: 'https://evil.example/', logo: JPEG });
+    const draft = json(await request(port, '/api/sponsors', { headers: admin }))?.slots?.['plaque:5']?.draft;
+    const own = json(await request(port, `/api/shop?device=${ann}`)).slots['plaque:5'];
+    const ownPic = await request(port, `${own?.draft?.logo || '/nowhere?x=1'}&device=${ann}`), otherPic = await request(port, `${own?.draft?.logo || '/nowhere?x=1'}&device=${bob}`);
+    const notYet = json(await request(port, `/api/shop?device=${bob}`)).slots['plaque:5'];
+    await post('/api/sponsors', { slot: 'plaque:5', approve: true }, admin);
+    const live = json(await request(port, `/api/shop?device=${bob}`)).slots['plaque:5'], pic = await request(port, live?.logo || '/nowhere');
+    // (its holder changes the words and keeps the picture: the administrator is told that the picture stays)
+    const again = await post('/api/sponsor', { slot: 'plaque:5', device: ann, title: 'Milou', subtitle: 'the best of dogs', keepLogo: true });
+    const keep = json(await request(port, '/api/sponsors', { headers: admin }))?.slots?.['plaque:5']?.draft;
+    // (the administrator fills one in by hand: no link there either)
+    const byHand = await post('/api/sponsors', { slot: 'plaque:40', set: { title: 'Félix', subtitle: 'cat of the mill', url: 'https://evil.example/' } }, admin);
+    const hand = json(await request(port, '/api/shop')).slots['plaque:40'];
+    check('plaques: a plate round the golden dog is paid once, at the price of the catalogue; who paid holds it and has it engraved — a name, a few words, a picture, never a link',
+      mine.prices.plaque === 2000 && (CF || (page.status === 200 && form?.get('mode') === 'payment' && form.get('line_items[0][price_data][unit_amount]') === '2000' && form.get('metadata[item]') === 'plaque:5' && !form.get('line_items[0][price_data][recurring][interval]') && none.every((r) => r.status === 400) && taken.status === 409))
+      && mine.slots['plaque:5']?.mine === true && seen.slots['plaque:5']?.state === 'taken' && !seen.slots['plaque:5'].mine
+      && fill.status === 200 && draft?.title === 'Milou' && draft.subtitle === '2009 – 2024 · he loved the sea' && draft.url === '' && typeof draft.logo === 'string'
+      && byHand.status === 200 && hand?.state === 'live' && hand.title === 'Félix' && hand.url === '',
+      [page?.status, form?.toString().slice(0, 200), none.map((r) => r.status), taken?.status, mine.slots['plaque:5'], seen.slots['plaque:5'], fill.status, draft, byHand.status, hand]);
+    check('plaques: nothing is engraved before it is approved — until then its picture is for its holder and the administrator only; a change of words keeps the picture, and says so',
+      notYet?.state === 'taken' && !notYet.title && ownPic.status === 200 && ownPic.headers['content-type'] === 'image/jpeg' && otherPic.status === 404
+      && live?.state === 'live' && live.title === 'Milou' && live.url === '' && pic.status === 200 && pic.headers['content-type'] === 'image/jpeg'
+      && again.status === 200 && keep?.keep === true && keep.logo === null && keep.subtitle === 'the best of dogs',
+      [notYet, ownPic.status, otherPic.status, live, pic.status, again.status, keep]);
+  }
   // the panel of a game is auctioned: a dollar to start; whoever bids more takes it, and the other is refunded
   const bidPaid = (item, device, amount, pay) => ({ type: 'checkout.session.completed', data: { object: { id: `cs_${pay}`, payment_status: 'paid', amount_total: amount, payment_intent: pay, metadata: { item, device, bid: String(amount) } } } });
   stripe.asked.length = 0; stripe.refunds.length = 0;
@@ -1044,6 +1095,41 @@ async function testAccounts({ port }) {
     for (let i = 0; i < 12; i++) if ((await acct({ action: 'login', device: b, name: 'Somebody Else', password: 'x'.repeat(9) }, { 'x-forwarded-for': '10.7.8.1' })).status === 429) flood++;
     check('accounts: ten wrong passwords close an account for a while, even to the right one; a name that does not exist is answered like a wrong password; an address may only try a few a minute',
       tries.every((t) => t === 403) && nobody.status === 403 && json(nobody).error === json(wrong).error && locked.status === 429 && Number(locked.headers['retry-after']) > 800 && flood === 2, [tries, locked.status, locked.headers['retry-after'], flood]);
+  }
+  // e-mails: where the host can send some, an account may carry an address, and a code to set a new password is mailed there
+  const says = json(await request(port, '/api/status'));
+  if (!CF) {
+    const from = (k) => ({ 'x-forwarded-for': `10.7.9.${k}` }); // (addresses of their own: see above)
+    const c = randomId(16), d = randomId(16), bob = `Bob ${randomId(3).replace(/[^A-Za-z0-9]/g, 'x')}`;
+    const outbox = () => (fs.existsSync(MAIL_FILE) ? fs.readFileSync(MAIL_FILE, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
+    const badMail = await acct({ action: 'create', device: c, name: bob, password: 'correct horse', email: 'not an address' }, from(1));
+    const madeB = await acct({ action: 'create', device: c, name: bob, password: 'correct horse', email: '  Bob@Example.ORG ' }, from(1));
+    const start = outbox().length;
+    const unknown = await acct({ action: 'mailcode', device: d, name: 'Nobody Here' }, from(2)), noAddress = await acct({ action: 'mailcode', device: d, name: who }, from(2));
+    const asked1 = await acct({ action: 'mailcode', device: d, name: bob.toUpperCase() }, from(2)), asked2 = await acct({ action: 'mailcode', device: d, name: bob }, from(2));
+    const box = outbox().slice(start), mail = box[0], code = /Your code: ([A-Z2-9-]{14})/.exec(mail?.text || '')?.[1] || 'none';
+    const wrongCode = await acct({ action: 'reset', device: d, name: bob, code: 'AAAA-BBBB-CCCC', password: 'mailed new one' }, from(3));
+    const byMail = await acct({ action: 'reset', device: d, name: bob, code: code.toLowerCase(), password: 'mailed new one' }, from(3));
+    const twice = await acct({ action: 'reset', device: randomId(16), name: bob, code, password: 'and another one' }, from(3));
+    const byRecovery = await acct({ action: 'reset', device: d, name: bob, code: json(madeB)?.recovery, password: 'by the first code' }, from(3));
+    check('e-mail: an account may carry an address (never shown whole); asked for, a code is mailed there — the same answer whatever the name, one message at a time — and sets a new password, once; the recovery code still works',
+      says.mail === true && badMail.status === 400 && madeB.status === 200 && json(madeB).account.email === 'b•••@e•••.org' && !madeB.body.toString().includes('bob@example.org')
+      && unknown.status === 200 && noAddress.status === 200 && asked1.status === 200 && asked2.status === 200 && unknown.body.toString() === asked1.body.toString()
+      && box.length === 1 && mail.to === 'bob@example.org' && /Atomic Oasis/.test(mail.subject) && code.length === 14 && mail.html.includes(code) && !/password: |correct horse/.test(mail.text)
+      && wrongCode.status === 403 && byMail.status === 200 && twice.status === 403 && byRecovery.status === 200,
+      [says, badMail.status, madeB.status, json(madeB)?.account, [unknown.status, noAddress.status, asked1.status, asked2.status], box.length, mail && { to: mail.to, subject: mail.subject }, wrongCode.status, byMail.status, twice.status, byRecovery.status]);
+    // the address is changed — or taken away — from a browser that is signed in, with the password
+    const noPw = await acct({ action: 'email', device: d, email: 'new@example.org', password: 'not the password' }, from(4));
+    const changed = await acct({ action: 'email', device: d, email: 'New@Example.org', password: 'by the first code' }, from(4));
+    const stranger = await acct({ action: 'email', device: randomId(16), email: 'evil@example.org', password: 'by the first code' }, from(4));
+    const removed = await acct({ action: 'email', device: d, email: '', password: 'by the first code' }, from(4));
+    const before2 = outbox().length;
+    const afterGone = await acct({ action: 'mailcode', device: d, name: bob }, from(5));
+    check('e-mail: the address of an account is changed, or taken away, from a browser that is signed in and with the password; once it is gone no code is mailed',
+      noPw.status === 403 && changed.status === 200 && json(changed).account.email === 'n•••@e•••.org' && stranger.status === 403 && removed.status === 200 && json(removed).account.email === undefined && afterGone.status === 200 && outbox().length === before2,
+      [noPw.status, changed.status, json(changed)?.account, stranger.status, removed.status, json(removed)?.account, afterGone.status, outbox().length - before2]);
+  } else {
+    check('e-mail: a host that cannot send any says so (the game then asks nobody for an address)', says.mail === false, says);
   }
 }
 

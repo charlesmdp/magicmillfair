@@ -75,7 +75,7 @@ export class Booths {
         ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 6; ctx.strokeRect(5, 5, w - 10, h - 10);
         ctx.fillStyle = '#f6e7b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = "700 58px Georgia, 'Times New Roman', serif";
         ctx.fillText(def.name.toUpperCase(), w / 2, h / 2 + 3, w - 30);
-      }, 4.6, 0.86);
+      }, 4.6, 0.86, { both: true }); // (read from behind too: from the walk on the other side, from the wheel)
       // (the striker has no roof to carry it: its name is on the back wall, beside the tower)
       if (def.id === 'bell') { sign.mesh.scale.set(0.76, 0.76, 1); sign.mesh.position.set(1.0, 3.48, BACK + 0.03); } else sign.mesh.position.set(0, 3.42, FRONT + 0.77);
       sign.mesh.name = `booth-${def.id}:sign`;
