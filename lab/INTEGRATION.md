@@ -1,34 +1,31 @@
 # The extras: what is on this branch, and what it takes to make each part of the game
 
-Everything here was added **without changing a file of the game**: only new files. Four things can be switched
+Everything here was added **without changing a file of the game**: only new files. Three things can be switched
 on over the game as it stands, each on its own, and with every switch off the game is exactly the game as it was.
 
 | Switch | What it is | Its files | Its checks |
 |---|---|---|---|
-| `slide` | **Mostly Down**, the water slide (third version: lanes, a pool of whirlpools, things that move) | `src/world/zones/games/slide/`, `src/extras/slide.js` | `node tools/slide-test.mjs` (69) |
-| `oak` | **Out on a Limb**, the climb up the Great Oak (the old tree, twice as tall) | `src/world/zones/games/oak/`, `src/extras/oak.js`, `tools/oak-course.mjs` | `node tools/oak-test.mjs` (25) |
+| `slide` | **Mostly Down**, the water slide | `src/world/zones/games/slide/`, `src/extras/slide.js` | `node tools/slide-test.mjs` |
 | `caves` | The caves are safe places: nearby chat only | `src/extras/caves.js` | `node tools/extras-test.mjs` (15, with the next) |
 | `stats` | The game in figures: counters, the page `/opendata`, a line in the settings | `src/extras/stats.js`, `server/stats.js`, `public/opendata/`, `public/opendate/` | the same |
 
 Also here: the icon (`lab/favicon/`, the "reactor" colours), the lab page with its switches (`lab/`), a server
-for the lab (`lab/worker.js`, `lab/wrangler.jsonc`).
+for the lab (`lab/worker.js`, `lab/wrangler.jsonc`). What else lies under `lab/` is the lab's own (trials that
+are not offered to the game).
 
 ## Switching them on in the game: one line
 
-An extra is a module with `attach(app)`: it plugs itself into the running game through what the game already
-exposes (`window.__mmf`). `src/extras/index.js` loads those that are switched on — nothing of the others is
-downloaded. In `src/main.js`, once the game runs (after `app.ready = true`):
+An extra is a module with `attach(app)`: it plugs itself into the running game through the `app` object (the
+one the game keeps in `window.__mmf`). `src/extras/index.js` loads those that are switched on — nothing of the
+others is downloaded. In `src/main.js`, once the game runs (after `app.ready = true`):
 
 ```js
-import('./extras/index.js').then(({ loadExtras }) => loadExtras(app, { slide: false, oak: false, caves: true, stats: true }));
+import('./extras/index.js').then(({ loadExtras }) => loadExtras(app, { slide: false, caves: true, stats: true }));
 ```
 
-That object is the whole of "with or without the slide, with or without the oak": it can sit in
-`src/app/config.js` (`FEATURES.extras`), or come from the server (`/api/status`) so that a game is opened
-without a new build. Releasing the slide one day and the oak the next is changing a `false` into a `true`.
-
-Each can also be built into the game properly (its own lines in `GamesZone.js` and `main.js`): for the slide
-that is described below; for the others the extra is the integration.
+That object is the whole of "with or without the slide": it can sit in `src/app/config.js`, or come from the
+server so that a game is opened without a new build. Releasing the slide is changing a `false` into a `true`.
+`loadExtras` can be called again later with more switched on: what is new is attached to the running game.
 
 ## Trying them
 
@@ -36,27 +33,18 @@ that is described below; for the others the extra is the integration.
 npx vite --config lab/vite.config.js
 ```
 
-then open `/lab/`. It is the whole game, with a small panel ("LABO") of four switches and two buttons that take
-one to the slide and to the oak. The switches are also in the address: `/lab/?slide=0&oak=1`. On that page
-anyone may fly the camera (F).
+then open `/lab/`. It is the whole game, with a small panel ("LABO") of switches and a button that takes one to
+the slide. The switches are also in the address: `/lab/?slide=0&caves=1`. On that page the visitor is the
+administrator of their own browser (the camera with F, the whole shop, every gesture), and the build defines
+`__LAB__` so that the game may go on exposing `window.__mmf` there once it no longer does in production.
 
 ## Mostly Down — the water slide
 
-1,160 m from the rim of the cliffs above the golden dog down to the sea. The third version adds, to the stream,
-the jump, the whirlpools and the gaps of the second:
-
-- **Three lanes** (56 m): rows of blocks part the trough, which opens out to twice its width; each lane has its
-  own things in it (rolls to jump, bars that slide across, arms that turn, blocks to go round). One picks a lane
-  quickly; where a row of blocks stops, nine metres are open: whoever aims well changes lane.
-- **A pool of three whirlpools** (27 m, sunk under the stream): a way between them, for who finds it.
-- **Whirlpools that are holes**, not pictures: a funnel of water that turns, with a lip of foam; five more sit in
-  small pools on the outside of bends, where a rider who lets go is carried.
-- **Things that move**: bars sliding from side to side, arms turning about a post — on the clock of the ride, the
-  same for everybody.
-- **Wider and narrower places**: the trough is 4.3 m across where it is plain, 8.5 m at the lanes.
-
-Times (`botRun`): a careful rider 0:59.4, a bold one through both shortcuts 0:50.7, someone who touches nothing
-1:39 (into 3 whirlpools and 18 other things).
+1,160 m from the rim of the cliffs above the golden dog down to the sea: the stream that carries, the walls that
+slow, a jump, whirlpools that are holes in the water, gaps to fly over, two shortcuts, a pool of three
+whirlpools, things that slide and turn on the clock of the ride — and an end in the sea, a swim from the beach.
+**It is still being changed in the lab** (the wide stretch after the second gap is being redone): leave its
+switch off until the owner says so. Its checks say what it does at any time: `node tools/slide-test.mjs`.
 
 To build it into the game rather than switch it on, the session follows the pattern of the race:
 `open(player, io)` returns a session that is also the driver of the player —
@@ -70,52 +58,6 @@ What to know: time advances in steps of 1/120 s whatever the frame rate (the sam
 is `RIDE` in `ride.js` and `SLIDE` / `COURSE` in `track.js`, then `node tools/slide-test.mjs`; nobody walks on
 the deck or in the trough (no collider); other visitors are seen sliding but in their ring only on one's own
 screen; not tried on a real phone.
-
-## Out on a Limb — the Great Oak
-
-The old tree of the clearing, **twice as tall (70 m) and twenty metres towards the mountain**, and a way up it:
-66 m from a plate on the ground to a crow's nest and its bell, against the clock.
-
-- **Branches one walks along**, out from the stem to their tip, then — a jump from tip to tip — back in along
-  the next: 30 of them, straight, L, C, S, Z, hooks. One has to walk each to reach the next.
-- **Dead wood** (9 branches, none at the foot, four in the top quarter): bare and grey, no leaf on it. It creaks
-  when one sets foot on it and breaks 1.0 to 1.9 s later — the time to run its length and half a second — then
-  grows back six seconds after.
-- **Bracket fungi** for steps round the stem (35), six of them up through each deck.
-- **Three nets** (11, 30 and 48 m) with a deck round the stem: a fall ends in the net below, never on the ground
-  from higher than the first. A slip costs a part of the climb.
-- **Harder with the height**: jumps from tip to tip from 36 % to 65 % of what a running jump can do, branches
-  from 1.2 m to 0.8 m wide, more dead wood, less time on it. 184 m to walk on branches in all.
-- On foot only, no jetpack at the tree; a cheat on (as for Mostly Up) and the time is not a record.
-
-How it is made:
-
-- `giant.js` moves and grows **the forest's own tree** in the running game (its matrices, its far picture, its
-  place in the forest's grid, its trunk in the collisions) and takes off it the 55 small branches and 58 leaf
-  cards that hang in the way; its trunk and its seven great limbs are left alone — the way goes round them, and
-  they are solid. With the extra off, nothing of this happens: the old tree stands where it stood.
-- `tree.js` works the way out from the tree's own skeleton (read back from its mesh): a search that takes a
-  second or two and that two browsers might not finish the same way. So it is run once —
-  `node tools/oak-course.mjs` — and **written down** (`route.js`, 53 KB): the game reads that, the same for
-  everybody. After a change to `tree.js`, or to the old tree in `TreeBuilder.js`: run the tool again, then
-  `node tools/oak-test.mjs` (which fails if what is written is not what `tree.js` gives). `--seed=N` tries
-  another course; the seed kept is in `OAK.seed`.
-- `Oak.js` builds what is added (a leader up to the top, the branches in the tree's own bark with moss where one
-  walks, small tufts of the tree's own leaves, fungi, decks, nets, the nest, the gate) and times the climb. What
-  happens is told through `oak.events` — `{ line, note, sound, started, finished(ms, clean) }` — like the other
-  games.
-
-Cost: 31 KB of code and course once compressed; built in half a second; 36,000 triangles and 28 meshes, hidden
-beyond 200 to 420 m.
-
-To make the move of the tree permanent instead (the layout's line `[-110, 138, 'elder', 1.05]` → `[-110, 158, 'elder', 2.1]`,
-then the bakers): the extra would then find the tree already there and only prune it — but the forest gives
-each tree a height of its own (±6 %) and one of two shapes at random; the extra sets both, which the layout
-cannot. Leaving it to the extra is simpler.
-
-Not done: the board of the best climbs (see below); others see one climb, but dead wood breaks on one's own
-screen only; the round map (a picture drawn once) still shows the tree where it stood, twenty metres north;
-not tried on a real phone.
 
 ## The caves are safe places
 
@@ -148,26 +90,25 @@ To have the server itself not send it (rather than each browser not show it), `R
 Three lines make it part of the game's server:
 
 1. `server/routes.js`, in `route()` before the shop: `const stats = await statsRoute(req, ctx); if (stats) return stats;`
-   (`import { statsRoute } from './stats.js';`).
-2. `server/shop.js`, where a payment is granted: `await noteSale(ctx.store, { cents, pass })` (`cents`: what
-   came in, in cents of a dollar; `pass`: true when it is a Game Pass) — until then "earned" and "Game Passes
-   sold" stay at what the owner set.
-3. `server/api.js`: `/api/stats` is posted by `sendBeacon`, with `Content-Type: application/json`; nothing to
-   change unless the limits per address should cover it too (the module has its own: one count per device every
-   twenty seconds).
+   (`import { statsRoute } from './stats.js';`). `lab/worker.js` does the same for a Worker.
+2. Where a payment is granted: `await noteSale(ctx.store, { cents, pass })` (`cents`: what came in, in cents of
+   a dollar; `pass`: true when it is a Game Pass), and where one is given back
+   `await noteRefund(ctx.store, { cents, pass })` — until then "earned" and "Game Passes sold" stay at what the
+   owner set.
+3. Whoever knows how many are connected may say so — `ctx.here = async () => number` — and the page shows that
+   instead of its own estimate (the browsers heard from in the last minutes).
 
 "Countries" also counts those of the visits the game has always noted (`visitors:days`, ninety days).
 
-## The boards of the best times
+## The board of the slide's best times
 
-Both games keep one's best time in the browser and show it on a board of their own. For the game's boards:
+The slide keeps one's best time in the browser and shows it on a board of its own. For the game's boards:
 
-- `server/scores.js`, in `BOARDS`: `slide: { order: 'asc', min: 39_000, max: 3600_000 }` (the bold bot needs
-  50.7 s) and `oak: { order: 'asc', min: 45_000, max: 6 * 3600_000 }` (the test's bot, which never hesitates,
-  needs about 80 s). `server/catalog.js`: their names. `lab/worker.js` does this for the lab's server.
-- `src/main.js`: `app.slideDone = (ms) => scoreGame('slide', SLIDE.name, ms, formatTime(ms))` and
-  `app.oakDone = (ms) => scoreGame('oak', OAK.name, ms, formatTime(ms))` — the extras call them when a run ends —
-  after `fair.boards.slide = new Scores('slide')` and the like, as for the race.
+- `server/scores.js`, in `BOARDS`: `slide: { order: 'asc', min: 39_000, max: 3600_000 }` (`tools/slide-test.mjs`
+  prints the rule from the course as it stands). `server/catalog.js`: its name. `lab/worker.js` does this for
+  the lab's server.
+- `src/main.js`: `app.slideDone = (ms) => scoreGame('slide', SLIDE.name, ms, formatTime(ms))` — the extra calls
+  it when a run ends — after `fair.boards.slide = new Scores('slide')` and the like, as for the race.
 
 ## The icon
 
@@ -177,8 +118,8 @@ Both games keep one's best time in the browser and show it on a board of their o
 ## The lab, and being its administrator
 
 The lab page is the game plus the switches. Served as a static site it has no server: no rooms, no boards, no
-administrator (hence the camera for everybody there). `lab/wrangler.jsonc` makes it a Worker of its own
-(`magicmillfair-lab`: its own rooms and notebook, nothing shared with the game that is online):
+shared figures. `lab/wrangler.jsonc` makes it a Worker of its own (`magicmillfair-lab`: its own rooms and
+notebook, nothing shared with the game that is online):
 
 1. In Cloudflare: *Workers & Pages → Create → Import a repository*, this repository, this branch; deploy command
    `npx wrangler deploy --config lab/wrangler.jsonc`.

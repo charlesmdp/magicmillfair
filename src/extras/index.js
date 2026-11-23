@@ -3,12 +3,11 @@
 // plugs itself into the running game through what the game exposes (window.__mmf). With every switch off,
 // the game is the game as it was.
 //
-//   import('./extras/index.js').then(({ loadExtras }) => loadExtras(app, { slide: true, oak: false }));
+//   import('./extras/index.js').then(({ loadExtras }) => loadExtras(app, { slide: false, caves: true, stats: true }));
 //
 // An extra is a module with `attach(app)`, which returns what it built (kept in app.extras[id]).
 export const EXTRAS = {
   slide: { name: 'Mostly Down — the water slide', load: () => import('./slide.js') },
-  oak: { name: 'Out on a Limb — the Great Oak', load: () => import('./oak.js') },
   caves: { name: 'The caves are safe places: nearby chat only', load: () => import('./caves.js') },
   stats: { name: 'The game in figures: counters, the page /opendata', load: () => import('./stats.js') },
 };

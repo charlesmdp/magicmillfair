@@ -12,7 +12,7 @@
 //
 // Lengths in metres, from the foot of the tree: x east, z south, y up from where its trunk starts (the ground
 // is OAK.sink higher). No dependency on the renderer: the tests walk the same course.
-import { reach } from '../course.js';
+import { reach } from '../../src/world/zones/games/course.js';
 
 export const OAK = {
   name: 'Out on a Limb', place: 'The Great Oak',
@@ -719,7 +719,7 @@ export function clearing(course, skeleton, cards = []) {
 // ------------------------------------------------------------------------------------- the course, written down
 
 /**
- * A course read back from what tools/oak-course.mjs wrote (route.js): the same holds, jumps and nets as
+ * A course read back from what lab/oak/oak-course.mjs wrote (route.js): the same holds, jumps and nets as
  * oakCourse() gives, and stem(y) → { x, z, r, least (where the bark is nearest its middle) }.
  */
 export function readRoute(route) {

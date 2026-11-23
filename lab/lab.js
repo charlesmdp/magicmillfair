@@ -1,13 +1,17 @@
 // The lab page: the game as it stands, plus the extras one chooses to switch on (src/extras/index.js) — to see
-// the game with and without each. The switches are in the address (?slide=0&oak=1), else what was last chosen
+// the game with and without each. The switches are in the address (?slide=0&caves=1), else what was last chosen
 // here, else everything on. On this page the visitor is the administrator (see below).
 import { FEATURES } from '../src/app/config.js';
 import { EXTRAS, loadExtras } from '../src/extras/index.js';
 
-const KEY = 'mmf.lab', NAMES = { slide: 'Toboggan', oak: 'Grand chêne', caves: 'Grottes : chat de proximité', stats: 'Compteurs et page des chiffres' };
+// What only the lab has: tried here, not offered to the game. Off unless asked for.
+const TRIALS = { oak: { name: 'Out on a Limb — the Great Oak (a trial, set aside)', load: () => import('./oak/extra.js') } };
+Object.assign(EXTRAS, TRIALS);
+
+const KEY = 'mmf.lab.2', NAMES = { slide: 'Toboggan', oak: 'Grand chêne (essai mis de côté)', caves: 'Grottes : chat de proximité', stats: 'Compteurs et page des chiffres' };
 const read = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { return {}; } };
 const query = new URLSearchParams(location.search), saved = read(), on = {};
-for (const id of Object.keys(EXTRAS)) on[id] = query.has(id) ? !/^(0|off|no|false)$/i.test(query.get(id)) : saved[id] !== false;
+for (const id of Object.keys(EXTRAS)) on[id] = query.has(id) ? !/^(0|off|no|false)$/i.test(query.get(id)) : id in TRIALS ? saved[id] === true : saved[id] !== false;
 
 function panel(app, built) {
   const box = document.createElement('div');

@@ -1,8 +1,8 @@
-// The Great Oak ("Out on a Limb") as an extra: plugged into the running game from outside, through what the
-// game exposes (window.__mmf), so that no file of the game is changed — and without it the old tree stands
-// where it always stood, as tall as it always was. See index.js (the switches).
-import { Oak } from '../world/zones/games/oak/Oak.js';
-import { OAK } from '../world/zones/games/oak/tree.js';
+// The Great Oak ("Out on a Limb"), plugged into the running game from outside like the extras of the game
+// (src/extras) — but kept in the lab: it is not good enough to be offered to the game (see README.md), and only
+// the lab page has a switch for it. Without it the old tree stands where it always stood.
+import { Oak } from './Oak.js';
+import { OAK } from './tree.js';
 
 const KEY = 'mmf.oak.best';
 

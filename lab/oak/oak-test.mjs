@@ -6,17 +6,17 @@
 // giant stands where it should, a bot climbs it with the real controller — every branch walked, every jump
 // taken, the dead wood breaking under it in its own time — the clock runs from the plate to the bell, dead
 // wood breaks and grows back, a net catches a fall, the jetpack stays off.
-// usage: node tools/oak-test.mjs [--no-browser]
+// usage: node lab/oak/oak-test.mjs [--no-browser]
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { OAK, oakCourse, readRoute, holdHeight, netHeight, widthAt } from '../src/world/zones/games/oak/tree.js';
-import { ROUTE } from '../src/world/zones/games/oak/route.js';
-import { reach } from '../src/world/zones/games/course.js';
+import { OAK, oakCourse, readRoute, holdHeight, netHeight, widthAt } from './tree.js';
+import { ROUTE } from './route.js';
+import { reach } from '../../src/world/zones/games/course.js';
 import { oakTree, written } from './oak-course.mjs';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const opt = Object.fromEntries(process.argv.slice(2).filter((a) => a.startsWith('--')).map((a) => { const [k, v] = a.slice(2).split('='); return [k, v ?? true]; }));
 const results = [];
 const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail !== '' ? ` — ${typeof detail === 'string' ? detail : JSON.stringify(detail)}` : ''}`); };
@@ -29,7 +29,7 @@ const G = course.ground;
 // --------------------------------------------------------------------------------------- what is written down
 {
   const again = written(oakCourse({ skeleton: tree.skeleton, ground: tree.ground, seed: OAK.seed, tries: 1 }), tree);
-  check('the course that is written down is the one tree.js gives today (else: node tools/oak-course.mjs)', JSON.stringify(again) === JSON.stringify(ROUTE), `seed ${ROUTE.seed}, ${(JSON.stringify(ROUTE).length / 1024).toFixed(0)} KB`);
+  check('the course that is written down is the one tree.js gives today (else: node lab/oak/oak-course.mjs)', JSON.stringify(again) === JSON.stringify(ROUTE), `seed ${ROUTE.seed}, ${(JSON.stringify(ROUTE).length / 1024).toFixed(0)} KB`);
   const P = tree.model.wood0.getAttribute('position');
   check('it was worked out for the old tree as the forest builds it', P.count === ROUTE.model.wood && ROUTE.model.probes.every(([i, x, y, z]) => Math.hypot(P.getX(i) - x, P.getY(i) - y, P.getZ(i) - z) < 0.01) && ROUTE.cut.every(([first, count]) => first > 0 && first + count <= P.count) && ROUTE.cards.every((k) => k * 4 < ROUTE.model.leaf),
     `${ROUTE.cut.length} small branches and ${ROUTE.cards.length} of ${ROUTE.model.leaf / 4} leaf cards taken off it; its trunk and its ${tree.skeleton.filter((b) => b.level === 1).length} great limbs are left alone: ${ROUTE.cut.every(([first]) => tree.skeleton.find((b) => b.first === first)?.level >= 2)}`);
@@ -170,13 +170,13 @@ if (!opt['no-browser']) {
       return { at, oak: !!app.oak, platforms: app.world.collision.platforms.length, fly: app.player.canFly({ x: -110, y: 60, z: 158 }), perf: { calls: app.engine.perf.calls, tris: app.engine.perf.triangles } };
     }, [OAK.species, OAK.from.x, OAK.from.z]);
     check('without the extra, the old tree stands where it always stood', !!before.at && !before.oak && before.at[2] < 45, before.at ? `at ${before.at[0]}, ${before.at[1]}, about ${before.at[2].toFixed(0)} m tall` : 'not found');
-    const built = await page.evaluate(() => import('/src/extras/index.js').then(async ({ loadExtras }) => { const t = performance.now(); const b = await loadExtras(window.__mmf, { oak: true }); const o = b.oak; let tris = 0, meshes = 0; o.group.traverse((m) => { if (m.isMesh) { meshes++; tris += (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3; } }); return { ms: Math.round(performance.now() - t), pruned: o.pruned, base: o.base.toArray(), height: o.giant.height, meshes, tris: Math.round(tris), dead: o.dead.length, platforms: window.__mmf.world.collision.platforms.length, fly: window.__mmf.player.canFly({ x: o.base.x + 3, y: o.base.y + 30, z: o.base.z }), flyAway: window.__mmf.player.canFly({ x: o.base.x + 60, y: o.base.y + 30, z: o.base.z }) }; }));
+    const built = await page.evaluate(() => import('/lab/oak/extra.js').then(async (extra) => { const t = performance.now(); const o = await extra.attach(window.__mmf); let tris = 0, meshes = 0; o.group.traverse((m) => { if (m.isMesh) { meshes++; tris += (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3; } }); return { ms: Math.round(performance.now() - t), pruned: o.pruned, base: o.base.toArray(), height: o.giant.height, meshes, tris: Math.round(tris), dead: o.dead.length, platforms: window.__mmf.world.collision.platforms.length, fly: window.__mmf.player.canFly({ x: o.base.x + 3, y: o.base.y + 30, z: o.base.z }), flyAway: window.__mmf.player.canFly({ x: o.base.x + 60, y: o.base.y + 30, z: o.base.z }) }; }));
     check('switched on: the giant stands twenty metres on, twice as tall, pruned where one climbs', built.pruned && Math.hypot(built.base[0] - OAK.at.x, built.base[2] - OAK.at.z) < 1e-6 && Math.abs(built.height - tree.model.height * OAK.scale) < 0.01 && built.platforms === before.platforms + holds.length + nets.length,
       `in ${built.ms} ms; ${built.height.toFixed(1)} m tall; ${built.meshes} meshes and ${built.tris} triangles added, ${built.dead} of them branches that break`);
     check('no jetpack at the tree (it is climbed), as before everywhere else', before.fly && !built.fly && built.flyAway);
     // ---- a bot climbs: every branch walked from where one lands on it, every jump taken, the dead wood on its own clock
     const climb = await page.evaluate(async () => {
-      const { holdHeight } = await import('/src/world/zones/games/oak/tree.js');
+      const { holdHeight } = await import('/lab/oak/tree.js');
       const app = window.__mmf, { player, input } = app, oak = app.oak, base = oak.base, course = oak.course, holds = course.holds, dt = 1 / 60, p = player.pos;
       let fast = true;
       const step = (dx, dz, jump) => { input.move.x = dx; input.move.y = -dz; input.run = fast; input.jump = !!jump; player.update(dt, 0, true); oak.tick(dt, player); };

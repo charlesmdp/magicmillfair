@@ -20,53 +20,51 @@ compacte, la fenêtre « Who is here ».
 ### A1. État des lieux
 
 - La branche du labo est **à jour avec la tienne** (elle contient ton commit `b4ebe31`). La fusion a été
-  faite et vérifiée : aucun conflit, et sur le résultat `node tools/slide-test.mjs` (69 contrôles),
-  `node tools/oak-test.mjs` (25) et `node tools/extras-test.mjs` (15) passent, ainsi que la compilation du jeu.
+  faite et vérifiée : aucun conflit, et sur le résultat les tests du labo (`node tools/slide-test.mjs`,
+  `node tools/extras-test.mjs`) passent, ainsi que la compilation du jeu.
   Tu peux donc fusionner `origin/claude/optimistic-ritchie-xi2mys` directement.
 - Lis `lab/INTEGRATION.md` : il décrit chaque nouveauté en détail. Ce brief ne le répète pas.
 - Tout ce que le labo a ajouté est dans des **fichiers nouveaux**. Rien de ce qui existait n'a été modifié.
 
 ### A2. Qui touche à quoi (pour qu'il n'y ait jamais de conflit)
 
-Le labo continue de travailler (retouches du toboggan, refonte du chêne). Pour que je puisse te demander de
+Le labo continue de travailler (le toboggan est encore en retouche). Pour que je puisse te demander de
 re-fusionner sa branche à tout moment sans casse :
 
-- **Au labo, tu n'y touches pas** : `src/extras/**`, `src/world/zones/games/slide/**`,
-  `src/world/zones/games/oak/**`, `server/stats.js`, `public/opendata/**`, `public/opendate/**`, `lab/**`,
-  `tools/slide-test.mjs`, `tools/oak-test.mjs`, `tools/oak-course.mjs`, `tools/extras-test.mjs`.
-  Si un changement y est nécessaire, dis-le-moi : je le transmets au labo.
+- **Au labo, tu n'y touches pas** : `src/extras/**`, `src/world/zones/games/slide/**`, `server/stats.js`,
+  `public/opendata/**`, `public/opendate/**`, tout ce qui est sous `lab/`, `tools/slide-test.mjs`,
+  `tools/extras-test.mjs`. Si un changement y est nécessaire, dis-le-moi : je le transmets au labo.
 - **Tout le reste est à toi** ; le labo n'y touche pas.
 
 ### A3. Ce dont les nouveautés dépendent chez toi
 
 Les nouveautés se branchent sur le jeu en marche à travers l'objet `app` (celui que tu ranges aujourd'hui dans
-`window.__mmf`). Si tu modifies l'un des points ci-dessous, relance les trois tests du labo ; s'ils cassent,
-dis-le-moi plutôt que de corriger dans ses fichiers.
+`window.__mmf`). Si tu modifies l'un des points ci-dessous, relance les tests du labo
+(`node tools/slide-test.mjs`, `node tools/extras-test.mjs`) ; s'ils cassent, dis-le-moi plutôt que de corriger
+dans ses fichiers.
 
 - `app` : `engine`, `world`, `player`, `hud`, `input`, `rig`, `fair` (`fov`, `session`), `presence`, `audio.play`,
   `who`, `setMode`, `setCam`, `refreshShop`, `ready`, `frames`.
-- `world` : `zones` (objets `{ update(dt, time, camera) }`), `actionSources`, `collision` (`addPlatform`,
-  `addCircle`, `circles`, `bulky`, `platforms`, `caves`, `caveAt`), `forest` (ses tableaux `matrices`, `info`,
-  `grid`, `all`, `species[…]`, `_mkLeaf`, `a2c`), `data.heightAt`, `materials`, `scene`, `bakeShadows`, `ripples`.
-- `player` : `pos`, `vel`, `grounded`, `cave`, `canFly`, `driver`, `teleport`, `update`, `riding`, `cheat`,
-  `gravity`, `boost`, `jet`, `dead`.
+- `world` : `zones` (objets `{ update(dt, time, camera) }`), `actionSources`, `collision` (`caves`, `caveAt`),
+  `data`, `materials`, `scene`, `engine.tier`, `bakeShadows`, `ripples`.
+- `player` : `pos`, `vel`, `yaw`, `pitch`, `roll`, `anim`, `grounded`, `cave`, `driver`, `teleport`, `update`,
+  `riding`, `dead`, et ses touches (`input.move`, `run`, `jump`).
 - `hud` : `note`, `setRun`, `addChat`, `_channel`, `chatChannel`, `chanBtn`, `chatInput`, `panel` (les réglages :
   le labo y insère une ligne avant le titre « Your robot »), `_robot`, `setAdmin`, `setFreeCamera`.
 - `presence` : `_emit`, `on('blast')`, `color`.
 - Modules : `Parts`/`MeshBuilder`, `distanceCuller`, `canvasBoard`, `makeMaterial` et ses blocs GLSL, `LAYER`,
-  `course.js` (`reach`, `formatTime`), `TreeBuilder` (l'espèce `elder` et la formule de graine
-  `1337 + si * 101 + v * 17`), `layout.js` (`ZONES`, la ligne `elder` de `HERO_TREES`), et côté serveur les
-  exports de `visitors.js`, `api.js`, `token.js`, `scores.js` qu'utilise `lab/worker.js`.
+  `ANIM`, `course.js` (`formatTime`), `layout.js` (`ZONES`), `net/device.js`, et côté serveur les exports de
+  `visitors.js`, `api.js`, `token.js`, `scores.js` qu'utilise `lab/worker.js`.
 
 ### A4. À intégrer tout de suite (petit et sans risque)
 
 1. **Fusionner** la branche du labo.
 2. **Les interrupteurs.** Chaque nouveauté est un « extra » (`src/extras/index.js`) qu'on allume ou non :
-   `slide`, `oak`, `caves`, `stats`. Une ligne suffit, une fois le jeu lancé :
+   `slide`, `caves`, `stats`. Une ligne suffit, une fois le jeu lancé :
    `import('./extras/index.js').then(({ loadExtras }) => loadExtras(app, { … }))`. Passe-lui `app` directement
    (pas `window.__mmf`, voir B6.4). Les valeurs doivent venir du système de « releases » de la partie B1, pour
    que j'allume chaque jeu quand je veux, sans nouvelle livraison. Valeurs de départ :
-   **`caves: true`, `stats: true`, `slide: false`, `oak: false`**.
+   **`caves: true`, `stats: true`, `slide: false`**.
 3. **Grottes = lieux sûrs** (`caves`) : dans une grotte le chat passe sur « Nearby » et y reste, un message le
    dit à l'entrée, et ce qui est dit à proximité ne traverse pas la roche (quelqu'un sur les marches au-dessus
    de la grotte de la cascade ne le voit pas). Aujourd'hui ce filtre est fait par chaque navigateur. Si tu
@@ -91,9 +89,8 @@ dis-le-moi plutôt que de corriger dans ses fichiers.
    `slide: { order: 'asc', min: 39_000, max: 3600_000 }`, son nom dans `server/catalog.js`, et dans `main.js`
    `app.slideDone = (ms) => scoreGame('slide', …)` (l'extra l'appelle à la fin d'une descente). Son panneau :
    voir `lab/INTEGRATION.md`.
-7. **Le toboggan reste éteint** tant que je ne dis rien : il me reste des choses à y changer, au labo.
-8. **Le grand chêne reste éteint** : il n'est pas livrable en l'état, le labo le refait. Ne l'intègre pas plus
-   loin que son interrupteur.
+7. **Le toboggan reste éteint** tant que je ne dis rien : il est encore en retouche au labo (ses changements
+   arriveront en re-fusionnant sa branche, sans rien à refaire de ton côté).
 
 ---
 
@@ -101,7 +98,7 @@ dis-le-moi plutôt que de corriger dans ses fichiers.
 
 ### B1. Mises à jour : livrer quand je veux, sans laisser personne sur une vieille version
 
-Dans les jours qui viennent je veux sortir, l'une après l'autre : les sky villages, le toboggan, le chêne, etc.
+Dans les jours qui viennent je veux sortir, l'une après l'autre : les sky villages, le toboggan, etc.
 Je veux décider **du moment** depuis une page admin, et que les joueurs connectés suivent sans rien faire.
 
 Deux mécanismes, complémentaires :
@@ -110,13 +107,13 @@ Deux mécanismes, complémentaires :
    depuis la page admin et tout le monde le voit en quelques secondes, sans nouvelle livraison.
    - Un seul objet, gardé dans le carnet (une clé `release`), avec ses valeurs par défaut dans
      `src/app/config.js` : par exemple
-     `{ slide: false, oak: false, caves: true, stats: true, sky: 'hidden', userRooms: false }`.
+     `{ slide: false, caves: true, stats: true, sky: 'hidden', userRooms: false }`.
      Tout futur interrupteur va là.
    - Il est servi à tout le monde (dans `/api/status` ou une route à lui) et **poussé aux joueurs connectés**
      quand il change (un message du relais à toutes les rooms), avec une relecture de secours toutes les
      quelques minutes.
-   - Côté joueur : un extra qui s'allume se charge à chaud (`loadExtras` le fait ; le toboggan et le chêne
-     redessinent les ombres fixes, un à-coup d'une fraction de seconde). Ce qui s'éteint, ou ce qui ne peut pas
+   - Côté joueur : un extra qui s'allume se charge à chaud (`loadExtras` le fait ; le toboggan redessine les
+     ombres fixes, un à-coup d'une fraction de seconde). Ce qui s'éteint, ou ce qui ne peut pas
      se faire à chaud, passe par le rafraîchissement ci-dessous.
 2. **Les nouvelles versions du code.** Chaque version a déjà un identifiant (`__BUILD__.commit`).
    - Le serveur doit connaître la version en ligne et la dire aux joueurs (à la connexion au relais, et dans
@@ -247,7 +244,7 @@ Six mesures. Les vraies protections sont côté serveur ; le navigateur appartie
    top 5** (d'une des quatre périodes ; plus tard d'une room privée aussi). Cela demande que la règle de chaque
    jeu soit séparée de son affichage et donne le même résultat partout. Un score qui ne se rejoue pas est
    refusé sans le dire et signalé dans la page admin.
-   Pour les jeux de parcours (Mostly Up, la course, le toboggan, plus tard le chêne), pas de rejeu ; garde les
+   Pour les jeux de parcours (Mostly Up, la course, le toboggan), pas de rejeu ; garde les
    bornes de temps, et étudie ceci : le relais voit passer les positions — il peut attester qu'il a bien vu ce
    joueur faire le parcours pendant cette durée, sans téléportation. Dis-moi ce que ça coûterait.
 6. **Bannir en silence.** En plus de l'exclusion actuelle (qui le dit au joueur) : une exclusion dont le joueur
@@ -267,12 +264,24 @@ Six mesures. Les vraies protections sont côté serveur ; le navigateur appartie
 3. **Rien ne se perd** : comptes, achats, scores, panneaux, plaques. Tout changement de ce que garde le carnet
    doit relire l'ancien format. Si tu ajoutes une classe de Durable Object, dis-moi ce que cela change au
    déploiement.
-4. **Vérifie** : tes tests (`net-test`, `shop-test`, `walk-test`…) et les trois du labo après chaque étape ;
+4. **Pas de nouvelle base de données, et on garde le moins possible.** Tout ce que ce brief demande de garder
+   va dans le carnet qui existe déjà (là où sont les comptes, les achats et les scores) :
+   - les interrupteurs des releases (un petit objet) ;
+   - la liste des rooms communes et leur nombre de présents (pas qui y est) ;
+   - plus tard, pour chaque room privée : son nom, son propriétaire, son mot de passe haché, ses scores ;
+   - pour les exclusions : une marque « silencieuse » en plus de ce qui existe ;
+   - pour l'anti-triche : les scores signalés, en attente de ma décision ;
+   - pour les chiffres : des sommes, et par appareil le jour de son dernier comptage (déjà écrit par le labo).
+   **On ne garde pas** : les messages du chat (relayés, jamais écrits, comme aujourd'hui) ; les gestes d'une
+   partie une fois le score vérifié (sauf ceux d'un score signalé, le temps que je tranche) ; les positions des
+   joueurs (en mémoire le temps de la session, jamais écrites) ; les adresses IP au-delà de ce qui existe déjà
+   pour les exclusions. Si un point demande de garder autre chose sur les joueurs, demande-moi d'abord.
+5. **Vérifie** : tes tests (`net-test`, `shop-test`, `walk-test`…) et ceux du labo après chaque étape ;
    pour les salles, une simulation de charge (pas seulement deux onglets) ; pour les mises à jour, un essai
    réel d'une version à la suivante avec un joueur connecté.
-5. **Dis-moi ce qui n'a pas pu être vérifié** (par exemple : pas essayé avec 200 vraies personnes, pas essayé
+6. **Dis-moi ce qui n'a pas pu être vérifié** (par exemple : pas essayé avec 200 vraies personnes, pas essayé
    sur un vrai téléphone).
-6. **Questions à me poser plutôt que deviner** : le prix et la formule des rooms privées ; la règle des
+7. **Questions à me poser plutôt que deviner** : le prix et la formule des rooms privées ; la règle des
    comptes pour les scores ; les limites par adresse ; ce que cache exactement l'exclusion silencieuse ; le
    remboursement d'un sponsor refusé ; ce qu'on voit des villages en mode « bientôt » ; les rooms gratuites par
    adresse.

@@ -1,15 +1,15 @@
-// Works out the way up the Great Oak ("Out on a Limb") once and writes it down: src/world/zones/games/oak/route.js.
+// Works out the way up the Great Oak ("Out on a Limb") once and writes it down: lab/oak/route.js.
 // The course is found by a search (see tree.js) that takes seconds and that two browsers might not finish the
 // same way; the game reads what is written here, the same for everybody.
-// usage: node tools/oak-course.mjs [--seed=23] [--dry]     (then: node tools/oak-test.mjs)
+// usage: node lab/oak/oak-course.mjs [--seed=23] [--dry]     (then: node lab/oak/oak-test.mjs)
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
-import { buildTree, SPECIES_ORDER } from '../src/world/vegetation/TreeBuilder.js';
-import { OAK, readSkeleton, oakCourse, clearing, trunkRadius } from '../src/world/zones/games/oak/tree.js';
+import { buildTree, SPECIES_ORDER } from '../../src/world/vegetation/TreeBuilder.js';
+import { OAK, readSkeleton, oakCourse, clearing, trunkRadius } from './tree.js';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const opt = Object.fromEntries(process.argv.slice(2).filter((a) => a.startsWith('--')).map((a) => { const [k, v] = a.slice(2).split('='); return [k, v ?? true]; }));
 
 /** The ground of the world, as the game reads it (WorldData.heightAt). */
@@ -91,7 +91,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const tree = await oakTree(), t0 = Date.now();
   const course = oakCourse({ skeleton: tree.skeleton, ground: tree.ground, seed: opt.seed ? Number(opt.seed) : OAK.seed, tries: opt.seed ? 1 : 60 });
   const route = written(course, tree), br = route.holds.filter((h) => h.kind === 'branch');
-  const text = `// The way up the Great Oak ("Out on a Limb"), as tools/oak-course.mjs worked it out (see tree.js): written down so\n// that it is the same on every device. Not to be edited by hand: change tree.js, then run the tool again.\n/* eslint-disable */\nexport const ROUTE = ${JSON.stringify(route)};\n`;
+  const text = `// The way up the Great Oak ("Out on a Limb"), as lab/oak/oak-course.mjs worked it out (see tree.js): written down so\n// that it is the same on every device. Not to be edited by hand: change tree.js, then run the tool again.\n/* eslint-disable */\nexport const ROUTE = ${JSON.stringify(route)};\n`;
   console.log(`seed ${course.seed}: ${route.holds.length} holds — ${br.length} branches (${br.filter((h) => h.fragile).length} dead), ${route.holds.filter((h) => h.kind === 'fungus').length} fungi, ${route.jumps.length} jumps; ${route.cut.length} small branches and ${route.cards.length} leaf cards taken off the tree; ${route.posts.length} posts; ${(text.length / 1024).toFixed(0)} KB; ${((Date.now() - t0) / 1000).toFixed(1)} s`);
-  if (!opt.dry) { fs.writeFileSync(path.join(ROOT, 'src/world/zones/games/oak/route.js'), text); console.log('written: src/world/zones/games/oak/route.js'); }
+  if (!opt.dry) { fs.writeFileSync(path.join(ROOT, 'lab/oak/route.js'), text); console.log('written: lab/oak/route.js'); }
 }

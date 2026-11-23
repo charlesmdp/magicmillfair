@@ -7,12 +7,12 @@
 // Like the other games, it knows nothing about the keyboard, the network or the leaderboards: what happens is
 // told through `events` ({ line(text | null), note(text, ms), sound(name, options), started(), finished(ms, clean) }).
 import * as THREE from 'three';
-import { Parts } from '../../../props/MeshBuilder.js';
-import { LAYER } from '../../../../render/Shadows.js';
-import { distanceCuller } from '../../../props/StaticBatch.js';
-import { makeMaterial, GLSL_COMMON, GLSL_SHADOW, GLSL_LIGHTING, GLSL_SURFACE } from '../../../../render/globals.js';
-import { canvasBoard } from '../Boards.js';
-import { formatTime } from '../course.js';
+import { Parts } from '../../src/world/props/MeshBuilder.js';
+import { LAYER } from '../../src/render/Shadows.js';
+import { distanceCuller } from '../../src/world/props/StaticBatch.js';
+import { makeMaterial, GLSL_COMMON, GLSL_SHADOW, GLSL_LIGHTING, GLSL_SURFACE } from '../../src/render/globals.js';
+import { canvasBoard } from '../../src/world/zones/games/Boards.js';
+import { formatTime } from '../../src/world/zones/games/course.js';
 import { OAK, holdHeight, netHeight, readRoute } from './tree.js';
 import { ROUTE } from './route.js';
 import { growTree, sameModel, prune } from './giant.js';
@@ -245,7 +245,7 @@ export class Oak {
     this.giant = giant;
     this.pruned = sameModel(giant.model, ROUTE.model);
     if (this.pruned) prune(giant.model, ROUTE.cut, ROUTE.cards);
-    else console.warn('[oak] the old tree is not the tree the course was worked out for: run tools/oak-course.mjs again');
+    else console.warn('[oak] the old tree is not the tree the course was worked out for: run lab/oak/oak-course.mjs again');
     const base = (this.base = V(giant.x, giant.y, giant.z));
     this.group.position.copy(base);
     this.ground = base.y + course.ground;
