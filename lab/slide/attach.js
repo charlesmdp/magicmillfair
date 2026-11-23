@@ -16,31 +16,36 @@ export function attachSlide(app) {
   const par = [['The careful bot', botRun(slide.course, 'careful').time], ['The bold bot', botRun(slide.course, 'bold').time]];
   slide.setTimes(read(), par);
 
-  let ride = null, after = 0;
+  let ride = null, saved = false;
   const io = {
     play: (name, options) => app.audio?.play(name, options),
     note: (text) => hud.note(text, 3200),
     go: () => {},
+    splash: (x, y, z, strength) => world.ripples?.splash(app.engine.time, x, y, z, strength),
   };
   const leave = (finished) => {
     if (!ride) return;
     const s = ride;
-    ride = null; after = 0;
-    s.close();
-    player.driver = null; player.riding = false; player.vel.set(0, 0, 0);
+    ride = null; saved = false;
     app.fair.fov = null;
     hud.setRun(null);
-    const [x, z, yaw] = finished ? s.exit : [slide.gate.x + Math.sin(slide.gate.yaw) * 2.6, slide.gate.z + Math.cos(slide.gate.yaw) * 2.6, slide.gate.yaw];
-    player.teleport(x, z, yaw);
-    app.rig.snap(player.pos, yaw + Math.PI);
-    if (!finished) hud.note('Ride left.', 2500);
+    if (finished) s.drop(player); // in the sea where the slide ends, facing the beach: one swims back
+    else {
+      s.close();
+      player.driver = null; player.riding = false;
+      player.teleport(slide.gate.x + Math.sin(slide.gate.yaw) * 2.6, slide.gate.z + Math.cos(slide.gate.yaw) * 2.6, slide.gate.yaw);
+      hud.note('Ride left.', 2500);
+    }
+    player.vel.set(0, 0, 0);
+    app.rig.snap(player.pos, player.yaw + Math.PI);
   };
   const start = () => {
     if (ride || app.fair.session || player.dead) return;
     ride = slide.open(player, io);
     player.driver = ride;
     app.audio?.play('teleport');
-    hud.note(app.input.touch ? 'The stick steers across the slide · up: lie back, faster · down: brake' : 'A / D or the arrows steer · W or Shift: lie back, faster · S: brake · E: leave', 7000);
+    hud.note(app.input.isTouch ? 'Keep to the water · the stick steers · the arrow jumps · up: lie back, faster · down: brake'
+      : 'Keep to the water · A / D or the arrows steer · Space jumps · W or Shift: lie back, faster · S: brake · E: leave', 8000);
   };
   world.actionSources.push((p) => {
     if (ride) return ride.over ? null : { label: 'Leave the slide', run: () => leave(false) };
@@ -56,13 +61,13 @@ export function attachSlide(app) {
       app.fair.fov = ride.camera(camera, dt);
       camera.updateMatrixWorld();
       hud.setRun(ride.line);
-      if (ride.over) {
-        if (after === 0) {
-          const ms = ride.time, best = read();
-          if (!best || ms < best) { try { localStorage.setItem(KEY, String(ms)); } catch { /* no storage */ } slide.setTimes(ms); hud.note(best ? 'Your best time yet!' : 'A first time on the board.', 5000); }
-        }
-        if ((after += dt) > 3.6) leave(true);
+      if (ride.over && !saved) {
+        // the clock has stopped at the end of the trough: the time is kept while the rider flies on into the sea
+        saved = true;
+        const ms = ride.time, best = read();
+        if (ms && (!best || ms < best)) { try { localStorage.setItem(KEY, String(ms)); } catch { /* no storage */ } slide.setTimes(ms); hud.note(best ? 'Your best time yet!' : 'A first time on the board.', 5000); }
       }
+      if (ride.ended) leave(true);
     },
   });
   Object.assign(app, { slide, rideSlide: start, leaveSlide: leave, slideRide: () => ride });

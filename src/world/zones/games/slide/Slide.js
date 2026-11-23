@@ -1,7 +1,8 @@
 // The water slide ("Mostly Down"): what is seen of it and how it is ridden. The line it follows is in
-// track.js, the way one goes down it in ride.js; here it is built — the trough in bands of colour, the water
-// that runs in it, the masts of its helices and the legs of the rest, the deck at the top, the arches, the
-// buoys, the strips of light, the gate on the beach and the board of the best times — and a ride is run.
+// track.js, the way one goes down it in ride.js; here it is built — the trough in bands of colour, the stream
+// that runs down its middle, the whirlpools and the rolls that lie in it, the ramps at the lips of its gaps,
+// the masts of its helices and the legs of the rest, the deck at the top, the arches, the gate on the beach
+// and the board of the best times — and a ride is run.
 //
 // Like the race, a ride is a session that drives the player (see PlayerController.driver): the game opens
 // it, calls its camera every frame, reads its line for the clock of the screen and its time at the end.
@@ -15,7 +16,7 @@ import { ANIM } from '../../../../player/Character.js';
 import { canvasBoard } from '../Boards.js';
 import { formatTime } from '../course.js';
 import { SLIDE, slideCourse, lineAt, frameAt } from './track.js';
-import { RIDE, startRide, stepRide, ridePose, rideProgress, lowSide, botInput } from './ride.js';
+import { RIDE, startRide, stepRide, ridePose, rideProgress, botInput } from './ride.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -82,6 +83,50 @@ function waterMaterial(foam) {
   return waterMat;
 }
 
+// A whirlpool: foam winding into a dark eye, turning.
+const WHIRL_VERT = /* glsl */ `
+${GLSL_COMMON}
+out vec2 vUv;
+out vec3 vWorld;
+void main() {
+  vUv = uv;
+  vec4 wp = modelMatrix * vec4(position, 1.0);
+  vWorld = wp.xyz;
+  gl_Position = projectionMatrix * viewMatrix * wp;
+}
+`;
+const WHIRL_FRAG = /* glsl */ `
+${GLSL_COMMON}
+${GLSL_SHADOW}
+${GLSL_LIGHTING}
+in vec2 vUv;   // -1..1 both ways, the eye in the middle
+in vec3 vWorld;
+void main() {
+  float r = length(vUv);
+  if (r > 1.0) discard;
+  float ang = atan(vUv.y, vUv.x) + uTime * 5.0 + r * 6.5;
+  float arms = smoothstep(0.25, 0.75, 0.5 + 0.5 * sin(ang * 3.0));
+  float eye = smoothstep(0.34, 0.12, r);
+  vec3 light = hemiAmbient(vec3(0.0, 1.0, 0.0)) + uSunColor * 0.8;
+  vec3 tone = mix(vec3(0.03, 0.22, 0.4), vec3(1.0), arms * smoothstep(0.2, 0.75, r) * 0.9);
+  tone = mix(tone, vec3(0.0, 0.03, 0.09), eye);
+  vec3 col = applyFog(tone * light, vWorld, cameraPosition);
+  float alpha = smoothstep(1.0, 0.82, r);
+  gl_FragColor = vec4(outputColor(col) * alpha, alpha);
+}
+`;
+let whirlMat = null;
+function whirlMaterial() {
+  if (!whirlMat) {
+    whirlMat = makeMaterial({
+      vertexShader: WHIRL_VERT, fragmentShader: WHIRL_FRAG, side: THREE.DoubleSide,
+      transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+    });
+    whirlMat.name = 'slide:whirl';
+  }
+  return whirlMat;
+}
+
 // ---------------------------------------------------------------------------------------------- building
 
 const _f = { side: [0, 0, 0], up: [0, 0, 0] };
@@ -146,8 +191,9 @@ export class Slide {
   }
 
   /**
-   * The trough of a line between two samples: its inside, its outside and its two lips. `N`: how many faces
-   * across; `stride`: one sample in so many (the plain version seen from far has few of both).
+   * The trough of a line between two samples: its inside, its outside and its two lips — nothing where the line
+   * crosses a gap. `N`: how many faces across; `stride`: one sample in so many (the plain version seen from far
+   * has few of both).
    */
   _trough(b, line, i0, i1, N = 10, stride = 1) {
     const pts = line.points, R = SLIDE.radius, fork = line.id >= 0;
@@ -155,22 +201,20 @@ export class Slide {
     const a = V(0, 0, 0), n = V(0, 0, 0);
     let prev = null;
     for (let i = i0; i <= i1; i = i < i1 ? Math.min(i1, i + stride) : i + 1) {
-      const p = pts[i], f = frameAt(p, _f), lo = -(p.rim[0] + 0.07), hi = p.rim[1] + 0.07;
-      const tone = palette(p)[Math.floor(p.s / BAND) % 2], low = p.rim[0] < SLIDE.rim - 0.2 || p.rim[1] < SLIDE.rim - 0.2;
+      const p = pts[i];
+      if (p.tag.gap) { prev = null; continue; }
+      const f = frameAt(p, _f), lo = -(p.rim[0] + 0.06), hi = p.rim[1] + 0.06;
+      const tone = palette(p)[Math.floor(p.s / BAND) % 2], inside = [tone[0] * 1.08 + 0.05, tone[1] * 1.08 + 0.05, tone[2] * 1.08 + 0.05, 1];
       const ring = { in: [], out: [], lipL: [], lipR: [] };
       for (let j = 0; j <= N; j++) {
         const ang = lerp(lo, hi, j / N);
-        // the inside is a shade lighter than the outside; a low side wears red and white
-        const edge = j === 0 ? p.rim[0] : j === N ? p.rim[1] : 9, warn = edge < SLIDE.rim - 0.2 && edge > 0.2;
-        const cIn = warn ? (Math.floor(p.s / 1.5) % 2 ? RED : WHITE) : [tone[0] * 1.08 + 0.05, tone[1] * 1.08 + 0.05, tone[2] * 1.08 + 0.05];
-        ring.in.push(b.vert(onPipe(p, f, ang, R, a), pipeNormal(f, ang, true, n), j / N, p.s, [...cIn, 1]));
+        ring.in.push(b.vert(onPipe(p, f, ang, R, a), pipeNormal(f, ang, true, n), j / N, p.s, inside));
         ring.out.push(b.vert(onPipe(p, f, ang, R + WALL, a), pipeNormal(f, ang, false, n), j / N, p.s, [...tone, 1]));
       }
-      // the lips: flat tops of the two sides, white
+      // the lips: the tops of the two sides, white
       for (const [key, ang, sign] of [['lipL', lo, -1], ['lipR', hi, 1]]) {
         n.set(f.side[0] * Math.cos(ang) + f.up[0] * Math.sin(ang), f.side[1] * Math.cos(ang) + f.up[1] * Math.sin(ang), f.side[2] * Math.cos(ang) + f.up[2] * Math.sin(ang)).multiplyScalar(sign);
-        const tint = low && sign === (p.rim[1] < p.rim[0] ? 1 : -1) ? (Math.floor(p.s / 1.5) % 2 ? RED : WHITE) : WHITE;
-        ring[key].push(b.vert(onPipe(p, f, ang, R, a), n, 0, p.s, [...tint, 1]), b.vert(onPipe(p, f, ang, R + WALL, a), n, 1, p.s, [...tint, 1]));
+        ring[key].push(b.vert(onPipe(p, f, ang, R, a), n, 0, p.s, [...WHITE, 1]), b.vert(onPipe(p, f, ang, R + WALL, a), n, 1, p.s, [...WHITE, 1]));
       }
       if (prev) {
         for (let j = 0; j < N; j++) {
@@ -184,28 +228,29 @@ export class Slide {
     }
   }
 
-  /** The water that runs in every trough, in stretches. */
+  /** The stream that runs down the middle of every trough, in stretches (none over a gap). */
   _water(lines) {
     const foam = this.world.water?.shared?.uFoam;
     if (!foam) return;
-    const R = SLIDE.radius, N = 6, a = V(0, 0, 0), n = V(0, 0, 0), mat = waterMaterial(foam);
+    const R = SLIDE.radius, N = 6, a = V(0, 0, 0), n = V(0, 0, 0), mat = waterMaterial(foam), half = SLIDE.stream + 0.08;
     lines.forEach((line, li) => {
       const pts = line.points, CHUNK = 84;
       for (let from = 0; from < pts.length - 1; from += CHUNK) {
         const to = Math.min(pts.length - 1, from + CHUNK), pos = [], nrm = [], uv = [], idx = [];
+        let prev = -1, rows = 0;
         for (let i = from; i <= to; i++) {
-          const p = pts[i], f = frameAt(p, _f), run = p.tag.runout ? 1.0 : 0.66;
-          const lo = -Math.min(run, p.rim[0] + 0.02), hi = Math.min(run, p.rim[1] + 0.02);
+          const p = pts[i];
+          if (p.tag.gap) { prev = -1; continue; }
+          const f = frameAt(p, _f), lo = -Math.min(half, p.rim[0] + 0.02), hi = Math.min(half, p.rim[1] + 0.02);
           for (let j = 0; j <= N; j++) {
             const ang = lerp(lo, hi, j / N);
             onPipe(p, f, ang, R - 0.035, a); pipeNormal(f, ang, true, n);
             pos.push(a.x, a.y, a.z); nrm.push(n.x, n.y, n.z); uv.push((j / N) * 2 - 1, p.s);
           }
-          if (i > from) {
-            const r0 = (i - from - 1) * (N + 1), r1 = r0 + N + 1;
-            for (let j = 0; j < N; j++) idx.push(r0 + j, r0 + j + 1, r1 + j, r1 + j, r0 + j + 1, r1 + j + 1);
-          }
+          if (prev >= 0) { const r0 = prev * (N + 1), r1 = rows * (N + 1); for (let j = 0; j < N; j++) idx.push(r0 + j, r0 + j + 1, r1 + j, r1 + j, r0 + j + 1, r1 + j + 1); }
+          prev = rows++;
         }
+        if (!idx.length) continue;
         const geo = new THREE.BufferGeometry();
         geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
         geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
@@ -266,7 +311,7 @@ export class Slide {
     for (let i = 4; i < P.length - 2; i++) {
       const p = P[i];
       since += 1;
-      if (inHelix(p.s) || since < 15) continue;
+      if (inHelix(p.s) || since < 15 || p.tag.gap) continue;
       const u = under(p), g = ground(p.x, p.z);
       if (u.y - g < 0.9) continue;
       if (!clearOf(V(p.x, g - 0.6, p.z), V(u.x, u.y - 0.25, u.z), p.s, R + 1.7)) continue;
@@ -281,9 +326,9 @@ export class Slide {
     this.group.add(parts.toMeshes(mats, { name: 'slide-masts', layers: cast }), legs.toMeshes(mats, { name: 'slide-legs', layers: cast }));
   }
 
-  /** The deck at the top, the arches along the way, the end of the run-out, the gate on the beach and its board. */
+  /** The deck at the top, the arches along the way, the gate on the beach and its board. */
   _ends(mats, cast) {
-    const course = this.course, P = course.main.points, R = SLIDE.radius, data = this.data;
+    const course = this.course, R = SLIDE.radius, data = this.data;
     const parts = new Parts(), wood = parts.get('woodDeck'), paint = parts.get('paint');
     // ---- the deck: planks on the rim of the cliff, a rail, two posts and the name
     const T = SLIDE.top, fx = Math.sin(T.yaw), fz = Math.cos(T.yaw), rx = -fz, rz = fx;
@@ -310,7 +355,7 @@ export class Slide {
       if (sub) { ctx.font = `600 ${Math.round(ch * 0.2)}px system-ui, sans-serif`; ctx.fillStyle = '#f2c14e'; ctx.fillText(sub, cw / 2, ch * 0.78, cw * 0.9); }
     }, w, h, { both: true });
     const hang = (board, x, y, z, yaw) => { board.mesh.position.set(x, y, z); board.mesh.rotation.y = yaw; board.mesh.name = 'slide-sign'; this.group.add(board.mesh); return board; };
-    hang(sign(SLIDE.name.toUpperCase(), `${Math.round(course.finish / 10) * 10} METRES OF WATER · ${Math.round(T.y - course.basin.y)} M DOWN`, 5.0, 1.25), T.x + fx * 0.1, T.y + 4.1, T.z + fz * 0.1, T.yaw);
+    hang(sign(SLIDE.name.toUpperCase(), `${Math.round(course.finish / 10) * 10} METRES OF WATER · ${Math.round(T.y)} M DOWN`, 5.0, 1.25), T.x + fx * 0.1, T.y + 4.1, T.z + fz * 0.1, T.yaw);
 
     // ---- the arches: one at every place one is put back, numbered; a chequered one where the clock stops
     const arches = new Parts(), ab = arches.get('paint');
@@ -323,10 +368,10 @@ export class Slide {
       for (let k = 0; k < n; k++) ab.tint(...tones[k % tones.length], 1).rod(pts[k], pts[k + 1], big ? 0.2 : 0.13, 6, { caps: false });
     };
     course.marks.forEach((m, k) => { if (k) arch(m.s, [GOLD, GOLD, RED], false); });
-    arch(course.finish, [NAVY, WHITE], true);
+    arch(course.finish - 1.5, [NAVY, WHITE], true);
     arch(1.2, [RED, CREAM], true);
     {
-      const p = lineAt(course.main, course.finish), f = frameAt(p, { side: [0, 0, 0], up: [0, 0, 0] });
+      const p = lineAt(course.main, course.finish - 1.5), f = frameAt(p, { side: [0, 0, 0], up: [0, 0, 0] });
       hang(sign('FINISH', '', 3.4, 0.8, '#1b1340'), p.x + f.up[0] * (R + 2.2), p.y + f.up[1] * (R + 2.2), p.z + f.up[2] * (R + 2.2), p.yaw);
     }
 
@@ -338,12 +383,6 @@ export class Slide {
       ab.tint(...STEEL, 1).rod(V(p.x + f.side[0] * fk.side * (R + 0.1), p.y + f.side[1] * fk.side * (R + 0.1) + 0.9, p.z + f.side[2] * fk.side * (R + 0.1)), V(x, y - 0.5, z), 0.09, 6);
     }
 
-    // ---- the end of the run-out: a rounded wall, and steps down to the sand
-    const E = P[P.length - 1], ef = frameAt(E, { side: [0, 0, 0], up: [0, 0, 0] });
-    for (let k = 0; k <= 8; k++) {
-      const ang = lerp(-1.2, 1.2, k / 8), a = onPipe(E, ef, ang, R), top = a.clone().add(V(Math.sin(E.yaw) * 0.0, 0, 0));
-      paint.tint(...(k % 2 ? RED : CREAM), 1).rod(V(a.x + Math.sin(E.yaw) * 0.25, a.y - 0.1, a.z + Math.cos(E.yaw) * 0.25), V(top.x + Math.sin(E.yaw) * 0.25, E.y + 1.25, top.z + Math.cos(E.yaw) * 0.25), 0.2, 6);
-    }
     // ---- the gate on the beach: two striped posts, the name over them, a round mat, the board of the times
     const G = SLIDE.gate, gy = data.heightAt(G.x, G.z), gfx = Math.sin(G.yaw), gfz = Math.cos(G.yaw);
     this.gate = { x: G.x, y: gy, z: G.z, yaw: G.yaw };
@@ -375,7 +414,7 @@ export class Slide {
     ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 10; ctx.strokeRect(9, 9, w - 18, h - 18);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = '#f6e7b8'; ctx.font = "700 70px Georgia, 'Times New Roman', serif"; ctx.fillText(SLIDE.name.toUpperCase(), w / 2, 78);
-    ctx.fillStyle = '#f2c14e'; ctx.font = '600 28px system-ui, sans-serif'; ctx.fillText('FROM THE TOP TO THE SAND, AGAINST THE CLOCK', w / 2, 136);
+    ctx.fillStyle = '#f2c14e'; ctx.font = '600 28px system-ui, sans-serif'; ctx.fillText('FROM THE TOP TO THE SEA, AGAINST THE CLOCK', w / 2, 136);
     const rows = [['Your best', this.best ? formatTime(this.best) : '—', '#ffffff'], ...(this.par || []).map(([name, ms]) => [name, formatTime(ms), '#bfe8ee'])];
     rows.forEach(([name, value, tone], i) => {
       const y = 215 + i * 78;
@@ -387,77 +426,144 @@ export class Slide {
   /** The best time of this visitor (ms), and the times to beat ([[name, ms]]): what the board by the gate shows. */
   setTimes(best, par) { this.best = best || null; if (par) this.par = par; this.board?.redraw(); }
 
-  /** What lies in the troughs: buoys (striped balls afloat) and strips of light. */
+  /**
+   * What lies in the stream: whirlpools (foam turning round a dark eye), rolls lying across (striped, to jump
+   * or to go round), and at the lip of each gap a ramp of arrows of light — and a striped edge where one lands.
+   */
   _things(mats) {
     const course = this.course, R = SLIDE.radius, parts = new Parts(), paint = parts.get('paint'), glow = parts.get('glow');
     const lineOf = (id) => (id < 0 ? course.main : course.forks[id]);
-    const p = {}, f = { side: [0, 0, 0], up: [0, 0, 0] }, a = V(0, 0, 0), b = V(0, 0, 0), n = V(0, 0, 0);
-    this.buoys = [];
+    const p = {}, f = { side: [0, 0, 0], up: [0, 0, 0] }, n = V(0, 0, 0);
+    // ---- the whirlpools: one patch each, bent like the trough it lies in
+    const pos = [], uv = [], idx = [], K = 6;
     for (const t of course.things) {
-      const line = lineOf(t.line);
-      if (t.kind === 'buoy') {
-        lineAt(line, t.s, p); frameAt(p, f);
-        const c = onPipe(p, f, t.a, R - t.r * 0.72), up = pipeNormal(f, t.a, true);
-        const m = new THREE.Matrix4().makeBasis(V(p.tx, p.ty, p.tz).cross(up).normalize(), up.clone(), V(p.tx, p.ty, p.tz)).setPosition(c);
-        paint.push(m);
-        // a ball in four bands, a ring round its middle
-        const prof = [[0.0, -1], [0.5, -0.87], [0.87, -0.5], [1, 0], [0.87, 0.5], [0.5, 0.87], [0.0, 1]].map(([r, y]) => [r * t.r, y * t.r]);
-        for (let k = 0; k < 6; k++) paint.tint(...(k % 2 ? WHITE : RED), 1).lathe([prof[k], prof[k + 1]], 10);
-        paint.tint(...NAVY, 1).lathe([[t.r * 1.02, -0.07], [t.r * 1.12, 0], [t.r * 1.02, 0.07]], 10);
-        paint.pop();
-        this.buoys.push({ index: course.things.indexOf(t), x: c.x, y: c.y, z: c.z });
-      } else {
-        // chevrons of light lying on the trough, pointing the way one goes
-        for (let k = 0; k < 4; k++) {
-          const s0 = t.s + k * (t.length / 4), tip = lineAt(line, s0 + 0.95, {}), base = lineAt(line, s0, {});
-          const ft = frameAt(tip, { side: [0, 0, 0], up: [0, 0, 0] }), fb = frameAt(base, { side: [0, 0, 0], up: [0, 0, 0] });
-          for (const sgn of [-1, 1]) {
-            const q0 = onPipe(base, fb, t.a + sgn * t.half, R - 0.05), q1 = onPipe(base, fb, t.a + sgn * t.half * 0.45, R - 0.05), q2 = onPipe(tip, ft, t.a, R - 0.05);
-            const q3 = onPipe(lineAt(line, s0 + 0.55, {}), ft, t.a + sgn * t.half, R - 0.05);
-            pipeNormal(fb, t.a, true, n);
-            glow.tint(1.0, 0.95, 0.35, 1).quad(sgn > 0 ? q1 : q0, sgn > 0 ? q0 : q1, sgn > 0 ? q3 : q2, sgn > 0 ? q2 : q3, { normal: n.clone() });
-          }
+      if (t.kind !== 'whirl') continue;
+      const line = lineOf(t.line), base = pos.length / 3, reach = t.r * 1.12;
+      for (let i = 0; i <= K; i++) {
+        const u = (i / K) * 2 - 1;
+        lineAt(line, t.s + u * reach, p); frameAt(p, f);
+        for (let j = 0; j <= K; j++) {
+          const v = (j / K) * 2 - 1, q = onPipe(p, f, t.a + (v * reach) / R, R - 0.085, n);
+          pos.push(q.x, q.y, q.z); uv.push(v, u);
         }
       }
+      for (let i = 0; i < K; i++) for (let j = 0; j < K; j++) { const a = base + i * (K + 1) + j, b = a + K + 1; idx.push(a, a + 1, b, b, a + 1, b + 1); }
     }
-    void a; void b;
-    const g = parts.toMeshes(mats, { name: 'slide-things', layers: [] });
-    this.group.add(g);
+    if (idx.length) {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      geo.setIndex(idx);
+      geo.computeBoundingSphere();
+      const mesh = new THREE.Mesh(geo, whirlMaterial());
+      mesh.name = 'slide-whirls';
+      mesh.renderOrder = 13; // over the stream
+      mesh.matrixAutoUpdate = false;
+      mesh.frustumCulled = false; // (one mesh for all of them, from one end of the slide to the other)
+      this.group.add(mesh);
+    }
+    // ---- the rolls: a tube lying across the stream, following the bottom of the trough, in the stripes of a
+    // warning (not those of the ring one rides in)
+    for (const t of course.things) {
+      if (t.kind !== 'bar') continue;
+      lineAt(lineOf(t.line), t.s, p); frameAt(p, f);
+      const steps = Math.max(4, Math.round((t.half * 2) / 0.22)), tube = t.h / 2, pts = [];
+      for (let k = 0; k <= steps; k++) pts.push(onPipe(p, f, t.a + lerp(-t.half, t.half, k / steps), R - tube - 0.02).clone());
+      for (let k = 0; k < steps; k++) paint.tint(...(k % 2 ? YELLOW : t.wide ? PURPLE : NAVY), 1).rod(pts[k], pts[k + 1], tube, 8, { caps: k === 0 || k === steps - 1 });
+    }
+    // ---- the gaps: arrows of light up to the lip, a striped edge on the lip and on the far side
+    const chevrons = (line, s0, length, a, half) => {
+      for (let k = 0; k < 4; k++) {
+        const s = s0 + k * (length / 4), base = lineAt(line, s, {}), tip = lineAt(line, s + 0.8, {}), mid = lineAt(line, s + 0.45, {});
+        const fb = frameAt(base, { side: [0, 0, 0], up: [0, 0, 0] }), ft = frameAt(tip, { side: [0, 0, 0], up: [0, 0, 0] });
+        for (const sgn of [-1, 1]) {
+          const q0 = onPipe(base, fb, a + sgn * half, R - 0.05).clone(), q1 = onPipe(base, fb, a + sgn * half * 0.45, R - 0.05).clone(), q2 = onPipe(tip, ft, a, R - 0.05).clone(), q3 = onPipe(mid, ft, a + sgn * half, R - 0.05).clone();
+          pipeNormal(fb, a, true, n);
+          glow.tint(1.0, 0.95, 0.35, 1).quad(sgn > 0 ? q1 : q0, sgn > 0 ? q0 : q1, sgn > 0 ? q3 : q2, sgn > 0 ? q2 : q3, { normal: n.clone() });
+        }
+      }
+    };
+    const edge = (line, s) => {
+      lineAt(line, s, p); frameAt(p, f);
+      const steps = 10, pts = [];
+      for (let k = 0; k <= steps; k++) pts.push(onPipe(p, f, lerp(-SLIDE.rim, SLIDE.rim, k / steps), R + 0.02).clone());
+      for (let k = 0; k < steps; k++) paint.tint(...(k % 2 ? YELLOW : NAVY), 1).rod(pts[k], pts[k + 1], 0.12, 6, { caps: false });
+    };
+    for (const g of course.gaps) {
+      chevrons(course.main, g.from - 5.2, 4.6, 0, 0.5);
+      edge(course.main, g.from - 0.5);
+      edge(course.main, g.to + 0.5);
+    }
+    this.group.add(parts.toMeshes(mats, { name: 'slide-things', layers: [] }));
   }
 
   /** Is the player standing at the gate, where one asks to ride? */
   near(x, z) { return (x - this.gate.x) ** 2 + (z - this.gate.z) ** 2 < 2.3 * 2.3; }
 
-  /** Where one stands again after a ride: on the sand by the end of the run-out. [x, z, yaw] */
-  get exit() { const e = this.course.basin; return [e.x - Math.sin(e.yaw) * 0.5 - Math.cos(e.yaw) * -3.2, e.z - Math.cos(e.yaw) * 0.5 + Math.sin(e.yaw) * -3.2, e.yaw]; }
+  /** About where one is after a ride: in the sea, off the end of the trough (a session tells exactly: `exit`). [x, z, yaw] */
+  get exit() { const c = this.course; return [c.splash.x, c.splash.z, c.end.yaw]; }
+
+  /** What a rider who has left the trough falls onto at (x, z): the water (of the sea, of a lake) or the ground. */
+  _under(x, z, out) {
+    const g = this.data.heightAt(x, z), w = this.data.waterAt(x, z);
+    out.wet = w > g + 0.5;
+    out.y = out.wet ? w : g;
+    return out;
+  }
+
+  /** The way (a heading) from (x, z) to the nearest dry ground: where one swims to, out of the sea. */
+  _shore(x, z, fallback = 0) {
+    let best = null;
+    for (let k = 0; k < 72; k++) {
+      const a = (k / 72) * Math.PI * 2, sn = Math.sin(a), cs = Math.cos(a);
+      for (let d = 1; d < (best ? best.d : 60); d += 0.5) {
+        if (this.data.heightAt(x + sn * d, z + cs * d) > this.data.waterAt(x + sn * d, z + cs * d) + 0.1) { best = { d, a }; break; }
+      }
+    }
+    return best ? best.a : fallback;
+  }
 
   /**
    * A ride starts: the player is put in the trough at the top; three, two, one… `io`: { play(sound, options),
-   * note(text), go() (the clock starts), splash(x, y, z, n) (optional: something bright where water flies) }.
-   * Returns the session — it is also the driver of the player (see PlayerController.driver):
-   * { step(dt, player, control), camera(camera, dt), line, over, time (ms), speed, riding: false, anim, close(), exit }.
+   * note(text), go() (the clock starts), splash(x, y, z, strength) (optional: rings on the water where one falls
+   * in) }. Returns the session — it is also the driver of the player (see PlayerController.driver):
+   *   step(dt, player, control), camera(camera, dt) → the angle of view, line (the clock of the screen), speed,
+   *   over (the clock has stopped: `time`, in ms, is the run's), ended (the rider is in the sea and has turned to
+   *   the beach: the game lets go of them — see `drop`), exit ([x, z, yaw]: where they are then),
+   *   drop(player) (the player swims from there), close(), riding: false, anim.
    */
   open(player, io) {
-    const course = this.course, st = startRide(course), events = [], pose = {};
-    const S = { count: 3.4, cam: null, look: null, fov: 60, shake: 0, stretch: -1, said: 0, tilt: 0, after: 0, lean: 0 };
+    const course = this.course, st = startRide(course, { under: (x, z, out) => this._under(x, z, out) }), events = [], pose = {};
+    const S = { count: 3.4, cam: null, look: null, fov: 60, shake: 0, stretch: -1, lean: 0, flip: 0, after: 0, from: 0, to: 0, yaw: 0 };
     // a ring to sit in
     const ring = this._ring || (this._ring = this._makeRing());
     ring.visible = true;
-    const _m = new THREE.Matrix4(), _x = V(0, 0, 0), _y = V(0, 0, 0), _z = V(0, 0, 0), _c = V(0, 0, 0), _t = V(0, 0, 0);
-    const input = { steer: 0, tuck: false, brake: false };
+    this._adrift = null;
+    const _m = new THREE.Matrix4(), _x = V(0, 0, 0), _y = V(0, 0, 0), _z = V(0, 0, 0), _t = V(0, 0, 0), _q = new THREE.Quaternion(), _e = new THREE.Euler(0, 0, 0, 'YXZ'), ONE = V(1, 1, 1);
+    const input = { steer: 0, tuck: false, brake: false, jump: false };
+    const turnTo = (from, to, t) => from + Math.atan2(Math.sin(to - from), Math.cos(to - from)) * t;
     const session = {
-      slide: this, over: false, time: 0, line: '', speed: 0, riding: false, anim: ANIM.sit, state: st, falls: 0,
+      slide: this, over: false, ended: false, time: 0, line: '', speed: 0, riding: false, anim: ANIM.sit, state: st, falls: 0,
       exit: this.exit,
-      auto: null, // 'careful' | 'bold': the ride steers by itself (see botInput)
-      /** For the tests: the rider is put at metre `s` of the line, going at `v`. Such a ride has no time. */
-      jump: (s, v = 15) => { Object.assign(st, { line: -1, s, v, a: 0, w: 0, h: 0, vh: 0, out: 0, jumped: true }); st.mark = Math.max(0, course.marks.findLastIndex((m) => m.s <= s)); S.count = 0; S.cam = null; },
+      // the ride steers by itself: 'careful' | 'bold' | { bold, cuts } (see botInput) — or a function (state, input)
+      // that fills the input as it likes (the tests, a film)
+      auto: null,
+      /** For the tests: the rider is put at metre `s` of the main line, going at `v`. Such a ride has no time. */
+      warp: (s, v = 15) => {
+        Object.assign(st, { line: -1, s, v, a: 0, w: 0, h: 0, vh: 0, fly: null, spin: 0, turn: 0, stun: 0, warped: true });
+        st.next.clear();
+        st.mark = Math.max(0, course.marks.findLastIndex((m) => m.s <= s));
+        S.count = 0; S.cam = null;
+      },
       step: (dt, pl, control) => {
         const inp = pl.input;
-        if (session.auto) botInput(st, session.auto, input);
+        if (typeof session.auto === 'function') session.auto(st, input);
+        else if (session.auto) botInput(st, session.auto, input);
         else {
           input.steer = control ? clamp(inp.move.x, -1, 1) : 0;
           input.tuck = control && (inp.move.y > 0.35 || !!inp.run);
           input.brake = control && inp.move.y < -0.35;
+          input.jump = control && !!inp.jump;
         }
         if (S.count > 0) {
           const was = S.count;
@@ -468,47 +574,106 @@ export class Slide {
         for (const e of events) this._tell(e, st, io, S);
         events.length = 0;
         ridePose(st, pose);
-        // ---- what the player is, as far as the world is concerned
-        const out = st.out > 0;
-        _c.set(pose.x + pose.ux * SEAT, pose.y + pose.uy * SEAT, pose.z + pose.uz * SEAT);
-        if (out) { S.tilt += dt * 7; }
-        pl.pos.copy(_c);
-        pl.yaw = pose.yaw + (out ? S.tilt : 0);
-        S.lean += ((input.tuck ? -0.42 : input.brake ? 0.18 : -0.16) - S.lean) * Math.min(1, dt * 6);
-        pl.pitch = -pose.pitch + S.lean; // nose down the slope; lying back when tucked
-        pl.roll = -pose.roll;
-        pl.speed = st.v; pl.grounded = true;
-        // the ring under the rider, flat on the water of the trough
-        _z.set(pose.fx, pose.fy, pose.fz); _y.set(pose.ux, pose.uy, pose.uz); _x.crossVectors(_y, _z).normalize(); _z.crossVectors(_x, _y);
-        ring.matrix.copy(_m.makeBasis(_x, _y, _z).setPosition(pose.x + pose.ux * 0.2, pose.y + pose.uy * 0.2, pose.z + pose.uz * 0.2));
+        if (S.flip > 0) S.flip = Math.max(0, S.flip - dt / 0.55);
+        const flip = S.flip > 0 ? (1 - S.flip) * Math.PI * 2 : 0; // (head over heels, once, after running into a roll)
+        S.lean += ((pose.flying ? 0 : input.tuck ? -0.42 : input.brake ? 0.18 : -0.16) - S.lean) * Math.min(1, dt * 6);
+        if (pose.flying) {
+          // ---- out of the trough: the ring and its rider turn over as one, and fall
+          const fly = st.fly, still = pose.wet || pose.down;
+          let yaw = pose.yaw;
+          if (fly.kind === 'end' && still) {
+            // in the sea at the end of a run: round to face the beach, then the game lets go
+            if (S.after === 0) { S.from = pose.yaw; S.to = this._shore(pose.x, pose.z, pose.yaw); }
+            S.after += dt;
+            const t = clamp(S.after / 1.0, 0, 1);
+            yaw = S.yaw = turnTo(S.from, S.to, t * t * (3 - 2 * t));
+            if (S.after > 1.25 && !session.ended) { session.ended = true; session.exit = [pose.x, pose.z, S.to]; }
+          }
+          const bob = pose.wet ? Math.sin(st.clock * 3.1 + fly.t * 3.1) * 0.05 : 0;
+          _e.set(-pose.pitch, yaw, -pose.roll);
+          _q.setFromEuler(_e);
+          _y.set(0, 1, 0).applyQuaternion(_q);
+          pl.pos.set(pose.x + _y.x * 0.04, pose.y + _y.y * 0.04 + bob, pose.z + _y.z * 0.04);
+          pl.yaw = yaw; pl.pitch = -pose.pitch + S.lean; pl.roll = -pose.roll;
+          _t.set(pose.x - _y.x * 0.1, pose.y - _y.y * 0.1 + bob, pose.z - _y.z * 0.1);
+          ring.matrix.compose(_t, _q, ONE);
+        } else {
+          // ---- in the trough: sitting in the ring, which lies flat on the water where they are
+          pl.pos.set(pose.x + pose.ux * SEAT, pose.y + pose.uy * SEAT, pose.z + pose.uz * SEAT);
+          pl.yaw = pose.yaw;
+          pl.pitch = -pose.pitch + S.lean + flip; // nose down the slope; lying back when tucked
+          pl.roll = -pose.roll;
+          _z.set(pose.fx, pose.fy, pose.fz); _y.set(pose.ux, pose.uy, pose.uz); _x.crossVectors(_y, _z).normalize(); _z.crossVectors(_x, _y);
+          if (st.turn) { _x.applyAxisAngle(_y, st.turn); _z.applyAxisAngle(_y, st.turn); } // (held in a whirlpool: round and round)
+          if (flip) { _y.applyAxisAngle(_x, flip); _z.applyAxisAngle(_x, flip); }
+          ring.matrix.copy(_m.makeBasis(_x, _y, _z).setPosition(pose.x + pose.ux * 0.2, pose.y + pose.uy * 0.2, pose.z + pose.uz * 0.2));
+        }
         ring.matrixWorldNeedsUpdate = true;
+        pl.speed = st.v; pl.grounded = true;
         // ---- the clock of the screen
         session.speed = st.v;
         const here = rideProgress(st), idx = course.stretches.findIndex((s) => here >= s.from && here <= s.to + 1);
         if (idx !== S.stretch && idx >= 0 && S.count <= 0) { S.stretch = idx; if (idx > 0 && idx < course.stretches.length - 1) io.note(st.line >= 0 ? course.forks[st.line].name : course.stretches[idx].name); }
-        if (st.over && !session.over) { session.over = true; session.time = st.jumped ? 0 : st.time; session.falls = st.falls; }
+        if (st.over && !session.over) { session.over = true; session.time = st.warped ? 0 : st.time; session.falls = st.falls; }
         session.line = S.count > 0 ? `${SLIDE.name} · ${Math.ceil(S.count) > 3 ? 'ready' : Math.ceil(S.count)}…`
           : session.over ? `${SLIDE.name} · ${formatTime(session.time)}`
             : `${formatTime(Math.round(st.clock * 1000))} · ${Math.round(st.v * 3.6)} km/h · ${Math.max(0, Math.round(course.finish - here))} m to go`;
       },
-      /** The camera of the ride: behind and above, looking down the trough; wider as it goes faster. */
+      /**
+       * The camera of the ride: behind and above, looking down the trough, wider as it goes faster. When the
+       * rider goes over the edge it stays where it is and watches them go; in the sea at the end it comes round
+       * behind them, to where the camera of the game will be.
+       */
       camera: (cam, dt) => {
-        const back = 5.4 + st.v * 0.07, up = 2.35 + st.v * 0.015;
-        _t.set(pose.x - pose.fx * back + pose.ux * up * 0.55, pose.y - pose.fy * back + up + pose.uy * 0.4, pose.z - pose.fz * back + pose.uz * up * 0.55);
-        if (!S.cam) { S.cam = _t.clone(); S.look = V(pose.x, pose.y, pose.z); }
-        S.cam.lerp(_t, Math.min(1, dt * (st.out > 0 ? 1.2 : 7.5)));
-        _t.set(pose.x + pose.fx * 5.5, pose.y + pose.fy * 5.5 + 0.9, pose.z + pose.fz * 5.5);
-        S.look.lerp(_t, Math.min(1, dt * 9));
+        const fly = st.fly;
+        if (!S.cam) {
+          S.cam = V(pose.x - pose.fx * 6 + pose.ux * 1.3, pose.y - pose.fy * 6 + 2.4, pose.z - pose.fz * 6 + pose.uz * 1.3);
+          S.look = V(pose.x + pose.fx * 5.5, pose.y + pose.fy * 5.5 + 0.9, pose.z + pose.fz * 5.5);
+        }
+        if (fly && fly.kind !== 'end') {
+          // out: watched from where the camera was, a little higher so as to see over the rim
+          if (fly.t < 0.8) S.cam.y += dt * 1.6;
+          _t.set(pose.x, pose.y + 0.2, pose.z);
+          S.look.lerp(_t, Math.min(1, dt * 10));
+        } else if (fly && S.after > 0) {
+          _t.set(pose.x - Math.sin(S.yaw) * 6.83, pose.y + 2.98, pose.z - Math.cos(S.yaw) * 6.83);
+          S.cam.lerp(_t, Math.min(1, dt * 5));
+          _t.set(pose.x, pose.y + 1.45, pose.z);
+          S.look.lerp(_t, Math.min(1, dt * 8));
+        } else {
+          const back = 5.4 + st.v * 0.07, up = 2.35 + st.v * 0.015, hop = fly ? 0 : st.h * 0.6; // (a jump is seen: the camera does not quite follow it)
+          _t.set(pose.x - pose.fx * back + pose.ux * (up * 0.55 - hop), pose.y - pose.fy * back + up + pose.uy * (0.4 - hop), pose.z - pose.fz * back + pose.uz * (up * 0.55 - hop));
+          S.cam.lerp(_t, Math.min(1, dt * 7.5));
+          _t.set(pose.x + pose.fx * 5.5 - pose.ux * hop, pose.y + pose.fy * 5.5 + 0.9 - pose.uy * hop, pose.z + pose.fz * 5.5 - pose.uz * hop);
+          S.look.lerp(_t, Math.min(1, dt * 9));
+        }
         cam.position.copy(S.cam);
         if (S.shake > 0) { S.shake = Math.max(0, S.shake - dt * 2.2); cam.position.x += (Math.random() - 0.5) * S.shake * 0.5; cam.position.y += (Math.random() - 0.5) * S.shake * 0.5; }
         cam.up.set(0, 1, 0);
         cam.lookAt(S.look);
         // (the horizon leans a little with the trough: the bends are felt)
-        cam.rotateZ(clamp(-pose.roll * 0.22, -0.3, 0.3));
-        S.fov += (62 + 24 * clamp(st.v / 26, 0, 1.25) + (st.boost > 0 ? 6 : 0) - S.fov) * Math.min(1, dt * 4);
+        if (!fly) cam.rotateZ(clamp(-pose.roll * 0.22, -0.3, 0.3));
+        // (wide when fast; narrow on someone who has gone over the edge, so that they are seen all the way down)
+        S.fov += ((fly ? (fly.kind === 'end' ? 62 : 36) : 62 + 24 * clamp(st.v / 26, 0, 1.25)) - S.fov) * Math.min(1, dt * (fly ? 3 : 4));
         return S.fov;
       },
-      close: () => { if (this.session === session) this.session = null; player.pitch = 0; player.roll = 0; ring.visible = false; },
+      /**
+       * The ride is over and the game lets go: the player is in the sea where they came down, facing the beach,
+       * and swims from there (the ring stays behind, adrift). Before the end, or on dry ground: stood at `exit`.
+       */
+      drop: (pl) => {
+        const [x, z, yaw] = session.exit, water = this.data.waterAt(x, z), ground = this.data.heightAt(x, z);
+        pl.driver = null; pl.riding = false; pl.pitch = 0; pl.roll = 0;
+        pl.teleport(x, z, yaw);
+        if (water > ground + 1.2) { pl.pos.y = water - 1.0; pl.grounded = false; }
+        if (session.ended && st.fly?.wet) this._adrift = { x: st.fly.x, y: st.fly.y, z: st.fly.z, t: 0, yaw };
+        session.close();
+      },
+      close: () => {
+        if (this.session === session) this.session = null;
+        player.pitch = 0; player.roll = 0;
+        if (!this._adrift) ring.visible = false;
+      },
     };
     this.session = session;
     session.step(0, player, false);
@@ -517,13 +682,23 @@ export class Slide {
 
   /** What happened in a step of the ride, told to the player. */
   _tell(e, st, io, S) {
-    if (e.type === 'buoy') { io.play('fail', { volume: 0.5 }); S.shake = 0.9; io.splash?.(st); }
-    else if (e.type === 'boost') io.play('boost', { volume: 0.8 });
-    else if (e.type === 'out') { io.play('fail'); io.note('Out! Back to the last arch…'); S.tilt = 0; }
-    else if (e.type === 'back') io.play('respawn');
-    else if (e.type === 'mark') io.play('tick', { volume: 0.5 });
-    else if (e.type === 'fork') { io.play('boost', { volume: 0.5 }); io.note(`${this.course.forks[e.fork].name}: the short way down`); }
-    else if (e.type === 'land' && e.hard > 3) S.shake = Math.max(S.shake, 0.4);
+    const forks = this.course.forks;
+    if (e.type === 'jump') io.play('jump', { volume: 0.6 });
+    else if (e.type === 'kick') io.play('boost', { volume: 0.8 });
+    else if (e.type === 'land') { if (e.hard > 2) io.play('land', { volume: clamp(e.hard / 8, 0.3, 1) }); if (e.hard > 3) S.shake = Math.max(S.shake, 0.4); }
+    else if (e.type === 'bar') { io.play('hit'); S.shake = 0.9; S.flip = 1; }
+    else if (e.type === 'whirl') { io.play('fail', { volume: 0.6 }); io.note('Caught in a whirlpool!'); }
+    else if (e.type === 'free') io.play('squirt', { volume: 0.5 });
+    else if (e.type === 'out') {
+      S.flip = 0;
+      if (e.kind === 'end') return;
+      io.play('fail');
+      io.note(e.kind === 'gap' ? 'Too short! Back to the last arch…' : 'Over the edge! Back to the last arch…');
+    } else if (e.type === 'splash') { io.play('splash', { volume: e.kind === 'end' ? 1 : 0.7 }); io.splash?.(e.x, e.y, e.z, e.kind === 'end' ? 9 : 5); if (e.kind === 'end') io.note('Swim back to the beach!'); }
+    else if (e.type === 'thud') io.play('land');
+    else if (e.type === 'back') { io.play('respawn'); S.cam = null; if (e.on) io.note('Put back a little further on.'); }
+    else if (e.type === 'mark') io.play('checkpoint', { volume: 0.5 });
+    else if (e.type === 'fork') { io.play('boost', { volume: 0.5 }); io.note(`${forks[e.fork].name}: the short way down`); }
     else if (e.type === 'finish') io.play('victory');
   }
 
@@ -547,6 +722,17 @@ export class Slide {
 
   /** Every frame: what is too far to be seen is not drawn, and the trough is drawn plainly where it is far. */
   update(dt, time, camera) {
+    const d = this._adrift;
+    if (d && this._ring) {
+      // the ring a rider has left in the sea: it bobs there for a while, turning slowly, and is taken away
+      d.t += dt;
+      if (d.t > 40) { this._adrift = null; this._ring.visible = false; }
+      else {
+        const m = this._ring.matrix.makeRotationY(d.yaw + d.t * 0.25);
+        m.setPosition(d.x, d.y + 0.04 + Math.sin(d.t * 2.2) * 0.05, d.z);
+        this._ring.matrixWorldNeedsUpdate = true;
+      }
+    }
     if (!camera || !this._cull) return;
     const c = camera.position;
     for (const t of this._stretches) {
@@ -557,4 +743,4 @@ export class Slide {
   }
 }
 
-export { lowSide, RIDE };
+export { RIDE };

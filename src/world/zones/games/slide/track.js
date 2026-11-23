@@ -1,12 +1,12 @@
-// The course of the water slide ("Mostly Down"): a trough of running water that leaves the rim of the cliffs
-// above the golden dog, a hundred and fifty metres up, winds round the statue, corkscrews over the sea,
-// runs along the cliffs through the fall that drops from them, and ends in a basin on the beach where one
-// asked to ride.
+// The course of the water slide ("Mostly Down"): a trough with a stream running down its middle, that leaves
+// the rim of the cliffs above the golden dog, a hundred and fifty metres up, winds round the statue,
+// corkscrews over the sea, swerves along the cliffs through the fall that drops from them, whirls in the bay
+// and throws its riders into the sea, a few strokes from the beach where they asked to ride.
 //
 // Nothing here knows about the renderer: the game, its tests and the bot that proves the course can be ridden
 // all read the same lines. A line is laid like a toy track — so many metres straight, a bend of so many
-// degrees, a helix — then its bends and its slopes are eased into one another, and it is cut into samples a
-// metre apart: where it is, which way it goes, how it leans, how it curves.
+// degrees, a helix, a swerve, a gap to fly over — then its bends and its slopes are eased into one another,
+// and it is cut into samples a metre apart: where it is, which way it goes, how it leans, how it curves.
 //
 // Headings are counted the way the valley's are: 0 looks south (+z), and they grow turning left.
 
@@ -16,16 +16,17 @@ export const SLIDE = {
   gate: { x: 63.5, z: -133.5, yaw: 1.05 },
   // the top: the deck on the rim of the cliff above the statue, and the way the trough leaves it
   top: { x: 189.5, z: -315.5, y: 154.6, yaw: 1.3324 },
-  radius: 1.85, // of the trough (a half pipe): what one slides in
-  rim: 1.14, // how far up its sides one may ride (radians from the bottom of the pipe)
-  low: 0.56, // …and how far where the outer side of a bend is cut low: beyond, one flies out
+  radius: 2.13, // of the trough (a shallow half pipe): what one slides in
+  rim: 1.0, // how far up its sides the trough goes (radians from its bottom): beyond, one is over the edge
+  stream: 0.42, // half the width of the water that runs down the middle (radians): where one is carried
   step: 1, // metres between two samples
-  checkpoint: 90, // metres, about, between two places one is put back at after flying out
+  checkpoint: 90, // metres, about, between two places one is put back at after going over the edge
 };
 
 const DEG = Math.PI / 180;
 const TIGHT = 0.62; // the radius of a shortcut, as a share of that of the helix it cuts
-const BUOY = 0.38; // the radius of a buoy
+const LEAN = 0.55; // how much of the lean a bend asks for the trough has
+const REACH = 8.5; // metres: about how far beyond the end of the trough one comes down in the sea
 const lerp = (a, b, t) => a + (b - a) * t;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 function mulberry32(a) {
@@ -40,6 +41,13 @@ export const line = (length, drop, o = {}) => ({ length, k: 0, slope: drop / len
 export const bend = (angle, r, drop, o = {}) => { const length = Math.abs(angle) * DEG * r; return { length, k: Math.sign(angle) / r, slope: drop / length, ...o }; };
 /** `turns` turns of a helix of radius `r` (to the left when positive), going down `drop` metres. */
 export const helix = (turns, r, drop, o = {}) => bend(turns * 360, r, drop, o);
+/**
+ * A swerve to one side and back onto the same line (to the left first when `side` > 0): three bends, `drop`
+ * metres down in all. It takes the place of 4 · r · sin(angle) metres of straight line.
+ */
+export const swerve = (angle, r, drop, side = 1) => [bend(side * angle, r, drop / 4), bend(-side * 2 * angle, r, drop / 2), bend(side * angle, r, drop / 4)];
+/** So many metres where there is no trough: one flies from a lip to the next stretch, or falls short. */
+export const gap = (length, drop) => line(length, drop, { gap: true });
 
 /** Runs a box filter of `width` samples twice over `a` (a triangle, then: bends ease in and out). Ends are held. */
 function ease(a, width) {
@@ -117,9 +125,9 @@ function sample(raw, step) {
     out[i].k = turn(a.yaw, b.yaw) / span;
     out[i].kv = (Math.asin(b.ty) - Math.asin(a.ty)) / span;
   }
-  // the trough leans into its bends, as much as someone going at a fair speed would wish — and never abruptly
-  // (where its outer side is cut low it hardly leans at all: there, speed is what throws one out)
-  const lean = ease(Float64Array.from(out, (p) => clamp(Math.atan((p.k * 16 * 16) / 9.81) * (p.tag.open ? 0.3 : 0.92), -0.8, 0.8)), 9 / h);
+  // the trough leans into its bends — but only about half as much as someone going at a fair speed would wish:
+  // a bend throws its riders up its outer side, out of the stream, and it is for them to steer back into it
+  const lean = ease(Float64Array.from(out, (p) => clamp(Math.atan((p.k * 16 * 16) / 9.81) * LEAN, -0.8, 0.8)), 9 / h);
   for (let i = 0; i <= n; i++) out[i].bank = lean[i];
   return { points: out, length: total, step: h };
 }
@@ -156,36 +164,36 @@ export function frameAt(p, out = { side: [0, 0, 0], up: [0, 0, 0] }) {
 // ---------------------------------------------------------------------------------------------- the course
 
 /**
- * The slide, from the top to the basin: stretches, each a few segments. A segment may be `open` (the outer side
- * of its bend is cut low: too fast and too wide, one flies out), and a stretch may hold a `shortcut`: a tighter
- * turn inside a helix, that leaves it `at` turns in and comes back to it a whole turn further down.
+ * The slide, from the top to the sea: stretches, each a few segments. A stretch may hold a `shortcut`: a
+ * tighter turn inside a helix, that leaves it `at` turns in and comes back to it a whole turn further down.
  */
 const COURSE = [
   { name: 'The Launch', line: [line(12, 0.4), line(33.66, 10.7)] },
-  { name: 'Round the Dog', line: [helix(1.788, 26, 41.3), line(46, 10)] },
-  { name: 'The Corkscrew', line: [helix(1.426, 24, 29.6), helix(0.5, 24, 10.4, { open: true })], shortcut: { at: 0.3, name: 'The Needle' } },
-  { name: 'The Balcony', line: [line(20, 5), line(11, 0.4), line(19, 5.4), line(11, 0.4), line(20, 5), line(18.6, 1.8)] },
-  { name: 'Through the Fall', line: [line(25, 2.3), bend(-34.9, 38, 2.1, { open: true }), line(35.9, 3.1)] },
+  { name: 'Round the Dog', line: [helix(1.788, 26, 41.3), line(4, 1), ...swerve(18, 18.6, 4.5, 1), line(4, 1), gap(9, 1.6), line(6, 1.9)] },
+  { name: 'The Corkscrew', line: [helix(1.926, 24, 40)], shortcut: { at: 0.3, name: 'The Needle' } },
+  { name: 'The Balcony', line: [...swerve(26, 22, 7, 1), line(6, 1.4), gap(10, 1.8), line(7, 1.8), ...swerve(24, 22, 5.7, 1), line(2.23, 0.3)] },
+  { name: 'Through the Fall', line: [...swerve(20, 18.3, 2.3, 1), bend(-34.9, 38, 2.1), line(6, 0.6), gap(9, 0.9), line(20.9, 1.6)] },
   { name: 'The Whirlpool', line: [helix(1.961, 20, 19.7)], shortcut: { at: 0.42, name: 'The Plughole' } },
-  { name: 'Home', line: [line(45.45, 3.2)] },
-  { name: 'Splashdown', line: [line(13.5, 0.2, { runout: true })] },
+  { name: 'Into the Sea', line: [line(10, 1.5), bend(54, 25, 2.5), line(8, 1.5)] },
 ];
 
 let built = null;
 /**
  * The course, laid once:
- *   main       the line from the top to the basin: { points, length, step }
+ *   main       the line from the top to the sea: { points, length, step }
  *   stretches  [{ name, from, to }] (metres along the main line)
  *   forks      [{ name, from, to (where it leaves the main line, and where it comes back to it), side (-1: it
  *              leaves on the left), points, length, step }]: the other way round a helix — shorter, steeper,
  *              tighter
- *   marks      [{ s }] where one is put back after flying out (the first is the start)
- *   things     what lies in the trough: [{ kind: 'buoy' | 'boost', line (-1: the main line, else the fork), s, a
- *              (where across the trough, radians from its bottom, right when positive), … }]
- *   open       [{ line, from, to, side }] where the outer side is cut low
+ *   gaps       [{ from, to }] (metres along the main line) where there is no trough: one flies, or falls short
+ *   marks      [{ s }] where one is put back after going over the edge or falling short (the first is the start)
+ *   things     what lies in the stream: [{ kind, line (-1: the main line, else the fork), s, a (where across
+ *              the trough, radians from its bottom, right when positive), … }] — a 'whirl' (a whirlpool, `r`
+ *              metres across at most: who rides into it is held and spun) or a 'bar' (a roll lying across,
+ *              `half` radians to each side, `h` metres high: one jumps it, goes round it, or runs into it)
  *   helices    [{ name, x, z, r, from, to, top, bottom, turn }]: what the line winds round
- *   finish     where the clock stops (metres along the main line); what follows is the run-out
- *   basin      { x, y, z, yaw }: where the slide ends
+ *   finish     where the clock stops (metres along the main line): the end of the trough
+ *   end        { x, y, z, yaw }: where the trough ends, over the sea; `splash`: { x, z } about where one lands
  * Every sample also carries `rim`: [left, right], how far up each side one may ride there (see rimAt).
  */
 export function slideCourse() {
@@ -201,7 +209,14 @@ export function slideCourse() {
     return { name: stretch.name, from: mine[0].s, to: mine[mine.length - 1].s };
   });
 
-  // the shortcuts: a turn of half the radius inside the helix, from one of its turns to the next one down
+  // the gaps: where the samples come from a segment that has no trough
+  const gaps = [];
+  {
+    let run = null;
+    for (const p of P) { if (p.tag.gap) { if (!run) gaps.push((run = { from: p.s - 0.5, to: p.s })); run.to = p.s + 0.5; } else run = null; }
+  }
+
+  // the shortcuts: a tighter turn inside the helix, from one of its turns to the next one down
   const forks = [];
   COURSE.forEach((stretch, i) => {
     if (!stretch.shortcut) return;
@@ -224,96 +239,87 @@ export function slideCourse() {
     forks.push(fork);
   });
 
-  // where the outer side is cut low
-  const open = [];
-  {
-    let run = null;
-    for (const p of P) {
-      if (p.tag.open && Math.abs(p.k) > 0.012) { if (!run) open.push((run = { line: -1, from: p.s, to: p.s, side: p.k > 0 ? 1 : -1 })); run.to = p.s; } else run = null;
-    }
-  }
-
   // how far up each side of the trough one may ride, at every sample: [left, right] (radians, both positive).
-  // The rim, as a rule; less where the outer side is cut low (it comes down and goes back up over a few
-  // metres); and where a shortcut leaves or joins, the ridge between the two troughs — they are two pipes that
-  // cross, and what parts them stands where they are equally far.
+  // The rim, as a rule; and where a shortcut leaves or joins, the ridge between the two troughs — they are two
+  // pipes that cross, and what parts them stands where they are equally far.
   const R = SLIDE.radius, ridge = (d) => (d >= 2 * R * Math.sin(SLIDE.rim) ? SLIDE.rim : Math.asin(clamp(d / (2 * R), 0, 1)));
   const rims = (line) => { for (const p of line.points) p.rim = [SLIDE.rim, SLIDE.rim]; };
   rims(main); forks.forEach(rims);
-  for (const o of open) for (const p of P) {
-    const inside = clamp(Math.min(p.s - (o.from - 7), o.to + 7 - p.s) / 7, 0, 1);
-    if (inside > 0) { const k = o.side > 0 ? 1 : 0, t = inside * inside * (3 - 2 * inside); p.rim[k] = Math.min(p.rim[k], lerp(SLIDE.rim, SLIDE.low, t)); }
-  }
   for (const f of forks) {
     const mine = f.side < 0 ? 0 : 1, theirs = 1 - mine; // the side of the main line the fork is on; and of the fork, the side the main line is on
     const near = (pts, q) => { let best = 1e9; for (const p of pts) { const d = Math.hypot(p.x - q.x, p.z - q.z, p.y - q.y); if (d < best) best = d; } return best; };
-    const a0 = Math.max(0, Math.floor(f.from) - 2), a1 = Math.min(P.length - 1, Math.ceil(f.from) + 26), b0 = Math.max(0, Math.floor(f.to) - 26), b1 = Math.min(P.length - 1, Math.ceil(f.to) + 2);
-    for (let i = a0; i <= a1; i++) if (P[i].s >= f.from) P[i].rim[mine] = Math.min(P[i].rim[mine], ridge(near(f.points.slice(0, 40), P[i])));
-    for (let i = b0; i <= b1; i++) if (P[i].s <= f.to) P[i].rim[mine] = Math.min(P[i].rim[mine], ridge(near(f.points.slice(-40), P[i])));
+    const a0 = Math.max(0, Math.floor(f.from) - 2), a1 = Math.min(P.length - 1, Math.ceil(f.from) + 30), b0 = Math.max(0, Math.floor(f.to) - 30), b1 = Math.min(P.length - 1, Math.ceil(f.to) + 2);
+    for (let i = a0; i <= a1; i++) if (P[i].s >= f.from) P[i].rim[mine] = Math.min(P[i].rim[mine], ridge(near(f.points.slice(0, 44), P[i])));
+    for (let i = b0; i <= b1; i++) if (P[i].s <= f.to) P[i].rim[mine] = Math.min(P[i].rim[mine], ridge(near(f.points.slice(-44), P[i])));
     f.points.forEach((p, n) => {
-      if (n < 30) p.rim[theirs] = Math.min(p.rim[theirs], ridge(near(P.slice(a0, a1 + 1), p)));
-      if (n > f.points.length - 31) p.rim[theirs] = Math.min(p.rim[theirs], ridge(near(P.slice(b0, b1 + 1), p)));
+      if (n < 34) p.rim[theirs] = Math.min(p.rim[theirs], ridge(near(P.slice(a0, a1 + 1), p)));
+      if (n > f.points.length - 35) p.rim[theirs] = Math.min(p.rim[theirs], ridge(near(P.slice(b0, b1 + 1), p)));
     });
   }
 
-  // where one is put back: the start, then every so often — never in a fork, nor where the side is low
-  const marks = [{ s: 0 }];
-  for (let s = SLIDE.checkpoint; s < main.length - 75; s += SLIDE.checkpoint) {
+  // where one is put back: the start, a good run-up before every gap (far enough to gather the speed it
+  // takes), and every so often in between — never in a shortcut
+  const RUNUP = 24, inFork = (v) => forks.some((f) => (v > f.from - 14 && v < f.from + 20) || (v > f.to - 20 && v < f.to + 14));
+  const spots = [0, ...gaps.map((g) => g.from - RUNUP)];
+  for (let s = SLIDE.checkpoint; s < main.length - 60; s += SLIDE.checkpoint) {
     let at = s;
-    const bad = (v) => forks.some((f) => (v > f.from - 14 && v < f.from + 20) || (v > f.to - 20 && v < f.to + 14)) || open.some((o) => v > o.from - 12 && v < o.to + 6);
-    for (let n = 0; n < 40 && bad(at); n++) at += 4;
-    if (at < main.length - 65 && at - marks[marks.length - 1].s > 40) marks.push({ s: at });
+    for (let n = 0; n < 40 && (inFork(at) || gaps.some((g) => at > g.from - RUNUP - 30 && at < g.to + 20)); n++) at += 4;
+    if (at < main.length - 50 && !spots.some((v) => Math.abs(v - at) < 40)) spots.push(at);
   }
+  const marks = spots.sort((x, y) => x - y).map((s) => ({ s }));
 
-  // what lies in the trough. It thickens as one goes down: nothing on the launch, then buoys to steer round —
-  // one, then two with a gap to thread — and strips of light that throw one forward, off the easy line
+  // what lies in the stream. It thickens as one goes down: nothing on the launch, then whirlpools to keep out
+  // of and rolls to jump — rolls only where the trough runs straight enough to jump, and the wide ones (that
+  // nobody gets round) further down
   const things = [], rnd = mulberry32(90210);
   const free = (line, s) => (line === main
-    // (nothing on the way into a shortcut: which side to take is choice enough)
-    ? !forks.some((f) => (s > f.from - 44 && s < f.from + 16) || Math.abs(s - f.to) < 16) && !marks.some((m) => m.s > 0 && Math.abs(s - m.s) < 9)
+    // (nothing on the way into a shortcut, nor on the run-up to a gap or where one lands after it)
+    ? !forks.some((f) => (s > f.from - 44 && s < f.from + 16) || Math.abs(s - f.to) < 11) && !gaps.some((g) => s > g.from - RUNUP - 4 && s < g.to + 14)
+      && !marks.some((m) => m.s > 0 && Math.abs(s - m.s) < 9)
     : s > 14 && s < line.length - 14);
-  const strew = (line, from, to, hard) => {
-    let s = from;
+  const strew = (line, from, to, hard, only) => {
+    let s = from, last = only === 'bar' ? 'whirl' : '';
     while (s < to) {
       const u = (s - from) / Math.max(1, to - from), level = clamp(hard(u), 0, 1);
-      s += lerp(34, 13, level) * (0.8 + 0.4 * rnd());
-      if (s >= to || !free(line, s)) continue;
-      const p = lineAt(line, s), roll = rnd();
-      if (roll < 0.24) {
-        // a strip of light, on the inside of the bend when there is one (where nobody drifts by chance)
-        const inside = Math.abs(p.k) > 0.01 ? (p.k > 0 ? -1 : 1) : (rnd() < 0.5 ? -1 : 1);
-        things.push({ kind: 'boost', line: line.id, s, a: inside * lerp(0.3, 0.52, rnd()), half: 0.3, length: 5 });
+      s += lerp(38, 22, level) * (0.85 + 0.3 * rnd());
+      // (where nothing may lie, a little further on rather than not at all: no long way with nothing in it)
+      const ok = (v) => v < to && free(line, v) && Math.min(rimAt(line, v, -1), rimAt(line, v, 1)) >= SLIDE.rim - 0.05;
+      for (let n = 0; n < 6 && s < to && !ok(s); n++) s += 3;
+      if (!ok(s)) continue;
+      const p = lineAt(line, s), straight = Math.abs(p.k) < 0.018;
+      // a roll after a whirlpool, more often than not a whirlpool after a roll; the wide rolls (that nobody gets
+      // round) only where the trough runs straight, and further down
+      if (only === 'bar' || last === 'whirl' || (last === 'bar' && rnd() < 0.35)) {
+        const wide = straight && rnd() < lerp(0.1, 0.7, level);
+        things.push({ kind: (last = 'bar'), line: line.id, s, a: 0, half: wide ? SLIDE.rim - 0.1 : 0.56, h: 0.46, wide });
       } else {
-        // how far to each side a buoy may float here (less where a side is low, or the ridge of a shortcut near)
-        const room = (side) => Math.min(...[-2, 0, 2].map((d) => line.points[clamp(Math.round((s + d) / line.step), 0, line.points.length - 1)].rim[side])) - BUOY / SLIDE.radius - 0.06;
-        const left = room(0), right = room(1);
-        if (left < 0.25 || right < 0.25) continue;
-        if (roll < 0.24 + lerp(0.5, 0.3, level) || left < 0.7 || right < 0.7) {
-          things.push({ kind: 'buoy', line: line.id, s, a: clamp(lerp(-0.66, 0.66, rnd()), -left, right), r: BUOY });
-        } else {
-          // two buoys abreast: the way through is between them, or outside one of them
-          const mid = lerp(-0.22, 0.22, rnd()), gap = lerp(0.66, 0.58, level);
-          things.push({ kind: 'buoy', line: line.id, s, a: mid - gap, r: BUOY }, { kind: 'buoy', line: line.id, s, a: mid + gap, r: BUOY });
-        }
+        things.push({ kind: (last = 'whirl'), line: line.id, s, a: lerp(-0.14, 0.14, rnd()), r: 1.05 });
       }
     }
   };
-  const total = main.length - 13.5;
-  strew(main, 70, total - 46, (u) => 0.1 + 0.9 * ((70 + u * (total - 116)) / total) ** 1.25);
-  for (const f of forks) strew(f, 12, f.length - 12, () => 0.95); // the short way is the hard way
+  const total = main.length;
+  strew(main, 30, total - 14, (u) => 0.1 + 0.9 * ((30 + u * (total - 44)) / total) ** 1.2);
+  for (const f of forks) strew(f, 16, f.length - 14, () => 0.9, 'bar'); // (a shortcut is tight enough: rolls only)
 
   // the helices: what they turn round (a mast stands there), between which metres, and how high
   const helices = [];
   COURSE.forEach((stretch, i) => {
     const seg = stretch.line.find((g) => Math.abs(g.k) > 0 && g.length * Math.abs(g.k) > 5);
     if (!seg) return;
-    const mine = P.filter((p) => p.tag.stretch === i && Math.abs(p.k) > Math.abs(seg.k) * 0.9), m = mine[mine.length >> 1];
+    const mine = P.filter((p) => p.tag.stretch === i && p.tag === P.find((q) => q.tag.stretch === i && Math.abs(q.tag.k) === Math.abs(seg.k) && q.tag.length === seg.length).tag && Math.abs(p.k) > Math.abs(seg.k) * 0.9), m = mine[mine.length >> 1];
     helices.push({ name: stretch.name, x: m.x + Math.cos(m.yaw) / m.k, z: m.z - Math.sin(m.yaw) / m.k, r: 1 / Math.abs(seg.k), from: mine[0].s, to: mine[mine.length - 1].s, top: mine[0].y, bottom: mine[mine.length - 1].y, turn: Math.sign(seg.k) });
   });
 
-  const finish = stretches[stretches.length - 1].from, last = P[P.length - 1];
-  built = { main, length: main.length, finish, stretches, forks, marks, things, open, helices, basin: { x: last.x, y: last.y, z: last.z, yaw: last.yaw } };
+  const last = P[P.length - 1], end = { x: last.x, y: last.y, z: last.z, yaw: last.yaw };
+  built = { main, length: main.length, finish: main.length - 0.4, stretches, forks, gaps, marks, things, helices, end, splash: { x: end.x + Math.sin(end.yaw) * REACH, z: end.z + Math.cos(end.yaw) * REACH } };
   return built;
+}
+
+/** The gap a place of a line is in, or null (only the main line has gaps). */
+export function gapAt(course, line, s) {
+  if (line >= 0) return null;
+  for (const g of course.gaps) if (s >= g.from && s <= g.to) return g;
+  return null;
 }
 
 /** How far up the left (`side` < 0) or the right-hand side of the trough one may ride at a place of a line (radians). */
