@@ -12,7 +12,7 @@
 //   POST /api/stats/set  { money, passes, people, since }   the owner only: what was before the counting began
 //
 // Kept: stats:all (the sums), stats:days (the last days), stats:live (who was heard from in the last minutes),
-// stats:dev:<device> (see above). The shop tells of a sale with noteSale().
+// stats:dev:<device> (see above). The shop tells of a sale with noteSale(), of one given back with noteRefund().
 import { cleanGeo } from './visitors.js';
 
 const DEVICE = /^[A-Za-z0-9_-]{16,64}$/;
@@ -81,7 +81,8 @@ export async function report(ctx) {
     now, since: all.since,
     keys: all.keys, km: Math.round(all.metres) / 1000, minutes: Math.floor(all.secs / 60), hours: Math.round(all.secs / 360) / 10, movingHours: Math.round(all.moving / 360) / 10,
     blasts: all.blasts,
-    here: Object.values(live).filter((at) => now - at <= LIVE).length,
+    // (whoever knows who is connected says so — ctx.here() — else: the browsers heard from in the last minutes)
+    here: (ctx.here && (await ctx.here())) ?? Object.values(live).filter((at) => now - at <= LIVE).length,
     today: days[dayOf(now)]?.u || 0, week: all.weeks[weekOf(now)] || 0, month: all.months[monthOf(now)] || 0, people: all.people,
     countries: Object.keys(cc).length, topCountries: top(all.cc, 12),
     money: Math.round(all.money) / 100, passes: all.passes, sales: all.sales,
@@ -95,6 +96,14 @@ export async function noteSale(store, { cents = 0, pass = false } = {}, now = Da
   const all = (await store.get('stats:all')) || blank(now);
   all.money += Math.max(0, Math.round(cents) || 0); all.sales = (all.sales || 0) + 1;
   if (pass) all.passes++;
+  await store.put('stats:all', all);
+}
+
+/** A sale was given back: `cents` leave what the game earned (and a Game Pass, when it was one). */
+export async function noteRefund(store, { cents = 0, pass = false } = {}, now = Date.now()) {
+  const all = (await store.get('stats:all')) || blank(now);
+  all.money = Math.max(0, all.money - Math.max(0, Math.round(cents) || 0));
+  if (pass) all.passes = Math.max(0, all.passes - 1);
   await store.put('stats:all', all);
 }
 

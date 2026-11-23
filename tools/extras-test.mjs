@@ -8,7 +8,7 @@
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { statsRoute, noteSale } from '../server/stats.js';
+import { statsRoute, noteSale, noteRefund } from '../server/stats.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const opt = Object.fromEntries(process.argv.slice(2).filter((a) => a.startsWith('--')).map((a) => { const [k, v] = a.slice(2).split('='); return [k, v ?? true]; }));
@@ -36,8 +36,10 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
   check('visitors: here now, today, this week, this month, ever — nobody twice', s.here === 2 && s.today === 2 && s.week === 2 && s.month === 2 && s.people === 2);
   const no = await statsRoute({ method: 'POST', path: '/api/stats/set', body: { money: 100 } }, ctx), yes = await statsRoute({ method: 'POST', path: '/api/stats/set', body: { money: 250.5, passes: 7, people: 5000 }, admin: true }, ctx);
   await noteSale(ctx.store, { cents: 1900, pass: true }, now);
+  await noteSale(ctx.store, { cents: 2000 }, now);
+  await noteRefund(ctx.store, { cents: 2000 }, now);
   s = await get();
-  check('the owner alone sets what was before the counting began; the shop adds its sales', no.status === 403 && yes.status === 200 && s.money === 269.5 && s.passes === 8 && s.people === 5000, `$${s.money}, ${s.passes} passes`);
+  check('the owner alone sets what was before the counting began; the shop adds its sales, and takes back what it gives back', no.status === 403 && yes.status === 200 && s.money === 269.5 && s.passes === 8 && s.people === 5000, `$${s.money}, ${s.passes} passes`);
   now += 8 * 86_400_000;
   await post(A, { keys: 1, secs: 10 }, { color: 16 });
   s = await get();

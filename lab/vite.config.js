@@ -38,6 +38,9 @@ const labPages = () => ({
 export default defineConfig(async (env) => mergeConfig(typeof game === 'function' ? await game(env) : game, {
   root: ROOT,
   base: '/', // a lab page lives two folders down: what it loads is named from the root
+  // (the lab says that it is the lab: the game may then leave what it keeps for itself in production — the
+  // object the extras' switches and the tools reach, window.__mmf — where this page finds it)
+  define: { __LAB__: 'true' },
   plugins: [labPages()],
   build: { rollupOptions: { input: { main: path.join(ROOT, 'index.html'), ...Object.fromEntries(Object.keys(PAGES).map((name) => [`lab${name && '-'}${name}`, fileOf(name)])) } } },
 }));
