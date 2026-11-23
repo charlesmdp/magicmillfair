@@ -1,7 +1,6 @@
 // The lab page: the game as it stands, plus the extras one chooses to switch on (src/extras/index.js) — to see
 // the game with and without each. The switches are in the address (?slide=0&oak=1), else what was last chosen
-// here, else everything on. On this page anyone may fly the camera about (F): there is nobody to be the
-// administrator of a page without a server.
+// here, else everything on. On this page the visitor is the administrator (see below).
 import { FEATURES } from '../src/app/config.js';
 import { EXTRAS, loadExtras } from '../src/extras/index.js';
 
@@ -43,7 +42,7 @@ function panel(app, built) {
   if (built.slide?.gate) go('Aller au toboggan', () => { const g = built.slide.gate; return [g.x - Math.sin(g.yaw) * 3, g.z - Math.cos(g.yaw) * 3, g.yaw]; });
   if (built.oak?.gate) go('Aller au grand chêne', () => { const g = built.oak.gate; return [g.x - Math.sin(g.yaw) * 3, g.z - Math.cos(g.yaw) * 3, g.yaw]; });
   const note = document.createElement('div');
-  note.textContent = 'Caméra libre : touche F';
+  note.textContent = 'Ici vous êtes administrateur : caméra libre (touche F), toute la boutique, tous les gestes.';
   note.style.cssText = 'margin-top:6px;opacity:.75;font-size:12px';
   body.append(note);
   box.append(head, body);
@@ -57,6 +56,10 @@ const wait = async () => {
   app.lab = { on };
   FEATURES.freeCamera = 'everyone';
   app.hud.setFreeCamera?.(true);
+  // on this page its visitor is the administrator — of this browser: what the game unlocks for one (the camera,
+  // everything in the shop, every gesture) is unlocked. What a server keeps for its administrators (who is
+  // here, keeping someone out, announcements) still asks for the key of that server: `/admin <key>`.
+  if (app.who && !app.who.admin) { Object.assign(app.who, { admin: true, owner: true }); app.hud.setAdmin?.(true); app.refreshShop?.(); }
   panel(app, await loadExtras(app, on));
 };
 wait();
