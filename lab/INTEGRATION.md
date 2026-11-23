@@ -114,7 +114,8 @@ each tree a height of its own (±6 %) and one of two shapes at random; the extra
 cannot. Leaving it to the extra is simpler.
 
 Not done: the board of the best climbs (see below); others see one climb, but dead wood breaks on one's own
-screen only; not tried on a real phone.
+screen only; the round map (a picture drawn once) still shows the tree where it stood, twenty metres north;
+not tried on a real phone.
 
 ## The caves are safe places
 
