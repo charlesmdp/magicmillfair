@@ -203,7 +203,12 @@ if (!opt['no-browser']) {
         for (let f = 0; f < 600; f++) {
           const [la, ax, az] = to(j.a), [lb, bx, bz] = to(T), walked = j.ratio === 0;
           const doJump = !walked && !jumped && player.grounded && la <= m + Math.hypot(player.vel.x, player.vel.z) * dt;
-          if (jumped && player.grounded) return on(B) ? null : air > 2 ? 'missed' : 'no jump';
+          if (jumped && player.grounded) {
+            if (!on(B)) return air > 2 ? 'missed' : 'no jump';
+            // landed: and it must be possible to stop there (the stick against one's own speed), not only to touch down
+            for (let g = 0; g < 30; g++) { const [l, dx, dz] = to(T), v = Math.hypot(player.vel.x, player.vel.z); if (v < 0.25 && l < 0.3) break; const k = Math.min(1, l / 0.5); step(dx * k - (player.vel.x / 8.2) * 0.9, dz * k - (player.vel.z / 8.2) * 0.9, false); }
+            return on(B) ? null : 'slid off';
+          }
           if (walked && on(B)) return null;
           let dirx = jumped || la < 0.25 || walked ? bx : ax, dirz = jumped || la < 0.25 || walked ? bz : az;
           if (jumped) {
@@ -268,7 +273,7 @@ if (!opt['no-browser']) {
       }
       return out;
     });
-    check('the climb can be done: a bot walks every branch and makes every jump, the dead wood breaking in its own time', climb.stuck.length === 0 && climb.jumps === jumps.length && climb.height > OAK.top - 0.1, `${climb.jumps} jumps, ${climb.first} at the first try${climb.stuck.length ? `; stuck at ${climb.stuck.join(', ')}` : ''}`);
+    check('the climb can be done: a bot walks every branch, makes every jump and stops where it lands, the dead wood breaking in its own time', climb.stuck.length === 0 && climb.jumps === jumps.length && climb.height > OAK.top - 0.1, `${climb.jumps} jumps, ${climb.first} at the first try${climb.stuck.length ? `; stuck at ${climb.stuck.join(', ')}` : ''}`);
     check('the clock starts on leaving the plate and stops at the bell; the time is kept', climb.ready === 'ready' && /^Ready/.test(climb.line0) && climb.onFirst && climb.running === 'running' && climb.state === 'done' && climb.clean && /^Top reached in \d+:\d\d\.\d\d!$/.test(climb.line) && climb.best > 0, JSON.stringify({ ready: climb.ready, line0: climb.line0, onFirst: climb.onFirst, running: climb.running, state: climb.state, clean: climb.clean, line: climb.line, best: climb.best }));
     check('dead wood creaks, breaks when it said it would, and grows back', climb.dead.creaks === 'creaking' && Math.abs(climb.dead.held - climb.dead.fuse) < 0.08 && climb.dead.fell > 1.5 && Math.abs(climb.dead.back - (OAK.back + 0.7)) < 3.5 && climb.dead.again, `held ${climb.dead.held.toFixed(2)} s (${climb.dead.fuse} s), back ${climb.dead.back.toFixed(1)} s after it broke`);
     check('a fall ends in the net, which gives a little', climb.net.grounded && climb.net.bounced && Math.abs(climb.net.landed) < 0.7, `${climb.net.from.toFixed(1)} m down onto the first net`);

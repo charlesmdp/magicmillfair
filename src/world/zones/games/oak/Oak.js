@@ -202,13 +202,15 @@ function drawBranch(wood, h, { from = 0, to = Infinity, origin = null, broken = 
     return a;
   };
   const pts = [], secs = [];
-  const put = (p, a, tone, flat = 2.9) => { pts.push(origin ? { x: p.x - origin.x, y: p.y - origin.y, z: p.z - origin.z } : p); const b = clamp(0.26 + 0.3 * a, 0.02, 0.5) * Math.min(1, a / 0.2); secs.push({ a: Math.max(a, 0.012), b: Math.max(b, 0.012), flat, drop: b, tone }); };
+  // (`mid`: a closing ring — where it broke — is drawn in to the middle of the wood, not to its top)
+  const put = (p, a, tone, flat = 2.9, mid = null) => { pts.push(origin ? { x: p.x - origin.x, y: p.y - origin.y, z: p.z - origin.z } : p); const b = clamp(0.26 + 0.3 * a, 0.02, 0.5) * Math.min(1, a / 0.2); secs.push({ a: Math.max(a, 0.012), b: Math.max(b, 0.012), flat, drop: mid ?? b, tone }); };
+  const thick = (e) => { const a = half(e); return clamp(0.26 + 0.3 * a, 0.02, 0.5) * Math.min(1, a / 0.2); };
   const inside = all.filter((p) => p.e >= from - 1e-6 && p.e <= to + 1e-6);
   if (inside.length < 2) return wood;
-  if (broken[0]) put(inside[0], 0.01, 1.9, 2);
+  if (broken[0]) put(inside[0], 0.01, 1.9, 2, thick(inside[0].e));
   inside.forEach((p, k) => put(p, half(p.e), (broken[0] && k === 0) || (broken[1] && k === inside.length - 1) ? 1.9 : lerp(0.72, 1, clamp(p.e / 1.2, 0, 1))));
   const last = inside[inside.length - 1], before = inside[inside.length - 2];
-  if (broken[1]) put(last, 0.01, 1.9, 2);
+  if (broken[1]) put(last, 0.01, 1.9, 2, thick(last.e));
   else if (to >= len - 1e-6) {
     // the end: rounded off, beyond where one stands (round the knot, when there is one)
     const dx = last.x - before.x, dy = last.y - before.y, dz = last.z - before.z, dl = Math.hypot(dx, dy, dz) || 1, R = K || half(len);
@@ -560,7 +562,8 @@ export class Oak {
     const col = this.world.collision, band = Math.floor(y / 2); // (y: the height of whoever the camera looks at)
     if (col.bulky && col.bulky.oak === band && col.bulky.count === col.circles.length) return;
     const mine = new Set(this._mine);
-    const list = col.circles.filter((c) => c[2] >= 0.9 && (!mine.has(c) || (y + 2.2 > c[3] && y - 0.5 < c[4])));
+    // (the eye is a little above whoever it looks at: what is in the way up to there counts)
+    const list = col.circles.filter((c) => c[2] >= 0.9 && (!mine.has(c) || (y + 4.6 > c[3] && y - 0.8 < c[4])));
     list.oak = band; list.count = col.circles.length;
     col.bulky = list;
   }
