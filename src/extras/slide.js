@@ -66,6 +66,7 @@ export function attach(app) {
         saved = true;
         const ms = ride.time, best = read();
         if (ms && (!best || ms < best)) { try { localStorage.setItem(KEY, String(ms)); } catch { /* no storage */ } slide.setTimes(ms); hud.note(best ? 'Your best time yet!' : 'A first time on the board.', 5000); }
+        if (ms) app.slideDone?.(ms); // (for whoever keeps a board of the best times)
       }
       if (ride.ended) leave(true);
     },
