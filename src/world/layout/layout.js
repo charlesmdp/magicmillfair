@@ -560,10 +560,10 @@ export const RACE = {
   name: 'Quadmania', laps: 3, width: 7.5, start: 0.012, paddock: 1, every: 5, starts: ['Red', 'Blue', 'Green', 'Yellow', 'Purple', 'Orange'],
   boosts: TRACKS[TRACK].boosts, jump: TRACKS[TRACK].jump, chicanes: TRACKS[TRACK].chicanes, gap: TRACKS[TRACK].gap || 24, logs: TRACKS[TRACK].logs, grove: TRACKS[TRACK].grove,
 };
-// Wing It: a little theatre on the plaza at the foot of the pier, where one flies on the spot while the
+// Flappy Robot: a little theatre on the plaza at the foot of the pier, where one flies on the spot while the
 // scenery goes by. (x, z): the middle of the front of its stage; `yaw`: which way the stage looks;
 // `width`, `height`: the opening of the stage.
-export const WING = { name: 'Wing It', x: -7.2, z: 12.6, yaw: Math.PI * 0.75, width: 12, height: 5.2 };
+export const WING = { name: 'Flappy Robot', x: -7.2, z: 12.6, yaw: Math.PI * 0.75, width: 12, height: 5.2 };
 // The boulder of the island: it rolls down the whole path, again and again (seconds; metres per second).
 export const BOULDER = { radius: 1.55, speed: 7.2, period: 52 };
 
@@ -727,6 +727,15 @@ export const HERO_TREES = [
   ...[[0.07, 'palm', 0.8, -3.6], [0.2, 'pine', 0.7, 3.3], [0.31, 'cypress', 0.8, 3.2], [0.49, 'pine', 0.85, 3.4], [0.6, 'pine', 0.6, 3.2], [0.7, 'cypress', 0.7, 3.3], [0.8, 'pine', 0.75, 3.3], [0.9, 'pine', 0.55, 3.2]]
     .map(([u, species, scale, off]) => { const p = islandPath(u); return [Math.round((p.x + p.nx * off) * 10) / 10, Math.round((p.z + p.nz * off) * 10) / 10, species, scale]; }),
 ];
+
+// What stands on the way for visitors to read (zones/games/Notices.js): the board of what is new, a few steps
+// from the arrival; the booth of the sponsors, by the lane, where the mill comes into view; and the arcade
+// cabinet at the top of the ramp of the pier (in the frame of the pier), its board of scores across the walk.
+export const NOTICES = {
+  news: { x: -116.4, z: -51, yaw: -2.6 },
+  ads: { x: -113.8, z: -29.5, yaw: -Math.PI / 2 },
+  arcade: { along: 17.6, side: -6.7 },
+};
 
 // Where visitors arrive: on the lane, facing the mill (yaw is the camera heading).
 export const SPAWN = { x: -121.8, z: -60, yaw: 3.21 };

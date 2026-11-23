@@ -10,6 +10,7 @@ import { cosmeticMaterial } from '../../../player/Cosmetics.js';
 import { Booths } from './Booths.js';
 import { Race } from './Race.js';
 import { Wing } from './Wing.js';
+import { buildNotices } from './Notices.js';
 import { CLIMB, ACID, BOULDER, ISLAND, islandPath, islandAt, ISLAND_LENGTH, SEA_REACH, SHARK, PONDS } from '../../layout/layout.js';
 import { climbCourse, stoneDepth, formatTime } from './course.js';
 import { canvasBoard, drawScores, drawSponsor } from './Boards.js';
@@ -71,6 +72,7 @@ export class GamesZone {
     this.group.add(this.booths.group);
     this.race = new Race(this).build();
     this.wing = new Wing(this).build(); // the theatre of the plaza
+    this.notices = buildNotices(this); // what is new, who sponsors what, and the arcade cabinet of the pier
     this.group.updateMatrixWorld(true);
     return this;
   }
@@ -177,7 +179,7 @@ export class GamesZone {
     const board = canvasBoard(Math.round(1024 * pixels), Math.round(904 * pixels), (ctx) => { ctx.save(); ctx.scale(pixels, pixels); drawScores(ctx, 1024, 904, { title, sub, lists: state.lists, format, me: this.me }); ctx.restore(); }, width, 3.0 * k, { both: true });
     board.mesh.position.set(x, y + 0.75 + 1.5 * k, z);
     board.mesh.rotation.y = yaw;
-    const panel = canvasBoard(Math.round(1024 * pixels), Math.round(316 * pixels), (ctx) => { ctx.save(); ctx.scale(pixels, pixels); drawSponsor(ctx, 1024, 316, state.sponsor, { what, price: state.offer }); ctx.restore(); }, width, 1.05 * k, { both: true });
+    const panel = canvasBoard(Math.round(1024 * pixels), Math.round(316 * pixels), (ctx) => { ctx.save(); ctx.scale(pixels, pixels); drawSponsor(ctx, 1024, 316, state.sponsor, { what, price: state.offer, label: 'OUR AWESOME SPONSOR' }); ctx.restore(); }, width, 1.05 * k, { both: true });
     panel.mesh.position.set(x, y + 0.75 + 3.0 * k + 0.08 + 0.525 * k, z);
     panel.mesh.rotation.y = yaw;
     this.group.add(board.mesh, panel.mesh);
@@ -698,6 +700,7 @@ export class GamesZone {
       this.booths.update(dt, time, p, camera);
       this.wing.update(dt, time, p);
       this.race.update?.(p);
+      this.notices.update(p);
     }
     if (camera) this._cull(camera.position);
   }

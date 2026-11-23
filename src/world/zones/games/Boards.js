@@ -119,11 +119,16 @@ export function drawScores(ctx, w, h, { title, sub, lists, format, me }) {
   });
 }
 
+/** Is this colour (#rrggbb) a dark one? (what is written on it is then written in a light ink) */
+const dark = (hex) => { const n = parseInt(hex.slice(1), 16); return 0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255) < 140; };
+
 /**
  * A sponsor panel. `sponsor`: null (the panel is for hire) or { title, subtitle, logo: an image ready to be
- * drawn }. `what` says what is sponsored ("this game", "this gondola"…), `price` what it costs.
+ * drawn, bg: the colour behind it (#rrggbb, the administrator's choice; cream without) }. `what` says what
+ * is sponsored ("this game", "this gondola"…), `price` what it costs; `label`: a word written in a ribbon
+ * along the top of a panel that has a sponsor ("OUR AWESOME SPONSOR", over the board of a game).
  */
-export function drawSponsor(ctx, w, h, sponsor, { what = 'this game', price = '' } = {}) {
+export function drawSponsor(ctx, w, h, sponsor, { what = 'this game', price = '', label = '' } = {}) {
   ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
   if (!sponsor) {
     // for hire: fairground stripes, an invitation
@@ -139,16 +144,27 @@ export function drawSponsor(ctx, w, h, sponsor, { what = 'this game', price = ''
     ctx.fillText(shrink(ctx, `Sponsor ${what}${price ? ` · ${price}` : ''}`, w * 0.8, Math.round(h * 0.13), 600, SANS), w / 2, h * 0.7);
     return;
   }
-  ctx.fillStyle = '#fbf7ec'; ctx.fillRect(0, 0, w, h);
+  const bg = /^#[0-9a-f]{6}$/.test(sponsor.bg || '') ? sponsor.bg : '#fbf7ec', night = dark(bg);
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
   ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = Math.max(4, h * 0.03); ctx.strokeRect(4, 4, w - 8, h - 8);
+  // (over the board of a game: a ribbon along the top says whose panel this is)
+  const top = label ? h * 0.22 : 0, body = h - top;
+  if (label) {
+    const g = ctx.createLinearGradient(0, 0, 0, top);
+    g.addColorStop(0, '#8a1826'); g.addColorStop(1, '#5d0f1a');
+    ctx.fillStyle = g; ctx.fillRect(4, 4, w - 8, top);
+    ctx.fillStyle = '#f2c14e'; ctx.fillRect(4, top + 2, w - 8, Math.max(2, h * 0.012));
+    ctx.fillStyle = '#ffe9a6';
+    ctx.fillText(shrink(ctx, `★  ${label}  ★`, w * 0.86, Math.round(top * 0.62), 800, SANS), w / 2, 4 + top / 2 + 1);
+  }
   let x0 = w * 0.06;
   if (sponsor.logo) {
-    const s = h * 0.76, iw = sponsor.logo.width || 1, ih = sponsor.logo.height || 1, k = Math.min(s / iw, s / ih);
-    try { ctx.drawImage(sponsor.logo, x0 + (s - iw * k) / 2, (h - ih * k) / 2, iw * k, ih * k); } catch { /* a broken picture: the text alone */ }
+    const s = body * 0.76, iw = sponsor.logo.width || 1, ih = sponsor.logo.height || 1, k = Math.min(s / iw, s / ih);
+    try { ctx.drawImage(sponsor.logo, x0 + (s - iw * k) / 2, top + (body - ih * k) / 2, iw * k, ih * k); } catch { /* a broken picture: the text alone */ }
     x0 += s + w * 0.04;
   }
   const tw = w - x0 - w * 0.05, cx = x0 + tw / 2;
-  ctx.fillStyle = '#1c2a22';
-  ctx.fillText(shrink(ctx, sponsor.title || '', tw, Math.round(h * (sponsor.subtitle ? 0.3 : 0.38)), 700, SERIF), cx, h * (sponsor.subtitle ? 0.4 : 0.5));
-  if (sponsor.subtitle) { ctx.fillStyle = '#5b6b5f'; ctx.fillText(shrink(ctx, sponsor.subtitle, tw, Math.round(h * 0.15), 500, SANS), cx, h * 0.72); }
+  ctx.fillStyle = night ? '#fdf8ea' : '#1c2a22';
+  ctx.fillText(shrink(ctx, sponsor.title || '', tw, Math.round(body * (sponsor.subtitle ? 0.3 : 0.38)), 700, SERIF), cx, top + body * (sponsor.subtitle ? 0.4 : 0.5));
+  if (sponsor.subtitle) { ctx.fillStyle = night ? '#c9d2cb' : '#5b6b5f'; ctx.fillText(shrink(ctx, sponsor.subtitle, tw, Math.round(body * 0.15), 500, SANS), cx, top + body * 0.72); }
 }

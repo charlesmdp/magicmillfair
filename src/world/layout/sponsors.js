@@ -55,3 +55,7 @@ SPONSORS[31] = {
 
 /** The id of a village: given, or made from its name. */
 export const sponsorId = (s) => (s.id || s.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+// The plaques of the companions, round the plinth of the golden dog (zones/places/Plaques.js): how many there
+// are — two rows of thirty-six. (Here because the server counts them too: see server/catalog.js.)
+export const PLAQUE_COUNT = 72;

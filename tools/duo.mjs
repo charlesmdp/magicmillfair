@@ -118,12 +118,12 @@ try {
   check('Bob sees what Alice wears from the shop — her paint, her trail — and the firework she lights', !!kitSeen && kitSeen.kit === 17 && !!rocket && !!kitOff, JSON.stringify({ kitSeen, rocket, kitOff }));
   // her size, a hat of the second dozen, a seat on the ground: all of it reaches Bob (nothing is sold on this
   // server: everything is everybody's, the sizes of the Game Pass too)
-  await alice.page.evaluate(() => { const a = window.__mmf; a.hud.handlers.size(2); a.equip('hat:party', true); });
-  const big = await until(() => bob.page.evaluate(() => { const it = [...window.__mmf.avatars.items.values()][0]; return it && it.character.size > 2 && it.character.look.hat === 12 ? { size: it.character.size, hat: it.character.look.hat } : null; }), 20000);
+  await alice.page.evaluate(() => { const a = window.__mmf; a.hud.handlers.size(3); a.equip('hat:party', true); });
+  const big = await until(() => bob.page.evaluate(() => { const it = [...window.__mmf.avatars.items.values()][0]; return it && it.character.size > 1.15 && it.character.look.hat === 12 ? { size: it.character.size, hat: it.character.look.hat } : null; }), 20000);
   await alice.page.evaluate(() => { const a = window.__mmf; a.hud.handlers.size(0); a.equip('hat:party', false); a.hud.handlers.sit(); });
   const onGround = await until(() => bob.page.evaluate(() => { const it = [...window.__mmf.avatars.items.values()][0]; return it && it.peer.anim === 10 && it.character.size === 1 && it.character.look.hat === 0 ? { anim: it.peer.anim } : null; }), 20000);
   await alice.page.evaluate(() => { window.__mmf.player.cross = false; });
-  check('Bob sees Alice giant with a party hat on, then her usual size, sitting on the ground', !!big && !!onGround, JSON.stringify({ big, onGround }));
+  check('Bob sees Alice in the largest size with a party hat on, then her usual size, sitting on the ground', !!big && !!onGround, JSON.stringify({ big, onGround }));
   // a bouquet: Alice holds it out to Bob, who stands right by her — it is in his hands
   await bob.page.evaluate(() => { const a = window.__mmf, o = [...a.avatars.items.values()][0].peer; a.player.teleport(o.x + 1.2, o.z + 0.4, 0); });
   await alice.page.evaluate(() => { const a = window.__mmf; a.look.kinds = undefined; a.look.bouquet = true; });

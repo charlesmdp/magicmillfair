@@ -31,8 +31,13 @@
     //   ADMIN_KEY          the administrator's key: a long password of your own (`/admin <key>` in the chat)
     //   SCORE_SECRET       optional: signs the notes of the game runs (drawn and kept by the Worker otherwise)
     //   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET   open the shop (sk_test_… to try, sk_live_… to sell): see the README, "The shop"
+    //   STRIPE_PUBLISHABLE_KEY   optional (pk_test_… / pk_live_…): the payment form is then shown inside the game
     // https://<the site>/api/status tells which of them the Worker sees (true / false, never their value).
   },
+  // E-mails (optional: a code to set a new password, for accounts that gave an address). Once the domain is
+  // onboarded to Cloudflare's Email Service (Workers Paid), add here
+  //   "send_email": [{ "name": "EMAIL" }],
+  // and a variable MAIL_FROM (an address of that domain) in "vars". See the README: "E-mails".
   "observability": { "enabled": true },
   // No usage statistics sent to Cloudflare by the tool itself.
   "send_metrics": false

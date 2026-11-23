@@ -100,7 +100,7 @@ export class ShopView {
     b.append(el('span', 'shine'), wide ? this._picture(it.id, 420, 264) : this._picture(it.id, 300, 375));
     if (wide && it.pitch) { const pitch = el('span', 'pitch'); for (const line of it.pitch) pitch.append(el('i', '', line)); b.append(pitch); }
     const foot = el('span', 'foot');
-    foot.append(el('b', '', it.name), el('i', `price${it.owned || it.lent ? ' has' : ''}`, it.worn ? 'Equipped' : it.owned ? (it.group === 'pass' ? 'Active' : 'Owned') : it.lent === 'pass' ? 'With your pass' : it.lent === 'trial' ? 'Free today' : it.cost));
+    foot.append(el('b', '', it.name), el('i', `price${it.owned || it.lent ? ' has' : ''}`, it.lent === 'trial' ? 'Free today' : it.worn ? 'Equipped' : it.owned ? (it.group === 'pass' ? 'Active' : 'Owned') : it.lent === 'pass' ? 'With your pass' : it.cost));
     b.append(el('small', 'rar', RARITY[it.rarity] || ''), foot);
     b.onclick = () => this._pick(it.id);
     return b;

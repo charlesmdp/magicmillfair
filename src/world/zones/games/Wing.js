@@ -1,8 +1,13 @@
-// Wing It: a little theatre on the plaza at the foot of the pier. One flies on the spot, a pair of cardboard
-// wings on the back, while the scenery goes by on the stage: clouds, hills, waves that rock, and candy-striped
-// columns hanging from the flies and standing on the stage, with a gap between them to fly through. A flap
-// (a click, a tap, the space bar) throws the flyer up; the rest of the time one falls. Every pair of columns
-// passed is a point; touch one, or the waves, and the flight is over.
+// Flappy Robot: a little theatre on the plaza at the foot of the pier. One flies on the spot, a pair of
+// cardboard wings on the back, while the scenery goes by on the stage: clouds, hills, waves that rock, and
+// candy-striped columns hanging from the flies and standing on the stage, with a gap between them to fly
+// through. A flap (a click, a tap, the space bar) throws the flyer up; the rest of the time one falls. Every
+// pair of columns passed is a point; touch one, or the waves, and the flight is over.
+//
+// What can be touched is plain to see: the flyer is made small for the flight and flies inside a ring of
+// light — the ring is exactly what must not touch anything —, the sea is one line of foam in the very plane
+// one flies in (nothing rocks in front of the flyer), and the picture is framed to the screen: the whole
+// stage on a wide one; on a tall one, the flyer and what comes at it.
 //
 // The theatre is static and merged with the rest of the fair; what moves — the two painted cloths that scroll,
 // the rows of waves, the columns — is a handful of meshes shown only to those who are near.
@@ -18,7 +23,9 @@ const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const HALF = WING.width / 2, FLOOR = 0.7, TOP = FLOOR + WING.height, ROOF = TOP + 2.5, DEPTH = 3.5, WALL = 0.5;
 const PLANE = -1.05, FLYER = -2.4; // how deep one flies, and where across the stage
 const COLUMN = { r: 0.42, lip: 0.56, length: 3.0, apart: 5.2, from: HALF - 0.55, count: 3 };
-const GRAVITY = 15, FLAP = 5.5, BODY = 0.46, WAVES = FLOOR + 0.5, CEILING = TOP - 0.25;
+const GRAVITY = 15, FLAP = 5.5, BODY = 0.4, WAVES = FLOOR + 0.44, CEILING = TOP - 0.25; // (BODY: the ring round the flyer; WAVES: the line of foam)
+/** How large the flyer is made for the flight (the ring is then about as large as it is). */
+export const FLYER_SCALE = 0.5;
 const RED = [0.8, 0.1, 0.1], CREAM = [1.3, 1.24, 1.08], GOLD = [1.5, 1.05, 0.25], NAVY = [0.07, 0.12, 0.32];
 /** How fast the scenery goes by, and how wide the gap is, after `n` pairs of columns. */
 const speedAt = (n) => Math.min(6.2, 3.6 + n * 0.075), gapAt = (n) => Math.max(1.8, 2.45 - n * 0.02);
@@ -173,9 +180,10 @@ export class Wing {
         ctx.fillStyle = '#f3ead6'; ctx.fillRect(676, 140, 16, 40); ctx.strokeStyle = '#7a3b22'; ctx.lineWidth = 5; for (let i = 0; i < 4; i++) { const a = 0.5 + (i * Math.PI) / 2; ctx.beginPath(); ctx.moveTo(684, 142); ctx.lineTo(684 + Math.cos(a) * 34, 142 + Math.sin(a) * 34); ctx.stroke(); }
       });
     }, true), 0.75);
-    // the waves: scalloped strips, white behind blue, one row before the flyer, two behind
-    const paintMat = this.world.materials.paint;
-    this.waves = [[0.42, [0.06, 0.26, 0.62], 0.1], [-0.35, [0.1, 0.4, 0.78], 0.3], [-1.75, [0.2, 0.55, 0.9], 0.55]].map(([z, tone, up], k) => {
+    // the waves: scalloped strips, white behind blue — all of them behind the flyer, and none higher than the
+    // first, whose foam is the line that must not be touched (WAVES)
+    const paintMat = this.world.materials.paint, CREST = 0.46 * 0.62 + 0.07;
+    this.waves = [[PLANE - 0.05, [0.06, 0.26, 0.62], WAVES - CREST - FLOOR], [PLANE - 0.5, [0.1, 0.4, 0.78], WAVES - CREST - FLOOR - 0.04], [PLANE - 1.0, [0.2, 0.55, 0.9], WAVES - CREST - FLOOR - 0.08]].map(([z, tone, up], k) => {
       const b = new Parts().get('paint'), step = 0.8, r = 0.46;
       for (const [dz, dy, t] of [[-0.02, 0.07, [1.5, 1.5, 1.45]], [0, 0, tone]]) {
         b.tint(t[0], t[1], t[2], 1);
@@ -210,6 +218,11 @@ export class Wing {
     const bp = at(HALF + WALL + 2.6, 0, 1.3);
     this.board = zone.scoreStand(this.id, bp.x, bp.z, yaw - 0.5, { title: `${WING.name.toUpperCase()} — BEST FLIGHTS`, sub: 'columns flown past in one flight', format: (n) => `${n}`, width: 3.0, pixels: 0.85 });
     this.view = { pos: at(0.4, FLOOR + 2.5, 11.6), look: at(0.2, FLOOR + 2.55, 0), fov: 44 };
+    // the ring of light round the flyer: what must not touch a column, nor the foam
+    this.ring = new THREE.Mesh(new THREE.RingGeometry(BODY - 0.035, BODY, 40), new THREE.MeshBasicMaterial({ color: 0xfff3b0, transparent: true, opacity: 0.9, depthTest: false, toneMapped: false }));
+    this.ring.renderOrder = 30;
+    this.ring.visible = false;
+    dyn.add(this.ring);
     return this;
   }
 
@@ -266,7 +279,7 @@ export class Wing {
     let lastY = S.y;
     const rnd = () => { S.seed = (S.seed * 1664525 + 1013904223) | 0; return (S.seed >>> 8) / 16777216; };
     const next = () => {
-      const gap = gapAt(S.score + 2), lo = WAVES + 0.35 + gap / 2, hi = CEILING - 0.3 - gap / 2;
+      const gap = gapAt(S.score + 2), lo = WAVES + 0.41 + gap / 2, hi = CEILING - 0.3 - gap / 2;
       lastY = clamp(lastY + (rnd() * 2 - 1) * 1.9, lo, hi);
       return { y: lastY, gap };
     };
@@ -274,9 +287,22 @@ export class Wing {
     this.pairs.forEach((p, k) => Object.assign(p, next(), { x: COLUMN.from + 3.5 + k * COLUMN.apart, passed: false }));
     this._place();
     const pos = new THREE.Vector3(), heading = this.yaw + Math.PI / 2; // (one flies towards the right of the stage)
+    const off = new THREE.Vector3(0, 0.95 * FLYER_SCALE, 0), _p = new THREE.Vector3(), _q = new THREE.Vector3(); // from the feet of the flyer to its middle
     const session = {
       booth: { id: this.id, name: WING.name, unit: 'columns' }, view: this.view, firstPerson: false, crosshair: false, over: false, score: 0, gauge: null,
       line: `${WING.name} · flap to take off`, state: S,
+      /** The picture, framed to a screen `aspect` times as wide as it is high: the whole stage if it fits, else the flyer and what comes at it. */
+      viewAt: (aspect) => {
+        const view = this.view, high = WING.height + 1.3, wide = high * aspect, D = 10.5, cy = FLOOR + WING.height / 2 + 0.05;
+        let cx = 0, H = high;
+        if (wide < WING.width + 0.4) {
+          const across = Math.max(wide, 7.6); // (a tall screen: seven and a half metres across, however much sky that shows)
+          H = across / aspect;
+          cx = clamp(FLYER - 1.4 + across / 2, -HALF - 0.2 + across / 2, Math.max(-HALF - 0.2 + across / 2, HALF + 0.2 - across / 2));
+        }
+        view.pos.copy(this.at(cx, cy, PLANE + D)); view.look.copy(this.at(cx, cy, PLANE)); view.fov = (2 * Math.atan(H / (2 * D)) * 180) / Math.PI;
+        return view;
+      },
       step: (dt, time, aim) => {
         if (session.over) return;
         S.t += dt;
@@ -296,10 +322,10 @@ export class Wing {
         S.vy -= GRAVITY * dt; S.y += S.vy * dt;
         if (S.y > CEILING - BODY) { S.y = CEILING - BODY; S.vy = Math.min(S.vy, 0); } // (the pelmet: one bumps one's head, no more)
         this._scroll(speedAt(S.score) * dt, next);
-        let hit = S.y - BODY < WAVES - 0.12;
+        let hit = S.y - BODY < WAVES;
         for (const p of this.pairs) {
           const dx = p.x - FLYER;
-          if (Math.abs(dx) < COLUMN.lip + BODY * 0.8 && (S.y - BODY * 0.85 < p.y - p.gap / 2 || S.y + BODY * 0.85 > p.y + p.gap / 2)) hit = true;
+          if (Math.abs(dx) < COLUMN.lip + BODY * 0.9 && (S.y - BODY < p.y - p.gap / 2 || S.y + BODY > p.y + p.gap / 2)) hit = true;
           if (!p.passed && dx < -COLUMN.lip) { p.passed = true; S.score++; session.score = S.score; io.play('coin', { volume: 0.6 }); }
         }
         if (hit) {
@@ -314,8 +340,14 @@ export class Wing {
       driver: {
         anim: ANIM.swim, riding: false,
         step: (dt, pl) => {
-          pos.copy(this.at(FLYER, S.y - 0.95, PLANE));
+          // (the middle of the flyer — between its head and its waist — is kept in the middle of the ring: the
+          // pose swings the body about its feet, so where the feet go is worked out from where the body was)
+          const bones = pl.character.bones, waist = bones && (bones.Abdomen || bones.Torso || bones.Body);
+          if (bones?.Head && waist) { bones.Head.getWorldPosition(_p); waist.getWorldPosition(_q); _p.add(_q).multiplyScalar(0.5).sub(pl.pos); if (_p.length() < 2) off.lerp(_p, 0.35); }
+          pos.copy(this.at(FLYER, S.y, PLANE)).sub(off);
           pl.pos.copy(pos);
+          this.ring.visible = !S.fallen;
+          this.ring.position.set(FLYER, S.y, PLANE + 0.4);
           pl.yaw = heading;
           // (nose up on a flap, nose down in the fall; tumbling once hit)
           pl.pitch = S.fallen ? pl.pitch + dt * 9 : clamp(-S.vy * 0.07, -0.5, 0.6) - 0.25;
@@ -327,6 +359,7 @@ export class Wing {
       },
       close: () => {
         if (this.session === session) this.session = null;
+        this.ring.visible = false;
         player.pitch = 0; player.roll = 0;
         // the stage goes back to idling: the columns where they were left drift on
         this.pairs.forEach((p) => { p.passed = true; });
@@ -341,7 +374,7 @@ export class Wing {
     const d2 = (pos.x - WING.x) ** 2 + (pos.z - WING.z) ** 2;
     this.dyn.visible = d2 < 110 * 110;
     if (!this.dyn.visible) return;
-    this.waves.forEach((m, k) => { m.position.x = Math.sin(time * (1.1 + k * 0.23) + k * 2.1) * 0.34; m.position.y = Math.sin(time * 1.9 + k) * 0.035; });
+    this.waves.forEach((m, k) => { m.position.x = Math.sin(time * (1.1 + k * 0.23) + k * 2.1) * 0.34; m.position.y = k ? Math.sin(time * 1.9 + k) * 0.03 - 0.03 : 0; }); // (the first row slides, and does not rise: it is the line)
     if (this.session || d2 > 60 * 60) return;
     this._idle = this._idle || { y: FLOOR + WING.height * 0.5, k: 0 };
     const I = this._idle;

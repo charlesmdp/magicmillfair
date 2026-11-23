@@ -94,6 +94,9 @@ html, body {
 .gate-banner em { font-style: normal; color: #ffe14d; text-shadow: 0 2px 0 #5a0715, 0 0 16px rgba(150, 255, 90, 0.75); }
 .gate-banner svg { flex: none; width: clamp(15px, 3.2vw, 38px); height: clamp(15px, 3.2vw, 38px); animation: spin 12s linear infinite; }
 .splash.done .gate-banner { display: none; }
+/* (the banner belongs to the gate: it is not hung over the story that opens the page) */
+.splash:not(.told) .gate-banner { opacity: 0; animation: none; }
+.splash.told .gate-banner { transition: opacity 0.9s ease 0.3s; }
 @media (max-height: 560px) { .gate-banner { display: none; } }
 @media (prefers-reduced-motion: reduce) { .gate-banner, .gate-banner svg { animation: none; } }
 /* the booth: a dark panel under a striped awning */
@@ -180,7 +183,7 @@ html, body {
 .swatches button.extra:not(.locked) { width: 86%; }
 .swatches button.locked { opacity: 0.55; cursor: not-allowed; }
 .swatches button.locked svg { display: block; }
-.sizes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.sizes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
 .sizes button { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 4px; border-radius: 9px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.07); font-size: 13px; }
 .sizes button svg { width: 13px; height: 13px; }
 .sizes button[aria-pressed='true'] { background: var(--accent); color: #2a1d05; border-color: transparent; font-weight: 700; }
@@ -230,6 +233,90 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border-radius: 
 /* a list to choose from (the sky villages) */
 .chooser { position: absolute; inset: 0; display: none; place-items: center; grid-template-rows: minmax(0, 1fr); background: rgba(8, 14, 10, 0.6); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 16; padding: 12px; }
 .chooser.on { display: grid; }
+/* paying without leaving the game: Stripe's form on a card (ui/PayView.js) */
+#ui .pay { position: absolute; inset: 0; display: none; place-items: center; grid-template-rows: minmax(0, 1fr); background: rgba(8, 10, 22, 0.72); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); z-index: 19; padding: 10px; pointer-events: auto; }
+#ui .pay.on { display: grid; }
+#ui .pay .sheet { display: flex; flex-direction: column; width: min(1040px, 100%); max-height: 100%; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 22px 70px rgba(0, 0, 0, 0.6); }
+#ui .pay .pay-bar { flex: none; display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 18px; background: linear-gradient(180deg, #1b1840, #141230); color: #ffe9a6; }
+#ui .pay .pay-what { font: 600 17px/1.2 Georgia, 'Times New Roman', serif; }
+#ui .pay .pay-mode { flex: 1; font: 600 12px/1.2 system-ui, sans-serif; color: #f2c14e; }
+#ui .pay .pay-x { flex: none; width: 34px; height: 34px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.1); color: #f3ecd9; font-size: 22px; line-height: 1; cursor: pointer; }
+#ui .pay .pay-x:hover { background: rgba(255, 255, 255, 0.2); }
+#ui .pay .pay-form { flex: 1; min-height: 240px; overflow-y: auto; -webkit-overflow-scrolling: touch; background: #fff; }
+#ui .pay .pay-note { flex: none; margin: 0; padding: 7px 12px; font: 500 11.5px/1.3 system-ui, sans-serif; color: #5b5870; text-align: center; background: #f4f2fb; }
+/* the account, on a card of its own (ui/AccountView.js) */
+#ui .account { position: absolute; inset: 0; display: none; place-items: center; grid-template-rows: minmax(0, 1fr); background: rgba(8, 10, 22, 0.66); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); z-index: 19; padding: 12px; pointer-events: auto; overflow-y: auto; }
+#ui .account.on { display: grid; }
+#ui .account .sheet { position: relative; width: min(440px, 100%); margin: auto; background: linear-gradient(180deg, #1b1840, #141230); border: 1px solid rgba(242, 193, 78, 0.45); border-radius: 20px; padding: 22px 22px 16px; box-shadow: 0 22px 70px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.06); color: #f3ecd9; }
+#ui .account .x { position: absolute; top: 10px; right: 12px; width: 34px; height: 34px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.08); color: #f3ecd9; font-size: 22px; line-height: 1; cursor: pointer; }
+#ui .account .x:hover { background: rgba(255, 255, 255, 0.18); }
+#ui .account .head { display: flex; align-items: center; gap: 14px; padding-right: 34px; }
+#ui .account .badge { flex: none; width: 52px; height: 52px; border-radius: 50%; background: radial-gradient(circle at 50% 50%, #1b1340 0 17%, transparent 18%), conic-gradient(from -30deg, #1b1340 0 60deg, #f2c14e 60deg 120deg, #1b1340 120deg 180deg, #f2c14e 180deg 240deg, #1b1340 240deg 300deg, #f2c14e 300deg 360deg); border: 3px solid #f2c14e; box-shadow: 0 0 18px rgba(242, 193, 78, 0.35); }
+#ui .account h2 { margin: 0; font: 600 25px/1.1 Georgia, 'Times New Roman', serif; color: #ffe9a6; }
+#ui .account .lead { margin: 4px 0 0; font-size: 13.5px; color: #cfc7e6; }
+#ui .account .perks { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 12px; padding: 0; list-style: none; }
+#ui .account .perks li { padding: 4px 10px 4px 8px; border-radius: 999px; background: rgba(125, 255, 90, 0.1); border: 1px solid rgba(125, 255, 90, 0.3); font-size: 12px; color: #d6ffc4; }
+#ui .account .perks li::before { content: '✓ '; font-weight: 700; }
+#ui .account .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 12px; background: rgba(0, 0, 0, 0.3); margin-bottom: 14px; }
+#ui .account .tabs button { padding: 9px 6px; border-radius: 9px; border: 0; background: transparent; color: #cfc7e6; font: 600 14px/1 system-ui, sans-serif; cursor: pointer; }
+#ui .account .tabs button.on { background: #f2c14e; color: #2a1d05; }
+#ui .account .sheet[data-mode='reset'] .tabs { display: none; }
+#ui .account .card-title { margin: 0 0 10px; font: 600 18px/1.2 Georgia, 'Times New Roman', serif; color: #ffe9a6; }
+#ui .account .card-title:empty { display: none; }
+#ui .account form { display: grid; gap: 11px; }
+#ui .account .f { display: grid; gap: 4px; font-size: 12.5px; color: #cfc7e6; }
+#ui .account .f > span:first-child { font-weight: 600; letter-spacing: 0.02em; }
+#ui .account .f em { font-style: normal; opacity: 0.7; font-weight: 400; }
+#ui .account .f input { width: 100%; box-sizing: border-box; padding: 11px 12px; border-radius: 11px; border: 1.5px solid rgba(255, 255, 255, 0.16); background: rgba(0, 0, 0, 0.32); color: #fff; font: 500 16px/1.2 system-ui, sans-serif; outline: none; }
+#ui .account .f input:focus { border-color: #f2c14e; box-shadow: 0 0 0 3px rgba(242, 193, 78, 0.2); }
+#ui .account .f.bad input { border-color: #ff7a66; }
+#ui .account .f.good input { border-color: rgba(125, 255, 90, 0.6); }
+#ui .account .f small { min-height: 15px; font-size: 11.5px; color: #a79fc4; }
+#ui .account .f.bad small { color: #ff9a86; }
+#ui .account .f.good small { color: #a8f08f; }
+#ui .account .pw { position: relative; display: block; }
+#ui .account .pw input { padding-right: 64px; }
+#ui .account .eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); padding: 6px 9px; border-radius: 8px; border: 0; background: rgba(255, 255, 255, 0.1); color: #f3ecd9; font: 600 12px/1 system-ui, sans-serif; cursor: pointer; }
+#ui .account .meter { display: none; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+#ui .account .meter b { display: block; height: 100%; width: 0; border-radius: 3px; transition: width 0.2s, background 0.2s; }
+#ui .account .meter[data-level='0'], #ui .account .meter[data-level='1'], #ui .account .meter[data-level='2'], #ui .account .meter[data-level='3'], #ui .account .meter[data-level='4'] { display: block; }
+#ui .account .meter[data-level='0'] b { width: 12%; background: #ff7a66; }
+#ui .account .meter[data-level='1'] b { width: 40%; background: #f2c14e; }
+#ui .account .meter[data-level='2'] b { width: 62%; background: #c8e05a; }
+#ui .account .meter[data-level='3'] b { width: 82%; background: #8be28f; }
+#ui .account .meter[data-level='4'] b { width: 100%; background: #5fe08a; }
+#ui .account .f-code, #ui .account .f-again, #ui .account .f-email { display: none; }
+#ui .account .sheet[data-mode='reset'] .f-code, #ui .account .sheet[data-mode='create'] .f-again, #ui .account .sheet[data-mode='create'].has-mail .f-email { display: grid; }
+#ui .account .error { min-height: 18px; margin: 0; font-size: 13px; color: #ff9a86; }
+#ui .account .error.good { color: #a8f08f; }
+#ui .account .error:empty { display: none; }
+#ui .account .submit { padding: 13px 14px; border-radius: 12px; border: 0; background: linear-gradient(180deg, #ffd666, #f2b53a); color: #2a1d05; font: 800 15px/1 system-ui, sans-serif; letter-spacing: 0.03em; cursor: pointer; box-shadow: 0 6px 18px rgba(242, 181, 58, 0.3); }
+#ui .account .submit:hover { filter: brightness(1.06); }
+#ui .account .submit:disabled { opacity: 0.6; cursor: progress; }
+#ui .account .links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 14px; margin: 0; }
+#ui .account .link { padding: 2px 0; border: 0; background: none; color: #ffe9a6; font: 500 13px/1.2 system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+#ui .account .link.mailcode, #ui .account .link.back { display: none; }
+#ui .account .sheet[data-mode='reset'] .link.forgot, #ui .account .sheet[data-mode='create'] .link.forgot { display: none; }
+#ui .account .sheet[data-mode='reset'] .link.back { display: inline; }
+#ui .account .sheet[data-mode='reset'].has-mail .link.mailcode { display: inline; }
+#ui .account .done { display: none; text-align: center; }
+#ui .account .done h3 { margin: 6px 0 8px; font: 600 22px/1.2 Georgia, 'Times New Roman', serif; color: #ffe9a6; }
+#ui .account .done .why { margin: 0 0 14px; font-size: 13.5px; color: #cfc7e6; }
+#ui .account .done code { display: block; padding: 14px 10px; border-radius: 12px; border: 1.5px dashed rgba(242, 193, 78, 0.7); background: rgba(0, 0, 0, 0.35); font: 700 22px/1.2 'Courier New', monospace; letter-spacing: 0.08em; color: #ffe9a6; user-select: all; -webkit-user-select: all; }
+#ui .account .done-row { display: grid; grid-template-columns: auto 1fr; gap: 8px; margin-top: 14px; }
+#ui .account .done button { padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.08); color: #f3ecd9; font: 700 14px/1 system-ui, sans-serif; cursor: pointer; }
+#ui .account .done .ok { border: 0; background: linear-gradient(180deg, #ffd666, #f2b53a); color: #2a1d05; }
+#ui .account .sheet.is-done form, #ui .account .sheet.is-done .tabs, #ui .account .sheet.is-done .perks { display: none; }
+#ui .account .sheet.is-done .done { display: block; }
+#ui .account .small { margin: 14px 0 0; font-size: 11.5px; line-height: 1.45; color: #9c95b8; text-align: center; }
+@media (max-height: 700px) { #ui .account .perks, #ui .account .small { display: none; } #ui .account .sheet { padding: 16px 18px 12px; } }
+/* the arcade cabinet: its screen, laid over the game while one plays (ui/Arcade.js) */
+.arcade { position: absolute; inset: 0; display: none; place-items: center; background: rgba(10, 6, 16, 0.82); z-index: 15; padding: 10px; pointer-events: auto; touch-action: none; }
+.arcade.on { display: grid; }
+.arcade .bezel { display: grid; justify-items: center; gap: 8px; padding: 12px 14px 10px; border-radius: 18px; background: linear-gradient(#3a1d52, #1d0f2c); border: 3px solid #f2c14e; box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6), inset 0 0 0 4px rgba(0, 0, 0, 0.35); }
+.arcade .marquee { font: 900 clamp(15px, 2.6vw, 24px)/1 'Courier New', monospace; letter-spacing: 0.16em; color: #ff5a48; text-shadow: 0 0 12px rgba(255, 90, 72, 0.7); }
+.arcade canvas { display: block; width: min(92vw, calc(72vh * 16 / 9), 960px); height: auto; aspect-ratio: 16 / 9; image-rendering: pixelated; border-radius: 8px; border: 3px solid #0c0812; background: #1a1020; }
+.arcade .keys { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 18px; font: 700 11.5px/1.2 system-ui, sans-serif; color: #e6d6f2; }
 .roster { position: absolute; inset: 0; display: none; place-items: center; background: rgba(8, 14, 10, 0.6); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 16; padding: 12px; }
 .roster.on { display: grid; }
 .roster .sheet { width: min(720px, 100%); max-height: min(86vh, 86dvh); min-height: 0; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 18px 18px 14px; box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5); }

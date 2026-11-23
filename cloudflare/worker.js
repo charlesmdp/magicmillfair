@@ -117,7 +117,10 @@ export class Room extends DurableObject {
     const ctx = (this.apiCtx ||= {
       limiter, now: () => Date.now(),
       store, stripe,
-      flags: { npc: !!env.ANTHROPIC_API_KEY, admin: !!env.ADMIN_KEY, shop: stripe.mode || 'off' },
+      // e-mails leave through Cloudflare's Email Service, where the Worker has its binding (EMAIL) and an
+      // address to write from (MAIL_FROM, of a domain onboarded there): see server/mail.js
+      mail: env.EMAIL && env.MAIL_FROM ? (m) => env.EMAIL.send({ from: String(env.MAIL_FROM), to: m.to, subject: m.subject, text: m.text, html: m.html }) : null,
+      flags: { npc: !!env.ANTHROPIC_API_KEY, admin: !!env.ADMIN_KEY, shop: stripe.mode || 'off', mail: !!(env.EMAIL && env.MAIL_FROM) },
       // the secret that signs the notes of the runs: given, or drawn once and kept here
       secret: async () => {
         if (!this.signing) {

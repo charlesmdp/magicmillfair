@@ -5,17 +5,20 @@ import { Input } from './core/Input.js';
 import { isMobile, TIERS } from './core/Quality.js';
 import { World } from './world/World.js';
 import { FreeCamera } from './player/FreeCamera.js';
-import { CharacterFactory, EMOTE_LIST, emoteIndex, packLook } from './player/Character.js';
+import { CharacterFactory, EMOTE_LIST, AVATAR_COLORS, emoteIndex, packLook } from './player/Character.js';
 import { HATS } from './player/Cosmetics.js';
-import { ITEMS, PAINTS, TRAILS, itemOf, packKit, PASS, SIZES, SIZE_SCALE, FREE_COLORS } from '../server/items.js';
+import { ITEMS, PAINTS, TRAILS, itemOf, packKit, PASS, SIZES, SIZE, SIZE_SCALE, sizeOf, FREE_COLORS } from '../server/items.js';
 import { BOARDS as GAME_NAMES } from '../server/catalog.js';
 import { drawSponsor } from './world/zones/games/Boards.js';
 import { ShopView } from './ui/ShopView.js';
+import { Arcade } from './ui/Arcade.js';
+import { AccountView } from './ui/AccountView.js';
+import { PayView } from './ui/PayView.js';
 import { Previewer } from './ui/Preview.js';
 import { Sparks } from './world/effects/Sparks.js';
 import { Account } from './net/Account.js';
-import { Shop, price, logoData, loadImage } from './net/Shop.js';
-import { PlayerController, JET } from './player/PlayerController.js';
+import { Shop, price, logoData, loadImage, ownDraft } from './net/Shop.js';
+import { PlayerController, JET, JET_LITE } from './player/PlayerController.js';
 import { CameraRig } from './player/CameraRig.js';
 import { Interact } from './player/Interact.js';
 import { RankEmotes, rankPicture } from './player/RankEmotes.js';
@@ -28,9 +31,9 @@ import { callApi, checkAdminKey, hasApi, sharedNow } from './net/api.js';
 import { formatTime } from './world/zones/games/course.js';
 import { RemoteAvatars } from './net/RemoteAvatars.js';
 import { Benchmark } from './app/Benchmark.js';
-import { SPAWN, ZONES, CLIMB, RACE, WING, TRACK } from './world/layout/layout.js';
+import { SPAWN, ZONES, CLIMB, RACE, WING, TRACK, PIER } from './world/layout/layout.js';
 import { VILLAGE_PERKS, VILLAGE_PITCH, money } from './world/layout/sponsors.js';
-import { FEATURES } from './app/config.js';
+import { FEATURES, skyGateOpen } from './app/config.js';
 import { Soundscape } from './audio/Soundscape.js';
 import { Blast } from './world/effects/Blast.js';
 import { BLAST_EVERY } from '../server/protocol.js';
@@ -53,6 +56,9 @@ window.__mmf = app;
 const input = new Input(canvas);
 input.enabled = false;
 const hud = new Hud(ui, { input, isTouch: touch });
+const arcade = new Arcade(ui); // (the screen of the cabinet of the pier: shown while one plays)
+const accountView = new AccountView(ui); // (the card of the account: signing in, making one)
+const payView = new PayView(ui); // (the payment form, when it can be shown inside the game)
 if (SHOT && !params.has('ui')) ui.style.display = 'none';
 
 // The view the welcome screen floats over: a slow arc above the mill and its pond.
@@ -69,6 +75,8 @@ async function boot() {
   const world = new World(engine);
   const camera = engine.camera, scene = engine.scene, data = world.data;
   Object.assign(app, { engine, world, input, hud });
+  // (the places that have a name — the Sky Gate has none while it is not there)
+  const PLACES = ZONES.filter((z) => !(z.id === 'skygate' && !skyGateOpen()));
   canvas.addEventListener('webglcontextlost', (e) => {
     e.preventDefault();
     hud.note('The graphics context was lost. Reload the page (the “Light” quality is advised).', 1e8);
@@ -97,8 +105,8 @@ async function boot() {
   const floorAt = (x, z) => Math.max(data.heightAt(x, z), data.waterAt(x, z));
   let color = parseInt(store.get('mmf.color'), 10);
   if (!(color >= 0 && color < 32)) color = Math.floor(Math.random() * 16);
-  // (tiny, giant: the choice of who holds the Game Pass; 0 is the usual size)
-  let size = Math.max(0, SIZES.indexOf(store.get('mmf.size') || 'normal'));
+  // (the size of the robot: the choice of who holds the Game Pass; 0 is everybody's)
+  let size = Math.max(0, SIZES.indexOf(sizeOf(store.get('mmf.size'))));
   let disguise = 0; // a bush (1), a tree (2): a secret word of the chat
   let name = (store.get('mmf.name') || '').trim() || `Visitor ${10 + Math.floor(Math.random() * 90)}`;
   const me = factory.create(color);
@@ -136,8 +144,15 @@ async function boot() {
   const who = { admin: false, owner: false, key: '', days: 1 };
   app.who = who;
   // no jetpack underground, nor where a game forbids it
-  // (two jetpacks: the real one, and a light one with a third of the tank)
-  player.canFly = (p) => (shop.owns('jetpack') || shop.owns('jetlite')) && !player.cave && !world.noFly.some((z) => (p.x - z.x) ** 2 + (p.z - z.z) ** 2 < z.r * z.r);
+  // (two jetpacks: the real one, and a light one with a small tank that needs its breath between two goes.
+  // Who has both chooses the one that is on — in the item shop —, and may wear none)
+  const jetOn = () => {
+    const real = shop.owns('jetpack'), lite = shop.owns('jetlite'), want = store.get('mmf.jet');
+    if (want === 'none') return null;
+    return want === 'jetlite' && lite ? 'jetlite' : want === 'jetpack' && real ? 'jetpack' : real ? 'jetpack' : lite ? 'jetlite' : null;
+  };
+  const fitJet = () => { const on = jetOn(); player.tank = on === 'jetpack' ? JET.time : JET_LITE.time; player.jetEvery = on === 'jetlite' ? JET_LITE.every : 0; if (on !== 'jetlite') player.jetCool = 0; if (player.fuel > player.tank) player.fuel = player.tank; };
+  player.canFly = (p) => !!jetOn() && !player.cave && !world.noFly.some((z) => (p.x - z.x) ** 2 + (p.z - z.z) ** 2 < z.r * z.r);
   player.onDeath = (cause) => { hud.wasted(cause); audio.play('wasted'); };
   player.onRespawn = () => { hud.wasted(null); rig.snap(player.pos, rig.yaw); audio.play('respawn'); };
   const rank = new RankEmotes(scene);
@@ -227,7 +242,7 @@ async function boot() {
   // ---------- who is here (and, for the administrator, where from; putting out, keeping out)
   const roster = { details: null, bans: null, admins: null, visitors: null, now: 0 };
   const showRoster = () => {
-    const p = player.pos, zoneOf = (x, z) => { let best = null, bd = 1; for (const zn of ZONES) { if (zn.hidden) continue; const d = Math.hypot(x - zn.x, z - zn.z) / zn.r; if (d < bd) { bd = d; best = zn; } } return best ? best.name : ''; };
+    const p = player.pos, zoneOf = (x, z) => { let best = null, bd = 1; for (const zn of PLACES) { if (zn.hidden) continue; const d = Math.hypot(x - zn.x, z - zn.z) / zn.r; if (d < bd) { bd = d; best = zn; } } return best ? best.name : ''; };
     const people = [{ id: presence?.id || 0, name, color, me: true, where: zoneOf(p.x, p.z) }];
     if (presence) {
       for (const o of [...presence.peers.values()].sort((a, b) => a.name.localeCompare(b.name))) {
@@ -366,6 +381,7 @@ async function boot() {
   // one of them is being played (`fair.session`), it has the pointer, the camera and the clock of the screen.
   const fair = { boards: { race: new Scores('race'), wing: new Scores('wing') }, session: null, kind: null, fov: null, after: 0, stands: { race: world.games.race.board, wing: world.games.wing.board }, tops: {} };
   for (const b of world.games.booths.list) { fair.boards[b.id] = new Scores(b.id); fair.stands[b.id] = b.board; }
+  fair.boards.run = new Scores('run'); fair.stands.run = world.games.notices.arcade.board; // (the arcade cabinet)
   Scores.every().then((all) => { fair.tops = all; world.games.setScores(lists(all.sky)); for (const id in fair.stands) fair.stands[id].setScores(all[id]); });
   const _aim = { origin: new THREE.Vector3(), dir: new THREE.Vector3(), clicks: 0, down: false };
   const fairIo = {
@@ -393,8 +409,8 @@ async function boot() {
     startBlend(0.5);
   };
   // ---------- the boards, live: when somebody in the room finishes a game, their score is fetched and shown
-  const GAMES = { sky: [CLIMB.name, formatTime], race: [RACE.name, formatTime], wing: [WING.name, (n) => `${n} column${n === 1 ? '' : 's'}`] };
-  for (const b of world.games.booths.list) GAMES[b.id] = [b.name, (points) => `${points.toLocaleString('en-US')} points`];
+  const GAMES = { sky: [CLIMB.name, formatTime], race: [RACE.name, formatTime], wing: [WING.name, (n) => `${n} column${n === 1 ? '' : 's'}`], run: [GAME_NAMES.run, (m) => `${m.toLocaleString('en-US')} m`] };
+  for (const b of world.games.booths.list) GAMES[b.id] = [b.name, b.format || ((points) => `${points.toLocaleString('en-US')} points`)];
   const boardOf = (id) => (id === 'sky' ? skyScores : fair.boards[id]);
   const showBoard = (id, tops) => { if (id === 'sky') world.games.setScores(lists(tops)); else fair.stands[id]?.setScores(tops); fair.tops[id] = tops; };
   const rankOf = (list, who) => (list || []).findIndex((e) => e.name.toLowerCase() === who.toLowerCase());
@@ -457,6 +473,22 @@ async function boot() {
     hud.note(touch ? 'Tap to flap, and fly through the gaps!' : 'Click or press Space to flap, and fly through the gaps! · E: give up', 6500);
     startBlend(0.6);
   };
+  // the arcade cabinet: its game is played on a screen of its own, laid over this one
+  const playArcade = () => {
+    if (fair.session || player.dead) return;
+    const spot = world.games.notices.arcade;
+    fair.boards.run.start();
+    fair.session = arcade.open(fairIo, `#${AVATAR_COLORS[color].toString(16).padStart(6, '0')}`); fair.kind = 'arcade'; fair.after = 0;
+    player.riding = false;
+    player.teleport(spot.x, spot.z, spot.yaw);
+    input.consumeClicks();
+    hud.note(touch ? 'Tap the top of the screen to jump, hold the bottom to duck.' : 'Space or ↑ jumps (hold it to jump higher), ↓ or S ducks.', 6500);
+  };
+  world.actionSources.unshift((p) => { // (before the flowers and the rest: by the cabinet, the first thing to do is to play)
+    const cab = world.games.notices.arcade;
+    if (Math.abs(p.pos.y - PIER.deckY) < 2 && near(p, [cab.x, cab.z], cab.reach)) return { label: `Play ${GAME_NAMES.run}`, run: playArcade };
+    return null;
+  });
   world.actionSources.push((p) => {
     const booth = world.games.booths.near(p.pos.x, p.pos.z);
     if (booth) return { label: `Play ${booth.name}`, run: () => playBooth(booth) };
@@ -470,10 +502,23 @@ async function boot() {
   const fairStep = (dt) => {
     const s = fair.session;
     if (player.dead) { endGame(); return; }
-    if (fair.kind === 'booth' || fair.kind === 'wing') {
-      const P = input.pointer, view = s.view, tall = engine.width < engine.height;
+    if (fair.kind === 'arcade') {
+      // (its own little screen: what is pressed, on the keys or on the picture)
+      const P = input.pointer, zone = P.down ? arcade.zone(P.x, P.y) : null, K = input.keys;
+      const keys = { jump: K.has('Space') || K.has('ArrowUp') || K.has('KeyW') || zone === 'jump', duck: K.has('ArrowDown') || K.has('KeyS') || zone === 'duck' };
+      input.consumeClicks();
+      player.update(dt, rig.heading, false);
+      if (s.over) {
+        if (fair.after === 0) { fair.after = 0.01; if (s.score > 0) scoreGame('run', GAME_NAMES.run, s.score, `${s.score.toLocaleString('en-US')} m`); }
+        else if ((fair.after += dt) > 0.7 && keys.jump && !fair.heldJump) { fair.boards.run.start(); s.restart(); fair.after = 0; } // (another run)
+      }
+      fair.heldJump = keys.jump;
+      s.step(dt, keys);
+      hud.setRun(s.line);
+    } else if (fair.kind === 'booth' || fair.kind === 'wing') {
+      const P = input.pointer, view = s.viewAt ? s.viewAt(engine.width / engine.height) : s.view, tall = engine.width < engine.height;
       camera.position.copy(view.pos); camera.lookAt(view.look);
-      fair.fov = Math.min(96, view.fov * (tall ? 1.5 : 1));
+      fair.fov = s.viewAt ? view.fov : Math.min(96, view.fov * (tall ? 1.5 : 1)); // (a game that frames itself says how wide it looks)
       camera.updateMatrixWorld();
       _aim.dir.set((P.x / window.innerWidth) * 2 - 1, -(P.y / window.innerHeight) * 2 + 1, 0.5).unproject(camera).sub(camera.position).normalize();
       _aim.origin.copy(camera.position);
@@ -487,7 +532,7 @@ async function boot() {
       if (s.over && fair.after === 0) {
         fair.after = 0.01;
         audio.play(s.score > 0 ? 'victory' : 'fail');
-        if (s.score > 0) scoreGame(s.booth.id, s.booth.name, s.score, `${s.score} ${s.booth.unit ? (s.score === 1 ? s.booth.unit.replace(/s$/, '') : s.booth.unit) : s.booth.seconds ? 'points' : 'on the scale'}`); else hud.note('Nothing this time. Have another go!', 4000);
+        if (s.score > 0) scoreGame(s.booth.id, s.booth.name, s.score, s.booth.format ? s.booth.format(s.score) : `${s.score} ${s.booth.unit ? (s.score === 1 ? s.booth.unit.replace(/s$/, '') : s.booth.unit) : s.booth.seconds ? 'points' : 'on the scale'}`); else hud.note('Nothing this time. Have another go!', 4000);
       }
       if (fair.after > 0 && (fair.after += dt) > 1.6) endGame();
     } else {
@@ -501,9 +546,9 @@ async function boot() {
       }
       if (fair.after > 0 && (fair.after += dt) > 3) endGame();
     }
-    if (fair.session && input.pressed('KeyE') && !(s.over)) { endGame(); hud.note(fair.kind === 'race' ? 'Race abandoned.' : 'Game left.'); }
+    if (fair.session && input.pressed('KeyE') && (!s.over || fair.kind === 'arcade')) { endGame(); hud.note(fair.kind === 'race' ? 'Race abandoned.' : 'Game left.'); }
   };
-  Object.assign(app, { fair, playBooth, playRace, playWing, endGame, fairStep });
+  Object.assign(app, { fair, playBooth, playRace, playWing, playArcade, endGame, fairStep });
   queueMicrotask(() => Object.assign(app, { shop, refreshShop, adminKey, scoreGame }));
   world.games.events = {
     note: (text) => hud.note(text, 4200),
@@ -569,7 +614,7 @@ async function boot() {
     if (!who.admin || !to?.dev) return;
     if (!shop.open) { hud.note('The shop is not open: everything is free already.', 5000); return; }
     const options = [
-      { label: `${PASS.name} — 30 days`, note: 'Every hat, the Jetpack Lite, tiny and giant, the extra colours', what: { pass: 30 }, color: [0.95, 0.76, 0.3] },
+      { label: `${PASS.name} — 30 days`, note: 'Every hat, the Jetpack Lite, the four sizes, the extra colours', what: { pass: 30 }, color: [0.95, 0.76, 0.3] },
       { label: `${PASS.name} — a year`, note: 'The same, for 365 days', what: { pass: 365 }, color: [0.95, 0.76, 0.3] },
       ...ITEMS.map((it) => ({ label: it.name, note: `${it.group} · ${price(it.price)} in the shop`, what: { item: it.id } })),
     ];
@@ -605,6 +650,8 @@ async function boot() {
     hud.note(word, 3000);
     audio.play('teleport');
   };
+  // (what the large map writes by a village: its name — and what it costs, where the map shows prices)
+  const villageLabel = (v) => (FEATURES.mapPrices && v.forHire ? money(v.price) : v.name);
   const chooseVillage = () => {
     const here = sky.villageAt(player.pos.x, player.pos.z);
     // (the cheapest first; each is the only one of its kind)
@@ -626,15 +673,24 @@ async function boot() {
   for (const sl of world.sponsorSlots || []) places.set(sl.id, { what: sl.what, spot: sl, set: sl.set });
   for (let n = 1; n <= (world.pier.gondolas || 0); n++) places.set(`gondola:${n}`, { what: `gondola ${n} of the big wheel`, set: (sp) => world.pier.setGondola(n, sp) });
   for (const v of sky.villages) places.set(`village:${v.id}`, { what: `the sky village ${v.name}`, village: v, set: (sp) => { if (sp) sky.setSponsor(v.index, { name: sp.title, motto: sp.subtitle, url: sp.url }); } });
+  const plaques = world.places.plaques; // (the plaques of the companions, round the plinth of the golden dog: places paid once)
+  for (let n = 1; n <= (plaques?.count || 0); n++) places.set(`plaque:${n}`, { what: 'a plaque round the golden dog', plaque: n, set: (sp) => plaques.set(n, sp) });
   const shown = new Map(); // what is painted where: id → the address of its picture + its words
   const applySponsors = async () => {
     for (const [id, place] of places) {
-      const view = shop.slots[id], live = view && view.state === 'live', key = live ? `${view.title}|${view.subtitle}|${view.logo}` : '';
+      const view = shop.slots[id], live = view && view.state === 'live';
+      // (what awaits approval is painted where it would go for the administrator, who has to see it to say yes
+      // or no — and for the holder of a plaque, who sees theirs as it will be)
+      const d = (who.admin && !place.village && pending[id]?.draft) || (place.plaque && view?.mine && view.draft) || null;
+      const key = d ? `?${d.title}|${d.subtitle}|${d.logo}|${d.keep ? 1 : 0}` : live ? `${view.title}|${view.subtitle}|${view.logo}|${view.bg || ''}` : view && place.plaque ? `taken${view.mine ? '!' : ''}` : '';
       if ((shown.get(id) || '') === key) continue;
       shown.set(id, key);
-      place.set(live ? { title: view.title, subtitle: view.subtitle, url: view.url, logo: await loadImage(view.logo) } : null);
+      if (d) place.set({ title: d.title, subtitle: d.subtitle, url: d.url, bg: view?.bg || '', pending: true, logo: d.logo ? await loadImage(who.admin ? d.logo : ownDraft(d.logo), who.admin ? who.key : '') : d.keep && live ? await loadImage(view.logo) : null });
+      else if (place.plaque) place.set(live ? { title: view.title, subtitle: view.subtitle, logo: view.logo } : view ? { taken: true, mine: !!view.mine } : null); // (its picture is fetched when the plate is painted)
+      else place.set(live ? { title: view.title, subtitle: view.subtitle, url: view.url, bg: view.bg || '', logo: await loadImage(view.logo) } : null);
     }
-    hud.setVillages(sky.villages, data.meta.size, (v) => (v.forHire ? money(v.price) : v.name));
+    hud.setVillages(sky.villages, data.meta.size, villageLabel);
+    world.games.notices.ads.set(adRows()); // (the board of the booth of the sponsors)
   };
   let shopKnown = false; // (has the server said what is theirs yet?)
   const refreshShop = async () => {
@@ -649,7 +705,7 @@ async function boot() {
     if (kit.paint && !shop.owns(`paint:${PAINTS[kit.paint]}`)) kit.paint = 0;
     if (kit.trail && !shop.owns(`trail:${TRAILS[kit.trail]}`)) kit.trail = 0;
     wear();
-    player.tank = shop.owns('jetpack') ? JET.time : JET.time / 3;
+    fitJet();
     // (the free day of the light jetpack: said once, the first time it is found)
     if (shop.open && shop.lent('jetlite') === 'trial' && !shop.has('jetpack') && !store.get('mmf.trial')) {
       store.set('mmf.trial', '1');
@@ -666,21 +722,23 @@ async function boot() {
   };
   /** The holder of a place (or the administrator) says what to show there. */
   const fillPlace = async (id) => {
-    const place = places.get(id), view = shop.slots[id] || {}, was = view.draft || view, isVillage = !!place.village;
-    const got = await hud.form(isVillage ? 'Your village' : 'Your panel', 'It is shown once the fair has looked at it. Keep it short: it is painted on a sign.', [
-      { key: 'title', label: isVillage ? 'Its name (22 letters at most)' : 'Your name (28 letters at most)', value: was.title || '', max: isVillage ? 22 : 28 },
-      { key: 'subtitle', label: isVillage ? 'A line under it (34 letters at most)' : 'A line under it (40 letters at most)', value: was.subtitle || '', max: isVillage ? 34 : 40 },
-      { key: 'url', label: 'Your website (https://…)', value: was.url || '', max: 200, hint: 'https://' },
-      ...(isVillage ? [] : [{ key: 'logo', label: 'Your logo (PNG, JPEG or WebP) — leave empty to keep the one you sent', type: 'file' }]),
-    ], 'Send it');
+    const place = places.get(id), view = shop.slots[id] || {}, was = view.draft || view, isVillage = !!place.village, isPlaque = !!place.plaque;
+    const byHand = who.admin && !view.mine; // (the administrator fills a place in for a sponsor: shown at once)
+    const got = await hud.form(isPlaque ? (byHand ? 'This plaque' : 'Their plaque') : isVillage ? 'Your village' : byHand ? 'This panel' : 'Your panel',
+      isPlaque ? (byHand ? 'What you save is engraved at once, for everyone to read.' : 'Their name, a few words — and their picture, if you have one you like. It is engraved once the fair has looked at it.') : byHand ? 'What you save is shown to everyone at once. The colour behind it is yours to choose.' : 'It is shown once the fair has looked at it. Keep it short: it is painted on a sign.', [
+        { key: 'title', label: isPlaque ? 'Their name (22 letters at most)' : isVillage ? 'Its name (22 letters at most)' : 'Your name (28 letters at most)', value: was.title || '', max: isVillage || isPlaque ? 22 : 28 },
+        { key: 'subtitle', label: isPlaque ? 'A few words (40 letters at most)' : isVillage ? 'A line under it (34 letters at most)' : 'A line under it (40 letters at most)', value: was.subtitle || '', max: isVillage ? 34 : 40 },
+        ...(isPlaque ? [] : [{ key: 'url', label: 'Your website (https://…)', value: was.url || '', max: 200, hint: 'https://' }]),
+        ...(isVillage ? [] : [{ key: 'logo', label: isPlaque ? 'Their picture (PNG, JPEG or WebP) — leave empty to keep the one you sent' : 'Your logo (PNG, JPEG or WebP) — leave empty to keep the one you sent', type: 'file' }]),
+        ...(byHand && !isVillage && !isPlaque ? [{ key: 'bg', label: 'The colour of the panel behind it', type: 'color', value: view.bg || '#fbf7ec' }] : []),
+      ], byHand ? 'Save' : 'Send it');
     if (!got) return;
     if (!got.title) { hud.note('A name is needed.', 4000); return; }
     let logo = null;
-    if (got.logo) { logo = await logoData(got.logo); if (!logo) { hud.note('That picture cannot be used: a PNG, a JPEG or a WebP, please.', 6000); return; } }
-    const byHand = who.admin && !view.mine; // (the administrator fills a place in for a sponsor: shown at once)
-    const wrong = byHand ? await shop.set(id, { title: got.title, subtitle: got.subtitle, url: got.url, logo }, who.key) : await shop.fill(id, { title: got.title, subtitle: got.subtitle, url: got.url, logo });
-    hud.note(wrong || (byHand ? 'Done: it is shown to everyone.' : 'Sent. It will be shown as soon as it is approved.'), 7000);
-    if (!wrong) { await refreshShop(); if (who.admin) pending = (await shop.all(who.key)) || {}; }
+    if (got.logo) { logo = await logoData(got.logo, 256, isPlaque); if (!logo) { hud.note('That picture cannot be used: a PNG, a JPEG or a WebP, please.', 6000); return; } }
+    const wrong = byHand ? await shop.set(id, { title: got.title, subtitle: got.subtitle, url: got.url, logo, ...(got.bg !== undefined && { bg: got.bg }) }, who.key) : await shop.fill(id, { title: got.title, subtitle: got.subtitle, url: got.url, logo });
+    hud.note(wrong || (byHand ? 'Done: it is shown to everyone.' : isPlaque ? 'Sent. Their plaque will be engraved as soon as the fair has looked at it.' : 'Sent. It will be shown as soon as it is approved.'), 7000);
+    if (!wrong) { if (who.admin) pending = (await shop.all(who.key)) || {}; await refreshShop(); }
   };
   let pending = {}; // the administrator: every place as the server keeps it (drafts included)
   /** What can be done about the place `id`, for who stands by it: [{ label, run }] */
@@ -698,13 +756,20 @@ async function boot() {
     const wrong = await shop.buy(id, bid);
     if (wrong) { hud.note(wrong, 7000); refreshShop(); }
   };
-  const placeActions = (id) => {
+  const placeActions = (id, row = '') => {
     const place = places.get(id), view = shop.slots[id], out = [];
     const cents = shop.cost(id, place.village?.tier);
     if (who.admin && pending[id]?.draft) {
       const d = pending[id].draft;
       out.push({ label: `Approve "${d.title}"`, run: async () => { await shop.decide(id, true, who.key); pending = (await shop.all(who.key)) || {}; await refreshShop(); hud.note('Approved: it is shown to everyone.', 5000); } });
-      out.push({ label: 'Refuse it', run: async () => { await shop.decide(id, false, who.key); pending = (await shop.all(who.key)) || {}; hud.note('Refused.', 4000); } });
+      out.push({ label: 'Refuse it', run: async () => { await shop.decide(id, false, who.key); pending = (await shop.all(who.key)) || {}; await applySponsors(); hud.note('Refused.', 4000); } });
+      return out;
+    }
+    if (place.plaque) {
+      // a plaque for a companion: paid once; its holder has it engraved (and may change it); the administrator may fill one in
+      if (view?.mine) out.push({ label: view.draft ? 'Change what you sent for your plaque' : view.state === 'live' ? 'Change your plaque' : 'Have your plaque engraved', run: () => fillPlace(id) });
+      else if (who.admin && shop.open) out.push({ label: `Fill the ${row} plaque in (administrator)`, run: () => fillPlace(id) });
+      else if (!view && shop.open) out.push({ label: `The ${row} plate, for your companion · ${price(cents)}`, run: () => offer(id, 'A plaque for a companion', `${price(cents)}, once, and this plate is theirs for as long as the fair stands: their name, a few words and their picture if you like, at the feet of the best dog ever. You write it right after paying; it is engraved as soon as the fair has looked at it.`, cents, false) });
       return out;
     }
     if (view?.mine || (who.admin && shop.open)) out.push({ label: view?.mine ? (view.draft ? 'Change what you sent' : 'Set up your panel') : 'Fill this place in (administrator)', run: () => fillPlace(id) });
@@ -723,6 +788,26 @@ async function boot() {
     for (const sl of world.sponsorSlots || []) if (Math.abs(p.pos.y - sl.y) < 2.5 && near(p, [sl.x, sl.z], sl.reach)) return placeActions(sl.id)[1] || null;
     return null;
   });
+  // the plaques of the companions: the two plates in front of whoever stands by the plinth (the upper, then the lower)
+  const plaqueActions = (p) => {
+    if (!plaques || Math.abs(p.pos.y - plaques.y) > 2.5) return [];
+    const col = plaques.columnAt(p.pos.x, p.pos.z);
+    if (col === null) return [];
+    const two = plaques.ids(col), out = [];
+    // (with flowers in hand: they can be left under a plate that has a name on it)
+    const named = two.find((q) => shop.slots[q.id]?.state === 'live');
+    if (look.bouquet && named) out.push({ label: `Lay your bouquet for ${shop.slots[named.id].title}`, run: () => {
+      const w = plaques.where(named.n);
+      look.bouquet = false; look.kinds = undefined;
+      audio.play('pick');
+      world.sparks.glitter(w.x, w.y, w.z, 0.9, 50);
+      hud.note(`For ${shop.slots[named.id].title}. Good companions are never very far.`, 5200);
+    } });
+    for (const q of two) out.push(...placeActions(q.id, q.row));
+    return out;
+  };
+  world.actionSources.push((p) => plaqueActions(p)[0] || null);
+  world.actionSources.push((p) => plaqueActions(p)[1] || null);
   // the golden dog above its cove: say hello at the foot of the plinth, and it answers
   world.actionSources.push((p) => {
     const c = world.places.crokmou;
@@ -754,6 +839,19 @@ async function boot() {
       hud.note(`You hold out your bouquet to ${best.name}.`, 4000);
     } } : null;
   });
+  // the booth of the sponsors, on the way to the mill: every game, who sponsors it, and the way to take its panel
+  const boardIds = () => Object.keys(GAME_NAMES).map((k) => `board:${k}`).filter((id) => places.has(id));
+  const sponsorLine = (id) => { const v = shop.slots[id], d = who.admin && pending[id]?.draft; return d ? `Awaiting approval: ${d.title}` : v?.mine ? 'Yours: set it up' : v?.state === 'live' ? v.title : v ? 'Taken' : shop.open ? `Free · from ${price(shop.least(id))}` : 'Free'; };
+  const adRows = () => boardIds().map((id) => { const v = shop.slots[id]; return { game: GAME_NAMES[id.split(':')[1]], sponsor: v?.state === 'live' ? v.title : '', offer: shop.open ? `from ${price(shop.least(id))}` : 'free' }; });
+  world.actionSources.unshift((p) => { // (the first thing to do at the booth, whatever grows at its foot)
+    const ads = world.games.notices.ads;
+    if (!near(p, [ads.x, ads.z], ads.reach)) return null;
+    return { label: 'The games and their sponsors', run: () => {
+      const ids = boardIds();
+      hud.choose('Sponsor a game', 'Your name, a line, your logo and a link over the board of scores of a game, in sight of everybody who plays it. The highest bid holds the panel; whoever is outbid is refunded in full.', ids.map((id) => ({ label: GAME_NAMES[id.split(':')[1]], note: sponsorLine(id), color: shop.slots[id]?.state === 'live' ? [0.9, 0.7, 0.2] : [0.5, 0.55, 0.6] })))
+        .then((i) => { if (i === null) return; const acts = placeActions(ids[i]); if (acts.length) acts[0].run(); else hud.note(shop.open ? 'That one is taken.' : 'The shop is not open yet. Come back soon!', 4000); });
+    } };
+  });
   // the stand of the wheel: its gondolas, who sponsors them, which are free
   world.actionSources.push((p) => {
     if (!world.pier.sponsorBooth || !near(p, world.pier.sponsorBooth, 2.6)) return null;
@@ -771,7 +869,7 @@ async function boot() {
       .then(async (i) => { if (i !== 0) return; hud.note('Opening the payment page…', 8000); const wrong = await shop.buy(`village:${v.id}`); if (wrong) hud.note(wrong, 7000); });
   };
   world.actionSources.push((p) => {
-    if (near(p, [sky.gate.x, sky.gate.z], 3.6)) return { label: 'Travel to a sky village', run: chooseVillage };
+    if (!sky.gate.hidden && near(p, [sky.gate.x, sky.gate.z], 3.6)) return { label: 'Travel to a sky village', run: chooseVillage };
     const v = sky.villageAt(p.pos.x, p.pos.z);
     return v && near(p, v.ring, 3.2) ? { label: 'Back to the valley', run: () => travel(sky.gate, 'Back in the valley') } : null;
   });
@@ -789,7 +887,7 @@ async function boot() {
   });
   Object.assign(app, { travel, sky });
   // ---------- the item shop: everything that is sold, on one screen (ui/ShopView.js)
-  const FEATURED = ['jetpack', 'paint:gold', 'fireworks', 'hat:crown'], WEARABLE = ['hat', 'paint', 'trail'];
+  const FEATURED = ['jetpack', 'paint:gold', 'fireworks', 'hat:crown'], WEARABLE = ['hat', 'paint', 'trail', 'jetpack', 'jetlite'];
   const previewer = new Previewer(engine, factory);
   // (the picture of a place to sponsor: its panel as it stands over the board, under the name of the game)
   const panelPicture = (id, w, h) => {
@@ -838,13 +936,13 @@ async function boot() {
     return c;
   };
   const shopView = new ShopView(hud.root, (id, w, h) => (id === PASS.id ? passPicture(w, h) : id.startsWith('board:') ? panelPicture(id, w, h) : previewer.shot(id, color, w, h)));
-  const wornNow = (type, sub) => (type === 'hat' ? HATS[look.hat]?.id === sub : type === 'paint' ? PAINTS[kit.paint] === sub : type === 'trail' ? TRAILS[kit.trail] === sub : false);
+  const wornNow = (type, sub) => (type === 'hat' ? HATS[look.hat]?.id === sub : type === 'paint' ? PAINTS[kit.paint] === sub : type === 'trail' ? TRAILS[kit.trail] === sub : type === 'jetpack' || type === 'jetlite' ? jetOn() === type : false);
   const shopItems = () => {
     const list = ITEMS.map((it) => {
       const [type, sub] = it.id.split(':'), owned = shop.has(it.id), lent = shop.lent(it.id), left = lent === 'trial' ? shop.trialLeft(it.id) : 0;
       return {
         ...it, owned, lent, cost: price(shop.cost(it.id) || it.price), worn: (owned || !!lent) && wornNow(type, sub), wearable: WEARABLE.includes(type), featured: FEATURED.includes(it.id),
-        hint: it.id === 'fireworks' ? 'Yours: press V (or the button in the emotes) to light one.' : it.id === 'jetpack' || it.id === 'jetlite' ? 'Yours: jump, then press jump again in the air.' : 'Yours for good: put it on and take it off as you please.',
+        hint: it.id === 'fireworks' ? 'Yours: press V (or the button in the emotes) to light one.' : it.id === 'jetpack' ? 'Yours: jump, then press jump again in the air. With both jetpacks, the one that is on is chosen here.' : it.id === 'jetlite' ? `Yours: jump, then press jump again in the air — once every ${JET_LITE.every} seconds. With both jetpacks, the one that is on is chosen here.` : 'Yours for good: put it on and take it off as you please.',
         ...(lent === 'pass' && { fine: `Yours while you hold the ${PASS.name}. Buy it to keep it for good.` }),
         ...(lent === 'trial' && { fine: `A taste, on the house: yours for ${left > 3600_000 ? `${Math.ceil(left / 3600_000)} more hours` : `${Math.max(1, Math.ceil(left / 60_000))} more minutes`} — jump, then press jump again in the air. After that it is sold here, and it comes with the ${PASS.name}.` }),
       };
@@ -858,7 +956,7 @@ async function boot() {
         act: held ? null : `Get the pass · ${price(shop.prices.pass || PASS.price)} a month`,
         manage: held && shop.pass.managed ? 'Look after it, or stop it' : null,
         blurb: held ? (gift ? `A gift of the fair: yours until ${new Date(shop.pass.until).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.` : 'It is yours. Thank you — truly.') : 'One pass, by the month, and the fair opens a little wider.',
-        perks: PASS.perks, why: PASS.why, pitch: ['Every hat', 'Jetpack Lite', 'Tiny or giant', '16 more colours'],
+        perks: PASS.perks, why: PASS.why, pitch: ['Every hat', 'Jetpack Lite', 'Four sizes', '16 more colours'],
         fine: held ? (gift ? 'When the gift ends, nothing is charged: the pass simply stops.' : 'Paid by the month on Stripe. Stop whenever you like: it lasts until the end of the month you paid for.') : 'Paid by the month on Stripe; stop whenever you like. What you bought before stays yours, pass or no pass.',
       });
     }
@@ -896,9 +994,9 @@ async function boot() {
     if (Number.isInteger(p.color)) { color = p.color; me.setColor(color); store.set('mmf.color', String(color)); shopView.stale(); }
     look.hat = Math.max(0, HATS.findIndex((h) => h.id === p.hat));
     kit.paint = Math.max(0, PAINTS.indexOf(p.paint)); kit.trail = Math.max(0, TRAILS.indexOf(p.trail));
-    if (SIZES.includes(p.size)) { size = SIZES.indexOf(p.size); store.set('mmf.size', SIZES[size]); }
+    if (p.size) { size = SIZES.indexOf(sizeOf(p.size)); store.set('mmf.size', SIZES[size]); }
   };
-  const showAccount = () => hud.setAccount({ name: account.name, available: account.available });
+  const showAccount = () => hud.setAccount({ name: account.name, available: account.available, mail: account.mail, email: account.email });
   /** Signed in (or out): what is owned, the days in a row and the look are asked again. */
   const accountChanged = async () => {
     showAccount();
@@ -907,40 +1005,52 @@ async function boot() {
     who.days = v.days;
     showEmotes();
   };
+  // the account, on its card (ui/AccountView.js): signing in, making one, a new password with the recovery code
   const accountAction = async (what) => {
     if (what === 'logout') { await account.logout(); await accountChanged(); hud.note('Signed out: this browser is a guest again.', 5000); return; }
-    if (what === 'create') {
-      const got = await hud.form('Create an account', 'A name and a password: nothing else is asked. Your purchases, your days in a row and the look of your robot will follow you to any browser you sign in from.',
-        [{ key: 'name', label: 'Account name (3 to 16 letters or digits)', value: /^Visitor \d+$/.test(name) ? '' : name, max: 16 }, { key: 'password', label: 'Password (at least 8 characters)', type: 'password', fresh: true }, { key: 'again', label: 'The password again', type: 'password', fresh: true }], 'Create the account');
+    if (what === 'email') {
+      // the address of the account: only ever used to mail a code when the password is forgotten
+      const got = await hud.form('The e-mail of your account', 'It is only used to send you a code if you forget the password. Leave it empty to take it away. Your password is asked for, so that nobody changes it behind your back.',
+        [{ key: 'email', label: 'E-mail', max: 120, hint: 'you@example.org' }, { key: 'password', label: 'Your password', type: 'password' }], 'Save');
       if (!got) return;
-      if (got.password !== got.again) { hud.note('The two passwords are not the same.', 5000); return; }
-      const made = await account.create(got.name, got.password, profileNow());
-      if (made.error) { hud.note(made.error, 6000); return; }
-      await accountChanged();
-      audio.play('victory');
-      await hud.choose('Write this down', `Your account "${account.name}" is made, and this browser is signed in. If you ever forget the password, this recovery code is the only way back in — it is shown once:`, [{ label: made.recovery, note: 'I have written it down', color: [0.9, 0.7, 0.2] }]);
+      const done = await account.setEmail(got.email, got.password);
+      hud.note(done.error || (got.email ? 'Saved: a code can be sent there if you forget the password.' : 'Taken away: no e-mail is kept for this account.'), 6000);
+      showAccount();
       return;
     }
-    if (what === 'reset') {
-      const got = await hud.form('A new password', 'With the recovery code you were given when the account was made.',
-        [{ key: 'name', label: 'Account name', max: 16 }, { key: 'code', label: 'Recovery code (XXXX-XXXX-XXXX)', max: 20 }, { key: 'password', label: 'New password (at least 8 characters)', type: 'password', fresh: true }], 'Set the password');
-      if (!got) return;
-      const done = await account.reset(got.name, got.code, got.password);
-      if (done.error) { hud.note(done.error, 6000); return; }
-    } else {
-      const got = await hud.form('Sign in', 'What you bought, your days in a row and the look of your robot come back.', [{ key: 'name', label: 'Account name', max: 16 }, { key: 'password', label: 'Password', type: 'password' }], 'Sign in');
-      if (!got) return;
-      const done = await account.login(got.name, got.password);
-      if (done.error) { hud.note(done.error, 6000); return; }
-    }
-    applyProfile(account.profile);
-    await accountChanged();
-    audio.play('victory');
-    hud.note(`Welcome back, ${account.name}!`, 5000);
+    hud.closeAll();
+    input.exitLock();
+    input.keys.clear(); // (nothing stays pressed behind the card)
+    accountView.open({ mode: what === 'create' ? 'create' : what === 'reset' ? 'reset' : 'login', name: what === 'create' && !/^Visitor \d+$/.test(name) ? name : '', mail: account.mail });
   };
-  Object.assign(app, { account, accountAction });
+  accountView
+    .on('submit', async (mode, d) => {
+      if (mode === 'create') {
+        const made = await account.create(d.name, d.password, profileNow(), d.email);
+        if (made.error) return { error: made.error };
+        await accountChanged();
+        audio.play('victory');
+        return { recovery: made.recovery, name: account.name };
+      }
+      const done = mode === 'reset' ? await account.reset(d.name, d.code, d.password) : await account.login(d.name, d.password);
+      if (done.error) return { error: done.error };
+      applyProfile(account.profile);
+      await accountChanged();
+      audio.play('victory');
+      hud.note(`Welcome back, ${account.name}!`, 5000);
+      return {};
+    })
+    .on('mailcode', (who) => account.mailCode(who))
+    .on('close', () => { document.getElementById('view')?.focus({ preventScroll: true }); });
+  Object.assign(app, { account, accountAction, accountView, payView });
   const equip = (id, on) => {
     const [type, sub] = id.split(':');
+    if (type === 'jetpack' || type === 'jetlite') {
+      // (the jetpack that is on: this one — or, taken off, none: the other one is put on from its own card)
+      store.set('mmf.jet', on ? type : 'none');
+      fitJet();
+      return;
+    }
     if (type === 'hat') look.hat = on ? Math.max(0, HATS.findIndex((h) => h.id === sub)) : 0;
     else if (type === 'paint') kit.paint = on ? Math.max(0, PAINTS.indexOf(sub)) : 0;
     else if (type === 'trail') kit.trail = on ? Math.max(0, TRAILS.indexOf(sub)) : 0;
@@ -987,26 +1097,40 @@ async function boot() {
   hud.setHat(look.hat);
   // where the shop stands. Back from the payment page, what was bought may take a few seconds to arrive
   // (the server only believes what Stripe tells it).
-  refreshShop().then(() => {
-    const paid = params.get('paid');
-    if (paid === null) return;
-    params.delete('paid');
-    history.replaceState(null, '', location.pathname + (params.toString() ? `?${params}` : '') + location.hash);
-    if (!paid) { hud.note('Nothing was paid.', 4000); return; }
+  const arrived = (paid) => {
     hud.note('Thank you! It will be here in a moment…', 6000);
     let tries = 0;
     const again = async () => {
       await refreshShop();
       if (shop.owned.has(paid) || shop.slots[paid]?.mine || (paid === PASS.id && shop.pass)) {
         audio.play('victory');
-        hud.note(paid === PASS.id ? `The ${PASS.name} is yours. Thank you — it keeps the lights on! Pick a size and a colour in the settings.` : shop.slots[paid]?.mine ? 'It is yours. Go to it to set it up: your name, your link, your logo.' : 'It is yours. Thank you!', 9000);
+        const plate = paid.startsWith('plaque:') && shop.slots[paid]?.mine;
+        hud.note(paid === PASS.id ? `The ${PASS.name} is yours. Thank you — it keeps the lights on! Pick a size and a colour in the settings.` : plate ? 'The plate is theirs, for good. Thank you!' : shop.slots[paid]?.mine ? 'It is yours. Go to it to set it up: your name, your link, your logo.' : 'It is yours. Thank you!', 9000);
+        // (what goes on a plaque is asked for right away — the plate itself is a swim and a climb away —, once they are in the world)
+        if (plate && !shop.slots[paid].draft && shop.slots[paid].state !== 'live') { const ask = () => { if (state.mode === 'walk') fillPlace(paid); else setTimeout(ask, 900); }; ask(); }
         // (what can be worn is put on at once)
         if (itemOf(paid) && WEARABLE.includes(paid.split(':')[0])) { equip(paid, true); shopView.refresh(shopItems()); }
       }
       else if (++tries < 8) setTimeout(again, 2500);
     };
     again();
+  };
+  refreshShop().then(() => {
+    const paid = params.get('paid');
+    if (paid === null) return;
+    params.delete('paid');
+    history.replaceState(null, '', location.pathname + (params.toString() ? `?${params}` : '') + location.hash);
+    if (!paid) { hud.note('Nothing was paid.', 4000); return; }
+    arrived(paid);
   });
+  // paying without leaving the game, where the server has Stripe's publishable key: their form on a card
+  // (ui/PayView.js). When it cannot be shown, the shop sends the visitor to Stripe's page as before.
+  shop.onEmbed = (item, secret) => {
+    hud.closeAll();
+    input.exitLock();
+    input.keys.clear();
+    return payView.open(shop.pk, secret, { title: 'Payment', test: shop.mode === 'test', paid: () => arrived(item) });
+  };
   account.load().then(showAccount);
   hud.setSettings(settings);
   hud.setVolume(volume);
@@ -1090,7 +1214,7 @@ async function boot() {
   hud
     .on('camera', toggleCamera)
     .on('emote', emote)
-    .on('interact', () => { if (fair.session) { if (!fair.session.over) { endGame(); hud.note('Game left.'); } } else interact.press(0); })
+    .on('interact', () => { if (fair.session) { if (!fair.session.over || fair.kind === 'arcade') { endGame(); hud.note('Game left.'); } } else interact.press(0); })
     .on('interact2', () => interact.press(1))
     .on('say', say)
     .on('roster', () => { showRoster(); refreshRoster(); })
@@ -1139,10 +1263,10 @@ async function boot() {
   input.on('drop', () => { if (look.bouquet) { look.bouquet = false; look.kinds = undefined; } });
   input.on('chat', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleChat(true, talking ? talking.brain.ask || `Say something to ${talking.name}…` : undefined); });
   input.on('respawn', () => { if (state.mode === 'walk') { endGame(); spawn(); hud.note('Back to the mill'); } });
-  input.on('menu', () => { if (fair.session && !fair.session.over) { endGame(); hud.note('Game left.'); } hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); hud.toggleChat(false); hud.closeChoice(); hud.closeRoster(); });
+  input.on('menu', () => { accountView.close(); payView.close(); if (fair.session && (!fair.session.over || fair.kind === 'arcade')) { endGame(); hud.note('Game left.'); } hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); hud.toggleChat(false); hud.closeChoice(); hud.closeRoster(); });
   input.on('map', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleBigMap(); });
-  hud.setMap(data.meta.map, ZONES);
-  hud.setVillages(world.sky.villages, data.meta.size, (v) => (v.forHire ? money(v.price) : v.name));
+  hud.setMap(data.meta.map, PLACES);
+  hud.setVillages(world.sky.villages, data.meta.size, villageLabel);
   if (params.has('stats')) hud.setStatsVisible(true);
 
   // ---------- benchmark
@@ -1216,7 +1340,7 @@ async function boot() {
     }
     camera.updateMatrixWorld();
     interact.update(mode === 'walk' && !fair.session);
-    if (fair.session && mode === 'walk') hud.setPrompt(0, fair.session.over ? null : fair.kind === 'race' ? 'Give up the race' : 'Leave the game');
+    if (fair.session && mode === 'walk') hud.setPrompt(0, fair.kind === 'arcade' ? 'Walk away' : fair.session.over ? null : fair.kind === 'race' ? 'Give up the race' : 'Leave the game');
     // the name of the characters one can talk to floats over them; walking away ends the conversation
     for (const n of npcs) {
       const d2 = (n.x - player.pos.x) ** 2 + (n.z - player.pos.z) ** 2;
@@ -1236,15 +1360,25 @@ async function boot() {
       player.hop = timers.hops ? 2 : 1;
       player.grip = timers.slick ? 0.09 : 1;
       player.cheat = !!(timers.lowg || timers.haste || timers.hops || timers.slick || timers.shot);
-      // (tiny, giant: a secret word for a moment, or the choice of who holds the pass — never in the race)
+      // (the size: small for a flight on the stage of the plaza; a secret word for a moment; or the choice of who
+      // holds the pass — and in the race, everybody's)
       const racing = !!fair.session && fair.kind === 'race';
-      look.size = racing ? 0 : timers.mini ? 1 : timers.maxi ? 2 : shop.hasPass ? size : 0;
+      look.size = racing ? 0 : fair.session && fair.kind === 'wing' ? SIZE.flyer : timers.mini ? SIZE.mini : timers.maxi ? SIZE.maxi : shop.hasPass ? size : 0;
       look.disguise = racing ? 0 : disguise;
       me.size = SIZE_SCALE[look.size];
+      if (player.jetWait) {
+        // (the light jetpack was asked for too soon: how long it still needs)
+        if (mode === 'walk' && !fair.session && state.time - (app.toldWait || -99) > 1.5) { app.toldWait = state.time; hud.note(`The Jetpack Lite is getting its breath back: ${Math.ceil(player.jetWait)} s.`, 2200); audio.play('miss', { volume: 0.4 }); }
+        player.jetWait = 0;
+      }
       if (player.noJet) {
         player.noJet = false;
         // (a jetpack was asked for and there is none: the free day is over — where to get one)
-        if (shop.open && !shop.owns('jetpack') && !shop.owns('jetlite') && mode === 'walk' && !fair.session && state.time - (app.toldJet || -99) > 8) {
+        if (jetOn() === null && (shop.owns('jetpack') || shop.owns('jetlite')) && mode === 'walk' && !fair.session && !player.cave && state.time - (app.toldJet || -99) > 8) {
+          // (they have one, and took it off)
+          app.toldJet = state.time;
+          hud.note('Your jetpack is off. Put it back on in the item shop (O).', 5000);
+        } else if (shop.open && !shop.owns('jetpack') && !shop.owns('jetlite') && mode === 'walk' && !fair.session && state.time - (app.toldJet || -99) > 8) {
           app.toldJet = state.time;
           hud.note(`Your free day with the jetpack is over. The Jetpack Lite is ${price(shop.cost('jetlite'))} in the item shop — and it comes with the ${PASS.name}.`, 7000);
         }
@@ -1317,7 +1451,7 @@ async function boot() {
     }
     world.update(dt, camera);
     const t0 = world.profile ? performance.now() : 0;
-    engine.renderer.render(scene, camera);
+    if (!arcade.isOpen || app.frames % 4 === 0) engine.renderer.render(scene, camera); // (behind the screen of the arcade, the world is drawn one frame in four)
     if (world.profile) { world.profile.mainPass = (world.profile.mainPass || 0) + performance.now() - t0; world.profile.frames = (world.profile.frames || 0) + 1; }
 
     // interface, a few times per second
@@ -1326,7 +1460,7 @@ async function boot() {
       zoneTimer = 0;
       const p = mode === 'walk' ? player.pos : camera.position;
       let best = null, bestD = 1;
-      for (const z of ZONES) { const d = Math.hypot(p.x - z.x, p.z - z.z) / z.r; if (d < bestD) { bestD = d; best = z; } }
+      for (const z of PLACES) { const d = Math.hypot(p.x - z.x, p.z - z.z) / z.r; if (d < bestD) { bestD = d; best = z; } }
       const village = sky.villageAt(p.x, p.z);
       if (village) hud.setZone(village.name); else if (best) hud.setZone(best.name);
     }

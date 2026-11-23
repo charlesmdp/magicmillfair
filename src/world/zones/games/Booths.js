@@ -1,8 +1,9 @@
-// The four booths of the pier head, on either side of the big wheel. Each is a game of some forty-five seconds
-// played from its counter, with a pointer (the mouse, a finger): Bullseye Alley (a shooting gallery whose
-// targets speed up), Whack-a-Mole, Feed the Clown (a jet of milk to keep in a mouth that will not stay still)
-// and Ring the Bell (the high striker). Each has its board of scores and its sponsor's panel; the backdrop of
-// the shooting gallery is a sponsor's tarp too.
+// The booths of the pier. Four stand at the pier head, on either side of the big wheel — each a game of some
+// forty-five seconds played from its counter, with a pointer (the mouse, a finger): Bullseye Alley (a shooting
+// gallery whose targets speed up), Whack-a-Mole, Feed the Clown (a jet of milk to keep in a mouth that will not
+// stay still) and Ring the Bell (the high striker). Six more line the walk that leads there (their games are
+// in Stalls.js). Each has its board of scores and its sponsor's panel; the backdrop of the shooting gallery is
+// a sponsor's tarp too; and over each a great arrow of running lights says where to play.
 //
 // Nothing here knows about the keyboard, the camera or the network: the game (main.js) opens a session, gives
 // it every frame where the pointer aims (a ray) and whether it is pressed, and reads its score at the end.
@@ -11,11 +12,8 @@ import { Parts } from '../../props/MeshBuilder.js';
 import { distanceCuller } from '../../props/StaticBatch.js';
 import { PIER, pierToWorld } from '../../layout/layout.js';
 import { canvasBoard, drawSponsor } from './Boards.js';
-
-const V = (x, y, z) => new THREE.Vector3(x, y, z);
-const lerp = (a, b, t) => a + (b - a) * t, clamp01 = (t) => Math.min(1, Math.max(0, t));
-const HALF = 3, BACK = -4, FRONT = 1.0; // of a booth, in its own frame: half its width, its back wall, the front of its counter
-const WHITE = [0.97, 0.95, 0.9], WOOD = [0.9, 0.8, 0.66];
+import { V, lerp, clamp01, HALF, BACK, FRONT, WHITE, WOOD, geometry, disc } from './kit.js';
+import { STALLS, STALL_GAMES } from './Stalls.js';
 
 /** id (also the board of its scores), name, where it stands on the pier (along, side), its colour, how long a game lasts. */
 export const BOOTHS = [
@@ -23,21 +21,23 @@ export const BOOTHS = [
   { id: 'mole', name: 'Whack-a-Mole', along: 81, side: 19, color: [0.1, 0.6, 0.62], seconds: 45, how: 'Click the moles as they come up. Golden ones are worth three; a hard hat takes two blows. Leave the rabbits alone!' },
   { id: 'milk', name: 'Feed the Clown', along: 123, side: -18, color: [0.95, 0.66, 0.08], seconds: 45, how: 'Hold the button down and keep the jet of milk in his mouth. He will not stay still.' },
   { id: 'bell', name: 'Ring the Bell', along: 123, side: 18, color: [0.2, 0.42, 0.85], seconds: 0, how: 'Three blows. Strike when the needle is right at the top — it goes through in a blink. The best one counts.' },
+  ...STALLS,
 ];
 
-/** A disc facing +Z, of radius 1, in rings of colour (from the rim to the middle). */
-function disc(b, rings, sides = 14) {
-  rings.forEach(([r, c], k) => {
-    const pts = [];
-    for (let i = 0; i < sides; i++) { const a = (i / sides) * Math.PI * 2; pts.push(V(Math.cos(a) * r, Math.sin(a) * r, k * 0.012)); }
-    b.tint(c[0], c[1], c[2], 1).poly(pts);
-  });
-}
+// The arrow of lights over a booth, in the plane that faces whoever walks along the pier (x = 0 in the frame of
+// the booth): it hangs from a mast behind the booth and points down at the counter. [y, z] of its outline:
+// the tail, the shaft, the head.
+const ARROW = (() => {
+  const tail = [5.95, -0.3], a = 35 * (Math.PI / 180), dir = [-Math.cos(a), Math.sin(a)], nor = [Math.sin(a), Math.cos(a)];
+  const at = (u, v) => [tail[0] + dir[0] * u + nor[0] * v, tail[1] + dir[1] * u + nor[1] * v];
+  const shape = (grow) => [at(-grow, 0.34 + grow), at(1.55 - grow * 0.4, 0.34 + grow), at(1.55 - grow * 0.4, 0.8 + grow * 1.6), at(2.65 + grow * 1.5, 0), at(1.55 - grow * 0.4, -0.8 - grow * 1.6), at(1.55 - grow * 0.4, -0.34 - grow), at(-grow, -0.34 - grow)];
+  return { tail, outer: shape(0.1), inner: shape(0), rim: shape(0.05) };
+})();
 /** The high striker: what a blow is worth (0 to 9,999) when the needle stands at `g` (0 at the bottom, 1 at the top)… */
 export const STRIKE = (g) => Math.round(9999 * clamp01(g) ** 5);
 /** …and how far up the tower (0 to 1) that sends the puck. */
 const SCALE_INV = (points) => points / 9999;
-const geometry = (fill, material = 'paint') => { const parts = new Parts(); fill(parts.get(material), parts); return parts.get(material).build(); };
+const PIER_MID = pierToWorld(PIER.length * 0.55, 0);
 
 export class Booths {
   /** @param zone the games zone (its world, its group, its colliders, its score stands) */
@@ -65,7 +65,8 @@ export class Booths {
       const booth = { ...def, x: ox, y, z: oz, yaw, group: g, dyn: new THREE.Group(), game: null };
       g.add(booth.dyn);
       booth.bulbs = this._mesh(booth, geometry((b) => { for (let k = 1; k < 16; k += 2) b.tint(1.0, 0.86, 0.5, 1).place(-HALF + 0.1 + k * ((HALF * 2 - 0.2) / 16), 2.9, FRONT + 0.09).lathe([[0.0, -0.06], [0.055, 0.0], [0.0, 0.06]], 6).pop(); }, 'glow'), 'bulbs', 'glow');
-      booth.game = this[`_${def.id}`](parts, booth);
+      booth.game = this[`_${def.id}`] ? this[`_${def.id}`](parts, booth) : STALL_GAMES[def.id](parts, booth, (geo, name, material) => this._mesh(booth, geo, name, material));
+      this._arrow(parts, def);
       const shell = parts.toMeshes(mats, { name: `booth-${def.id}`, layers: this.zone.cast });
       g.add(shell);
       // its name, over the counter
@@ -74,7 +75,7 @@ export class Booths {
         ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 6; ctx.strokeRect(5, 5, w - 10, h - 10);
         ctx.fillStyle = '#f6e7b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = "700 58px Georgia, 'Times New Roman', serif";
         ctx.fillText(def.name.toUpperCase(), w / 2, h / 2 + 3, w - 30);
-      }, 4.6, 0.86);
+      }, 4.6, 0.86, { both: true }); // (read from behind too: from the walk on the other side, from the wheel)
       // (the striker has no roof to carry it: its name is on the back wall, beside the tower)
       if (def.id === 'bell') { sign.mesh.scale.set(0.76, 0.76, 1); sign.mesh.position.set(1.0, 3.48, BACK + 0.03); } else sign.mesh.position.set(0, 3.42, FRONT + 0.77);
       sign.mesh.name = `booth-${def.id}:sign`;
@@ -89,8 +90,25 @@ export class Booths {
       this.zone.colliders.push({ type: 'box', x: cx, z: cz, hw: HALF + 0.12, hl: (FRONT + 0.15 - BACK) / 2 + 0.1, yaw });
       // its board of scores, beside it, and the panel of its sponsor
       const [bx, bz] = world((def.side < 0 ? 1 : -1) * (HALF + 2.1), FRONT - 0.2); // (on the side of the end of the pier)
-      booth.board = this.zone.scoreStand(def.id, bx, bz, yaw, { title: def.name.toUpperCase(), sub: def.seconds ? `Most points in ${def.seconds} seconds` : 'The hardest blow of three, out of 9,999', format: (s) => String(s), width: 2.7, y, pixels: 0.75 });
+      booth.board = this.zone.scoreStand(def.id, bx, bz, yaw, { title: def.name.toUpperCase(), sub: def.sub || (def.seconds ? `Most points in ${def.seconds} seconds` : 'The hardest blow of three, out of 9,999'), format: def.format || ((s) => String(s)), width: 2.7, y, pixels: 0.75 });
       this.list.push(booth);
+    }
+    // the lights of the arrows: a bulb every hand along each outline, in three sets lit in turn — they run round
+    // the arrow (three meshes for all the booths together)
+    {
+      const sets = [0, 1, 2].map(() => new Parts());
+      for (const b of this.list) {
+        const pts = ARROW.rim, ax = b.id === 'bell' ? 2.3 : 0;
+        let k = 0;
+        for (let i = 0; i < pts.length; i++) {
+          const p = pts[i], q = pts[(i + 1) % pts.length], len = Math.hypot(q[0] - p[0], q[1] - p[1]), n = Math.max(1, Math.round(len / 0.27));
+          for (let j = 0; j < n; j++, k++) {
+            const glow = sets[k % 3].get('glow');
+            glow.place(b.x, b.y, b.z, b.yaw).tint(1.0, 0.9, 0.55, 1).place(ax, lerp(p[0], q[0], j / n), lerp(p[1], q[1], j / n)).lathe([[0.0, -0.085], [0.075, 0.0], [0.0, 0.085]], 5).pop().pop();
+          }
+        }
+      }
+      this.arrows = sets.map((parts, i) => { const m = new THREE.Mesh(parts.get('glow').build(), mats.glow); m.name = `booths:arrows${i}`; m.frustumCulled = false; this.group.add(m); return m; });
     }
     this.group.updateMatrixWorld(true);
     this._cull = distanceCuller(this.group, [[/:sign$/, 220], [/^booth-\w+:(glow|doubleSided)$/, 300], [/^booth-/, 480]]);
@@ -157,6 +175,20 @@ export class Booths {
     }
     cloth.tint(c[0], c[1], c[2], 1);
     for (const g of [-1, 1]) cloth.tri(V(g * (HALF + 0.35), 2.9, FRONT + 0.75), V(g * (HALF + 0.35), 3.1, BACK - 0.15), V(g * (HALF + 0.35), 3.85, -1.3));
+  }
+
+  // The arrow over a booth: a mast behind it, an arm, and the arrow itself — gold round a field of the colour
+  // of the booth, seen from both ways along the pier (its lights are built with those of the others: see build).
+  _arrow(parts, def) {
+    const paint = parts.get('paint'), cloth = parts.get('doubleSided'), c = def.color, x = def.id === 'bell' ? 2.3 : 0;
+    const P = ([y, z], dx = 0) => V(x + dx, y, z);
+    const fill = (shape, dx) => { cloth.poly([P(shape[0], dx), P(shape[1], dx), P(shape[5], dx), P(shape[6], dx)]).poly([P(shape[2], dx), P(shape[3], dx), P(shape[4], dx)]); };
+    cloth.tint(1.5, 1.05, 0.2, 1); fill(ARROW.outer, 0);
+    cloth.tint(c[0] * 1.25, c[1] * 1.25, c[2] * 1.25, 1); fill(ARROW.inner, 0.014); fill(ARROW.inner, -0.014);
+    // the mast, the arm that carries the arrow, a stay
+    const top = V(x, 6.45, BACK - 0.2), tail = P(ARROW.tail);
+    paint.tint(0.93, 0.93, 0.9, 1).rod(V(x, 0, BACK - 0.2), top, 0.075, 6).rod(top, V(x, tail.y + 0.3, tail.z + 0.5), 0.05, 5).rod(V(x, 5.1, BACK - 0.2), V(x, tail.y - 0.2, tail.z - 0.1), 0.035, 5);
+    paint.tint(1.5, 1.05, 0.25, 1).place(top.x, top.y, top.z).lathe([[0.0, 0.0], [0.13, 0.08], [0.0, 0.3]], 7).pop();
   }
 
   /** Something that moves in a booth (its targets, its moles…): kept apart from what stands still. */
@@ -686,7 +718,7 @@ export class Booths {
           if (left <= 5 && Math.ceil(left) !== Math.ceil(booth.seconds - was) && left > 0) io.play('tick', { volume: 0.6 });
           if (left <= 0) session.over = true;
         } else {
-          session.line = `${booth.name} · best ${game.score} · ${game.left} blow${game.left === 1 ? '' : 's'} left`;
+          session.line = `${booth.name} · ${game.line ? game.line() : `best ${game.score} · ${game.left} blow${game.left === 1 ? '' : 's'} left`}`;
           if (game.over) session.over = true;
         }
       },
@@ -700,6 +732,7 @@ export class Booths {
   /** Every frame: the booths nobody plays at idle along, when somebody is near enough to see. */
   update(dt, time, pos, camera) {
     if (camera) this._cull(camera.position);
+    { const near = (pos.x - PIER_MID[0]) ** 2 + (pos.z - PIER_MID[1]) ** 2 < 330 * 330, lit = Math.floor(time * 7) % 3; this.arrows.forEach((m, i) => { m.visible = near && i === lit; }); }
     for (const b of this.list) {
       const d2 = (pos.x - b.x) ** 2 + (pos.z - b.z) ** 2;
       b.dyn.visible = d2 < 70 * 70;

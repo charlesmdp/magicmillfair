@@ -374,46 +374,71 @@ export class Race {
         }
       }
     }
-    // ---- the paddock: where one asks to race — under a striped tent — and the board of the best times
-    const side = RACE.paddock, px = st.x + st.nx * side * (HW + 3.2) - st.tx * 5, pz = st.z + st.nz * side * (HW + 3.2) - st.tz * 5;
-    this.paddock = { x: st.x + st.nx * side * (HW + 1.6) - st.tx * 2, z: st.z + st.nz * side * (HW + 1.6) - st.tz * 2, r: 4.2 };
+    // ---- the paddock: where one asks to race. A great mat on the ground with nothing over it, so that it is
+    // seen from wherever one comes; behind it, side by side, the board of the starts and the board of the best
+    // times, and between them a mast with an arrow of light.
+    const side = RACE.paddock, MAT = 3.2, A0 = HW + 3.7, B0 = -3.2;
+    // (`a` metres from the middle of the track, away from it; `b` metres along it, the way one drives)
+    const off = (a, b) => [st.x + st.nx * side * a + st.tx * b, st.z + st.nz * side * a + st.tz * b];
+    const [mx, mz] = off(A0, B0), out = Math.atan2(st.nx * side, st.nz * side); // (`out`: facing away from the track)
+    this.paddock = { x: mx, z: mz, r: MAT + 0.9 };
     {
-      const P = this.paddock, yaw = Math.atan2(st.tx, st.tz), y = Math.max(...[[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => h(P.x + st.nx * a * 1.5 + st.tx * b * 1.9, P.z + st.nz * a * 1.5 + st.tz * b * 1.9)));
-      const Q = (a, b, dy) => V(P.x + st.nx * a + st.tx * b, y + dy, P.z + st.nz * a + st.tz * b), apex = Q(0, 0, 3.75);
-      const corners = [[-1.5, -1.9], [1.5, -1.9], [1.5, 1.9], [-1.5, 1.9]];
-      corners.forEach(([a, b], k) => {
-        const q = Q(a, b, 0), [a2, b2] = corners[(k + 1) % 4];
-        paint.tint(WHITE[0], WHITE[1], WHITE[2], 1).rod(V(q.x, h(q.x, q.z) - 0.3, q.z), Q(a, b, 2.7), 0.045, 5);
-        zone.colliders.push({ type: 'circle', x: q.x, z: q.z, r: 0.14 });
-        // (each side of the roof in two halves: red, white)
-        const m = Q((a + a2) / 2 * 1.14, (b + b2) / 2 * 1.14, 2.6), e0 = Q(a * 1.14, b * 1.14, 2.6), e1 = Q(a2 * 1.14, b2 * 1.14, 2.6);
-        cloth.tint(RED[0], RED[1], RED[2], 1).tri(apex, e0, m);
-        cloth.tint(WHITE[0], WHITE[1], WHITE[2], 1).tri(apex, m, e1);
-      });
-      paint.tint(1.5, 1.1, 0.2, 1).place(apex.x, apex.y - 0.05, apex.z).lathe([[0.0, 0.0], [0.14, 0.08], [0.0, 0.4]], 6).pop();
-      // where to stand is written on the ground: a disc under the tent
-      const spot = canvasBoard(512, 512, (ctx, w) => {
+      // the mat: it lies on the ground as the ground goes, and is read by who comes to the track
+      const spot = canvasBoard(768, 768, (ctx, w) => {
         const c = w / 2, serif = "Georgia, 'Times New Roman', serif";
         ctx.clearRect(0, 0, w, w);
-        ctx.fillStyle = '#b3261e'; ctx.beginPath(); ctx.arc(c, c, c - 4, 0, 7); ctx.fill();
-        ctx.strokeStyle = '#f6e7b8'; ctx.lineWidth = 14; ctx.beginPath(); ctx.arc(c, c, c - 24, 0, 7); ctx.stroke();
-        ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 5; ctx.setLineDash([16, 12]); ctx.beginPath(); ctx.arc(c, c, c - 50, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = '#b3261e'; ctx.beginPath(); ctx.arc(c, c, c - 6, 0, 7); ctx.fill();
+        ctx.strokeStyle = '#f6e7b8'; ctx.lineWidth = 20; ctx.beginPath(); ctx.arc(c, c, c - 30, 0, 7); ctx.stroke();
+        // the middle: a chequered disc, as on a flag, rimmed with gold
+        const m = c * 0.3, q = (2 * m) / 6;
+        ctx.save(); ctx.beginPath(); ctx.arc(c, c, m, 0, 7); ctx.clip();
+        for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) { ctx.fillStyle = (i + j) % 2 ? '#15130f' : '#fff3d6'; ctx.fillRect(c - m + i * q, c - m + j * q, q + 1, q + 1); }
+        ctx.restore();
+        ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 12; ctx.beginPath(); ctx.arc(c, c, m, 0, 7); ctx.stroke();
+        // what it says goes round it, three times over: it reads from wherever one comes
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#fff3d6'; ctx.font = `900 96px ${serif}`; ctx.fillText('RACE', c, c - 62);
-        ctx.fillStyle = '#f2c14e'; ctx.font = `900 96px ${serif}`; ctx.fillText('HERE', c, c + 36);
-        ctx.fillStyle = '#fff3d6'; ctx.font = '700 34px system-ui, sans-serif'; ctx.fillText('stand here · press E', c, c + 122);
-      }, 4.4, 4.4);
-      spot.mesh.material.transparent = true; spot.mesh.material.depthWrite = false; spot.mesh.material.polygonOffset = true; spot.mesh.material.polygonOffsetFactor = -2; spot.mesh.material.polygonOffsetUnits = -4;
-      spot.mesh.rotation.order = 'YXZ';
-      spot.mesh.rotation.set(-Math.PI / 2, Math.atan2(st.nx * side, st.nz * side), 0); // flat on the ground, read from the valley side
-      spot.mesh.position.set(P.x, h(P.x, P.z) + 0.05, P.z);
+        const round = (text, radius, font, tone, turn, gap = 0) => {
+          ctx.font = font; ctx.fillStyle = tone;
+          const wide = [...text].map((ch) => ctx.measureText(ch).width + gap);
+          let at = turn - wide.reduce((x, y) => x + y, 0) / radius / 2;
+          [...text].forEach((ch, k) => {
+            const mid = at + wide[k] / radius / 2;
+            ctx.save(); ctx.translate(c + Math.sin(mid) * radius, c + Math.cos(mid) * radius); ctx.rotate(-mid); ctx.fillText(ch, 0, 0); ctx.restore();
+            at += wide[k] / radius;
+          });
+        };
+        for (let k = 0; k < 3; k++) {
+          const turn = (k * 2 * Math.PI) / 3;
+          round('RACE HERE', c * 0.73, `900 82px ${serif}`, k === 1 ? '#f2c14e' : '#fff3d6', turn, 5);
+          round('★', c * 0.73, `900 54px ${serif}`, '#f2c14e', turn + Math.PI / 3);
+          round('stand here · press E', c * 0.445, '700 29px system-ui, sans-serif', '#fff3d6', turn + Math.PI / 3, 1.5);
+        }
+      }, 2 * MAT, 2 * MAT);
+      const fx = -st.nx * side, fz = -st.nz * side, rx = -fz, rz = fx; // towards the track (the top of what is written); to the right of who reads it
+      const N = 10, pos = [], uv = [], idx = [];
+      for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
+        const u = i / N, v = j / N, x = mx + rx * (u - 0.5) * 2 * MAT + fx * (v - 0.5) * 2 * MAT, z = mz + rz * (u - 0.5) * 2 * MAT + fz * (v - 0.5) * 2 * MAT;
+        pos.push(x, h(x, z) + 0.07, z); uv.push(u, v);
+      }
+      for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const k = j * (N + 1) + i; idx.push(k, k + 1, k + N + 2, k, k + N + 2, k + N + 1); }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      geo.setIndex(idx);
+      spot.mesh.geometry.dispose();
+      spot.mesh.geometry = geo;
+      Object.assign(spot.mesh.material, { transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, side: THREE.DoubleSide });
       spot.mesh.name = 'games:race-spot';
       spot.mesh.renderOrder = 4;
       zone.group.add(spot.mesh);
-      // an arrow of light over the tent, seen from far: this way to race
-      const top = Q(0, 0, 4.3);
-      paint.tint(STEEL[0], STEEL[1], STEEL[2], 1).rod(Q(0, 0, 3.9), Q(0, 0, 6.2), 0.045, 5);
-      glow.tint(1.0, 0.7, 0.08, 1).place(top.x, top.y + 0.2, top.z, yaw);
+      // (no fern and no blade of grass comes through it)
+      this.world.scatter?.keepOut?.push({ x: mx, z: mz, r: MAT + 0.25 });
+      this.world.grass?.uniforms.uBare?.value.set(mx, mz, MAT + 0.15);
+      // the mast, between the two boards: an arrow of light at its top, seen from far — this way to race
+      const [ax, az] = off(A0 + MAT + 1.0, B0 + 0.13), ay = h(ax, az), yaw = Math.atan2(st.tx, st.tz);
+      paint.tint(STEEL[0], STEEL[1], STEEL[2], 1).rod(V(ax, ay - 0.3, az), V(ax, ay + 6.4, az), 0.055, 6);
+      zone.colliders.push({ type: 'circle', x: ax, z: az, r: 0.16 });
+      glow.tint(1.0, 0.7, 0.08, 1).place(ax, ay + 4.7, az, yaw);
       for (const turn of [0, Math.PI / 2]) {
         glow.push(new THREE.Matrix4().makeRotationY(turn));
         for (const dy of [0, 0.62]) for (const sgn of [-1, 1]) for (const f of [1, -1]) facing(glow, V(sgn * 0.7, dy + 1.25, 0), V(0, dy + 0.65, 0), V(0, dy + 0.28, 0), V(sgn * 0.7, dy + 0.88, 0), V(0, 0, f));
@@ -423,39 +448,58 @@ export class Race {
     }
     zone._add(parts, 'race');
     {
-      // the board of the starts, beside the tent: which start leaves next, and in how long (it reads from both sides)
-      const P = this.paddock, bx = P.x + st.nx * side * 3.4 + st.tx * 1.2, bz = P.z + st.nz * side * 3.4 + st.tz * 1.2, by = h(bx, bz), yaw = Math.atan2(st.nx * side, st.nz * side);
-      const state = { name: '', tone: '#f2c14e', wait: 0, after: '' };
-      const board = canvasBoard(512, 256, (ctx, w, hh) => {
-        const serif = "Georgia, 'Times New Roman', serif";
+      // the board of the starts, behind the mat: the start that leaves next, counted down to its GO — and the
+      // two after it, each with its colour, so that friends can settle on one (it reads from both sides). When
+      // it is too late to join the one that is leaving, the board says so, and which one is next for the asking.
+      const [bx, bz] = off(A0 + MAT + 1.0, B0 + 1.95), by = h(bx, bz);
+      const state = { key: '', name: '', tone: '#f2c14e', wait: 9, open: true, next: [] };
+      const board = canvasBoard(640, 320, (ctx, w, hh) => {
+        const serif = "Georgia, 'Times New Roman', serif", sans = 'system-ui, sans-serif', gone = state.wait <= 0;
         ctx.fillStyle = '#16211b'; ctx.fillRect(0, 0, w, hh);
-        ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 8; ctx.strokeRect(8, 8, w - 16, hh - 16);
+        ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 9; ctx.strokeRect(8, 8, w - 16, hh - 16);
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#f6e7b8'; ctx.font = '700 30px system-ui, sans-serif'; ctx.fillText('NEXT START', w / 2, 46);
-        ctx.fillStyle = state.tone; ctx.beginPath(); ctx.arc(74, 136, 38, 0, 7); ctx.fill();
+        ctx.fillStyle = gone ? '#8be28f' : state.open ? '#f6e7b8' : '#ff9a86'; ctx.font = `700 31px ${sans}`;
+        ctx.fillText(gone ? 'OFF THEY GO!' : state.open ? 'NEXT START — ASK NOW TO BE IN IT' : 'LEAVING — TOO LATE FOR THIS ONE', w / 2, 44, w - 50);
+        ctx.globalAlpha = state.open || gone ? 1 : 0.6;
+        ctx.fillStyle = state.tone; ctx.beginPath(); ctx.arc(78, 132, 40, 0, 7); ctx.fill();
         ctx.strokeStyle = '#f6e7b8'; ctx.lineWidth = 5; ctx.stroke();
-        ctx.fillStyle = state.tone; ctx.font = `900 96px ${serif}`; ctx.fillText(state.name.toUpperCase(), w / 2 + 12, 134, w - 250);
-        ctx.fillStyle = '#fff3d6'; ctx.font = `900 80px ${serif}`; ctx.textAlign = 'right'; ctx.fillText(`${Math.max(0, Math.ceil(state.wait))}`, w - 34, 136);
-        ctx.textAlign = 'center'; ctx.fillStyle = '#b9c7bd'; ctx.font = '600 25px system-ui, sans-serif'; ctx.fillText(state.after, w / 2, 218, w - 40);
+        ctx.fillStyle = state.tone; ctx.font = `900 98px ${serif}`; ctx.fillText(state.name.toUpperCase(), w / 2 + 6, 132, w - 300);
+        ctx.fillStyle = '#fff3d6'; ctx.font = `900 ${gone ? 62 : 88}px ${serif}`; ctx.textAlign = 'right'; ctx.fillText(gone ? 'GO!' : `${Math.ceil(state.wait)}`, w - 34, 134);
+        ctx.globalAlpha = 1;
+        // the two that follow
+        ctx.fillStyle = '#b9c7bd'; ctx.font = `700 22px ${sans}`; ctx.textAlign = 'left'; ctx.fillText('THEN', 28, 252);
+        state.next.forEach((s, k) => {
+          const x0 = 96 + k * 266, mine = k === 0 && !state.open && !gone;
+          ctx.fillStyle = mine ? 'rgba(246, 231, 184, 0.16)' : 'rgba(255, 255, 255, 0.06)'; ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x0, 222, 254, 62, 12); else ctx.rect(x0, 222, 254, 62); ctx.fill();
+          if (mine) { ctx.strokeStyle = '#f6e7b8'; ctx.lineWidth = 3; ctx.stroke(); }
+          ctx.fillStyle = s.tone; ctx.beginPath(); ctx.arc(x0 + 30, 253, 17, 0, 7); ctx.fill();
+          ctx.fillStyle = s.tone; ctx.font = `900 30px ${serif}`; ctx.textAlign = 'left'; ctx.fillText(s.name.toUpperCase(), x0 + 56, 254, 108);
+          ctx.fillStyle = '#fff3d6'; ctx.font = `700 23px ${sans}`; ctx.textAlign = 'right'; ctx.fillText(`in ${Math.ceil(s.wait)} s`, x0 + 244, 254);
+        });
+        ctx.textAlign = 'center'; ctx.fillStyle = '#8fa096'; ctx.font = `600 17px ${sans}`;
+        ctx.fillText(`a start every ${RACE.every} seconds — ask for the same colour as your friends and leave together`, w / 2, 300, w - 40);
       }, 2.6, 1.3, { both: true });
       board.mesh.position.set(bx, by + 2.25, bz);
-      board.mesh.rotation.y = yaw;
+      board.mesh.rotation.y = out;
       board.mesh.name = 'games:race-starts';
       zone.group.add(board.mesh);
       const post = new Parts(), pw = post.get('paint');
-      for (const g of [-1, 1]) { const qx = bx + Math.cos(yaw) * g * 1.38, qz = bz - Math.sin(yaw) * g * 1.38; pw.tint(STEEL[0], STEEL[1], STEEL[2], 1).box(qx - 0.05, by - 0.3, qz - 0.05, qx + 0.05, by + 2.95, qz + 0.05); zone.colliders.push({ type: 'circle', x: qx, z: qz, r: 0.14 }); }
+      for (const g of [-1, 1]) { const qx = bx + Math.cos(out) * g * 1.38, qz = bz - Math.sin(out) * g * 1.38; pw.tint(STEEL[0], STEEL[1], STEEL[2], 1).box(qx - 0.05, by - 0.3, qz - 0.05, qx + 0.05, by + 2.95, qz + 0.05); zone.colliders.push({ type: 'circle', x: qx, z: qz, r: 0.14 }); }
       zone._add(post, 'race-starts');
+      const named = (k) => RACE.starts[((k % RACE.starts.length) + RACE.starts.length) % RACE.starts.length];
       /** Called every frame: the board follows the clock (it is painted again when what it says changes). */
       this.update = (pos) => {
         if ((pos.x - bx) ** 2 + (pos.z - bz) ** 2 > 70 * 70) return;
-        const s = this.nextStart(), then = RACE.starts[(s.n + 1) % RACE.starts.length], secs = Math.ceil(s.wait);
-        if (s.name === state.name && secs === Math.ceil(state.wait)) return;
-        Object.assign(state, { name: s.name, tone: s.tone, wait: s.wait, after: `then ${then}, every ${RACE.every} seconds — leave together!` });
+        // the start that leaves next — or that left less than a second ago (its GO stays up that long)
+        const now = this.clock(), every = RACE.every * 1000, n = Math.ceil((now - 900) / every), wait = (n * every - now) / 1000, key = `${n}|${Math.ceil(wait)}`;
+        if (key === state.key) return;
+        Object.assign(state, { key, name: named(n), tone: START_TONES[named(n)] || '#f2c14e', wait, open: wait >= 3.2, next: [1, 2].map((k) => ({ name: named(n + k), tone: START_TONES[named(n + k)] || '#f2c14e', wait: wait + k * RACE.every })) });
         board.redraw();
       };
     }
 
-    this.board = zone.scoreStand('race', px, pz, Math.atan2(st.nx * side, st.nz * side), { title: RACE.name.toUpperCase(), sub: `${RACE.laps} laps of the track on a quad · best times`, format: formatTime, width: 3.0, pixels: 0.85 });
+    // the board of the best times: beside the board of the starts, the same way round
+    { const [px, pz] = off(A0 + MAT + 1.2, B0 - 2.05); this.board = zone.scoreStand('race', px, pz, out, { title: RACE.name.toUpperCase(), sub: `${RACE.laps} laps of the track on a quad · best times`, format: formatTime, width: 3.0, pixels: 0.85 }); }
     return this;
   }
 

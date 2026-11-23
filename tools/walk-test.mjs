@@ -51,7 +51,7 @@ const walk = async (n, run = false) => {
 };
 
 try {
-  await page.goto(`http://127.0.0.1:${port}/?q=${opt.q || 'low'}`);
+  await page.goto(`http://127.0.0.1:${port}/?q=${opt.q || 'low'}&sky=1`); // (sky=1: the Sky Gate, which is not shown to visitors for now)
   await page.waitForSelector('.card.ready', { timeout: 240000 });
   const dl = await page.evaluate(() => {
     const list = performance.getEntriesByType('resource').filter((e) => e.name.includes('/assets/'));
@@ -341,6 +341,22 @@ try {
       gold.swam && gold.offshore.swimming && gold.minFar > 30 && gold.modes.join() === 'patrol' && !gold.dead && !!gold.landed && gold.beach > 1.3 && gold.landed.y < 1.0
       && !gold.sand.swimming && gold.sand.d < 1.5 && Math.abs(gold.sand.y - 1.15) < 0.2 && Math.abs(gold.top.y - gold.top.want) < 0.5 && gold.dog < gold.reach && seen.zone === 'The Golden Cove' && seen.prompts.some((t) => /CROKMOU|Crokmou/.test(t)),
       JSON.stringify({ ...gold, ...seen }));
+    // round the drum of the plinth: the plaques of the companions. Their picture exists because somebody is up
+    // here; in front of whoever stands by the drum is a column of two plates (none in front of the tablet)
+    const plates = await page.evaluate(() => {
+      const m = window.__mmf, q = m.world.places.plaques, dog = m.world.places.crokmou, w = q.where(10), g = m.world.places.group;
+      const out = { count: q.count, painted: q.painted, tablet: q.columnAt(dog.x, dog.z), column: q.columnAt(w.sx, w.sz), ids: q.ids(q.columnAt(w.sx, w.sz) ?? 0).map((p) => `${p.id} ${p.row}`).join(), mesh: !!g.getObjectByName('golden:plaques')?.visible, sign: !!g.getObjectByName('golden:companions'), away: q.columnAt(w.sx + (w.sx - w.x) * 3, w.sz + (w.sz - w.z) * 3) };
+      m.player.teleport(w.sx, w.sz, 0);
+      out.stands = { walkable: m.world.collision.walkable(w.sx, w.sz), y: +m.player.pos.y.toFixed(1) };
+      return out;
+    });
+    await frames(6);
+    await page.evaluate(() => window.__mmf.player.teleport(98, 0, 0));
+    await frames(8);
+    const platesGone = await page.evaluate(() => { const m = window.__mmf, q = m.world.places.plaques; return { painted: q.painted, mesh: !!m.world.places.group.getObjectByName('golden:plaques')?.visible }; });
+    check('round the plinth of the golden dog, the plaques of the companions: seventy-two plates in two rows, a column of two in front of whoever stands by the drum; their picture is made for who climbs up there and thrown away behind them',
+      plates.count === 72 && plates.painted && plates.mesh && plates.sign && plates.tablet === null && plates.column === 9 && plates.ids === 'plaque:10 upper,plaque:46 lower' && plates.away === null && plates.stands.walkable && Math.abs(plates.stands.y - gold.top.want) < 0.5
+      && !platesGone.painted && !platesGone.mesh, JSON.stringify({ plates, platesGone }));
   }
 
   // --- the sky villages: carried there from the Sky Gate, and back through the ring
@@ -694,15 +710,73 @@ try {
     const offered = await page.evaluate(() => { const m = window.__mmf, b = m.world.games.booths.list[0]; m.player.teleport(b.stand[0], b.stand[1], b.stand[2]); return b.name; });
     await frames(6);
     const ask = await prompt();
-    const fair = await page.evaluate(() => {
+    const fair = await page.evaluate(async () => {
       const app = window.__mmf, { input, world, engine } = app, cam = engine.camera, T = app.THREE, g = world.games, out = {};
+      // ---- the bots of the six booths of the walk: each does what a visitor would, from what is seen on the stage
+      const stall = async (booth, s, n, bot, dyn, point) => {
+        const G = booth.game, M = booth.group.matrixWorld, at = (x, y, z) => new T.Vector3(x, y, z).applyMatrix4(M);
+        const named = (re) => dyn.children.filter((c) => re.test(c.name));
+        if (booth.id === 'hoop') {
+          // the hoop rests a moment at each end: from the last rests, when and where the next one will be;
+          // wind up so as to let go half a second before it gets there (the ball takes a second)
+          const hoop = named(/:hoop$/)[0], x = G.at, v = bot.x === undefined ? 0 : x - bot.x, still = Math.abs(v) < 1e-5 && Math.abs(x) > 0.2;
+          bot.x = x;
+          if (still && !bot.still) { if (bot.left !== undefined) bot.travel = n - bot.left; bot.ends = [...(bot.ends || []), x].slice(-2); bot.stopped = n; bot.plan = null; }
+          if (!still && bot.still) { bot.dwell = n - bot.stopped; bot.left = n; }
+          bot.still = still;
+          if (still && !bot.plan && bot.dwell && bot.travel && bot.ends.length === 2) {
+            const [was, now] = bot.ends, grow = Math.max(0, Math.abs(now) - Math.abs(was));
+            bot.plan = { press: bot.stopped + bot.dwell + bot.travel - 15 - Math.round((G.sweet / 0.8) * 30), x: -Math.sign(now) * (Math.abs(now) + grow), held: false, done: false };
+          }
+          const P = bot.plan;
+          if (P && !P.done && n >= P.press) {
+            point(at(P.x, hoop.position.y, hoop.position.z));
+            if (!P.held || s.gauge === null || s.gauge < G.sweet) { input.pointer.down = true; P.held = true; } else P.done = true; // (let go at the green)
+          }
+        } else if (booth.id === 'stack') {
+          // twelve floors dropped just right, then one beside the tower
+          const v = bot.at === undefined ? 0 : G.at - bot.at, floors = +(s.line.match(/(\d+) floor/) || [0, 0])[1];
+          bot.at = G.at;
+          if (floors < 12 ? Math.abs(G.at + v - G.goal) < 0.04 : Math.abs(G.at - G.goal) > 2.05) input._clicks++;
+        } else if (booth.id === 'geiger') {
+          // the lamps that light while the sequence is shown are written down, then clicked in that order; after six rounds, the wrong ones
+          const lit = [0, 1, 2, 3].map((k) => named(new RegExp(`:lit${k}$`))[0]), stage = +(s.line.match(/round (\d+)/) || [0, 1])[1];
+          if (G.phase === 'show') { if (bot.phase !== 'show') bot.seq = []; lit.forEach((m, k) => { if (m.visible && !bot.was?.[k]) bot.seq.push(k); }); }
+          if (G.phase === 'input') {
+            if (bot.phase !== 'input') bot.i = 0;
+            if (n % 5 === 0 && bot.seq && bot.i < bot.seq.length) { const k = stage <= 6 ? bot.seq[bot.i] : (bot.seq[bot.i] + 1) % 4; point(at(lit[k].position.x, lit[k].position.y, lit[k].position.z)); input._clicks++; bot.i++; }
+          }
+          bot.phase = G.phase; bot.was = lit.map((m) => m.visible);
+        } else if (booth.id === 'fish') {
+          // to the nearest fish; once one is on the hook, straight up
+          const hook = named(/:hook$/)[0], fish = named(/:f\d$/).filter((c) => c.visible);
+          bot.prev ||= new Map();
+          if (G.carry) point(at(hook.position.x, 2.9, hook.position.z));
+          else {
+            let best = null, bd = 99;
+            for (const f of fish) { const d = Math.hypot(f.position.x - hook.position.x, (f.position.y - hook.position.y) * 1.4); if (d < bd && Math.abs(f.position.x) < 2.5) { bd = d; best = f; } }
+            if (best) { const vx = (best.position.x - (bot.prev.get(best) ?? best.position.x)) * 30; point(at(best.position.x + vx * 0.25, best.position.y + 0.12, best.position.z)); }
+          }
+          for (const f of fish) bot.prev.set(f, f.position.x);
+        } else if (booth.id === 'scram') {
+          // the red: a real fifth of a second, then the click (never on the blue, never before)
+          if (G.phase === 'alarm' && !bot.seen) { bot.seen = true; await new Promise((r) => setTimeout(r, 185)); input._clicks++; }
+          if (G.phase !== 'alarm') bot.seen = false;
+        } else if (booth.id === 'cups') {
+          // the cup that was lifted is followed with the eyes (it is the same cup all along); after five rounds, another one
+          const cups = named(/:cup\d$/).filter((c) => c.visible), stage = +(s.line.match(/round (\d+)/) || [0, 1])[1];
+          if (G.phase === 'reveal') { const up = cups.reduce((a, b) => (b.position.y > a.position.y ? b : a)); if (up.position.y > 1.2) bot.mine = up; }
+          if (G.phase === 'pick' && n % 6 === 0 && bot.mine) { const c = stage <= 5 ? bot.mine : cups.find((q) => q !== bot.mine); point(at(c.position.x, c.position.y + 0.3, c.position.z)); input._clicks++; }
+        }
+      };
       const v = new T.Vector3(), m = new T.Matrix4(), dt = 1 / 30;
       const point = (w) => { v.copy(w).project(cam); input.pointer.x = (v.x * 0.5 + 0.5) * window.innerWidth; input.pointer.y = (-v.y * 0.5 + 0.5) * window.innerHeight; };
       for (const booth of g.booths.list) {
         app.playBooth(booth);
         const s = app.fair.session, dyn = booth.dyn;
         let n = 0, sight = false, hidden = false;
-        for (; n < 30 * 70 && app.fair.session === s && !s.over; n++) {
+        const bot = {};
+        for (; n < 30 * 150 && app.fair.session === s && !s.over; n++) {
           input.pointer.down = false;
           if (s.t >= 0) {
             if (booth.id === 'shoot') {
@@ -717,7 +791,8 @@ try {
               const clown = dyn.children.find((c) => c.name.endsWith(':clown'));
               point(new T.Vector3(clown.position.x, clown.position.y - 0.3, clown.position.z).applyMatrix4(booth.group.matrixWorld));
               input.pointer.down = true;
-            } else if (s.gauge !== null && s.gauge > 0.9) input._clicks++;
+            } else if (booth.id === 'bell') { if (s.gauge !== null && s.gauge > 0.9) input._clicks++; }
+            else await stall(booth, s, n, bot, dyn, point);
           }
           app.fairStep(dt);
           if (n === 150) { sight = document.querySelector('.sight').classList.contains('on'); hidden = !app.me.root.visible; }
@@ -732,7 +807,48 @@ try {
     await frames(20);
     const boards = await page.evaluate(() => Object.fromEntries(Object.entries(window.__mmf.fair.boards).map(([k, b]) => [k, b._local().all[0]?.score || 0])));
     check('the four booths of the pier are offered at their counters and played with the pointer: targets, moles, the clown, the bell', ask.includes(`Play ${offered}`) && fair.shoot.score > 300 && fair.mole.score > 100 && fair.milk.score > 150 && fair.bell.score >= 4000 && fair.bell.score <= 9999 && ['shoot', 'mole', 'milk'].every((id) => fair[id].over && fair[id].sight && fair[id].hidden && fair[id].seconds > 47 && fair[id].closed && fair[id].shown) && fair.bell.over && !fair.bell.sight && fair.bell.closed, JSON.stringify(fair));
-    check('each score goes on the board of its booth', ['shoot', 'mole', 'milk', 'bell'].every((id) => boards[id] === fair[id].score), JSON.stringify(boards));
+    check('each score goes on the board of its booth', ['shoot', 'mole', 'milk', 'bell', 'hoop', 'stack', 'geiger', 'fish', 'scram', 'cups'].every((id) => boards[id] === fair[id].score), JSON.stringify(boards));
+    const walk6 = Object.fromEntries(['hoop', 'stack', 'geiger', 'fish', 'scram', 'cups'].map((id) => [id, { score: fair[id].score, over: fair[id].over, closed: fair[id].closed, seconds: +fair[id].seconds.toFixed(1), line: fair[id].line }]));
+    check('the six booths along the walk of the pier, each played by a bot that does what a visitor would: baskets shot where the hoop is going to be, twelve floors stacked just right, a sequence of lamps remembered for six rounds, fish brought up, five alarms answered in about a fifth of a second, the cup followed for five rounds',
+      fair.hoop.score >= 20 && fair.hoop.over && fair.hoop.seconds > 47 && fair.stack.score >= 300 && fair.stack.over && fair.geiger.score >= 270 && fair.geiger.over && fair.fish.score >= 40 && fair.fish.over && fair.fish.seconds > 47
+      && fair.scram.over && fair.scram.score >= 150 && fair.scram.score <= 700 && fair.cups.over && fair.cups.score >= 150 && ['hoop', 'stack', 'geiger', 'fish', 'scram', 'cups'].every((id) => fair[id].closed && fair[id].shown), JSON.stringify(walk6));
+    // the arcade cabinet at the top of the ramp of the pier: a bot runs — over what stands on the road, under what flies low
+    {
+      await page.evaluate(() => { const m = window.__mmf, c = m.world.games.notices.arcade; m.player.teleport(c.x, c.z, c.yaw); });
+      await frames(6);
+      const askRun = await prompt();
+      const run = await page.evaluate(() => {
+        const app = window.__mmf, { input } = app, K = input.keys, dt = 1 / 60, screen = document.querySelector('.arcade');
+        app.playArcade();
+        const s = app.fair.session, open = screen.classList.contains('on');
+        let n = 0, jumps = 0, ducks = 0, wasJump = false, wasDuck = false;
+        for (; n < 60 * 120 && app.fair.session === s && !s.over; n++) {
+          const { speed, things } = s.peek(), next = things.filter((o) => o.gap + o.wide > -20).sort((a, b) => a.gap - b.gap)[0];
+          let jump = false, duck = false;
+          if (next && s.score < 320) { // (after that it runs on without a thought, and meets what comes)
+            if (next.kind === 'drone') duck = next.gap < 40 && next.gap + next.wide > -24;
+            else if (next.kind !== 'high') jump = next.gap < speed * 0.27 - next.wide / 2 - 9 && next.gap > -4; // (a hop whose top is over the thing, let go once over it)
+          }
+          if (jump) K.add('Space'); else K.delete('Space');
+          if (duck) K.add('ArrowDown'); else K.delete('ArrowDown');
+          if (jump && !wasJump) jumps++;
+          if (duck && !wasDuck) ducks++;
+          wasJump = jump; wasDuck = duck;
+          app.fairStep(dt);
+        }
+        K.delete('Space'); K.delete('ArrowDown');
+        const out = { open, score: s.score, over: s.over, seconds: +(n * dt).toFixed(1), jumps, ducks, line: s.line };
+        for (let k = 0; k < 20; k++) app.fairStep(dt);
+        out.still = !!app.fair.session; // (a run that is over leaves the screen up: another go is one jump away)
+        app.endGame();
+        out.closed = !app.fair.session && !screen.classList.contains('on');
+        return out;
+      });
+      await frames(12);
+      const kept = await page.evaluate(() => window.__mmf.fair.boards.run._local().all[0]?.score || 0);
+      check('the arcade cabinet of the pier: Meltdown Run is played on a screen of its own — a bot jumps what stands on the road and ducks what flies low for three hundred metres —, the run goes on its board, and one walks away',
+        askRun.includes('Play Meltdown Run') && run.open && run.over && run.score >= 300 && run.score < 900 && run.jumps > 5 && run.still && run.closed && kept === run.score, JSON.stringify({ askRun, run, kept }));
+    }
     // the race
     const race = await page.evaluate(() => {
       const app = window.__mmf, { input, world, player } = app, r = world.games.race, dt = 1 / 60;
@@ -796,7 +912,7 @@ try {
     await frames(20);
     const flown = await page.evaluate(() => window.__mmf.fair.boards.wing._local().all[0]?.score || 0);
     check('the flying theatre: asked for before the stage; wings on, a bot flaps through nine pairs of columns, falls into the waves, and the flight goes on the board',
-      wing.ask.includes('Play Wing It') && wing.waited === 30 && wing.score === 9 && wing.over && wing.flaps > 12 && wing.top < 5.9 && wing.low > 1.0 && wing.wings && wing.anim === 4 && wing.flyer && wing.line === 'Wing It · 9'
+      wing.ask.includes('Play Flappy Robot') && wing.waited === 30 && wing.score === 9 && wing.over && wing.flaps > 12 && wing.top < 5.9 && wing.low > 1.0 && wing.wings && wing.anim === 4 && wing.flyer && wing.line === 'Flappy Robot · 9'
       && wing.after.closed && !wing.after.driver && !wing.after.wings && wing.after.d < 0.5 && wing.after.pitch === 0 && flown === 9, JSON.stringify(wing));
     const best = await page.evaluate(() => window.__mmf.fair.boards.race._local().all[0]?.score || 0);
     check('the quad race: asked for in the paddock, it leaves with the next start (they have names, one every five seconds), the lights, three laps flat out — the bot never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, the pads, a real flight off the ramp, the time on the board', race.ask.some((t) => /^Race: 3 laps on a quad · (Red|Blue|Green|Yellow|Purple|Orange) start in \d s$/.test(t)) && race.start && race.over && race.laps.length === 3 && race.time > 46000 && race.time < 62000 && race.slowest >= 18 && race.off === 0 && race.widest < 3.75 && race.still > 150 && race.lamps > 20 && race.air > 120 && race.flight > 45 && race.boost > 100 && race.top > 24 && race.riding && race.quad && race.after.closed && !race.after.riding && !race.after.driver && best === race.time, JSON.stringify(race));
@@ -812,6 +928,40 @@ try {
     await walk(14);
     const up = await page.evaluate(() => { const a = window.__mmf; return { cross: a.player.cross, anim: a.player.anim }; });
     check('X sits down on the ground, legs crossed, wherever one stands; the first step gets up again', sat.cross && sat.anim === 10 && sat.legs > 0.5 && !up.cross && up.anim !== 10, JSON.stringify({ sat, up }));
+  }
+
+  // --- the two jetpacks: who has both chooses which is on; the light one lifts three metres or so, then needs
+  // fifteen seconds before it lights again (nothing is sold here: both are everybody's)
+  {
+    await place(-40, 6, 90);
+    await frames(4);
+    const jets = await page.evaluate(() => {
+      const a = window.__mmf, { player: p, input } = a, dt = 1 / 60;
+      // a jump from the ground, the jetpack asked for at once in the air: did it light, how high did it carry
+      const flight = () => {
+        const y0 = p.pos.y;
+        let top = y0;
+        input.move.x = 0; input.move.y = 0; input.jump = true; p.update(dt, 0, true);
+        input.jump = false; p.update(dt, 0, true);
+        input.jump = true; p.update(dt, 0, true);
+        const lit = p.jet > 0, wait = p.jetWait;
+        p.jetWait = 0; input.jump = false;
+        for (let k = 0; k < 900 && !p.grounded; k++) { p.update(dt, 0, true); top = Math.max(top, p.pos.y); }
+        for (let k = 0; k < 10; k++) p.update(dt, 0, true);
+        return { lit, rise: +(top - y0).toFixed(2), wait: +wait.toFixed(1) };
+      };
+      const out = {};
+      a.equip('jetpack', true); out.real = { tank: p.tank, every: p.jetEvery, ...flight() }; out.real2 = flight();
+      a.equip('jetlite', true); out.lite = { tank: p.tank, every: p.jetEvery, ...flight() }; out.lite2 = flight();
+      for (let k = 0; k < 60 * 15.5; k++) p.update(dt, 0, true);
+      out.lite3 = flight();
+      a.equip('jetlite', false); out.none = p.canFly(p.pos);
+      a.equip('jetpack', true); out.back = { tank: p.tank, every: p.jetEvery, can: p.canFly(p.pos) };
+      return out;
+    });
+    check('the two jetpacks: the one that is on is chosen (or none); the light one lifts three metres or so and lights again only fifteen seconds later, the real one whenever one likes',
+      jets.real.lit && jets.real2.lit && jets.real.every === 0 && jets.real.rise > 9 && jets.lite.lit && Math.abs(jets.lite.tank - 0.3) < 0.01 && jets.lite.every === 15 && jets.lite.rise > 2.4 && jets.lite.rise < 4.3
+      && !jets.lite2.lit && jets.lite2.wait > 10 && jets.lite2.rise < 1.3 && jets.lite3.lit && jets.none === false && jets.back.every === 0 && Math.abs(jets.back.tank - 1.5) < 0.01 && jets.back.can, JSON.stringify(jets));
   }
 
   // --- the big red button at the top of the island: a show far out at sea, then a quarter of an hour of patience
