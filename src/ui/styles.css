@@ -94,6 +94,9 @@ html, body {
 .gate-banner em { font-style: normal; color: #ffe14d; text-shadow: 0 2px 0 #5a0715, 0 0 16px rgba(150, 255, 90, 0.75); }
 .gate-banner svg { flex: none; width: clamp(15px, 3.2vw, 38px); height: clamp(15px, 3.2vw, 38px); animation: spin 12s linear infinite; }
 .splash.done .gate-banner { display: none; }
+/* (the banner belongs to the gate: it is not hung over the story that opens the page) */
+.splash:not(.told) .gate-banner { opacity: 0; animation: none; }
+.splash.told .gate-banner { transition: opacity 0.9s ease 0.3s; }
 @media (max-height: 560px) { .gate-banner { display: none; } }
 @media (prefers-reduced-motion: reduce) { .gate-banner, .gate-banner svg { animation: none; } }
 /* the booth: a dark panel under a striped awning */
@@ -180,7 +183,7 @@ html, body {
 .swatches button.extra:not(.locked) { width: 86%; }
 .swatches button.locked { opacity: 0.55; cursor: not-allowed; }
 .swatches button.locked svg { display: block; }
-.sizes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.sizes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
 .sizes button { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 4px; border-radius: 9px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.07); font-size: 13px; }
 .sizes button svg { width: 13px; height: 13px; }
 .sizes button[aria-pressed='true'] { background: var(--accent); color: #2a1d05; border-color: transparent; font-weight: 700; }

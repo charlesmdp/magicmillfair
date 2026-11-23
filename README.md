@@ -252,10 +252,14 @@ the first time the panel is opened (`rankPicture`). The administrator has them a
   (the trunks stand a few metres from the track), esses along the foot of the crags, a straight for the
   ramp, a second sweeper above the beach, and back to the line. No bend is tighter than 21 m in the
   middle of the track (a quad at full speed turns in 12 m, in 17.5 m while a boost lasts). Where to ask is
-  written on the ground — a red disc, RACE HERE, under the striped tent of the paddock, an arrow of light
-  over it. **A race leaves every five seconds**, on a clock everybody shares, and each start has the name
-  of a colour (Red, Blue, Green, Yellow, Purple, Orange, in turn): the board by the tent says which one
-  is next and in how many seconds, and friends who ask for the same start leave at the same instant, side
+  written on the ground — a great red mat, RACE HERE, six metres across, with nothing over it (no fern and
+  no blade of grass comes through it); behind it stand, side by side, the board of the starts and the board
+  of the best times, a mast with an arrow of light between them. **A race leaves every five seconds**, on
+  a clock everybody shares, and each start has the name of a colour (Red, Blue, Green, Yellow, Purple,
+  Orange, in turn). The board of the starts shows the one that leaves next, counted down to its GO, and
+  under it the two that follow, each with its colour and its seconds; when it is too late to get into the
+  one that is leaving (under three seconds), the board says so and frames the next one — it never jumps
+  from one colour to another. Friends who ask for the same start leave at the same instant, side
   by side on the grid. Then the gantry — three red lights, green — and three laps against the clock,
   seen from low behind the quad. Hold the drift button in a bend to slide through it (let go after a good
   slide and the quad leaps forward) and hop with the jump button. On the way: four **pads** of running
@@ -270,14 +274,18 @@ the first time the panel is opened (`rankPicture`). The administrator has them a
   to the address to drive it (an oval of 330 m round the wheat field, with its own baked maps in
   `public/assets/world-classic`); times driven there are not recorded. Which of the two is the track of the
   game is one word in `layout.js` (`TRACKS`).
-- **Wing It**: the little theatre on the plaza at the foot of the pier. Step up before its stage and press
-  E: a pair of wings is strapped on your back and you are hung in the middle of the stage, in front of
-  everybody. Click, tap or press Space to flap; the rest of the time you fall. You do not travel: the
-  scenery does — painted clouds and hills scroll behind, three rows of waves rock at the bottom, and
-  candy-striped columns come by in pairs, one hanging from the flies, one standing in the waves, with a
-  gap to fly through. Each pair passed is a point; they come faster and the gap narrows as the flight
-  goes on. Touch a column or the waves: feathers, a splash, and the flight is on the board beside the
-  theatre. When nobody is flying the scenery idles along for the passers-by.
+- **Flappy Robot**: the little theatre on the plaza at the foot of the pier. Step up before its stage and
+  press E: a pair of wings is strapped on your back and you are hung on the stage, in front of everybody.
+  Click, tap or press Space to flap; the rest of the time you fall. You do not travel: the scenery does —
+  painted clouds and hills scroll behind, waves rock at the bottom, and candy-striped columns come by in
+  pairs, one hanging from the flies, one standing in the waves, with a gap to fly through. Each pair
+  passed is a point; they come faster and the gap narrows as the flight goes on. Touch a column or the
+  waves: feathers, a splash, and the flight is on the board beside the theatre. What can be touched is
+  plain to see: the flyer is made small for the flight and flies inside a **ring of light** — the ring is
+  exactly what must not touch anything; the sea is one line of foam, in the very plane one flies in
+  (nothing rocks in front of the flyer); and the picture is framed to the screen — the whole stage on a
+  wide one, the flyer and what comes at it on a phone held upright. When nobody is flying the scenery
+  idles along for the passers-by.
 - **The Grandstand**: the striped tower behind the lawn. Its stair winds round it for twelve turns, with a
   landing on each that faces the climb, up to a deck 84 m above the lawn: the place to watch friends climb
   and cheer them on (Cheer, Clap, Jump for joy, Go! Go!). Nobody gets from the tower into the game.
@@ -304,7 +312,7 @@ the first time the panel is opened (`rankPicture`). The administrator has them a
   on shelves of cards dressed by rarity — each with a picture of *your* robot wearing the thing, drawn by
   the game itself. Pick a card: what it is, what it costs, and a button to buy it (or to put it on and take
   it off, once it is yours). On the shelves: two **jetpacks** (the real one, a second and a half of thrust;
-  the light one, a third of that), twelve **hats** (crown, wizard hat, top hat, cowboy hat, straw hat,
+  the light one, three tenths of a second — three metres or so — once every fifteen seconds), twelve **hats** (crown, wizard hat, top hat, cowboy hat, straw hat,
   cap, beanie, pirate hat, Viking helmet, chef's hat, a cap whose propeller turns, party hat), four **paint jobs** drawn by the
   material of the robot itself (gold plating: facets and gold dust that glitters; chrome: a mirror with the
   sky, the horizon and the grass in it; an atomic glow: a dark shell with green veins that breathe; candy
@@ -313,14 +321,18 @@ the first time the panel is opened (`rankPicture`). The administrator has them a
   Everybody sees what you wear and leave behind you; none of it helps at the games. The first shelf is the
   **Game Pass** (see *The shop*).
 - **Jetpack**: press jump again in the air. A second and a half of thrust, refilled on landing; it does not
-  work in caves, on the island, around Mostly Up or on its tower. **Everybody has the light one for a day**:
+  work in caves, on the island, around Mostly Up or on its tower. The **light one** has a small tank
+  (three tenths of a second: it lifts three metres or so) and needs fifteen seconds to get its breath
+  back between two goes — asked for sooner, it says how long is left. Who has both chooses which one is
+  on, in the item shop (*Equip* on its card; *Take it off* to fly with none). **Everybody has the light one for a day**:
   the twenty-four hours that follow a first visit (the shop tags it *Free today* and says how long is
   left; a line in the chat says so on the first visit). After that, pressing jump in the air says that the free day is over, and that the light jetpack
   is $5 in the shop or comes with the Game Pass.
-- **Tiny or giant**: the card of the welcome (and Settings → *Your robot*) asks for a size next to the name
-  and the colour — normal, tiny (under half the height) or giant (more than twice). Everybody around sees
-  it. The two sizes, and two more rows of colours (black among them), belong to the Game Pass: without it
-  they carry a padlock. In the quad race everybody is the same size.
+- **Four sizes**: the card of the welcome (and Settings → *Your robot*) asks for a size next to the name
+  and the colour — *Pocket* (a tenth smaller), *Classic* (everybody's), *Jumbo* (a tenth bigger) or
+  *Titan* (a fifth bigger). Everybody around sees it. The three that are not Classic, and two more rows
+  of colours (black among them), belong to the Game Pass: without it they carry a padlock. In the quad
+  race everybody is the same size.
 - **Sitting on the ground**: X, anywhere on dry land — the robot sits down cross-legged, hands on its
   knees, and the others see it. The first step gets up.
 - **Flowers**: walk up to a flower and pick it (E): a bouquet grows in your hand, flower by flower. B puts
@@ -330,9 +342,11 @@ the first time the panel is opened (`rankPicture`). The administrator has them a
   over his name. Talk to him (the prompt by his chair, then type): a question or anything else on your
   mind, and he answers in one sentence that sails past the point and lands on it. The conversation is
   between the two of you: nobody else sees it (its lines are marked "only you" in the chat).
-- **The sky villages**: step up to the Sky Gate — the stone ring on the lawn between the arrival and the
-  mill — and choose one of fifty villages perched on the mountains: you are carried there, facing the
-  valley. The ring of each village leads back, or on to another village. A village that nobody has taken
+- **The sky villages** *(the Sky Gate is not shown for now: `skyGate` in `src/app/config.js` brings it
+  back, and `?sky=1` at the end of the address shows it to whoever types it; the large map writes the
+  names of the villages, and their prices only if `mapPrices` says so)*: step up to the Sky Gate — the
+  stone ring on the lawn between the arrival and the mill — and choose one of fifty villages perched on
+  the mountains: you are carried there, facing the valley. The ring of each village leads back, or on to another village. A village that nobody has taken
   yet says so on its sign, with its price; step up to its board to hire it (see *Sky villages for hire*).
 - **Listening**: every place has its sound — the surf on the beach and the water lapping under the pier, the
   wind in the leaves round the mill and the ponds, the roar of the waterfall, brooks, birds, a colder wind up
@@ -351,9 +365,9 @@ trails, fireworks: the item shop says so and lets everything be put on. With a k
 
 | What | Price | |
 |---|---|---|
-| **The Game Pass**: every hat, the light jetpack, tiny or giant, two more rows of colours | $19 a month | the first shelf of the item shop (O) |
+| **The Game Pass**: every hat, the light jetpack, four sizes, two more rows of colours | $19 a month | the first shelf of the item shop (O) |
 | The jetpack | $30, once | the item shop |
-| The light jetpack (a third of the thrust; free for the first day) | $5, once | the item shop |
+| The light jetpack (a small tank, one go every fifteen seconds; free for the first day) | $5, once | the item shop |
 | A hat (each of the twelve) | $9.99, once | the item shop |
 | A paint job: gold plating, chrome, atomic glow, candy paint | $19, $15, $12, $9, once | the item shop |
 | A trail: fallout, confetti, stardust, bubbles | $12, $9, $7, $5, once | the item shop |
@@ -380,8 +394,8 @@ fair a few cents), and the rules of the auction are three lines of `server/catal
 **The Game Pass** is a subscription ($19 a month, `PASS` in `server/items.js`: the price, the lines of the
 card and its last words — *Atomic Oasis is not made by a multinational, but by a guy on a couch*). For as
 long as it runs, its holder wears every hat of the shop (the cards say *With your pass*; a hat that is
-bought stays after the pass), flies with the light jetpack, may be tiny or giant, and picks the colour of
-the robot among thirty-two instead of sixteen. One line of the card is a promise: the weather of where
+bought stays after the pass), flies with the light jetpack, picks the size of the robot among four, and its colour
+among thirty-two instead of sixteen. One line of the card is a promise: the weather of where
 one lives, with its day and its night, is to come. The card of the shop then reads *Look after it, or stop
 it*: it opens Stripe's customer portal (payment method, invoices, cancelling). When Stripe says the
 subscription has ended, the pass goes, the robot takes back a colour of the first sixteen and its normal
@@ -829,11 +843,11 @@ that is the last point. Going further means a referee: the server replaying the 
 | `npm run bake:statue` | sculpts the golden dog again (`-- --preview=dog.png` also draws it from five sides, `-- --cell=0.012` makes a finer mesh) |
 | `npm test` | 181 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents) |
 | `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (126 in all) |
-| `npm run test:shop` | the shop in the real game, on the Node server with test keys and a stand-in for Stripe: a hat bought and worn, the panel of a game sponsored, filled in (with a logo) and approved by the administrator, the stand of the gondolas; and a newcomer: the padlocks of the welcome card and the free day of the jetpack, the Game Pass bought as a subscription, what it lends (black, giant, a hat that was never bought), its end and the end of the free day (16 checks) |
+| `npm run test:shop` | the shop in the real game, on the Node server with test keys and a stand-in for Stripe: a hat bought and worn, the panel of a game sponsored, filled in (with a logo) and approved by the administrator, the stand of the gondolas; and a newcomer: the padlocks of the welcome card and the free day of the jetpack, the Game Pass bought as a subscription, what it lends (black, the largest size, a hat that was never bought), its end and the end of the free day (16 checks) |
 | `npm run test:smoke` | drives the real site: welcome screen, walking, free camera, settings, large map (`-- --mobile` for the touch layout) |
 | `npm run test:audio` | Listens to the sound engine without ears: in headless Chromium it renders a dozen listener scenarios (beach, cliffs, pier, woods, mill, waterfall, cave, sky village, the climb…) and every one-shot effect through an offline audio context, measures level, spectrum, how the loudness moves and how tonal it is, fails on silence or clipping, and times `update()` (about 0.01 ms a frame) |
-| `npm run test:walk` | 45 checks in the real game: pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls and the high clearing above them, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the swim on to the golden cove (the shark stays away; out of the sea on the beach; the stair up to the golden dog), the fifty sky villages (prices, places to sit, the board of one for hire, the one dressed as a demonstration), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, sitting down on the ground, big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the four booths (a bot plays each through the pointer; boards), the quad race (asked for in the paddock, it leaves with the next named start; a bot drives three laps flat out — it never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, and flies off the ramp), the flying theatre (a bot flaps through nine pairs of columns), the acid pond, the shark, change of tier |
-| `npm run test:duo` | 25 checks with two visitors on the production server: they must see each other move, wave, summon an animal, chat and sit down; a giant in a party hat sitting on the ground, a bouquet given from hand to hand; the administrator's key in the address, the administrator seeing the game as a visitor does (`-- --cloudflare` for the Cloudflare version) |
+| `npm run test:walk` | 46 checks in the real game: pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls and the high clearing above them, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the swim on to the golden cove (the shark stays away; out of the sea on the beach; the stair up to the golden dog), the fifty sky villages (prices, places to sit, the board of one for hire, the one dressed as a demonstration), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, sitting down on the ground, the two jetpacks (which is on; the light one's fifteen seconds), big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the four booths (a bot plays each through the pointer; boards), the quad race (asked for in the paddock, it leaves with the next named start; a bot drives three laps flat out — it never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, and flies off the ramp), the flying theatre (a bot flaps through nine pairs of columns), the acid pond, the shark, change of tier |
+| `npm run test:duo` | 25 checks with two visitors on the production server: they must see each other move, wave, summon an animal, chat and sit down; the largest size and a party hat, sitting on the ground, a bouquet given from hand to hand; the administrator's key in the address, the administrator seeing the game as a visitor does (`-- --cloudflare` for the Cloudflare version) |
 | `npm run bench` | benchmark tour for each tier (`-- --mobile` for the phone profile) |
 | `npm run profile` | cost of each system (script, draw calls, triangles) at seven viewpoints |
 | `npm run shots -- name=x,y,z,heading,pitch` | screenshots from a viewpoint |

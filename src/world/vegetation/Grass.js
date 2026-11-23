@@ -17,12 +17,14 @@ uniform sampler2D uAux;
 uniform sampler2D uTint;
 uniform vec4 uGrass; // range, density, blade width, max height
 uniform vec3 uPlayer;
+uniform vec3 uBare; // a disc where no grass grows: x, z, radius (a mat laid on the ground)
 out vec3 vColor;
 
 void main() {
   vec2 root = iTile.xy + aBlade.xy;
   vec2 uv = worldUV(root);
   float cover = textureLod(uAux, uv, 0.0).r;
+  if (distance(root, uBare.xy) < uBare.z) cover = 0.0;
   float ground = worldHeightsLod(root).x;
   float dist = distance(vec3(root.x, ground, root.y), cameraPosition);
   // thin the field out with distance; survivors get wider so the lawn keeps its body
@@ -133,6 +135,7 @@ export class Grass {
       uTint: { value: data.tintTex },
       uGrass: { value: new THREE.Vector4(t.grassRange, 1, 0.034, 0.92) },
       uPlayer: { value: new THREE.Vector3(0, -999, 0) },
+      uBare: { value: new THREE.Vector3(0, 0, 0) },
     };
     this.material = makeMaterial({ uniforms: this.uniforms, vertexShader: VERT, fragmentShader: FRAG, side: THREE.DoubleSide });
     const near = Math.round(2600 * t.grassDensity), far = Math.round(900 * t.grassDensity);

@@ -22,7 +22,7 @@
 // same `pass` and `first` in its own record, `own:<device>` (see shop.js).
 import { randomId, sameSecret } from './token.js';
 import { cleanName } from './protocol.js';
-import { COLORS, SIZES } from './items.js';
+import { COLORS, sizeOf } from './items.js';
 
 const enc = new TextEncoder();
 const ROUNDS = 100_000, DEVICES = 12, FAILS = 10, LOCK = 15 * 60_000;
@@ -46,7 +46,7 @@ const goodPassword = (p) => typeof p === 'string' && p.length >= 8 && p.length <
 function cleanProfile(p) {
   if (!p || typeof p !== 'object') return null;
   const word = (v) => (typeof v === 'string' && /^[a-z]{1,16}$/.test(v) ? v : 'none');
-  return { name: cleanName(p.name || ''), color: Number.isInteger(p.color) && p.color >= 0 && p.color < COLORS ? p.color : 0, hat: word(p.hat), paint: word(p.paint), trail: word(p.trail), size: SIZES.includes(p.size) ? p.size : 'normal' };
+  return { name: cleanName(p.name || ''), color: Number.isInteger(p.color) && p.color >= 0 && p.color < COLORS ? p.color : 0, hat: word(p.hat), paint: word(p.paint), trail: word(p.trail), size: sizeOf(p.size) };
 }
 // (a code to write down: twelve characters that cannot be mistaken for one another)
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';

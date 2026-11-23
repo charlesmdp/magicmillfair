@@ -125,6 +125,8 @@ export class Scatter {
     this.range = engine.tier.scatterRange;
     this.density = engine.tier.scatterDensity;
     this.cells = new Map();
+    /** Places where nothing is to grow: [{ x, z, r }] (said before the cells round them are made: a mat on the ground, say). */
+    this.keepOut = [];
     // room for what a tier can show at once (the nearest cells win when an area is denser than that)
     this.capacity = Math.round(26000 * Math.max(1, (this.range / 80) ** 2 * this.density));
     this.group = new THREE.Group();
@@ -187,6 +189,7 @@ export class Scatter {
         if (x < x0 || x >= x0 + CELL || z < z0 || z >= z0 + CELL) continue;
         if (Math.abs(x) > half - 2 || Math.abs(z) > half - 2) continue;
         if (r3 > dens) continue;
+        if (this.keepOut.length && this.keepOut.some((k) => (x - k.x) ** 2 + (z - k.z) ** 2 < k.r * k.r)) continue;
         const h = d.heightAt(x, z);
         const wl = d.waterAt(x, z);
         d.surfaceAt(x, z, surf);

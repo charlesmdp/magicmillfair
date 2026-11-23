@@ -1,6 +1,6 @@
 // DOM interface: welcome screen, heads-up display, settings, touch controls, name tags.
 import { AVATAR_COLORS } from '../player/Character.js';
-import { FREE_COLORS } from '../../server/items.js';
+import { FREE_COLORS, SIZE_NAMES } from '../../server/items.js';
 import { HATS } from '../player/Cosmetics.js';
 import { TIERS, TIER_ORDER } from '../core/Quality.js';
 import { assetUrl } from '../core/Assets.js';
@@ -111,12 +111,12 @@ export class Hud {
    * The colours and the sizes a robot can have, as buttons in `colours` and `sizes` (two elements): the first
    * sixteen colours are everybody's; the two rows after them, and the sizes other than the usual one, come
    * with the Game Pass — without it they are shown with a padlock and cannot be picked (`hint` then says why).
-   * Emits 'color' (its number) and 'size' (0 normal, 1 tiny, 2 giant). Kept in step by setRobot().
+   * Emits 'color' (its number) and 'size' (its number: see SIZES in items.js). Kept in step by setRobot().
    */
   _robotUI(colours, sizes, hint) {
     const ui = { colours: [], sizes: [], hint };
     const locked = (b) => b.classList.contains('locked');
-    const why = () => { if (hint) { hint.hidden = false; hint.textContent = 'That comes with the Game Pass ($19 a month, in the item shop): two more rows of colours, tiny and giant, every hat, the Jetpack Lite.'; } this.emit('wantpass'); };
+    const why = () => { if (hint) { hint.hidden = false; hint.textContent = 'That comes with the Game Pass ($19 a month, in the item shop): two more rows of colours, four sizes, every hat, the Jetpack Lite.'; } this.emit('wantpass'); };
     colours.textContent = '';
     AVATAR_COLORS.forEach((c, i) => {
       const b = el('button');
@@ -130,14 +130,16 @@ export class Hud {
       ui.colours.push(b);
     });
     sizes.textContent = '';
-    ['Normal', 'Tiny', 'Giant'].forEach((label, i) => {
+    // (from the smallest to the largest: Pocket, Classic — everybody's —, Jumbo, Titan)
+    for (const i of [1, 0, 2, 3]) {
       const b = el('button');
       b.type = 'button';
-      b.innerHTML = i ? `${LOCK}<span>${label}</span>` : `<span>${label}</span>`;
+      b.innerHTML = i ? `${LOCK}<span>${SIZE_NAMES[i]}</span>` : `<span>${SIZE_NAMES[i]}</span>`;
+      b.title = ['The size of everybody', 'A tenth smaller', 'A tenth bigger', 'A fifth bigger'][i];
       b.onclick = () => { if (locked(b)) { why(); return; } this.setRobot({ size: i }); this.emit('size', i); };
       sizes.append(b);
-      ui.sizes.push(b);
-    });
+      ui.sizes[i] = b;
+    }
     (this._robotUIs ||= []).push(ui);
     this.setRobot({});
   }

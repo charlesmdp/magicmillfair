@@ -51,7 +51,7 @@ const walk = async (n, run = false) => {
 };
 
 try {
-  await page.goto(`http://127.0.0.1:${port}/?q=${opt.q || 'low'}`);
+  await page.goto(`http://127.0.0.1:${port}/?q=${opt.q || 'low'}&sky=1`); // (sky=1: the Sky Gate, which is not shown to visitors for now)
   await page.waitForSelector('.card.ready', { timeout: 240000 });
   const dl = await page.evaluate(() => {
     const list = performance.getEntriesByType('resource').filter((e) => e.name.includes('/assets/'));
@@ -796,7 +796,7 @@ try {
     await frames(20);
     const flown = await page.evaluate(() => window.__mmf.fair.boards.wing._local().all[0]?.score || 0);
     check('the flying theatre: asked for before the stage; wings on, a bot flaps through nine pairs of columns, falls into the waves, and the flight goes on the board',
-      wing.ask.includes('Play Wing It') && wing.waited === 30 && wing.score === 9 && wing.over && wing.flaps > 12 && wing.top < 5.9 && wing.low > 1.0 && wing.wings && wing.anim === 4 && wing.flyer && wing.line === 'Wing It · 9'
+      wing.ask.includes('Play Flappy Robot') && wing.waited === 30 && wing.score === 9 && wing.over && wing.flaps > 12 && wing.top < 5.9 && wing.low > 1.0 && wing.wings && wing.anim === 4 && wing.flyer && wing.line === 'Flappy Robot · 9'
       && wing.after.closed && !wing.after.driver && !wing.after.wings && wing.after.d < 0.5 && wing.after.pitch === 0 && flown === 9, JSON.stringify(wing));
     const best = await page.evaluate(() => window.__mmf.fair.boards.race._local().all[0]?.score || 0);
     check('the quad race: asked for in the paddock, it leaves with the next start (they have names, one every five seconds), the lights, three laps flat out — the bot never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, the pads, a real flight off the ramp, the time on the board', race.ask.some((t) => /^Race: 3 laps on a quad · (Red|Blue|Green|Yellow|Purple|Orange) start in \d s$/.test(t)) && race.start && race.over && race.laps.length === 3 && race.time > 46000 && race.time < 62000 && race.slowest >= 18 && race.off === 0 && race.widest < 3.75 && race.still > 150 && race.lamps > 20 && race.air > 120 && race.flight > 45 && race.boost > 100 && race.top > 24 && race.riding && race.quad && race.after.closed && !race.after.riding && !race.after.driver && best === race.time, JSON.stringify(race));
@@ -812,6 +812,40 @@ try {
     await walk(14);
     const up = await page.evaluate(() => { const a = window.__mmf; return { cross: a.player.cross, anim: a.player.anim }; });
     check('X sits down on the ground, legs crossed, wherever one stands; the first step gets up again', sat.cross && sat.anim === 10 && sat.legs > 0.5 && !up.cross && up.anim !== 10, JSON.stringify({ sat, up }));
+  }
+
+  // --- the two jetpacks: who has both chooses which is on; the light one lifts three metres or so, then needs
+  // fifteen seconds before it lights again (nothing is sold here: both are everybody's)
+  {
+    await place(-40, 6, 90);
+    await frames(4);
+    const jets = await page.evaluate(() => {
+      const a = window.__mmf, { player: p, input } = a, dt = 1 / 60;
+      // a jump from the ground, the jetpack asked for at once in the air: did it light, how high did it carry
+      const flight = () => {
+        const y0 = p.pos.y;
+        let top = y0;
+        input.move.x = 0; input.move.y = 0; input.jump = true; p.update(dt, 0, true);
+        input.jump = false; p.update(dt, 0, true);
+        input.jump = true; p.update(dt, 0, true);
+        const lit = p.jet > 0, wait = p.jetWait;
+        p.jetWait = 0; input.jump = false;
+        for (let k = 0; k < 900 && !p.grounded; k++) { p.update(dt, 0, true); top = Math.max(top, p.pos.y); }
+        for (let k = 0; k < 10; k++) p.update(dt, 0, true);
+        return { lit, rise: +(top - y0).toFixed(2), wait: +wait.toFixed(1) };
+      };
+      const out = {};
+      a.equip('jetpack', true); out.real = { tank: p.tank, every: p.jetEvery, ...flight() }; out.real2 = flight();
+      a.equip('jetlite', true); out.lite = { tank: p.tank, every: p.jetEvery, ...flight() }; out.lite2 = flight();
+      for (let k = 0; k < 60 * 15.5; k++) p.update(dt, 0, true);
+      out.lite3 = flight();
+      a.equip('jetlite', false); out.none = p.canFly(p.pos);
+      a.equip('jetpack', true); out.back = { tank: p.tank, every: p.jetEvery, can: p.canFly(p.pos) };
+      return out;
+    });
+    check('the two jetpacks: the one that is on is chosen (or none); the light one lifts three metres or so and lights again only fifteen seconds later, the real one whenever one likes',
+      jets.real.lit && jets.real2.lit && jets.real.every === 0 && jets.real.rise > 9 && jets.lite.lit && Math.abs(jets.lite.tank - 0.3) < 0.01 && jets.lite.every === 15 && jets.lite.rise > 2.4 && jets.lite.rise < 4.3
+      && !jets.lite2.lit && jets.lite2.wait > 10 && jets.lite2.rise < 1.3 && jets.lite3.lit && jets.none === false && jets.back.every === 0 && Math.abs(jets.back.tank - 1.5) < 0.01 && jets.back.can, JSON.stringify(jets));
   }
 
   // --- the big red button at the top of the island: a show far out at sea, then a quarter of an hour of patience

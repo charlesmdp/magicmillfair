@@ -96,12 +96,12 @@ const REST_HAND = [0.33, 0.74, 0.04]; // about where a hand hangs (gestures ease
 /**
  * What an avatar wears and holds travels in the 16 "flags" bits of its state:
  * bit 0 free camera · bits 1-3 hat (index in HATS, its low bits) · bit 4 jetpack burning · bit 5 bouquet ·
- * bit 6 quad · bit 7 a head twice the size · bits 8-9 size (0 normal, 1 tiny, 2 giant) · bits 10-11 disguise (0 none,
+ * bit 6 quad · bit 7 a head twice the size · bits 8-9 and 13 size (see SIZE_SCALE in items.js) · bits 10-11 disguise (0 none,
  * 1 a bush, 2 a tree) · bit 12 the fourth bit of the hat
  */
 export const packLook = (o) => (o.free ? 1 : 0) | ((o.hat & 7) << 1) | (o.jet ? 16 : 0) | (o.bouquet ? 32 : 0) | (o.quad ? 64 : 0) | (o.dome ? 128 : 0)
-  | (((o.size || 0) & 3) << 8) | (((o.disguise || 0) & 3) << 10) | (((o.hat >> 3) & 1) << 12);
-const unpackLook = (f) => ({ hat: ((f >> 1) & 7) | (((f >> 12) & 1) << 3), jet: !!(f & 16), bouquet: !!(f & 32), quad: !!(f & 64), dome: !!(f & 128), size: (f >> 8) & 3, disguise: (f >> 10) & 3 });
+  | (((o.size || 0) & 3) << 8) | (((o.disguise || 0) & 3) << 10) | (((o.hat >> 3) & 1) << 12) | ((((o.size || 0) >> 2) & 1) << 13);
+const unpackLook = (f) => ({ hat: ((f >> 1) & 7) | (((f >> 12) & 1) << 3), jet: !!(f & 16), bouquet: !!(f & 32), quad: !!(f & 64), dome: !!(f & 128), size: ((f >> 8) & 3) | (((f >> 13) & 1) << 2), disguise: (f >> 10) & 3 });
 
 const HEIGHT = 1.72;
 // Seated, the hips sit this far behind the feet and the underside of the body this high above them.
@@ -290,7 +290,7 @@ export class Character {
     this.ambient = 1;
     this.look = { hat: 0, jet: false, bouquet: false, quad: false, dome: false, disguise: 0 };
     this.big = 0; // 0..1: how far the head has grown
-    this.size = 1; // (tiny, giant: a cheat, or the choice of who holds the Game Pass)
+    this.size = 1; // (the choice of who holds the Game Pass, a secret word, or a flight on the stage of the plaza)
     this.prop = null; // what the avatar is disguised as (a bush, a tree)
     this.cross = 0; // 0..1: how far it has sat down on the ground, legs crossed
     this.move = null; // a gesture made by hand: { fn, t, T } (see MOVES)

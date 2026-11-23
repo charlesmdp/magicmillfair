@@ -9,6 +9,8 @@ const REACH = 0.6; // slopes are measured over that distance ahead, never over o
 const EASE = 0.7; // from that slope up, one climbs more and more slowly (half speed at the limit)
 const OK = 0, BLOCKED = 1, STEEP = 2;
 export const JET = { time: 1.5, thrust: 27, max: 7 }; // seconds of fuel, upward acceleration, top climbing speed
+/** The light jetpack: three tenths of a second of thrust (it lifts three metres or so), and so long between two goes. */
+export const JET_LITE = { time: 0.3, every: 15 };
 const QUAD = { speed: 15.5, cruise: 9.5 };
 const DEATH = 3.6; // seconds between dying and standing again
 
@@ -66,6 +68,9 @@ export class PlayerController {
     this._plunge = 0; // seconds under water left after a dive
     this.cross = false; // sitting on the ground, legs crossed (anywhere: see sitOnGround)
     this.noJet = false; // "jump" was pressed in the air and no jetpack answered (read and cleared by the game)
+    this.jetEvery = 0; // seconds a jetpack needs between two goes (0: none — the light one needs some)
+    this.jetCool = 0; // …and how many of them are left to wait
+    this.jetWait = 0; // "jump" was pressed in the air too soon: how long is left (read and cleared by the game)
     this._sink = 0; // …and how fast one is still going down
     /** May the jetpack be used here? Set by the game (caves and some places say no). */
     this.canFly = () => true;
@@ -218,6 +223,7 @@ export class PlayerController {
   }
 
   update(dt, camYaw, control = true) {
+    if (this.jetCool > 0) this.jetCool = Math.max(0, this.jetCool - dt);
     if (this.dead) { this.cross = false; return this._dying(dt); }
     if (this.seat) { this.cross = false; return this._seated(dt, control); }
     if (this.driver) { this.cross = false; return this._driven(dt, control); }
@@ -360,7 +366,9 @@ export class PlayerController {
       else pos.y += (ground - pos.y) * (1 - Math.exp(-dt * 22));
     } else {
       // a second press of "jump" in the air lights the jetpack, for as long as its fuel lasts
-      if (control && inp.jump && this.jet <= 0 && this.fuel > 0.1 && !riding && this.canFly(pos)) { this.jet = this.fuel; this.fuel = 0; vel.y = Math.max(vel.y, 2.5); }
+      const ready = this.jet <= 0 && this.fuel > 0.1 && !riding && this.canFly(pos);
+      if (control && inp.jump && ready && this.jetCool > 0) this.jetWait = this.jetCool; // (it has not got its breath back)
+      else if (control && inp.jump && ready) { this.jet = this.fuel; this.fuel = 0; vel.y = Math.max(vel.y, 2.5); this.jetCool = this.jetEvery; }
       else if (control && inp.jump && this.jet <= 0 && !riding && !this.swimming) this.noJet = true;
       if (this.jet > 0) {
         this.jet -= dt;

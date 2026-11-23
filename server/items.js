@@ -11,11 +11,11 @@
 // games do without them), the rest is for show.
 //
 // The Game Pass (PASS) is not owned: it is held by the month. While it lasts its holder has every hat (those
-// that come later too) and the light jetpack, may be tiny or giant, and picks their colour among two more
+// that come later too) and the light jetpack, picks the size of their robot among four, and its colour among two more
 // rows. And everybody has the light jetpack for a day after their first visit (TRIAL): a taste of it.
 export const ITEMS = [
   { id: 'jetpack', name: 'Jetpack', price: 3000, group: 'gear', rarity: 'legendary', blurb: 'Jump again in the air and fly: a second and a half of thrust, refilled every time you land. For the rooftops, the cliffs and the showing off.' },
-  { id: 'jetlite', name: 'Jetpack Lite', price: 500, group: 'gear', rarity: 'rare', blurb: 'The same idea with a third of the tank: half a second of thrust. Enough for a ledge, a wall, a second thought.' },
+  { id: 'jetlite', name: 'Jetpack Lite', price: 500, group: 'gear', rarity: 'rare', blurb: 'The same idea with a small tank: a third of a second of thrust, and fifteen seconds to get its breath back. Enough for a ledge, a wall, a second thought.' },
   { id: 'fireworks', name: 'Box of fireworks', price: 1500, group: 'fun', rarity: 'epic', blurb: 'Never empty. Press V: a rocket goes up, bursts, and everybody around looks at the sky. The end of the world deserves a party.' },
 
   { id: 'hat:crown', name: 'Crown', price: 999, group: 'hats', rarity: 'legendary', blurb: 'Solid gold, five points. Somebody has to be in charge of what is left.' },
@@ -48,7 +48,7 @@ export const PASS = {
   perks: [
     'Every hat of the shop — and every hat to come',
     'The Jetpack Lite, for as long as you hold the pass',
-    'Be tiny or be giant, whenever you like',
+    'Four sizes for your robot: Pocket, Classic, Jumbo and Titan',
     'Two more rows of colours for your robot, black included',
     'Coming: the weather of where you live, with its day and its night',
   ],
@@ -56,9 +56,18 @@ export const PASS = {
 };
 /** What a holder of the pass has without owning it. */
 export const passGives = (id) => id === 'jetlite' || (typeof id === 'string' && id.startsWith('hat:'));
-/** The sizes a holder of the pass may take (the number travels in the look of the avatar: see Character.js). */
-export const SIZES = ['normal', 'tiny', 'giant'];
-export const SIZE_SCALE = [1, 0.45, 2.3];
+/**
+ * The sizes of a robot. The first four are the choice of who holds the Game Pass: Classic (everybody's),
+ * Pocket (a tenth smaller), Jumbo (a tenth bigger), Titan (a fifth bigger). The others are nobody's choice:
+ * what two secret words do for a moment, and how small one is made to fly on the stage of the plaza. The
+ * number travels in the look of the avatar (see Character.js).
+ */
+export const SIZES = ['normal', 'pocket', 'jumbo', 'titan'];
+export const SIZE_NAMES = ['Classic', 'Pocket', 'Jumbo', 'Titan'];
+export const SIZE_SCALE = [1, 0.9, 1.1, 1.2, 0.45, 2.3, 0.5];
+export const SIZE = { mini: 4, maxi: 5, flyer: 6 };
+/** (what the sizes were called before there were four) */
+export const sizeOf = (word) => (SIZES.includes(word) ? word : word === 'tiny' ? 'pocket' : word === 'giant' ? 'titan' : 'normal');
 /** Everybody has this for a while after their first visit (ms): a taste. */
 export const TRIAL = { item: 'jetlite', ms: 24 * 3600_000 };
 /** How many colours a robot can be: the first sixteen are everybody's, the others come with the pass. */

@@ -7,7 +7,7 @@ import { World } from './world/World.js';
 import { FreeCamera } from './player/FreeCamera.js';
 import { CharacterFactory, EMOTE_LIST, emoteIndex, packLook } from './player/Character.js';
 import { HATS } from './player/Cosmetics.js';
-import { ITEMS, PAINTS, TRAILS, itemOf, packKit, PASS, SIZES, SIZE_SCALE, FREE_COLORS } from '../server/items.js';
+import { ITEMS, PAINTS, TRAILS, itemOf, packKit, PASS, SIZES, SIZE, SIZE_SCALE, sizeOf, FREE_COLORS } from '../server/items.js';
 import { BOARDS as GAME_NAMES } from '../server/catalog.js';
 import { drawSponsor } from './world/zones/games/Boards.js';
 import { ShopView } from './ui/ShopView.js';
@@ -15,7 +15,7 @@ import { Previewer } from './ui/Preview.js';
 import { Sparks } from './world/effects/Sparks.js';
 import { Account } from './net/Account.js';
 import { Shop, price, logoData, loadImage } from './net/Shop.js';
-import { PlayerController, JET } from './player/PlayerController.js';
+import { PlayerController, JET, JET_LITE } from './player/PlayerController.js';
 import { CameraRig } from './player/CameraRig.js';
 import { Interact } from './player/Interact.js';
 import { RankEmotes, rankPicture } from './player/RankEmotes.js';
@@ -30,7 +30,7 @@ import { RemoteAvatars } from './net/RemoteAvatars.js';
 import { Benchmark } from './app/Benchmark.js';
 import { SPAWN, ZONES, CLIMB, RACE, WING, TRACK } from './world/layout/layout.js';
 import { VILLAGE_PERKS, VILLAGE_PITCH, money } from './world/layout/sponsors.js';
-import { FEATURES } from './app/config.js';
+import { FEATURES, skyGateOpen } from './app/config.js';
 import { Soundscape } from './audio/Soundscape.js';
 import { Blast } from './world/effects/Blast.js';
 import { BLAST_EVERY } from '../server/protocol.js';
@@ -69,6 +69,8 @@ async function boot() {
   const world = new World(engine);
   const camera = engine.camera, scene = engine.scene, data = world.data;
   Object.assign(app, { engine, world, input, hud });
+  // (the places that have a name — the Sky Gate has none while it is not there)
+  const PLACES = ZONES.filter((z) => !(z.id === 'skygate' && !skyGateOpen()));
   canvas.addEventListener('webglcontextlost', (e) => {
     e.preventDefault();
     hud.note('The graphics context was lost. Reload the page (the “Light” quality is advised).', 1e8);
@@ -97,8 +99,8 @@ async function boot() {
   const floorAt = (x, z) => Math.max(data.heightAt(x, z), data.waterAt(x, z));
   let color = parseInt(store.get('mmf.color'), 10);
   if (!(color >= 0 && color < 32)) color = Math.floor(Math.random() * 16);
-  // (tiny, giant: the choice of who holds the Game Pass; 0 is the usual size)
-  let size = Math.max(0, SIZES.indexOf(store.get('mmf.size') || 'normal'));
+  // (the size of the robot: the choice of who holds the Game Pass; 0 is everybody's)
+  let size = Math.max(0, SIZES.indexOf(sizeOf(store.get('mmf.size'))));
   let disguise = 0; // a bush (1), a tree (2): a secret word of the chat
   let name = (store.get('mmf.name') || '').trim() || `Visitor ${10 + Math.floor(Math.random() * 90)}`;
   const me = factory.create(color);
@@ -136,8 +138,15 @@ async function boot() {
   const who = { admin: false, owner: false, key: '', days: 1 };
   app.who = who;
   // no jetpack underground, nor where a game forbids it
-  // (two jetpacks: the real one, and a light one with a third of the tank)
-  player.canFly = (p) => (shop.owns('jetpack') || shop.owns('jetlite')) && !player.cave && !world.noFly.some((z) => (p.x - z.x) ** 2 + (p.z - z.z) ** 2 < z.r * z.r);
+  // (two jetpacks: the real one, and a light one with a small tank that needs its breath between two goes.
+  // Who has both chooses the one that is on — in the item shop —, and may wear none)
+  const jetOn = () => {
+    const real = shop.owns('jetpack'), lite = shop.owns('jetlite'), want = store.get('mmf.jet');
+    if (want === 'none') return null;
+    return want === 'jetlite' && lite ? 'jetlite' : want === 'jetpack' && real ? 'jetpack' : real ? 'jetpack' : lite ? 'jetlite' : null;
+  };
+  const fitJet = () => { const on = jetOn(); player.tank = on === 'jetpack' ? JET.time : JET_LITE.time; player.jetEvery = on === 'jetlite' ? JET_LITE.every : 0; if (on !== 'jetlite') player.jetCool = 0; if (player.fuel > player.tank) player.fuel = player.tank; };
+  player.canFly = (p) => !!jetOn() && !player.cave && !world.noFly.some((z) => (p.x - z.x) ** 2 + (p.z - z.z) ** 2 < z.r * z.r);
   player.onDeath = (cause) => { hud.wasted(cause); audio.play('wasted'); };
   player.onRespawn = () => { hud.wasted(null); rig.snap(player.pos, rig.yaw); audio.play('respawn'); };
   const rank = new RankEmotes(scene);
@@ -227,7 +236,7 @@ async function boot() {
   // ---------- who is here (and, for the administrator, where from; putting out, keeping out)
   const roster = { details: null, bans: null, admins: null, visitors: null, now: 0 };
   const showRoster = () => {
-    const p = player.pos, zoneOf = (x, z) => { let best = null, bd = 1; for (const zn of ZONES) { if (zn.hidden) continue; const d = Math.hypot(x - zn.x, z - zn.z) / zn.r; if (d < bd) { bd = d; best = zn; } } return best ? best.name : ''; };
+    const p = player.pos, zoneOf = (x, z) => { let best = null, bd = 1; for (const zn of PLACES) { if (zn.hidden) continue; const d = Math.hypot(x - zn.x, z - zn.z) / zn.r; if (d < bd) { bd = d; best = zn; } } return best ? best.name : ''; };
     const people = [{ id: presence?.id || 0, name, color, me: true, where: zoneOf(p.x, p.z) }];
     if (presence) {
       for (const o of [...presence.peers.values()].sort((a, b) => a.name.localeCompare(b.name))) {
@@ -471,9 +480,9 @@ async function boot() {
     const s = fair.session;
     if (player.dead) { endGame(); return; }
     if (fair.kind === 'booth' || fair.kind === 'wing') {
-      const P = input.pointer, view = s.view, tall = engine.width < engine.height;
+      const P = input.pointer, view = s.viewAt ? s.viewAt(engine.width / engine.height) : s.view, tall = engine.width < engine.height;
       camera.position.copy(view.pos); camera.lookAt(view.look);
-      fair.fov = Math.min(96, view.fov * (tall ? 1.5 : 1));
+      fair.fov = s.viewAt ? view.fov : Math.min(96, view.fov * (tall ? 1.5 : 1)); // (a game that frames itself says how wide it looks)
       camera.updateMatrixWorld();
       _aim.dir.set((P.x / window.innerWidth) * 2 - 1, -(P.y / window.innerHeight) * 2 + 1, 0.5).unproject(camera).sub(camera.position).normalize();
       _aim.origin.copy(camera.position);
@@ -569,7 +578,7 @@ async function boot() {
     if (!who.admin || !to?.dev) return;
     if (!shop.open) { hud.note('The shop is not open: everything is free already.', 5000); return; }
     const options = [
-      { label: `${PASS.name} — 30 days`, note: 'Every hat, the Jetpack Lite, tiny and giant, the extra colours', what: { pass: 30 }, color: [0.95, 0.76, 0.3] },
+      { label: `${PASS.name} — 30 days`, note: 'Every hat, the Jetpack Lite, the four sizes, the extra colours', what: { pass: 30 }, color: [0.95, 0.76, 0.3] },
       { label: `${PASS.name} — a year`, note: 'The same, for 365 days', what: { pass: 365 }, color: [0.95, 0.76, 0.3] },
       ...ITEMS.map((it) => ({ label: it.name, note: `${it.group} · ${price(it.price)} in the shop`, what: { item: it.id } })),
     ];
@@ -605,6 +614,8 @@ async function boot() {
     hud.note(word, 3000);
     audio.play('teleport');
   };
+  // (what the large map writes by a village: its name — and what it costs, where the map shows prices)
+  const villageLabel = (v) => (FEATURES.mapPrices && v.forHire ? money(v.price) : v.name);
   const chooseVillage = () => {
     const here = sky.villageAt(player.pos.x, player.pos.z);
     // (the cheapest first; each is the only one of its kind)
@@ -634,7 +645,7 @@ async function boot() {
       shown.set(id, key);
       place.set(live ? { title: view.title, subtitle: view.subtitle, url: view.url, logo: await loadImage(view.logo) } : null);
     }
-    hud.setVillages(sky.villages, data.meta.size, (v) => (v.forHire ? money(v.price) : v.name));
+    hud.setVillages(sky.villages, data.meta.size, villageLabel);
   };
   let shopKnown = false; // (has the server said what is theirs yet?)
   const refreshShop = async () => {
@@ -649,7 +660,7 @@ async function boot() {
     if (kit.paint && !shop.owns(`paint:${PAINTS[kit.paint]}`)) kit.paint = 0;
     if (kit.trail && !shop.owns(`trail:${TRAILS[kit.trail]}`)) kit.trail = 0;
     wear();
-    player.tank = shop.owns('jetpack') ? JET.time : JET.time / 3;
+    fitJet();
     // (the free day of the light jetpack: said once, the first time it is found)
     if (shop.open && shop.lent('jetlite') === 'trial' && !shop.has('jetpack') && !store.get('mmf.trial')) {
       store.set('mmf.trial', '1');
@@ -771,7 +782,7 @@ async function boot() {
       .then(async (i) => { if (i !== 0) return; hud.note('Opening the payment page…', 8000); const wrong = await shop.buy(`village:${v.id}`); if (wrong) hud.note(wrong, 7000); });
   };
   world.actionSources.push((p) => {
-    if (near(p, [sky.gate.x, sky.gate.z], 3.6)) return { label: 'Travel to a sky village', run: chooseVillage };
+    if (!sky.gate.hidden && near(p, [sky.gate.x, sky.gate.z], 3.6)) return { label: 'Travel to a sky village', run: chooseVillage };
     const v = sky.villageAt(p.pos.x, p.pos.z);
     return v && near(p, v.ring, 3.2) ? { label: 'Back to the valley', run: () => travel(sky.gate, 'Back in the valley') } : null;
   });
@@ -789,7 +800,7 @@ async function boot() {
   });
   Object.assign(app, { travel, sky });
   // ---------- the item shop: everything that is sold, on one screen (ui/ShopView.js)
-  const FEATURED = ['jetpack', 'paint:gold', 'fireworks', 'hat:crown'], WEARABLE = ['hat', 'paint', 'trail'];
+  const FEATURED = ['jetpack', 'paint:gold', 'fireworks', 'hat:crown'], WEARABLE = ['hat', 'paint', 'trail', 'jetpack', 'jetlite'];
   const previewer = new Previewer(engine, factory);
   // (the picture of a place to sponsor: its panel as it stands over the board, under the name of the game)
   const panelPicture = (id, w, h) => {
@@ -838,13 +849,13 @@ async function boot() {
     return c;
   };
   const shopView = new ShopView(hud.root, (id, w, h) => (id === PASS.id ? passPicture(w, h) : id.startsWith('board:') ? panelPicture(id, w, h) : previewer.shot(id, color, w, h)));
-  const wornNow = (type, sub) => (type === 'hat' ? HATS[look.hat]?.id === sub : type === 'paint' ? PAINTS[kit.paint] === sub : type === 'trail' ? TRAILS[kit.trail] === sub : false);
+  const wornNow = (type, sub) => (type === 'hat' ? HATS[look.hat]?.id === sub : type === 'paint' ? PAINTS[kit.paint] === sub : type === 'trail' ? TRAILS[kit.trail] === sub : type === 'jetpack' || type === 'jetlite' ? jetOn() === type : false);
   const shopItems = () => {
     const list = ITEMS.map((it) => {
       const [type, sub] = it.id.split(':'), owned = shop.has(it.id), lent = shop.lent(it.id), left = lent === 'trial' ? shop.trialLeft(it.id) : 0;
       return {
         ...it, owned, lent, cost: price(shop.cost(it.id) || it.price), worn: (owned || !!lent) && wornNow(type, sub), wearable: WEARABLE.includes(type), featured: FEATURED.includes(it.id),
-        hint: it.id === 'fireworks' ? 'Yours: press V (or the button in the emotes) to light one.' : it.id === 'jetpack' || it.id === 'jetlite' ? 'Yours: jump, then press jump again in the air.' : 'Yours for good: put it on and take it off as you please.',
+        hint: it.id === 'fireworks' ? 'Yours: press V (or the button in the emotes) to light one.' : it.id === 'jetpack' ? 'Yours: jump, then press jump again in the air. With both jetpacks, the one that is on is chosen here.' : it.id === 'jetlite' ? `Yours: jump, then press jump again in the air — once every ${JET_LITE.every} seconds. With both jetpacks, the one that is on is chosen here.` : 'Yours for good: put it on and take it off as you please.',
         ...(lent === 'pass' && { fine: `Yours while you hold the ${PASS.name}. Buy it to keep it for good.` }),
         ...(lent === 'trial' && { fine: `A taste, on the house: yours for ${left > 3600_000 ? `${Math.ceil(left / 3600_000)} more hours` : `${Math.max(1, Math.ceil(left / 60_000))} more minutes`} — jump, then press jump again in the air. After that it is sold here, and it comes with the ${PASS.name}.` }),
       };
@@ -858,7 +869,7 @@ async function boot() {
         act: held ? null : `Get the pass · ${price(shop.prices.pass || PASS.price)} a month`,
         manage: held && shop.pass.managed ? 'Look after it, or stop it' : null,
         blurb: held ? (gift ? `A gift of the fair: yours until ${new Date(shop.pass.until).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.` : 'It is yours. Thank you — truly.') : 'One pass, by the month, and the fair opens a little wider.',
-        perks: PASS.perks, why: PASS.why, pitch: ['Every hat', 'Jetpack Lite', 'Tiny or giant', '16 more colours'],
+        perks: PASS.perks, why: PASS.why, pitch: ['Every hat', 'Jetpack Lite', 'Four sizes', '16 more colours'],
         fine: held ? (gift ? 'When the gift ends, nothing is charged: the pass simply stops.' : 'Paid by the month on Stripe. Stop whenever you like: it lasts until the end of the month you paid for.') : 'Paid by the month on Stripe; stop whenever you like. What you bought before stays yours, pass or no pass.',
       });
     }
@@ -896,7 +907,7 @@ async function boot() {
     if (Number.isInteger(p.color)) { color = p.color; me.setColor(color); store.set('mmf.color', String(color)); shopView.stale(); }
     look.hat = Math.max(0, HATS.findIndex((h) => h.id === p.hat));
     kit.paint = Math.max(0, PAINTS.indexOf(p.paint)); kit.trail = Math.max(0, TRAILS.indexOf(p.trail));
-    if (SIZES.includes(p.size)) { size = SIZES.indexOf(p.size); store.set('mmf.size', SIZES[size]); }
+    if (p.size) { size = SIZES.indexOf(sizeOf(p.size)); store.set('mmf.size', SIZES[size]); }
   };
   const showAccount = () => hud.setAccount({ name: account.name, available: account.available });
   /** Signed in (or out): what is owned, the days in a row and the look are asked again. */
@@ -941,6 +952,12 @@ async function boot() {
   Object.assign(app, { account, accountAction });
   const equip = (id, on) => {
     const [type, sub] = id.split(':');
+    if (type === 'jetpack' || type === 'jetlite') {
+      // (the jetpack that is on: this one — or, taken off, none: the other one is put on from its own card)
+      store.set('mmf.jet', on ? type : 'none');
+      fitJet();
+      return;
+    }
     if (type === 'hat') look.hat = on ? Math.max(0, HATS.findIndex((h) => h.id === sub)) : 0;
     else if (type === 'paint') kit.paint = on ? Math.max(0, PAINTS.indexOf(sub)) : 0;
     else if (type === 'trail') kit.trail = on ? Math.max(0, TRAILS.indexOf(sub)) : 0;
@@ -1141,8 +1158,8 @@ async function boot() {
   input.on('respawn', () => { if (state.mode === 'walk') { endGame(); spawn(); hud.note('Back to the mill'); } });
   input.on('menu', () => { if (fair.session && !fair.session.over) { endGame(); hud.note('Game left.'); } hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); hud.toggleChat(false); hud.closeChoice(); hud.closeRoster(); });
   input.on('map', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleBigMap(); });
-  hud.setMap(data.meta.map, ZONES);
-  hud.setVillages(world.sky.villages, data.meta.size, (v) => (v.forHire ? money(v.price) : v.name));
+  hud.setMap(data.meta.map, PLACES);
+  hud.setVillages(world.sky.villages, data.meta.size, villageLabel);
   if (params.has('stats')) hud.setStatsVisible(true);
 
   // ---------- benchmark
@@ -1236,15 +1253,25 @@ async function boot() {
       player.hop = timers.hops ? 2 : 1;
       player.grip = timers.slick ? 0.09 : 1;
       player.cheat = !!(timers.lowg || timers.haste || timers.hops || timers.slick || timers.shot);
-      // (tiny, giant: a secret word for a moment, or the choice of who holds the pass — never in the race)
+      // (the size: small for a flight on the stage of the plaza; a secret word for a moment; or the choice of who
+      // holds the pass — and in the race, everybody's)
       const racing = !!fair.session && fair.kind === 'race';
-      look.size = racing ? 0 : timers.mini ? 1 : timers.maxi ? 2 : shop.hasPass ? size : 0;
+      look.size = racing ? 0 : fair.session && fair.kind === 'wing' ? SIZE.flyer : timers.mini ? SIZE.mini : timers.maxi ? SIZE.maxi : shop.hasPass ? size : 0;
       look.disguise = racing ? 0 : disguise;
       me.size = SIZE_SCALE[look.size];
+      if (player.jetWait) {
+        // (the light jetpack was asked for too soon: how long it still needs)
+        if (mode === 'walk' && !fair.session && state.time - (app.toldWait || -99) > 1.5) { app.toldWait = state.time; hud.note(`The Jetpack Lite is getting its breath back: ${Math.ceil(player.jetWait)} s.`, 2200); audio.play('miss', { volume: 0.4 }); }
+        player.jetWait = 0;
+      }
       if (player.noJet) {
         player.noJet = false;
         // (a jetpack was asked for and there is none: the free day is over — where to get one)
-        if (shop.open && !shop.owns('jetpack') && !shop.owns('jetlite') && mode === 'walk' && !fair.session && state.time - (app.toldJet || -99) > 8) {
+        if (jetOn() === null && (shop.owns('jetpack') || shop.owns('jetlite')) && mode === 'walk' && !fair.session && !player.cave && state.time - (app.toldJet || -99) > 8) {
+          // (they have one, and took it off)
+          app.toldJet = state.time;
+          hud.note('Your jetpack is off. Put it back on in the item shop (O).', 5000);
+        } else if (shop.open && !shop.owns('jetpack') && !shop.owns('jetlite') && mode === 'walk' && !fair.session && state.time - (app.toldJet || -99) > 8) {
           app.toldJet = state.time;
           hud.note(`Your free day with the jetpack is over. The Jetpack Lite is ${price(shop.cost('jetlite'))} in the item shop — and it comes with the ${PASS.name}.`, 7000);
         }
@@ -1326,7 +1353,7 @@ async function boot() {
       zoneTimer = 0;
       const p = mode === 'walk' ? player.pos : camera.position;
       let best = null, bestD = 1;
-      for (const z of ZONES) { const d = Math.hypot(p.x - z.x, p.z - z.z) / z.r; if (d < bestD) { bestD = d; best = z; } }
+      for (const z of PLACES) { const d = Math.hypot(p.x - z.x, p.z - z.z) / z.r; if (d < bestD) { bestD = d; best = z; } }
       const village = sky.villageAt(p.x, p.z);
       if (village) hud.setZone(village.name); else if (best) hud.setZone(best.name);
     }

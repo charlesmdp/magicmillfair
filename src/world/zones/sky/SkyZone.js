@@ -13,6 +13,7 @@ import { Polygon } from '../../Areas.js';
 import { fallsMaterial } from '../../water/Falls.js';
 import { seatAt } from '../../../player/PlayerController.js';
 import { SKY } from '../../layout/layout.js';
+import { skyGateOpen } from '../../../app/config.js';
 import { SPONSORS, sponsorId, VILLAGE_PRICES, VILLAGE_PERKS, VILLAGE_PITCH, money } from '../../layout/sponsors.js';
 import { drawEmblem } from './emblems.js';
 
@@ -329,6 +330,8 @@ export class SkyZone {
   // The Sky Gate, in the valley: a bigger ring on three steps, lanterns, a signpost
   _gate() {
     const G = SKY.gate, parts = new Parts(), y = this.data.heightAt(G.x, G.z);
+    // (not shown for now: see FEATURES.skyGate — where it would stand is kept, for whoever comes back from a village)
+    if (!skyGateOpen()) { this.gate = { x: G.x, z: G.z, y, yaw: G.yaw, arrive: [G.x + Math.sin(G.yaw) * 2.4, G.z + Math.cos(G.yaw) * 2.4, G.yaw], hidden: true }; return; }
     const m = parts.get('matte'), glow = parts.get('glow');
     m.tint(STONE[0] * 0.92, STONE[1] * 0.92, STONE[2] * 0.92, 1).cylinder(G.x, y - 0.6, G.z, 3.4, 3.6, 0.66, 18);
     this.platforms.push({ type: 'disc', x: G.x, z: G.z, r: 3.4, y: y + 0.06, clearance: 1.0 });

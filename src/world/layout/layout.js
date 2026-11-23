@@ -560,10 +560,10 @@ export const RACE = {
   name: 'Quadmania', laps: 3, width: 7.5, start: 0.012, paddock: 1, every: 5, starts: ['Red', 'Blue', 'Green', 'Yellow', 'Purple', 'Orange'],
   boosts: TRACKS[TRACK].boosts, jump: TRACKS[TRACK].jump, chicanes: TRACKS[TRACK].chicanes, gap: TRACKS[TRACK].gap || 24, logs: TRACKS[TRACK].logs, grove: TRACKS[TRACK].grove,
 };
-// Wing It: a little theatre on the plaza at the foot of the pier, where one flies on the spot while the
+// Flappy Robot: a little theatre on the plaza at the foot of the pier, where one flies on the spot while the
 // scenery goes by. (x, z): the middle of the front of its stage; `yaw`: which way the stage looks;
 // `width`, `height`: the opening of the stage.
-export const WING = { name: 'Wing It', x: -7.2, z: 12.6, yaw: Math.PI * 0.75, width: 12, height: 5.2 };
+export const WING = { name: 'Flappy Robot', x: -7.2, z: 12.6, yaw: Math.PI * 0.75, width: 12, height: 5.2 };
 // The boulder of the island: it rolls down the whole path, again and again (seconds; metres per second).
 export const BOULDER = { radius: 1.55, speed: 7.2, period: 52 };
 
