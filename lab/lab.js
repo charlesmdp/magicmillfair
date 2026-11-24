@@ -11,7 +11,7 @@ const TRIALS = {
 };
 Object.assign(EXTRAS, TRIALS);
 
-const KEY = 'mmf.lab.3', NAMES = { slide: 'Toboggan', pond: 'The Endless Pond (course sur l’étang)', boats: 'Bateaux télécommandés', hill: 'Uphill Battle (la pente aux rondins)', oak: 'Chêne : un étage à essayer', oak0: 'Chêne (premier essai, mis de côté)', caves: 'Grottes : chat de proximité', stats: 'Compteurs et page des chiffres' };
+const KEY = 'mmf.lab.3', NAMES = { slide: 'Toboggan', pond: 'The Endless Pond (course sur l’étang)', boats: 'Bateaux télécommandés', hill: 'Uphill Battle (la pente aux rondins)', crack: 'Between a Rock (la fissure de la falaise)', oak: 'Chêne : un étage à essayer', oak0: 'Chêne (premier essai, mis de côté)', caves: 'Grottes : chat de proximité', stats: 'Compteurs et page des chiffres' };
 const read = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { return {}; } };
 const query = new URLSearchParams(location.search), saved = read(), on = {};
 for (const id of Object.keys(EXTRAS)) on[id] = query.has(id) ? !/^(0|off|no|false)$/i.test(query.get(id)) : id === 'oak0' ? saved[id] === true : saved[id] !== false; // (the first trial of the oak only when asked for)
@@ -49,6 +49,7 @@ function panel(app, built) {
   if (built.slide?.gate) go('Aller au toboggan', () => { const g = built.slide.gate; return [g.x - Math.sin(g.yaw) * 3, g.z - Math.cos(g.yaw) * 3, g.yaw]; });
   if (built.pond?.gate) go('Aller à l’Endless Pond', () => { const g = built.pond.gate; return [g.x + 2.2, g.z, g.yaw]; });
   if (built.hill?.gate) go('Aller à la pente (Uphill Battle)', () => { const g = built.hill.gate; return [g.x - Math.sin(g.yaw) * 2.5, g.z - Math.cos(g.yaw) * 2.5, g.yaw]; });
+  if (built.crack?.gate) go('Aller à la fissure (Between a Rock)', () => { const g = built.crack.gate; return [g.x, g.z, g.yaw]; });
   if (built.boats?.stand) go('Aller aux bateaux', () => { const g = built.boats.stand; return [g.x - Math.sin(g.yaw) * 2.6, g.z - Math.cos(g.yaw) * 2.6, g.yaw]; });
   if (built.oak?.gate) go('Aller au chêne (étage d’essai)', () => { const g = built.oak.gate; return [g.x, g.z - 2.5, 0]; });
   if (built.oak0?.gate) go('Aller au grand chêne', () => { const g = built.oak0.gate; return [g.x - Math.sin(g.yaw) * 3, g.z - Math.cos(g.yaw) * 3, g.yaw]; });
