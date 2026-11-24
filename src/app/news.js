@@ -6,9 +6,16 @@ export const NEWS = [
   {
     date: '24 November 2026',
     items: [
+      ['Stars on the map', 'The big map (M) marks the big attractions with a gold star and their name.'],
+      ['Play on the beach!', 'The easel where you arrive points to the games of the beach now. Billy\'s own stands in the flower bed by the house.'],
+      ['Which room am I in?', 'The settings name the room you are in — and a list there takes you to another.'],
+      ['A camera that stays behind', 'A new switch in the settings: the camera always follows the way your robot faces. Off unless you ask.'],
+      ['Emotes, in order', 'Behind the smile: gestures, cheers, then the animals of light — with their pictures back.'],
+      ['A race joined to the last second', 'Quadmania: the start you are offered is the start you get. Its name no longer changes while you read it.'],
+      ['Who makes this', 'The terms and the privacy page now say who is behind the game, and where to write.'],
       ['The keys, any time', 'In a game, press H — or the small "keys" button under its line — and its keys are shown again, a line each.'],
       ['The arcade, with a finger', 'Meltdown Run hears a touch screen now: the top of its picture jumps, the bottom ducks, the ✕ of its frame walks away.'],
-      ['Get life advice', 'An easel where you arrive, planks at the mill and by the pond: they lead to Billy — who now follows what the two of you were saying.'],
+      ['Get life advice', 'An easel and planks at the mill and by the pond lead to Billy — who now follows what the two of you were saying.'],
       ['A referee at the booths', 'A score that would enter the first five of a board is played again by the fair, move for move, before anybody else sees it.'],
       ['Nearby first', 'The chat opens on "Nearby": those within twenty metres read you. The button left of the line (or Tab) talks to the whole oasis.'],
       ['Scores belong to accounts', 'Without one you are on the board of the day. With one — free: a name, a password — the week, the month and all time are yours too. Every board starts again.'],

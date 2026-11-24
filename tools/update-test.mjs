@@ -220,6 +220,27 @@ try {
     && climbed.during.on && climbed.during.busy && climbed.free && climbed.day.length === 1 && climbed.day[0].name === 'Traveller' && climbed.day[0].score > 9000 && climbed.day[0].score < 90000
     && others.pond === 404 && others.run === 400,
     JSON.stringify({ extras: labOn.extras, lap, flown, climbed, others }));
+  // ---- and each got what every game of the fair has: a stand by its gate — the four lists, under the panel of
+  // a sponsor that is for sale from that moment —, a star on the map, planks at the forks; a game still off has
+  // none of it
+  const dressed = await page.evaluate(async () => {
+    const m = window.__mmf, w = m.world, out = { stands: {}, slots: {} };
+    for (const id of ['hill', 'hollow', 'pond']) {
+      const st = w.games.stands?.[id], gate = m.extras[id]?.gate, p = st?.board.mesh.position;
+      out.stands[id] = st ? { far: +Math.hypot(p.x - gate.x, p.z - gate.z).toFixed(1), dry: w.data.heightAt(p.x, p.z) > 0.5, first: st.lists?.day?.[0]?.name || '' } : null;
+      out.slots[id] = (w.sponsorSlots || []).some((q) => q.id === `board:${id}`);
+    }
+    out.stars = (m.hud.attractions || []).map((a) => a.id).join();
+    out.planks = [...new Set((m.labSigns || []).flatMap((p) => p.arms.map((a) => a.to)))].sort().join();
+    out.posts = (m.labSigns || []).map((p) => p.id).join();
+    return out;
+  });
+  check('the two games got what every game of the fair has, as the game runs: a stand by the gate with the time just made on it, a panel for a sponsor over it, a star on the map, planks at the forks — and the game that is still off has none of it',
+    dressed.stands.hill && dressed.stands.hollow && !dressed.stands.pond && dressed.stands.hill.far > 2 && dressed.stands.hill.far < 12 && dressed.stands.hollow.far > 2 && dressed.stands.hollow.far < 12
+    && dressed.stands.hill.dry && dressed.stands.hollow.dry && dressed.stands.hill.first === 'Traveller' && dressed.stands.hollow.first === 'Traveller'
+    && dressed.slots.hill && dressed.slots.hollow && !dressed.slots.pond
+    && dressed.stars === 'climb,race,wing,hill,hollow' && dressed.planks === 'hill,hollow' && dressed.posts === 'games-arrival,games-plaza,games-pondside,games-shore',
+    JSON.stringify(dressed));
   await page.evaluate(([x, z]) => { const m = window.__mmf; m.player.teleport(x, z, 1.2); m.rig.snap(m.player.pos, 1.2 + Math.PI); }, [first.x, first.z]);
   await frames(6);
 

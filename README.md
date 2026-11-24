@@ -175,7 +175,7 @@ room; `?village=name` arrives straight in a sky village.
 | Run / jump | one runs by default and Shift walks (Settings → *Run by default* to have it the other way round) / Space | buttons on the right | trigger, A button |
 | Zoom | wheel | pinch | |
 | Flying camera (the eye at the top right: the administrator's, see `app/config.js`) | F (Space / C to go up and down, Shift to go faster) | the eye | |
-| Map | M, or click the minimap (click again or Escape to close); its **Mega map** button shows the whole country with the fifty sky villages | tap the minimap | |
+| Map | M, or click the minimap (click again or Escape to close): the big attractions wear a gold star and their name on it — the climb, the race, the flying theatre, and each game of the lab that is on (the slide is drawn where it runs); its **Mega map** button shows the whole country with the fifty sky villages | tap the minimap | |
 | Jetpack | Space again while in the air: a second and a half of thrust | jump button again | A again |
 | Sit, lie down, board, pick a flower, talk, travel, get up | E when the action is offered (walking away or jumping gets up too) | tap the action shown above the jump button | |
 | Open or close the laptop; second action | L | tap the second action | |
@@ -224,7 +224,8 @@ six seconds. Everybody around sees them. Ten of them, earned by coming back day 
 blows bubbles (2 days in a row), a squirrel that nibbles a nut (3), a carp that leaps as up a waterfall (5),
 a stag that rears (10), an eagle that spreads its wings (15), a panda that munches bamboo (20), a wolf that
 howls (25), a tiger that leaps through the ring (30), an elephant that trumpets (35) and a dragon that coils
-round the ring (50). The emote panel shows where you stand, with a medallion for each animal: a picture of
+round the ring (50). The emote panel (T, or the smiley) is in order: what one does on the spot (sit down,
+put the bouquet down, light a firework), the gestures, the cheers, then the animals. It shows where you stand, with a medallion for each animal: a picture of
 those that are yours (click one to play it) and of the next one to come, greyed, with the days still to
 go; the others stay a question mark until their turn. The pictures are drawn by the game's own renderer
 the first time the panel is opened (`rankPicture`). The administrator has them all.
@@ -371,8 +372,8 @@ the first time the panel is opened (`rankPicture`). The administrator has them a
   back between two goes — asked for sooner, it says how long is left. Who has both chooses which one is
   on, in the item shop (*Equip* on its card; *Take it off* to fly with none). **Everybody has the light one for a day**:
   the twenty-four hours that follow a first visit (the shop tags it *Free today* and says how long is
-  left; a line in the chat says so on the first visit). After that, pressing jump in the air says that the free day is over, and that the light jetpack
-  is $5 in the shop or comes with the Game Pass.
+  left; a line in the chat says so on the first visit). After that, pressing jump in the air says — kindly — that the free day is over, and that the light jetpack
+  is $5 in the shop or comes with the Game Pass: the line carries a **Get the Game Pass** button that opens the payment at once.
 - **Four sizes**: the card of the welcome (and Settings → *Your robot*) asks for a size next to the name
   and the colour — *Pocket* (a tenth smaller), *Classic* (everybody's), *Jumbo* (a tenth bigger) or
   *Titan* (a fifth bigger). Everybody around sees it. The three that are not Classic, and two more rows
@@ -387,8 +388,8 @@ the first time the panel is opened (`rankPicture`). The administrator has them a
   over his name. Talk to him (the prompt by his chair, then type): a question or anything else on your
   mind, and he answers in one sentence that sails past the point and lands on it. The conversation is
   between the two of you: nobody else sees it (its lines are marked "only you" in the chat), and he
-  remembers what the two of you just said — never what somebody else told him. An easel beside the arrival
-  (*GET LIFE ADVICE*) and two planks further on show the way to his deck.
+  remembers what the two of you just said — never what somebody else told him. An easel in the flower bed
+  by the house (*GET LIFE ADVICE*) and two planks further on show the way to his deck.
 - **The sky villages** *(released in three stages by the owner's switch `sky` — see "What is released"
   below: **hidden**, nothing of them exists — no gate, no village on the mountains, no mega map, not a word
   from the characters; **soon**, their gate stands on the lawn, closed, under a sign: "Soon, the sky will
@@ -458,6 +459,13 @@ the browser otherwise, and follows a browser that signs in. What it lends is dec
 the account), and for twenty-four hours `/api/shop` lends the light jetpack (`TRIAL` in `server/items.js`:
 what, for how long).
 
+**Two cards make an offer in full**, each once a day at the most and never in the middle of anything (a
+game, a race, a payment, a sentence being typed): after **ten minutes** of play without an account, a card
+proposes to make one — what it keeps, in four lines —; after **fifteen minutes** without the Game Pass, a
+card says what the pass gives and opens the payment (`pitch` in `src/main.js`; `Hud.pitch` draws them).
+Escape or "Not now" closes them. The administrator sees both whenever they like: two links at the bottom of
+their settings. On a development page they only come by themselves when the address asks (`?pitch`).
+
 What a visitor owns is one list, `server/items.js` (id, name, price, shelf, rarity, the words on the card):
 add a line there and it is sold. Prices of the places are in `server/catalog.js` (and `VILLAGE_PRICES` in
 `src/world/layout/sponsors.js` for the villages): the browser is shown them and is never asked what
@@ -526,7 +534,10 @@ to download.
 mill, half way down the valley, on the plaza, on the boardwalk, by the paddock of the race: a post, and
 planks nailed to it that point the way to the games (*PIER GAMES*, *FLAPPY ROBOT*, *MOSTLY UP*,
 *QUADMANIA*…), each saying how far it is — and, in front of the mill and where the path of the great pond
-leaves its yard, to *GET LIFE ADVICE* (Billy's deck). A plank points along the path to take. Their names are **painted
+leaves its yard, to *GET LIFE ADVICE* (Billy's deck). A plank points along the path to take. **The games
+of the lab get planks too, the moment they are switched on**: a post of their own beside five of the others
+(`GAME_SIGNPOSTS`), a plank for each game that is on, pointing straight at it and saying how far — planted
+without loading the page again (`buildGameSignposts`). Their names are **painted
 by hand**: no font — each letter is a few strokes of a brush drawn by the game
 (`src/world/props/handpaint.js`), never twice quite the same, and the same on every device. Where they
 stand and what they point to: `SIGNPOSTS` and `WAYS` in `src/world/layout/layout.js`. They cost one draw
@@ -537,9 +548,11 @@ OASIS*, a little mushroom cloud puffing over each of its posts, again and again 
 strip, shown seven a second: no video, no animated file) — and, to the left, **the rules of the fair** on a
 board: there are five, and the fifth is "You are free." To the right, under a little roof, an old page:
 **how it all came to this** — the story of the opening told as it is told at the fair (*The last
-afternoon*). And at one's feet, on the left of the lane, **an easel** of planks painted by hand: *GET LIFE
-ADVICE*, an arrow, *ASK BILLY · 90 M* (its back says he is behind you). It is low and near: it is read at
-once, on a wide screen as on a phone held upright, and hides neither board. **The boards of what is new** stand behind, west
+afternoon*). And at one's feet, on the left of the lane, **an easel** of planks painted by hand: *PLAY ON
+THE BEACH!*, an arrow, *GAMES · THE PIER · 150 M* (its back says the beach is behind you). It is low and near: it is read at
+once, on a wide screen as on a phone held upright, and hides neither board. A second easel, *GET LIFE
+ADVICE*, stands in the flower bed by the house and points to Billy (`NOTICES.beach` and `NOTICES.advice`
+in `layout.js`; both are drawn by `drawEasel` in `Notices.js`). **The boards of what is new** stand behind, west
 of the lane, by the poppy field: one for each of the three latest days something changed, each headed by
 the day its changes went live (`src/app/news.js` keeps every day: add one at the top with each update).
 
@@ -937,8 +950,9 @@ like, and both ways of sending.
 tabs (`src/ui/LegalView.js`; the words are in `src/app/legal.js`): a short version at the top of each, then
 sections in plain words — what the fair asks of its visitors, what the shop sells and how a purchase is
 undone, and, for privacy, everything the game keeps and every outside service it uses (Cloudflare, Stripe,
-Anthropic for Billy, and the script that counts the visits). Two lines at the top of `legal.js` are for
-whoever runs the game to fill in: who they are, and an address to write to. Keep the pages true: when the
+Anthropic for Billy, and the script that counts the visits). The lines at the top of `legal.js` say who
+runs the game — the company, its registration number, its address — and where to write: both pages show
+them. Keep the pages true: when the
 game starts to use something new, say so there and change the date.
 
 **The script that counts the visits.** The page carries one script from another site
@@ -1107,7 +1121,11 @@ switch goes on, all of them off as delivered — six games:
 With a switch off nothing of its game is loaded, built or drawn: the fair is the fair as it was. Switched on,
 a game is built at once on every screen, its board of scores exists from that moment (`BOARDS` in
 `server/scores.js`: each has `release: '<its switch>'`), the server notes when a run begins and the game says
-when it ends (`app.pondDone(ms)`… — `src/main.js`: `LAB_GAMES`). These are courses: their scores are bounded in
+when it ends (`app.pondDone(ms)`… — `src/main.js`: `LAB_GAMES`). **Each gets what every game of the fair
+has**: a stand by its gate with the four lists (today, the week, the month, all time) under the panel of a
+sponsor — for sale like the others from that moment, and not before (`LAB_BOARD` says where each stand goes
+from its gate; the one of the cleft stands on piles at the end of its planks) —, a star on the map, planks
+at the forks. These are courses: their scores are bounded in
 time, not played again by the referee. The files of the lab are the lab's: `src/extras/**`,
 `src/world/zones/games/{slide,pond,boats,hill,crack,hollow}/**`, `server/stats.js`, `public/opendata/**`,
 `public/opendate/**`, `lab/**` and its tests are not edited here.
@@ -1141,7 +1159,8 @@ before it dials the relay (`GET /api/door`), and no longer decides anything itse
   has room; **a friend's link** (`?room=main-2`, copied from "Who is here") leads to the friend's room if it has
   room — otherwise the visitor is told, and gets another room;
 - **one changes room without loading the page again**: "Who is here" lists the rooms and how many each holds;
-  a click, and the same page — the avatar where it stands — is in the other room.
+  a click, and the same page — the avatar where it stands — is in the other room. **The settings name the
+  room one is in**, with a list to go to another (and, where rooms of one's own are sold, to make one).
 
 The four numbers are **settings, not constants**: the owner changes them from the back office ("Rooms"), and
 "at most" can be lowered there, never raised above the `MAX_PLAYERS` the server was started with. The door
@@ -1235,14 +1254,14 @@ notebook, with the rest. No new Durable Object class: such a room is a room like
 |---|---|
 | `npm run bake` | bakes the world, the statue and the textures again |
 | `npm run bake:statue` | sculpts the golden dog again (`-- --preview=dog.png` also draws it from five sides, `-- --cell=0.012` makes a finer mesh) |
-| `npm test` | 241 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password), the rooms that players make (bought, entered with a ticket, their own boards, asleep when unpaid, freed) |
-| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (182 in all) |
-| `npm run test:update` | a delivery from end to end, in the real game: two builds, a visitor in the world, the owner at the back office (`/admin`: the switches, a word to every room, a line refused, somebody kept out, the figures, two games of the lab thrown on — fetched and built as the game runs, each played by its own bot, its time on its board —, the sky villages stage by stage), every page asked to refresh but never in the middle of a sentence, then the server replaced by the next version — the page says so, refreshes, comes back at the same spot and says what is new; and a plain build leaves nothing of the game on the page (13 checks) |
+| `npm test` | 242 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password), the rooms that players make (bought, entered with a ticket, their own boards, asleep when unpaid, freed) |
+| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (183 in all) |
+| `npm run test:update` | a delivery from end to end, in the real game: two builds, a visitor in the world, the owner at the back office (`/admin`: the switches, a word to every room, a line refused, somebody kept out, the figures, two games of the lab thrown on — fetched and built as the game runs, each played by its own bot, its time on its board; each with its stand, its panel for a sponsor, its star on the map and its planks at the forks —, the sky villages stage by stage), every page asked to refresh but never in the middle of a sentence, then the server replaced by the next version — the page says so, refreshes, comes back at the same spot and says what is new; and a plain build leaves nothing of the game on the page (14 checks) |
 | `node tools/extras-test.mjs`, `node tools/slide-test.mjs`, `node tools/pond-test.mjs`, `node tools/boats-test.mjs`, `node tools/hill-test.mjs`, `node tools/crack-test.mjs`, `node tools/hollow-test.mjs`, `node tools/games-test.mjs` | the lab's own checks of its extras and of each of its games — the last one plays them in the running game, in a browser (see `lab/INTEGRATION.md`) |
 | `npm run test:load` | a crowd at the door, with the real rules: 600 connections arrive in twenty seconds and walk (everybody gets in, rooms of about fifty, the lists say what is true, a state reaches the neighbours in time), 230 more follow one link (that room holds 200, never one more; the relay refuses whoever comes without asking; the owner still gets in), then most leave (the rooms that have emptied are offered a livelier one, nobody is moved or cut off) — 11 checks; `-- --cloudflare` plays it against the real Worker in the local Workers runtime, `-- --visitors=400` changes the crowd |
 | `npm run sim:rooms` | a whole day at the door, simulated with the real rules: the size of every room through the day as a picture (`tools/preview/rooms-<scenario>.png`), next to what the old door did; `-- --peak=800`, `-- --rules=open:40,start:15,low:6` try other days and other numbers |
 | `npm run test:shop` | the shop in the real game, on the Node server with test keys and a stand-in for Stripe: a hat bought and worn, the panel of a game sponsored, filled in (with a logo) and approved by the administrator, the stand of the gondolas, a plaque for a companion (bought at a bare plate, engraved with a picture, approved), an account made and signed in to on its card, the payment form inside the game (and Stripe's page when it cannot be shown); and a newcomer: the padlocks of the welcome card and the free day of the jetpack, the Game Pass bought as a subscription, what it lends (black, the largest size, a hat that was never bought), its end and the end of the free day; the window of the Trading Post; and a room of one's own: its card and its payment, its settings from a form, its password asked for at the door, a score on its board and on the world's, a visitor put out (27 checks) |
-| `npm run test:smoke` | drives the real site: welcome screen, walking, free camera, settings, large map, the story of the opening told once (`-- --mobile` for the touch layout) |
+| `npm run test:smoke` | drives the real site: welcome screen, walking, free camera, settings, large map (and its stars), the two cards that make an offer, the emotes and the pictures of their animals, the story of the opening told once (`-- --mobile` for the touch layout) |
 | `npm run test:audio` | Listens to the sound engine without ears: in headless Chromium it renders a dozen listener scenarios (beach, cliffs, pier, woods, mill, waterfall, cave, sky village, the climb…) and every one-shot effect through an offline audio context, measures level, spectrum, how the loudness moves and how tonal it is, fails on silence or clipping, and times `update()` (about 0.01 ms a frame) |
 | `npm run test:walk` | 57 checks in the real game (each of the twelve games a bot plays there is then played again by the server's referee, from what the page wrote down, and must end with the very same score): what a newcomer sees first (the banner, the rules, the story on its board, the easel of life advice; the boards of what is new out of that first look), who hears the chat (it opens on Nearby, says so, and is told how to reach everybody), the wooden signposts (beside the paths, each plank pointing the way of what it names), the Trading Post and its window of photographs, pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls and the high clearing above them, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the swim on to the golden cove (the shark stays away; out of the sea on the beach; the stair up to the golden dog; the plaques round its plinth, painted for who climbs up there), the fifty sky villages (prices, places to sit, the board of one for hire, the one dressed as a demonstration), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, sitting down on the ground, the two jetpacks (which is on; the light one's fifteen seconds), big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the four booths of the pier head and the six of the walk (a bot plays each through the pointer, as a visitor would: baskets shot where the hoop is going to be, a tower stacked, a sequence of lamps remembered, fish brought up, alarms answered in a fifth of a second, a cup followed; boards), the arcade cabinet (a bot runs three hundred metres; then a finger: the top of its picture jumps, the bottom ducks, the cross of its frame walks away), the keys of every game (said when it opens, there for the asking, gone when it closes), the quad race (asked for in the paddock, it leaves with the next named start; a bot drives three laps flat out — it never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, and flies off the ramp), the flying theatre (a bot flaps through nine pairs of columns), the acid pond, the shark, change of tier |
 | `npm run test:duo` | 32 checks with two visitors on the production server: they must see each other move, wave, summon an animal, chat (nearby first, then to everyone) and sit down; the administrator's badge worn and taken off; the rooms (a room that fills, the offer of a livelier one, the list, a link); the largest size and a party hat, sitting on the ground, a bouquet given from hand to hand; the administrator's key in the address, the administrator seeing the game as a visitor does (`-- --cloudflare` for the Cloudflare version) |

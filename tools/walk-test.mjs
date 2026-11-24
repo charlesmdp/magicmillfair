@@ -736,6 +736,7 @@ try {
       m.player.teleport(s.x, s.z, s.yaw + Math.PI);
       // (which way a newcomer looks, and how far to the side of that a thing stands: 0 straight ahead, 180 behind)
       const fx = -Math.sin(s.yaw), fz = -Math.cos(s.yaw), off = (x, z) => Math.round((Math.acos(((x - s.x) * fx + (z - s.z) * fz) / Math.hypot(x - s.x, z - s.z)) * 180) / Math.PI);
+      const inside = (poly, x, z) => { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, zi] = poly[i], [xj, zj] = poly[j]; if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) c = !c; } return c; };
       const puff = g.getObjectByName('notice-puff0'), before = puff.material.map.offset.x;
       await new Promise((r) => { let k = 0; const tick = () => (++k > 40 ? r() : requestAnimationFrame(tick)); tick(); });
       const flowers = n.news.map((b) => [0, 1, 2, 3, 4, 5, 6, 7].some((k) => /poppy|cornflower/.test(m.world.scatter.flowerNear(b.x - 9 + (k % 4) * 3, b.z - 14 + Math.floor(k / 4) * 5, 6) || '')));
@@ -743,7 +744,9 @@ try {
         banner: { there: !!g.getObjectByName('notice-welcome'), ahead: off(n.welcome.x, n.welcome.z), far: +Math.hypot(n.welcome.x - s.x, n.welcome.z - s.z).toFixed(1) },
         rules: { there: !!g.getObjectByName('notice-rules'), ahead: off(L.NOTICES.rules.x, L.NOTICES.rules.z), left: (L.NOTICES.rules.x - s.x) * fz - (L.NOTICES.rules.z - s.z) * fx > 0 },
         story: { there: !!g.getObjectByName('notice-story'), ahead: off(L.NOTICES.story.x, L.NOTICES.story.z), left: (L.NOTICES.story.x - s.x) * fz - (L.NOTICES.story.z - s.z) * fx > 0, far: +Math.hypot(L.NOTICES.story.x - s.x, L.NOTICES.story.z - s.z).toFixed(1) },
-        advice: { there: !!g.getObjectByName('notice-advice'), words: g.getObjectByName('notice-advice')?.userData.words || '', left: (L.NOTICES.advice.x - s.x) * fz - (L.NOTICES.advice.z - s.z) * fx > 0, far: +Math.hypot(L.NOTICES.advice.x - s.x, L.NOTICES.advice.z - s.z).toFixed(1), billy: Math.round(Math.hypot(L.WAYS.billy.at[0] - L.POND_DECK.x, L.WAYS.billy.at[1] - L.POND_DECK.z)) },
+        // (the easel beside whoever arrives sends them to the beach; the one of the life coach stands in a flower bed of the rock garden)
+        beach: { there: !!g.getObjectByName('notice-beach'), words: g.getObjectByName('notice-beach')?.userData.words || '', turns: g.getObjectByName('notice-beach')?.userData.turns || [], left: (L.NOTICES.beach.x - s.x) * fz - (L.NOTICES.beach.z - s.z) * fx > 0, far: +Math.hypot(L.NOTICES.beach.x - s.x, L.NOTICES.beach.z - s.z).toFixed(1) },
+        advice: { there: !!g.getObjectByName('notice-advice'), words: g.getObjectByName('notice-advice')?.userData.words || '', turns: g.getObjectByName('notice-advice')?.userData.turns || [], garden: inside(L.ROCK_GARDEN.outline, L.NOTICES.advice.x, L.NOTICES.advice.z), path: +Math.min(...L.PATHS.find((q) => q.id === 'garden').points.map(([qx, qz]) => Math.hypot(qx - L.NOTICES.advice.x, qz - L.NOTICES.advice.z))).toFixed(1), billy: Math.round(Math.hypot(L.WAYS.billy.at[0] - L.POND_DECK.x, L.WAYS.billy.at[1] - L.POND_DECK.z)) },
         planks: n.signposts.filter((p) => p.arms.some((a) => a.to === 'billy')).map((p) => `${p.id}: ${p.arms.find((a) => a.to === 'billy').text}`),
         puffs: { moved: puff.material.map.offset.x !== before, frames: Math.round(1 / puff.material.map.repeat.x) },
         news: n.news.map((b) => ({ date: b.date, behind: off(b.x, b.z), far: Math.round(Math.hypot(b.x - s.x, b.z - s.z)) })), boards: [0, 1, 2].map((k) => !!g.getObjectByName(`notice-news${k}`)), days: N.NEWS.slice(0, 3).map((d) => d.date), old: !!g.getObjectByName('notice-news'), flowers,
@@ -752,9 +755,11 @@ try {
     check('where one arrives: a banner of welcome across the lane (little mushroom clouds puffing over its posts) and the rules to the left are what is seen first; the boards of what is new stand by the poppies, out of that first look — one for each of the three latest days',
       arrive.banner.there && arrive.banner.ahead < 12 && arrive.banner.far > 7 && arrive.banner.far < 16 && arrive.rules.there && arrive.rules.ahead < 48 && arrive.rules.left && arrive.puffs.moved && arrive.puffs.frames === 12
       && arrive.news.length === 3 && arrive.boards.every(Boolean) && !arrive.old && arrive.news.every((b, k) => b.date === arrive.days[k] && b.behind > 75 && b.far > 18 && b.far < 45) && arrive.flowers.some(Boolean), JSON.stringify(arrive));
-    check('…and, on arriving: to the right, a board tells how it all came to this (the story of the opening, another way); beside one, an easel says where life advice is to be had — and planks at the mill and by the pond point the rest of the way to Billy',
-      arrive.story.there && !arrive.story.left && arrive.story.ahead < 48 && arrive.story.far > 5 && arrive.story.far < 14 && arrive.advice.there && arrive.advice.left && arrive.advice.far < 3.5 && /^GET LIFE ADVICE · ASK BILLY · \d+0 M$/.test(arrive.advice.words) && arrive.advice.billy < 20
-      && arrive.planks.join() === 'mill: GET LIFE ADVICE,pondside: GET LIFE ADVICE', JSON.stringify({ story: arrive.story, advice: arrive.advice, planks: arrive.planks }));
+    check('…and, on arriving: to the right, a board tells how it all came to this (the story of the opening, another way); beside one, an easel sends everybody to the beach — PLAY ON THE BEACH!, an arrow up the lane on its front —; the easel of the life coach stands in a flower bed of the rock garden, by its path, an arrow on each face — and planks at the mill and by the pond point the rest of the way to Billy',
+      arrive.story.there && !arrive.story.left && arrive.story.ahead < 48 && arrive.story.far > 5 && arrive.story.far < 14
+      && arrive.beach.there && arrive.beach.left && arrive.beach.far < 3.5 && /^PLAY ON THE BEACH! · GAMES · THE PIER · \d+0 M$/.test(arrive.beach.words) && typeof arrive.beach.turns[0] === 'number' && Math.abs(arrive.beach.turns[0]) < 0.9
+      && arrive.advice.there && arrive.advice.garden && arrive.advice.path < 6 && /^GET LIFE ADVICE · ASK BILLY · \d+0 M$/.test(arrive.advice.words) && arrive.advice.turns.some((t) => typeof t === 'number') && arrive.advice.billy < 20
+      && arrive.planks.join() === 'mill: GET LIFE ADVICE,pondside: GET LIFE ADVICE', JSON.stringify({ story: arrive.story, beach: arrive.beach, advice: arrive.advice, planks: arrive.planks }));
   }
   // --- the wooden signposts at the forks of the paths, and the Trading Post: the booth of the sponsors, on the
   // plaza at the foot of the pier, a long way from the arrival; its window shows every game with a photograph

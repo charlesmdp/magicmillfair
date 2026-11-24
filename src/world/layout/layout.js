@@ -747,6 +747,16 @@ export const WAYS = {
   // (Billy the alligator, life coach, on the deck over the great pond: where its gangway leaves the bank)
   billy: { text: 'GET LIFE ADVICE', more: 'ASK BILLY', at: [POND_DECK.gangway[0][0], POND_DECK.gangway[0][1]] },
 };
+// The signposts of the games that are switched on one by one (the lab's: Signposts.js, buildGameSignposts): a post
+// of their own beside a few of the others, planted when the first of its games is there. `to`: the games a post
+// names, in the order of its planks (from the top) — each plank points straight at its game.
+export const GAME_SIGNPOSTS = [
+  { id: 'games-arrival', x: -116.1, z: -43.7, to: ['slide', 'hill', 'pond', 'boats', 'hollow', 'crack'] },
+  { id: 'games-plaza', x: -19.4, z: 2.5, to: ['slide', 'hollow', 'crack', 'pond', 'boats', 'hill'] },
+  { id: 'games-pondside', x: -136.4, z: 7.5, to: ['pond', 'boats', 'hill'] },
+  { id: 'games-shore', x: 21.7, z: 53.8, to: ['hollow', 'crack'] },
+  { id: 'games-beach', x: 26.1, z: -82.1, to: ['slide'] },
+];
 export const SIGNPOSTS = [
   // past the banner of the arrival, on the left of the lane: everything is ahead, the race is behind
   { id: 'arrival', x: -117.3, z: -42.4, arms: [['pier', [-108, -31.5]], ['flappy', [-109.2, -31]], ['climb', [-110.6, -30.6]], ['race', [-112, -62]]] },
@@ -781,9 +791,13 @@ export const NOTICES = {
   rules: { x: -116.9, z: -53.6, yaw: -2.49 },
   // (…and, to the right, how it all came to this: the story of the opening, told another way)
   story: { x: -125.35, z: -52.0, yaw: 2.62 },
-  // (…and, beside whoever arrives, on the left of the lane: an easel of painted planks — a life coach is not
-  // far; the planks of the signposts take over further on. `yaw`: which way its front looks)
-  advice: { x: -119.75, z: -60.5, yaw: -2.8 },
+  // (…and, beside whoever arrives, on the left of the lane: an easel of painted planks that sends them to the
+  // beach. `yaw`: which way its front looks; `to`: where its arrow points — the way one walks: up the lane, then
+  // down the valley —; `far`: the place it counts the metres to)
+  beach: { x: -119.75, z: -60.5, yaw: -2.8, to: [-97, -32], far: [14, -2] },
+  // (…and the easel of the life coach: in a flower bed of the rock garden, above the house — Billy is on his
+  // deck, down by the great pond; the planks of the signposts take over further on)
+  advice: { x: -124.6, z: -16.6, yaw: -1.86 }, // (its front looks west, a little uphill: at whoever comes along the path of the garden)
   ads: { x: TRADING.x, z: TRADING.z, yaw: TRADING.yaw },
   arcade: { along: 17.6, side: -6.7 },
 };

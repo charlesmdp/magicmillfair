@@ -29,8 +29,8 @@ export const BOARDS = {
   hoop: 'Buzzer Beater', stack: 'Stack It', geiger: 'Geiger Says', fish: 'Hook, Line & Sinker', scram: 'SCRAM!', cups: 'Shell Shock', run: 'Meltdown Run',
   slide: 'Mostly Down', pond: 'The Endless Pond', boats: 'The Little Regatta', hill: 'Uphill Battle', crack: 'Between a Rock', hollow: 'The Hollow Hill',
 };
-/** The games whose board has no panel for a sponsor (yet): nothing of theirs is sold. */
-export const NO_PANEL = new Set(['slide', 'pond', 'boats', 'hill', 'crack', 'hollow']);
+// (Every game has a panel for a sponsor over its board — those of the games that wait for a switch are sold
+// once their game is on: shop.js asks.)
 export const GONDOLAS = 24;
 const VILLAGES = new Map(SPONSORS.map((s, i) => [sponsorId(s), { name: s.name, tier: SKY_TIERS[i] ?? 0 }]));
 
@@ -46,7 +46,7 @@ export function describe(item) {
   if (own) return { item, kind: 'own', amount: own.price, monthly: false, name: `Atomic Oasis — ${own.name}` };
   if (item === PASS.id) return { item, kind: 'pass', amount: PASS.price, monthly: true, name: `Atomic Oasis — ${PASS.name}` };
   if (item === 'room') return { item, kind: 'room', amount: PRICES.room, monthly: true, name: 'Atomic Oasis — a room of your own' };
-  if (type === 'board' && Object.hasOwn(BOARDS, id) && !NO_PANEL.has(id)) return { item, kind: 'slot', auction: true, amount: AUCTION.start, monthly: false, label: BOARDS[id], name: `Atomic Oasis — sponsor of ${BOARDS[id]} (your bid)` };
+  if (type === 'board' && Object.hasOwn(BOARDS, id)) return { item, kind: 'slot', auction: true, amount: AUCTION.start, monthly: false, label: BOARDS[id], name: `Atomic Oasis — sponsor of ${BOARDS[id]} (your bid)` };
   if (item === 'tarp:shoot') return { item, kind: 'slot', amount: PRICES.tarp, monthly: true, name: 'Atomic Oasis — the backdrop of Bullseye Alley' };
   if (type === 'gondola' && /^[1-9]\d?$/.test(id || '') && +id <= GONDOLAS) return { item, kind: 'slot', amount: PRICES.gondola, monthly: true, name: `Atomic Oasis — gondola ${id} of the big wheel` };
   if (type === 'plaque' && /^[1-9]\d?$/.test(id || '') && +id <= PLAQUE_COUNT) return { item, kind: 'slot', plaque: true, amount: PRICES.plaque, monthly: false, name: `Atomic Oasis — a plaque for a companion, at the feet of the golden dog (no. ${id})` };

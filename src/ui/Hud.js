@@ -930,6 +930,7 @@ export class Hud {
     clearTimeout(this._offer);
     if (!text) { bar.classList.remove('on'); return; }
     bar.querySelector('.offer-text').textContent = text;
+    bar.classList.toggle('long', text.length > 120); // (a long one: its words on a line of their own, over the buttons)
     const y = bar.querySelector('.offer-yes');
     y.textContent = yes;
     y.onclick = () => { bar.classList.remove('on'); fn(); };
@@ -1225,7 +1226,13 @@ export class Hud {
     if (open) { this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this._bigSize = ''; }
   }
 
-  /** The whole valley, with the places, the other visitors and oneself. */
+  /**
+   * The big attractions, for the map: [{ id, name, x, z, line: [[x, z], …] | undefined }] — a gold star and the
+   * name of each; `line`: what is drawn of it on the ground (the slide: a ribbon of water).
+   */
+  setAttractions(list) { this.attractions = list || []; }
+
+  /** The whole valley, with the places, the big attractions, the other visitors and oneself. */
   drawBigMap(x, z, heading, others) {
     const mega = this.mega && this.megaImg.complete && this.megaImg.width > 0;
     const v = mega ? this.megaView : this.mapView, img = mega ? this.megaImg : this.mapImg;
@@ -1260,7 +1267,43 @@ export class Hud {
     // (names never lie on one another: the larger places are written first, where they are; a name that would
     // cover another is moved up or down by a line or two — or left out, if there is no room at all)
     const size = Math.max(mega ? 9 : 11, Math.round(w / (mega ? 86 : 62))), placed = [];
-    const places = (this.zones || []).filter((zone) => !(zone.hidden || (mega && zone.r < 30))).sort((a, b) => b.r - a.r); // (some places are for those who find them; the mega map only names the large ones)
+    // the big attractions (the map of the valley only): what is drawn of them on the ground, a gold star, their
+    // name in gold beside it — written first: the names of the places make room for them
+    const stars = mega ? [] : this.attractions || [], starred = new Set(stars.map((s) => s.id));
+    if (stars.length) {
+      const R = Math.max(7, Math.round(w / 105));
+      ctx.lineCap = 'round';
+      for (const s of stars) {
+        if (!s.line || s.line.length < 2) continue;
+        for (const [width, color] of [[Math.max(4, R * 0.62), 'rgba(255, 255, 255, 0.95)'], [Math.max(2, R * 0.34), '#35a9e6']]) {
+          ctx.beginPath();
+          s.line.forEach(([lx, lz], i) => (i ? ctx.lineTo(X(lx), Z(lz)) : ctx.moveTo(X(lx), Z(lz))));
+          ctx.lineWidth = width; ctx.strokeStyle = color; ctx.stroke();
+        }
+      }
+      ctx.font = `700 ${size}px Georgia, 'Times New Roman', serif`;
+      for (const s of stars) {
+        const px = X(s.x), pz = Z(s.z);
+        ctx.beginPath();
+        for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + (i * Math.PI) / 5, r = i % 2 ? R * 0.45 : R; if (i) ctx.lineTo(px + Math.cos(a) * r, pz + Math.sin(a) * r); else ctx.moveTo(px + Math.cos(a) * r, pz + Math.sin(a) * r); }
+        ctx.closePath();
+        ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(40, 26, 4, 0.9)'; ctx.stroke();
+        ctx.fillStyle = '#ffd24a'; ctx.fill();
+        // its name: to the right of the star — to the left when the edge is near —, moved by a line if another is there
+        const half = ctx.measureText(s.name).width / 2 + 5, right = px + R + 4 + half * 2 < w - 4;
+        const tx = right ? px + R + 4 + half : px - R - 4 - half;
+        let ty = null;
+        for (const k of [0, 1, -1, 2, -2]) { const y = pz + k * size * 1.15; if (placed.every((q) => Math.abs(q.x - tx) > q.half + half || Math.abs(q.y - y) > size * 1.05)) { ty = y; break; } }
+        placed.push({ x: px, y: pz, half: R + 2 });
+        if (ty === null) continue;
+        placed.push({ x: tx, y: ty, half });
+        ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(14, 22, 17, 0.85)'; ctx.strokeText(s.name, tx, ty);
+        ctx.fillStyle = '#ffd76a'; ctx.fillText(s.name, tx, ty);
+      }
+      ctx.font = `600 ${size}px Georgia, 'Times New Roman', serif`;
+    }
+    // (a place that is an attraction has its name already, by its star)
+    const places = (this.zones || []).filter((zone) => !(zone.hidden || starred.has(zone.id) || (mega && zone.r < 30))).sort((a, b) => b.r - a.r); // (some places are for those who find them; the mega map only names the large ones)
     for (const zone of places) {
       const half = ctx.measureText(zone.name).width / 2 + 6;
       const tx = Math.min(w - half, Math.max(half, X(zone.x))); // never cut by the edge
