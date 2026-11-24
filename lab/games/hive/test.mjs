@@ -127,6 +127,16 @@ const height = await ground();
   const eaten = Math.max(...H.drone.first) + (N - 1) * H.drone.every, bound = eaten + H.capped + H.throw / H.g + Math.sqrt((2 * (H.levels[0] + (H.throw * H.throw) / (2 * H.g))) / H.g);
   const greedy = botRun(3, 600, (st, out) => { botInput(st, out); return out; }).state;
   check('a run has an end, whatever one does: the bees have landed on every cell in time, and nobody holds longer than that', bound < 90 && most / 1000 < bound - 5 && [0, 1, 2].every((c) => greedy.drop[c].every((t) => t <= eaten + H.capped + 1e-6 || t === Infinity) && standing(greedy, c) < N), `every cell touched by ${eaten.toFixed(0)} s, in the sea by ${bound.toFixed(0)} s at the very latest; the best of the twelve runs: ${fmt(most)}`);
+  // (and players that push the stick and the jump at random: none passes that second, none is ever off the wax sideways)
+  const rnd = (n, k) => { const v = Math.sin(n * 127.1 + k * 311.7 + 74.7) * 43758.5453; return v - Math.floor(v); };
+  let longest = 0, astray = 0;
+  for (let seed = 1; seed <= 60; seed++) {
+    const st = startRun(seed), input = { x: 0, y: 0, jump: false };
+    for (let k = 0; !st.over && k < 120 * 120; k++) { const beat = Math.floor(st.clock * (1 + (seed % 4))); input.x = rnd(seed, beat) * 2 - 1; input.y = rnd(seed, beat + 0.5) * 2 - 1; input.jump = rnd(seed, k) < 0.02 * (seed % 3); stepRun(st, H.step, input, null); if (cellAt(st.x, st.z) < 0 || !Number.isFinite(st.y)) astray++; }
+    if (!st.over) astray++;
+    longest = Math.max(longest, st.time);
+  }
+  check('sixty players that push the stick and the jump at random: all in the sea before that second, none ever off the wax sideways', astray === 0 && longest > 5000 && longest / 1000 < bound, `the luckiest held ${fmt(longest)}`);
   console.log(`      for the board of scores: hive: { order: 'desc', min: ${Math.floor(Math.min(idle, hammer) / 1000) * 1000}, max: ${Math.ceil(bound / 10) * 10}_000 }`);
 }
 done();

@@ -129,8 +129,10 @@ export function gateArch(group, paint, x, y, z, yaw, title, sub = '', { tone = [
     ctx.fillStyle = ink; ctx.fillRect(0, 0, w, h);
     ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 7; ctx.strokeRect(7, 7, w - 14, h - 14);
     ctx.fillStyle = '#f6e7b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = "700 76px Georgia, 'Times New Roman', serif"; ctx.fillText(title, w / 2, sub ? 62 : 84, w * 0.92);
-    if (sub) { ctx.fillStyle = '#f2c14e'; ctx.font = '600 30px system-ui, sans-serif'; ctx.fillText(sub, w / 2, 124, w * 0.92); }
+    // (the board runs behind the two posts: what is written keeps between them)
+    const room = w * (width - 0.5) / (width + 0.5);
+    ctx.font = "700 76px Georgia, 'Times New Roman', serif"; ctx.fillText(title, w / 2, sub ? 62 : 84, room);
+    if (sub) { ctx.fillStyle = '#f2c14e'; ctx.font = '600 30px system-ui, sans-serif'; ctx.fillText(sub, w / 2, 124, room); }
   }, width + 0.5, (width + 0.5) * 0.15625, { both: true });
   board.mesh.position.set(x, top - 0.42, z); board.mesh.rotation.y = yaw; board.mesh.name = 'gate-board';
   group.add(board.mesh);

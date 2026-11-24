@@ -269,8 +269,7 @@ export class Spiral {
 
     // ---- the gate, on the sand of the south beach, looking at the tower
     const gx = S.gate.x, gz = S.gate.z, gy = this.data.heightAt(gx, gz), yaw = Math.atan2(C.x - gx, C.z - gz), gate = new Parts();
-    // (the name between two spaces at each end: the posts stand before the ends of the board)
-    gateArch(this.group, gate.get('paint'), gx, gy, gz, yaw, `  ${S.name.toUpperCase()}  `, 'UP THE TOWER TO THE BELL · ONE TOUCH AND IT IS THE FOOT AGAIN', { width: 4 });
+    gateArch(this.group, gate.get('paint'), gx, gy, gz, yaw, S.name.toUpperCase(), 'UP THE TOWER TO THE BELL · ONE TOUCH AND IT IS THE FOOT AGAIN', { width: 4 });
     this.group.add(gate.toMeshes(mats, { name: 'spiral-gate', layers: [LAYER.STATIC_CASTER] }));
     this.board = canvasBoard(512, 256, (ctx, w, h) => {
       ctx.fillStyle = '#12122e'; ctx.fillRect(0, 0, w, h); ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 8; ctx.strokeRect(7, 7, w - 14, h - 14);

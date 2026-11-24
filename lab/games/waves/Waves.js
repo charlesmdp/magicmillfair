@@ -76,6 +76,13 @@ export class Waves {
     this.gate = { x: g.x, y: g.y, z: g.z, yaw: W.yaw };
     gateArch(this.group, paint, g.x, g.y, g.z, W.yaw, W.name.toUpperCase(), 'WADE IN WHEN YOU LIKE · JUMP WHAT COMES · THE BIG ONES AT THEIR LOW END', { tone: [0.12, 0.5, 0.85], ink: '#0d2a3a', width: 3.6 });
     this.group.add(parts.toMeshes(mats, { name: 'waves-set', layers: [LAYER.STATIC_CASTER] }));
+    // ---- one can walk out on the bar at any time (the waves only matter to who has waded in under the arch)
+    const fx = Math.sin(W.yaw), fz = Math.cos(W.yaw);
+    this.deck = {
+      clearance: 1.2,
+      heightAt: (x, z) => { const dx = x - W.from.x, dz = z - W.from.z, s = dx * fx + dz * fz, u = -dx * fz + dz * fx; return s >= -1 && s <= W.length - 2.5 && Math.abs(u) <= W.half + 0.45 ? TOP : null; },
+    };
+    world.collision.addPlatform(this.deck);
     // ---- one's own best: a golden float out by the bar, as far as one got
     const float = new Parts();
     float.get('paint').tint(1.6, 1.15, 0.2, 1).lathe([[0.001, -0.25], [0.3, -0.12], [0.36, 0.1], [0.2, 0.3], [0.05, 0.36], [0.05, 1.5]], 10);

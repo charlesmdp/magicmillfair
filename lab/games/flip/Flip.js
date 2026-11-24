@@ -31,7 +31,7 @@ export class Flip {
     this.group.name = 'flip';
     this.session = null;
     this.best = 0;
-    // the heading of who runs the line (a heading of the valley: 0 looks south), and the plan of the line
+    // the heading of who runs the line (a heading of the valley: 0 looks south)
     this.yaw = Math.PI / 2 - PIER.heading;
     this._p = {};
   }
@@ -51,7 +51,7 @@ export class Flip {
     // the girders: a cream web between a red flange and a blue one, a navy plate on each end
     for (const g of R.girders) {
       if (g.kind === 'stud' || g.kind === 'fang') {
-        // a block to be passed on the other side: bands of yellow and navy, a point towards who comes
+        // a block to be passed on the other side: bands of yellow and navy
         const n = 3, h = (g.top - g.bottom) / n;
         for (let k = 0; k < n; k++) paint.tint(...(k % 2 ? NAVY : YELLOW), 1).box(g.from, g.bottom + k * h, -W + 0.12, g.to, g.bottom + (k + 1) * h, W - 0.12);
         continue;
@@ -132,7 +132,8 @@ export class Flip {
     const sparks = (this.sparks = new THREE.InstancedMesh(spark.get('paint').build(), this.sparkMat, R.sparks.length));
     sparks.name = 'flip-sparks'; sparks.frustumCulled = false; sparks.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     line.add(sparks);
-    this._m = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._e = new THREE.Euler(); this._sc = new THREE.Vector3();
+    this._m = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._e = new THREE.Euler(); this._sc = new THREE.Vector3(); this._v = new THREE.Vector3();
+    this._clock = 0;
     this._sparks(0, 0);
     this.group.add(line);
     // ---- the gate, on the sand before the stairs: where one asks to run; one's own best under it
@@ -162,7 +163,7 @@ export class Flip {
     for (let k = 0; k < list.length; k++) {
       const shown = !(got & (1 << k)), sc = shown ? 1 + 0.12 * Math.sin(clock * 5 + k * 1.7) : 0.0001;
       this._e.set(0, clock * 2.4 + k, 0);
-      m.compose(P(list[k][0], list[k][1] + (shown ? 0.07 * Math.sin(clock * 3 + k) : 0), 0), this._q.setFromEuler(this._e), this._sc.set(sc, sc, sc));
+      m.compose(this._v.set(list[k][0], list[k][1] + (shown ? 0.07 * Math.sin(clock * 3 + k) : 0), 0), this._q.setFromEuler(this._e), this._sc.set(sc, sc, sc));
       this.sparks.setMatrixAt(k, m);
     }
     this.sparks.instanceMatrix.needsUpdate = true;
@@ -222,7 +223,6 @@ export class Flip {
         const running = st.wait <= 0 && !(st.out > 0) && !(st.hold > 0) && !st.over;
         pl.speed = running ? speedAt(st.s) : 0; pl.grounded = st.on >= 0;
         session.anim = f ? ANIM.jump : !running ? ANIM.idle : st.on >= 0 ? ANIM.run : ANIM.jump;
-        this._sparks(st.clock + st.wait, st.got);
         if (st.over) { S.after += dt; if (!session.over) { session.over = true; session.time = session.score = st.time; } if (S.after > 2.2) session.ended = true; }
         const n = st.sparks, falls = st.falls;
         session.line = st.wait > 0 ? `${R.name} · ${Math.max(1, Math.ceil(st.wait))}…`
@@ -247,7 +247,7 @@ export class Flip {
       },
       /** The run is over (or left): the player is put back on the sand, before the gate. */
       drop: (pl) => { pl.driver = null; pl.riding = false; pl.pitch = 0; pl.roll = 0; pl.teleport(this.gate.x - Math.sin(this.yaw) * 1.2, this.gate.z - Math.cos(this.yaw) * 1.2, this.yaw); session.close(); },
-      close: () => { if (this.session === session) this.session = null; player.pitch = 0; player.roll = 0; this._sparks(this._clock || 0, 0); },
+      close: () => { if (this.session === session) this.session = null; player.pitch = 0; player.roll = 0; },
     };
     this.session = session;
     io.play('tick');
@@ -256,6 +256,6 @@ export class Flip {
     return session;
   }
 
-  /** Every frame, played or not: the sparks turn (while one runs, the session shows one's own). */
-  update(dt) { this._clock = (this._clock || 0) + dt; if (!this.session) this._sparks(this._clock, 0); }
+  /** Every frame, played or not: the sparks turn; who runs no longer sees those already caught. */
+  update(dt) { this._clock += dt; this._sparks(this._clock, this.session ? this.session.state.got : 0); }
 }

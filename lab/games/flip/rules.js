@@ -1,7 +1,7 @@
 // Head Over Heels: its rules. No renderer here: the game, its checks and the runner that plays by itself all
 // read this.
 //
-// A line of painted girders on pylons over the sea, along the south side of the pier. One runs along it by
+// A line of painted girders hung over the sea, along the south side of the pier. One runs along it by
 // oneself, faster and faster, and has one key: it turns gravity over. One then falls up to the underside of what
 // is above — or back down onto what is below — and runs on there, head down. Gravity is turned over only while
 // one's feet are on a girder (or have just left it), never in the air. Running into the end of a girder, falling

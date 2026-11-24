@@ -8,7 +8,7 @@ each). They borrow the *mechanics* of games one knows — never their look, thei
 |---|---|---|---|
 | `waves` | **Wave Goodbye** — the sea comes in over a bar of sand: one is drawn out, and jumps what comes, for as long as one can | the north beach: a bar from (47, -60) to (103, -39) | `node lab/games/waves/test.mjs` (21) |
 | `lava` | **Thin Crust** — basalt columns that warn, then sink into the lava of a crater: the last ground standing | an islet east of the head of the pier, about (188, 8) | `node lab/games/lava/test.mjs` |
-| `hive` | **The Bee's Knees** — three combs of wax over the sea: the cell one sets foot on gives way | the north of the bay, about (84, -84) | `node lab/games/hive/test.mjs` |
+| `hive` | **The Bee's Knees** — three combs of wax over the sea: the cell one sets foot on gives way | the north of the bay: combs at (84, -84), the gate on the beach at (43.5, -79.5) | `node lab/games/hive/test.mjs` (28) |
 | `flip` | **Head Over Heels** — one runs by oneself along a line of girders, and one key turns gravity over | along the south side of the pier, over the sea | `node lab/games/flip/test.mjs` |
 | `spiral` | **A Turn for the Worse** — a track wound round a tower: obstacles worse every turn, one touch and it is the foot again | a tower in the south of the bay, about (168, 84) | `node lab/games/spiral/test.mjs` |
 
@@ -80,3 +80,30 @@ The wader that plays by itself holds 124 to 146 s (52 to 60 m out); who stands t
 
 To tune: `WAVES` in `rules.js` — `drift` (how fast one is drawn out), `grow` (how tall the sea stands, metre by
 metre), `beat` and `sets` (its rhythm), `kinds` (how tall, how lopsided), `knee`, `clear`.
+
+What it adds to the world (only when it is on): the bar, its stakes, the arch, the waves (one group, `waves`;
+the sand and the water are two materials of its own) — and, so that one can walk out on the bar at any time,
+one `collision.addPlatform` (the waves only matter to who has waded in under the arch).
+
+### The Bee's Knees (`hive`)
+
+Three round combs of wax, fifty-five cells each, hang one above the other over the sea in the north of the bay
+(19, 13 and 7 m up), from a great crook of timber with a straw skep at its tip; one asks to play on the sand
+of the north beach, at (43.5, -79.5). One runs on the combs, and **the cell one sets foot on gives way**: it
+holds a moment — 0.6 s on the top comb, 0.5 on the middle one, 0.4 on the lowest — and drops, whether one is
+still on it or not; it does not come back. Through a hole one falls to the comb below; from the last one, into
+the sea, and that is the run: how long one held. A run is one's own, and starts when one asks.
+
+One is not alone up there: on each comb a bee takes the wax apart by itself, a cell every 1.3 s, on a path
+drawn from the seed of the run — so nobody can stand and wait. Amber caps hold two seconds; on the two lower
+combs three cells of royal jelly throw the first foot that touches them back up to the comb above, once. The
+camera looks down from behind, towards the beach; the comb over one's head is hidden, those below are dimmed
+so that a hole reads as a hole.
+
+The bot holds 50 to 70 s over the twelve seeds of the checks (39 to 71 over two hundred); who stands still is
+in the sea in 5 s, who runs round without looking in about 20. A run has an end whatever one does: the bees
+have landed on every cell by 75 s. For the game's boards: `hive: { order: 'desc', min: 5000, max: 80_000 }`.
+
+What it does not do: the broken cells are each player's own — another visitor is seen running on whole combs
+and falling through solid wax, and friends do not break each other's cells (reading the place of the other
+robots could do it: not tried). Runs differ by seed, so the board has some luck in it.

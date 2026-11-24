@@ -20,6 +20,11 @@ const SPECS = {
     // (the wader is put fifty-six metres out, where the sea soon has the better of anybody)
     hurry: async (id) => { const { WAVES: W } = await import('/lab/games/waves/rules.js'); const st = window.__mmf.labGames[id].run().state; st.s = 56; st.clock = 56 / W.drift; st.next = Math.ceil((st.t0 + st.clock - (W.length + W.far - st.s - 1.5) / W.speed) / W.beat); },
     score: (ms) => ms > 100000 && ms < 300000,
+    // (the bar can be walked on at any time: its sand carries, twenty metres out as on the beach)
+    also: async (page, check) => {
+      const y = await page.evaluate(async () => { const { barAt } = await import('/lab/games/waves/rules.js'); const a = window.__mmf, p = barAt(20, 1); a.setMode?.('walk', true); a.player.teleport(p.x, p.z, 0); return { y: a.player.pos.y, swim: !!a.player.swimming }; });
+      check('waves: the bar of sand carries who walks out on it', Math.abs(y.y - 0.22) < 0.02 && !y.swim, `${y.y.toFixed(2)} m over the sea, twenty metres out`);
+    },
   },
   lava: { offer: /Thin Crust/, score: (ms) => ms > 3000 && ms < 600000 },
   hive: { offer: /Bee/, score: (ms) => ms > 3000 && ms < 600000 },
@@ -58,6 +63,7 @@ try {
     await frames(4);
     check(`${id}: built in the running game — one group named after it, a gate`, !built.error && built.group && built.game && Number.isFinite(built.gate?.x), built.error || `gate at (${built.gate.x.toFixed(1)}, ${built.gate.z.toFixed(1)})`);
     if (built.error) continue;
+    if (spec.also) await spec.also(page, check);
     // ---- at its gate: offered; on ground one can stand on
     const stand = await page.evaluate((id) => { const a = window.__mmf, g = a.labGames[id].game.gate; a.setMode?.('walk', true); a.player.teleport(g.x, g.z, g.yaw); return { y: a.player.pos.y, gate: g.y }; }, id);
     await frames(3);

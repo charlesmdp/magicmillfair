@@ -7,8 +7,9 @@
 //
 // A round leaves every ten seconds on the clock everybody shares, and what the columns do in a round is drawn
 // from its number: the same for everybody who takes that start, something else for the next one. Nothing in it
-// is unfair for the first minute: a column that warns always has a neighbour that outlives it, no higher than
-// one step. After that there is only something to jump to, and in the end not even that.
+// is unfair to begin with: for the first thirty-five seconds a column that warns always has a neighbour that
+// outlives it, no higher than one step. Then, to the minute, there is at least something to jump to — and
+// after the minute, less and less often even that.
 //
 // Places on the field: x metres east and z metres south of its middle; heights are counted from the lava.
 // Time is counted from the start of the round (before it: negative, and every column stands), and advances in
@@ -29,7 +30,7 @@ export const LAVA = {
   burn: 0.15, // m over the lava: lower than that, one is in it
   rise: 0.6, sink: 0.7, // s: a column takes so long to come up, to go down
   grace: 2.5, // s: nothing warns before
-  fair: 62, reach: 80, end: 240, // s: until then a column that warns has a neighbour to step to; until then one to jump to; after the last, nothing rises again
+  fair: 35, reach: 60, end: 240, // s: until then a column that warns has a neighbour to step to; until then one to jump to; after the last, nothing rises again
 };
 
 export const GONE = 0, RISING = 1, UP = 2, WARN = 3, SINKING = 4;
@@ -90,7 +91,7 @@ export function targetAt(t) {
   return 2;
 }
 /** For how long a column that begins to warn at `t` warns before it sinks (s). */
-export const warnTime = (t) => (t < 20 ? 1.4 : t < 70 ? 1.4 - 0.65 * ((t - 20) / 50) : Math.max(0.55, 0.75 - (t - 70) * 0.004));
+export const warnTime = (t) => (t < 15 ? 1.4 : t < 60 ? 1.4 - 0.65 * ((t - 15) / 45) : Math.max(0.55, 0.75 - (t - 60) * 0.004));
 /** For how long a column may stand, at `t`, before it warns whatever else goes on (s). */
 const stayTime = (t) => (t < 15 ? Infinity : Math.max(2.2, 22 - (t - 15) * 0.26));
 
@@ -145,7 +146,7 @@ export function makeRound(n) {
     // (…and whoever is on a column round it that warns already must still have theirs)
     if (ok) for (const x of wide ? CELLS[c].n.concat(CELLS[c].far.map((f) => f.i)) : CELLS[c].n) { const lx = warned(x, t); if (lx && !escape(x, lx, lx.warn >= L.fair)) { ok = false; break; } }
     // (unfair — nowhere to go from it, or from a neighbour — it does not happen… until late, and then more and more)
-    if (!ok && (t < L.reach || rnd() >= Math.min(1, (t - L.reach) / 45))) { l.warn = l.sink = l.gone = Infinity; return false; }
+    if (!ok && (t < L.reach || rnd() >= Math.min(1, (t - L.reach) / 50))) { l.warn = l.sink = l.gone = Infinity; return false; }
     alive--; solid--;
     // ---- does it come back? Less and less: the round has a number of columns in mind, and the rim goes first
     const over = alive + 1 - targetAt(t + 3);
@@ -328,24 +329,31 @@ function sub(st, dt, input, events) {
 
 const _b = {};
 /**
- * Plays by itself — the proof that a round can be held: it stays where it is while that is safe, and when its
- * column warns it goes to the neighbour that will hold longest, jumping a step up or a ditch. Returns the input
- * for stepRun.
+ * Plays by itself — the proof that a round can be held. It knows nothing a player does not see: a column that
+ * does not warn yet is as good as any other, one that is not there yet is not counted on. It stays where it is
+ * while that is safe, and when its column warns it goes to the neighbour that will hold longest, jumping a step
+ * up or a ditch. Returns the input for stepRun. (`st.bot.every`: how often it looks about itself, s — a tenth
+ * of a second unless said; the checks try a slower one.)
  */
 export function botInput(st, out = { x: 0, y: 0, jump: false }) {
   const L = LAVA, R = st.round, t = st.clock, [fx, fz] = L.look, rx = -fz, rz = fx;
   out.x = 0; out.y = 0; out.jump = false;
   if (st.over) return out;
-  const B = st.bot || (st.bot = { goal: -1, think: -1e9 }), here = cellAt(st.x, st.z);
-  /** How long column `y` holds from `after` seconds on (0: it will not be there, or too high). */
+  const B = st.bot || (st.bot = { goal: -1, think: -1e9, every: 0.1 }), here = cellAt(st.x, st.z);
+  /** How long column `y` holds from `after` seconds on, as far as can be seen now (0: it will not be there, or it is too high). */
   const holds = (y, after, feet, up) => {
     const lives = R.lives[y], at = t + after;
-    for (let k = lives.length - 1; k >= 0; k--) { const l = lives[k]; if (l.up <= at && l.sink > at) return L.tops[l.level] <= feet + up ? Math.min(l.sink - at, 8) : 0; }
+    for (let k = lives.length - 1; k >= 0; k--) {
+      const l = lives[k];
+      if (l.rise > t) continue; // (not there yet: nobody knows it will be)
+      if (l.up <= at && (l.warn > t || l.sink > at)) return L.tops[l.level] <= feet + up ? (l.warn > t ? 8 : Math.min(l.sink - at, 8)) : 0;
+      return 0;
+    }
     return 0;
   };
   const room = (y) => { let n = 0; for (const z of CELLS[y].n) if (holds(z, 0.3, 9, 0) > 1.5) n++; return n; };
   if (st.ground && here >= 0 && t >= B.think) {
-    B.think = t + 0.1;
+    B.think = t + (B.every || 0.1);
     const feet = st.h, value = (y, after, up) => { const left = holds(y, after, feet, up); return left < 0.7 ? -1 : left + 0.3 * room(y) - 0.04 * Math.sqrt(CELLS[y].x ** 2 + CELLS[y].z ** 2); };
     let best = here, most = value(here, 0, 9) + 0.9;
     for (const y of CELLS[here].n) { const v = value(y, 0.5, 0.95); if (v > most) { most = v; best = y; } }
@@ -368,9 +376,10 @@ export function botInput(st, out = { x: 0, y: 0, jump: false }) {
 /** Who only stands there: the input of somebody who does nothing. */
 export function idleInput(st, out = { x: 0, y: 0, jump: false }) { out.x = 0; out.y = 0; out.jump = false; return out; }
 
-/** Plays round `n` with the bot: { time (ms), jumps, over }. */
-export function botRun(n, limit = 300) {
+/** Plays round `n` with the bot (`every`: how often it looks about itself, s): { time (ms), jumps, over }. */
+export function botRun(n, limit = 300, every = 0.1) {
   const st = startRun(n, 0), input = { x: 0, y: 0, jump: false };
+  st.bot = { goal: -1, think: -1e9, every };
   for (let t = 0; t < limit && !st.over; t += LAVA.step) { botInput(st, input); stepRun(st, LAVA.step, input, null); }
   return { time: st.time, jumps: st.jumps, over: st.over };
 }

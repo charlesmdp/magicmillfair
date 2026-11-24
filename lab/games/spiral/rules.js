@@ -122,10 +122,10 @@ export function course() {
   stairs(160.5); hole(165.5, 3.4); // (off the high crate with a jump: the track is missing behind it)
   high(175);
   // ---- 4 · Clockwork: what moves
-  mill(188, 3.0, 0.4); low(194.5);
-  stomp(200, 2.2, 0.1); high(207);
-  hammer(213, 2.6, 1.0); hole(218.5, 2.6);
-  mill(226, 2.4, 2.2); stomp(232.5, 1.9, 0.55);
+  mill(187.5, 3.0, 0.4); low(193.5);
+  stomp(198.5, 2.2, 0.1); high(204.5);
+  hammer(209.5, 2.6, 1.0); hole(214.5, 2.6); low(221.5);
+  mill(227, 2.4, 2.2); stomp(232.5, 1.9, 0.55);
   hammer(238.5, 2.2, 3.1);
   // ---- 5 · Roll Out the Barrel: they are dropped from the gallery above, and roll down into a hole
   hole(243.6, 2.6); barrels(246.2, 270, 1.5, 5, 0);

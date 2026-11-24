@@ -157,7 +157,8 @@ export class Lava {
     }
     const P = (i, j, out = V(0, 0, 0)) => {
       const k = ((i % SEG) + SEG) % SEG, a = (k / SEG) * TAU, yc = crest[k], w = wob[k], jit = j > 1 && j < 11 ? (rnd(k * 16 + j, 13) - 0.5) * 0.36 : 0;
-      const [dr, y] = [[-0.6, L.level - 0.9], [0.0, L.level + 0.3], [0.42, L.level + 1.45], [1.05, L.level + (yc - L.level) * 0.74], [1.9, yc], [2.8, yc - 0.3], [4.2 + 0.5 * w, yc * 0.6], [5.6 + 0.8 * w, yc * 0.29], [7.1 + w, 0.32], [8.3 + w, -1.0], [9.5 + 0.6 * w, -4.6], [10.1, -9.2]][j];
+      // (from the lava up the inside of the crater to its crest, then down a cliff into the sea, and to its bed)
+      const [dr, y] = [[-0.6, L.level - 0.9], [0.0, L.level + 0.3], [0.42, L.level + 1.45], [1.05, L.level + (yc - L.level) * 0.74], [1.9, yc], [2.9, yc - 0.25], [4.0 + 0.4 * w, yc * 0.78], [4.9 + 0.6 * w, yc * 0.4], [5.6 + 0.8 * w, 0.25], [6.6 + 0.8 * w, -1.4], [8.0 + 0.5 * w, -5.0], [8.8, -9.2]][j];
       const r = INNER + dr + jit;
       return out.set(cx + Math.cos(a) * r, y + jit * 0.8, cz + Math.sin(a) * r);
     };
@@ -173,7 +174,7 @@ export class Lava {
           n.crossVectors(a, c).normalize();
           if (j > 0) along += p.distanceTo(P(i, j - 1, d));
           // (dark stone, darker and warmer down the inside of the crater, a little paler on the crest)
-          const inside = j < 4, t = 0.36 + 0.12 * rnd(i * 31 + j, 5) + (j === 4 || j === 5 ? 0.06 : 0);
+          const inside = j < 4, t = 0.42 + 0.12 * rnd(i * 31 + j, 5) + (j === 4 || j === 5 ? 0.06 : 0);
           const col = inside ? [t * 0.95, t * 0.74, t * 0.66, j < 2 ? 0.55 : 0.8] : [t * 0.86, t * 0.82, t * 0.84, 1];
           ids[i].push(rock.vert(p, n, ((i / SEG) * TAU * (INNER + 4)) / rock.tile, along / rock.tile, col));
         }
@@ -181,13 +182,13 @@ export class Lava {
       for (let i = 0; i < SEG; i++) for (let j = 0; j + 1 < ROWS; j++) rock.idx.push(ids[i][j], ids[i + 1][j], ids[i][j + 1], ids[i + 1][j], ids[i + 1][j + 1], ids[i][j + 1]);
     }
     // ---- teeth of rock along the crest, boulders where the sea breaks on it
-    for (let k = 0; k < 9; k++) {
-      const i = Math.floor(rnd(k, 21) * SEG), q = P(i, 4), s = 0.75 + rnd(k, 22) * 0.9, t = 0.3 + 0.1 * rnd(k, 23);
-      rock.tint(t * 0.86, t * 0.82, t * 0.84, 1).place(q.x, q.y - 0.5, q.z, rnd(k, 24) * TAU, (rnd(k, 25) - 0.5) * 0.3, (rnd(k, 26) - 0.5) * 0.3)
-        .lathe([[1.0 * s, -0.5], [0.8 * s, 0.5 * s], [0.5 * s, 1.5 * s], [0.2 * s, 2.3 * s], [0.02, 2.7 * s]], 6).pop();
+    for (let k = 0; k < 7; k++) {
+      const i = Math.floor(rnd(k, 21) * SEG), q = P(i, 4), s = 0.8 + rnd(k, 22) * 0.8, t = 0.36 + 0.1 * rnd(k, 23);
+      rock.tint(t * 0.86, t * 0.82, t * 0.84, 1).place(q.x, q.y - 0.6, q.z, rnd(k, 24) * TAU, (rnd(k, 25) - 0.5) * 0.5, (rnd(k, 26) - 0.5) * 0.5)
+        .lathe([[1.25 * s, -0.6], [1.1 * s, 0.5 * s], [0.85 * s, 1.2 * s], [0.5 * s, 1.75 * s], [0.12 * s, 2.0 * s], [0.01, 2.02 * s]], 5).pop();
     }
     for (let k = 0; k < 12; k++) {
-      const i = Math.floor(rnd(k, 31) * SEG), q = P(i, 8), s = 0.6 + rnd(k, 32) * 0.9, t = 0.28 + 0.1 * rnd(k, 33);
+      const i = Math.floor(rnd(k, 31) * SEG), q = P(i, 8), s = 0.6 + rnd(k, 32) * 0.9, t = 0.34 + 0.1 * rnd(k, 33);
       rock.tint(t * 0.86, t * 0.82, t * 0.84, 1).place(q.x + (rnd(k, 34) - 0.5) * 1.6, 0.1, q.z + (rnd(k, 35) - 0.5) * 1.6, rnd(k, 36) * TAU)
         .lathe([[0.02, -0.7 * s], [0.75 * s, -0.5 * s], [1.0 * s, -0.05 * s], [0.85 * s, 0.4 * s], [0.5 * s, 0.72 * s], [0.02, 0.85 * s]], 7).pop();
     }

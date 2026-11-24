@@ -8,9 +8,10 @@
 //
 // One is not alone up there: on each comb a bee takes the wax apart by itself, cell after cell, on a path drawn
 // from the seed of the run — where it lands, the cell gives way as under a foot. Some cells are capped: they hold
-// much longer. And on the two lower combs a few hold royal jelly: the first foot on one is thrown back up to the
-// comb above (through its wax: a comb stops only what comes down on it) — once; after that it is a cell like
-// another, and a bee that got there first has eaten it.
+// much longer — the one in the middle of the top comb is: one begins there, with the time to look round. And on
+// the two lower combs a few hold royal jelly: the first foot on one is thrown back up to the comb above (through
+// its wax: a comb stops only what comes down on it) — once; after that it is a cell like another, and a bee that
+// got there first has eaten it.
 //
 // Places: metres from the middle of the combs, `x` to the east and `z` to the south; `y` over the sea. The stick
 // is read along the way the camera looks (HIVE.view): up runs away from it. Time advances in steps of 1/120 s
@@ -328,7 +329,7 @@ export function botInput(st, out = { x: 0, y: 0, jump: false }) {
 export function idleInput(st, out = { x: 0, y: 0, jump: false }) { out.x = 0; out.y = 0; out.jump = false; return out; }
 /** Who only hammers the jump. */
 export function hammerInput(st, out = { x: 0, y: 0, jump: false }) { out.x = 0; out.y = 0; out.jump = st.ground; return out; }
-/** Who runs straight on and jumps when the wax ends. */
+/** Who runs round without looking, and jumps now and then. */
 export function runnerInput(st, out = { x: 0, y: 0, jump: false }) { const a = st.clock * 0.9 + st.seed; out.x = Math.sin(a); out.y = Math.cos(a); out.jump = st.ground && Math.floor(st.clock * 2) % 2 === 0; return out; }
 
 /** Plays a run with `play` (the bot, unless another is given): { time (ms), mine, jumps, throws, falls, over, state }. */
