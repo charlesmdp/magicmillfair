@@ -14,7 +14,7 @@ on over the game as it stands, each on its own, and with every switch off the ga
 | `caves` | The caves are safe places: nearby chat only | `src/extras/caves.js` | `node tools/extras-test.mjs` (15, with the next) |
 | `stats` | The game in figures: counters, the page `/opendata`, a line in the settings | `src/extras/stats.js`, `server/stats.js`, `public/opendata/`, `public/opendate/` | the same |
 
-`node tools/games-test.mjs` (13) plays the cleft, the cave and the slope through in the running game, in a headless
+`node tools/games-test.mjs` (14) plays the cleft, the cave and the slope through in the running game, in a headless
 browser: with every switch off nothing of them is there; switched on they are built, offered at their gates,
 played by their own bots, and the player is let go where it should be.
 
@@ -169,6 +169,11 @@ rings flown through gives a third of it back. The inside of a bend is the shorte
 quarter on who flies the middle. What one hits — columns, teeth of rock from the roof and from the floor, boulders,
 arches over the lake, curtains of rock with one hole, beams of crystal — does not end the flight: it throws one
 aside and all but stops one, and the clock runs on. The walls rub.
+
+**The cave itself is drawn only for who flies in it** (`Hollow.inside`, a group made visible when a flight opens
+and hidden when it closes): it lies under the hill, nobody else could see any of it, and left visible it was handed
+to the graphics card whenever one looked towards the hill — 35 000 triangles and some twenty draw calls for nothing.
+Hidden, it costs nothing; only the mouth of the mine is drawn (a few hundred triangles).
 
 Ten stretches, each with its own light (painted in the vertices, like the game's other caves; the mesh casts no
 shadow and is not in the shadow pass): The Start Hall, The Lantern Gallery, The Forest of Columns, The Teeth, The

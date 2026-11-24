@@ -4,8 +4,8 @@
 // a flight is run: a session that drives the player (see PlayerController.driver).
 //
 // The cave lies whole under the hill behind the sea cliff: nothing of it shows outside but the mouth of a mine
-// at the foot of the cliff, where one asks to fly. No lamp is computed in it, as in the other caves of the
-// valley: the light is painted in the vertices.
+// at the foot of the cliff, where one asks to fly — and the cave itself is only drawn for who flies in it. No
+// lamp is computed in it, as in the other caves of the valley: the light is painted in the vertices.
 import * as THREE from 'three';
 import { Parts } from '../../../props/MeshBuilder.js';
 import { ANIM } from '../../../../player/Character.js';
@@ -197,14 +197,18 @@ export class Hollow {
       glow.tint(1.0, 0.72, 0.2, 1).place(p.x, p.y, p.z).lathe([[0, -0.13], [0.11, -0.05], [0.11, 0.05], [0, 0.13]], 6).pop();
     }
     for (let i = -7; i < 7; i++) for (let j = 0; j < 2; j++) { const a = P(-0.8 + j * 0.8, i, floor + 0.2), b = P(-0.8 + j * 0.8, i + 1, floor + 0.2), c = P(j * 0.8, i + 1, floor + 0.2), d = P(j * 0.8, i, floor + 0.2), w = (i + j) & 1 ? 1.5 : 0.06; paint.tint(w, w, w, 1).quad(a, b, c, d); }
-    this.group.add(parts.toMeshes(mats, { name: 'hollow-cave', layers: [] }));
+    // (the cave itself is drawn only for who flies in it: nobody else can see any of it — it is under the hill —
+    // and what is not drawn costs nothing)
+    this.inside = new THREE.Group(); this.inside.name = 'hollow-inside'; this.inside.visible = false;
+    this.inside.add(parts.toMeshes(mats, { name: 'hollow-cave', layers: [] }));
+    this.group.add(this.inside);
 
     // ---- the rings: each one by itself, to be put out when it is flown through
     this.rings = C.rings.map((r) => {
       const p = new Parts(), b = p.get('glow'), n = 20;
       for (let i = 0; i < n; i++) { const a0 = (i / n) * TAU, a1 = ((i + 1) / n) * TAU; b.tint(1.0, 0.7, 0.16, 1).rod(P(r.s, r.u + r.r * Math.cos(a0), r.v + r.r * Math.sin(a0)), P(r.s, r.u + r.r * Math.cos(a1), r.v + r.r * Math.sin(a1)), 0.1, 5, { caps: false }); }
       const m = p.toMeshes(mats, { name: 'hollow-ring', layers: [] });
-      this.group.add(m);
+      this.inside.add(m);
       return m;
     });
 
@@ -253,6 +257,7 @@ export class Hollow {
     const H = HOLLOW, C = course(), events = [], input = { x: 0, y: 0, burst: false }, st = startFlight();
     const S = { cam: null, look: V(0, 0, 0), after: 0, acc: 0, last: 9, shake: 0, fov: 70, was: false, hold: false }, _t = V(0, 0, 0), pose = {}, p = {};
     for (const m of this.rings) m.visible = true;
+    this.inside.visible = true;
     const session = {
       hollow: this, over: false, ended: false, time: 0, line: '', riding: false, anim: ANIM.swim, state: st, auto: false,
       step: (dt, pl, control) => {
@@ -310,7 +315,7 @@ export class Hollow {
       },
       /** The flight is over (or left): the player is put back outside, before the mouth of the mine. */
       drop: (pl) => { pl.driver = null; pl.riding = false; pl.pitch = 0; pl.roll = 0; pl.teleport(this.gate.x, this.gate.z, this.gate.yaw); session.close(); },
-      close: () => { if (this.session === session) this.session = null; player.pitch = 0; player.roll = 0; for (const m of this.rings) m.visible = true; },
+      close: () => { if (this.session === session) this.session = null; player.pitch = 0; player.roll = 0; for (const m of this.rings) m.visible = true; this.inside.visible = false; },
     };
     this.session = session;
     session.step(0, player, false);

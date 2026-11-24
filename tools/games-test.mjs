@@ -2,7 +2,7 @@
 // them is there; switched on, each is built without a word of complaint and offers itself at its gate; the
 // planks of the cleft carry; the cleft, the cave and the slope are played through by their own bots and let
 // the player go where they should, their time told to whoever keeps a board; a game left half-way leaves
-// nothing behind.
+// nothing behind; the cave is drawn only for who flies in it.
 // usage: node tools/games-test.mjs
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -66,17 +66,19 @@ try {
   // ---- the cave: the lap of the bot is the lap the rules foretell
   const lap = botFlight().time;
   await at(gates.hollow.x, gates.hollow.z);
+  const hidden = await page.evaluate(() => window.__mmf.extras.hollow.inside.visible);
   await page.evaluate(() => { const a = window.__mmf; a.flyHollow(); a.hollowFlight().auto = true; });
   await page.waitForFunction(() => { const f = window.__mmf.hollowFlight(); return f && f.state.s > 250; }, null, { timeout: 180000 });
-  const deep = await page.evaluate(() => { const a = window.__mmf, p = a.player.pos; return { under: a.world.data.heightAt(p.x, p.z) - p.y, line: a.hollowFlight().line }; });
+  const deep = await page.evaluate(() => { const a = window.__mmf, p = a.player.pos; return { under: a.world.data.heightAt(p.x, p.z) - p.y, line: a.hollowFlight().line, inside: a.extras.hollow.inside.visible }; });
   await page.waitForFunction(() => !window.__mmf.hollowFlight(), null, { timeout: 180000 });
-  const out = await page.evaluate(() => { const a = window.__mmf, p = a.player.pos; return { told: window.__told.hollow, best: Number(localStorage.getItem('mmf.hollow.best')), x: p.x, z: p.z, above: p.y - a.world.data.heightAt(p.x, p.z), driver: !!a.player.driver }; });
+  const out = await page.evaluate(() => { const a = window.__mmf, p = a.player.pos; return { told: window.__told.hollow, best: Number(localStorage.getItem('mmf.hollow.best')), x: p.x, z: p.z, above: p.y - a.world.data.heightAt(p.x, p.z), driver: !!a.player.driver, inside: a.extras.hollow.inside.visible }; });
+  check('the cave itself is drawn only for who flies in it: not before, not after (it is under the hill: nobody else could see it)', hidden === false && deep.inside === true && out.inside === false);
   check('the cave is flown by its bot in the running game, deep under the hill; its lap is the lap the rules foretell', deep.under > 20 && /burst|BURST/.test(deep.line) && out.told && out.told[0] === lap && out.told[1] === 0 && out.best === lap, `${(lap / 1000).toFixed(2)} s, ${deep.under.toFixed(0)} m under the ground half-way`);
   check('and the flyer is put back outside, before the mouth of the mine', !out.driver && Math.abs(out.above) < 0.1 && Math.hypot(out.x - gates.hollow.x, out.z - gates.hollow.z) < 0.5);
   // left half-way: nothing stays
   await page.evaluate(() => { const a = window.__mmf; a.flyHollow(); });
   await frames(20);
-  const left = await page.evaluate(() => { const a = window.__mmf; a.leaveHollow(false); const p = a.player.pos; return { flight: !!a.hollowFlight(), driver: !!a.player.driver, above: p.y - a.world.data.heightAt(p.x, p.z), fov: a.fair.fov, rings: a.extras.hollow.rings.every((m) => m.visible) }; });
+  const left = await page.evaluate(() => { const a = window.__mmf; a.leaveHollow(false); const p = a.player.pos; return { flight: !!a.hollowFlight(), driver: !!a.player.driver, above: p.y - a.world.data.heightAt(p.x, p.z), fov: a.fair.fov, rings: a.extras.hollow.rings.every((m) => m.visible) && !a.extras.hollow.inside.visible }; });
   check('a flight left half-way leaves nothing behind: the player outside, the camera given back, every ring lit again', !left.flight && !left.driver && Math.abs(left.above) < 0.1 && left.fov === null && left.rings);
 
   // ---- the slope: the bot climbs it with the next start
