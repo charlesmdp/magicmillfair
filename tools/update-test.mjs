@@ -21,6 +21,8 @@ const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const opt = Object.fromEntries(process.argv.slice(2).filter((a) => a.startsWith('--')).map((a) => { const [k, v] = a.slice(2).split('='); return [k, v ?? true]; }));
+import { botFlight } from '../src/world/zones/games/hollow/tunnel.js'; // (the lab's: the lap its own bot flies)
+
 const PORT = 8797, BASE = `http://127.0.0.1:${PORT}`, ADMIN_KEY = 'update-test-admin-key', SCORE_SECRET = 'update-test-score-secret';
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'mmf-update-test-'));
 const ONE = 'aaaaaaa', TWO = 'bbbbbbb';
@@ -189,6 +191,38 @@ try {
   const on = await state();
   check('a switch goes on: what it releases is there at once, as the game runs — no refresh', on.extras === 'caves,stats' && on.figures && !on.bar && on.release.stats === true, JSON.stringify(on));
 
+  // ---- two of the lab's games, thrown on from the back office like anything else: their files are fetched and
+  // they are built as the game runs (in a build made as the delivered one is); each is played by its own bot, and
+  // its time is on its board — the server noted when the run began, the game said when it ended
+  await throwSwitch('Uphill Battle');
+  await throwSwitch('The Hollow Hill');
+  await page.waitForFunction(() => { const m = window.__mmf, e = m.extras || {}; return !!(e.hill && e.hollow && m.climbHill && m.flyHollow); }, null, { timeout: 60000 });
+  await frames(6);
+  const labOn = await state();
+  const dayOf = async (id) => ((await api(`/api/scores?board=${id}`)).body.tops?.day || []).map((e) => ({ name: e.name, score: e.score }));
+  /** One of them played by its bot, from its gate: what was so meanwhile, and what its board says afterwards. */
+  const playLab = async (id, begin, run) => {
+    await page.evaluate(([id, begin, run]) => { const m = window.__mmf, g = m.extras[id].gate || m.extras[id].stand; m.player.teleport(g.x, g.z, 0); m[begin](); m[run]().auto = true; }, [id, begin, run]);
+    await frames(30);
+    const during = await page.evaluate((run) => { const m = window.__mmf; return { on: !!m[run](), busy: m.busyNow(), keys: [...document.querySelectorAll('button')].some((b) => /keys$/.test(b.textContent) && b.style.display !== 'none') }; }, run);
+    await page.waitForFunction((run) => !window.__mmf[run](), run, { timeout: 300000 });
+    let day = [];
+    for (let i = 0; i < 100 && !day.length; i++) { await sleep(200); day = await dayOf(id); }
+    return { during, day, free: await page.evaluate(() => !window.__mmf.player.driver && !window.__mmf.busyNow()) };
+  };
+  const lap = botFlight().time;
+  const flown = await playLab('hollow', 'flyHollow', 'hollowFlight');
+  const climbed = await playLab('hill', 'climbHill', 'hillClimb');
+  const others = { pond: (await api('/api/scores?board=pond')).status, run: (await api('/api/run', { board: 'pond' })).status };
+  check('two games of the lab are thrown on from the back office: built as the game runs, no refresh; each is played by its own bot — the page would not refresh meanwhile, the keys are offered — and its time is on its board under the name of the visitor; a game that is still off has no board',
+    labOn.extras === 'caves,hill,hollow,stats' && !labOn.bar && labOn.release.hill === true && labOn.release.hollow === true && labOn.release.pond === false
+    && flown.during.on && flown.during.busy && flown.during.keys && flown.free && flown.day.length === 1 && flown.day[0].name === 'Traveller' && flown.day[0].score === lap
+    && climbed.during.on && climbed.during.busy && climbed.free && climbed.day.length === 1 && climbed.day[0].name === 'Traveller' && climbed.day[0].score > 9000 && climbed.day[0].score < 90000
+    && others.pond === 404 && others.run === 400,
+    JSON.stringify({ extras: labOn.extras, lap, flown, climbed, others }));
+  await page.evaluate(([x, z]) => { const m = window.__mmf; m.player.teleport(x, z, 1.2); m.rig.snap(m.player.pos, 1.2 + Math.PI); }, [first.x, first.z]);
+  await frames(6);
+
   // ---- the sky villages, stage by stage: "soon" builds their gate, closed; "open" builds the fifty of them
   const skyNow = () => page.evaluate(() => { const m = window.__mmf, g = m.world.sky; return { stage: g.stage, villages: g.villages.length, gate: !g.gate.hidden, closed: !!g.gate.closed, sign: !!g.group.getObjectByName('skygate-soon'), x: +m.player.pos.x.toFixed(1), z: +m.player.pos.z.toFixed(1) }; });
   const stageTo = async (label) => {
@@ -236,6 +270,9 @@ try {
     /asks every page to refresh/.test(typing.bar) && /as soon as you have finished/.test(typing.bar) && Math.hypot(typing.x - first.x, typing.z - first.z) < 1.5 && Math.hypot(asked.x - first.x, asked.z - first.z) < 1.5 && asked.room === 'fair' && !asked.bar, JSON.stringify({ typing: typing.bar, asked }));
 
   // ---- a delivery: the server is replaced by one that serves version two; every connection is cut
+  // (once this page has all that is released: the extras are fetched one after the other, the figures last — one
+  // still on its way when the server goes would be asked of the next server, which has other files)
+  await page.waitForFunction(() => ['caves', 'stats', 'hill', 'hollow'].every((k) => window.__mmf.extras?.[k]), null, { timeout: 120000 });
   await stop();
   await sleep(1500);
   const cut = await page.evaluate(() => window.__mmf.presence.mode);

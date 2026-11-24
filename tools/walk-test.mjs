@@ -35,6 +35,7 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text().slice
 page.on('pageerror', (e) => errors.push(e.message));
 
 const results = [];
+const keysSeen = {}; // (game by game: was the button of its keys there while it was played, and gone once it closed)
 const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`); };
 const frames = (n) => page.evaluate((n) => { const app = window.__mmf; const target = app.frames + n; return new Promise((res) => { const tick = () => (app.frames >= target ? res() : requestAnimationFrame(tick)); tick(); }); }, n);
 const state = () => page.evaluate(() => { const p = window.__mmf.player; return { x: p.pos.x, y: p.pos.y, z: p.pos.z, swimming: p.swimming, grounded: p.grounded, anim: p.anim }; });
@@ -661,6 +662,7 @@ try {
       out.line0 = document.querySelector('.hud .run').textContent;
       for (let f = 0; f < 600 && !onStone(c[0]); f++) { const dx = c[0].x - player.pos.x, dz = c[0].z - player.pos.z, l = Math.hypot(dx, dz) || 1; step(dx / l, dz / l, false); }
       out.running = g.run.state;
+      out.keys = [...document.querySelectorAll('button')].some((b) => /keys$/.test(b.textContent) && b.style.display !== 'none'); // (the keys of the climb are said when one leaves the plate)
       for (let i = 1; i < c.length; i++) {
         let ok = false, n = 0;
         for (const [m, s] of ways) { n++; if ((ok = jump(c[i - 1], c[i], m, s))) break; }
@@ -673,6 +675,7 @@ try {
       return out;
     });
     await frames(6); // the time goes to the board (kept in this browser: the test has no server)
+    keysSeen.climb = [climb.keys, true]; // (they are taken back when one walks away from the course)
     const board = await page.evaluate(() => { const g = window.__mmf.world.games; return { top: g.scores, note: document.querySelector('.hud .note').textContent }; });
     check('the climb can be done: a bot makes every jump', climb.stuck.length === 0 && climb.stones > 140 && climb.height > 85, `${climb.stones} stones, ${climb.height.toFixed(1)} m, ${climb.firstTry} jumps at the first try, stuck at [${climb.stuck.join(', ')}]`);
     check('the clock starts on leaving the plate and stops at the top; no jetpack there', climb.noFly && climb.ready === 'ready' && /^Ready/.test(climb.line0) && climb.running === 'running' && climb.state === 'done' && climb.clean && /^Top reached in \d+:\d\d\.\d\d!$/.test(climb.line), JSON.stringify({ ready: climb.ready, running: climb.running, state: climb.state, line: climb.line, noFly: climb.noFly }));
@@ -881,12 +884,13 @@ try {
         }
       };
       const v = new T.Vector3(), m = new T.Matrix4(), dt = 1 / 30;
+      const keysOn = () => [...document.querySelectorAll('button')].some((b) => /keys$/.test(b.textContent) && b.style.display !== 'none'); // (the small button that shows the keys of the game again)
       const point = (w) => { v.copy(w).project(cam); input.pointer.x = (v.x * 0.5 + 0.5) * window.innerWidth; input.pointer.y = (-v.y * 0.5 + 0.5) * window.innerHeight; };
       for (const booth of g.booths.list) {
         // (a rehearsal: the game is played with a seed, as when a server draws one — what is written down of it can then be played again)
         const seed = (Math.random() * 4294967296) >>> 0;
         app.fair.seed = seed; app.playBooth(booth); app.fair.seed = undefined;
-        const s = app.fair.session, dyn = booth.dyn;
+        const s = app.fair.session, dyn = booth.dyn, keys = keysOn();
         let n = 0, sight = false, hidden = false;
         const bot = {};
         for (; n < 30 * 150 && app.fair.session === s && !s.over; n++) {
@@ -912,7 +916,7 @@ try {
         }
         const line = s.line, score = s.score, over = s.over, log = s.log();
         for (let k = 0; k < 80 && app.fair.session; k++) app.fairStep(dt);
-        out[booth.id] = { score, over, line, sight, hidden, seconds: n * dt, closed: !app.fair.session, shown: app.me.root.visible, seed, log };
+        out[booth.id] = { score, over, line, sight, hidden, seconds: n * dt, closed: !app.fair.session, shown: app.me.root.visible, seed, log, keys, keysGone: !keysOn() };
       }
       input.pointer.down = false;
       return out;
@@ -944,7 +948,8 @@ try {
         const app = window.__mmf, { input } = app, K = input.keys, dt = 1 / 60, screen = document.querySelector('.arcade');
         const seed = (Math.random() * 4294967296) >>> 0;
         app.fair.seed = seed; app.playArcade(); app.fair.seed = undefined;
-        const s = app.fair.session, open = screen.classList.contains('on');
+        const keysOn = () => [...document.querySelectorAll('button')].some((b) => /keys$/.test(b.textContent) && b.style.display !== 'none');
+        const s = app.fair.session, open = screen.classList.contains('on'), noPill = !keysOn();
         let n = 0, jumps = 0, ducks = 0, wasJump = false, wasDuck = false;
         for (; n < 60 * 120 && app.fair.session === s && !s.over; n++) {
           const { speed, things } = s.peek(), next = things.filter((o) => o.gap + o.wide > -20).sort((a, b) => a.gap - b.gap)[0];
@@ -966,11 +971,34 @@ try {
         out.still = !!app.fair.session; // (a run that is over leaves the screen up: another go is one jump away)
         app.endGame();
         out.closed = !app.fair.session && !screen.classList.contains('on');
+        out.noPill = noPill; out.own = screen.querySelector('.keys').textContent;
+        // with a finger (the screen of the cabinet lies over the canvas of the game, which hears nothing meanwhile:
+        // the cabinet listens itself): a press on the top of the picture, one on the bottom, then the cross of the frame
+        app.fair.seed = 20240607; app.playArcade(); app.fair.seed = undefined;
+        {
+          const s2 = app.fair.session, r = screen.querySelector('canvas').getBoundingClientRect();
+          const finger = (type, share) => screen.dispatchEvent(new PointerEvent(type, { clientX: r.left + r.width / 2, clientY: r.top + r.height * share, bubbles: true }));
+          for (let k = 0; k < 10; k++) app.fairStep(dt);
+          finger('pointerdown', 0.85);
+          for (let k = 0; k < 6; k++) app.fairStep(dt);
+          const duck = s2.peek().duck;
+          finger('pointerup', 0.85);
+          for (let k = 0; k < 6; k++) app.fairStep(dt);
+          const up = !s2.peek().duck;
+          finger('pointerdown', 0.3);
+          for (let k = 0; k < 6; k++) app.fairStep(dt);
+          const jump = s2.peek().air, alive = !s2.over;
+          finger('pointerup', 0.3);
+          screen.querySelector('.out').click();
+          out.finger = { jump, duck, up, alive, left: !app.fair.session && !screen.classList.contains('on') };
+        }
         return out;
       });
       await frames(12);
       const kept = await page.evaluate(() => window.__mmf.fair.boards.run._local().all[0]?.score || 0);
       const ranAgain = replay('run', run.seed, run.log);
+      check('the cabinet says its keys under its own picture all along, the way out with them — the small button is not put over its title — and it is played with a finger: a press on the top of the picture is a jump, on the bottom a duck, and the cross in its frame walks away',
+        run.noPill && /JUMP/.test(run.own) && /DUCK/.test(run.own) && /LEAVE · E, Esc or the ✕/.test(run.own) && run.finger.jump && run.finger.duck && run.finger.up && run.finger.alive && run.finger.left, JSON.stringify({ noPill: run.noPill, own: run.own, finger: run.finger }));
       check('the arcade cabinet of the pier: Meltdown Run is played on a screen of its own — a bot jumps what stands on the road and ducks what flies low for three hundred metres —, the run goes on its board, and one walks away; the referee, given which keys were down and when, runs the same run to the same metre',
         askRun.includes('Play Meltdown Run') && run.open && run.over && run.score >= 300 && run.score < 900 && run.jumps > 5 && run.still && run.closed && kept === run.score && agrees('run', run.score, ranAgain) && run.log.length < 4000, JSON.stringify({ askRun, run, kept, ranAgain }));
     }
@@ -981,7 +1009,8 @@ try {
       return new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(() => {
         const ask = [...document.querySelectorAll('.prompt.on span')].map((e) => e.textContent);
         app.playRace();
-        const s = app.fair.session, S = s.state, laps = [];
+        const keysOn = () => [...document.querySelectorAll('button')].some((b) => /keys$/.test(b.textContent) && b.style.display !== 'none');
+        const s = app.fair.session, S = s.state, laps = [], keys = keysOn();
         let n = 0, air = 0, boost = 0, top = 0, still = 0, flight = 0, run = 0, lamps = 0, slowest = 99, widest = 0, off = 0;
         for (; n < 60 * 200 && app.fair.session === s && !s.over; n++) {
           // it aims at the clear line the track gives (through the chicanes, onto the ramp) and never lifts:
@@ -1004,6 +1033,7 @@ try {
         const out = { ask, start: /^(Red|Blue|Green|Yellow|Purple|Orange)$/.test(s.start.name) && s.start.wait >= 3.2 && s.start.wait <= 8.3, over: s.over, time: s.time, laps, air, boost, top, still, flight, lamps, slowest: +slowest.toFixed(1), widest: +widest.toFixed(2), off, riding: player.riding, quad: !!player.driver };
         for (let k = 0; k < 60 * 4 && app.fair.session; k++) app.fairStep(dt);
         out.after = { closed: !app.fair.session, riding: player.riding, driver: !!player.driver, d: Math.hypot(player.pos.x - r.start.x, player.pos.z - r.start.z) };
+        out.keys = keys; out.keysGone = !keysOn();
         res(out);
       })));
     });
@@ -1015,7 +1045,8 @@ try {
       return new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(() => {
         const ask = [...document.querySelectorAll('.prompt.on span')].map((e) => e.textContent);
         app.fair.seed = 20240607; app.playWing(); app.fair.seed = undefined; // (a rehearsal: those gaps and no others)
-        const s = app.fair.session, S = s.state, goal = 9;
+        const keysOn = () => [...document.querySelectorAll('button')].some((b) => /keys$/.test(b.textContent) && b.style.display !== 'none');
+        const s = app.fair.session, S = s.state, goal = 9, keys = keysOn();
         let k = 0, flaps = 0, top = 0, low = 99, waited = 0;
         // (before the first flap: it hovers, and no column is on the stage)
         for (let q = 0; q < 30; q++) { app.input.consumeClicks = () => 0; app.fairStep(dt); if (!S.flying && g.pairs.every((p) => p.x > 5.4)) waited++; }
@@ -1030,6 +1061,7 @@ try {
         const out = { ask, score: s.score, over: s.over, flaps, frames: k, top, low, waited, wings: !!player.character.wings?.visible, anim: player.anim, flyer: g.inside(player.pos.x, player.pos.y + 1, player.pos.z), line: s.line, log: s.log() };
         for (let q = 0; q < 60 * 4 && app.fair.session; q++) app.fairStep(dt);
         out.after = { closed: !app.fair.session, driver: !!player.driver, wings: !!player.character.wings?.visible, d: Math.hypot(player.pos.x - g.spot.x, player.pos.z - g.spot.z), pitch: player.pitch };
+        out.keys = keys; out.keysGone = !keysOn();
         res(out);
       })));
     });
@@ -1040,6 +1072,10 @@ try {
       wing.ask.includes('Play Flappy Robot') && wing.waited === 30 && wing.score === 9 && wing.over && wing.flaps > 12 && wing.top < 5.9 && wing.low > 1.0 && wing.wings && wing.anim === 4 && wing.flyer && wing.line === 'Flappy Robot · 9'
       && wing.after.closed && !wing.after.driver && !wing.after.wings && wing.after.d < 0.5 && wing.after.pitch === 0 && flown === 9 && agrees('wing', 9, flownAgain) && wing.log.length < 400, JSON.stringify({ ...wing, flownAgain }));
     const best = await page.evaluate(() => window.__mmf.fair.boards.race._local().all[0]?.score || 0);
+    for (const [id, f] of Object.entries(fair)) keysSeen[id] = [f.keys, f.keysGone];
+    keysSeen.race = [race.keys, race.keysGone]; keysSeen.wing = [wing.keys, wing.keysGone];
+    check('every game says its keys and keeps them for the asking: while a booth, the race, the flying theatre or the climb is on, the small button that shows them again is under the line of the game (the H key does the same); it is gone when the game closes',
+      Object.keys(keysSeen).length === 13 && Object.values(keysSeen).every(([on, gone]) => on === true && gone === true), JSON.stringify(keysSeen));
     check('the quad race: asked for in the paddock, it leaves with the next start (they have names, one every five seconds), the lights, three laps flat out — the bot never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, the pads, a real flight off the ramp, the time on the board', race.ask.some((t) => /^Race: 3 laps on a quad · (Red|Blue|Green|Yellow|Purple|Orange) start in \d s$/.test(t)) && race.start && race.over && race.laps.length === 3 && race.time > 46000 && race.time < 62000 && race.slowest >= 18 && race.off === 0 && race.widest < 3.75 && race.still > 150 && race.lamps > 20 && race.air > 120 && race.flight > 45 && race.boost > 100 && race.top > 24 && race.riding && race.quad && race.after.closed && !race.after.riding && !race.after.driver && best === race.time, JSON.stringify(race));
   }
 

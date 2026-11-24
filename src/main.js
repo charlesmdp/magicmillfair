@@ -693,7 +693,8 @@ async function boot() {
     player.riding = false;
     player.teleport(spot.x, spot.z, spot.yaw);
     input.consumeClicks();
-    gameKeys(['Space or ↑: jump — hold it to jump higher', '↓ or S: duck'], ['Tap the top of the screen: jump', 'Hold the bottom: duck']);
+    // (its keys are written under its picture all along, with the way out: the button that shows the keys of a
+    // game again would only sit on its title)
   };
   world.actionSources.unshift((p) => { // (before the flowers and the rest: by the cabinet, the first thing to do is to play)
     const cab = world.games.notices.arcade;
@@ -715,7 +716,8 @@ async function boot() {
     if (player.dead) { endGame(); return; }
     if (fair.kind === 'arcade') {
       // (its own little screen: what is pressed, on the keys or on the picture)
-      const P = input.pointer, zone = P.down ? arcade.zone(P.x, P.y) : null, K = input.keys;
+      // (a finger on its screen is heard by the cabinet itself: that screen lies over the canvas of the game)
+      const P = input.pointer, zone = arcade.pressed || (P.down ? arcade.zone(P.x, P.y) : null), K = input.keys;
       const keys = { jump: K.has('Space') || K.has('ArrowUp') || K.has('KeyW') || zone === 'jump', duck: K.has('ArrowDown') || K.has('KeyS') || zone === 'duck' };
       input.consumeClicks();
       player.update(dt, rig.heading, false);
@@ -760,6 +762,8 @@ async function boot() {
     if (fair.session && input.pressed('KeyE') && (!s.over || fair.kind === 'arcade')) { endGame(); hud.note(fair.kind === 'race' ? 'Race abandoned.' : 'Game left.'); }
   };
   Object.assign(app, { fair, playBooth, playRace, playWing, playArcade, endGame, fairStep });
+  // (the cross in the frame of the cabinet: the way out for who has no keys)
+  arcade.onLeave = () => { if (fair.session && fair.kind === 'arcade') { endGame(); hud.note('Game left.'); } };
   queueMicrotask(() => Object.assign(app, { shop, refreshShop, adminKey, scoreGame }));
   let climbKeys = false; // (the keys of the climb are on the screen for the asking)
   world.games.events = {
@@ -1698,7 +1702,8 @@ async function boot() {
     }
     camera.updateMatrixWorld();
     interact.update(mode === 'walk' && !fair.session);
-    if (fair.session && mode === 'walk') hud.setPrompt(0, fair.kind === 'arcade' ? 'Walk away' : fair.session.over ? null : fair.kind === 'race' ? 'Give up the race' : 'Leave the game');
+    // (the cabinet has its own way out, in its frame and under its picture: a button here would lie under its screen)
+    if (fair.session && mode === 'walk') hud.setPrompt(0, fair.kind === 'arcade' || fair.session.over ? null : fair.kind === 'race' ? 'Give up the race' : 'Leave the game');
     // the name of the characters one can talk to floats over them; walking away ends the conversation
     for (const n of npcs) {
       const d2 = (n.x - player.pos.x) ** 2 + (n.z - player.pos.z) ** 2;

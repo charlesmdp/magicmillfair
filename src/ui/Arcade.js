@@ -20,12 +20,25 @@ export class Arcade {
   constructor(parent) {
     this.el = document.createElement('div');
     this.el.className = 'arcade';
-    this.el.innerHTML = '<div class="bezel"><b class="marquee">MELTDOWN RUN</b><canvas width="480" height="270"></canvas><div class="keys"><span>JUMP · Space, ↑ or tap the top</span><span>DUCK · ↓, S or hold the bottom</span></div></div>';
+    this.el.innerHTML = '<div class="bezel"><button type="button" class="out" title="Walk away" aria-label="Walk away">✕</button><b class="marquee">MELTDOWN RUN</b><canvas width="480" height="270"></canvas><div class="keys"><span>JUMP · Space, ↑ or tap the top</span><span>DUCK · ↓, S or hold the bottom</span><span>LEAVE · E, Esc or the ✕</span></div></div>';
     parent.append(this.el);
     this.canvas = this.el.querySelector('canvas');
     this.ctx = this.canvas.getContext('2d');
     this.session = null;
+    // What is pressed on the screen itself — a finger, or the mouse, on the picture: this screen lies over the
+    // canvas of the game, which hears nothing of it meanwhile. And a cross in the frame to walk away, for who
+    // has no keys (`onLeave`: what the game does then).
+    this.press = null;
+    this.onLeave = null;
+    const at = (e) => { this.press = { x: e.clientX, y: e.clientY }; };
+    this.el.addEventListener('pointerdown', (e) => { if (e.target.closest?.('.out')) return; at(e); e.preventDefault(); });
+    this.el.addEventListener('pointermove', (e) => { if (this.press) at(e); });
+    for (const kind of ['pointerup', 'pointercancel', 'pointerleave']) this.el.addEventListener(kind, () => { this.press = null; });
+    this.el.querySelector('.out').addEventListener('click', (e) => { e.stopPropagation(); this.press = null; this.onLeave?.(); });
   }
+
+  /** What is being pressed on the screen just now: 'jump', 'duck' or null. */
+  get pressed() { return this.press ? this.zone(this.press.x, this.press.y) : null; }
 
   get isOpen() { return !!this.session; }
 
@@ -171,11 +184,11 @@ export class Arcade {
       },
       /** What was pressed and when, for the server (null: the run had no seed, or is not over). */
       log: () => (written && q.over ? packLog(written.words()) : null),
-      /** What is on the road ahead, and how fast it comes: { speed, things: [{ kind, gap (pixels to the robot), wide, up }] }. */
-      peek: () => ({ speed: q.speed, things: q.things.filter((o) => !o.gone && o.kind !== 'iso').map((o) => ({ kind: o.kind, gap: o.x + 2 - (q.x + 84), wide: o.w - 4, up: o.up })) }),
+      /** What is on the road ahead, and how fast it comes: { speed, air, duck (what the robot is doing), things: [{ kind, gap (pixels to the robot), wide, up }] }. */
+      peek: () => ({ speed: q.speed, air: !!q.air, duck: !!q.duck, things: q.things.filter((o) => !o.gone && o.kind !== 'iso').map((o) => ({ kind: o.kind, gap: o.x + 2 - (q.x + 84), wide: o.w - 4, up: o.up })) }),
       /** Another run, on the same screen (`seeded`: its seed, as for open). */
       restart: (seeded = null) => { run = null; q = REST(); written = null; held = 0; crash = 0; stride = 0; dust = []; shake = 0; session.over = false; session.score = 0; wait(seeded); },
-      close: () => { turn++; this.el.classList.remove('on'); this.session = null; },
+      close: () => { turn++; this.el.classList.remove('on'); this.session = null; this.press = null; },
     };
     wait(seeded);
     this.session = session;
