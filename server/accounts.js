@@ -12,7 +12,7 @@
 //        reset   { name, code, password }                    → { account }             (a new password, with the recovery code
 //                                                                                       — or with the code that was mailed)
 //   and, where the host can send e-mail (mail.js) — elsewhere no address is ever kept:
-//        create  { …, email? }                               the account carries an address
+//        create  { …, email? }                               the account carries an address (and is welcomed there: mail.js)
 //        email   { email, password }                         → { account }   (signed in: the address is given, changed, or — '' — taken away)
 //        mailcode { name }                                   → { ok }        (a code is mailed to the address of that account, if it has
 //                                                                            one: good for half an hour, once. The answer never tells.)

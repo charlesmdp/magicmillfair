@@ -59,8 +59,8 @@ export class Rocks {
     for (const st of [STAIRWAY, ...FALLS.stairs, ...NORTH.stairs]) for (let k = 0; k + 1 < st.points.length; k++) flights.push([st.points[k], st.points[k + 1], st.width / 2 + 0.9]);
     {
       // …nor over the wall of thanks, cut into the cliff: none on its face, none at the foot of it (it is read from the meadow)
-      const T = THANKS_WALL, half = T.width / 2 + 1, ax = Math.cos(T.yaw) * half, az = -Math.sin(T.yaw) * half, mx = T.x + Math.sin(T.yaw) * 2, mz = T.z + Math.cos(T.yaw) * 2;
-      flights.push([[mx - ax, mz - az], [mx + ax, mz + az], 6.5]);
+      const T = THANKS_WALL, half = T.width / 2 - 3, ax = Math.cos(T.yaw) * half, az = -Math.sin(T.yaw) * half, mx = T.x + Math.sin(T.yaw) * 1.5, mz = T.z + Math.cos(T.yaw) * 1.5;
+      flights.push([[mx - ax, mz - az], [mx + ax, mz + az], T.height * 0.5 + 1.5]);
     }
     const put = (x, z, size, sink = 0.3) => {
       if (!data.inside(x, z, 4)) return;

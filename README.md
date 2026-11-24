@@ -537,11 +537,12 @@ does not draw the back of a sheet. They now face outwards, and read from left to
 from the open sea.)
 
 **The wall of thanks** is cut into the cliff west of the meadow of the acid pond, where the rock is one
-even face: a tablet sixteen metres long — *THANKS TO THOSE COMPANIES, THE GAME IS FREE FOR YOU!* — and
-under it every sponsor of the fair, the one who puts in the most first: a rank, their logo, their name and
-their line, where they are, what they pay. In one column while they are three, up to four columns of seven;
-the first three are washed with gold, silver and bronze; and while a place is left the next one is invited
-("Your brand here — from $1 — ask at the Trading Post"). The rules (`src/app/thanks.js`):
+even face: a tablet twenty-eight metres long and ten up the rock — *THANKS TO THOSE COMPANIES, THE GAME
+IS FREE FOR YOU!*, read from across the meadow — and under it every sponsor of the fair, the one who puts
+in the most first: a rank, their logo, their name and their line, where they are, what they pay. In one
+column while they are three, up to four columns of seven (beyond that, "… and 6 more"); the first three
+are washed with gold, silver and bronze; and while a place is left the next one is invited ("Your brand
+here — from $1 — ask at the Trading Post"). The rules (`src/app/thanks.js`):
 
 - **who is on it**: whoever shows something on the panel of a game, on a gondola, on the backdrop of
   Bullseye Alley or on a sky village. Not the plaques of the companions (they are for pets, by people), and
@@ -555,9 +556,12 @@ the first three are washed with gold, silver and bronze; and while a place is le
   `pays: { amount, monthly, total }` in cents (`paysOf` in `server/shop.js`). Amounts only: who pays is
   said nowhere, and what a bid went for was already told to everybody who bids.
 
-The tablet finds the lean of the rock by itself and lies just proud of it, in a frame of rough blocks of
-the stone of the boulders (none of which lies over it). It is one sheet — a canvas painted when the list
-changes and not otherwise — on one mesh; logos come the same safe way as on the panels.
+The tablet is in the rock rather than on it (`ThanksWall.js`): it reads the cliff in section and its face
+bends with it, half a metre proud — far enough for the distant, coarser drawing of the ground never to
+swallow it — and from its edges a buttress of faceted rock, in the tone of the cliff, runs back into the
+ground: a swelling of the rock face, dressed flat where the words are cut. No boulder lies over it. It is
+one sheet — a canvas of 2048 × 732, painted when the list changes and not otherwise — on one mesh; the
+buttress is merged with the rest of the rock of the fair; logos come the same safe way as on the panels.
 
 **Wooden signposts** stand at the forks of the paths — past the banner of the arrival, in front of the
 mill, half way down the valley, on the plaza, on the boardwalk, by the paddock of the race: a post, and

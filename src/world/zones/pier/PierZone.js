@@ -653,9 +653,13 @@ export class PierZone {
      * a few metres before the wheel on the side of the shore, level with the car.
      */
     this.gondolaView = (n) => {
+      // (the wheel is put where the clock says first: far from the pier nothing moves it, and the photograph is taken at once)
+      angle = clock();
+      wheel.rotation.x = -angle;
+      place();
       const a = angle + ((n - 1) / N) * Math.PI * 2, y = Math.sin(a) * R, z = Math.cos(a) * R;
       pivot.updateWorldMatrix(true, false);
-      const from = pivot.localToWorld(new THREE.Vector3(-7.4, y - 1.9, z + 1.3)), at = pivot.localToWorld(new THREE.Vector3(-1.4, y - 2.2, z));
+      const from = pivot.localToWorld(new THREE.Vector3(-5.7, y - 2.2, z + 0.9)), at = pivot.localToWorld(new THREE.Vector3(-1.4, y - 2.45, z));
       return { from: from.toArray(), at: at.toArray() };
     };
     {

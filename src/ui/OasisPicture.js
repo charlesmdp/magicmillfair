@@ -3,12 +3,20 @@
 // the robot is the photograph the shop takes of it (ui/Preview.js), in the colours it has right now.
 
 const rng = (seed) => () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-/** How much larger than the picture the robot is asked for (it stands big, its feet on the bank). */
-export const OASIS_ROBOT = 1.15;
+/** The size the robot is asked for, against that of the picture (it is fitted in afterwards, whatever room it takes). */
+export const OASIS_ROBOT = 1;
+
+/** Where the robot is in its photograph: the box of what is not transparent — { x0, y0, x1, y1 }, or null. */
+function boxOf(canvas) {
+  const w = canvas.width, h = canvas.height, px = canvas.getContext('2d').getImageData(0, 0, w, h).data;
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (px[(y * w + x) * 4 + 3] > 24) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  return x1 < 0 ? null : { x0, y0, x1: x1 + 1, y1: y1 + 1 };
+}
 
 /**
- * The picture, `w` by `h` pixels. `robot`: a canvas of the robot, transparent round it, `OASIS_ROBOT` times the
- * size of the picture (or null: the oasis alone).
+ * The picture, `w` by `h` pixels. `robot`: a canvas of the robot, transparent round it (or null: the oasis
+ * alone).
  */
 export function oasisPicture(w, h, robot = null) {
   const c = document.createElement('canvas');
@@ -16,25 +24,25 @@ export function oasisPicture(w, h, robot = null) {
   const g = c.getContext('2d'), rnd = rng(59);
   // the evening sky, a few stars, the sun going down behind the dunes
   const sky = g.createLinearGradient(0, 0, 0, h * 0.6);
-  sky.addColorStop(0, '#241a66'); sky.addColorStop(0.42, '#7d3a92'); sky.addColorStop(0.78, '#ff8559'); sky.addColorStop(1, '#ffd27a');
+  sky.addColorStop(0, '#17154f'); sky.addColorStop(0.4, '#4a2f8c'); sky.addColorStop(0.74, '#c8508f'); sky.addColorStop(1, '#ffb88f');
   g.fillStyle = sky; g.fillRect(0, 0, w, h);
   for (let i = 0; i < 28; i++) { const y = rnd() * h * 0.3; g.fillStyle = `rgba(255, 255, 255, ${0.35 + rnd() * 0.55 - y / h})`; g.beginPath(); g.arc(rnd() * w, y, w * (0.003 + rnd() * 0.004), 0, 7); g.fill(); }
   const sx = w * 0.7, sy = h * 0.5, glow = g.createRadialGradient(sx, sy, 0, sx, sy, w * 0.42);
-  glow.addColorStop(0, 'rgba(255, 244, 176, 0.9)'); glow.addColorStop(0.3, 'rgba(255, 196, 110, 0.4)'); glow.addColorStop(1, 'rgba(255, 170, 90, 0)');
+  glow.addColorStop(0, 'rgba(255, 244, 200, 0.9)'); glow.addColorStop(0.3, 'rgba(255, 170, 150, 0.4)'); glow.addColorStop(1, 'rgba(255, 150, 160, 0)');
   g.fillStyle = glow; g.fillRect(0, 0, w, h * 0.7);
   g.fillStyle = '#fff3b4'; g.beginPath(); g.arc(sx, sy, w * 0.105, 0, 7); g.fill();
   // the dunes, far then near
   const dune = (y0, y1, y2, style) => { g.fillStyle = style; g.beginPath(); g.moveTo(0, h * y0); g.bezierCurveTo(w * 0.3, h * y1, w * 0.62, h * y2, w, h * y0 * 0.985); g.lineTo(w, h); g.lineTo(0, h); g.closePath(); g.fill(); };
-  dune(0.555, 0.47, 0.6, '#b9603c');
-  dune(0.6, 0.66, 0.535, '#d98a4c');
+  dune(0.555, 0.47, 0.6, '#7d4168');
+  dune(0.6, 0.66, 0.535, '#a85a66');
   const sand = g.createLinearGradient(0, h * 0.62, 0, h);
-  sand.addColorStop(0, '#f1c17a'); sand.addColorStop(1, '#c98a4a');
+  sand.addColorStop(0, '#e9b98a'); sand.addColorStop(1, '#b77f55');
   dune(0.64, 0.6, 0.67, sand);
   // the pool: the sky in it, and the last of the sun
   const px = w * 0.5, py = h * 0.675, rx = w * 0.43, ry = h * 0.062;
   g.fillStyle = 'rgba(120, 70, 30, 0.35)'; g.beginPath(); g.ellipse(px, py + h * 0.006, rx * 1.04, ry * 1.16, 0, 0, 7); g.fill();
   const water = g.createLinearGradient(0, py - ry, 0, py + ry);
-  water.addColorStop(0, '#ffb07a'); water.addColorStop(0.35, '#58d6cc'); water.addColorStop(1, '#17879c');
+  water.addColorStop(0, '#f7a6b0'); water.addColorStop(0.3, '#52d8d0'); water.addColorStop(1, '#127d96');
   g.fillStyle = water; g.beginPath(); g.ellipse(px, py, rx, ry, 0, 0, 7); g.fill();
   g.save(); g.beginPath(); g.ellipse(px, py, rx, ry, 0, 0, 7); g.clip();
   g.fillStyle = 'rgba(255, 244, 190, 0.75)';
@@ -69,13 +77,16 @@ export function oasisPicture(w, h, robot = null) {
     g.fillStyle = halo; g.beginPath(); g.arc(x, y + r, r * 4.5, 0, 7); g.fill();
     g.fillStyle = col; g.beginPath(); g.arc(x, y + r, r, 0, 7); g.fill();
   }
-  // its owner on the bank, a shadow at their feet (the sun is behind them)
-  const fy = h * 0.745;
-  g.fillStyle = 'rgba(70, 36, 20, 0.38)'; g.beginPath(); g.ellipse(w * 0.47, fy + h * 0.012, w * 0.2, h * 0.02, 0, 0, 7); g.fill();
-  if (robot) {
-    // (in the photograph the robot's feet are a little above three quarters of the way down: they go on the bank)
-    const rw = w * OASIS_ROBOT, rh = h * OASIS_ROBOT;
-    g.drawImage(robot, (w - rw) / 2, fy - rh * 0.767, rw, rh);
+  // its owner on the bank: fitted into the picture whatever their size, a light behind them (whatever their
+  // colour, they stand out of the evening), a shadow at their feet
+  const fy = h * 0.76, box = robot ? boxOf(robot) : null;
+  if (box) {
+    const bw = box.x1 - box.x0, bh = box.y1 - box.y0, k = Math.min((h * 0.6) / bh, (w * 0.84) / bw), cx = w * 0.5, top = fy - bh * k;
+    const halo = g.createRadialGradient(cx, top + bh * k * 0.42, 0, cx, top + bh * k * 0.42, bh * k * 0.62);
+    halo.addColorStop(0, 'rgba(255, 250, 236, 0.5)'); halo.addColorStop(0.55, 'rgba(255, 240, 220, 0.2)'); halo.addColorStop(1, 'rgba(255, 240, 220, 0)');
+    g.fillStyle = halo; g.fillRect(0, 0, w, h);
+    g.fillStyle = 'rgba(60, 30, 40, 0.4)'; g.beginPath(); g.ellipse(cx, fy - h * 0.004, bw * k * 0.5, h * 0.018, 0, 0, 7); g.fill();
+    g.drawImage(robot, cx - (box.x0 + bw / 2) * k, top - box.y0 * k, robot.width * k, robot.height * k);
   }
   return c;
 }

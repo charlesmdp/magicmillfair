@@ -2,9 +2,11 @@
 // rock — THANKS TO THOSE COMPANIES, THE GAME IS FREE FOR YOU! — and under it everyone who sponsors the fair,
 // the one who puts in the most first (who counts, and in which order: app/thanks.js).
 //
-// The tablet lies on the rock: it finds the lean of the cliff by itself and sits just proud of it, in a frame
-// of rough blocks of the same stone as the boulders around. One sheet for all of it (a canvas, painted when
-// the list changes and not otherwise) and one mesh; the frame goes with the rest of the rock of the fair.
+// The tablet is in the rock: it reads the cliff in section and follows it — its face bends with the rock, half
+// a metre proud of it — and from its edges a buttress of faceted rock, the stone of the boulders around, runs
+// back into the cliff: a swelling of the rock face, dressed flat where the words are cut. One sheet for all of
+// it (a canvas, painted when the list changes and not otherwise) on one mesh; the buttress goes with the rest
+// of the rock of the fair.
 //
 //   wall.set(rows, info)   rows: what rankSponsors() gives, `logo` being a picture already loaded (or null);
 //                          info: { open, from, gondola, backdrop } — the words of the invitation ("from $1"…)
@@ -17,12 +19,12 @@ import { Parts } from '../../props/MeshBuilder.js';
 import { THANKS_WALL } from '../../layout/layout.js';
 
 const SERIF = "Georgia, 'Times New Roman', serif", SANS = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
-const CW = 1536, CH = 608; // (the sheet: 93 pixels a metre)
+const CW = 2048, CH = 732, K = CW / 1536; // (the sheet: 73 pixels a metre; K: its measures were first drawn 1536 wide)
 export const THANKS_TITLE = ['THANKS TO THOSE COMPANIES,', 'THE GAME IS FREE FOR YOU!'];
 /** How many sponsors fit, and how: up to `max` of them in `cols` columns of `rows`. */
 const LAYOUTS = [{ max: 3, cols: 1, rows: 3 }, { max: 8, cols: 2, rows: 4 }, { max: 15, cols: 3, rows: 5 }, { max: 28, cols: 4, rows: 7 }];
 const MEDALS = [['#f3cf63', '#8a5a00', 'rgba(236, 190, 70, 0.26)'], ['#e9edf2', '#5c6470', 'rgba(232, 236, 242, 0.24)'], ['#e0a473', '#7a3f14', 'rgba(214, 140, 86, 0.22)']]; // gold, silver, bronze: leaf, shade, wash
-const INK = '#40372e', FAINT = '#5d5348', LIP = 'rgba(255, 248, 232, 0.6)', SHADE = 'rgba(26, 20, 14, 0.5)';
+const INK = '#3a3129', FAINT = '#51473d', RUST = '#7c2c12', BRONZE = '#4f3a10', LIP = 'rgba(255, 248, 232, 0.6)', SHADE = 'rgba(26, 20, 14, 0.5)';
 
 const rng = (seed) => () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 const rounded = (ctx, x, y, w, h, r) => { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); };
@@ -58,13 +60,18 @@ function stone(w, h) {
   base.addColorStop(0, '#a39a8d'); base.addColorStop(0.5, '#978d80'); base.addColorStop(1, '#887e72');
   g.fillStyle = base; g.fillRect(0, 0, w, h);
   // the beds of the rock: long soft bands, a little out of level
-  for (let i = 0; i < 48; i++) {
-    const y = rnd() * h, t = 3 + rnd() * 17, lean = (rnd() - 0.5) * 28;
-    g.fillStyle = rnd() < 0.55 ? `rgba(52, 44, 36, ${0.03 + rnd() * 0.06})` : `rgba(255, 246, 228, ${0.03 + rnd() * 0.05})`;
+  for (let i = 0; i < 18; i++) {
+    const y = rnd() * h, t = 10 + rnd() * 46, lean = (rnd() - 0.5) * 40;
+    g.fillStyle = rnd() < 0.55 ? `rgba(52, 44, 36, ${0.015 + rnd() * 0.03})` : `rgba(255, 246, 228, ${0.015 + rnd() * 0.028})`;
     g.beginPath(); g.moveTo(0, y);
     for (let x = 96; x <= w; x += 96) g.lineTo(x, y + (x / w) * lean + Math.sin(x * 0.011 + i) * 3);
     for (let x = w; x >= 0; x -= 96) g.lineTo(x, y + t + (x / w) * lean + Math.sin(x * 0.013 + i * 2) * 3);
     g.closePath(); g.fill();
+  }
+  for (let i = 0; i < 70; i++) { // large stains
+    const r = 70 + rnd() * 170;
+    g.fillStyle = rnd() < 0.5 ? `rgba(40, 34, 28, ${0.02 + rnd() * 0.03})` : `rgba(255, 250, 238, ${0.018 + rnd() * 0.026})`;
+    g.beginPath(); g.ellipse(rnd() * w, rnd() * h, r * (1 + rnd() * 0.8), r * 0.7, rnd() * 3, 0, 6.3); g.fill();
   }
   for (let i = 0; i < 520; i++) { // stains
     const r = 8 + rnd() * 46;
@@ -84,14 +91,14 @@ function stone(w, h) {
     }
   }
   // its edges: the face is cut into the rock — the upper and left walls of the cut in shade, the others lit
-  const B = 15, side = (pts, style) => { g.beginPath(); pts.forEach(([x, y], k) => (k ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); g.fillStyle = style; g.fill(); };
+  const B = Math.round(15 * K), side = (pts, style) => { g.beginPath(); pts.forEach(([x, y], k) => (k ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); g.fillStyle = style; g.fill(); };
   side([[0, 0], [w, 0], [w - B, B], [B, B]], 'rgba(20, 16, 12, 0.46)');
   side([[0, 0], [B, B], [B, h - B], [0, h]], 'rgba(20, 16, 12, 0.32)');
   side([[0, h], [B, h - B], [w - B, h - B], [w, h]], 'rgba(255, 248, 232, 0.34)');
   side([[w, 0], [w, h], [w - B, h - B], [w - B, B]], 'rgba(255, 248, 232, 0.2)');
-  const under = g.createLinearGradient(0, B, 0, B + 46);
+  const under = g.createLinearGradient(0, B, 0, B + 46 * K);
   under.addColorStop(0, 'rgba(20, 16, 12, 0.22)'); under.addColorStop(1, 'rgba(20, 16, 12, 0)');
-  g.fillStyle = under; g.fillRect(B, B, w - 2 * B, 46);
+  g.fillStyle = under; g.fillRect(B, B, w - 2 * B, 46 * K);
   g.strokeStyle = 'rgba(30, 24, 18, 0.4)'; g.lineWidth = 1.5; g.strokeRect(B + 0.5, B + 0.5, w - 2 * B - 1, h - 2 * B - 1);
   return c;
 }
@@ -128,7 +135,7 @@ function line(ctx, x, y, w, h, rank, r, ghost) {
   const rw = h * 0.74, mid = y + h / 2;
   ctx.textAlign = 'center';
   ctx.font = `800 ${Math.round(h * (rank > 9 ? 0.3 : 0.36))}px ${SERIF}`;
-  if (medal) gild(ctx, `#${rank}`, x + pad + rw / 2, mid, h * 0.36, medal, 1.6); else carve(ctx, `#${rank}`, x + pad + rw / 2, mid, FAINT, 1.4);
+  carve(ctx, `#${rank}`, x + pad + rw / 2, mid, medal ? INK : FAINT, 1.5);
   // its plate
   const s = h * 0.7, px = x + pad + rw + h * 0.04;
   plate(ctx, px, y + (h - s) / 2, s, r.logo, r.name, ghost);
@@ -139,7 +146,7 @@ function line(ctx, x, y, w, h, rank, r, ghost) {
     const size = Math.round(h * (rich ? 0.36 : 0.4));
     ctx.font = `800 ${size}px ${SERIF}`;
     const fw = ctx.measureText(r.figure).width, fy = r.unit ? y + h * 0.38 : mid;
-    if (ghost) carve(ctx, r.figure, right, fy, FAINT, 1.5); else gild(ctx, r.figure, right, fy, size, MEDALS[0], 1.6);
+    carve(ctx, r.figure, right, fy, ghost ? FAINT : RUST, 1.6); // (what is paid: in rust, as on the list this one is modelled on)
     let uw = 0;
     if (r.unit) { ctx.font = `700 ${Math.max(9, Math.round(h * 0.18))}px ${SANS}`; uw = ctx.measureText(r.unit).width; carve(ctx, r.unit, right, y + h * 0.72, FAINT, 1); }
     right -= Math.max(fw, uw) + h * 0.16;
@@ -150,11 +157,11 @@ function line(ctx, x, y, w, h, rank, r, ghost) {
   const small = [r.where, r.note].filter(Boolean).join(' · ');
   if (rich) {
     carve(ctx, fit(ctx, r.name, tw, Math.round(h * 0.31), 700, SERIF, 12), tx, y + h * (r.tagline ? 0.27 : 0.36), ghost ? FAINT : INK, 1.7);
-    if (r.tagline) { const t = fit(ctx, r.tagline, tw, Math.round(h * 0.19), 500, SANS, 10); carve(ctx, t, tx, y + h * 0.54, FAINT, 1); }
-    if (small) { const t = fit(ctx, small, tw, Math.round(h * 0.165), 700, SANS, 9); carve(ctx, t, tx, y + h * (r.tagline ? 0.78 : 0.68), ghost ? FAINT : '#6a4a12', 1); }
+    if (r.tagline) { const t = fit(ctx, r.tagline, tw, Math.round(h * 0.2), 600, SANS, 10); carve(ctx, t, tx, y + h * 0.545, FAINT, 1); }
+    if (small) { const t = fit(ctx, small, tw, Math.round(h * 0.17), 800, SANS, 9); carve(ctx, t, tx, y + h * (r.tagline ? 0.79 : 0.68), ghost ? FAINT : BRONZE, 1); }
   } else {
     carve(ctx, fit(ctx, r.name, tw, Math.round(h * 0.36), 700, SERIF, 11), tx, y + h * (small ? 0.34 : 0.5), ghost ? FAINT : INK, 1.4);
-    if (small) { const t = fit(ctx, small, tw, Math.round(h * 0.24), 700, SANS, 9); carve(ctx, t, tx, y + h * 0.72, ghost ? FAINT : '#6a4a12', 1); }
+    if (small) { const t = fit(ctx, small, tw, Math.round(h * 0.24), 800, SANS, 9); carve(ctx, t, tx, y + h * 0.72, ghost ? FAINT : BRONZE, 1); }
   }
 }
 
@@ -167,17 +174,17 @@ export function drawThanks(ctx, w, h, bare, rows = [], info = {}) {
   ctx.drawImage(bare, 0, 0, w, h);
   ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
   // the two lines of the title: cut deep, the second with leaf in the cut
-  const one = fit(ctx, THANKS_TITLE[0], w - 150, 70, 900, SERIF, 30);
-  carve(ctx, one, w / 2, 70, INK, 3.2);
+  const one = fit(ctx, THANKS_TITLE[0], w - 150 * K, Math.round(70 * K), 900, SERIF, 30);
+  carve(ctx, one, w / 2, 70 * K, INK, 3.2 * K);
   const size = parseInt(ctx.font.match(/(\d+)px/)[1], 10);
   ctx.font = `900 ${size}px ${SERIF}`;
-  gild(ctx, fit(ctx, THANKS_TITLE[1], w - 150, size, 900, SERIF, 30), w / 2, 146, size, MEDALS[0], 3.2);
+  gild(ctx, fit(ctx, THANKS_TITLE[1], w - 150 * K, size, 900, SERIF, 30), w / 2, 146 * K, size, MEDALS[0], 3.2 * K);
   // a rule under them, an atom in its middle
-  const ry = 196;
-  for (const [x0, x1] of [[110, w / 2 - 44], [w / 2 + 44, w - 110]]) { ctx.fillStyle = 'rgba(30, 24, 18, 0.5)'; ctx.fillRect(x0, ry - 1.5, x1 - x0, 2); ctx.fillStyle = 'rgba(255, 248, 232, 0.5)'; ctx.fillRect(x0, ry + 0.5, x1 - x0, 1.5); }
-  ctx.strokeStyle = INK; ctx.lineWidth = 2;
-  for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.ellipse(w / 2, ry, 26, 9.5, (k * Math.PI) / 3, 0, Math.PI * 2); ctx.stroke(); }
-  ctx.fillStyle = MEDALS[0][0]; ctx.beginPath(); ctx.arc(w / 2, ry, 5, 0, Math.PI * 2); ctx.fill();
+  const ry = 196 * K;
+  for (const [x0, x1] of [[110 * K, w / 2 - 44 * K], [w / 2 + 44 * K, w - 110 * K]]) { ctx.fillStyle = 'rgba(30, 24, 18, 0.5)'; ctx.fillRect(x0, ry - 1.5, x1 - x0, 2); ctx.fillStyle = 'rgba(255, 248, 232, 0.5)'; ctx.fillRect(x0, ry + 0.5, x1 - x0, 1.5); }
+  ctx.strokeStyle = INK; ctx.lineWidth = 2 * K;
+  for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.ellipse(w / 2, ry, 26 * K, 9.5 * K, (k * Math.PI) / 3, 0, Math.PI * 2); ctx.stroke(); }
+  ctx.fillStyle = MEDALS[0][0]; ctx.beginPath(); ctx.arc(w / 2, ry, 5 * K, 0, Math.PI * 2); ctx.fill();
   // the list
   const invite = { name: 'YOUR BRAND HERE', tagline: info.open ? 'The panel of a game goes to the highest bid' : 'Sponsoring opens soon', where: 'ASK AT THE TRADING POST', note: '', figure: info.open && info.from ? info.from : '', unit: '', logo: null };
   const ghosts = [];
@@ -193,7 +200,7 @@ export function drawThanks(ctx, w, h, bare, rows = [], info = {}) {
   let more = 0;
   if (rows.length > cells) { more = rows.length - (cells - 1); list = rows.slice(0, cells - 1); }
   else if (rows.length && rows.length < cells) ghosts.push(invite); // (a place left: the next one is invited)
-  const top = 218, bottom = h - 62, gap = lay.cols > 1 ? 26 : 0, inner = lay.cols === 1 ? Math.round(w * 0.64) : w - 150;
+  const top = 218 * K, bottom = h - 62 * K, gap = lay.cols > 1 ? 26 * K : 0, inner = lay.cols === 1 ? Math.round(w * 0.6) : w - 150 * K;
   const cw = (inner - gap * (lay.cols - 1)) / lay.cols, x0 = (w - inner) / 2, rh = (bottom - top) / lay.rows;
   const cell = (i) => [x0 + Math.floor(i / lay.rows) * (cw + gap), top + (i % lay.rows) * rh];
   list.forEach((r, i) => { const [x, y] = cell(i); line(ctx, x, y + 2, cw, rh - 4, i + 1, r, false); });
@@ -208,85 +215,101 @@ export function drawThanks(ctx, w, h, bare, rows = [], info = {}) {
   // how to be on it
   ctx.textAlign = 'center';
   const foot = rows.length ? `YOUR BRAND HERE?  ASK AT THE TRADING POST, AT THE FOOT OF THE PIER${info.open && info.from ? `  ·  ${String(info.from).toUpperCase()}` : ''}` : 'THE TRADING POST IS AT THE FOOT OF THE PIER  ·  EVERY SPONSOR IS THANKED HERE, THE MOST GENEROUS FIRST';
-  carve(ctx, fit(ctx, foot, w - 160, 21, 800, SANS, 11), w / 2, h - 38, FAINT, 1.2);
+  carve(ctx, fit(ctx, foot, w - 160 * K, Math.round(21 * K), 800, SANS, 11), w / 2, h - 38 * K, FAINT, 1.2 * K);
   return { title: THANKS_TITLE.join(' '), cols: lay.cols, rows: list.map((r, i) => ({ rank: i + 1, name: r.name, figure: r.figure, unit: r.unit, where: r.where })), ghosts: Math.min(ghosts.length, cells - list.length), more };
 }
 
 /**
  * Builds the wall in the games zone. Returns { x, z (where one stands to read it), face: { x, y, z, yaw, tilt,
- * width, height }, shown, set(rows, info) }.
+ * width, height }, points (nine points of its face: corners, middles — [x, y, z]), shown, set(rows, info) }.
  */
 export function buildThanksWall(zone) {
   const T = THANKS_WALL, W = T.width, H = T.height, g = zone.ground;
   const nx = Math.sin(T.yaw), nz = Math.cos(T.yaw), tx = Math.cos(T.yaw), tz = -Math.sin(T.yaw);
-  // the meadow in front of it; then how the rock leans: where the ground reaches the foot of the tablet, and its head
+  const at = (o, y, s) => new THREE.Vector3(T.x + nx * o + tx * s, y, T.z + nz * o + tz * s); // (o: out of the hill, s: along the tablet)
+  // The cliff in section, across the tablet: at each step into the hill, the rock where it stands out most
+  // along the length of the tablet (the tablet clears all of it), smoothed over a metre.
   const meadow = Math.min(...[11, 13, 15, 17].map((d) => g(T.x + nx * d, T.z + nz * d)));
-  const RISE = 5.6, yb = meadow + T.lift, N = 9;
-  const reach = (s, y) => { for (let d = -10; d < 14; d += 0.1) if (g(T.x + tx * s - nx * d, T.z + tz * s - nz * d) >= y) return d; return 14; };
-  let lo = 0, hi = 0;
-  for (let i = 0; i < N; i++) { const s = (i / (N - 1) - 0.5) * W; lo += reach(s, yb) / N; hi += reach(s, yb + RISE) / N; }
-  const tilt = Math.min(0.7, Math.max(0.26, Math.atan2(hi - lo, RISE))), ct = Math.cos(tilt), st = Math.sin(tilt);
-  const into = lo + (H / 2) * st; // (how far into the hill its middle is)
-  const c = new THREE.Vector3(T.x - nx * into, yb + (H / 2) * ct, T.z - nz * into);
-  const out = new THREE.Vector3(nx * ct, st, nz * ct), up = new THREE.Vector3(-nx * st, ct, -nz * st), along = new THREE.Vector3(tx, 0, tz);
-  // …and just proud of it: no corner of the face under the ground
-  const p = new THREE.Vector3();
-  const buried = () => {
-    let worst = -Infinity;
-    for (let i = 0; i <= 12; i++) for (let k = 0; k <= 6; k++) {
-      p.copy(c).addScaledVector(along, (i / 12 - 0.5) * (W + 1.4)).addScaledVector(up, (k / 6 - 0.5) * (H + 1.4));
-      worst = Math.max(worst, g(p.x, p.z) - p.y);
-    }
-    return worst;
-  };
-  let proud = 0;
-  for (; proud < 3 && buried() > -0.12; proud += 0.05) c.addScaledVector(out, 0.05);
-
-  // the frame: rough blocks of the rock around the face, standing out of the cliff a little more than it
-  const parts = new Parts(), rock = parts.get('rock'), rnd = rng(77), back = 1.7 + proud;
-  rock.place(c.x, c.y, c.z, T.yaw, -tilt);
-  rock.tint(0.8, 0.79, 0.76, 1).box(-W / 2 - 0.5, -H / 2 - 0.5, -back, W / 2 + 0.5, H / 2 + 0.5, -0.04, { faces: 'xXyY' });
-  const block = (x0, x1, y0, y1, stand) => {
-    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, k = 0.8 + rnd() * 0.2;
-    rock.tint(k, k * 0.985, k * 0.955, 1);
-    rock.place(cx, cy, 0, (rnd() - 0.5) * 0.05, (rnd() - 0.5) * 0.05, (rnd() - 0.5) * 0.03);
-    rock.box(x0 - cx, y0 - cy, -back, x1 - cx, y1 - cy, stand, { faces: 'xXyYZ' });
-    rock.pop();
-  };
-  const cuts = (a, b, n) => { const at = [a]; for (let i = 1; i < n; i++) at.push(a + ((b - a) * (i + (rnd() - 0.5) * 0.5)) / n); at.push(b); return at; };
-  const E = 1.0;
-  { const at = cuts(-W / 2 - E, W / 2 + E, 5); for (let i = 0; i < 5; i++) block(at[i], at[i + 1], H / 2 - 0.06, H / 2 + 0.8 + rnd() * 0.4, 0.4 + rnd() * 0.3); } // the lintel
-  { const at = cuts(-W / 2 - E, W / 2 + E, 4); for (let i = 0; i < 4; i++) block(at[i], at[i + 1], -H / 2 - 0.75 - rnd() * 0.35, -H / 2 + 0.06, 0.6 + rnd() * 0.35); } // the sill
-  for (const side of [-1, 1]) {
-    const at = cuts(-H / 2 + 0.06, H / 2 - 0.06, 3);
-    for (let i = 0; i < 3; i++) { const far = W / 2 + 0.7 + rnd() * 0.4; block(side < 0 ? -far : W / 2 - 0.06, side < 0 ? -W / 2 + 0.06 : far, at[i], at[i + 1], 0.35 + rnd() * 0.3); }
+  const STEP = 0.1, D0 = -8, D1 = 18, raw = [];
+  for (let d = D0; d <= D1 + 1e-6; d += STEP) { let top = -Infinity; for (let i = 0; i < 13; i++) top = Math.max(top, g(T.x + tx * (i / 12 - 0.5) * W - nx * d, T.z + tz * (i / 12 - 0.5) * W - nz * d)); raw.push(top); }
+  const prof = raw.map((_, i) => { let sum = 0, n = 0; for (let k = -5; k <= 5; k++) if (raw[i + k] !== undefined) { sum += raw[i + k]; n++; } return sum / n; });
+  const rockAt = (d) => { const u = Math.min(prof.length - 1.001, Math.max(0, (d - D0) / STEP)), i = Math.floor(u); return prof[i] + (prof[i + 1] - prof[i]) * (u - i); };
+  // Its foot: where that rock is `lift` above the meadow. Then up the rock by equal lengths to its head: each row
+  // knows the way out of the rock there, and the way up it.
+  const NV = 16, PROUD = 0.5, rows = [];
+  let d = D0;
+  while (d < D1 && rockAt(d) < meadow + T.lift) d += 0.02;
+  for (let len = 0, next = 0, pd = d, py = rockAt(d); rows.length <= NV && d < D1; d += 0.02) {
+    const y = rockAt(d);
+    len += Math.hypot(d - pd, y - py); pd = d; py = y;
+    if (len < next) continue;
+    const rise = rockAt(d + 0.6) - rockAt(d - 0.6), l = Math.hypot(rise, 1.2);
+    rows.push({ o: -d, y, out: [rise / l, 1.2 / l], up: [-1.2 / l, rise / l] });
+    next += H / NV;
   }
-  rock.pop();
-  zone._add(parts, 'thanks');
+  while (rows.length <= NV) rows.push(rows[rows.length - 1]); // (never, on this cliff: a rock that would end before the tablet does)
+  /** A point of the tablet: row j, `s` along it, `proud` of the rock — and `past` its foot (row 0) or its head (the last row), along the rock. */
+  const point = (j, s, proud, past = 0) => { const r = rows[j], k = j === 0 ? -past : past; return at(r.o + r.out[0] * proud + r.up[0] * k, r.y + r.out[1] * proud + r.up[1] * k, s); };
 
-  // the face
+  // the face: a sheet that bends with the rock, straight along its length
+  const pos = [], uv = [], idx = [];
+  for (let j = 0; j <= NV; j++) for (const side of [0, 1]) { const q = point(j, (side - 0.5) * W, PROUD); pos.push(q.x, q.y, q.z); uv.push(side, j / NV); }
+  for (let j = 0; j < NV; j++) { const a = j * 2; idx.push(a, a + 1, a + 3, a, a + 3, a + 2); }
+  const sheet = new THREE.BufferGeometry();
+  sheet.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  sheet.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  sheet.setIndex(idx);
+  sheet.computeBoundingSphere();
   const canvas = document.createElement('canvas');
   canvas.width = CW; canvas.height = CH;
   const ctx = canvas.getContext('2d'), bare = stone(CW, CH), texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 8; // (it is read from below, and it leans back)
-  const face = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshBasicMaterial({ map: texture, toneMapped: false }));
-  face.position.copy(c);
-  face.rotation.order = 'YXZ';
-  face.rotation.set(-tilt, T.yaw, 0);
+  const face = new THREE.Mesh(sheet, new THREE.MeshBasicMaterial({ map: texture, toneMapped: false }));
   face.name = 'notice-thanks';
   zone.group.add(face);
 
+  // the buttress: round the face, a lip (the face is cut into it), a rim, a shoulder, and a last ring under the
+  // ground — facets of rock between them. The rings go round the face the same way: along its foot, up its
+  // right side, back along its head, down its left side.
+  const parts = new Parts(), rock = parts.get('rock'), rnd = rng(77), loop = [], NB = 12, D = Math.SQRT1_2;
+  for (let i = 0; i <= NB; i++) loop.push({ j: 0, s: (i / NB - 0.5) * W, dir: i === 0 ? [-D, D] : i === NB ? [D, D] : [0, 1] });
+  for (let j = 1; j < NV; j++) loop.push({ j, s: W / 2, dir: [1, 0] });
+  for (let i = NB; i >= 0; i--) loop.push({ j: NV, s: (i / NB - 0.5) * W, dir: i === 0 ? [-D, D] : i === NB ? [D, D] : [0, 1] });
+  for (let j = NV - 1; j >= 1; j--) loop.push({ j, s: -W / 2, dir: [-1, 0] });
+  /** A ring: `wide` metres out from the edge of the face, `proud(v)` of the rock (null: sunk under the ground), each with a little chance in it. */
+  const ring = (wide, proud, chance = 0) => loop.map((v) => {
+    const m = wide * (1 + (rnd() - 0.5) * chance), q = point(v.j, v.s + v.dir[0] * m, proud === null ? 0 : proud(v) + (rnd() - 0.5) * chance * 0.5, v.dir[1] * m);
+    if (proud === null) q.y = g(q.x, q.z) - 0.9;
+    return q;
+  });
+  // (no lip along the foot: seen from the meadow, it would stand in front of the last line)
+  const lip = (v) => (v.j === 0 ? 0 : 0.32);
+  const rings = [ring(0, () => PROUD), ring(0, (v) => PROUD + lip(v)), ring(0.75, (v) => PROUD + (v.j === 0 ? -0.1 : 0.36), 0.3), ring(2.0, () => PROUD * 0.5, 0.45), ring(3.6, null, 0.3)];
+  const n = loop.length;
+  for (let r = 0; r + 1 < rings.length; r++) {
+    const A = rings[r], B = rings[r + 1];
+    for (let k = 0; k < n; k++) {
+      const k1 = (k + 1) % n, shade = (r === 0 ? 0.46 : 0.6) + rnd() * 0.16; // (the tone of the cliff; the cut round the face in its own shade)
+      rock.tint(shade, shade * 0.955, shade * 0.89, 1);
+      if (r === 0) { if (lip(loop[k]) + lip(loop[k1]) > 0) { rock.tri(A[k], B[k], B[k1]); rock.tri(A[k], B[k1], A[k1]); } } // (the wall of the cut: it looks at the face)
+      else { rock.tri(B[k], B[k1], A[k1]); rock.tri(B[k], A[k1], A[k]); }
+    }
+  }
+  zone._add(parts, 'thanks');
+
+  const c = point(NV / 2, 0, PROUD), lean = Math.atan2(rows[0].o - rows[NV].o, rows[NV].y - rows[0].y);
   const wall = {
-    x: T.x + nx * 10, z: T.z + nz * 10,
-    face: { x: c.x, y: c.y, z: c.z, yaw: T.yaw, tilt, width: W, height: H },
+    x: T.x + nx * 12, z: T.z + nz * 12,
+    face: { x: c.x, y: c.y, z: c.z, yaw: T.yaw, tilt: lean, width: W, height: H },
+    points: [0, NV / 2, NV].flatMap((j) => [-0.5, 0, 0.5].map((u) => point(j, u * W, PROUD).toArray())),
     shown: null,
     /** Who is thanked, the most generous first (see the top of this file). Painted again only when something changed. */
-    set(rows = [], info = {}) {
-      const key = JSON.stringify([rows.map((r) => [r.name, r.tagline, r.where, r.note, r.figure, r.unit, r.logo ? `${r.logo.width}x${r.logo.height}:${r.logo.src || ''}` : 0]), info]);
+    set(list = [], info = {}) {
+      const key = JSON.stringify([list.map((r) => [r.name, r.tagline, r.where, r.note, r.figure, r.unit, r.logo ? `${r.logo.width}x${r.logo.height}:${r.logo.src || ''}` : 0]), info]);
       if (key === wall.key) return false;
       wall.key = key;
-      wall.shown = drawThanks(ctx, CW, CH, bare, rows, info);
+      wall.shown = drawThanks(ctx, CW, CH, bare, list, info);
       texture.needsUpdate = true;
       return true;
     },
