@@ -18,13 +18,20 @@
   // One Durable Object per multiplayer room, plus one that keeps the leaderboards (see cloudflare/worker.js).
   "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+  // A variable added in the dashboard (the Worker → Settings → Variables and Secrets) stays there when the game is
+  // delivered again: without this line every delivery would take away what is not written below.
+  "keep_vars": true,
   "vars": {
     // How many visitors a room holds before the next ones gather in another (each is told in detail about
     // the forty nearest: see server/protocol.js).
     "MAX_PLAYERS": "200",
     "TICK_MS": "100",
     // Comma separated origins allowed to open the multiplayer socket. Empty: the site's own address only.
-    "ALLOWED_ORIGINS": ""
+    "ALLOWED_ORIGINS": "",
+    // The address the game writes from (a code to set a new password, a welcome, a thank you): an address of
+    // the domain that was onboarded to Cloudflare's Email Service. Not a secret — the two that go with it are
+    // (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_EMAIL_TOKEN: below).
+    "MAIL_FROM": "hello@atomicoasis.io"
     // Secrets are NOT written here: add them in the dashboard (the Worker → Settings → Variables and
     // Secrets → Add → type "Secret"), or with `npx wrangler secret put NAME`:
     //   ANTHROPIC_API_KEY  Billy the alligator then answers through Claude (NPC_MODEL, a variable, picks the model)
@@ -32,8 +39,9 @@
     //   SCORE_SECRET       optional: signs the notes of the game runs (drawn and kept by the Worker otherwise)
     //   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET   open the shop (sk_test_… to try, sk_live_… to sell): see the README, "The shop"
     //   STRIPE_PUBLISHABLE_KEY   optional (pk_test_… / pk_live_…): the payment form is then shown inside the game
-    //   MAIL_FROM, CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_EMAIL_TOKEN   optional: the game can then send an e-mail (a code
-    //                      to set a new password, for accounts that gave an address): see the README, "E-mails"
+    //   CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_EMAIL_TOKEN   optional: with MAIL_FROM above, the game can then send an
+    //                      e-mail (a code to set a new password, a welcome, a thank you — to accounts that gave an
+    //                      address): see the README, "E-mails"
     // https://<the site>/api/status tells which of them the Worker sees (true / false, never their value).
   },
   // (E-mails need nothing here: the three secrets above are enough. A binding

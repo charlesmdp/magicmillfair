@@ -913,15 +913,18 @@ switch it on at Cloudflare (their Email Service — on the Workers Paid plan —
    that name.
 2. In *Manage account → Account API tokens*: *Create token → Custom token*, with the one permission
    **Email Sending: Edit**. Copy the token: it is shown once.
-3. In the Worker (*Settings → Variables and Secrets*), add three secrets — like the others, never in a file:
-   `MAIL_FROM` (an address of that domain, for instance `hello@your-domain`: the mailbox need not exist),
+3. In the Worker (*Settings → Variables and Secrets*), add two secrets — like the others, never in a file:
    `CLOUDFLARE_ACCOUNT_ID` (the 32 characters shown on the overview page of *Workers & Pages*) and
-   `CLOUDFLARE_EMAIL_TOKEN` (the token).
+   `CLOUDFLARE_EMAIL_TOKEN` (the token). The address the game writes from, `MAIL_FROM` (an address of that
+   domain — the mailbox need not exist), is no secret: it is written in `wrangler.jsonc`, with the other
+   variables. Change it there if the domain changes.
 4. Deploy, and check `/api/status`: `"mail": true`. Make an account with your own address and ask for a code.
    If nothing arrives, the logs of the Worker have a line `[mail] Cloudflare e-mail: …` with Cloudflare's
    own reason (10102: the token may not send; 10105: the plan of the account does not send).
 
-That is all: the game then sends through Cloudflare's REST API, and nothing in `wrangler.jsonc` changes.
+That is all: the game then sends through Cloudflare's REST API. (A variable that is only in the dashboard
+used to be taken away by the next delivery — the file was the only truth. `wrangler.jsonc` now says
+`keep_vars`: what the dashboard holds stays; what the file names is set from the file.)
 (A Worker that has a `send_email` binding named `EMAIL` uses it instead of the token; it is not there by
 default, because a binding the account cannot honour makes a deployment fail.) The same three variables
 work on the Node server; there, `MAIL_FILE=/some/file` writes each message to that file instead of sending
