@@ -3,6 +3,7 @@
 // See index.js (the switches) and lab/INTEGRATION.md (its board of scores).
 import { Pond } from '../world/zones/games/pond/Pond.js';
 import { POND } from '../world/zones/games/pond/ring.js';
+import { keysHelp } from './help.js';
 
 const KEY = 'mmf.pond.best';
 
@@ -26,6 +27,7 @@ export function attach(app) {
     run = null; saved = false;
     app.fair.fov = null;
     hud.setRun(null);
+    keysHelp(app).clear();
     if (fell) s.drop(player); // in the pond where they fell: one swims back
     else {
       s.close();
@@ -41,8 +43,8 @@ export function attach(app) {
     run = pond.open(player, io);
     player.driver = run;
     app.audio?.play('teleport');
-    hud.note(app.input.isTouch ? 'The legs run by themselves · the arrow jumps (again in the air: further) · stick down: slide, or dive · stick aside: the other ring'
-      : 'The legs run by themselves · Space jumps (again in the air: further) · S: slide, or dive · A / D: the other ring · E: leave', 9000);
+    keysHelp(app).set(app.input.isTouch ? 'The legs run by themselves · the arrow jumps (again in the air: further) · stick down: slide, or dive · stick aside: the other ring'
+      : 'The legs run by themselves · Space jumps (again in the air: further) · S: slide, or dive · A / D: the other ring · E: leave · H: these keys again');
   };
   world.actionSources.push((p) => {
     if (run) return run.over ? null : { label: 'Leave the pond', run: () => leave(false) };

@@ -3,6 +3,7 @@
 // See index.js (the switches) and lab/INTEGRATION.md (its board of scores).
 import { Boats } from '../world/zones/games/boats/Boats.js';
 import { REGATTA } from '../world/zones/games/boats/water.js';
+import { keysHelp } from './help.js';
 
 const KEY = 'mmf.boats.best';
 
@@ -27,6 +28,7 @@ export function attach(app) {
     app.fair.fov = null;
     hud.setRun(null);
     s.drop(player);
+    keysHelp(app).clear();
     if (!finished) hud.note('Race left.', 2500);
     player.vel.set(0, 0, 0);
     app.rig.snap(player.pos, player.yaw + Math.PI);
@@ -36,8 +38,8 @@ export function attach(app) {
     race = boats.open(player, io);
     player.driver = race;
     app.audio?.play('teleport');
-    hud.note(app.input.isTouch ? 'Your boat is the red one · stick up: ahead · stick aside: the helm · the arrow: a burst of speed · between the buoys, red to port'
-      : 'Your boat is the red one · W: ahead, S: astern · A / D: the helm · Space: a burst of speed · between the buoys · E: leave', 9000);
+    keysHelp(app).set(app.input.isTouch ? 'Your boat is the red one · stick up: ahead · stick aside: the helm · the arrow: a burst of speed (the gauge says how much is left) · between the buoys, red to port'
+      : 'Your boat is the red one · W: ahead, S: astern · A / D: the helm · Space: a burst of speed (the gauge says how much is left) · between the buoys · E: leave · H: these keys again');
   };
   world.actionSources.push((p) => {
     if (race) return race.over ? null : { label: 'Leave the race', run: () => leave(false) };

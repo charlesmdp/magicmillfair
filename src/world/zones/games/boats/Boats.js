@@ -18,6 +18,11 @@ const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const RED = [0.95, 0.1, 0.12], WHITE = [1.6, 1.6, 1.55], NAVY = [0.07, 0.07, 0.2], YELLOW = [1.6, 1.3, 0.12], BLUE = [0.16, 0.36, 1.0], GREEN = [0.15, 0.85, 0.3], CREAM = [1.3, 1.17, 0.9], DARK = [0.05, 0.06, 0.08];
 const HULLS = [RED, BLUE, YELLOW, GREEN]; // the visitor's, then the three that sail by themselves
 const PLACES = ['1st', '2nd', '3rd', '4th'];
+/** How much burst a boat has: a bar that empties while it is used, and fills again — "ready" when it is full. */
+function gauge(b) {
+  const B = REGATTA.burst, full = b.burst > 0 ? b.burst / B.time : 1 - Math.max(0, b.ready) / B.wait, n = Math.max(0, Math.min(8, Math.round(full * 8)));
+  return `${b.burst > 0 ? 'BURST' : b.ready <= 0 ? 'burst ready' : 'burst'} ${'█'.repeat(n)}${'░'.repeat(8 - n)}`;
+}
 
 export class Boats {
   constructor(world) {
@@ -164,7 +169,7 @@ export class Boats {
         const place = PLACES[ranking(race).indexOf(me)];
         session.line = S.count > 0 ? `${R.name} · ${Math.ceil(S.count) > 3 ? 'ready' : Math.ceil(S.count)}…`
           : race.over ? `${R.name} · ${formatTime(race.time)} · ${PLACES[race.place - 1]}`
-            : `Lap ${Math.min(R.laps, me.lap + 1)}/${R.laps} · ${formatTime(Math.round(race.clock * 1000))} · ${place} · ${Math.round(Math.abs(me.way) * 3.6)} km/h${me.burst > 0 ? ' ▲' : me.ready <= 0 ? ' · burst ready' : ''}`;
+            : `Lap ${Math.min(R.laps, me.lap + 1)}/${R.laps} · ${formatTime(Math.round(race.clock * 1000))} · ${place} · ${Math.round(Math.abs(me.way) * 3.6)} km/h · ${gauge(me)}`;
       },
       /** The camera of a race: low over the water behind one's boat, looking where it goes. */
       camera: (cam, dt) => {
