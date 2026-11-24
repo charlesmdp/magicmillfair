@@ -33,6 +33,7 @@ import { keysHelp } from './extras/help.js'; // (the keys of a game, shown again
 import { countVisit } from './net/Visits.js';
 import { callApi, checkAdminKey, hasApi, noApi, sharedNow } from './net/api.js';
 import { formatTime } from './world/zones/games/course.js';
+import { buildGameSignposts } from './world/zones/games/Signposts.js';
 import { RemoteAvatars } from './net/RemoteAvatars.js';
 import { Benchmark } from './app/Benchmark.js';
 import { SPAWN, ZONES, CLIMB, RACE, WING, TRACK, PIER } from './world/layout/layout.js';
@@ -158,10 +159,13 @@ async function boot() {
   scene.add(world.sparks.mesh);
   const timers = {}; // cheats that wear off: name → seconds left
   // habits kept from one visit to the next
-  // (running, and the camera that turns with the character, are on unless the visitor switched them off)
-  const settings = { run: store.get('mmf.run') !== '0', follow: store.get('mmf.follow') !== '0' };
+  // (running is on unless the visitor switched it off; the camera that always stays behind the character is
+  // off unless they switched it on. The camera turns with the walker for everybody — it was a setting that
+  // nobody left off: only the tools still switch it off, for a camera that stays where they put it)
+  const settings = { run: store.get('mmf.run') !== '0', behind: store.get('mmf.behind') === '1' };
   player.autoRun = settings.run;
-  rig.follow = settings.follow;
+  rig.follow = !((import.meta.env.DEV || typeof __LAB__ !== 'undefined' || typeof __TEST__ !== 'undefined') && store.get('mmf.follow') === '0');
+  rig.behind = settings.behind;
   // who is visiting: `admin` once the server has recognised the administrator's key; `days`: visits in a row
   const who = { admin: false, owner: false, key: '', days: 1 };
   app.who = who;
@@ -208,7 +212,12 @@ async function boot() {
   // long as the address still asks for the same thing)
   let backTo = (() => { try { const kept = JSON.parse(store.get('mmf.room', true)); return kept && kept.asked === (params.get('room') || '') ? cleanRoom(kept.room) : ''; } catch { return ''; } })();
   let inRoom = ''; // (the room one is in, once one is in one)
-  const roomInfo = () => (presence && presence.mode === 'online' ? { name: presence.room, label: presence.label, several: /^Room (?!1$)/.test(presence.label) || (roster.rooms || []).some((r) => r.name !== presence.room) } : null);
+  // (what the interface says of the room one is in: its name, whether there are others — and, for the settings,
+  // the rooms one may go to and one's own, where rooms are sold)
+  const roomInfo = () => (presence && presence.mode === 'online' ? {
+    name: presence.room, label: presence.label, several: /^Room (?!1$)/.test(presence.label) || (roster.rooms || []).some((r) => r.name !== presence.room),
+    rooms: roster.rooms || [], own: mine.on || presence.inOwn ? { room: mine.room, price: price(mine.price || 5900), here: presence.inOwn ? { host: presence.host } : null } : null,
+  } : null);
   const startPresence = () => {
     presence = new Presence({ name, color, kit: packKit(kit), ...(backTo && { back: backTo }) });
     // which room: said when one is entered — and when the one that was asked for could not be
@@ -370,6 +379,7 @@ async function boot() {
     mine.on = !!on;
     const got = mine.on ? await callApi(`api/myroom?device=${deviceId()}`) : null;
     mine.room = got?.room || null; mine.price = got?.price || 0;
+    if (presence) hud.setPresence(presence.mode, presence.count, roomInfo()); // (the settings name the rooms too)
     if (hud.rosterOpen) showRoster();
     if (shopView.isOpen) shopView.refresh(shopItems());
   };
@@ -1100,6 +1110,13 @@ async function boot() {
     if (key === 'wing') return photographer.shoot([WING.x + 11.2, 5.6, WING.z - 9.6], [WING.x, 5.8, WING.z], W, H, 50);
     if (key === 'sky') return photographer.shoot([CLIMB.x + 3, CLIMB.y + 1.6, CLIMB.z - 12], [CLIMB.x, CLIMB.y + 20, CLIMB.z], W, H, 78); // (from the foot of the climb, looking up its stones)
     if (key === 'race') { const pd = world.games.race.paddock, g = world.groundAt(pd.x, pd.z); return photographer.shoot([pd.x - 14, g + 3.6, pd.z + 9], [pd.x + 2, g + 2, pd.z - 3], W, H, 56); }
+    // (a game of the lab: its gate and its board, from a few steps away)
+    const stand = fair.stands[key], game = app.extras?.[key], gate = game && (game.gate || game.stand);
+    if (stand && gate) {
+      const bx = stand.board.mesh.position.x, bz = stand.board.mesh.position.z, mx = (bx + gate.x) / 2, mz = (bz + gate.z) / 2, g = world.groundAt(mx, mz);
+      const nx = Math.sin(stand.board.mesh.rotation.y), nz = Math.cos(stand.board.mesh.rotation.y);
+      return photographer.shoot([mx + nx * 11, g + 3.4, mz + nz * 11], [mx, g + 2.2, mz], W, H, 58);
+    }
     return null;
   };
   const openTrading = () => {
@@ -1138,15 +1155,60 @@ async function boot() {
   const labBusy = () => Object.values(LAB_GAMES).some((run) => !!app[run]?.());
   const applyRelease = (release, before) => {
     const on = Object.fromEntries(EXTRA.map((k) => [k, release[k] === true]));
-    if (EXTRA.some((k) => on[k])) import('./extras/index.js').then(({ loadExtras }) => loadExtras(app, on)).catch((err) => console.error('[extras]', err));
+    if (EXTRA.some((k) => on[k])) import('./extras/index.js').then(({ loadExtras }) => loadExtras(app, on)).then(() => extrasBuilt()).catch((err) => console.error('[extras]', err));
     // (the rooms that players make: their card in the shop and their corner of "Who is here" come and go with the switch)
     if (!before || before.userRooms !== release.userRooms) queueMicrotask(() => refreshMine(release.userRooms === true));
     // (the sky is built with the world: another stage of it is another world)
     return !!before && (EXTRA.some((k) => before[k] === true && !on[k]) || (before.sky !== undefined && before.sky !== release.sky));
   };
+  // ---- the games of the lab, once built: each gets a board like every game's (the four lists; over it the panel
+  // of a sponsor, for sale like the others), the map a star, the forks of the paths a plank that points to it.
+  // `at`: where the board stands from the gate of its game — metres to the right of one who looks the way the
+  // gate looks (at the game), metres along that way, and how far the board is turned from facing those who
+  // arrive (the slide says itself where its board goes). `deck`: the gate is on planks over the sea — the board
+  // stands at their height, smaller, on piles.
+  const LAB_BOARD = {
+    slide: { title: 'BEST TIMES', sub: 'from the top of the cliffs to the sea · fastest down' },
+    pond: { title: 'LONGEST RUNS', sub: 'three ponds · who held the longest', at: [5.0, -1.4, -0.35] },
+    boats: { title: 'BEST TIMES', sub: 'three laps round the buoys · fastest', at: [-4.6, -0.6, 0.35] },
+    hill: { title: 'BEST TIMES', sub: 'from the arch to the bell · fastest up', at: [-6.4, -1.0, 0.35] },
+    crack: { title: 'BEST TIMES', sub: 'up the cleft, from wall to wall · fastest', at: [-4.0, -0.85, Math.PI / 2], deck: true },
+    hollow: { title: 'BEST TIMES', sub: 'one lap under the ground · fastest', at: [4.4, -1.6, -0.4] },
+  };
+  const labSigns = { group: null, key: null, planted: new Set() };
+  /** What follows the building of the extras that were switched on. */
+  const extrasBuilt = () => {
+    let added = false;
+    for (const id of Object.keys(LAB_GAMES)) {
+      const game = app.extras?.[id], gate = game && (game.gate || game.stand);
+      if (!gate || fair.stands[id]) continue;
+      const o = LAB_BOARD[id], fx = Math.sin(gate.yaw), fz = Math.cos(gate.yaw);
+      const spot = game.boardSpot || { x: gate.x - fz * o.at[0] + fx * o.at[1], z: gate.z + fx * o.at[0] + fz * o.at[1], yaw: gate.yaw + Math.PI + o.at[2] };
+      if (id === 'slide') game.board?.mesh?.removeFromParent(); // (the plain board the slide hung for itself: this one takes its place)
+      const deck = o.deck && { y: gate.y, width: 2.7, pixels: 0.75, foot: gate.y - Math.min(world.data.heightAt(spot.x, spot.z), 0) + 0.6 };
+      fair.stands[id] = world.games.lateStand(id, spot.x, spot.z, spot.yaw, { title: `${GAME_NAMES[id].toUpperCase()} — ${o.title}`, sub: o.sub, format: formatTime, what: 'this game', ...deck });
+      const slot = (world.sponsorSlots || []).find((q) => q.id === `board:${id}`);
+      if (slot) { places.set(slot.id, { what: slot.what, spot: slot, set: slot.set }); slot.offer?.(shop.open ? `from ${price(shop.least(slot.id))} · step up and bid` : ''); }
+      added = true;
+    }
+    if (added) { refreshBoards(); applySponsors(); shopView.stale('board:'); if (shopView.isOpen) shopView.refresh(shopItems()); }
+    hud.setAttractions(attractions());
+    // (the planks: rebuilt when the games that are on change)
+    const games = Object.keys(LAB_GAMES).map((id) => { const game = app.extras?.[id], at = game && (game.gate || game.stand); return at ? { id, name: GAME_NAMES[id], x: at.x, z: at.z } : null; }).filter(Boolean);
+    const key = games.map((g) => g.id).join();
+    if (key !== labSigns.key) {
+      labSigns.key = key;
+      if (labSigns.group) { labSigns.group.removeFromParent(); labSigns.group.traverse((q) => { q.geometry?.dispose(); if (q.name === 'signposts-games-planks') { q.material.map?.dispose(); q.material.dispose(); } }); }
+      const built = buildGameSignposts(world.games, games, labSigns.planted);
+      labSigns.group = built?.group || null;
+      if (built) world.games.group.add(built.group);
+      app.labSigns = built?.posts || [];
+    }
+  };
+  Object.assign(app, { extrasBuilt });
   // (never in the middle of a game, a race, a timed climb, a ride, a payment, a form or a sentence)
   const busyNow = () => !!fair.session || world.games.run.state === 'running' || labBusy() || player.riding || shopView.isOpen || payView.isOpen || accountView.isOpen || sponsorsView.isOpen
-    || hud.chatOpen || !!hud.chatInput?.value || !!document.querySelector('.chooser.on') || /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName || '');
+    || hud.chatOpen || !!hud.chatInput?.value || !!document.querySelector('.chooser.on, .pitch.on') || /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName || '');
   const updates = new Updates(ui, {
     build: typeof __BUILD__ !== 'undefined' ? __BUILD__.commit || '' : '',
     status: async () => { try { const res = await fetch(`${import.meta.env.BASE_URL}api/status`, { cache: 'no-store' }); return res.ok && /json/.test(res.headers.get('content-type') || '') ? await res.json() : null; } catch { return null; } },
@@ -1162,6 +1224,21 @@ async function boot() {
     ...((import.meta.env.DEV || typeof __TEST__ !== 'undefined') && params.has('count') && { count: Number(params.get('count')) }),
   });
   Object.assign(app, { updates, busyNow });
+  // (the big attractions, for the map: the climb, the race, the flying theatre — and the games of the lab that are
+  // switched on, each where one asks for it; the slide is drawn too, from its top to the sea)
+  const attractions = () => {
+    const pd = world.games.race?.paddock, list = [{ id: 'climb', name: CLIMB.name, x: CLIMB.x, z: CLIMB.z }];
+    if (pd) list.push({ id: 'race', name: RACE.name, x: pd.x, z: pd.z });
+    list.push({ id: 'wing', name: WING.name, x: WING.x, z: WING.z });
+    for (const id of Object.keys(LAB_GAMES)) {
+      const game = app.extras?.[id], at = game && (game.gate || game.stand);
+      if (!at) continue;
+      const points = id === 'slide' ? game.course?.main?.points : null;
+      list.push({ id, name: GAME_NAMES[id], x: at.x, z: at.z, ...(points && { line: points.filter((_, i) => i % 6 === 0 || i === points.length - 1).map((p) => [p.x, p.z]) }) });
+    }
+    return list;
+  };
+  hud.setAttractions(attractions());
   // (the games of the lab, when they are switched on — the slide, the three ponds, the regatta, the slope, the
   // cleft, the cave: the server notes when a run begins — a time only counts with that note — and each game says
   // when a run ends (app.slideDone(ms), app.pondDone(ms)…): the time goes on its board of scores)
@@ -1399,6 +1476,60 @@ async function boot() {
     shopView.open({ items: shopItems(), mode: shop.mode, note: account.name ? `It goes to your account, ${account.name}.` : 'It stays in this browser: an account (Settings) keeps it everywhere.' });
     audio.play('pick');
   };
+  /** The payment of the Game Pass, opened at once (from a proposal: the end of the free day, the card that tells what it gives). */
+  const buyPass = async () => {
+    if (shop.pass) { hud.note(`You hold the ${PASS.name} already — thank you!`, 5000); return; }
+    hud.note('Opening the payment page…', 8000);
+    const wrong = await shop.buy(PASS.id);
+    if (wrong) hud.note(wrong, 7000);
+  };
+  // ---------- two cards that make an offer in full, once in a while: an account, to who has played ten minutes
+  // without one; the Game Pass, to who has played fifteen without it. Once a day each at the most, never in the
+  // middle of anything. (`shown`: the administrator asked to see it — nothing is counted, nothing is checked.)
+  const PITCH_AFTER = { account: 600, pass: 900 }; // seconds of play, in this visit
+  const pitchedToday = (kind) => store.get(`mmf.pitch.${kind}`) === new Date().toDateString();
+  const pitchWanted = { account: () => !account.name && !noApi(), pass: () => shop.open && !shop.pass };
+  const pitch = async (kind, shown = false) => {
+    if (hud.pitching || (!shown && (pitchedToday(kind) || !pitchWanted[kind]()))) return false;
+    if (!shown) store.set(`mmf.pitch.${kind}`, new Date().toDateString());
+    audio.play('pick');
+    if (kind === 'account') {
+      const taken = await hud.pitch({
+        kind, eyebrow: 'Ten minutes in the oasis', title: 'Shall we remember you?',
+        lead: 'You have been here a while — long enough to have a best score, a favourite bench, maybe a grudge against a boulder. An account keeps all of it, wherever you play from.',
+        perks: [
+          'Your scores count for the week, the month and all time — not only for today',
+          'What you buy, your days in a row and your animals of light follow you to any device',
+          'Your robot keeps its name and its colours, even when this browser forgets everything',
+          'A name and a password: no e-mail needed, no newsletter, no small print with teeth',
+        ],
+        fine: 'Free, and done in less time than the queue for the big wheel.',
+        yes: 'Create my account', no: 'Not now', picture: previewer.shot('', color, 360, 450),
+      });
+      if (taken) accountAction('create');
+      return taken;
+    }
+    const taken = await hud.pitch({
+      kind, eyebrow: 'Fifteen minutes! You clearly like it here', title: `The ${PASS.name} — for those who are staying`,
+      lead: `${price(PASS.price)} a month keeps the lights of the oasis on, pays for the alligator's coaching licence — and gives you the good stuff:`,
+      perks: PASS.perks,
+      fine: 'Paid on Stripe: the game never sees your card. Stop whenever you like, in two clicks — no hard feelings, the robot keeps its dignity.',
+      yes: `Get the ${PASS.name} · ${price(PASS.price)} a month`, no: 'Maybe later', picture: passPicture(420, 300),
+    });
+    if (taken) buyPass();
+    return taken;
+  };
+  const pitchQueue = Object.keys(PITCH_AFTER).map((kind) => ({ kind, at: PITCH_AFTER[kind] }));
+  // (the tools play for a long time and must not find a card over what they are doing: on their pages the cards
+  // only come by themselves when the address asks for them — ?pitch)
+  const pitchAuto = !(import.meta.env.DEV || typeof __LAB__ !== 'undefined' || typeof __TEST__ !== 'undefined') || params.has('pitch');
+  let played = 0;
+  /** Called while one walks about: the clock of the visit, and the card that is due — once nothing else is going on. */
+  const playClock = (dt) => {
+    played += dt;
+    if (pitchAuto && pitchQueue.length && played >= pitchQueue[0].at && !busyNow() && !hud.rosterOpen && !hud.bigMapOpen) pitch(pitchQueue.shift().kind);
+  };
+  Object.assign(app, { pitch, playedFor: (seconds) => { if (seconds !== undefined) played = seconds; return played; } });
   shopView
     .on('buy', async (id) => {
       if (id.startsWith('board:')) { shopView.close(); bidFor(id); return; } // (a place to sponsor: how much?)
@@ -1567,6 +1698,7 @@ async function boot() {
     .on('say', say)
     .on('roster', () => { showRoster(); refreshRoster(); refreshRooms(); if (mine.on) refreshMine(); })
     .on('myroom', myRoom)
+    .on('show', (kind) => pitch(kind, true))
     .on('putout', (id) => { if (presence?.host) { presence.kick(id); hud.note('Put out: they cannot come back for an hour.', 4500); } })
     .on('room', (to) => changeRoom(to))
     .on('badge', () => {
@@ -1601,7 +1733,7 @@ async function boot() {
       settings[key] = on;
       store.set(`mmf.${key}`, on ? '1' : '0');
       player.autoRun = settings.run;
-      rig.follow = settings.follow;
+      rig.behind = settings.behind;
     })
     .on('color', (i) => { if (i >= FREE_COLORS && !shop.hasPass) return; color = i; me.setColor(i); store.set('mmf.color', String(color)); presence?.setIdentity(name, color); shopView.stale(); keepProfile(); })
     .on('size', (i) => { if (i && !shop.hasPass) return; size = i; store.set('mmf.size', SIZES[size]); keepProfile(); })
@@ -1674,6 +1806,7 @@ async function boot() {
       if (input.pressed('KeyL')) interact.press(1);
       player.update(dt, rig.heading, true);
       rig.update(dt, player.pos, player);
+      playClock(dt);
     }
     if (mode === 'walk' && state.blend) {
       const b = state.blend;
@@ -1743,7 +1876,13 @@ async function boot() {
           hud.note('Your jetpack is off. Put it back on in the item shop (O).', 5000);
         } else if (shop.open && !shop.owns('jetpack') && !shop.owns('jetlite') && mode === 'walk' && !fair.session && state.time - (app.toldJet || -99) > 8) {
           app.toldJet = state.time;
-          hud.note(`Your free day with the jetpack is over. The Jetpack Lite is ${price(shop.cost('jetlite'))} in the item shop — and it comes with the ${PASS.name}.`, 7000);
+          // (said in full once in a while, with the button that opens the payment of the pass; in a word otherwise)
+          if (state.time - (app.toldJetLong || -999) > 90 && !busyNow()) {
+            app.toldJetLong = state.time;
+            hud.offer(touch
+              ? `That was your free day of flying — gravity sends its regards. The jetpack comes with the ${PASS.name} (${price(PASS.price)} a month) — or on its own: the Jetpack Lite is ${price(shop.cost('jetlite'))} in the item shop.`
+              : `That was your free day of flying — we hope it was a good one! Gravity sends its regards. The jetpack comes with the ${PASS.name} (${price(PASS.price)} a month, with every hat, four sizes and more colours) — or on its own: the Jetpack Lite is ${price(shop.cost('jetlite'))} in the item shop (O).`, `Get the ${PASS.name}`, () => buyPass(), 22000, 'Not now');
+          } else hud.note(`No jetpack on your back: it comes with the ${PASS.name}, and the Jetpack Lite is ${price(shop.cost('jetlite'))} in the item shop (O).`, 5000);
         }
       }
       const fov = fair.fov ?? (timers.wide ? 104 : engine.width < engine.height ? 68 : 55);

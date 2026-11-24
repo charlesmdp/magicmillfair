@@ -49,6 +49,7 @@ import { describe, publicPrices, nextBid, AUCTION, CURRENCY } from './catalog.js
 import { createCheckout, createPortal, verifyWebhook, refundPayment, endSubscription } from './stripe.js';
 import { noteSale, noteRefund } from './stats.js';
 import { readRelease } from './release.js';
+import { BOARDS as SCORE_BOARDS } from './scores.js';
 import { accountOf, addItem, holderOf, itemsOf, passLive, sameOwner } from './accounts.js';
 import { quietOnes } from './bans.js';
 import { PASS, TRIAL, itemOf } from './items.js';
@@ -334,6 +335,8 @@ export async function shopRoute(req, ctx) {
     if (!what || !DEVICE.test(device || '')) return out(400, { error: 'Nothing of that name is sold.' });
     // (a sky village is only for hire once the sky is open: the owner's switch)
     if (what.item.startsWith('village:') && (await readRelease(ctx)).release.sky !== 'open') return out(400, { error: 'Nothing of that name is sold.' });
+    // (…and the panel of a game that waits for its switch, once that game is on: its board does not exist before)
+    if (what.item.startsWith('board:')) { const sw = SCORE_BOARDS[what.item.slice(6)]?.release; if (sw && !(await readRelease(ctx)).release[sw]) return out(400, { error: 'Nothing of that name is sold.' }); }
     if (what.kind === 'own' && (await ownedBy(ctx, device)).includes(what.item)) return out(409, { error: 'You already have it.' });
     if (what.kind === 'pass') { const holder = await holderOf(ctx.store, device); if (passLive(holder.pass, now) && !holder.pass.gift) return out(409, { error: 'You already have the pass.' }); }
     let extra = {};

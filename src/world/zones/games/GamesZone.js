@@ -172,7 +172,7 @@ export class GamesZone {
    * in a room a player made: the board then shows both); the place is added to
    * world.sponsorSlots under `board:<id>` (walk up to it to sponsor the game).
    */
-  scoreStand(id, x, z, yaw, { title, sub, format, what = 'this game', width = 3.4, y = this.ground(x, z), pixels = 1 }) {
+  scoreStand(id, x, z, yaw, { title, sub, format, what = 'this game', width = 3.4, y = this.ground(x, z), pixels = 1, foot = 0.3 }) {
     const k = width / 3.4;
     const state = { lists: null, room: null, sponsor: null, offer: '' };
     // (`pixels`: a smaller board is drawn on a smaller sheet — the same drawing, scaled)
@@ -188,7 +188,7 @@ export class GamesZone {
     const ax = Math.cos(yaw), az = -Math.sin(yaw), top = y + 0.75 + 4.05 * k + 0.25;
     for (const s of [-1, 1]) {
       const px = x + ax * s * (width / 2 + 0.09), pz = z + az * s * (width / 2 + 0.09);
-      pw.tint(1.1, 1.0, 0.85, 1).box(px - 0.07, y - 0.3, pz - 0.07, px + 0.07, top, pz + 0.07, { tile: 1 });
+      pw.tint(1.1, 1.0, 0.85, 1).box(px - 0.07, y - foot, pz - 0.07, px + 0.07, top, pz + 0.07, { tile: 1 }); // (`foot`: how deep the posts go — a stand by planks over the sea stands on the bottom)
       paint.tint(1.0, 0.75, 0.12, 1).place(px, top, pz).lathe([[0.0, -0.02], [0.13, 0.1], [0.0, 0.26]], 8).pop();
     }
     {
@@ -212,6 +212,8 @@ export class GamesZone {
     this.colliders.push({ type: 'box', x, z, hw: width / 2 + 0.2, hl: 0.14, yaw });
     const stand = {
       id, board, panel,
+      /** What the board shows now: its four lists (for the checks). */
+      get lists() { return state.lists; },
       setScores: (lists, room = null) => { state.lists = lists; state.room = room; board.redraw(); },
       redraw: () => board.redraw(),
       setSponsor: (sponsor) => { state.sponsor = sponsor; panel.redraw(); },
@@ -220,6 +222,17 @@ export class GamesZone {
     };
     (this.world.sponsorSlots ||= []).push({ id: `board:${id}`, what, x: x + Math.sin(yaw) * 1.4, y, z: z + Math.cos(yaw) * 1.4, reach: 3.2, set: stand.setSponsor, offer: stand.setOffer });
     (this.stands ||= {})[id] = stand;
+    return stand;
+  }
+
+  /**
+   * The board of a game that is switched on after the world was built (the games of the lab): a stand like every
+   * other game's — and what stops the walker is told to the world at once (the rest was told when it was built).
+   */
+  lateStand(id, x, z, yaw, o) {
+    if (this.stands?.[id]) return this.stands[id];
+    const stand = this.scoreStand(id, x, z, yaw, o);
+    this.world.collision.addBox(x, z, (o.width || 3.4) / 2 + 0.2, 0.14, yaw);
     return stand;
   }
 

@@ -2,12 +2,13 @@
 // (ui/LegalView.js). Keep them true: when the game starts to use something new — a service, a script, a
 // thing it remembers — say so here, and change the date.
 //
-// WHO: the two lines below are for whoever runs the game to fill in (a name — a person or a company — and an
-// address people can write to). Left empty, the pages say how to reach the maker without them.
+// WHO: the lines below say who makes and runs the game (a company, its registration number, its address) and
+// the mailbox people can write to. Left empty, the pages say how to reach the maker without them.
 export const LEGAL = {
   updated: '24 November 2026',
-  operator: '', // e.g. 'Atomic Oasis is run by …'
-  contact: '', // e.g. 'hello@your-domain'
+  maker: 'MY BIG LEO',
+  operator: 'It is made and run by MY BIG LEO, a company registered in France (SIREN 880 338 827), 14 rue Charles V, Paris, France.',
+  contact: 'atomicoasisgame@gmail.com',
 };
 
 const reach = () => (LEGAL.contact ? `write to ${LEGAL.contact}` : 'ask in the chat for an administrator (their name carries a badge), or write to the address given by whoever sent you here');
@@ -55,6 +56,9 @@ export const PRIVACY = () => ({
   lead: 'What the fair knows about you, why, and for how long. No advertising, no selling of data, no tracking across other sites by the game itself.',
   short: ['You can play without giving your name, an e-mail or anything else.', 'Your browser gives itself a random name; that is how the game knows what is yours.', 'A few outside services are used. They are all listed below.'],
   sections: [
+    ...(LEGAL.operator ? [{ icon: '🏠', title: 'Who is behind the game', text: [
+      `Atomic Oasis — ${LEGAL.operator.replace(/^It is /, 'it is ')} It is that company which decides what the game keeps and why, and which answers for it. To reach it: ${reach()}.`,
+    ] }] : []),
     { icon: '🗂️', title: 'What stays in your browser', text: [
       'The game keeps a few things in the storage of your browser (not cookies): a random identifier it made up for this browser, the name and the look of your robot, your settings, whether you have heard the opening story — and, for an administrator, their key. Clearing the data of the site in your browser removes all of it.',
     ] },

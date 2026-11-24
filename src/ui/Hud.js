@@ -237,10 +237,8 @@ export class Hud {
         <div class="sheet"><canvas></canvas><div class="legend"><b>Map</b><button class="mega" type="button" aria-pressed="false" title="The whole country, with the fifty sky villages">Mega map</button><span>Click anywhere to close</span></div></div>
       </div>
       <div class="stats"></div>
-      <div class="emotes">
-        <div class="sit"><button data-sit>Sit on the ground (X)</button></div>
-        <div class="held"><button data-drop>Put the bouquet down (B)</button></div>
-        <div class="boom"><button data-firework>Light a firework (V)</button></div>
+      <div class="emotes" role="dialog" aria-label="Emotes">
+        <div class="acts"><b class="title">Emotes</b><span class="sit"><button data-sit>Sit on the ground (X)</button></span><span class="held"><button data-drop>Put the bouquet down (B)</button></span><span class="boom"><button data-firework>Light a firework (V)</button></span></div>
       </div>
       <div class="wasted" aria-live="assertive"><div class="band"><b>WASTED</b><span></span></div></div>
       <div class="sight" aria-hidden="true"></div>
@@ -263,6 +261,11 @@ export class Hud {
       <div class="banner" role="alert"></div>
       <div class="panel" role="dialog" aria-label="Settings">
         <h2>Settings</h2>
+        <div class="room-box" hidden>
+          <h3>Your room</h3>
+          <select class="room-pick" aria-label="The room you are in — choose another to go there"></select>
+          <p class="room-say"></p>
+        </div>
         <h3>Graphics quality</h3>
         <div class="seg quality"><button data-q="auto">Auto</button>${TIER_ORDER.map((q) => `<button data-q="${q}">${TIERS[q].label}</button>`).join('')}</div>
         <p class="q-info"></p>
@@ -275,7 +278,7 @@ export class Hud {
         <div class="row"><span>Music</span><input type="range" class="vol" data-vol="music" min="0" max="100" step="5" aria-label="Volume of the music" /></div>
         <h3>Controls</h3>
         <div class="row"><span>Run by default <small>(Shift walks)</small></span><button class="switch" data-set="run" aria-pressed="false" aria-label="Run by default"></button></div>
-        <div class="row"><span>The camera turns with the character</span><button class="switch" data-set="follow" aria-pressed="false" aria-label="The camera turns with the character"></button></div>
+        <div class="row"><span>The camera always stays behind the character <small>(it turns as fast as they do)</small></span><button class="switch" data-set="behind" aria-pressed="false" aria-label="The camera always stays behind the character"></button></div>
         <h3>Hats, jetpacks, paint</h3>
         <button class="open-shop" type="button">Open the item shop</button>
         <h3>Your robot</h3>
@@ -287,6 +290,7 @@ export class Hud {
         <div class="acct" hidden><h3>Account</h3><p class="acct-info"></p><div class="acct-acts"></div></div>
         <p class="net-info"></p>
         <p class="legal-links"><button type="button" data-legal="terms">Terms of use</button><span aria-hidden="true">·</span><button type="button" data-legal="privacy">Privacy</button></p>
+        <p class="admin-shows" hidden>Administrator — see a card as visitors do: <button type="button" data-show="account">the account</button><span aria-hidden="true">·</span><button type="button" data-show="pass">the Game Pass</button></p>
         <p class="version">${VERSION}</p>
       </div>`;
     this.root.append(h);
@@ -322,7 +326,7 @@ export class Hud {
       const act = b.dataset.act;
       if (act === 'settings') this.panel.classList.toggle('on');
       else if (act === 'fullscreen') this.toggleFullscreen();
-      else if (act === 'emote') this.emotes.classList.toggle('on');
+      else if (act === 'emote') this.toggleEmotes(); // (which draws the pictures of the animals of light the first time)
       else if (act === 'chat') this.toggleChat();
       else this.emit(act);
       b.blur();
@@ -426,6 +430,7 @@ export class Hud {
     }
     // the small print (ui/LegalView.js)
     h.querySelectorAll('[data-legal]').forEach((b) => (b.onclick = () => { this.panel.classList.remove('on'); this.emit('legal', b.dataset.legal); }));
+    h.querySelectorAll('[data-show]').forEach((b) => (b.onclick = () => { this.panel.classList.remove('on'); this.emit('show', b.dataset.show); }));
     h.querySelectorAll('[data-sw]').forEach((b) => (b.onclick = () => {
       const on = b.getAttribute('aria-pressed') !== 'true';
       b.setAttribute('aria-pressed', String(on));
@@ -582,14 +587,14 @@ export class Hud {
    */
   setEmotes(list, days = 1) {
     this._emoteIds = Object.fromEntries(list.map((e) => [e.id, e.index]));
-    const box = this.emotes, held = box.querySelector('.held');
+    const box = this.emotes;
     box.querySelectorAll('.group').forEach((n) => n.remove());
     const ranks = list.filter((e) => e.rank).sort((a, b) => a.days - b.days);
+    // (what one reaches for most comes first: a wave, a dance; then the cheers; the animals of light under them)
     const groups = [
-      ['', list.filter((e) => e.clip)],
+      ['Say it with a gesture', list.filter((e) => e.clip)],
       ['Cheer on', list.filter((e) => e.move)],
     ];
-    if (ranks.length) box.insertBefore(this._zoo(ranks, days), held);
     for (const [title, items] of groups) {
       if (!items.length) continue;
       const g = el('div', `group${items[0].rank ? ' rank' : ''}`);
@@ -606,8 +611,9 @@ export class Hud {
         row.append(b);
       }
       g.append(row);
-      box.insertBefore(g, held);
+      box.append(g);
     }
+    if (ranks.length) box.append(this._zoo(ranks, days));
   }
   /**
    * The animals of light: what they are, where the visitor stands, and a tile for each — a picture of those
@@ -688,6 +694,7 @@ export class Hud {
     if (!on && this.chatChannel === 'important') this._channel('all');
     this.bigEl.querySelector('.legend span').textContent = on ? 'Administrator: click a spot to go there · outside the map to close' : 'Click anywhere to close';
     this.bigEl.classList.toggle('goto', !!on);
+    this.panel.querySelector('.admin-shows').hidden = !on;
   }
   /** The administrator is looking at the game as a visitor sees it: a pill says so, and brings them back. */
   setVisitorView(on) { this.hud.querySelector('.as-visitor').hidden = !on; }
@@ -923,6 +930,7 @@ export class Hud {
     clearTimeout(this._offer);
     if (!text) { bar.classList.remove('on'); return; }
     bar.querySelector('.offer-text').textContent = text;
+    bar.classList.toggle('long', text.length > 120); // (a long one: its words on a line of their own, over the buttons)
     const y = bar.querySelector('.offer-yes');
     y.textContent = yes;
     y.onclick = () => { bar.classList.remove('on'); fn(); };
@@ -931,6 +939,51 @@ export class Hud {
     requestAnimationFrame(() => bar.classList.add('on'));
     this._offer = setTimeout(() => bar.classList.remove('on'), ms);
   }
+
+  /**
+   * A card that makes an offer in full — what it is, what it gives, a picture, a button to take it and another to
+   * leave it: { kind, eyebrow, title, lead, perks: [a line], fine, yes, no, picture (a canvas, or nothing) }.
+   * Resolves to true when it is taken. (Nothing is in focus and the buttons wake up after a moment: whoever was
+   * jumping or clicking when it came does not take it by accident.)
+   */
+  pitch(o) {
+    if (!this.pitchEl) {
+      this.pitchEl = el('div', 'pitch', '<div class="sheet"><div class="art"></div><div class="words"><p class="eyebrow"></p><h2></h2><p class="lead"></p><ul class="perks"></ul><p class="fine"></p><div class="acts"><button type="button" class="yes"></button><button type="button" class="no"></button></div></div></div>');
+      this.pitchEl.setAttribute('role', 'dialog');
+      this.pitchEl.setAttribute('aria-modal', 'true');
+      for (const ev of ['mousedown', 'touchstart', 'wheel']) this.pitchEl.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
+      this.root.append(this.pitchEl);
+    }
+    const box = this.pitchEl, q = (s) => box.querySelector(s);
+    this._pitched?.(false);
+    box.dataset.kind = o.kind || '';
+    q('.eyebrow').textContent = o.eyebrow || '';
+    q('h2').textContent = o.title;
+    q('.lead').textContent = o.lead || '';
+    q('.perks').textContent = '';
+    for (const line of o.perks || []) { const li = el('li'); li.textContent = line; q('.perks').append(li); }
+    q('.fine').textContent = o.fine || '';
+    q('.art').textContent = '';
+    if (o.picture) q('.art').append(o.picture);
+    q('.art').hidden = !o.picture;
+    q('.yes').textContent = o.yes;
+    q('.no').textContent = o.no || 'Not now';
+    this.closeAll();
+    this.input.exitLock();
+    document.activeElement?.blur?.();
+    return new Promise((resolve) => {
+      const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(false); } };
+      const done = (taken) => { this._pitched = null; clearTimeout(arm); box.classList.remove('on', 'arming'); box.onclick = null; window.removeEventListener('keydown', key, true); resolve(taken); };
+      this._pitched = done;
+      q('.yes').onclick = (e) => { e.stopPropagation(); done(true); };
+      q('.no').onclick = (e) => { e.stopPropagation(); done(false); };
+      box.onclick = (e) => { if (e.target === box && !box.classList.contains('arming')) done(false); };
+      window.addEventListener('keydown', key, true);
+      box.classList.add('on', 'arming');
+      const arm = setTimeout(() => box.classList.remove('arming'), 900);
+    });
+  }
+  get pitching() { return !!this._pitched; }
 
   /** A message that stays (put out by the administrator, for instance); null takes it away. */
   banner(text) {
@@ -1069,6 +1122,7 @@ export class Hud {
 
   /** `room` ({ label, several }): the room one is in, named when the fair has several of them. */
   setPresence(mode, count, room = null) {
+    this._roomBox(mode, count, room);
     const dot = this.hud.querySelector('.players .dot');
     dot.className = `dot ${mode === 'online' ? 'online' : mode === 'local' ? 'local' : ''}`;
     const where = mode === 'online' && room && room.several ? `${room.label} · ` : '';
@@ -1078,6 +1132,35 @@ export class Hud {
       : mode === 'local'
         ? 'Local mode: only the tabs of this browser see each other (no presence server found).'
         : 'Offline.';
+  }
+
+  /**
+   * The room one is in, in the settings: its name first in a list of the rooms one may go to (`room`: { name,
+   * label, rooms: [{ name, label, players, quiet }], own: { on, room, price, here, host } | null }) — the common
+   * rooms, and, where rooms are sold, one's own (or the way to buy one). Choosing a line goes there.
+   */
+  _roomBox(mode, count, room) {
+    const box = this.panel.querySelector('.room-box'), pick = box.querySelector('.room-pick'), say = box.querySelector('.room-say');
+    box.hidden = !(mode === 'online' && room);
+    if (box.hidden || document.activeElement === pick) return; // (not while the list is open)
+    pick.textContent = '';
+    const add = (value, text) => { const o = el('option'); o.value = value; o.textContent = text; pick.append(o); };
+    add('', `${room.label} — you are here${count > 1 ? `, with ${count - 1} other${count > 2 ? 's' : ''}` : ', on your own'}`);
+    for (const r of room.rooms || []) if (r.name !== room.name) add(`go:${r.name}`, `${r.label} — ${r.players} there${r.quiet ? ', quiet' : ''}`);
+    const own = room.own;
+    if (own?.here) add('my:leave', 'Back to the rooms of the fair');
+    if (own?.room && !own.here?.host) add('my:go', `★ ${own.room.name} — your own room`);
+    if (own && !own.room) add('my:buy', `＋ A room of your own — ${own.price} a month`);
+    pick.selectedIndex = 0;
+    pick.disabled = pick.options.length < 2;
+    say.textContent = pick.disabled ? 'The only room open just now: everybody is here.' : own?.here ? 'A room of its own: only those who were given its link are here.' : 'Choose another line to go there: you stay where you stand.';
+    pick.onchange = () => {
+      const v = pick.value;
+      pick.selectedIndex = 0; pick.blur();
+      if (!v) return;
+      this.panel.classList.remove('on');
+      if (v.startsWith('go:')) this.emit('room', v.slice(3)); else this.emit('myroom', v.slice(3));
+    };
   }
 
   // ---------- name tags
@@ -1143,7 +1226,13 @@ export class Hud {
     if (open) { this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this._bigSize = ''; }
   }
 
-  /** The whole valley, with the places, the other visitors and oneself. */
+  /**
+   * The big attractions, for the map: [{ id, name, x, z, line: [[x, z], …] | undefined }] — a gold star and the
+   * name of each; `line`: what is drawn of it on the ground (the slide: a ribbon of water).
+   */
+  setAttractions(list) { this.attractions = list || []; }
+
+  /** The whole valley, with the places, the big attractions, the other visitors and oneself. */
   drawBigMap(x, z, heading, others) {
     const mega = this.mega && this.megaImg.complete && this.megaImg.width > 0;
     const v = mega ? this.megaView : this.mapView, img = mega ? this.megaImg : this.mapImg;
@@ -1178,7 +1267,43 @@ export class Hud {
     // (names never lie on one another: the larger places are written first, where they are; a name that would
     // cover another is moved up or down by a line or two — or left out, if there is no room at all)
     const size = Math.max(mega ? 9 : 11, Math.round(w / (mega ? 86 : 62))), placed = [];
-    const places = (this.zones || []).filter((zone) => !(zone.hidden || (mega && zone.r < 30))).sort((a, b) => b.r - a.r); // (some places are for those who find them; the mega map only names the large ones)
+    // the big attractions (the map of the valley only): what is drawn of them on the ground, a gold star, their
+    // name in gold beside it — written first: the names of the places make room for them
+    const stars = mega ? [] : this.attractions || [], starred = new Set(stars.map((s) => s.id));
+    if (stars.length) {
+      const R = Math.max(7, Math.round(w / 105));
+      ctx.lineCap = 'round';
+      for (const s of stars) {
+        if (!s.line || s.line.length < 2) continue;
+        for (const [width, color] of [[Math.max(4, R * 0.62), 'rgba(255, 255, 255, 0.95)'], [Math.max(2, R * 0.34), '#35a9e6']]) {
+          ctx.beginPath();
+          s.line.forEach(([lx, lz], i) => (i ? ctx.lineTo(X(lx), Z(lz)) : ctx.moveTo(X(lx), Z(lz))));
+          ctx.lineWidth = width; ctx.strokeStyle = color; ctx.stroke();
+        }
+      }
+      ctx.font = `700 ${size}px Georgia, 'Times New Roman', serif`;
+      for (const s of stars) {
+        const px = X(s.x), pz = Z(s.z);
+        ctx.beginPath();
+        for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + (i * Math.PI) / 5, r = i % 2 ? R * 0.45 : R; if (i) ctx.lineTo(px + Math.cos(a) * r, pz + Math.sin(a) * r); else ctx.moveTo(px + Math.cos(a) * r, pz + Math.sin(a) * r); }
+        ctx.closePath();
+        ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(40, 26, 4, 0.9)'; ctx.stroke();
+        ctx.fillStyle = '#ffd24a'; ctx.fill();
+        // its name: to the right of the star — to the left when the edge is near —, moved by a line if another is there
+        const half = ctx.measureText(s.name).width / 2 + 5, right = px + R + 4 + half * 2 < w - 4;
+        const tx = right ? px + R + 4 + half : px - R - 4 - half;
+        let ty = null;
+        for (const k of [0, 1, -1, 2, -2]) { const y = pz + k * size * 1.15; if (placed.every((q) => Math.abs(q.x - tx) > q.half + half || Math.abs(q.y - y) > size * 1.05)) { ty = y; break; } }
+        placed.push({ x: px, y: pz, half: R + 2 });
+        if (ty === null) continue;
+        placed.push({ x: tx, y: ty, half });
+        ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(14, 22, 17, 0.85)'; ctx.strokeText(s.name, tx, ty);
+        ctx.fillStyle = '#ffd76a'; ctx.fillText(s.name, tx, ty);
+      }
+      ctx.font = `600 ${size}px Georgia, 'Times New Roman', serif`;
+    }
+    // (a place that is an attraction has its name already, by its star)
+    const places = (this.zones || []).filter((zone) => !(zone.hidden || starred.has(zone.id) || (mega && zone.r < 30))).sort((a, b) => b.r - a.r); // (some places are for those who find them; the mega map only names the large ones)
     for (const zone of places) {
       const half = ctx.measureText(zone.name).width / 2 + 6;
       const tx = Math.min(w - half, Math.max(half, X(zone.x))); // never cut by the edge
