@@ -187,6 +187,7 @@ room; `?village=name` arrives straight in a sky village.
 | Emotes | T; 1 to 6 for the gestures, 7 to 0 to cheer, clap, jump for joy, rage; or by name in the chat: `/wave`, `/cheer`, `/bow`… | smiley button | |
 | The booths of the pier | E at the counter; then the mouse aims and its button fires (Space fires too); E or Escape leaves | tap or hold where you aim | |
 | The quad race | E in the paddock; arrows or WASD steer; Shift drifts; Space hops; E gives up | the stick steers; Run drifts; Jump hops | left stick, trigger, A |
+| The keys of the game one is playing, again | H, or the small **H · keys** button under the line of the game (they are shown by themselves when a game opens) | the **? keys** button | |
 | Stuck somewhere | `/kill` in the chat: WASTED, then back at the mill | the same | |
 | Full screen | the button with four corners at the top right, or Settings → Display (Escape leaves) | the same, where the browser allows it (not on an iPhone) | |
 | Performance figures | P | Settings → Performance figures | |
@@ -772,7 +773,7 @@ src/
                            SponsorsView.js: the window of the Trading Post, and the photographs the game takes of itself
   app/Benchmark.js         benchmark tour
   app/Updates.js           what is released and new versions, on the visitor's side: the bar, the refresh at a safe moment
-  extras/                  the lab's extras (the caves, the figures, the slide): loaded when their switch is on
+  extras/                  the lab's extras (the caves, the figures, the slide and five other games): loaded when their switch is on
 server/index.js            Node production server: static files + presence relay + API
 server/release.js          the switches of what is released, the version online, a word to every room
 server/door.js             the door of the rooms: which room a visitor goes to, the lists, the rules, who gets in
@@ -1045,8 +1046,8 @@ booth: they keep their bounds in time (see *Known limits*).
 
 **The switches.** The code of a novelty is delivered switched off; the owner switches it on, and every
 browser is told at once — no new delivery. The switches are one small object, `RELEASE` in
-`src/app/config.js` (what each is worth where nothing was decided: the slide off, the caves and the figures
-on, the sky villages hidden, players' rooms off); every future switch goes there. The server keeps what the
+`src/app/config.js` (what each is worth where nothing was decided: the slide and the lab's five other games
+off, the caves and the figures on, the sky villages hidden, players' rooms off); every future switch goes there. The server keeps what the
 owner decided (`server/release.js`, one key in the notebook), says it with `/api/status` and `/api/release`,
 and **tells every room** when it changes (a message of the relay, `{t:'r'}`: a browser that does not know
 it ignores it). On the visitor's side (`src/app/Updates.js`): a switch that goes **on** is applied as the
@@ -1080,13 +1081,28 @@ releases. The page is fenced in by its headers: no script but its own, nothing f
 framed, never listed, never kept.
 
 **The lab.** Novelties are built on another branch, as *extras* (`src/extras/`: a module with
-`attach(app)`), with their own checks (`node tools/slide-test.mjs`, `node tools/extras-test.mjs`) and a page
-of their own (`lab/`: see `lab/INTEGRATION.md`). The game switches them on through the switches above:
-**the caves are safe places** (nearby chat only), **the game in figures** (counters, the page `/opendata`,
-sums only — `server/stats.js`; the shop tells it what it sold and gave back, the relay how many are
-connected) and, when its switch goes on, **Mostly Down**, the water slide (its board of scores exists from
-that moment). The files of the lab are the lab's: `src/extras/**`, `src/world/zones/games/slide/**`,
-`server/stats.js`, `public/opendata/**`, `public/opendate/**`, `lab/**` and its two tests are not edited here.
+`attach(app)`), with their own checks (a test for each: see below) and a page of their own (`lab/`: see
+`lab/INTEGRATION.md`). The game switches them on through the switches above: **the caves are safe places**
+(nearby chat only), **the game in figures** (counters, the page `/opendata`, sums only — `server/stats.js`;
+the shop tells it what it sold and gave back, the relay how many are connected) and — each when its own
+switch goes on, all of them off as delivered — six games:
+
+| Switch | Game | Where | Its score |
+|---|---|---|---|
+| `slide` | **Mostly Down**, the water slide | from the cliffs to the sea | a time |
+| `pond` | **The Endless Pond**: three circuits, fifteen seconds, twenty, then as long as one can | the east bank of the Great Pond | how long one held |
+| `boats` | **The Little Regatta**: radio-controlled boats, three laps against three others | the Great Pond | a time |
+| `hill` | **Uphill Battle**: up a slope while logs, barrels and boulders roll down it | between the Great Pond and the old tree | a time |
+| `crack` | **Between a Rock**: up a cleft between two needles of rock, from wall to wall | in the sea, at the south end of the bay | a time |
+| `hollow` | **The Hollow Hill**: a race flown under the ground, one lap | a mine at the foot of the sea cliff | a time |
+
+With a switch off nothing of its game is loaded, built or drawn: the fair is the fair as it was. Switched on,
+a game is built at once on every screen, its board of scores exists from that moment (`BOARDS` in
+`server/scores.js`: each has `release: '<its switch>'`), the server notes when a run begins and the game says
+when it ends (`app.pondDone(ms)`… — `src/main.js`: `LAB_GAMES`). These are courses: their scores are bounded in
+time, not played again by the referee. The files of the lab are the lab's: `src/extras/**`,
+`src/world/zones/games/{slide,pond,boats,hill,crack,hollow}/**`, `server/stats.js`, `public/opendata/**`,
+`public/opendate/**`, `lab/**` and its tests are not edited here.
 
 **Nothing of the game on the page.** What goes online leaves no `window.__mmf` (nor anything else) for a
 console to pick up; a development page, the lab's pages and the builds the tools make keep it (`__LAB__`,
@@ -1180,10 +1196,10 @@ tests, `npm run dev`) has it open.
 |---|---|
 | `npm run bake` | bakes the world, the statue and the textures again |
 | `npm run bake:statue` | sculpts the golden dog again (`-- --preview=dog.png` also draws it from five sides, `-- --cell=0.012` makes a finer mesh) |
-| `npm test` | 230 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password) |
-| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (172 in all) |
+| `npm test` | 231 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password) |
+| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (173 in all) |
 | `npm run test:update` | a delivery from end to end, in the real game: two builds, a visitor in the world, the owner at the back office (`/admin`: the switches, a word to every room, a line refused, somebody kept out, the figures, the sky villages stage by stage), every page asked to refresh but never in the middle of a sentence, then the server replaced by the next version — the page says so, refreshes, comes back at the same spot and says what is new; and a plain build leaves nothing of the game on the page (12 checks) |
-| `node tools/extras-test.mjs`, `node tools/slide-test.mjs` | the lab's own checks of its extras (see `lab/INTEGRATION.md`) |
+| `node tools/extras-test.mjs`, `node tools/slide-test.mjs`, `node tools/pond-test.mjs`, `node tools/boats-test.mjs`, `node tools/hill-test.mjs`, `node tools/crack-test.mjs`, `node tools/hollow-test.mjs`, `node tools/games-test.mjs` | the lab's own checks of its extras and of each of its games — the last one plays them in the running game, in a browser (see `lab/INTEGRATION.md`) |
 | `npm run test:load` | a crowd at the door, with the real rules: 600 connections arrive in twenty seconds and walk (everybody gets in, rooms of about fifty, the lists say what is true, a state reaches the neighbours in time), 230 more follow one link (that room holds 200, never one more; the relay refuses whoever comes without asking; the owner still gets in), then most leave (the rooms that have emptied are offered a livelier one, nobody is moved or cut off) — 11 checks; `-- --cloudflare` plays it against the real Worker in the local Workers runtime, `-- --visitors=400` changes the crowd |
 | `npm run sim:rooms` | a whole day at the door, simulated with the real rules: the size of every room through the day as a picture (`tools/preview/rooms-<scenario>.png`), next to what the old door did; `-- --peak=800`, `-- --rules=open:40,start:15,low:6` try other days and other numbers |
 | `npm run test:shop` | the shop in the real game, on the Node server with test keys and a stand-in for Stripe: a hat bought and worn, the panel of a game sponsored, filled in (with a logo) and approved by the administrator, the stand of the gondolas, a plaque for a companion (bought at a bare plate, engraved with a picture, approved), an account made and signed in to on its card, the payment form inside the game (and Stripe's page when it cannot be shown); and a newcomer: the padlocks of the welcome card and the free day of the jetpack, the Game Pass bought as a subscription, what it lends (black, the largest size, a hat that was never bought), its end and the end of the free day; the window of the Trading Post (20 checks) |

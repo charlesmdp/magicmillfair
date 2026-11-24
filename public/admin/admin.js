@@ -50,6 +50,11 @@
   // ---------------------------------------------------------------------------------------------- the releases
   const SWITCH = {
     slide: ['Mostly Down — the water slide', 'The new ride, from the cliffs to the sea.'],
+    pond: ['The Endless Pond', 'Three circuits on the Great Pond: fifteen seconds, twenty, then as long as one can.'],
+    boats: ['The Little Regatta', 'Radio-controlled boats racing on the Great Pond: three laps against three others.'],
+    hill: ['Uphill Battle', 'Up a long slope while logs, barrels and boulders roll down it — a start every ten seconds.'],
+    crack: ['Between a Rock', 'Up a cleft between two needles of rock in the sea, from wall to wall.'],
+    hollow: ['The Hollow Hill', 'A race flown under the ground: one lap of a great cave, against the clock.'],
     caves: ['The caves are safe places', 'In a cave, only those nearby hear what is said.'],
     stats: ['The game in figures', 'The counters, and the page /opendata.'],
     sky: ['The sky villages', 'Hidden: nothing of them. Soon: their gate is there, closed. Open: everything.'],

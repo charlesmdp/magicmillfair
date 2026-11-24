@@ -852,8 +852,8 @@ async function testRelease(start, dist) {
   const call = (target, body, key) => request(port, target, { method: body === undefined ? 'GET' : 'POST', headers: { ...(body !== undefined && { 'content-type': 'application/json' }), ...(key && { authorization: `Bearer ${key}` }) }, ...(body !== undefined && { body: typeof body === 'string' ? body : JSON.stringify(body) }) });
   try {
     const st = json(await call('/api/status'));
-    check('release: the status says what is released — the slide off, the caves and the figures on, the sky hidden — and which version is online',
-      st?.ok === true && st.release?.slide === false && st.release.caves === true && st.release.stats === true && st.release.sky === 'hidden' && st.release.userRooms === false && st.build === 'abc1234' && st.refresh === 0, st);
+    check('release: the status says what is released — the slide and the lab\'s five other games off, the caves and the figures on, the sky hidden — and which version is online',
+      st?.ok === true && st.release?.slide === false && ['pond', 'boats', 'hill', 'crack', 'hollow'].every((k) => st.release[k] === false) && st.release.caves === true && st.release.stats === true && st.release.sky === 'hidden' && st.release.userRooms === false && st.build === 'abc1234' && st.refresh === 0, st);
     // the board of a game that is not released: as if it did not exist
     const shut = { run: await call('/api/run', { board: 'slide' }), board: await call('/api/scores?board=slide'), all: json(await call('/api/scores?board=all')) };
     // two visitors, in two rooms
@@ -878,6 +878,31 @@ async function testRelease(start, dist) {
     check('release: the board of a game waits for its switch — no note, no score, not listed; once released it takes a time',
       shut.run.status === 400 && shut.board.status === 404 && shut.all?.boards && !('slide' in shut.all.boards) && 'sky' in shut.all.boards
       && run.status === 200 && posted.status === 200 && json(posted).day === 1 && open.boards.slide?.tops?.day?.[0]?.name === 'Otter', [shut.run.status, shut.board.status, run.status, posted.status, posted.body.toString().slice(0, 120)]);
+    // the lab's five other games: a switch each, and a board that waits for it — a time for four of them (the
+    // less the better), how long one held for the three ponds (the more the better: never longer than the run lasted)
+    {
+      const LAB = { pond: 20_000, boats: 40_000, hill: 12_000, crack: 9_000, hollow: 20_000 }, ids = Object.keys(LAB);
+      const note = (b, ago) => sign(SCORE_SECRET, { b, t: Date.now() - ago, n: randomId(9) });
+      // (what an address may post is counted: each of these scores comes from an address of its own)
+      let who = 150;
+      const post = (body) => request(port, '/api/scores', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), from: `127.0.0.${who++}` });
+      const before = { runs: [], all: json(await call('/api/scores?board=all')) };
+      for (const b of ids) before.runs.push((await call('/api/run', { board: b })).status);
+      const on = json(await call('/api/release', { set: Object.fromEntries(ids.map((b) => [b, true])) }, ADMIN_KEY));
+      const posted = {};
+      for (const b of ids) posted[b] = json(await post({ board: b, name: `Lab ${b}`, score: LAB[b], run: await note(b, LAB[b] + 2500) }));
+      // (too good to be true: under what each board believes — and a pond held for a minute, ten seconds after its run began)
+      const low = { boats: await post({ board: 'boats', name: 'Quick', score: 30_000, run: await note('boats', 60_000) }), hollow: await post({ board: 'hollow', name: 'Quick', score: 15_000, run: await note('hollow', 60_000) }) };
+      const soon = await post({ board: 'pond', name: 'Quick', score: 60_000, run: await note('pond', 10_000) });
+      const longer = json(await post({ board: 'pond', name: 'Longer', score: 45_000, run: await note('pond', 48_000) }));
+      const after = json(await call('/api/scores?board=all')), desk = json(await call('/api/admin', null, ADMIN_KEY));
+      const unit = Object.fromEntries((desk?.boards || []).map((x) => [x.id, x.unit])), named = Object.fromEntries((desk?.boards || []).map((x) => [x.id, x.name]));
+      check('release: the lab\'s five other games — the three ponds, the regatta, the slope, the cleft, the cave — each have a switch and a board that waits for it; a time too good to be true is refused, and the ponds are scored by how long one held',
+        before.runs.every((s) => s === 400) && ids.every((b) => !(b in before.all.boards)) && ids.every((b) => on?.release?.[b] === true) && ids.every((b) => posted[b]?.day === 1 && after.boards[b]?.tops.day.some((e) => e.name === `Lab ${b}`))
+        && low.boats.status === 400 && low.hollow.status === 400 && soon.status === 400 && longer?.day === 1 && after.boards.pond.tops.day.map((e) => e.name).join() === 'Longer,Lab pond'
+        && unit.pond === 'time' && unit.hollow === 'time' && unit.bell === 'points' && named.pond === 'The Endless Pond' && named.crack === 'Between a Rock',
+        [before.runs, on?.release, Object.fromEntries(ids.map((b) => [b, posted[b]?.day])), low.boats.status, low.hollow.status, soon.status, after.boards?.pond?.tops.day, unit.pond, named.pond]);
+    }
     // everybody is asked to refresh
     const t0 = Date.now();
     ann.msgs.length = 0;

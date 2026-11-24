@@ -26,10 +26,10 @@ export const nextBid = (bid = 0) => (bid > 0 ? bid + Math.max(100, Math.ceil(bid
 export const BOARDS = {
   sky: 'Mostly Up', race: 'Quadmania', wing: 'Flappy Robot', shoot: 'Bullseye Alley', mole: 'Whack-a-Mole', milk: 'Feed the Clown', bell: 'Ring the Bell',
   hoop: 'Buzzer Beater', stack: 'Stack It', geiger: 'Geiger Says', fish: 'Hook, Line & Sinker', scram: 'SCRAM!', cups: 'Shell Shock', run: 'Meltdown Run',
-  slide: 'Mostly Down',
+  slide: 'Mostly Down', pond: 'The Endless Pond', boats: 'The Little Regatta', hill: 'Uphill Battle', crack: 'Between a Rock', hollow: 'The Hollow Hill',
 };
 /** The games whose board has no panel for a sponsor (yet): nothing of theirs is sold. */
-export const NO_PANEL = new Set(['slide']);
+export const NO_PANEL = new Set(['slide', 'pond', 'boats', 'hill', 'crack', 'hollow']);
 export const GONDOLAS = 24;
 const VILLAGES = new Map(SPONSORS.map((s, i) => [sponsorId(s), { name: s.name, tier: SKY_TIERS[i] ?? 0 }]));
 

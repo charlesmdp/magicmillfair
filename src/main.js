@@ -29,6 +29,7 @@ import { Hud, VERSION } from './ui/Hud.js';
 import { Presence, cleanChat, cleanRoom, roomLabel } from './net/Presence.js';
 import { Npc } from './npc/Npc.js';
 import { Scores } from './net/Scores.js';
+import { keysHelp } from './extras/help.js'; // (the keys of a game, shown again whenever asked: the lab's, used as it is)
 import { countVisit } from './net/Visits.js';
 import { callApi, checkAdminKey, hasApi, noApi, sharedNow } from './net/api.js';
 import { formatTime } from './world/zones/games/course.js';
@@ -484,6 +485,7 @@ async function boot() {
     feathers: (x, y, z, n) => world.sparks.feathers(x, y, z, n),
   };
   const endGame = () => {
+    keysHelp(app).clear(); // (the keys of the game that was on are its own: gone with it)
     const s = fair.session;
     if (!s) return;
     s.close();
@@ -557,6 +559,21 @@ async function boot() {
     if (Number.isInteger(fair.seed)) return fair.seed;
     return noApi() ? null : started.then((r) => r?.seed);
   };
+  // The keys of the game that is on: said when it opens, a line for each, and again whenever asked — the H key, or
+  // the small button under the line of the run (src/extras/help.js: the lab's games say theirs the same way).
+  const gameKeys = (desk, phone) => keysHelp(app).set((touch ? [...phone, 'The button at the bottom: leave'] : [...desk, 'E or Esc: leave', 'H: these keys again']).join(' · '));
+  const BOOTH_KEYS = {
+    shoot: [['Mouse: aim', 'Click or Space: shoot'], ['Tap a target: shoot']],
+    mole: [['Mouse: aim', 'Click or Space: whack'], ['Tap a mole: whack']],
+    milk: [['Mouse: aim the jet', 'Hold the button (or Space): pour'], ['Hold a finger where you aim: pour']],
+    bell: [['Click or Space: strike — three blows'], ['Tap: strike — three blows']],
+    hoop: [['Mouse: aim', 'Hold the button (or Space): wind up', 'Let go: shoot'], ['Hold a finger where you aim: wind up', 'Let go: shoot']],
+    stack: [['Click or Space: drop the floor'], ['Tap: drop the floor']],
+    geiger: [['Click the lamps in the order they lit'], ['Tap the lamps in the order they lit']],
+    fish: [['Mouse: the hook goes where you point'], ['Drag a finger: the hook follows it']],
+    scram: [['Click or Space: answer the alarm — red only'], ['Tap: answer the alarm — red only']],
+    cups: [['Click the cup that hides the core'], ['Tap the cup that hides the core']],
+  };
   const playBooth = (booth) => {
     if (fair.session || player.dead) return;
     fair.session = world.games.booths.open(booth, fairIo, seedOf(booth.id)); fair.kind = 'booth'; fair.after = 0;
@@ -566,6 +583,7 @@ async function boot() {
     if (fair.session.crosshair) document.body.classList.add('playing');
     input.consumeClicks();
     hud.note(booth.how, 6500);
+    if (BOOTH_KEYS[booth.id]) gameKeys(...BOOTH_KEYS[booth.id]);
     startBlend(0.6);
   };
   const playRace = () => {
@@ -577,7 +595,8 @@ async function boot() {
     const start = world.games.race.nextStart();
     fair.session = world.games.race.open(player, fairIo, start, presence?.id ?? 0); fair.kind = 'race'; fair.after = 0;
     player.driver = fair.session;
-    hud.note(`${start.name} start! ${touch ? 'The stick steers; hold Run to drift, Jump to hop.' : 'Arrows or WASD · Shift: drift (a boost when you let go) · Space: hop · E: give up'}`, 7000);
+    hud.note(`${start.name} start!`, 5000);
+    gameKeys(['Arrows or WASD: steer', 'Shift: drift — a boost when you let go', 'Space: hop'], ['The stick: steer', 'Hold Run: drift — a boost when you let go', 'Jump: hop']);
     startBlend(0.6);
   };
   // the flying theatre: up on the stage with a pair of wings; the game holds the flyer, the scenery goes by
@@ -588,7 +607,8 @@ async function boot() {
     player.driver = fair.session.driver;
     me.setWings(true);
     input.consumeClicks();
-    hud.note(touch ? 'Tap to flap, and fly through the gaps!' : 'Click or press Space to flap, and fly through the gaps! · E: give up', 6500);
+    hud.note('Flap, and fly through the gaps!', 5000);
+    gameKeys(['Click or Space: flap'], ['Tap: flap']);
     startBlend(0.6);
   };
   // the arcade cabinet: its game is played on a screen of its own, laid over this one
@@ -599,7 +619,7 @@ async function boot() {
     player.riding = false;
     player.teleport(spot.x, spot.z, spot.yaw);
     input.consumeClicks();
-    hud.note(touch ? 'Tap the top of the screen to jump, hold the bottom to duck.' : 'Space or ↑ jumps (hold it to jump higher), ↓ or S ducks.', 6500);
+    gameKeys(['Space or ↑: jump — hold it to jump higher', '↓ or S: duck'], ['Tap the top of the screen: jump', 'Hold the bottom: duck']);
   };
   world.actionSources.unshift((p) => { // (before the flowers and the rest: by the cabinet, the first thing to do is to play)
     const cab = world.games.notices.arcade;
@@ -667,10 +687,19 @@ async function boot() {
   };
   Object.assign(app, { fair, playBooth, playRace, playWing, playArcade, endGame, fairStep });
   queueMicrotask(() => Object.assign(app, { shop, refreshShop, adminKey, scoreGame }));
+  let climbKeys = false; // (the keys of the climb are on the screen for the asking)
   world.games.events = {
     note: (text) => hud.note(text, 4200),
-    run: (text) => hud.setRun(text),
-    started: () => { skyScores.start(); audio.play('start'); },
+    run: (text) => { hud.setRun(text); if (!text && climbKeys) { climbKeys = false; keysHelp(app).clear(); } },
+    started: () => {
+      skyScores.start(); audio.play('start');
+      // (the climb is walked and jumped like the rest of the world: its keys are said all the same — once, the first
+      // time one leaves the plate — and taken back when one walks away from the course)
+      if (!climbKeys) {
+        climbKeys = true;
+        keysHelp(app).set((touch ? ['The stick: move', 'The Jump button: jump', 'Back on the start plate: the clock starts again'] : ['WASD or the arrows: move', 'Space: jump', 'Shift: walk — one runs by default', 'Back on the start plate: the clock starts again', 'H: these keys again']).join(' · '));
+      }
+    },
     finished: (ms, clean) => {
       audio.play('victory');
       rank.play('dragon', me.root);
@@ -1026,7 +1055,10 @@ async function boot() {
   // ---------- what is released, and new versions (app/Updates.js; the switches: RELEASE in app/config.js)
   // The extras of src/extras are loaded when their switch is on — as the game runs when it goes on later;
   // one that goes off again is only undone by loading the page again.
-  const EXTRA = ['slide', 'caves', 'stats'];
+  const EXTRA = ['slide', 'pond', 'boats', 'hill', 'crack', 'hollow', 'caves', 'stats'];
+  // (the games among them — each says, while one of its runs is on, which run: app.slideRide(), app.pondRun()…)
+  const LAB_GAMES = { slide: 'slideRide', pond: 'pondRun', boats: 'boatRace', hill: 'hillClimb', crack: 'cleftClimb', hollow: 'hollowFlight' };
+  const labBusy = () => Object.values(LAB_GAMES).some((run) => !!app[run]?.());
   const applyRelease = (release, before) => {
     const on = Object.fromEntries(EXTRA.map((k) => [k, release[k] === true]));
     if (EXTRA.some((k) => on[k])) import('./extras/index.js').then(({ loadExtras }) => loadExtras(app, on)).catch((err) => console.error('[extras]', err));
@@ -1034,7 +1066,7 @@ async function boot() {
     return !!before && (EXTRA.some((k) => before[k] === true && !on[k]) || (before.sky !== undefined && before.sky !== release.sky));
   };
   // (never in the middle of a game, a race, a timed climb, a ride, a payment, a form or a sentence)
-  const busyNow = () => !!fair.session || world.games.run.state === 'running' || !!app.slideRide?.() || player.riding || shopView.isOpen || payView.isOpen || accountView.isOpen || sponsorsView.isOpen
+  const busyNow = () => !!fair.session || world.games.run.state === 'running' || labBusy() || player.riding || shopView.isOpen || payView.isOpen || accountView.isOpen || sponsorsView.isOpen
     || hud.chatOpen || !!hud.chatInput?.value || !!document.querySelector('.chooser.on') || /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName || '');
   const updates = new Updates(ui, {
     build: typeof __BUILD__ !== 'undefined' ? __BUILD__.commit || '' : '',
@@ -1051,12 +1083,18 @@ async function boot() {
     ...((import.meta.env.DEV || typeof __TEST__ !== 'undefined') && params.has('count') && { count: Number(params.get('count')) }),
   });
   Object.assign(app, { updates, busyNow });
-  // (the slide, when it is switched on: the server notes when a ride begins — a time only counts with that
-  // note — and the slide says when it ends: the time goes on its board of scores)
-  fair.boards.slide = new Scores('slide');
-  app.slideDone = (ms) => scoreGame('slide', GAME_NAMES.slide, ms, formatTime(ms));
-  let sliding = false;
-  world.zones.push({ update: () => { const on = !!app.slideRide?.(); if (on && !sliding) fair.boards.slide.start(); sliding = on; } });
+  // (the games of the lab, when they are switched on — the slide, the three ponds, the regatta, the slope, the
+  // cleft, the cave: the server notes when a run begins — a time only counts with that note — and each game says
+  // when a run ends (app.slideDone(ms), app.pondDone(ms)…): the time goes on its board of scores)
+  {
+    const on = {};
+    for (const id of Object.keys(LAB_GAMES)) {
+      fair.boards[id] = new Scores(id);
+      GAMES[id] = [GAME_NAMES[id], formatTime];
+      app[`${id}Done`] = (ms) => scoreGame(id, GAME_NAMES[id], Math.round(ms), formatTime(ms));
+    }
+    world.zones.push({ update: () => { for (const id in LAB_GAMES) { const now = !!app[LAB_GAMES[id]]?.(); if (now && !on[id]) fair.boards[id].start(); on[id] = now; } } });
+  }
   // a village for hire: what it brings, what it costs, and the way to take it
   const hireVillage = (v) => {
     if (!shop.open) { hud.note('Hiring opens soon. Come back shortly!', 5200); return; }

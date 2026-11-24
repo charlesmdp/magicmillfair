@@ -97,7 +97,7 @@ export async function route(req, ctx) {
   if (!owner && req.bearer) req.admin = !!(await adminOf(ctx.store, '', req.bearer));
 
   // (with the boards of scores — their names, and what a score on each is: the back office lists them)
-  if (path === '/api/admin') return req.admin ? out(200, { ok: true, owner, boards: Object.keys(BOARDS).map((id) => ({ id, name: GAME_NAMES[id] || id, unit: BOARDS[id].order !== 'asc' ? 'points' : BOARDS[id].max <= 10_000 ? 'ms' : 'time' })) }) : out(403, { error: 'Forbidden.' });
+  if (path === '/api/admin') return req.admin ? out(200, { ok: true, owner, boards: Object.keys(BOARDS).map((id) => ({ id, name: GAME_NAMES[id] || id, unit: BOARDS[id].unit || (BOARDS[id].order !== 'asc' ? 'points' : BOARDS[id].max <= 10_000 ? 'ms' : 'time') })) }) : out(403, { error: 'Forbidden.' });
 
   // which room a visitor is sent to, the rooms and how many each holds, the rules of it all (door.js)
   const door = await doorRoute(req, ctx, owner);

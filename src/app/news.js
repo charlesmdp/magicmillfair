@@ -6,6 +6,7 @@ export const NEWS = [
   {
     date: '24 November 2026',
     items: [
+      ['The keys, any time', 'In a game, press H — or the small "keys" button under its line — and its keys are shown again, a line each.'],
       ['Get life advice', 'An easel where you arrive, planks at the mill and by the pond: they lead to Billy — who now follows what the two of you were saying.'],
       ['A referee at the booths', 'A score that would enter the first five of a board is played again by the fair, move for move, before anybody else sees it.'],
       ['Nearby first', 'The chat opens on "Nearby": those within twenty metres read you. The button left of the line (or Tab) talks to the whole oasis.'],

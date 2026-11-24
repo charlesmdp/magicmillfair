@@ -55,6 +55,14 @@ export const BOARDS = {
   // Mostly Down, the water slide (an extra: src/extras/slide.js): from the top to the sea. `release`: the board
   // only exists once that switch is on (src/app/config.js: RELEASE)
   slide: { order: 'asc', min: 30_000, max: 3600_000, release: 'slide' },
+  // …and the lab's other games (src/extras), each behind its own switch — the rules are those its checks print:
+  // The Endless Pond is scored by how long one held, in ms (the more the better: `unit` says it is a time, and
+  // a run cannot be over sooner than it claims to have lasted); the others are times, the less the better
+  pond: { order: 'desc', min: 1000, max: 3600_000, each: 1, unit: 'time', release: 'pond' },
+  boats: { order: 'asc', min: 37_000, max: 1800_000, release: 'boats' }, // The Little Regatta: three laps
+  hill: { order: 'asc', min: 9000, max: 600_000, release: 'hill' }, // Uphill Battle: from the arch to the bell
+  crack: { order: 'asc', min: 7000, max: 1800_000, release: 'crack' }, // Between a Rock: forty metres of cleft
+  hollow: { order: 'asc', min: 16_000, max: 600_000, release: 'hollow' }, // The Hollow Hill: one lap of the cave
   run: { order: 'desc', min: 1, max: 60_000, length: 2_000, each: 12 }, // the arcade cabinet: metres run (52 a second at the fastest), and 25 for an isotope now and then
 };
 export const KEPT = { all: 200, month: 100, week: 100, day: 100 }, SHOWN = 10;
