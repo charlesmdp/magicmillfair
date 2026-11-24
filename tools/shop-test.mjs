@@ -435,10 +435,11 @@ try {
       return { noJet: player.noJet, grounded: player.grounded };
     });
     await frames3(4);
-    const note3 = await p3.evaluate(() => document.querySelector('.hud .note').textContent);
+    // (it is said on the bar of the proposals, with a button that opens the payment of the pass)
+    const note3 = await p3.evaluate(() => { const bar = document.querySelector('.offer-bar'); return bar?.classList.contains('on') ? `${bar.querySelector('.offer-text').textContent} [${bar.querySelector('.offer-yes').textContent}]` : document.querySelector('.hud .note').textContent; });
     await third.close();
     check('when the subscription ends the pass is handed back (colour, size, hat) and they are told; a day after the first visit the free jetpack is over, and asking for it says where to get one',
-      ended3 === 200 && after3.color === 0 && after3.size === 1 && after3.hat === 0 && !after3.pass && after3.lite === 'trial' && after3.told === 1 && over3.lent === null && !over3.canFly && said3.noJet && /free day with the jetpack is over/.test(note3) && /Jetpack Lite is \$5/.test(note3) && /Game Pass/.test(note3),
+      ended3 === 200 && after3.color === 0 && after3.size === 1 && after3.hat === 0 && !after3.pass && after3.lite === 'trial' && after3.told === 1 && over3.lent === null && !over3.canFly && said3.noJet && /your free day of flying/.test(note3) && /Jetpack Lite is \$5/.test(note3) && /comes with the Game Pass \(\$19 a month/.test(note3) && /\[Get the Game Pass\]$/.test(note3),
       JSON.stringify({ ended3, after3, over3, said3, note3 }));
   }
   // ---- a room of one's own (server/urooms.js — switched on for this part, as the owner would): bought by the month

@@ -211,7 +211,12 @@ async function boot() {
   // long as the address still asks for the same thing)
   let backTo = (() => { try { const kept = JSON.parse(store.get('mmf.room', true)); return kept && kept.asked === (params.get('room') || '') ? cleanRoom(kept.room) : ''; } catch { return ''; } })();
   let inRoom = ''; // (the room one is in, once one is in one)
-  const roomInfo = () => (presence && presence.mode === 'online' ? { name: presence.room, label: presence.label, several: /^Room (?!1$)/.test(presence.label) || (roster.rooms || []).some((r) => r.name !== presence.room) } : null);
+  // (what the interface says of the room one is in: its name, whether there are others — and, for the settings,
+  // the rooms one may go to and one's own, where rooms are sold)
+  const roomInfo = () => (presence && presence.mode === 'online' ? {
+    name: presence.room, label: presence.label, several: /^Room (?!1$)/.test(presence.label) || (roster.rooms || []).some((r) => r.name !== presence.room),
+    rooms: roster.rooms || [], own: mine.on || presence.inOwn ? { room: mine.room, price: price(mine.price || 5900), here: presence.inOwn ? { host: presence.host } : null } : null,
+  } : null);
   const startPresence = () => {
     presence = new Presence({ name, color, kit: packKit(kit), ...(backTo && { back: backTo }) });
     // which room: said when one is entered — and when the one that was asked for could not be
@@ -373,6 +378,7 @@ async function boot() {
     mine.on = !!on;
     const got = mine.on ? await callApi(`api/myroom?device=${deviceId()}`) : null;
     mine.room = got?.room || null; mine.price = got?.price || 0;
+    if (presence) hud.setPresence(presence.mode, presence.count, roomInfo()); // (the settings name the rooms too)
     if (hud.rosterOpen) showRoster();
     if (shopView.isOpen) shopView.refresh(shopItems());
   };
@@ -1149,7 +1155,7 @@ async function boot() {
   };
   // (never in the middle of a game, a race, a timed climb, a ride, a payment, a form or a sentence)
   const busyNow = () => !!fair.session || world.games.run.state === 'running' || labBusy() || player.riding || shopView.isOpen || payView.isOpen || accountView.isOpen || sponsorsView.isOpen
-    || hud.chatOpen || !!hud.chatInput?.value || !!document.querySelector('.chooser.on') || /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName || '');
+    || hud.chatOpen || !!hud.chatInput?.value || !!document.querySelector('.chooser.on, .pitch.on') || /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName || '');
   const updates = new Updates(ui, {
     build: typeof __BUILD__ !== 'undefined' ? __BUILD__.commit || '' : '',
     status: async () => { try { const res = await fetch(`${import.meta.env.BASE_URL}api/status`, { cache: 'no-store' }); return res.ok && /json/.test(res.headers.get('content-type') || '') ? await res.json() : null; } catch { return null; } },
@@ -1402,6 +1408,60 @@ async function boot() {
     shopView.open({ items: shopItems(), mode: shop.mode, note: account.name ? `It goes to your account, ${account.name}.` : 'It stays in this browser: an account (Settings) keeps it everywhere.' });
     audio.play('pick');
   };
+  /** The payment of the Game Pass, opened at once (from a proposal: the end of the free day, the card that tells what it gives). */
+  const buyPass = async () => {
+    if (shop.pass) { hud.note(`You hold the ${PASS.name} already — thank you!`, 5000); return; }
+    hud.note('Opening the payment page…', 8000);
+    const wrong = await shop.buy(PASS.id);
+    if (wrong) hud.note(wrong, 7000);
+  };
+  // ---------- two cards that make an offer in full, once in a while: an account, to who has played ten minutes
+  // without one; the Game Pass, to who has played fifteen without it. Once a day each at the most, never in the
+  // middle of anything. (`shown`: the administrator asked to see it — nothing is counted, nothing is checked.)
+  const PITCH_AFTER = { account: 600, pass: 900 }; // seconds of play, in this visit
+  const pitchedToday = (kind) => store.get(`mmf.pitch.${kind}`) === new Date().toDateString();
+  const pitchWanted = { account: () => !account.name && !noApi(), pass: () => shop.open && !shop.pass };
+  const pitch = async (kind, shown = false) => {
+    if (hud.pitching || (!shown && (pitchedToday(kind) || !pitchWanted[kind]()))) return false;
+    if (!shown) store.set(`mmf.pitch.${kind}`, new Date().toDateString());
+    audio.play('pick');
+    if (kind === 'account') {
+      const taken = await hud.pitch({
+        kind, eyebrow: 'Ten minutes in the oasis', title: 'Shall we remember you?',
+        lead: 'You have been here a while — long enough to have a best score, a favourite bench, maybe a grudge against a boulder. An account keeps all of it, wherever you play from.',
+        perks: [
+          'Your scores count for the week, the month and all time — not only for today',
+          'What you buy, your days in a row and your animals of light follow you to any device',
+          'Your robot keeps its name and its colours, even when this browser forgets everything',
+          'A name and a password: no e-mail needed, no newsletter, no small print with teeth',
+        ],
+        fine: 'Free, and done in less time than the queue for the big wheel.',
+        yes: 'Create my account', no: 'Not now', picture: previewer.shot('', color, 360, 450),
+      });
+      if (taken) accountAction('create');
+      return taken;
+    }
+    const taken = await hud.pitch({
+      kind, eyebrow: 'Fifteen minutes! You clearly like it here', title: `The ${PASS.name} — for those who are staying`,
+      lead: `${price(PASS.price)} a month keeps the lights of the oasis on, pays for the alligator's coaching licence — and gives you the good stuff:`,
+      perks: PASS.perks,
+      fine: 'Paid on Stripe: the game never sees your card. Stop whenever you like, in two clicks — no hard feelings, the robot keeps its dignity.',
+      yes: `Get the ${PASS.name} · ${price(PASS.price)} a month`, no: 'Maybe later', picture: passPicture(420, 300),
+    });
+    if (taken) buyPass();
+    return taken;
+  };
+  const pitchQueue = Object.keys(PITCH_AFTER).map((kind) => ({ kind, at: PITCH_AFTER[kind] }));
+  // (the tools play for a long time and must not find a card over what they are doing: on their pages the cards
+  // only come by themselves when the address asks for them — ?pitch)
+  const pitchAuto = !(import.meta.env.DEV || typeof __LAB__ !== 'undefined' || typeof __TEST__ !== 'undefined') || params.has('pitch');
+  let played = 0;
+  /** Called while one walks about: the clock of the visit, and the card that is due — once nothing else is going on. */
+  const playClock = (dt) => {
+    played += dt;
+    if (pitchAuto && pitchQueue.length && played >= pitchQueue[0].at && !busyNow() && !hud.rosterOpen && !hud.bigMapOpen) pitch(pitchQueue.shift().kind);
+  };
+  Object.assign(app, { pitch, playedFor: (seconds) => { if (seconds !== undefined) played = seconds; return played; } });
   shopView
     .on('buy', async (id) => {
       if (id.startsWith('board:')) { shopView.close(); bidFor(id); return; } // (a place to sponsor: how much?)
@@ -1570,6 +1630,7 @@ async function boot() {
     .on('say', say)
     .on('roster', () => { showRoster(); refreshRoster(); refreshRooms(); if (mine.on) refreshMine(); })
     .on('myroom', myRoom)
+    .on('show', (kind) => pitch(kind, true))
     .on('putout', (id) => { if (presence?.host) { presence.kick(id); hud.note('Put out: they cannot come back for an hour.', 4500); } })
     .on('room', (to) => changeRoom(to))
     .on('badge', () => {
@@ -1677,6 +1738,7 @@ async function boot() {
       if (input.pressed('KeyL')) interact.press(1);
       player.update(dt, rig.heading, true);
       rig.update(dt, player.pos, player);
+      playClock(dt);
     }
     if (mode === 'walk' && state.blend) {
       const b = state.blend;
@@ -1746,7 +1808,11 @@ async function boot() {
           hud.note('Your jetpack is off. Put it back on in the item shop (O).', 5000);
         } else if (shop.open && !shop.owns('jetpack') && !shop.owns('jetlite') && mode === 'walk' && !fair.session && state.time - (app.toldJet || -99) > 8) {
           app.toldJet = state.time;
-          hud.note(`Your free day with the jetpack is over. The Jetpack Lite is ${price(shop.cost('jetlite'))} in the item shop — and it comes with the ${PASS.name}.`, 7000);
+          // (said in full once in a while, with the button that opens the payment of the pass; in a word otherwise)
+          if (state.time - (app.toldJetLong || -999) > 90 && !busyNow()) {
+            app.toldJetLong = state.time;
+            hud.offer(`That was your free day of flying — we hope it was a good one! Gravity sends its regards. The jetpack comes with the ${PASS.name} (${price(PASS.price)} a month, with every hat, four sizes and more colours) — or on its own: the Jetpack Lite is ${price(shop.cost('jetlite'))} in the item shop (O).`, `Get the ${PASS.name}`, () => buyPass(), 22000, 'Not now');
+          } else hud.note(`No jetpack on your back: it comes with the ${PASS.name}, and the Jetpack Lite is ${price(shop.cost('jetlite'))} in the item shop (O).`, 5000);
         }
       }
       const fov = fair.fov ?? (timers.wide ? 104 : engine.width < engine.height ? 68 : 55);
