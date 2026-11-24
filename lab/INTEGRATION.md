@@ -24,6 +24,13 @@ are not offered to the game: `lab/oak/floor/` is one floor of the oak, tried aga
 the game is the jump from limb to limb with a ring of light that shows where it ends, the camera stays outside
 the tree; `node lab/oak/floor/test.mjs`).
 
+**Five more games are being tried, and are not offered to the game yet**: `lab/games/` — Wave Goodbye (the sea
+comes in over a bar of sand), Thin Crust (basalt columns that sink into lava), The Bee's Knees (combs of wax
+that give way underfoot), Head Over Heels (a runner who turns gravity over), A Turn for the Worse (a track
+wound round a tower). Every file of them is in that folder, only the lab page switches them on, and
+`lab/games/README.md` says what each is, how it is checked, and what it takes to make one of them an extra like
+those of this page once its owner has tried it.
+
 ## Switching them on in the game: one line
 
 An extra is a module with `attach(app)`: it plugs itself into the running game through the `app` object (the
@@ -49,8 +56,9 @@ of this page becomes one more switch by adding its name to both (`pond`, `boats`
 npx vite --config lab/vite.config.js
 ```
 
-then open `/lab/`. It is the whole game, with a small panel ("LABO") of switches and a button that takes one to
-each game. The switches are also in the address: `/lab/?slide=0&caves=1`. On that page the visitor is the
+then open `/lab/`. It is the whole game, with a small panel ("LABO") of switches and, beside each game, an arrow
+that takes one to it. (`node lab/tools/static-site.mjs <folder>` builds the same page as a folder of plain files
+that can be put on any host and opened without a server: see `lab/vite.static.config.js`.) The switches are also in the address: `/lab/?slide=0&caves=1`. On that page the visitor is the
 administrator of their own browser (the camera with F, the whole shop, every gesture), and the build defines
 `__LAB__` so that the game may go on exposing `window.__mmf` there once it no longer does in production.
 

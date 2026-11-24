@@ -4,30 +4,54 @@
 import { FEATURES } from '../src/app/config.js';
 import { EXTRAS, loadExtras } from '../src/extras/index.js';
 
-// What only the lab has: tried here, not offered to the game. Off unless asked for.
+// What only the lab has: tried here, not offered to the game.
 const TRIALS = {
+  // five games being tried (lab/games): nothing of them is in the game
+  waves: { name: 'Wave Goodbye — the sea comes in over a bar of sand: jump what comes', load: () => import('./games/waves/extra.js') },
+  lava: { name: 'Thin Crust — basalt columns that sink into the lava of a crater', load: () => import('./games/lava/extra.js') },
+  hive: { name: "The Bee's Knees — three combs over the sea: the cell one stands on gives way", load: () => import('./games/hive/extra.js') },
+  flip: { name: 'Head Over Heels — one runs by oneself, and turns gravity over', load: () => import('./games/flip/extra.js') },
+  spiral: { name: 'A Turn for the Worse — a track wound round a tower: one touch and it is the foot again', load: () => import('./games/spiral/extra.js') },
   oak: { name: 'Out on a Limb — one floor to try', load: () => import('./oak/floor/extra.js') },
   oak0: { name: 'Out on a Limb — the Great Oak (the first trial, set aside)', load: () => import('./oak/extra.js') },
 };
+const ORDER = [...Object.keys(TRIALS).filter((id) => !/^oak/.test(id)), ...Object.keys(EXTRAS), 'oak', 'oak0']; // (the panel: what is being tried first)
 Object.assign(EXTRAS, TRIALS);
 
-const KEY = 'mmf.lab.3', NAMES = { slide: 'Toboggan', pond: 'The Endless Pond (trois étangs)', boats: 'Bateaux télécommandés', hill: 'Uphill Battle (la pente aux rondins)', crack: 'Between a Rock (la fissure entre deux aiguilles)', hollow: 'The Hollow Hill (course volante dans la grotte)', oak: 'Chêne : un étage à essayer', oak0: 'Chêne (premier essai, mis de côté)', caves: 'Grottes : chat de proximité', stats: 'Compteurs et page des chiffres' };
+const KEY = 'mmf.lab.3', NAMES = { waves: '★ Wave Goodbye (les vagues)', lava: '★ Thin Crust (la lave)', hive: '★ The Bee’s Knees (nid d’abeille)', flip: '★ Head Over Heels (gravité)', spiral: '★ A Turn for the Worse (spirale)', slide: 'Toboggan', pond: 'The Endless Pond (trois étangs)', boats: 'Bateaux télécommandés', hill: 'Uphill Battle (la pente aux rondins)', crack: 'Between a Rock (la fissure entre deux aiguilles)', hollow: 'The Hollow Hill (course volante dans la grotte)', oak: 'Chêne : un étage à essayer', oak0: 'Chêne (premier essai, mis de côté)', caves: 'Grottes : chat de proximité', stats: 'Compteurs et page des chiffres' };
 const read = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { return {}; } };
 const query = new URLSearchParams(location.search), saved = read(), on = {};
 for (const id of Object.keys(EXTRAS)) on[id] = query.has(id) ? !/^(0|off|no|false)$/i.test(query.get(id)) : id === 'oak0' ? saved[id] === true : saved[id] !== false; // (the first trial of the oak only when asked for)
 
+// Where the button of a game puts one: the spot where one asks to play — or a step or two before it, facing it.
+const SPOT = {
+  slide: (g) => [g.x - Math.sin(g.yaw) * 3, g.z - Math.cos(g.yaw) * 3, g.yaw],
+  hill: (g) => [g.x - Math.sin(g.yaw) * 2.5, g.z - Math.cos(g.yaw) * 2.5, g.yaw],
+  hollow: (g) => [g.x, g.z - 1.5, g.yaw],
+  boats: (g) => [g.x - Math.sin(g.yaw) * 2.6, g.z - Math.cos(g.yaw) * 2.6, g.yaw],
+  oak: (g) => [g.x, g.z - 2.5, 0],
+  oak0: (g) => [g.x - Math.sin(g.yaw) * 3, g.z - Math.cos(g.yaw) * 3, g.yaw],
+};
+
 function panel(app, built) {
+  const coarse = !!window.matchMedia?.('(pointer: coarse)').matches; // (a phone, a tablet: the panel opens shut, clear of the stick)
   const box = document.createElement('div');
-  box.style.cssText = 'position:fixed;left:10px;top:38%;z-index:60;font:13px/1.35 system-ui,sans-serif;color:#f6e7c8;background:rgba(27,19,64,.86);border:1px solid rgba(242,193,78,.55);border-radius:12px;padding:8px 10px;max-width:230px;user-select:none';
+  box.style.cssText = `position:fixed;left:10px;top:${coarse ? '104px' : '38%'};z-index:60;font:13px/1.35 system-ui,sans-serif;color:#f6e7c8;background:rgba(27,19,64,.86);border:1px solid rgba(242,193,78,.55);border-radius:12px;padding:8px 10px;max-width:250px;user-select:none`;
   const head = document.createElement('div');
-  head.textContent = 'LABO ▾';
   head.style.cssText = 'font-weight:700;letter-spacing:.08em;color:#f2c14e;cursor:pointer';
   const body = document.createElement('div');
-  body.style.marginTop = '6px';
-  head.onclick = () => { body.hidden = !body.hidden; head.textContent = body.hidden ? 'LABO ▸' : 'LABO ▾'; };
-  for (const id of Object.keys(EXTRAS)) {
-    const row = document.createElement('label'), tick = document.createElement('input');
-    row.style.cssText = 'display:flex;gap:6px;align-items:center;cursor:pointer;margin:2px 0';
+  body.style.cssText = 'margin-top:6px;max-height:52vh;overflow-y:auto;overscroll-behavior:contain';
+  const shut = (yes) => { body.hidden = yes; head.textContent = yes ? 'LABO ▸' : 'LABO ▾'; };
+  head.onclick = () => shut(!body.hidden);
+  shut(coarse);
+  const hint = document.createElement('div');
+  hint.textContent = '★ nouveau · coche : allumé · flèche : y aller';
+  hint.style.cssText = 'opacity:.75;font-size:12px;margin-bottom:4px';
+  body.append(hint);
+  for (const id of ORDER) {
+    const line = document.createElement('div'), row = document.createElement('label'), tick = document.createElement('input');
+    line.style.cssText = 'display:flex;gap:6px;align-items:center;margin:3px 0';
+    row.style.cssText = 'display:flex;gap:6px;align-items:center;cursor:pointer;flex:1;min-width:0';
     tick.type = 'checkbox'; tick.checked = !!on[id];
     tick.onchange = () => {
       // (a switch is thrown by loading the page again: the game without an extra is the game that never had it)
@@ -37,23 +61,18 @@ function panel(app, built) {
       location.search = next.toString();
     };
     row.append(tick, document.createTextNode(NAMES[id] || EXTRAS[id].name));
-    body.append(row);
+    line.append(row);
+    // (the arrow: one is put where one asks to play that game)
+    const g = built[id] && (built[id].gate || built[id].stand);
+    if (g) {
+      const b = document.createElement('button');
+      b.textContent = '➜'; b.title = 'Y aller'; b.setAttribute('aria-label', `Aller à ${NAMES[id] || id}`);
+      b.style.cssText = 'flex:none;width:30px;height:26px;border-radius:8px;border:1px solid rgba(246,231,200,.4);background:rgba(246,231,200,.14);color:inherit;font:inherit;cursor:pointer;touch-action:manipulation';
+      b.onclick = () => { const [x, z, yaw] = (SPOT[id] || ((q) => [q.x, q.z, q.yaw]))(g); app.setMode?.('walk', true); app.player.teleport(x, z, yaw); app.rig.snap(app.player.pos, yaw + Math.PI); b.blur(); if (coarse) shut(true); };
+      line.append(b);
+    }
+    body.append(line);
   }
-  const go = (label, where) => {
-    const b = document.createElement('button');
-    b.textContent = label;
-    b.style.cssText = 'display:block;width:100%;margin-top:5px;padding:4px 6px;border-radius:8px;border:1px solid rgba(246,231,200,.4);background:rgba(246,231,200,.12);color:inherit;font:inherit;cursor:pointer';
-    b.onclick = () => { const [x, z, yaw] = where(); app.setMode?.('walk', true); app.player.teleport(x, z, yaw); app.rig.snap(app.player.pos, yaw + Math.PI); b.blur(); };
-    body.append(b);
-  };
-  if (built.slide?.gate) go('Aller au toboggan', () => { const g = built.slide.gate; return [g.x - Math.sin(g.yaw) * 3, g.z - Math.cos(g.yaw) * 3, g.yaw]; });
-  if (built.pond?.gate) go('Aller à l’Endless Pond', () => { const g = built.pond.gate; return [g.x, g.z, g.yaw]; });
-  if (built.hill?.gate) go('Aller à la pente (Uphill Battle)', () => { const g = built.hill.gate; return [g.x - Math.sin(g.yaw) * 2.5, g.z - Math.cos(g.yaw) * 2.5, g.yaw]; });
-  if (built.crack?.gate) go('Aller à la fissure (Between a Rock)', () => { const g = built.crack.gate; return [g.x, g.z, g.yaw]; });
-  if (built.hollow?.gate) go('Aller à la grotte (The Hollow Hill)', () => { const g = built.hollow.gate; return [g.x, g.z - 1.5, g.yaw]; });
-  if (built.boats?.stand) go('Aller aux bateaux', () => { const g = built.boats.stand; return [g.x - Math.sin(g.yaw) * 2.6, g.z - Math.cos(g.yaw) * 2.6, g.yaw]; });
-  if (built.oak?.gate) go('Aller au chêne (étage d’essai)', () => { const g = built.oak.gate; return [g.x, g.z - 2.5, 0]; });
-  if (built.oak0?.gate) go('Aller au grand chêne', () => { const g = built.oak0.gate; return [g.x - Math.sin(g.yaw) * 3, g.z - Math.cos(g.yaw) * 3, g.yaw]; });
   const note = document.createElement('div');
   note.textContent = 'Ici vous êtes administrateur : caméra libre (touche F), toute la boutique, tous les gestes.';
   note.style.cssText = 'margin-top:6px;opacity:.75;font-size:12px';
