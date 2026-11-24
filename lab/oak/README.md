@@ -19,7 +19,14 @@ that anyone would want to. A second attempt should start from what makes Mostly 
 a glance against the sky, a camera with nothing between it and the player, one clear thing to do at a time — and
 keep the tree as scenery rather than climb inside it: outside the crown, or round a bare trunk.
 
-What is here, if any of it is of use again:
+**A second attempt has begun: `floor/`** — one floor, for its owner to try in the lab (`/lab/`, "Chêne : un
+étage à essayer"). An old snag stands in the clearing with four limbs curling round it over a net. On a limb one
+cannot fall: one goes along it. The game is the jump from limb to limb: a ring of light shows where it would end,
+green on a limb, red in the net, and one still steers a little in the air. One limb sways, one is dead wood that
+cracks under who lingers; the net puts back on the limb one left. The camera is put by the game, outside the
+tree. `node lab/oak/floor/test.mjs` (13) says that it works — not that it is a pleasure: that is the question.
+
+What is here of the first attempt, if any of it is of use again:
 
 - `giant.js` — moves and grows a tree of the forest in the running game (its matrices, its far picture, its
   place in the forest's grid), and prunes branches and leaf cards off its model;

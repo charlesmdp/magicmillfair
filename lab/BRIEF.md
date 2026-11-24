@@ -91,6 +91,10 @@ dans ses fichiers.
    voir `lab/INTEGRATION.md`.
 7. **Le toboggan reste éteint** tant que je ne dis rien : il est encore en retouche au labo (ses changements
    arriveront en re-fusionnant sa branche, sans rien à refaire de ton côté).
+8. **Deux autres jeux sont arrivés sur la branche du labo**, chacun avec son interrupteur, **éteints** tant que je
+   ne dis rien : `pond` (« The Endless Pond », un circuit sur le Grand Étang) et `boats` (« The Little Regatta »,
+   des bateaux télécommandés sur l'étang). Rien à faire pour eux d'ici là ; `lab/INTEGRATION.md` dit comment les
+   brancher et quels tableaux de scores ils attendent.
 
 ---
 

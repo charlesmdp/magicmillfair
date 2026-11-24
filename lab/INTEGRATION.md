@@ -1,17 +1,21 @@
 # The extras: what is on this branch, and what it takes to make each part of the game
 
-Everything here was added **without changing a file of the game**: only new files. Three things can be switched
+Everything here was added **without changing a file of the game**: only new files. Five things can be switched
 on over the game as it stands, each on its own, and with every switch off the game is exactly the game as it was.
 
 | Switch | What it is | Its files | Its checks |
 |---|---|---|---|
 | `slide` | **Mostly Down**, the water slide | `src/world/zones/games/slide/`, `src/extras/slide.js` | `node tools/slide-test.mjs` |
+| `pond` | **The Endless Pond**, a circuit one runs round and round on the Great Pond | `src/world/zones/games/pond/`, `src/extras/pond.js` | `node tools/pond-test.mjs` (26) |
+| `boats` | **The Little Regatta**, radio-controlled boats racing on the Great Pond | `src/world/zones/games/boats/`, `src/extras/boats.js` | `node tools/boats-test.mjs` (18) |
 | `caves` | The caves are safe places: nearby chat only | `src/extras/caves.js` | `node tools/extras-test.mjs` (15, with the next) |
 | `stats` | The game in figures: counters, the page `/opendata`, a line in the settings | `src/extras/stats.js`, `server/stats.js`, `public/opendata/`, `public/opendate/` | the same |
 
 Also here: the icon (`lab/favicon/`, the "reactor" colours), the lab page with its switches (`lab/`), a server
 for the lab (`lab/worker.js`, `lab/wrangler.jsonc`). What else lies under `lab/` is the lab's own (trials that
-are not offered to the game).
+are not offered to the game: `lab/oak/floor/` is one floor of the oak, tried again — on a limb one cannot fall,
+the game is the jump from limb to limb with a ring of light that shows where it ends, the camera stays outside
+the tree; `node lab/oak/floor/test.mjs`).
 
 ## Switching them on in the game: one line
 
@@ -20,7 +24,7 @@ one the game keeps in `window.__mmf`). `src/extras/index.js` loads those that ar
 others is downloaded. In `src/main.js`, once the game runs (after `app.ready = true`):
 
 ```js
-import('./extras/index.js').then(({ loadExtras }) => loadExtras(app, { slide: false, caves: true, stats: true }));
+import('./extras/index.js').then(({ loadExtras }) => loadExtras(app, { slide: false, pond: false, boats: false, caves: true, stats: true }));
 ```
 
 That object is the whole of "with or without the slide": it can sit in `src/app/config.js`, or come from the
@@ -71,6 +75,34 @@ What to know: time advances in steps of 1/120 s whatever the frame rate (the sam
 is `RIDE` in `ride.js` and `SLIDE` / `COURSE` in `track.js`, then `node tools/slide-test.mjs`; nobody walks on
 the deck or in the trough (no collider); other visitors are seen sliding but in their ring only on one's own
 screen; not tried on a real phone.
+
+## The Endless Pond
+
+A circuit not fourteen metres across on the Great Pond, off its east bank (a jetty leads to it): an outer ring of
+stones that never move, and inside it rafts of logs that drift the other way — the shorter way round, with gaps
+that are never where they were. The legs run by themselves, **each lap a little faster than the last**, until the
+water. It is not only a matter of jumping: one jumps (again in the air: further), dives back down, slides, steps to
+the other ring; each ring has its arm turning about the post — a low beam over the logs, a curtain over the stones
+— so that whichever comes, the other ring is clear of it; and fireflies caught make lily pads, which put back on the
+circuit, once, who falls in. What moves goes by the clock of the world: several visitors run at once on the same
+pond, each seen by the others (they are where the game puts them), each with their own run.
+
+Its score is laps, to a tenth; the extra calls `app.pondDone?.(tenths, ms)` when a run ends. For the game's boards:
+`pond: { order: 'desc', … }` in `BOARDS` (the checks print a rule), and
+`app.pondDone = (tenths) => scoreGame('pond', POND.name, tenths, `${(tenths / 10).toFixed(1)} laps`)`.
+
+## The Little Regatta
+
+Radio-controlled boats on the Great Pond, on the principle of the quad race: three laps of fourteen gates (two
+buoys each), from before the circuit of The Endless Pond, west along the deck, through the neck of the pond into
+its far half, round, and back along the south bank — a hundred and fifty-seven metres a lap. One steers from a
+stand on the south bank, the camera riding low behind one's boat, against the clock and against three boats that
+sail by themselves (one starts behind them). A boat gathers way, slides when thrown into a turn, bounces off the
+bank, the buoys and the others, and has a burst of speed that comes back after a few seconds.
+
+The boats are seen only by who races: each visitor has a race of their own (showing them to others would take a
+message of the game's network, which an extra cannot add). The extra calls `app.boatsDone?.(ms, place)`; for the
+game's boards `boats: { order: 'asc', min: 37_000, max: 1800_000 }` (the checks print the rule).
 
 ## The caves are safe places
 
