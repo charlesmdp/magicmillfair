@@ -1,4 +1,4 @@
-// The Bee's Knees: what is seen of it and how it is played. Its rules are in rules.js; here it is built — three
+// The Bee's Knees: what is seen of it and how it is played. Its rules are in rules.js; here it is built — four
 // round combs of wax in their hoops of dark timber, hung over the sea from a great crook under a skep of straw,
 // the bees, the arch on the sand where one asks to play — and a run is played: a session that drives the player
 // (see PlayerController.driver). The wax one has broken is one's own: a comb is whole again for the next run.
@@ -13,7 +13,7 @@ import { HIVE, CELLS, KIND, holds, startRun, stepRun, botInput, droneAt, standin
 
 const N = CELLS.length, COMBS = HIVE.levels.length, R = HIVE.cell, TAU = Math.PI * 2;
 const FX = Math.sin(HIVE.view), FZ = Math.cos(HIVE.view);
-const NAMES = ['top comb', 'middle comb', 'last comb'];
+const NAMES = ['top comb', 'upper comb', 'lower comb', 'last comb'];
 // the wax: fresh, capped, with royal jelly in it — and as it gives way
 const TINT = [[1, 1, 1], [1.0, 0.86, 0.6], [1.04, 0.8, 1.1]], HOT = [1.0, 0.4, 0.16], BURNT = [0.42, 0.17, 0.07];
 const CAP = [[0, 0, 0], [0.56, 0.27, 0.05], [1.0, 0.42, 0.82]];
@@ -74,14 +74,14 @@ export class Hive {
   build() {
     const world = this.world, mats = world.materials, H = HIVE, C = H.at, parts = new Parts();
     const wood = parts.get('woodDark'), matte = parts.get('matte'), paint = parts.get('paint');
-    // ---- the wax: every cell of the three combs is one instance of the same cup; the caps and the jelly, of the same dome
+    // ---- the wax: every cell of the four combs is one instance of the same cup; the caps and the jelly, of the same dome
     const wax = (this.wax = surfaceMaterial({ name: 'wax', rough: 0.5, spec: 0.3, emissive: [0.05, 0.032, 0.008] }));
     const cells = (this.cells = new THREE.InstancedMesh(cellGeometry(), wax, COMBS * N));
     const lids = [];
     for (let c = 0; c < COMBS; c++) for (let i = 0; i < N; i++) if (KIND[c][i]) lids.push(c * N + i);
     const caps = (this.caps = new THREE.InstancedMesh(capGeometry(), wax, lids.length));
-    // (their instances move: what is tested against the view is one sphere round the three combs and what falls from them)
-    for (const m of [cells, caps]) { m.boundingSphere = new THREE.Sphere(V(C.x, H.levels[1], C.z), 17); m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.group.add(m); }
+    // (their instances move: what is tested against the view is one sphere round the four combs and what falls from them)
+    for (const m of [cells, caps]) { m.boundingSphere = new THREE.Sphere(V(C.x, (H.levels[0] + H.levels[COMBS - 1]) / 2, C.z), 23); m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.group.add(m); }
     cells.name = 'hive-cells'; caps.name = 'hive-caps';
     cells.setColorAt(0, new THREE.Color(1, 1, 1)); caps.setColorAt(0, new THREE.Color(1, 1, 1));
     // ---- a great crook of timber stands in the sea on the side the camera looks at — never between it and the
@@ -91,7 +91,7 @@ export class Hive {
     const at = (off, side, y) => V(C.x + FX * off + RX * side, y, C.z + FZ * off + RZ * side);
     const foot = at(POLE, 0, 0), bed = Math.min(-1, this.data.heightAt(foot.x, foot.z)) - 0.6;
     wood.tint(...TIMBER, 1).cylinder(foot.x, bed, foot.z, 0.58, 0.42, HEAD - bed, 12, { capTop: false });
-    for (const y of [0.5, H.levels[2] - 2.6, HEAD - 0.5]) wood.tint(0.36, 0.3, 0.27, 1).cylinder(foot.x, y, foot.z, 0.62, 0.6, 0.36, 12); // (iron bands)
+    for (const y of [0.5, H.levels[COMBS - 1] - 2.6, HEAD - 0.5]) wood.tint(0.36, 0.3, 0.27, 1).cylinder(foot.x, y, foot.z, 0.62, 0.6, 0.36, 12); // (iron bands)
     const crook = [];
     for (let k = 0; k <= 10; k++) { const t = (k / 10) * (Math.PI / 2); crook.push([POLE * Math.cos(t), HEAD + 6 * Math.sin(t)]); }
     crook.push([-0.95, HEAD + 5.72], [-1.55, HEAD + 5.05], [-1.42, HEAD + 4.4], [-0.9, HEAD + 4.05]);
@@ -125,11 +125,12 @@ export class Hive {
     // ---- the arch on the sand, where one asks
     const g = H.gate, gy = this.data.heightAt(g.x, g.z);
     this.gate = { x: g.x, y: gy, z: g.z, yaw: g.yaw };
+    this.boardSpot = { x: g.x + 0.2, z: g.z - 4.2, yaw: g.yaw + Math.PI }; // (its stand: on the other side of the arch than the kit would put it, clear of the parasols on the sand)
     gateArch(this.group, paint, g.x, gy, g.z, g.yaw, H.name.toUpperCase(), 'THE WAX YOU STAND ON GIVES WAY · HOW LONG CAN YOU HOLD?', { tone: [1.45, 0.92, 0.12], ink: '#2a1c0a' });
     this.group.add(parts.toMeshes(mats, { name: 'hive-frame', layers: [LAYER.STATIC_CASTER] }));
     // ---- the bees
     const bees = (this.bees = new THREE.InstancedMesh(beeGeometry(), mats.paint, BEES));
-    bees.name = 'hive-bees'; bees.boundingSphere = new THREE.Sphere(V(C.x, H.levels[0] + 2, C.z), 20); bees.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    bees.name = 'hive-bees'; bees.boundingSphere = new THREE.Sphere(V(C.x, (H.levels[0] + H.levels[COMBS - 1]) / 2 + 2, C.z), 23); bees.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.group.add(bees);
     this._draw(null);
     this._fly(null, 0);

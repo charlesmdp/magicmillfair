@@ -1,7 +1,7 @@
 // The Bee's Knees: its rules. No renderer here: the game, its checks and the player that plays by itself all read
 // this.
 //
-// Three round combs of wax hang one above the other over the sea, in the north of the bay. One runs on them, and
+// Four round combs of wax hang one above the other over the sea, in the north of the bay. One runs on them, and
 // the cell one sets foot on gives way: it holds a moment — a little less on each comb down — and drops, whether
 // one is still on it or not; it does not come back. Through a hole one falls to the comb below; from the last
 // one, into the sea, and that is the run: how long one held.
@@ -9,7 +9,7 @@
 // One is not alone up there: on each comb a bee takes the wax apart by itself, cell after cell, on a path drawn
 // from the seed of the run — where it lands, the cell gives way as under a foot. Some cells are capped: they hold
 // much longer — the one in the middle of the top comb is: one begins there, with the time to look round. And on
-// the two lower combs a few hold royal jelly: the first foot on one is thrown back up to the comb above (through
+// the three lower combs a few hold royal jelly: the first foot on one is thrown back up to the comb above (through
 // its wax: a comb stops only what comes down on it) — once; after that it is a cell like another, and a bee that
 // got there first has eaten it.
 //
@@ -22,10 +22,10 @@ export const HIVE = {
   at: { x: 84, z: -84 }, // the middle of the combs, over the sea
   gate: { x: 43.5, z: -79.5, yaw: 1.68 }, // where one asks to play, on the sand between the last parasol of the beach and its lounge, looking out at the combs (a heading of the valley: 0 looks south)
   view: -Math.PI / 2, // the way the camera looks, and "up" on the stick: west, back towards the beach and the valley
-  levels: [19, 13, 7], // the floor of each comb over the sea: the top one first
+  levels: [25, 19, 13, 7], // the floor of each comb over the sea: the top one first
   cell: 1.1, // from the middle of a cell to one of its corners
   radius: 7, // a comb is every cell whose middle is within so far of its own
-  delay: [0.6, 0.5, 0.4], // s a cell holds once touched, comb by comb
+  delay: [0.65, 0.6, 0.5, 0.4], // s a cell holds once touched, comb by comb
   capped: 2, caps: 0.13, // … and a capped one, on any comb; the share of them
   jelly: 3, throw: 17.6, // cells of royal jelly on each comb but the top one; how hard they throw (m/s up: seven metres)
   step: 1 / 120,
@@ -33,7 +33,7 @@ export const HIVE = {
   g: 22, jump: 7.3, // m/s², m/s up: a little over a metre high, two thirds of a second in the air
   foot: 0.22, // one still stands with the feet so far over the edge of a cell
   coyote: 0.1, buffer: 0.12, // s: a jump still granted after the wax has gone; asked so long before it can be
-  drone: { every: 1.3, first: [2.4, 3.6, 4.8] }, // a bee lands on a cell every so many seconds; its first, comb by comb
+  drone: { every: 1.3, first: [2.4, 3.6, 4.8, 6] }, // a bee lands on a cell every so many seconds; its first, comb by comb
 };
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -42,7 +42,7 @@ const S3 = Math.sqrt(3), R = HIVE.cell;
 /** From the middle of a cell to the middle of one of its sides, and to the middle of the next cell. */
 export const APOTHEM = (R * S3) / 2, PITCH = R * S3;
 
-// ---- the cells of a comb (the three are alike): pointed hexagons, their neighbours across their six sides
+// ---- the cells of a comb (the four are alike): pointed hexagons, their neighbours across their six sides
 const key = (q, r) => (q + 64) * 128 + (r + 64), SIDES = [[1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1]];
 /** The cells: { q, r (their rank on the comb), x, z (their middle) }, row after row. */
 export const CELLS = [];
@@ -58,6 +58,15 @@ export const NEAR = CELLS.map((c) => SIDES.map(([dq, dr]) => index(c.q + dq, c.r
 const RING2 = CELLS.map((c, i) => { const out = new Set(); for (const j of NEAR[i]) for (const k of NEAR[j]) if (k !== i && !NEAR[i].includes(k)) out.add(k); return [...out].sort((a, b) => a - b); });
 /** The cell in the middle of a comb: on the top one, where one stands when the run begins. */
 export const START = index(0, 0);
+/**
+ * The board of scores of the game, how long one held (ms). The least is what one gets by not playing at all (standing
+ * still, or hammering the jump: the checks measure it); the most is the hard bound of a run: the bees land on a cell
+ * of each comb every so often, so there comes a second when every cell has been touched, the capped ones hold longest,
+ * and one is in the sea a throw and a fall later.
+ */
+const EATEN = Math.max(...HIVE.drone.first) + (N - 1) * HIVE.drone.every;
+export const BOUND = EATEN + HIVE.capped + HIVE.throw / HIVE.g + Math.sqrt((2 * (HIVE.levels[0] + (HIVE.throw * HIVE.throw) / (2 * HIVE.g))) / HIVE.g);
+export const BOARD = { order: 'desc', min: 6000, max: Math.ceil(BOUND / 10) * 10_000 };
 const RIM = CELLS.map((_, i) => i).filter((i) => NEAR[i].length < 6);
 
 /** How far (x, z) is from the middle of a cell, as its sides count it: within APOTHEM, one is over the cell. */

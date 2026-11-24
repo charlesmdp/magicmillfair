@@ -3,7 +3,7 @@
 import { plug } from '../kit.js';
 import { formatTime } from '../../../src/world/zones/games/course.js';
 import { Hive } from './Hive.js';
-import { HIVE } from './rules.js';
+import { HIVE, BOARD } from './rules.js';
 
 /** Hangs the combs over the sea of `app` (the game, once it runs) and lets the player run on them. Returns the hive. */
 export function attach(app) {
@@ -11,6 +11,9 @@ export function attach(app) {
   app.world.bakeShadows(); // (the masts, the hoops and the skep were not there when the shadows of what never moves were drawn)
   return plug(app, hive, {
     id: 'hive',
+    name: HIVE.name,
+    board: BOARD,
+    sub: 'four combs over the sea · how long one held',
     more: true, // (the longer one held, the better)
     format: (ms) => `Held ${formatTime(ms)}`,
     label: () => `Play ${HIVE.name}`,

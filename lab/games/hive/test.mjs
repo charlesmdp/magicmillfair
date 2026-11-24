@@ -8,7 +8,7 @@
 import { check, done, ground } from '../check.mjs';
 import { PIER, ISLAND, BEACH_LOUNGE, BOUNDS } from '../../../src/world/layout/layout.js';
 import { slideCourse } from '../../../src/world/zones/games/slide/track.js';
-import { HIVE, CELLS, KIND, NEAR, START, APOTHEM, PITCH, holds, cellAt, startRun, stepRun, gone, standing, droneAt, botInput, botRun, idleInput, hammerInput, runnerInput } from './rules.js';
+import { HIVE, BOARD, BOUND, CELLS, KIND, NEAR, START, APOTHEM, PITCH, holds, cellAt, startRun, stepRun, gone, standing, droneAt, botInput, botRun, idleInput, hammerInput, runnerInput } from './rules.js';
 
 const H = HIVE, C = H.at, N = CELLS.length, RIM = H.radius + H.cell + 0.7, POLE = 12.6 + 0.6; // (the outside of the hoops; the foot of the crook, on the side the camera looks at)
 const FX = Math.sin(H.view), FZ = Math.cos(H.view), RX = -FZ, RZ = FX;
@@ -50,12 +50,12 @@ const height = await ground();
 }
 {
   // ---- the combs
-  const count = (c, k) => KIND[c].filter((v) => v === k).length, caps = [0, 1, 2].map((c) => count(c, 1) / N);
-  check('three combs alike, round: every cell within reach of the middle, six neighbours unless on the rim', H.levels.length === 3 && N >= 50 && CELLS.every((c) => Math.hypot(c.x, c.z) <= H.radius + 1e-6) && NEAR.every((n, i) => n.length >= 3 && n.length <= 6 && n.every((j) => NEAR[j].includes(i) && Math.abs(Math.hypot(CELLS[i].x - CELLS[j].x, CELLS[i].z - CELLS[j].z) - PITCH) < 1e-9)), `${N} cells a comb, ${PITCH.toFixed(2)} m from one to the next`);
+  const count = (c, k) => KIND[c].filter((v) => v === k).length, caps = [0, 1, 2, 3].map((c) => count(c, 1) / N);
+  check('four combs alike, round: every cell within reach of the middle, six neighbours unless on the rim', H.levels.length === 4 && N >= 50 && CELLS.every((c) => Math.hypot(c.x, c.z) <= H.radius + 1e-6) && NEAR.every((n, i) => n.length >= 3 && n.length <= 6 && n.every((j) => NEAR[j].includes(i) && Math.abs(Math.hypot(CELLS[i].x - CELLS[j].x, CELLS[i].z - CELLS[j].z) - PITCH) < 1e-9)), `${N} cells a comb, ${PITCH.toFixed(2)} m from one to the next`);
   let holes = 0, n = 0; for (let x = -H.radius; x <= H.radius; x += 0.17) for (let z = -H.radius; z <= H.radius; z += 0.17) { if (Math.hypot(x, z) > H.radius - H.cell) continue; n++; const i = cellAt(x, z); if (i < 0 || Math.max(Math.abs(x - CELLS[i].x), 0) > H.cell) holes++; }
   check('a comb is whole: no gap in it before one has run on it', holes === 0 && cellAt(H.radius + 3, 0) < 0, `${n} places tried`);
-  const apart = [1, 2].every((c) => { const j = CELLS.map((_, i) => i).filter((i) => KIND[c][i] === 2); return j.every((a) => j.every((b) => a === b || Math.hypot(CELLS[a].x - CELLS[b].x, CELLS[a].z - CELLS[b].z) > 5)); });
-  check('capped cells on every comb, royal jelly on the two lower ones only, well apart; one begins on a capped cell', count(0, 2) === 0 && count(1, 2) === H.jelly && count(2, 2) === H.jelly && apart && caps.every((s) => s > 0.07 && s < 0.22) && KIND[0][START] === 1 && KIND[1][START] === 0 && KIND[2][START] === 0, `${[0, 1, 2].map((c) => `${count(c, 1)} capped${c ? `, ${count(c, 2)} of jelly` : ''}`).join(' · ')}`);
+  const apart = [1, 2, 3].every((c) => { const j = CELLS.map((_, i) => i).filter((i) => KIND[c][i] === 2); return j.every((a) => j.every((b) => a === b || Math.hypot(CELLS[a].x - CELLS[b].x, CELLS[a].z - CELLS[b].z) > 5)); });
+  check('capped cells on every comb, royal jelly on the three lower ones only, well apart; one begins on a capped cell', count(0, 2) === 0 && count(1, 2) === H.jelly && count(2, 2) === H.jelly && count(3, 2) === H.jelly && apart && caps.every((s) => s > 0.07 && s < 0.22) && KIND[0][START] === 1 && KIND[1][START] === 0 && KIND[2][START] === 0 && KIND[3][START] === 0, `${[0, 1, 2, 3].map((c) => `${count(c, 1)} capped${c ? `, ${count(c, 2)} of jelly` : ''}`).join(' · ')}`);
   // nobody leaves a comb sideways
   let out = 0, far = 0;
   for (let k = 0; k < 12; k++) { const a = (k / 12) * Math.PI * 2, st = startRun(3); run(st, 4, (q, i) => { towards(Math.sin(a), Math.cos(a), i); i.jump = q.ground && Math.floor(q.clock * 3) % 2 === 0; if (cellAt(q.x, q.z) < 0) out++; far = Math.max(far, Math.hypot(q.x, q.z)); }); }
@@ -64,21 +64,21 @@ const height = await ground();
 {
   // ---- a cell gives way: after its time, not before
   const fell = [];
-  for (let c = 0; c < 3; c++) { const st = standOn(c, plain(c)), seen = run(st, 3, null, (q) => !q.ground); fell.push(seen.find((e) => e.type === 'fall')?.at ?? 0); }
+  for (let c = 0; c < 4; c++) { const st = standOn(c, plain(c)), seen = run(st, 3, null, (q) => !q.ground); fell.push(seen.find((e) => e.type === 'fall')?.at ?? 0); }
   check('a cell one stands on drops after its time and not before: less on each comb down', fell.every((t, c) => t >= H.delay[c] && t < H.delay[c] + 2.5 * H.step), fell.map((t) => `${t.toFixed(3)} s`).join(' · '));
   const capped = KIND[0].findIndex((k) => k === 1), st = standOn(0, capped), seen = run(st, 3, null, (q) => !q.ground);
   check('a capped cell holds much longer', Math.abs(seen.find((e) => e.type === 'fall').at - H.capped) < 2.5 * H.step && holds(0, capped) === H.capped, `${seen.find((e) => e.type === 'fall').at.toFixed(3)} s`);
   // touched, then left: it drops all the same, and stays dropped; the next one drops in its turn
   const from = plain(0), next = beside(0, from), walk = standOn(0, from), when = [];
-  run(walk, 1.6, (q, i) => { towards(CELLS[next].x - q.x, CELLS[next].z - q.z, i); if (Math.hypot(CELLS[next].x - q.x, CELLS[next].z - q.z) < 0.15) { i.x = 0; i.y = 0; } if (gone(q, 0, from) && !when[0]) when[0] = q.clock; if (gone(q, 0, next) && !when[1]) when[1] = q.clock; }, (q) => q.on !== 0 && q.ground);
+  run(walk, 2.2, (q, i) => { towards(CELLS[next].x - q.x, CELLS[next].z - q.z, i); if (Math.hypot(CELLS[next].x - q.x, CELLS[next].z - q.z) < 0.15) { i.x = 0; i.y = 0; } if (gone(q, 0, from) && !when[0]) when[0] = q.clock; if (gone(q, 0, next) && !when[1]) when[1] = q.clock; }, (q) => q.on !== 0 && q.ground);
   check('whether one is still on it or not: a cell touched and left drops at its time — and the one run on to, at its own', when[0] >= H.delay[0] && when[0] < H.delay[0] + 2.5 * H.step && when[1] > when[0] && when[1] < when[0] + 0.5 && walk.on === 1, `${when.map((t) => t.toFixed(2)).join(' s, then ')} s`);
-  const long = botRun(5).state, back = []; for (let c = 0; c < 3; c++) for (let i = 0; i < N; i++) if (long.drop[c][i] < long.clock && !gone(long, c, i)) back.push(i);
-  check('a cell that dropped does not come back', back.length === 0 && [0, 1, 2].every((c) => standing(long, c) < N));
+  const long = botRun(5).state, back = []; for (let c = 0; c < 4; c++) for (let i = 0; i < N; i++) if (long.drop[c][i] < long.clock && !gone(long, c, i)) back.push(i);
+  check('a cell that dropped does not come back', back.length === 0 && [0, 1, 2, 3].every((c) => standing(long, c) < N));
 }
 {
   // ---- from comb to comb, and into the sea
   const st = startRun(1), seen = run(st, 20, null), order = seen.filter((e) => e.type !== 'touch' && e.type !== 'bee').map((e) => `${e.type}${e.comb ?? ''}`).join(' ');
-  check('who stands still falls from comb to comb and is in the sea within six seconds', order === 'fall0 land1 fall1 land2 fall2 sea' && st.over && st.time < 6000 && st.time === seen.at(-1).time, `${fmt(st.time)}: ${order}`);
+  check('who stands still falls from comb to comb and is in the sea within eight seconds', order === 'fall0 land1 fall1 land2 fall2 land3 fall3 sea' && st.over && st.time < 8000 && st.time === seen.at(-1).time, `${fmt(st.time)}: ${order}`);
   // a jump
   const up = standOn(0, KIND[0].findIndex((k) => k === 1)); let top = 0; const air = run(up, 2, (q, i, t) => { i.jump = t === 0; top = Math.max(top, q.y - H.levels[0]); }, (q, ev) => ev.some((e) => e.type === 'land')); // (off a capped cell: it is still there when one comes down)
   const flight = air.find((e) => e.type === 'land').at - air.find((e) => e.type === 'jump').at;
@@ -98,7 +98,7 @@ const height = await ground();
 }
 {
   // ---- the bees
-  const st = startRun(7), input = { x: 0, y: 0, jump: false }, events = [], bees = [[], [], []];
+  const st = startRun(7), input = { x: 0, y: 0, jump: false }, events = [], bees = [[], [], [], []];
   for (let t = 0; t < 600 && !st.over; t += H.step) { botInput(st, input); stepRun(st, H.step, input, events); for (const e of events) if (e.type === 'bee') bees[e.comb].push({ cell: e.cell, at: st.clock }); events.length = 0; }
   const onTime = bees.every((list, c) => list.every((b) => { const k = (b.at - H.drone.first[c]) / H.drone.every; return Math.abs(k - Math.round(k)) < 0.02; }));
   const hops = bees.map((list) => list.filter((b, k) => k && NEAR[list[k - 1].cell].includes(b.cell)).length / Math.max(1, list.length - 1));
@@ -112,21 +112,21 @@ const height = await ground();
   // ---- a player that plays by itself, and those that do not think
   const runs = []; for (let seed = 1; seed <= 12; seed++) runs.push(botRun(seed));
   const least = Math.min(...runs.map((r) => r.time)), most = Math.max(...runs.map((r) => r.time));
-  check('a player that plays by itself holds thirty-five seconds and more, whatever the seed', runs.every((r) => r.over && r.time >= 35000), runs.map((r) => (r.time / 1000).toFixed(0)).join(' · ') + ' s');
-  const last = runs.filter((r) => r.state.low === 2).length;
-  check('it runs on the three combs — when the bees have left it any of the last —, and takes the jelly now and then', runs.every((r) => r.state.low >= 1 && r.mine > 25) && last >= 8 && runs.some((r) => r.throws > 0), `${Math.round(runs.reduce((a, r) => a + r.mine, 0) / runs.length)} cells of its own a run; on the last comb in ${last} runs of twelve; ${runs.reduce((a, r) => a + r.throws, 0)} throws`);
-  const a = botRun(9), b = botRun(9), same = (x, y) => x.time === y.time && x.mine === y.mine && [0, 1, 2].every((c) => x.state.drop[c].every((v, i) => v === y.state.drop[c][i]));
+  check('a player that plays by itself holds fifty-five seconds and more, whatever the seed', runs.every((r) => r.over && r.time >= 55000), runs.map((r) => (r.time / 1000).toFixed(0)).join(' · ') + ' s');
+  const last = runs.filter((r) => r.state.low === 3).length;
+  check('it runs on the four combs — when the bees have left it any of the last —, and takes the jelly now and then', runs.every((r) => r.state.low >= 1 && r.mine > 25) && last >= 5 && runs.some((r) => r.throws > 0), `${Math.round(runs.reduce((a, r) => a + r.mine, 0) / runs.length)} cells of its own a run; on the last comb in ${last} runs of twelve; ${runs.reduce((a, r) => a + r.throws, 0)} throws`);
+  const a = botRun(9), b = botRun(9), same = (x, y) => x.time === y.time && x.mine === y.mine && [0, 1, 2, 3].every((c) => x.state.drop[c].every((v, i) => v === y.state.drop[c][i]));
   check('the same run for the same seed', same(a, b) && !same(a, botRun(10)));
   const at = (dt) => { const st = startRun(11), input = { x: 0, y: 0, jump: false }; let acc = 0; for (let t = 0; t < 600 && !st.over; t += dt) { acc += dt; while (acc >= H.step && !st.over) { acc -= H.step; botInput(st, input); stepRun(st, H.step, input, null); } } return st.time; };
   check('the same run at 30 and at 144 frames a second', at(1 / 30) === at(1 / 144) && at(1 / 30) > 0);
   const idle = botRun(1, 600, idleInput).time, hammer = botRun(1, 600, hammerInput).time, wild = [1, 2, 3, 4, 5, 6].map((s) => botRun(s, 600, runnerInput).time);
-  check('who only hammers the jump is in the sea at once; who runs round without looking, long before the one who thinks', hammer < 7000 && idle < 6000 && Math.max(...wild) < least * 0.8 && Math.min(...wild) > idle, `still: ${fmt(idle)} · hammering: ${fmt(hammer)} · running round: ${wild.map(fmt).join(', ')}`);
+  check('who only hammers the jump is in the sea at once; who runs round without looking, long before the one who thinks', hammer < 8000 && idle < 7500 && Math.max(...wild) < least * 0.8 && Math.min(...wild) > idle, `still: ${fmt(idle)} · hammering: ${fmt(hammer)} · running round: ${wild.map(fmt).join(', ')}`);
   // what nobody can pass: a bee lands on a cell nothing has touched every so often for as long as its comb has one,
-  // so there comes a second when every cell of the three combs has been touched; a capped one holds longest; then
+  // so there comes a second when every cell of the four combs has been touched; a capped one holds longest; then
   // nothing is left to stand on, and one is in the sea a throw and a fall later
-  const eaten = Math.max(...H.drone.first) + (N - 1) * H.drone.every, bound = eaten + H.capped + H.throw / H.g + Math.sqrt((2 * (H.levels[0] + (H.throw * H.throw) / (2 * H.g))) / H.g);
+  const eaten = Math.max(...H.drone.first) + (N - 1) * H.drone.every, bound = BOUND;
   const greedy = botRun(3, 600, (st, out) => { botInput(st, out); return out; }).state;
-  check('a run has an end, whatever one does: the bees have landed on every cell in time, and nobody holds longer than that', bound < 90 && most / 1000 < bound - 5 && [0, 1, 2].every((c) => greedy.drop[c].every((t) => t <= eaten + H.capped + 1e-6 || t === Infinity) && standing(greedy, c) < N), `every cell touched by ${eaten.toFixed(0)} s, in the sea by ${bound.toFixed(0)} s at the very latest; the best of the twelve runs: ${fmt(most)}`);
+  check('a run has an end, whatever one does: the bees have landed on every cell in time, and nobody holds longer than that', bound < 90 && most / 1000 < bound - 5 && [0, 1, 2, 3].every((c) => greedy.drop[c].every((t) => t <= eaten + H.capped + 1e-6 || t === Infinity) && standing(greedy, c) < N), `every cell touched by ${eaten.toFixed(0)} s, in the sea by ${bound.toFixed(0)} s at the very latest; the best of the twelve runs: ${fmt(most)}`);
   // (and players that push the stick and the jump at random: none passes that second, none is ever off the wax sideways)
   const rnd = (n, k) => { const v = Math.sin(n * 127.1 + k * 311.7 + 74.7) * 43758.5453; return v - Math.floor(v); };
   let longest = 0, astray = 0;
@@ -137,6 +137,8 @@ const height = await ground();
     longest = Math.max(longest, st.time);
   }
   check('sixty players that push the stick and the jump at random: all in the sea before that second, none ever off the wax sideways', astray === 0 && longest > 5000 && longest / 1000 < bound, `the luckiest held ${fmt(longest)}`);
-  console.log(`      for the board of scores: hive: { order: 'desc', min: ${Math.floor(Math.min(idle, hammer) / 1000) * 1000}, max: ${Math.ceil(bound / 10) * 10}_000 }`);
+  const line = { order: 'desc', min: Math.floor(Math.min(idle, hammer) / 1000) * 1000, max: Math.ceil(bound / 10) * 10_000 };
+  check('the board of scores in rules.js is the one these runs give: its least what one gets by not playing, its most the bound of a run', BOARD.order === line.order && BOARD.min === line.min && BOARD.max === line.max && BOARD.max > most, JSON.stringify(BOARD));
+  console.log(`      for the board of scores: hive: { order: 'desc', min: ${line.min}, max: ${String(line.max).replace(/000$/, '_000')} }`);
 }
 done();
