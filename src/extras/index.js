@@ -8,6 +8,7 @@
 // An extra is a module with `attach(app)`, which returns what it built (kept in app.extras[id]).
 export const EXTRAS = {
   slide: { name: 'Mostly Down — the water slide', load: () => import('./slide.js') },
+  pond: { name: 'The Endless Pond — round and round, every lap faster', load: () => import('./pond.js') },
   caves: { name: 'The caves are safe places: nearby chat only', load: () => import('./caves.js') },
   stats: { name: 'The game in figures: counters, the page /opendata', load: () => import('./stats.js') },
 };
