@@ -292,17 +292,18 @@ const only = (t, fn) => { const things = course.things; course.things = [].conca
       for (let t = 0; t < RIDE.out + 0.4 && !land; t += RIDE.step) { stepRide(q, RIDE.step, input, events); land = events.find((e) => e.type === 'land' && e.hop); if (events.some((e) => e.type === 'back')) break; events.length = 0; }
       if (!land || land.gain < 30) continue;
       // (it counts when one is still riding two seconds later, steering as the careful bot does)
-      const kept = q.mark, to = rideProgress(q); let held = true;
+      const kept = q.mark, to = rideProgress(q), v1 = q.v; let held = true;
       events.length = 0;
       for (let k = 0; k < 240 && held; k++) { botInput(q, 'careful', input); stepRide(q, RIDE.step, input, events); if (events.some((e) => e.type === 'out' || e.type === 'back')) held = false; }
       // (…and a little further on — out of a shortcut, if that is where one came down — the arches are theirs)
       for (let k = 0; k < 1200 && held && q.mark === mark; k++) { botInput(q, 'careful', input); stepRide(q, RIDE.step, input, events); }
-      if (held) skips.push({ s, side, v, steer, to, gain: land.gain, mark, kept, after: q.mark });
+      if (held) skips.push({ s, side, v, steer, to, gain: land.gain, mark, kept, after: q.mark, flat: land.flat, v1: v1 });
     }
   }
   const whirl = course.stretches.find((q) => q.name === 'The Whirlpool'), early = skips.filter((k) => k.s < whirl.from - 60), drops = skips.filter((k) => k.s >= whirl.from - 60);
   check('nowhere above the Whirlpool does leaving the slide skip any great length of it', early.length === 0, early.length ? `${early.length} ways, the first from metre ${early[0].s} to ${early[0].to.toFixed(0)}` : `${skips.length} ways of skipping 30 m or more, all of them at the Whirlpool`);
   check('in the Whirlpool, who goes over the inner rim at the right speed comes down on the turn below — a daring short cut', drops.length >= 3 && drops.every((k) => k.gain > 90 && k.gain < 140 && k.side < 0), drops.length ? `${drops.length} ways found, about ${Math.round(drops[0].gain)} m skipped; from metre ${drops[0].s} at ${(drops[0].v * 3.6).toFixed(0)} km/h, for one` : 'none');
+  check('…from so high one is flattened: most of the speed is gone, and none of that anywhere else', drops.length > 0 && drops.every((k) => k.flat && k.v1 <= Math.max(RIDE.carry, k.v * 0.75)), drops.length ? `down at ${(drops[0].v1 * 3.6).toFixed(0)} km/h for ${(drops[0].v * 3.6).toFixed(0)} before` : '');
   check('…the arches flown over are one\'s own only once one has stayed in the trough a moment', drops.length > 0 && drops.every((k) => k.kept === k.mark && k.after > k.mark));
   // …and who touches the turn below only to be thrown out of it goes back to the arch they had
   if (drops.length) {

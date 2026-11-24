@@ -13,8 +13,9 @@
 //
 // Over the rim one is out of the trough — not out of the ride: the ring and its rider really fly, steered a
 // little, and whatever trough they come down into — the same one further on, a pipe beside it, a turn of the
-// slide below — they ride on from there. Only who has found none when the count runs out (RIDE.out), or has
-// come down on the ground or in the sea, is put back at the last arch, with the clock running.
+// slide below, which costs most of one's speed — they ride on from there. Only who has found none when the
+// count runs out (RIDE.out), or has come down on the ground or in the sea, is put back at the last arch, with
+// the clock running.
 //
 // Time advances in steps of 1/120 s whatever the frame rate: the same run takes the same time on every device.
 // What moves in the trough moves by the clock of the ride itself.
@@ -49,12 +50,13 @@ export const RIDE = {
   blade: 0.5, // how much of the speed one runs into a blade with it gives back
   bounce: { speed: 11, time: 0.55, fade: 3.2 }, // off a buffer: thrown back at that speed (m/s), for so long, slowing so fast (1/s)
   again: 1.2, // s before the same thing can be run into again
-  out: 1.5, // s one may be out of a trough: the time to come down into one — any — or one is put back
+  out: 1.6, // s one may be out of a trough: the time to come down into one — any — or one is put back
   rest: 0.7, // s one is left where one came down, on the ground or in the sea, before being put back
   wing: 4, // m/s² across, steering in the air out of the trough
   airbrake: 5, // m/s² taken off, sitting up in the air
   tip: 2.4, // m/s: who goes over the rim goes outwards at least this fast
-  hard: 11, // m/s into the trough one comes down in: beyond (a fall of six metres), it costs speed
+  hard: 11, // m/s: falling faster than that into a trough (from six metres up), one is flattened…
+  flat: 0.4, // …and keeps so much of one's speed
   settle: 1.2, // s one must stay in the trough one has come down into before the arches flown over count
   mercy: 3, // times in a row put back at the same arch after which one is put back at the next
   back: 10, // m/s: the speed one is put back with
@@ -102,8 +104,8 @@ function thingsOf(course, id) {
 /**
  * Advances a ride by `dt` seconds. `input`: { steer (-1 left … 1 right), tuck, brake, jump (true on the frame it
  * is asked) }. `events`, when given, is filled with what happened: { type: 'jump' | 'kick' | 'land' (hard: how
- * hard; hop: back in a trough after having left one — then line, gain (the metres of the course skipped) and
- * from (the kind of the flight)) | 'bar' (a roll, a slider) | 'arm' (a spinner) | 'block' | 'hub' | 'blade' (back:
+ * hard; hop: back in a trough after having left one — then line, gain (the metres of the course skipped), from
+ * (the kind of the flight) and flat (from so high that most of the speed is gone)) | 'bar' (a roll, a slider) | 'arm' (a spinner) | 'block' | 'hub' | 'blade' (back:
  * thrown back by it) | 'bump' (a buffer) | 'plunge' | 'whirl' | 'free' | 'out' (kind: 'side' | 'gap' | 'off' |
  * 'end') | 'splash' | 'thud' | 'back' (late: the count ran out in the air) | 'mark' | 'fork' | 'join' | 'finish'
  * | 'end', … }. Returns the ride.
@@ -495,8 +497,9 @@ function alight(st, events) {
     fly: null, line: line.id, s: hit.s, u: Math.abs(hit.u) > limit ? sg * limit : hit.u, w: clamp(cross, -7, 7), v: clamp(along, RIDE.carry, RIDE.top),
     h: 0, vh: 0, floor: p.F, spin: 0, turn: 0, kb: 0,
   });
-  // (a hard landing, or one against the way the water runs, costs speed)
-  if (into > RIDE.hard) { st.v = Math.max(RIDE.carry, st.v * 0.85); st.stun = 0.35; }
+  // (down from high up, one is flattened: most of the speed is gone; and so it is against the way the water runs)
+  const flat = -f.vy > RIDE.hard;
+  if (flat) { st.v = Math.max(RIDE.carry, st.v * RIDE.flat); st.stun = 0.6; }
   if (along < 0) st.stun = 0.5;
   st.next.clear();
   // (the arches flown over are one's own only once one has stayed in the trough a moment: who bounces out of
@@ -506,7 +509,7 @@ function alight(st, events) {
   if (line.id >= 0 && st.took[st.took.length - 1] !== line.id) st.took.push(line.id);
   st.hops++;
   st.skipped += gain;
-  events?.push({ type: 'land', hard: into, hop: true, line: line.id, gain, from: f.kind });
+  events?.push({ type: 'land', hard: into, hop: true, line: line.id, gain, from: f.kind, flat });
   return true;
 }
 

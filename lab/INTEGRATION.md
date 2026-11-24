@@ -48,12 +48,13 @@ throws one back), with buffers between them that throw one back too, then a pool
 end in the sea, a swim from the beach.
 
 **Over the rim one is out of the trough, not out of the ride.** One flies — steering a little, a ring of light
-showing where one is going to come down — and whatever trough one comes down into within a second and a half,
+showing where one is going to come down — and whatever trough one comes down into within the count (1.6 s),
 one rides on from there; only who has found none is put back at the last arch. Two places are made for it: a
 pipe runs beside the long pool, lower ("The Overflow": one jumps the rim of the pool to drop into it, skips the
-propellers, and flies off its end back onto the slide); and in the Whirlpool, who goes over the inner rim at the
-right speed comes down on the turn below, a hundred metres on. The count (`RIDE.out` in `ride.js`) is what
-decides how much of the slide can be skipped: at 1.5 s nothing above the Whirlpool, and its checks say so.
+propellers, and flies off its end back onto the slide); and in the Whirlpool, who slows down and goes over the
+inner rim comes down on the turn below, a hundred metres on — flattened: most of the speed is gone. The count
+(`RIDE.out` in `ride.js`) is what decides how much of the slide can be skipped: at 1.6 s nothing above the
+Whirlpool, and its checks say so (at 2.5 s one could drop from turn to turn of every helix).
 
 **It is still being changed in the lab**: leave its switch off until the owner says so. Its checks say what it
 does at any time: `node tools/slide-test.mjs` (87).

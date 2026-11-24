@@ -882,7 +882,8 @@ export class Slide {
       if (e.hop) {
         // back in a trough after having left one: which, and what was skipped
         if (e.gain > 25) io.play('boost', { volume: 0.7 });
-        io.note(e.line >= 0 && lineOf(course, e.line).pipe ? `${lineOf(course, e.line).name}: the pipe below!` : e.gain > 25 ? `Back in the tube — ${Math.round(e.gain)} m skipped!` : e.from === 'off' ? 'Back on the slide!' : 'Back in the tube!');
+        io.note(e.line >= 0 && lineOf(course, e.line).pipe ? `${lineOf(course, e.line).name}: the pipe below!` : e.gain > 25 ? `Back in the tube — ${Math.round(e.gain)} m skipped!${e.flat ? ' (a hard landing)' : ''}` : e.from === 'off' ? 'Back on the slide!' : 'Back in the tube!');
+        if (e.flat) S.shake = 1.2;
       }
     } else if (e.type === 'bar' || e.type === 'arm') { io.play('hit'); S.shake = 0.9; S.flip = 1; }
     else if (e.type === 'block' || e.type === 'hub') { io.play('hit'); S.shake = 1.0; }
@@ -892,7 +893,7 @@ export class Slide {
       if (it) it.swell = 1;
       io.play('whack', { volume: e.graze ? 0.5 : 1 });
       if (!e.graze) { S.shake = 1.0; io.note('Bounced back!'); }
-    } else if (e.type === 'plunge') { io.play('splash', { volume: 0.7 }); S.shake = Math.max(S.shake, 0.5); }
+    } else if (e.type === 'plunge') { io.play('splash', { volume: 0.7 }); S.shake = Math.max(S.shake, 0.5); io.note('Propellers! Slip by behind a blade — or jump it.'); }
     else if (e.type === 'whirl') { io.play('fail', { volume: 0.6 }); io.note('Caught in a whirlpool!'); }
     else if (e.type === 'free') io.play('squirt', { volume: 0.5 });
     else if (e.type === 'out') {
