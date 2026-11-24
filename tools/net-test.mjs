@@ -1120,10 +1120,11 @@ async function testShop({ port }) {
   const nothing = await post('/api/checkout', { item: 'hat:invisible', device: ann }), nobody = await post('/api/checkout', { item: 'jetpack', device: 'x' });
   check('shop: a village is a subscription by the month, at the price of its height — once the sky is open, not before; what is not sold is refused', shutSky.status === 400 && res.status === 200 && sub?.get('mode') === 'subscription' && sub.get('line_items[0][price_data][recurring][interval]') === 'month' && Number(sub.get('line_items[0][price_data][unit_amount]')) >= 1900 && sub.get('subscription_data[metadata][item]') === 'village:eagle-rest' && nothing.status === 400 && nobody.status === 400, [res.status, sub?.toString().slice(0, 200), nothing.status, nobody.status]);
   // (the panel over the board of a game of the lab is for sale once its game is switched on — its board waits for it too)
-  const aside = { 'x-forwarded-for': '10.6.6.9' }; // (an address of its own: these two do not count against what the other checks may ask)
-  const shutPanel = await post('/api/checkout', { item: 'board:hill', device: bob, bid: 300 }, aside);
+  // (asked from an address of its own — on either server: these two do not count against what the other checks may ask)
+  const aside = (body) => request(port, '/api/checkout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), from: '127.0.0.77' });
+  const shutPanel = await aside({ item: 'board:hill', device: bob, bid: 300 });
   await post('/api/release', { set: { hill: true } }, { authorization: `Bearer ${ADMIN_KEY}` });
-  const openPanel = await post('/api/checkout', { item: 'board:hill', device: bob, bid: 300 }, aside);
+  const openPanel = await aside({ item: 'board:hill', device: bob, bid: 300 });
   await post('/api/release', { set: { hill: false } }, { authorization: `Bearer ${ADMIN_KEY}` });
   check('shop: the panel of a game that waits for its switch is sold once that game is on, not before', shutPanel.status === 400 && openPanel.status === 200 && /^https:\/\/checkout\.stripe\.test\//.test(json(openPanel)?.url || ''), [shutPanel.status, openPanel.status, openPanel.body?.toString().slice(0, 120)]);
   // the payment form inside the game: where the publishable key was given, Stripe is asked for a form to embed
