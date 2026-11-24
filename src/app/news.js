@@ -6,6 +6,9 @@ export const NEWS = [
   {
     date: '24 November 2026',
     items: [
+      ['A wall of thanks', 'Cut into the cliff above the poppies, in the north-west: every sponsor of the fair, the most generous first. Thanks to them, the game is free.'],
+      ['Sponsors on the big wheel', 'A sponsored gondola now carries its banner for all to see, with its number — and the Trading Post shows which one is whose.'],
+      ['A word in your inbox', 'Give your account an e-mail and the fair writes to say welcome. It says thank you for the Game Pass, too — and nothing else, ever.'],
       ['Stars on the map', 'The big map (M) marks the big attractions with a gold star and their name.'],
       ['Play on the beach!', 'The easel where you arrive points to the games of the beach now. Billy\'s own stands in the flower bed by the house.'],
       ['Which room am I in?', 'The settings name the room you are in — and a list there takes you to another.'],

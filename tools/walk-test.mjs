@@ -823,6 +823,26 @@ try {
       && win.cards.length === 14 && win.cards.includes('Mostly Up') && win.cards.includes('Meltdown Run') && win.photos === 14 && win.tags.join() === 'Free' && win.extras.includes('The big wheel') && /of 14 games sponsored/.test(win.count) && !win.sky && shut,
       JSON.stringify({ booth: signs.booth, atBooth, win, shut }));
   }
+  // --- the wall of thanks: a tablet cut into the cliff west of the meadow of the acid pond, facing the meadow. Nobody
+  // sponsors anything in this world: it says its title, and invites
+  {
+    const wall = await page.evaluate(async () => {
+      const m = window.__mmf, L = await import('/src/world/layout/layout.js'), w = m.world.games.thanks, f = w.face, g = (x, z) => m.world.groundAt(x, z);
+      const mesh = m.world.games.group.getObjectByName('notice-thanks');
+      const nx = Math.sin(f.yaw), nz = Math.cos(f.yaw), ct = Math.cos(f.tilt), st = Math.sin(f.tilt), tx = Math.cos(f.yaw), tz = -Math.sin(f.yaw);
+      // (its corners, the middles of its sides and its middle: how far above the rock each is)
+      const above = [];
+      for (const u of [-0.5, 0, 0.5]) for (const v of [-0.5, 0, 0.5]) above.push(+(f.y + ct * v * f.height - g(f.x + tx * u * f.width - nx * st * v * f.height, f.z + tz * u * f.width - nz * st * v * f.height)).toFixed(2));
+      const far = Math.hypot(L.ACID.x - f.x, L.ACID.z - f.z);
+      return {
+        shown: w.shown, above, lean: +((f.tilt * 180) / Math.PI).toFixed(1), foot: +(f.y - (f.height / 2) * ct - g(w.x, w.z)).toFixed(2), size: [f.width, f.height],
+        faces: +(((L.ACID.x - f.x) * nx + (L.ACID.z - f.z) * nz) / far).toFixed(2), pond: Math.round(far), sheet: mesh ? [mesh.material.map.image.width, mesh.material.map.image.height] : null,
+      };
+    });
+    check('the wall of thanks is cut into the cliff by the acid pond: it lies on the rock — no corner under it, none far off it — and leans back with it, its foot above the grass, facing the meadow; nobody sponsoring yet, it says its title and invites',
+      !!wall.sheet && wall.sheet[0] <= 1536 && wall.above.every((d) => d > 0 && d < 2.6) && wall.lean > 15 && wall.lean < 40 && wall.foot > 0.8 && wall.foot < 2.6 && wall.faces > 0.85 && wall.pond > 15 && wall.pond < 45
+      && wall.shown?.title === 'THANKS TO THOSE COMPANIES, THE GAME IS FREE FOR YOU!' && wall.shown.rows.length === 0 && wall.shown.ghosts === 3 && wall.shown.cols === 1, JSON.stringify(wall));
+  }
   // --- the fair: the four booths of the pier, played by a bot through the pointer; the race, driven by a bot
   {
     await place(98, 0, 0);

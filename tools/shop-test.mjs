@@ -236,6 +236,46 @@ try {
   // ---- a plaque for a companion, round the plinth of the golden dog: bought at a bare plate, engraved by who paid, approved, read by all
   await page.keyboard.press('Escape');
   await frames(3);
+  // ---- (first) a gondola is taken: its sponsor is seen on the car itself — both ends, facing outwards — the Trading
+  // Post says which car it is, and the wall of thanks has them
+  {
+    const bare7 = await page.evaluate(() => window.__mmf.world.pier.gondolaShown(7));
+    await pay('gondola:7', device, 'sub_test_gondola_7');
+    const filled = await (await fetch(`${BASE}/api/sponsor`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ slot: 'gondola:7', device, title: 'Seven Seas Ice Cream', subtitle: 'on the pier since ever', url: 'https://ice.example' }) })).json();
+    await page.evaluate(() => window.__mmf.refreshShop());
+    await page.waitForFunction(() => window.__mmf.world.pier.gondolaShown(7), null, { timeout: 30000 });
+    await frames(3);
+    const car = await page.evaluate(() => {
+      const pier = window.__mmf.world.pier, mesh = pier.wheelPivot.children.find((c) => c.name === 'big-wheel-banners'), pos = mesh.geometry.attributes.position, uv = mesh.geometry.attributes.uv;
+      // (a banner of a car, in the frame of the wheel — whose x runs along the pier: which way it faces, which way its words run, how wide it is)
+      const quad = (n, side) => {
+        const o = ((n - 1) * 2 + side) * 4, P = (k) => [pos.getX(o + k), pos.getY(o + k), pos.getZ(o + k)], a = P(0), b = P(1), d = P(3);
+        const nx = (b[1] - a[1]) * (d[2] - a[2]) - (b[2] - a[2]) * (d[1] - a[1]);
+        return { faces: Math.sign(nx), runs: Math.sign((b[2] - a[2]) * (uv.getX(o + 1) - uv.getX(o))), wide: +Math.abs(b[2] - a[2]).toFixed(2), x: Math.sign(a[0]) };
+      };
+      return { shore: quad(7, 0), sea: quad(7, 1), free: quad(8, 0), shown: [7, 8].map((n) => pier.gondolaShown(n)).join() };
+    });
+    await page.evaluate(() => window.__mmf.openTrading());
+    await page.waitForSelector('.tp-car[data-id="gondola:7"] canvas', { timeout: 120000 });
+    const post7 = await page.evaluate(() => {
+      const c = document.querySelector('.tp-car[data-id="gondola:7"]'), k = c.querySelector('canvas'), px = k.getContext('2d').getImageData(0, 0, k.width, k.height).data;
+      let lit = 0;
+      for (let i = 0; i < px.length; i += 400) if (px[i] + px[i + 1] + px[i + 2] > 60) lit++;
+      return { name: c.querySelector('h3').textContent, tag: c.querySelector('.tp-tag').textContent, who: c.querySelector('.tp-who').textContent, price: c.querySelector('.tp-price')?.textContent || '', title: document.querySelector('.tp-also-w').textContent, cars: document.querySelectorAll('.tp-car').length, lit };
+    });
+    await page.evaluate(() => window.__mmf.sponsorsView.close());
+    const row = await page.evaluate(async () => {
+      const wall = window.__mmf.world.games.thanks, mine = () => wall.shown?.rows.find((r) => r.name === 'Seven Seas Ice Cream');
+      for (let i = 0; i < 100 && !mine(); i++) await new Promise((r) => setTimeout(r, 100));
+      return mine() || null;
+    });
+    check('a gondola that is taken shows its sponsor on the car — a board wider than the car on both ends, each facing outwards with its words running the right way, a free car keeping the small invitation — the Trading Post says which car it is, with a photograph of it, and the wall of thanks has them at "$29 a month"',
+      filled.ok === true && bare7 === false && car.shown === 'true,false' && car.shore.x === -1 && car.shore.faces === -1 && car.sea.x === 1 && car.sea.faces === 1 && car.shore.runs * car.shore.faces === -1 && car.sea.runs * car.sea.faces === -1
+      && car.shore.wide > 3 && car.sea.wide > 3 && car.free.wide < 2.2 && car.free.faces === -1
+      && post7.name === 'Gondola 7' && /Seven Seas Ice Cream/.test(post7.who) && /\$29 a month/.test(post7.price) && /1 of 24 gondolas sponsored/.test(post7.title) && post7.cars === 1 && post7.lit > 200
+      && row?.figure === '$29' && row.unit === 'a month' && row.where === 'Gondola 7',
+      JSON.stringify({ filled, bare7, car, post7, row }));
+  }
   await page.evaluate(() => window.__mmf.adminKey(''));
   const atPlate = (n) => page.evaluate((n) => { const m = window.__mmf, q = m.world.places.plaques, w = q.where(n), yaw = Math.atan2(w.x - w.sx, w.z - w.sz); m.player.teleport(w.sx, w.sz, yaw); m.player.pos.y = q.y; m.rig.snap(m.player.pos, yaw + Math.PI); m.rig.yaw = yaw + Math.PI; m.rig.pitch = -0.04; m.rig.distance = 2.4; return { count: q.count, column: q.columnAt(w.sx, w.sz), row: w.row }; }, n);
   const plates = await atPlate(3);
@@ -476,6 +516,8 @@ try {
     // switched on (the owner of the game throws the switch): the card is there at once, without loading the page again
     await flip({ userRooms: true });
     const cardOn = await until(() => o.evaluate(() => { const c = document.querySelector('.shop .card[data-item="room"]'); return c ? { tag: c.querySelector('.price').textContent, shelf: [...document.querySelectorAll('.shop .shelf h3')].map((h) => h.textContent).pop() } : null; }));
+    // (its picture: an oasis at dusk — the evening sky, the pool — and the visitor's own robot on the bank)
+    const roomPic = await o.evaluate(() => { const k = document.querySelector('.shop .card[data-item="room"] canvas'); if (!k) return null; const g = k.getContext('2d'), at = (x, y) => [...g.getImageData(Math.round(k.width * x), Math.round(k.height * y), 1, 1).data].slice(0, 3); return { size: `${k.width}x${k.height}`, sky: at(0.5, 0.03), water: at(0.3, 0.675), robot: at(0.5, 0.45), beside: at(0.27, 0.45) }; });
     await o.evaluate(() => document.querySelector('.shop .card[data-item="room"]').click());
     const offer4 = await o.evaluate(() => ({ title: document.querySelector('.shop .detail h3').textContent, acts: [...document.querySelectorAll('.shop .detail .acts button')].map((b) => b.textContent), perks: document.querySelectorAll('.shop .detail .perks li').length, fine: document.querySelector('.shop .detail .fine').textContent }));
     const n4 = asked.length;
@@ -485,6 +527,9 @@ try {
       !/room of your own/i.test(offRoster) && !/room of your own/i.test(offShelves) && cardOn?.tag === '$59 a month' && cardOn.shelf === 'A room of your own' && offer4.title === 'A room of your own' && offer4.acts.join() === 'Get a room · $59 a month' && offer4.perks === 6 && /thirty days/.test(offer4.fine)
       && form4?.get('mode') === 'subscription' && form4.get('line_items[0][price_data][unit_amount]') === '5900' && form4.get('metadata[item]') === 'room' && form4.get('metadata[account]') === 'Roomy',
       JSON.stringify({ offRoster, offShelves, cardOn, offer4, form: form4?.toString().slice(0, 260) }));
+    check('the card of a room of one\'s own has its picture: an oasis — the evening sky, the pool — with the visitor\'s own robot standing on its bank',
+      !!roomPic && roomPic.size === '216x252' && roomPic.sky[2] > 80 && roomPic.sky[2] > roomPic.sky[0] + 30 && roomPic.water[1] > roomPic.water[0] + 40
+      && roomPic.robot.reduce((sum, v, i) => sum + Math.abs(v - roomPic.beside[i]), 0) > 60, JSON.stringify(roomPic));
     // Stripe says it was paid; back in the game the room is theirs: "Who is here" has its link and its settings
     const paid4 = await tell({ type: 'checkout.session.completed', data: { object: { id: 'cs_room_shop', payment_status: 'paid', amount_total: 5900, subscription: 'sub_room_shop', customer: 'cus_room_shop', metadata: { item: 'room', device: devO, account: 'Roomy' } } } });
     await owner.go('&paid=room');
