@@ -778,6 +778,7 @@ server/index.js            Node production server: static files + presence relay
 server/release.js          the switches of what is released, the version online, a word to every room
 server/door.js             the door of the rooms: which room a visitor goes to, the lists, the rules, who gets in
 server/replay.js           the referee: a game played again from its seed and what the page wrote down of it
+server/urooms.js           the rooms that players make for themselves (switched off as delivered): bought, entered with a ticket, asleep when unpaid
 server/rooms.js            …and its reasoning: the common rooms, when one opens, starts, goes quiet
 server/stats.js            the game in figures: sums only (the lab's)
 public/admin/              the back office: a page of plain files that asks everything of the API
@@ -1155,6 +1156,37 @@ this is **closed**: only the common rooms exist (and, one day, the rooms players
 the owner. The switch `freeRooms` of the back office opens it again; a server started with `FREE_ROOMS=1` (the
 tests, `npm run dev`) has it open.
 
+**Rooms that players make** (`server/urooms.js`) — built, and delivered **switched off**: while the switch
+`userRooms` of the back office is off there is no card in the shop, no corner in "Who is here", no path that
+answers, and a name of that kind is no room. Switched on:
+
+- **a room of one's own is bought in the shop, by the month ($59)**, from a browser signed in to an account —
+  one room for an account. Stripe says when it is paid (the webhook), as for everything else;
+- it is **reached by its link only** (`?room=own-xxxxxxxx`, in no list), **holds fifty**, and is **kept** — its
+  name, its owner, its password, its boards — even when nobody is in it. **No sky village** hangs over it: the
+  page that opens such a link builds the world without them;
+- **a password, if its owner wants one** — kept as those of the accounts are (a salted hash, never the words),
+  and **never in an address**: the page exchanges it (`POST /api/room/enter`) for a *ticket*, a note signed for
+  that browser and that room and good for a minute, and the relay lets nobody into such a room without one
+  (its owner needs no password). The password stays in the memory of the page — a line that drops is picked
+  up again without asking — and nowhere else. Ten wrong passwords in a row close the door of a room for a
+  quarter of an hour;
+- **its own boards of scores, next to the world's**: a score made in the room goes on both (with the ticket
+  comes the note of a *member*, good for twelve hours, which the page sends with its scores), and each board
+  of the fair then shows the room on the left and the world on the right — today, and of all time. A score
+  that would enter the first five of the room is played again by the referee like any other;
+- **its owner** renames it, sets or removes its password, empties its boards, and **puts a visitor out** —
+  out of the room, back to the rooms of the fair, and not into this one again for an hour (by the browser the
+  door let in: the relay remembers it for as long as the room is awake; a password changed keeps somebody
+  out for good). All of it from "Who is here";
+- **when it is no longer paid for** (Stripe says the subscription ended) the room **falls asleep**: nobody
+  gets in, its link says so, nothing is lost. **Thirty days later it is freed** — its name, its boards. Paying
+  again in the meantime wakes it as it was;
+- the owner of the game sees every such room in the back office ("Rooms"), and gets into any of them.
+
+Kept for a room: its name, the account that pays for it, the hash of its password, its boards — in the
+notebook, with the rest. No new Durable Object class: such a room is a room like the others for the relay.
+
 ### How many visitors at once?
 
 - **A room holds 200 visitors at the most** (`MAX_PLAYERS`; 48 in the first versions, then 250). The old limit came from the fact
@@ -1196,13 +1228,13 @@ tests, `npm run dev`) has it open.
 |---|---|
 | `npm run bake` | bakes the world, the statue and the textures again |
 | `npm run bake:statue` | sculpts the golden dog again (`-- --preview=dog.png` also draws it from five sides, `-- --cell=0.012` makes a finer mesh) |
-| `npm test` | 231 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password) |
-| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (173 in all) |
+| `npm test` | 241 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password), the rooms that players make (bought, entered with a ticket, their own boards, asleep when unpaid, freed) |
+| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (182 in all) |
 | `npm run test:update` | a delivery from end to end, in the real game: two builds, a visitor in the world, the owner at the back office (`/admin`: the switches, a word to every room, a line refused, somebody kept out, the figures, the sky villages stage by stage), every page asked to refresh but never in the middle of a sentence, then the server replaced by the next version — the page says so, refreshes, comes back at the same spot and says what is new; and a plain build leaves nothing of the game on the page (12 checks) |
 | `node tools/extras-test.mjs`, `node tools/slide-test.mjs`, `node tools/pond-test.mjs`, `node tools/boats-test.mjs`, `node tools/hill-test.mjs`, `node tools/crack-test.mjs`, `node tools/hollow-test.mjs`, `node tools/games-test.mjs` | the lab's own checks of its extras and of each of its games — the last one plays them in the running game, in a browser (see `lab/INTEGRATION.md`) |
 | `npm run test:load` | a crowd at the door, with the real rules: 600 connections arrive in twenty seconds and walk (everybody gets in, rooms of about fifty, the lists say what is true, a state reaches the neighbours in time), 230 more follow one link (that room holds 200, never one more; the relay refuses whoever comes without asking; the owner still gets in), then most leave (the rooms that have emptied are offered a livelier one, nobody is moved or cut off) — 11 checks; `-- --cloudflare` plays it against the real Worker in the local Workers runtime, `-- --visitors=400` changes the crowd |
 | `npm run sim:rooms` | a whole day at the door, simulated with the real rules: the size of every room through the day as a picture (`tools/preview/rooms-<scenario>.png`), next to what the old door did; `-- --peak=800`, `-- --rules=open:40,start:15,low:6` try other days and other numbers |
-| `npm run test:shop` | the shop in the real game, on the Node server with test keys and a stand-in for Stripe: a hat bought and worn, the panel of a game sponsored, filled in (with a logo) and approved by the administrator, the stand of the gondolas, a plaque for a companion (bought at a bare plate, engraved with a picture, approved), an account made and signed in to on its card, the payment form inside the game (and Stripe's page when it cannot be shown); and a newcomer: the padlocks of the welcome card and the free day of the jetpack, the Game Pass bought as a subscription, what it lends (black, the largest size, a hat that was never bought), its end and the end of the free day; the window of the Trading Post (20 checks) |
+| `npm run test:shop` | the shop in the real game, on the Node server with test keys and a stand-in for Stripe: a hat bought and worn, the panel of a game sponsored, filled in (with a logo) and approved by the administrator, the stand of the gondolas, a plaque for a companion (bought at a bare plate, engraved with a picture, approved), an account made and signed in to on its card, the payment form inside the game (and Stripe's page when it cannot be shown); and a newcomer: the padlocks of the welcome card and the free day of the jetpack, the Game Pass bought as a subscription, what it lends (black, the largest size, a hat that was never bought), its end and the end of the free day; the window of the Trading Post; and a room of one's own: its card and its payment, its settings from a form, its password asked for at the door, a score on its board and on the world's, a visitor put out (27 checks) |
 | `npm run test:smoke` | drives the real site: welcome screen, walking, free camera, settings, large map, the story of the opening told once (`-- --mobile` for the touch layout) |
 | `npm run test:audio` | Listens to the sound engine without ears: in headless Chromium it renders a dozen listener scenarios (beach, cliffs, pier, woods, mill, waterfall, cave, sky village, the climb…) and every one-shot effect through an offline audio context, measures level, spectrum, how the loudness moves and how tonal it is, fails on silence or clipping, and times `update()` (about 0.01 ms a frame) |
 | `npm run test:walk` | 55 checks in the real game (each of the twelve games a bot plays there is then played again by the server's referee, from what the page wrote down, and must end with the very same score): what a newcomer sees first (the banner, the rules, the story on its board, the easel of life advice; the boards of what is new out of that first look), who hears the chat (it opens on Nearby, says so, and is told how to reach everybody), the wooden signposts (beside the paths, each plank pointing the way of what it names), the Trading Post and its window of photographs, pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls and the high clearing above them, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the swim on to the golden cove (the shark stays away; out of the sea on the beach; the stair up to the golden dog; the plaques round its plinth, painted for who climbs up there), the fifty sky villages (prices, places to sit, the board of one for hire, the one dressed as a demonstration), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, sitting down on the ground, the two jetpacks (which is on; the light one's fifteen seconds), big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the four booths of the pier head and the six of the walk (a bot plays each through the pointer, as a visitor would: baskets shot where the hoop is going to be, a tower stacked, a sequence of lamps remembered, fish brought up, alarms answered in a fifth of a second, a cup followed; boards), the arcade cabinet (a bot runs three hundred metres), the quad race (asked for in the paddock, it leaves with the next named start; a bot drives three laps flat out — it never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, and flies off the ramp), the flying theatre (a bot flaps through nine pairs of columns), the acid pond, the shark, change of tier |

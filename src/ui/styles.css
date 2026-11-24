@@ -851,3 +851,7 @@ button.pill.players { pointer-events: auto; }
   #ui .tp-who { min-height: 42px; padding: 6px 7px; }
   #ui .tp-logo { width: 32px; height: 32px; }
 }
+/* a room of one's own, in "Who is here": a line of words, then its buttons underneath */
+.roster .who.room.mine { flex-wrap: wrap; }
+.roster .who.room.mine small { white-space: normal; }
+.roster .who.room.mine .acts { flex: 1 1 100%; max-width: none; justify-content: flex-start; }

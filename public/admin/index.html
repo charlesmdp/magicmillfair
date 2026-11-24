@@ -62,6 +62,11 @@
       <h2>Rooms</h2>
       <p class="hint">The rooms that hold somebody right now. Per room: the chat, who one sees, the big red button. Shared by all: the boards of scores, announcements, what is released.</p>
       <div id="rooms" class="list"></div>
+      <div id="urooms-box" hidden>
+        <h3>Rooms made by players</h3>
+        <p class="hint">A room of one's own is bought by the month, by an account. It is reached by its link only, holds fifty, and has its own boards of scores next to the world's. When it is no longer paid for it falls asleep — nobody gets in, nothing is lost — and is freed thirty days later.</p>
+        <div id="urooms" class="list"></div>
+      </div>
       <h3>How newcomers are shared out</h3>
       <p class="hint">The common rooms (Room 1, Room 2…) are filled by the door: a new one opens once every room that takes newcomers holds <b>“a new room at”</b>; while it holds fewer than <b>“starting under”</b>, every newcomer goes there; a room that has fallen to <b>“quiet at”</b> or fewer takes no newcomer, and its visitors are offered a livelier room — nobody is ever moved. Whoever comes back finds their room again. <code>npm run sim:rooms</code> plays a whole day with these numbers.</p>
       <form id="rules-form" class="row wrap" data-owner>

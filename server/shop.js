@@ -52,6 +52,7 @@ import { readRelease } from './release.js';
 import { accountOf, addItem, holderOf, itemsOf, passLive, sameOwner } from './accounts.js';
 import { quietOnes } from './bans.js';
 import { PASS, TRIAL, itemOf } from './items.js';
+import { userRoomsOn, roomOfAccount, openRoom, sleepRoom } from './urooms.js';
 
 const out = (status, body, headers = {}) => ({ status, body, headers });
 const DEVICE = /^[A-Za-z0-9_-]{16,64}$/;
@@ -132,9 +133,18 @@ const shown = (id, s) => ({ title: s.title || '', subtitle: s.subtitle || '', ur
 const draftOf = (id, s) => (s.draft ? { ...s.draft, logo: s.draft.logo > 0 ? logoUrl(id, s.draft.logo, true) : null, ...(s.draft.logo === -1 && { keep: true }) } : null);
 
 /** What was paid for becomes theirs (called from the webhook; safe to call twice). `customer`: who pays, at Stripe. */
-export async function grant(ctx, item, device, sub = null, customer = null) {
+export async function grant(ctx, item, device, sub = null, customer = null, account = '') {
   const what = describe(item);
   if (!what || !DEVICE.test(device || '')) return false;
+  if (what.kind === 'room') {
+    // a room of one's own (urooms.js): made for the account that paid — or woken, if that account had one asleep
+    const acct = (typeof account === 'string' && account) || (await accountOf(ctx.store, device))?.name || '';
+    const room = await openRoom(ctx, acct, typeof sub === 'string' ? sub : '', typeof customer === 'string' ? customer : '');
+    if (!room) return false;
+    if (room.sub) await ctx.store.put(`sub:${room.sub}`, { room: room.id, device, at: ctx.now() });
+    await leaveNote(ctx, device, `Your room is ready: "${room.name}". Its link is in "Who is here" — only those you give it to can come.`);
+    return true;
+  }
   if (what.kind === 'own') {
     await addItem(ctx.store, device, item, ctx.now());
     return true;
@@ -304,9 +314,12 @@ export async function shopRoute(req, ctx) {
     const device = body?.device;
     if (!DEVICE.test(device || '')) return out(400, { error: 'Not a browser of the game.' });
     const holder = await holderOf(ctx.store, device);
-    if (!passLive(holder.pass, now) || !holder.pass.customer) return out(404, { error: 'There is no subscription to look after.' });
+    // (`what: 'room'`: the subscription of their room, rather than the Game Pass)
+    const mine = body.what === 'room' && (await userRoomsOn(ctx)) && holder.account ? await roomOfAccount(ctx, holder.account) : null;
+    const customer = body.what === 'room' ? (mine?.state === 'live' && mine.customer) || '' : passLive(holder.pass, now) ? holder.pass.customer || '' : '';
+    if (!customer) return out(404, { error: 'There is no subscription to look after.' });
     try {
-      return out(200, await createPortal(cfg, holder.pass.customer, req.site || '', ctx.fetch || fetch));
+      return out(200, await createPortal(cfg, customer, req.site || '', ctx.fetch || fetch));
     } catch (err) {
       console.error('[shop]', err.message);
       return out(502, { error: 'That page could not be opened. Try again in a moment.' });
@@ -324,6 +337,14 @@ export async function shopRoute(req, ctx) {
     if (what.kind === 'own' && (await ownedBy(ctx, device)).includes(what.item)) return out(409, { error: 'You already have it.' });
     if (what.kind === 'pass') { const holder = await holderOf(ctx.store, device); if (passLive(holder.pass, now) && !holder.pass.gift) return out(409, { error: 'You already have the pass.' }); }
     let extra = {};
+    if (what.kind === 'room') {
+      // a room of one's own: while they are switched on, for an account, one each
+      if (!(await userRoomsOn(ctx))) return out(400, { error: 'Nothing of that name is sold.' });
+      const acct = await accountOf(ctx.store, device);
+      if (!acct) return out(403, { error: 'A room takes an account: create one first (it is free).', account: true });
+      if ((await roomOfAccount(ctx, acct.name))?.state === 'live') return out(409, { error: 'You already have a room.' });
+      extra = { account: acct.name };
+    }
     if (what.auction) {
       // an auction: the bid must beat what the place went for (and be a sum Stripe can take)
       const bid = Math.round(Number(body.bid)), least = nextBid((await slotsOf(ctx))[what.item]?.bid || 0);
@@ -351,7 +372,7 @@ export async function shopRoute(req, ctx) {
       // (the figures: what came in, once — a bid that comes too late is given back at once, and counted as given back)
       if (describe(o.metadata?.item) && (await firstTime(ctx, o.id))) await noteSale(ctx.store, { cents: Number.isInteger(o.amount_total) ? o.amount_total : 0, pass: describe(o.metadata.item).kind === 'pass' }, now).catch(() => {});
       if (describe(o.metadata?.item)?.auction) await takeBid(ctx, cfg, o.metadata.item, o.metadata?.device, o.amount_total, o.payment_intent);
-      else await grant(ctx, o.metadata?.item, o.metadata?.device, o.subscription, o.customer);
+      else await grant(ctx, o.metadata?.item, o.metadata?.device, o.subscription, o.customer, o.metadata?.account);
     } else if (event.type === 'invoice.paid' && o.billing_reason === 'subscription_cycle') {
       // a month more of something held by the month (where Stripe is asked to tell of these): money in, nothing new sold
       if (Number.isInteger(o.amount_paid) && o.amount_paid > 0 && (await firstTime(ctx, o.id))) await noteSale(ctx.store, { cents: o.amount_paid }, now).catch(() => {});
@@ -360,7 +381,11 @@ export async function shopRoute(req, ctx) {
       const slots = await slotsOf(ctx), id = Object.keys(slots).find((k) => slots[k].sub && slots[k].sub === o.id);
       if (id) await release(ctx, slots, id);
       const held = typeof o.id === 'string' ? await ctx.store.get(`sub:${o.id}`) : null;
-      if (held) {
+      if (held?.room) {
+        // a room of one's own: it falls asleep — nothing is lost for thirty days (urooms.js)
+        if (await sleepRoom(ctx, held.room)) await leaveNote(ctx, held.device, 'Your room has fallen asleep: nobody can enter it. It is kept for thirty days — pay for it again and it wakes as it was.');
+        await ctx.store.delete(`sub:${o.id}`);
+      } else if (held) {
         let ended = false;
         for (const key of [held.account && `acct:${held.account}`, held.device && `own:${held.device}`]) {
           const rec = key ? await ctx.store.get(key) : null;

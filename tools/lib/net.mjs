@@ -43,8 +43,8 @@ export class Client {
     this.waiters = [];
     this.id = 0;
     this.code = null; // close code once closed
-    const { dev, pass, ...wsOptions } = options; // `dev`: the name the browser gave itself, as the game passes it; `pass`: the owner's note for that room
-    this.ws = new WebSocket(`ws://127.0.0.1:${port}/ws${room ? `?room=${encodeURIComponent(room)}` : '?'}${dev ? `&dev=${dev}` : ''}${pass ? `&pass=${encodeURIComponent(pass)}` : ''}`, wsOptions);
+    const { dev, pass, ticket, ...wsOptions } = options; // `dev`: the name the browser gave itself, as the game passes it; `pass`: the owner's note for that room; `ticket`: the note that lets into a room a player made
+    this.ws = new WebSocket(`ws://127.0.0.1:${port}/ws${room ? `?room=${encodeURIComponent(room)}` : '?'}${dev ? `&dev=${dev}` : ''}${pass ? `&pass=${encodeURIComponent(pass)}` : ''}${ticket ? `&ticket=${encodeURIComponent(ticket)}` : ''}`, wsOptions);
     this.opened = new Promise((resolve) => {
       this.ws.once('open', () => resolve(true));
       this.ws.once('error', () => resolve(false));

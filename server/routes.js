@@ -9,10 +9,7 @@
 //   GET  /api/door, GET /api/rooms, POST /api/rooms/rules    which room a visitor goes to, the rooms, their rules (door.js)
 //   GET | POST /api/stats, POST /api/stats/set     the game in figures (stats.js)
 //   POST /api/visit  { device, tz }           → { days, best, today }             (see visit())
-//   GET | POST | DELETE /api/scores, POST /api/scores/claim, POST /api/run         (see scores.js)
-//   GET | POST /api/flagged                   the scores the referee did not believe (replay.js): an administrator
-//                                             looks — { flagged: [{ id, board, name, score, at, why, guest }] } —
-//                                             then takes one onto its board ({ id, accept: true }) or lets it go
+//   GET | POST | DELETE /api/scores, POST /api/run                                 (see scores.js)
 //   GET  /api/admin                           → { ok, owner, boards }   (with an administrator's key: Authorization: Bearer …)
 //   GET | DELETE /api/admins                  the administrators the owner and the others have named (admins.js)
 //   GET  /api/visitors                        where the visitors come from, for the administrators (visitors.js)
@@ -47,7 +44,8 @@ import { readRelease, releaseNews, releaseRoute } from './release.js';
 import { doorRoute } from './door.js';
 import { banned, addBan, bansRoute, anyQuiet, keptOut } from './bans.js';
 import { statsRoute } from './stats.js';
-import { BOARDS as GAME_NAMES } from './catalog.js';
+import { BOARDS as GAME_NAMES, PRICES } from './catalog.js';
+import { uroomsRoute, memberOf, userRoom, userRoomsOn } from './urooms.js';
 
 const out = (status, body, headers = {}) => ({ status, body, headers });
 
@@ -106,6 +104,9 @@ export async function route(req, ctx) {
   // what is released, a word to every room (release.js)
   const released = await releaseRoute(req, ctx, owner);
   if (released) return released;
+  // the rooms that players make for themselves (urooms.js — nothing answers while they are switched off)
+  const mine = await uroomsRoute(req, ctx, PRICES.room);
+  if (mine) return mine;
   // (a board of scores can wait for its game to be released: until then it is as if it did not exist)
   const shut = async (board) => { const sw = BOARDS[board]?.release; return !!sw && !(await readRelease(ctx)).release[sw]; };
   // (the version of the game online, in a few characters — '' when the host cannot tell)
@@ -178,7 +179,11 @@ export async function route(req, ctx) {
         if (!c || c.c !== 1 || !Object.hasOwn(BOARDS, c.b) || !Number.isFinite(c.s) || !(c.x > now) || typeof c.n !== 'string' || (await shut(c.b))) continue;
         if (await used(ctx, `claim:${c.n}`, c.x)) continue;
         if (hush) own[c.b] = addScore(own[c.b], c.b, { name: acct.name, score: c.s }, now).state;
-        else await ctx.store.put(`board:${c.b}`, addScore(await ctx.store.get(`board:${c.b}`), c.b, { name: acct.name, score: c.s }, now).state);
+        else {
+          await ctx.store.put(`board:${c.b}`, addScore(await ctx.store.get(`board:${c.b}`), c.b, { name: acct.name, score: c.s }, now).state);
+          // (made in a room a player made: it counts on the boards of that room as well)
+          if (typeof c.r === 'string' && (await userRoomsOn(ctx)) && (await userRoom(ctx, c.r))?.state === 'live') await ctx.store.put(`uboard:${c.r}:${c.b}`, addScore(await ctx.store.get(`uboard:${c.r}:${c.b}`), c.b, { name: acct.name, score: c.s }, now).state);
+        }
         if (!claimed.includes(c.b)) claimed.push(c.b);
       }
       if (hush && claimed.length) await ctx.store.put(`shadow:${device}`, own);
@@ -187,16 +192,19 @@ export async function route(req, ctx) {
     }
 
     if (method === 'GET' || method === 'HEAD') {
-      const board = query.get('board') || 'sky', own = await shadowOf(browser(query.get('device')));
-      const show = async (id) => { const stored = await ctx.store.get(`board:${id}`); return own?.[id] ? topsWith(stored, own[id], id, now) : topsOf(stored, now); };
+      const board = query.get('board') || 'sky', device = browser(query.get('device')), own = await shadowOf(device);
+      const from = async (key, id) => { const stored = await ctx.store.get(key); return own?.[id] ? topsWith(stored, own[id], id, now) : topsOf(stored, now); };
+      const show = (id) => from(`board:${id}`, id);
+      // (asked from a room a player made, with the note of a member: the boards of that room come with the world's)
+      const inRoom = (await memberOf(ctx, query.get('room') || '', device, query.get('member') || '')) ? query.get('room') : '';
       if (board === 'all') {
         // every board at once (the game asks for them all when it starts)
-        const boards = {};
-        for (const id of Object.keys(BOARDS)) if (!(await shut(id))) boards[id] = await show(id);
-        return out(200, { boards });
+        const boards = {}, theirs = {};
+        for (const id of Object.keys(BOARDS)) if (!(await shut(id))) { boards[id] = await show(id); if (inRoom) theirs[id] = await from(`uboard:${inRoom}:${id}`, id); }
+        return out(200, { boards, ...(inRoom && { room: { id: inRoom, boards: theirs } }) });
       }
       if (!Object.hasOwn(BOARDS, board) || (await shut(board))) return out(404, { error: 'Unknown board.' });
-      return out(200, { board, ...(await show(board)) });
+      return out(200, { board, ...(await show(board)), ...(inRoom && { room: { id: inRoom, ...(await from(`uboard:${inRoom}:${board}`, board)) } }) });
     }
     if (method === 'DELETE') {
       if (!req.admin) return out(403, { error: 'Forbidden.' });
@@ -220,13 +228,17 @@ export async function route(req, ctx) {
     if (guest && (await isAccountName(ctx.store, name))) return out(409, { error: 'That name belongs to an account: sign in to play under it, or pick another name.', taken: true });
     if (await used(ctx, note.n, note.t + BOARDS[score.board].max + 3600_000)) return out(400, { error: 'Not a score: this run was already counted.' });
     const stored = await ctx.store.get(`board:${score.board}`), periods = guest ? ['day'] : PERIODS, line = { name, score: score.score };
-    let added, tops;
-    // A game that would enter the first five of one of its lists is played again by the server (replay.js), from
+    // (made in a room a player made — the note of a member came with it: it goes on the boards of that room too)
+    const inRoom = (await memberOf(ctx, body.room, device, body.member)) ? body.room : '';
+    const roomKey = inRoom ? `uboard:${inRoom}:${score.board}` : '', roomStored = inRoom ? await ctx.store.get(roomKey) : null;
+    let added, tops, theirs = null;
+    // A game that would enter the first five of one of its lists — the world's, or those of the room it was made
+    // in — is played again by the server (replay.js), from
     // the seed of its note and what the page wrote down of the game. A score that does not come out of it is
     // refused without a word — its author sees it on the board, nobody else does — and listed for the owner
     // (GET /api/flagged): a name, a score, the reason. Nothing of the game itself is kept, believed or not.
     let doubt = '';
-    if (replayable(score.board) && wouldEnter(stored, score.board, score.score, periods, 5, now)) {
+    if (replayable(score.board) && (wouldEnter(stored, score.board, score.score, periods, 5, now) || (inRoom && wouldEnter(roomStored, score.board, score.score, periods, 5, now)))) {
       let played = null, broke = false;
       try { played = Number.isInteger(note.s) ? replay(score.board, note.s, body.log) : null; } catch { broke = true; }
       if (!agrees(score.board, score.score, played)) {
@@ -236,7 +248,7 @@ export async function route(req, ctx) {
     }
     if (doubt) {
       const kept = ((await ctx.store.get('flagged')) || []).slice(-39);
-      kept.push({ id: randomId(6), board: score.board, name, score: score.score, at: now, why: doubt, guest });
+      kept.push({ id: randomId(6), board: score.board, name, score: score.score, at: now, why: doubt, guest, ...(inRoom && { room: inRoom }) });
       await ctx.store.put('flagged', kept);
     }
     // (…and a score that is not believed is kept apart like those of a visitor kept out in silence: theirs to see)
@@ -247,15 +259,19 @@ export async function route(req, ctx) {
       tops = topsWith(stored, added.state, score.board, now);
       added.rank = tops.tops.all.findIndex((e) => e.name.toLowerCase() === name.toLowerCase()) + 1;
       added.day = tops.tops.day.findIndex((e) => e.name.toLowerCase() === name.toLowerCase()) + 1;
+      if (inRoom) theirs = topsWith(roomStored, added.state, score.board, now); // (…on the boards of the room as well: theirs to see)
     } else {
       added = addScore(stored, score.board, line, now, periods);
       await ctx.store.put(`board:${score.board}`, added.state);
       tops = topsOf(added.state, now);
+      if (inRoom) { const r = addScore(roomStored, score.board, line, now, periods); await ctx.store.put(roomKey, r.state); theirs = { ...topsOf(r.state, now), rank: r.rank, day: r.day }; }
     }
     return out(200, {
       board: score.board, ...tops, rank: added.rank, best: added.best,
       // (a guest: where they stand today, where they would stand with an account — and a note to claim it with)
-      ...(guest && { guest: true, day: added.day, would: wouldRank(stored, score.board, score.score, now), claim: await sign(await ctx.secret(), { c: 1, b: score.board, s: score.score, x: now + CLAIM_MS, n: randomId(9) }) }),
+      ...(guest && { guest: true, day: added.day, would: wouldRank(stored, score.board, score.score, now), claim: await sign(await ctx.secret(), { c: 1, b: score.board, s: score.score, x: now + CLAIM_MS, n: randomId(9), ...(inRoom && { r: inRoom }) }) }),
+      // (the boards of the room it was made in)
+      ...(theirs && { room: { id: inRoom, ...theirs } }),
     });
   }
 
@@ -269,11 +285,13 @@ export async function route(req, ctx) {
       if (body.accept === true && Object.hasOwn(BOARDS, one.board)) {
         const state = addScore(await ctx.store.get(`board:${one.board}`), one.board, { name: one.name, score: one.score }, now, one.guest ? ['day'] : PERIODS).state;
         await ctx.store.put(`board:${one.board}`, state);
+        // (made in a room a player made, if that room is still there: on its boards too)
+        if (one.room && (await userRoom(ctx, one.room))?.state === 'live') await ctx.store.put(`uboard:${one.room}:${one.board}`, addScore(await ctx.store.get(`uboard:${one.room}:${one.board}`), one.board, { name: one.name, score: one.score }, now, one.guest ? ['day'] : PERIODS).state);
       }
       kept = kept.filter((f) => f !== one);
       await ctx.store.put('flagged', kept);
     } else if (method !== 'GET' && method !== 'HEAD') return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD, POST' });
-    return out(200, { flagged: kept.map((f) => ({ id: f.id, board: f.board, name: f.name, score: f.score, at: f.at, why: f.why, guest: !!f.guest })).reverse() });
+    return out(200, { flagged: kept.map((f) => ({ id: f.id, board: f.board, name: f.name, score: f.score, at: f.at, why: f.why, guest: !!f.guest, ...(f.room && { room: true }) })).reverse() });
   }
 
   // an account, to keep things from one browser to the next (accounts.js)

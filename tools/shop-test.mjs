@@ -441,6 +441,123 @@ try {
       ended3 === 200 && after3.color === 0 && after3.size === 1 && after3.hat === 0 && !after3.pass && after3.lite === 'trial' && after3.told === 1 && over3.lent === null && !over3.canFly && said3.noJet && /free day with the jetpack is over/.test(note3) && /Jetpack Lite is \$5/.test(note3) && /Game Pass/.test(note3),
       JSON.stringify({ ended3, after3, over3, said3, note3 }));
   }
+  // ---- a room of one's own (server/urooms.js — switched on for this part, as the owner would): bought by the month
+  // with an account, set up from "Who is here", reached by its link; a friend is asked for its password; a score
+  // made there goes on the boards of the room and on the world's; its owner puts the friend out
+  {
+    const flip = async (set) => (await fetch(`${BASE}/api/release`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${ADMIN_KEY}` }, body: JSON.stringify({ set }) })).json();
+    const until = async (fn, ms = 20000) => { for (const end = Date.now() + ms; Date.now() < end; await new Promise((r) => setTimeout(r, 150))) { const v = await fn(); if (v) return v; } return fn(); };
+    const visitor = async () => {
+      const context = await browser.newContext({ viewport: { width: 960, height: 560 }, deviceScaleFactor: 1 });
+      await context.route('https://checkout.stripe.test/**', (route) => route.fulfill({ contentType: 'text/html', body: '<title>pay</title>the payment page' }));
+      const p = await context.newPage();
+      p.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) logs.push(m.text().slice(0, 300)); });
+      p.on('pageerror', (e) => logs.push(e.message));
+      const go = async (query = '') => { await p.goto(`${BASE}/?q=${opt.q || 'low'}${query}`); await p.waitForSelector('.card.ready', { timeout: 240000 }); await p.click('.go'); await p.waitForFunction(() => window.__mmf && window.__mmf.ready && window.__mmf.player, null, { timeout: 60000 }); };
+      const roomButton = (label) => p.evaluate((label) => { const b = [...document.querySelectorAll('.roster .acts button')].find((e) => e.textContent === label); if (b) b.click(); return !!b; }, label);
+      const said = () => p.evaluate(() => `${[...document.querySelectorAll('.chat .log p')].map((e) => e.textContent).join(' | ')} | ${document.querySelector('.hud .note').textContent}`);
+      return { context, p, go, roomButton, said };
+    };
+    const owner = await visitor(), o = owner.p;
+    await owner.go();
+    const devO = await o.evaluate(() => localStorage.getItem('mmf.device'));
+    // (an account first: a room takes one — made here as the card of the settings makes it)
+    await o.evaluate(async (device) => { await fetch('/api/account', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'create', device, name: 'Roomy', password: 'a long password' }) }); }, devO);
+    await owner.go();
+    await o.waitForFunction(() => document.querySelector('.shop-icon').classList.contains('selling'), null, { timeout: 20000 });
+    await o.click('.pill.players');
+    await o.waitForSelector('.roster.on', { timeout: 20000 });
+    const offRoster = await o.evaluate(() => [...document.querySelectorAll('.roster .rooms h3')].map((h) => h.textContent).join());
+    await o.click('.roster .close');
+    await o.click('.shop-icon');
+    await o.waitForSelector('.shop.on', { timeout: 20000 });
+    const offShelves = await o.evaluate(() => [...document.querySelectorAll('.shop .shelf h3')].map((h) => h.textContent).join());
+    // switched on (the owner of the game throws the switch): the card is there at once, without loading the page again
+    await flip({ userRooms: true });
+    const cardOn = await until(() => o.evaluate(() => { const c = document.querySelector('.shop .card[data-item="room"]'); return c ? { tag: c.querySelector('.price').textContent, shelf: [...document.querySelectorAll('.shop .shelf h3')].map((h) => h.textContent).pop() } : null; }));
+    await o.evaluate(() => document.querySelector('.shop .card[data-item="room"]').click());
+    const offer4 = await o.evaluate(() => ({ title: document.querySelector('.shop .detail h3').textContent, acts: [...document.querySelectorAll('.shop .detail .acts button')].map((b) => b.textContent), perks: document.querySelectorAll('.shop .detail .perks li').length, fine: document.querySelector('.shop .detail .fine').textContent }));
+    const n4 = asked.length;
+    await Promise.all([o.waitForURL(/checkout\.stripe\.test/, { timeout: 20000 }), o.evaluate(() => document.querySelector('.shop .detail .acts button').click())]);
+    const form4 = asked[n4];
+    check('a room of one\'s own: nothing of it while it is switched off; switched on, its card is in the shop at once — $59 a month, what it gives — and its button leads to the payment page, as a subscription for that account',
+      !/room of your own/i.test(offRoster) && !/room of your own/i.test(offShelves) && cardOn?.tag === '$59 a month' && cardOn.shelf === 'A room of your own' && offer4.title === 'A room of your own' && offer4.acts.join() === 'Get a room · $59 a month' && offer4.perks === 6 && /thirty days/.test(offer4.fine)
+      && form4?.get('mode') === 'subscription' && form4.get('line_items[0][price_data][unit_amount]') === '5900' && form4.get('metadata[item]') === 'room' && form4.get('metadata[account]') === 'Roomy',
+      JSON.stringify({ offRoster, offShelves, cardOn, offer4, form: form4?.toString().slice(0, 260) }));
+    // Stripe says it was paid; back in the game the room is theirs: "Who is here" has its link and its settings
+    const paid4 = await tell({ type: 'checkout.session.completed', data: { object: { id: 'cs_room_shop', payment_status: 'paid', amount_total: 5900, subscription: 'sub_room_shop', customer: 'cus_room_shop', metadata: { item: 'room', device: devO, account: 'Roomy' } } } });
+    await owner.go('&paid=room');
+    const told4 = await until(async () => { const t = await owner.said(); return /"Roomy's room" is yours/.test(t) ? t : null; });
+    await o.click('.pill.players');
+    await o.waitForSelector('.roster.on', { timeout: 20000 });
+    const mine4 = await until(() => o.evaluate(() => { const row = [...document.querySelectorAll('.roster .who.room.mine')].find((r) => /Roomy/.test(r.textContent)); return row ? { name: row.querySelector('b').textContent, sub: row.querySelector('small').textContent, acts: [...row.querySelectorAll('.acts button')].map((b) => b.textContent), rows: document.querySelectorAll('.roster .who.room.mine').length } : null; }));
+    // its name and its password, from the form
+    await owner.roomButton('Name, password');
+    await o.waitForSelector('.chooser.on', { timeout: 20000 });
+    await o.fill('.chooser .fields label:nth-of-type(1) input', 'The Den');
+    await o.fill('.chooser .fields label:nth-of-type(2) input', 'open sesame');
+    await o.click('.chooser .save');
+    const kept4 = await until(() => o.evaluate(async () => { const r = (await (await fetch(`/api/myroom?device=${localStorage.getItem('mmf.device')}`)).json()).room; return r && r.name === 'The Den' && r.locked ? r : null; }));
+    check('once Stripe says it is paid the room is theirs: "Who is here" has it — its link, its name, its password, its boards, its subscription; a name and a password are given from a form',
+      paid4 === 200 && !!told4 && mine4?.name === "Roomy's room" && mine4.rows === 1 && /Yours · reached by its link only · up to 50 visitors · no password/.test(mine4.sub) && mine4.acts.join() === 'Go there,Copy its link,Name, password,Empty its boards,Subscription' && kept4?.name === 'The Den' && kept4.locked === true && /^own-[a-z0-9]{8}$/.test(kept4.id),
+      JSON.stringify({ paid4, told4: (told4 || '').slice(-120), mine4, kept4 }));
+    // its owner goes there by its link (no password asked of them); a friend opens the same link: the password is asked for
+    const id = kept4.id;
+    await owner.go(`&room=${id}`);
+    const inO = await until(() => o.evaluate((id) => { const a = window.__mmf; return a.presence && a.presence.mode === 'online' && a.presence.room === id ? { room: a.presence.room, label: a.presence.label, host: a.presence.host, own: a.presence.inOwn } : null; }, id));
+    const friend = await visitor(), f = friend.p;
+    await friend.go(`&room=${id}`);
+    await f.waitForSelector('.chooser.on', { timeout: 30000 });
+    const asked1 = await f.evaluate(() => ({ title: document.querySelector('.chooser h2').textContent, lead: document.querySelector('.chooser .lead').textContent, kind: document.querySelector('.chooser .fields input').type }));
+    await f.fill('.chooser .fields input', 'open says me');
+    await f.press('.chooser .fields input', 'Enter');
+    const asked2 = await until(() => f.evaluate(() => (document.querySelector('.chooser.on') && /not its password/.test(document.querySelector('.chooser .lead').textContent) ? document.querySelector('.chooser .lead').textContent : null)));
+    await f.fill('.chooser .fields input', 'open sesame');
+    await f.press('.chooser .fields input', 'Enter');
+    const inF = await until(() => f.evaluate((id) => { const a = window.__mmf; return a.presence && a.presence.mode === 'online' && a.presence.room === id && a.presence.count === 2 ? { room: a.presence.room, label: a.presence.label, host: a.presence.host, count: a.presence.count, address: location.search } : null; }, id));
+    const seen4 = await until(() => o.evaluate(() => (window.__mmf.presence.count === 2 ? [...window.__mmf.presence.peers.values()].map((p) => p.name) : null)));
+    const saidF = await friend.said();
+    check('its owner goes there by its link and is asked nothing; a friend who opens the link is asked for the password — a wrong one is refused, the right one lets them in, and the two see each other in a room that is theirs alone',
+      inO?.host === true && inO.own === true && inO.label === 'The Den' && asked1.title === '"The Den" has a password' && asked1.kind === 'password' && /Type it to come in/.test(asked1.lead) && !!asked2 && inF?.host === false && inF.label === 'The Den' && /room=own-/.test(inF.address) && !/sesame/.test(inF.address)
+      && seen4?.length === 1 && /a room of its own: only those who were given its link are here/.test(saidF), JSON.stringify({ inO, asked1, asked2, inF, seen4, saidF: saidF.slice(-200) }));
+    // the friend really plays the bell: the score goes on the boards of the room — and on the world's
+    await f.evaluate(() => new Promise((done) => {
+      const a = window.__mmf, booth = a.world.games.booths.list.find((b) => b.id === 'bell');
+      a.playBooth(booth);
+      const tick = () => {
+        const s = a.fair.session;
+        if (!s) return done(true);
+        if (!s.over && s.gauge !== null && s.gauge > 0.85) a.input._clicks++;
+        requestAnimationFrame(tick);
+      };
+      tick();
+    }));
+    const boardsF = await until(() => f.evaluate(() => { const a = window.__mmf, r = a.fair.roomTops.bell, w = a.fair.tops.bell; return r && r.day.length ? { room: r.day, world: w.day, name: a.presence.name } : null; }));
+    const boardsO = await until(() => o.evaluate(() => { const r = window.__mmf.fair.roomTops.bell; return r && r.day.length ? r.day : null; }));
+    const world4 = await (await fetch(`${BASE}/api/scores?board=bell`)).json();
+    // (a picture of the board of the bell, as it stands in a room of one's own: the room on the left, the world on the right)
+    await f.evaluate(() => { const m = window.__mmf, mesh = m.fair.stands.bell.board.mesh, ry = mesh.rotation.y, p = mesh.position; m.setCam(p.x + 5.2 * Math.sin(ry), p.y, p.z + 5.2 * Math.cos(ry), (ry * 180) / Math.PI, 0); });
+    await new Promise((r) => setTimeout(r, 2500));
+    await f.screenshot({ path: path.join(ROOT, 'tools/preview/shop-room-board.png') });
+    await f.evaluate(() => window.__mmf.setMode('walk', true));
+    check('a score made in a room of one\'s own goes on the boards of the room and on the world\'s: the friend sees both, the owner sees it arrive on the board of the room',
+      boardsF?.room.length === 1 && boardsF.room[0].name === boardsF.name && boardsF.world.some((e) => e.name === boardsF.name && e.score === boardsF.room[0].score) && boardsO?.[0]?.score === boardsF.room[0].score && world4.tops.day.some((e) => e.score === boardsF.room[0].score) && !world4.room,
+      JSON.stringify({ boardsF, boardsO, world: world4.tops.day }));
+    // its owner puts the friend out: back to the rooms of the fair, and told so
+    await o.click('.pill.players');
+    await o.waitForSelector('.roster.on', { timeout: 20000 });
+    const hostActs = await until(() => o.evaluate(() => { const b = [...document.querySelectorAll('.roster .list .acts button')].map((e) => e.textContent); return b.length ? b : null; }));
+    await owner.roomButton('Put out');
+    const outF = await until(() => f.evaluate(() => { const a = window.__mmf; return a.presence.mode === 'online' && /^main/.test(a.presence.room) && /room=main/.test(location.search) ? { room: a.presence.room, address: location.search, own: a.presence.inOwn } : null; }));
+    const saidOut = await friend.said();
+    const backIn = await f.evaluate(async (id) => { const r = await fetch('/api/room/enter', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ room: id, device: localStorage.getItem('mmf.device'), password: 'open sesame' }) }); return r.status; }, id);
+    check('the owner of the room puts a visitor out from "Who is here": the visitor is back in a room of the fair, and told why',
+      hostActs.join() === 'Put out' && /^main/.test(outF?.room || '') && outF.own === false && /room=main/.test(outF.address) && /The owner of "The Den" has put you out of it/.test(saidOut) && backIn === 200,
+      JSON.stringify({ hostActs, outF, saidOut: saidOut.slice(-160), backIn }));
+    await flip({ userRooms: false });
+    await friend.context.close();
+    await owner.context.close();
+  }
   // ---- paying without leaving the game: a server that was given Stripe's publishable key (Stripe's script is a stand-in here)
   {
     const PORT2 = PORT + 2, BASE2 = `http://127.0.0.1:${PORT2}`, STORE2 = path.join(ROOT, 'tools/preview/shop-test-store2.json');

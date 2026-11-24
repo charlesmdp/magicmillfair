@@ -168,15 +168,16 @@ export class GamesZone {
 
   /**
    * A scoreboard on two posts with a sponsor panel above it, facing `yaw`: what every game of the fair has at
-   * its entrance. Returns { board, panel, setScores(lists), setSponsor(sponsor) }; the place is added to
+   * its entrance. Returns { board, panel, setScores(lists, room), setSponsor(sponsor) } (`room`: { name, lists }
+   * in a room a player made: the board then shows both); the place is added to
    * world.sponsorSlots under `board:<id>` (walk up to it to sponsor the game).
    */
   scoreStand(id, x, z, yaw, { title, sub, format, what = 'this game', width = 3.4, y = this.ground(x, z), pixels = 1 }) {
     const k = width / 3.4;
-    const state = { lists: null, sponsor: null, offer: '' };
+    const state = { lists: null, room: null, sponsor: null, offer: '' };
     // (`pixels`: a smaller board is drawn on a smaller sheet — the same drawing, scaled)
     // (the board and the panel read from both sides: one walks round a stand)
-    const board = canvasBoard(Math.round(1024 * pixels), Math.round(904 * pixels), (ctx) => { ctx.save(); ctx.scale(pixels, pixels); drawScores(ctx, 1024, 904, { title, sub, lists: state.lists, format, me: this.me }); ctx.restore(); }, width, 3.0 * k, { both: true });
+    const board = canvasBoard(Math.round(1024 * pixels), Math.round(904 * pixels), (ctx) => { ctx.save(); ctx.scale(pixels, pixels); drawScores(ctx, 1024, 904, { title, sub, lists: state.lists, format, me: this.me, room: state.room }); ctx.restore(); }, width, 3.0 * k, { both: true });
     board.mesh.position.set(x, y + 0.75 + 1.5 * k, z);
     board.mesh.rotation.y = yaw;
     const panel = canvasBoard(Math.round(1024 * pixels), Math.round(316 * pixels), (ctx) => { ctx.save(); ctx.scale(pixels, pixels); drawSponsor(ctx, 1024, 316, state.sponsor, { what, price: state.offer, label: 'OUR AWESOME SPONSOR' }); ctx.restore(); }, width, 1.05 * k, { both: true });
@@ -211,7 +212,7 @@ export class GamesZone {
     this.colliders.push({ type: 'box', x, z, hw: width / 2 + 0.2, hl: 0.14, yaw });
     const stand = {
       id, board, panel,
-      setScores: (lists) => { state.lists = lists; board.redraw(); },
+      setScores: (lists, room = null) => { state.lists = lists; state.room = room; board.redraw(); },
       redraw: () => board.redraw(),
       setSponsor: (sponsor) => { state.sponsor = sponsor; panel.redraw(); },
       /** What the empty panel says about taking it ("from $1 · step up and bid"), or nothing. */
@@ -430,7 +431,7 @@ export class GamesZone {
   setMe(name) { this.me = name; for (const st of Object.values(this.stands || {})) st.redraw(); }
 
   /** The best climbs to show on the board: { day, week, month, all }, each [{ name, score }] best first. */
-  setScores(lists) { this.scores = lists; this.stands.sky.setScores(lists); }
+  setScores(lists, room = null) { this.scores = lists; this.stands.sky.setScores(lists, room); }
 
   _tickClimb(dt, player) {
     const C = CLIMB, p = player.pos, run = this.run, ev = this.events;

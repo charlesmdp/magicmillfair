@@ -93,8 +93,9 @@ export class Shop {
   }
 
   /** Off to Stripe's page where the Game Pass is looked after — or stopped. Resolves to an error to show, or the page leaves. */
-  async portal() {
-    const res = await ask('api/portal', { method: 'POST', body: { device: deviceId() } });
+  async portal(what = '') {
+    // (`what`: 'room' — the subscription of one's own room, rather than the Game Pass)
+    const res = await ask('api/portal', { method: 'POST', body: { device: deviceId(), ...(what && { what }) } });
     if (res.ok && res.body && /^https:\/\//.test(res.body.url || '')) { window.location.assign(res.body.url); return null; }
     return res.body?.error || 'That page could not be opened.';
   }

@@ -45,6 +45,11 @@ async function hashOf(secret, salt) {
   return b64(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: enc.encode(salt), iterations: ROUNDS }, key, 256));
 }
 
+/** A secret as it is kept — the password of a room, like those of the accounts: { salt, hash }, never the secret itself. */
+export const keepSecret = async (secret) => { const salt = randomId(16); return { salt, hash: await hashOf(secret, salt) }; };
+/** Is `secret` the one that was kept? (Compared without telling where they differ.) */
+export const isSecret = async (secret, kept) => !!kept && typeof secret === 'string' && secret.length > 0 && secret.length <= 100 && sameSecret(await hashOf(secret, kept.salt), kept.hash);
+
 /** A name for an account: 3 to 16 letters, digits, spaces, dashes or underscores; '' when it is not one. */
 export function accountName(text) {
   const s = typeof text === 'string' ? text.normalize('NFKC').replace(/\s+/g, ' ').trim() : '';

@@ -706,7 +706,7 @@ export class Hud {
    * `room` ({ name, label }: the one one is in) and `rooms` ([{ name, label, players, quiet }]: the common rooms)
    * list the rooms above the visitors: 'room' (a name) asks to change to it, 'roomlink' (a name) for a link to it.
    */
-  showRoster({ people, mode, admin = false, owner = false, details = null, bans = null, admins = null, visitors = null, now = 0, rooms = null, room = null, badge = false }) {
+  showRoster({ people, mode, admin = false, owner = false, details = null, bans = null, admins = null, visitors = null, now = 0, rooms = null, room = null, badge = false, own = null }) {
     const box = this.rosterEl, list = box.querySelector('.list'), bansEl = box.querySelector('.bans'), adminsEl = box.querySelector('.admins'), visitorsEl = box.querySelector('.visitors');
     if (!this.rosterOpen) { this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this.toggleBigMap(false); this.input.exitLock(); }
     box.querySelector('h2').textContent = people.length > 1 ? `Who is here — ${people.length} visitors` : 'Who is here';
@@ -742,6 +742,31 @@ export class Hud {
       roomsEl.append(line({ name: room.name, label: room.label, players: people.length }, true));
       for (const r of others) roomsEl.append(line(r, false));
       if (others.length) { const note = el('p', 'rooms-note'); note.textContent = 'Each room has its own visitors, its own chat and its own big red button. The scores, the shop and the news of the fair are the same in all of them.'; roomsEl.append(note); }
+    }
+    // A room of one's own (`own`: only while such rooms are switched on — { room: the one this visitor pays for,
+    // price, here: { host } when the room one is in is such a room }): its link and its settings, or where to
+    // get one; and the way back to the rooms of the fair ('myroom' is emitted with what was asked).
+    if (own && mode === 'online') {
+      const act = (acts, label, title, what, cls = '') => { const b = el('button', cls); b.type = 'button'; b.textContent = label; b.title = title; b.onclick = () => this.emit('myroom', what); acts.append(b); };
+      const line = (title, sub, fill) => { const row = el('div', 'who room mine'), text = el('span', 'id'), name = el('b'), small = el('small'), acts = el('span', 'acts'); name.textContent = title; small.textContent = sub; text.append(name, small); fill(acts); row.append(text, acts); return row; };
+      if (own.here) roomsEl.append(line('The rooms of the fair', 'Leave this room for the common ones (the page loads again)', (acts) => act(acts, 'Go back', 'To the rooms everybody shares', 'leave')));
+      const head = el('h3'); head.textContent = 'A room of your own';
+      roomsEl.append(head);
+      const r = own.room, cost = own.price ? `$${(own.price / 100).toFixed(2).replace(/\.00$/, '')} a month` : '';
+      if (r && r.state === 'live') {
+        roomsEl.append(line(r.name, `Yours · reached by its link only · up to 50 visitors · ${r.locked ? 'has a password' : 'no password'}`, (acts) => {
+          if (!(own.here && own.here.host)) act(acts, 'Go there', 'Opens your room (the page loads again)', 'go', 'good');
+          act(acts, 'Copy its link', 'Whoever opens it comes to your room', 'link');
+          act(acts, 'Name, password', 'Rename it, or give it a password', 'edit');
+          if (r.locked) act(acts, 'No password', 'Take its password away: whoever has the link comes in', 'open');
+          act(acts, 'Empty its boards', 'Every score made in your room goes (the world keeps its own)', 'reset');
+          if (r.managed) act(acts, 'Subscription', 'Look after what you pay for it — or stop it', 'manage');
+        }));
+      } else if (r) {
+        roomsEl.append(line(r.name, `Asleep: nobody can enter it. It is kept until ${new Date(r.until).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}, then freed.`, (acts) => act(acts, 'Wake it', `Pay for it again${cost ? ` (${cost})` : ''}: it wakes as it was`, 'buy', 'good')));
+      } else {
+        roomsEl.append(line('Friends only', `A room nobody walks into: you give its link to whoever you like.${cost ? ` ${cost}.` : ''}`, (acts) => act(acts, 'See it in the shop', 'A room of your own, by the month', 'buy', 'good')));
+      }
     }
     const ago = (t) => { const m = Math.max(0, Math.round((now - t) / 60000)); return m < 1 ? 'just arrived' : m < 60 ? `here for ${m} min` : `here for ${Math.floor(m / 60)} h ${m % 60} min`; };
     for (const p of people) {
@@ -804,6 +829,12 @@ export class Hud {
           row.append(acts);
         }
         row.append(more);
+      } else if (own?.here?.host && !p.me) {
+        // (the owner of a room of their own puts a visitor out — an administrator has more than that, above)
+        const acts = el('span', 'acts'), b = el('button');
+        b.type = 'button'; b.textContent = 'Put out'; b.title = 'Out of your room — and not back for an hour'; b.onclick = () => this.emit('putout', p.id);
+        acts.append(b);
+        row.append(acts);
       }
       list.append(row);
     }

@@ -28,7 +28,7 @@ import { RankEmotes, rankPicture } from './player/RankEmotes.js';
 import { Hud, VERSION } from './ui/Hud.js';
 import { Presence, cleanChat, cleanRoom, roomLabel } from './net/Presence.js';
 import { Npc } from './npc/Npc.js';
-import { Scores } from './net/Scores.js';
+import { Scores, scoreRoom } from './net/Scores.js';
 import { keysHelp } from './extras/help.js'; // (the keys of a game, shown again whenever asked: the lab's, used as it is)
 import { countVisit } from './net/Visits.js';
 import { callApi, checkAdminKey, hasApi, noApi, sharedNow } from './net/api.js';
@@ -88,8 +88,12 @@ async function boot() {
   // The sky villages: hidden, announced ("soon": their gate, closed) or open — the owner's switch `sky` (what
   // the server says; hidden where there is no server). The administrator may look ahead with ?sky=1 — and so
   // may a development page, a page of the lab and the tools. Asked while the world loads; built with it.
+  // (A room a player made — server/urooms.js — has no sky village over it: those are the common rooms'. Such a
+  // room is entered by its link, so the page that opens it knows from the start.)
+  const ownAsked = /^own-[a-z0-9]{8}$/.test(cleanRoom(params.get('room') || ''));
   world.skyStage = (async () => {
     const served = await hasApi(), kept = store.get('mmf.admin');
+    if (ownAsked && served?.release?.userRooms === true) return 'hidden';
     const ahead = skyAsked() && (import.meta.env.DEV || typeof __LAB__ !== 'undefined' || typeof __TEST__ !== 'undefined' || (!!kept && (await checkAdminKey(kept)).ok));
     return ahead ? 'open' : SKY_STAGES.includes(served?.release?.sky) ? served.release.sky : 'hidden';
   })();
@@ -215,15 +219,35 @@ async function boot() {
       }
       store.set('mmf.room', JSON.stringify({ room: e.room, asked: params.get('room') || '' }), true);
       // (a name the address did not ask for — a page served under a folder of its own — is not worth a word)
-      const lost = e.closed ? (params.has('room') ? `"${e.closed}" is not a room of the fair` : '') : e.full ? `${roomLabel(e.full)} is full` : e.gone ? `${roomLabel(e.gone)} is no longer open` : '';
+      const lost = e.closed ? (params.has('room') ? `"${e.closed}" is not a room of the fair` : '') : e.full ? `${e.fullLabel || roomLabel(e.full)} is full` : e.asleep ? `"${e.asleepLabel}" is asleep (nobody pays for it any more)`
+        : e.out ? `The owner of "${e.outLabel}" has put you out of it` : e.gone ? `${roomLabel(e.gone)} is no longer open` : '';
       if (lost) hud.note(e.moved ? `${lost}: you are in ${e.label}.` : `${lost}: you stay in ${e.label}.`, 7000);
+      // (put out of a room, or its door found shut: said in the chat too, where it stays)
+      if (lost && (e.out || e.asleep)) hud.addChat('✦', 5, `${lost}: you are in ${e.label}.`, true);
+      else if (lost) { /* said */ }
       else if (e.moved && inRoom) {
         hud.note(`You are in ${e.label} now.`, 4500);
         hud.addChat('✦', 5, `You are in ${e.label} now: who you see and the chat are those of this room.`, true);
       }
+      // a room a player made: reached by its link alone, with boards of its own next to the world's
+      if (e.own && e.moved) hud.addChat('✦', 5, `You are in "${e.label}", a room of its own: only those who were given its link are here. The boards of the games show this room next to the world.${e.host ? ' It is yours: its settings are in "Who is here".' : ''}`, true);
       if (e.moved) hud.offer(null);
+      const changed = inRoom !== e.room;
       inRoom = e.room;
+      scoreRoom(e.own ? { id: e.room, member: presence.member } : null);
+      if (changed && (e.own || fair.inOwn)) refreshBoards();
+      fair.inOwn = !!e.own;
       refreshRooms();
+    });
+    // a room a player made has a password: asked for — it stays in this page, and goes nowhere but to the server
+    presence.on('locked', ({ label, wrong, wait }) => {
+      const ask = async () => {
+        if (state.mode === 'intro') return void setTimeout(ask, 700); // (once the visitor is in the world)
+        const got = await hud.form(`"${label}" has a password`, `${wait ? 'Too many wrong passwords: the door of this room is closed for a quarter of an hour.' : wrong ? 'That is not its password.' : 'Whoever made this room gave it a password.'} ${wait ? 'Try again later' : 'Type it to come in'} — or cancel, and visit the fair meanwhile.`,
+          [{ key: 'password', label: 'Password', type: 'password' }], 'Come in');
+        if (got?.password) presence.unlock(got.password); else presence.giveUp();
+      };
+      ask();
     });
     // this room has gone quiet, another has room: an offer — nobody is moved
     presence.on('quiet', ({ to, label, n }) => {
@@ -336,7 +360,48 @@ async function boot() {
         people.push({ id: o.id, name: o.name, color: o.color, where: known ? `${d < 1000 ? `${Math.round(d)} m away` : 'far away'}${zoneOf(o.x, o.z) ? ` · ${zoneOf(o.x, o.z)}` : ''}` : '' });
       }
     }
-    hud.showRoster({ people, mode: presence?.mode || 'offline', admin: who.admin && presence?.admin, owner: who.owner, details: roster.details, bans: roster.bans, admins: roster.admins, visitors: roster.visitors, now: roster.now, rooms: roster.rooms, room: roomInfo(), badge: badgeOn });
+    hud.showRoster({ people, mode: presence?.mode || 'offline', admin: who.admin && presence?.admin, owner: who.owner, details: roster.details, bans: roster.bans, admins: roster.admins, visitors: roster.visitors, now: roster.now, rooms: roster.rooms, room: roomInfo(), badge: badgeOn,
+      // (a room of one's own — only while such rooms are switched on: the one this visitor pays for, and whether the room they are in is one)
+      own: mine.on ? { room: mine.room, price: mine.price, here: presence?.inOwn ? { host: presence.host } : null } : null });
+  };
+  // ---------- a room of one's own (server/urooms.js): nothing of it while its switch is off
+  const mine = { on: false, room: null, price: 0 };
+  const refreshMine = async (on = mine.on) => {
+    mine.on = !!on;
+    const got = mine.on ? await callApi(`api/myroom?device=${deviceId()}`) : null;
+    mine.room = got?.room || null; mine.price = got?.price || 0;
+    if (hud.rosterOpen) showRoster();
+    if (shopView.isOpen) shopView.refresh(shopItems());
+  };
+  const ownLink = (id) => { const u = new URL(location.href); u.search = ''; u.hash = ''; if (id) u.searchParams.set('room', id); return u.href; };
+  // (asked without callApi: a refusal has something to say here)
+  const tellMine = async (body) => {
+    try {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/myroom`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ device: deviceId(), ...body }) });
+      const said = /json/.test(res.headers.get('content-type') || '') ? await res.json() : null;
+      if (res.ok && said?.room) { mine.room = said.room; if (hud.rosterOpen) showRoster(); return null; }
+      return said?.error || 'That could not be changed just now.';
+    } catch { return 'The fair cannot be reached.'; }
+  };
+  const myRoom = async (what) => {
+    const room = mine.room;
+    if (what === 'buy') { hud.closeRoster(); openShop('room'); return; }
+    if (what === 'leave') { location.assign(ownLink('')); return; }
+    if (!room) return;
+    if (what === 'go') location.assign(ownLink(room.id));
+    else if (what === 'link') { try { await navigator.clipboard.writeText(ownLink(room.id)); hud.note(`Link copied: whoever opens it comes to your room${room.locked ? ' — and is asked for its password' : ''}.`, 6000); } catch { hud.note(ownLink(room.id), 14000); } }
+    else if (what === 'edit') {
+      hud.closeRoster();
+      const got = await hud.form('Your room', `Its name, and a password if you want one (4 characters or more; leave it empty to change nothing${room.locked ? ' — it has one now' : ''}).`,
+        [{ key: 'name', label: 'Name', value: room.name, max: 28 }, { key: 'password', label: room.locked ? 'New password' : 'Password', type: 'password', fresh: true }], 'Save');
+      if (!got) return;
+      const wrong = await tellMine({ ...(got.name && got.name !== room.name && { name: got.name }), ...(got.password && { password: got.password }) });
+      hud.note(wrong || 'Saved.', wrong ? 7000 : 3000);
+    } else if (what === 'open') { const wrong = await tellMine({ password: '' }); hud.note(wrong || 'No password any more: whoever has the link comes in.', 6000); }
+    else if (what === 'reset') {
+      hud.closeRoster();
+      hud.offer('Empty the boards of your room? Every score made in it goes — the boards of the world keep theirs.', 'Empty them', async () => { const wrong = await tellMine({ reset: true }); hud.note(wrong || 'The boards of your room are empty.', 6000); if (!wrong && presence?.inOwn) refreshBoards(); }, 30000, 'Keep them');
+    } else if (what === 'manage') { hud.note('Opening the page of your subscription…', 8000); const wrong = await shop.portal('room'); if (wrong) hud.note(wrong, 7000); }
   };
   const refreshRoster = async () => {
     if (!who.admin) return;
@@ -474,10 +539,18 @@ async function boot() {
   const lists = (tops) => Object.fromEntries(Object.entries(tops).map(([k, v]) => [k, v])); // (already { name, score })
   // the fair: the four booths of the pier, the quad race and the flying theatre, each with its board. While
   // one of them is being played (`fair.session`), it has the pointer, the camera and the clock of the screen.
-  const fair = { boards: { race: new Scores('race'), wing: new Scores('wing') }, session: null, kind: null, fov: null, after: 0, stands: { race: world.games.race.board, wing: world.games.wing.board }, tops: {} };
+  const fair = { boards: { race: new Scores('race'), wing: new Scores('wing') }, session: null, kind: null, fov: null, after: 0, stands: { race: world.games.race.board, wing: world.games.wing.board }, tops: {}, roomTops: {}, inOwn: false };
   for (const b of world.games.booths.list) { fair.boards[b.id] = new Scores(b.id); fair.stands[b.id] = b.board; }
   fair.boards.run = new Scores('run'); fair.stands.run = world.games.notices.arcade.board; // (the arcade cabinet)
-  Scores.every().then((all) => { fair.tops = all; world.games.setScores(lists(all.sky)); for (const id in fair.stands) fair.stands[id].setScores(all[id]); });
+  // Every board is asked for — with those of the room one is in, when it is a room a player made (server/urooms.js):
+  // each board then shows the room next to the world.
+  const roomOf = (id) => (presence?.inOwn && fair.roomTops[id] ? { name: presence.label, lists: fair.roomTops[id] } : null);
+  const refreshBoards = () => Scores.everywhere().then(({ world: all, room }) => {
+    fair.tops = all; fair.roomTops = room || {};
+    world.games.setScores(lists(all.sky), roomOf('sky'));
+    for (const id in fair.stands) fair.stands[id].setScores(all[id], roomOf(id));
+  });
+  refreshBoards();
   const _aim = { origin: new THREE.Vector3(), dir: new THREE.Vector3(), clicks: 0, down: false };
   const fairIo = {
     play: (sound, options) => audio.play(sound, options), note: (text) => hud.note(text, 3000),
@@ -508,12 +581,13 @@ async function boot() {
   const GAMES = { sky: [CLIMB.name, formatTime], race: [RACE.name, formatTime], wing: [WING.name, (n) => `${n} column${n === 1 ? '' : 's'}`], run: [GAME_NAMES.run, (m) => `${m.toLocaleString('en-US')} m`] };
   for (const b of world.games.booths.list) GAMES[b.id] = [b.name, b.format || ((points) => `${points.toLocaleString('en-US')} points`)];
   const boardOf = (id) => (id === 'sky' ? skyScores : fair.boards[id]);
-  const showBoard = (id, tops) => { if (id === 'sky') world.games.setScores(lists(tops)); else fair.stands[id]?.setScores(tops); fair.tops[id] = tops; };
+  // (`theirs`: the lists of the room one is in, when they came with the world's)
+  const showBoard = (id, tops, theirs) => { if (theirs) fair.roomTops[id] = theirs; if (id === 'sky') world.games.setScores(lists(tops), roomOf(id)); else fair.stands[id]?.setScores(tops, roomOf(id)); fair.tops[id] = tops; };
   const rankOf = (list, who) => (list || []).findIndex((e) => e.name.toLowerCase() === who.toLowerCase());
   liveScore = async (peer, id) => {
     if (!GAMES[id] || !peer) return;
-    const before = fair.tops[id], tops = await boardOf(id).tops(), [title, format] = GAMES[id];
-    showBoard(id, tops);
+    const before = fair.tops[id], { tops, room: theirs } = await boardOf(id).both(), [title, format] = GAMES[id];
+    showBoard(id, tops, theirs);
     const at = rankOf(tops.day, peer.name);
     if (at < 0) return; // (kept in their browser only, or beaten since)
     const was = before ? rankOf(before.day, peer.name) : -1, same = was >= 0 && before.day[was].score === tops.day[at].score;
@@ -542,7 +616,7 @@ async function boot() {
   const scoreGame = (id, title, score, text, log = null) => {
     fair.boards[id].submit(name, score, log).then((r) => {
       const { tops, rank: place, best, shared } = r;
-      showBoard(id, tops);
+      showBoard(id, tops, r.room);
       if (r.taken) return nameTaken(text);
       if (shared) presence?.sendScore(id);
       hud.note(`${text} — ${best ? whereOf(r) : 'your best stands'}${shared ? '' : ' (kept in this browser only)'}`, 8000);
@@ -707,8 +781,7 @@ async function boot() {
       if (!clean) { hud.note(`${formatTime(ms)} — but a cheat was on: not recorded`, 7000); return; }
       skyScores.submit(name, ms).then((r) => {
         const { tops, rank: place, best, shared } = r;
-        world.games.setScores(lists(tops));
-        fair.tops.sky = tops;
+        showBoard('sky', tops, r.room);
         if (r.taken) return nameTaken(formatTime(ms));
         if (shared) presence?.sendScore('sky');
         hud.note(`${formatTime(ms)} — ${best ? whereOf(r) : 'your best time stands'}${shared ? '' : ' (kept in this browser only)'}`, 8000);
@@ -1062,6 +1135,8 @@ async function boot() {
   const applyRelease = (release, before) => {
     const on = Object.fromEntries(EXTRA.map((k) => [k, release[k] === true]));
     if (EXTRA.some((k) => on[k])) import('./extras/index.js').then(({ loadExtras }) => loadExtras(app, on)).catch((err) => console.error('[extras]', err));
+    // (the rooms that players make: their card in the shop and their corner of "Who is here" come and go with the switch)
+    if (!before || before.userRooms !== release.userRooms) queueMicrotask(() => refreshMine(release.userRooms === true));
     // (the sky is built with the world: another stage of it is another world)
     return !!before && (EXTRA.some((k) => before[k] === true && !on[k]) || (before.sky !== undefined && before.sky !== release.sky));
   };
@@ -1206,6 +1281,18 @@ async function boot() {
         fine: mine ? 'Yours: go to the board of the game to set up your panel. Outbid, you are refunded in full.' : 'An auction: you pay your bid once and hold the panel until somebody bids more — then you are refunded in full, automatically.',
       });
     }
+    // a room of one's own, by the month (only while such rooms are switched on, and things are sold)
+    if (shop.open && mine.on) {
+      const room = mine.room, live = room?.state === 'live', cost = `${price(mine.price || 5900)} a month`;
+      list.push({
+        id: 'room', name: room ? room.name : 'A room of your own', group: 'room', rarity: 'legendary', owned: live, wearable: false, cost,
+        act: live ? null : room ? `Wake it · ${cost}` : `Get a room · ${cost}`,
+        manage: live && room.managed ? 'Look after it, or stop it' : null,
+        blurb: live ? 'It is yours. Its link, its name and its password are in "Who is here".' : room ? 'Your room is asleep: nobody can enter it. Pay for it again and it wakes as it was — its name, its password, its boards.' : 'A room that is yours alone: no stranger walks in. You give its link to whoever you like.',
+        perks: ['Reached by its link only: it is in no list', 'Up to 50 visitors at once', 'A password, if you want one', 'Its own boards of scores, next to the world\'s', 'You can put a visitor out', 'Your scores there count for the world too'],
+        fine: `Paid by the month on Stripe; stop whenever you like. It takes an account (free). No sky village hangs over a room of one's own. When it is no longer paid for it falls asleep: it is kept for thirty days, then freed.${account.name ? '' : ' Create an account first, in the settings.'}`,
+      });
+    }
     return list;
   };
   /** What is worn goes on the avatar, is remembered (by the account too, for who has one), and is told to the others. */
@@ -1237,9 +1324,11 @@ async function boot() {
     await refreshShop();
     // (on the boards, "me" is the account from now on — and what was scored as a guest in the last half hour counts for it)
     world.games.setMe(account.name || name);
+    refreshMine();
     if (account.name) Scores.claim().then(({ claimed, boards }) => {
       if (!claimed.length) return;
-      for (const id of claimed) { if (id === 'sky') { world.games.setScores(lists(boards.sky)); fair.tops.sky = boards.sky; } else if (fair.boards[id]) showBoard(id, boards[id]); presence?.sendScore(id); }
+      for (const id of claimed) { if (id === 'sky' || fair.boards[id]) showBoard(id, boards[id]); presence?.sendScore(id); }
+      if (presence?.inOwn) refreshBoards(); // (…and the boards of the room they were made in)
       hud.addChat('✦', 5, `Your score${claimed.length > 1 ? 's' : ''} of a moment ago now count${claimed.length > 1 ? '' : 's'} for the week, the month and all time, under the name ${account.name}.`, true);
     });
     const v = await countVisit(name);
@@ -1314,7 +1403,7 @@ async function boot() {
       if (wrong) hud.note(wrong, 7000);
     })
     .on('equip', (id) => { const [type, sub] = id.split(':'); if (!shop.owns(id)) return; equip(id, !wornNow(type, sub)); shopView.refresh(shopItems()); audio.play('pick'); })
-    .on('manage', async () => { hud.note('Opening the page of your subscription…', 8000); const wrong = await shop.portal(); if (wrong) hud.note(wrong, 7000); })
+    .on('manage', async (id) => { hud.note('Opening the page of your subscription…', 8000); const wrong = await shop.portal(id === 'room' ? 'room' : ''); if (wrong) hud.note(wrong, 7000); })
     .on('close', () => { document.getElementById('view')?.focus({ preventScroll: true }); });
   // a firework (for who has the box): up it goes, and those around see it too
   const FIREWORK = 31, BOUQUET = 30; // (the numbers they travel under, among the emotes: a firework lit, a bouquet held out)
@@ -1343,6 +1432,18 @@ async function boot() {
     let tries = 0;
     const again = async () => {
       await refreshShop();
+      if (paid === 'room') {
+        // a room of one's own: there once Stripe has said it is paid
+        await refreshMine(true);
+        if (mine.room?.state === 'live') {
+          audio.play('victory');
+          const text = `"${mine.room.name}" is yours. Its link and its settings are in "Who is here": give the link to whoever you like.`;
+          hud.note(text, 10000);
+          hud.addChat('✦', 5, text, true); // (a note goes by while the world loads: the chat keeps it)
+        }
+        else if (++tries < 8) setTimeout(again, 2500);
+        return;
+      }
       if (shop.owned.has(paid) || shop.slots[paid]?.mine || (paid === PASS.id && shop.pass)) {
         audio.play('victory');
         const plate = paid.startsWith('plaque:') && shop.slots[paid]?.mine;
@@ -1460,7 +1561,9 @@ async function boot() {
     .on('interact', () => { if (fair.session) { if (!fair.session.over || fair.kind === 'arcade') { endGame(); hud.note('Game left.'); } } else interact.press(0); })
     .on('interact2', () => interact.press(1))
     .on('say', say)
-    .on('roster', () => { showRoster(); refreshRoster(); refreshRooms(); })
+    .on('roster', () => { showRoster(); refreshRoster(); refreshRooms(); if (mine.on) refreshMine(); })
+    .on('myroom', myRoom)
+    .on('putout', (id) => { if (presence?.host) { presence.kick(id); hud.note('Put out: they cannot come back for an hour.', 4500); } })
     .on('room', (to) => changeRoom(to))
     .on('badge', () => {
       // the administrator's badge: worn or not, as they choose — kept by this browser, shown by the relay only

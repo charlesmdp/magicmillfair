@@ -32,6 +32,8 @@ export const LIMITS = {
   portal: [[6, 60_000], [30, 3600_000]], // the page where a subscription is looked after
   sponsor: [[12, 60_000], [40, 3600_000]], // what a sponsor wants shown (a picture each time)
   account: [[10, 60_000], [40, 3600_000]], // a name and a password tried (creating, signing in, a new password)
+  enter: [[20, 60_000], [240, 3600_000]], // the door of a room a player made: a ticket asked for (a password tried)
+  myroom: [[20, 60_000], [120, 3600_000]], // …and its owner changing something about it
   npc: [[10, 60_000], [120, 3600_000]],
   npcDay: [3000, 24 * 3600_000], // everyone together: a ceiling on what the key can spend in a day
 };

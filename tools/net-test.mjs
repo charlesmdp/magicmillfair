@@ -30,6 +30,7 @@ import { sessionOf, packLog, rngOf } from '../src/world/zones/games/core.js';
 import { flightOf, flightLog } from '../src/world/zones/games/WingRules.js';
 import { runOf, runLog } from '../src/ui/ArcadeRules.js';
 import { cleanGeo, packGeo, unpackGeo } from '../server/visitors.js';
+import { openRoom, sleepRoom, userRoom, isUserRoom, cleanRoomName } from '../server/urooms.js';
 
 // what the test servers are given: the secret that signs the notes of the runs, the administrator's key
 const SCORE_SECRET = 'test-score-secret', ADMIN_KEY = 'test-admin-key';
@@ -1493,6 +1494,23 @@ function testShopLogic() {
 
 async function testApiLogic() {
   {
+    // a room a player made (server/urooms.js), from the day it is paid for to the day it is freed
+    const kept = new Map(), clock = { t: Date.UTC(2026, 0, 10) }, DAY = 86_400_000;
+    const ctx = { store: { get: async (k) => (kept.has(k) ? structuredClone(kept.get(k)) : undefined), put: async (k, v) => { kept.set(k, structuredClone(v)); }, delete: async (k) => { kept.delete(k); } }, now: () => clock.t, secret: async () => 'a-secret' };
+    const made = await openRoom(ctx, 'Ada', 'sub_1', 'cus_1');
+    await ctx.store.put(`uboard:${made.id}:bell`, { v: 2, all: [{ name: 'Ada', score: 5, at: clock.t }] });
+    const slept = await sleepRoom(ctx, made.id);
+    clock.t += 29 * DAY;
+    const still = await userRoom(ctx, made.id), woken = await openRoom(ctx, 'ada', 'sub_2', 'cus_1'), boards = kept.has(`uboard:${made.id}:bell`), subs = [kept.has('sub:sub_1'), kept.get('sub:sub_2')?.room];
+    await sleepRoom(ctx, made.id);
+    clock.t += 31 * DAY;
+    const gone = await userRoom(ctx, made.id), again = await openRoom(ctx, 'Ada', 'sub_3', 'cus_1');
+    check('rooms of players: a room is made for an account; it falls asleep when its subscription ends and, paid for again within thirty days, wakes as it was — after that it is freed, its boards with it',
+      isUserRoom(made.id) && !isUserRoom('own-short') && !isUserRoom('main') && made.name === "Ada's room" && made.state === 'live' && slept === true && still?.state === 'asleep' && woken.id === made.id && woken.state === 'live' && woken.sub === 'sub_2' && boards
+      && subs[0] === false && subs[1] === made.id && !kept.has('sub:sub_2') && gone === null && again.id !== made.id && !kept.has(`uboard:${made.id}:bell`) && !kept.has(`uroom:${made.id}`) && cleanRoomName('  A <b>fine</b>\n room  ') === 'A b fine /b room',
+      [made, slept, still, woken, gone, again, [...kept.keys()]]);
+  }
+  {
     // e-mails through Cloudflare's REST API: three secrets, or nothing
     const asked = [], ok = { ok: true, json: async () => ({ success: true }) }, no = { ok: false, status: 403, json: async () => ({ errors: [{ code: 10102, message: 'Sending domain not onboarded' }] }) };
     const env = { MAIL_FROM: 'Hello@Example.org', CLOUDFLARE_ACCOUNT_ID: '0123456789abcdef0123456789abcdef', CLOUDFLARE_EMAIL_TOKEN: 'token-of-at-least-twenty-characters' };
@@ -2184,6 +2202,129 @@ async function testReplay(start, dist) {
   }
 }
 
+// Rooms that players make for themselves (server/urooms.js): nothing while the switch is off; then a room is bought
+// by an account, reached by its link, a password exchanged for a ticket, its owner's tools, its own boards — and it
+// falls asleep when it is no longer paid for.
+async function testUserRooms(start, dist) {
+  const file = path.join(os.tmpdir(), `mmf-urooms-${process.pid}.json`);
+  fs.rmSync(file, { force: true });
+  const server = await start({ DIST_DIR: dist, SCORES_FILE: file, FREE_ROOMS: '0' });
+  const { port } = server;
+  const json = (res) => { try { return JSON.parse(res.body.toString()); } catch { return null; } };
+  const key = { authorization: `Bearer ${ADMIN_KEY}` };
+  // (what an address may ask is counted: the visitors of this test come from addresses of their own)
+  let who = 100;
+  const post = (target, body, headers = {}) => request(port, target, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body), from: `127.0.0.${who++}` });
+  const get = (target, headers = {}) => request(port, target, { headers, from: `127.0.0.${who++}` });
+  const hook = async (event) => { const raw = JSON.stringify(event); return post('/api/stripe/webhook', raw, { 'stripe-signature': await signWebhook(STRIPE_HOOK, raw, Date.now()) }); };
+  const release = (set) => post('/api/release', { set }, key);
+  const paid = (session, sub, device, account) => hook({ type: 'checkout.session.completed', data: { object: { id: session, payment_status: 'paid', amount_total: 5900, subscription: sub, customer: 'cus_ada', metadata: { item: 'room', device, account } } } });
+  const ada = randomId(16), guest = randomId(16), other = randomId(16);
+  const join = async (room, dev, name, ticket) => {
+    const c = new Client(port, room, { dev, ...(ticket && { ticket }) });
+    await c.opened;
+    const no = await c.wait((m) => m.t === 'locked' || m.t === 'closed' || m.t === 'kicked', 500);
+    if (no) return { c, no: no.t, code: await Promise.race([c.closed, sleep(3000)]) };
+    return { c, welcome: await c.hello(name, 1) };
+  };
+  const made = [];
+  try {
+    // switched off, as the fair is delivered: nothing answers, nothing is sold, such a name is no room
+    const off = { mine: await get(`/api/myroom?device=${ada}`), enter: await post('/api/room/enter', { room: 'own-abcdefgh', device: guest }), list: await get('/api/urooms', key), buy: await post('/api/checkout', { item: 'room', device: ada }), door: json(await get('/api/door?want=own-abcdefgh')), prices: json(await get(`/api/shop?device=${ada}`))?.prices };
+    check('rooms of players: switched off, as delivered, nothing answers — no path, nothing sold, and such a name is no room',
+      off.mine.status === 404 && off.enter.status === 404 && off.list.status === 404 && off.buy.status === 400 && off.door?.closed === 'own-abcdefgh' && !!off.prices && !('room' in off.prices), [off.mine.status, off.enter.status, off.list.status, off.buy.status, off.door, off.prices]);
+
+    // switched on: a room takes an account; it is bought by the month, and made when Stripe says it is paid
+    await release({ userRooms: true });
+    const noAcct = await post('/api/checkout', { item: 'room', device: ada });
+    const acct = json(await post('/api/account', { action: 'create', device: ada, name: 'Ada', password: 'correct horse' }));
+    stripe.asked.length = 0;
+    const buy = await post('/api/checkout', { item: 'room', device: ada }), form = stripe.asked[0]?.form;
+    const before = json(await get(`/api/myroom?device=${ada}`));
+    await paid('cs_room_1', 'sub_room_1', ada, 'Ada');
+    const mine = json(await get(`/api/myroom?device=${ada}`)), id = mine?.room?.id || '';
+    const twice = await post('/api/checkout', { item: 'room', device: ada });
+    check('rooms of players: switched on, a room is bought by the month ($59) from a browser signed in to an account — one for each — and is there once Stripe says it is paid',
+      noAcct.status === 403 && json(noAcct)?.account === true && acct?.account?.name === 'Ada' && buy.status === 200 && form?.get('mode') === 'subscription' && form.get('line_items[0][price_data][unit_amount]') === '5900' && form.get('metadata[account]') === 'Ada'
+      && before?.room === null && before.price === 5900 && /^own-[a-z0-9]{8}$/.test(id) && mine.room.name === "Ada's room" && mine.room.state === 'live' && mine.room.locked === false && twice.status === 409, [noAcct.status, buy.status, before, mine, twice.status]);
+
+    // its owner names it and gives it a password; the door says that it is there, and locked
+    const named = json(await post('/api/myroom', { device: ada, name: '  The   Clubhouse <3 ', password: 'sesame42' }));
+    const notMine = await post('/api/myroom', { device: guest, name: 'Mine now' }), short = await post('/api/myroom', { device: ada, password: 'abc' });
+    const door = json(await get(`/api/door?want=${id}`)), nowhere = json(await get('/api/door?want=own-zzzzzzzz'));
+    if (!CF) await until(() => { try { return fs.readFileSync(file, 'utf8').includes(id); } catch { return false; } }, 4000);
+    check('rooms of players: its owner names it and gives it a password — kept as those of the accounts are, never as it was typed; the door says the room is there and locked, and that another name of the kind is no room',
+      named?.room?.name === 'The Clubhouse 3' && named.room.locked === true && notMine.status === 403 && short.status === 400 && door?.room === id && door.own === true && door.locked === true && door.label === 'The Clubhouse 3' && door.why === 'own'
+      && nowhere?.gone === 'own-zzzzzzzz' && /^main/.test(nowhere.room) && (CF || (fs.readFileSync(file, 'utf8').includes(id) && !fs.readFileSync(file, 'utf8').includes('sesame42'))), [named, notMine.status, short.status, door, nowhere]);
+
+    // getting in: the password is exchanged for a ticket (never in an address); the relay lets nobody in without one
+    const none = await post('/api/room/enter', { room: id, device: guest }), wrong = await post('/api/room/enter', { room: id, device: guest, password: 'sesame' });
+    const right = json(await post('/api/room/enter', { room: id, device: guest, password: 'sesame42' })), host = json(await post('/api/room/enter', { room: id, device: ada }));
+    const bare = await join(id, guest, 'Guest'), stolen = await join(id, other, 'Thief', right?.ticket);
+    const g = await join(id, guest, 'Guest', right?.ticket), h = await join(id, ada, 'Ada', host?.ticket);
+    made.push(bare, stolen, g, h);
+    check('rooms of players: the password is exchanged for a ticket (its owner needs none); the relay lets in who holds a ticket made for their browser — and nobody else',
+      none.status === 401 && json(none)?.locked === true && wrong.status === 401 && json(wrong)?.wrong === true && !!right?.ticket && !!right.member && right.host === false && right.max === 50 && right.label === 'The Clubhouse 3'
+      && host?.host === true && bare.no === 'locked' && bare.code === 1013 && stolen.no === 'locked' && !!g.welcome && !!h.welcome && h.welcome.peers.length === 1, [none.status, wrong.status, right && { ...right, ticket: !!right.ticket, member: !!right.member }, host?.host, bare.no, bare.code, stolen.no, !!g.welcome, h.welcome?.peers]);
+
+    // its owner puts a visitor out: gone, and not back within the hour; a visitor puts nobody out
+    g.c.send({ t: 'kick', id: h.welcome.id });
+    await sleep(300);
+    const stays = h.c.code === null;
+    h.c.send({ t: 'kick', id: g.welcome.id });
+    const out = await g.c.wait((m) => m.t === 'kicked', 3000), code = await Promise.race([g.c.closed, sleep(3000)]);
+    const fresh = json(await post('/api/room/enter', { room: id, device: guest, password: 'sesame42' })), back = await join(id, guest, 'Guest', fresh?.ticket);
+    made.push(back);
+    check('rooms of players: its owner puts a visitor out — gone, and not back within the hour, even with a new ticket; a visitor puts nobody out',
+      stays && out?.host === true && out.ban === false && code === 4001 && !!fresh?.ticket && !back.welcome && back.c.msgs.some((m) => m.t === 'kicked' && m.host === true), [stays, out, code, !!fresh?.ticket, !!back.welcome, back.c.msgs.map((m) => m.t)]);
+
+    // its own boards, next to the world's: a score made in the room goes on both
+    const member = right.member, games = [playBooth('bell', 7001), playBooth('bell', 7002, 2), playBooth('bell', 7003, 3)];
+    const note = (seed) => sign(SCORE_SECRET, { b: 'bell', t: Date.now() - 6000, n: randomId(9), s: seed });
+    const scored = json(await post('/api/scores', { board: 'bell', name: 'Guest', score: games[0].score, run: await note(7001), log: games[0].log, device: guest, room: id, member }));
+    const outside = json(await post('/api/scores', { board: 'bell', name: 'Passer', score: games[1].score, run: await note(7002), log: games[1].log, device: other }));
+    // (the note of a member is made for one browser: it lets nobody else onto the boards of the room)
+    const forged = json(await post('/api/scores', { board: 'bell', name: 'Forger', score: games[2].score, run: await note(7003), log: games[2].log, device: randomId(16), room: id, member }));
+    const q = `&room=${id}&member=${encodeURIComponent(member)}`;
+    const world = json(await get('/api/scores?board=bell')), inside = json(await get(`/api/scores?board=bell&device=${guest}${q}`)), peek = json(await get(`/api/scores?board=bell&device=${other}${q}`)), every = json(await get(`/api/scores?board=all&device=${guest}${q}`));
+    const order = [['Guest', games[0].score], ['Passer', games[1].score], ['Forger', games[2].score]].sort((a, b) => b[1] - a[1]).map((e) => e[0]).join();
+    check('rooms of players: a score made in a room goes on the boards of the room and on the world\'s; the boards of a room are read — and written — with the note of a member, made for one browser',
+      scored?.day >= 1 && scored.room?.id === id && scored.room.tops.day.map((e) => e.name).join() === 'Guest' && scored.room.day === 1 && !!outside?.tops && !outside.room && !!forged?.tops && !forged.room
+      && world.tops.day.map((e) => e.name).join() === order && !world.room && inside.room?.tops.day.map((e) => e.name).join() === 'Guest' && inside.tops.day.length === 3 && !peek.room && every.room?.boards.bell.tops.day[0].score === games[0].score && every.boards.bell.tops.day.length === 3,
+      [scored && { day: scored.day, room: scored.room }, !!outside?.room, !!forged?.room, world?.tops.day, inside?.room, !!peek?.room, games.map((x) => x.score)]);
+
+    // its owner empties its boards — the world keeps its own; the administrators see every room
+    const reset = json(await post('/api/myroom', { device: ada, reset: true }));
+    const emptied = json(await get(`/api/scores?board=bell&device=${guest}${q}`));
+    const listed = json(await get('/api/urooms', key)), noKey = await get('/api/urooms');
+    check('rooms of players: its owner empties its boards — the world keeps its own; the administrators see every room, with its owner',
+      reset?.reset === true && emptied.room?.tops.day.length === 0 && emptied.tops.day.length === 3 && noKey.status === 403 && listed?.rooms.length === 1 && listed.rooms[0].id === id && listed.rooms[0].owner === 'Ada' && listed.rooms[0].locked === true && listed.max === 50, [reset, emptied?.room, noKey.status, listed]);
+
+    // the subscription ends: the room falls asleep — nobody gets in, nothing is lost; paid for again, it wakes as it was
+    await hook({ type: 'customer.subscription.deleted', data: { object: { id: 'sub_room_1' } } });
+    const asleep = { mine: json(await get(`/api/myroom?device=${ada}`)), enter: await post('/api/room/enter', { room: id, device: ada }), door: json(await get(`/api/door?want=${id}`)), knock: await join(id, ada, 'Ada', host.ticket) };
+    made.push(asleep.knock);
+    const again = await post('/api/checkout', { item: 'room', device: ada });
+    await paid('cs_room_2', 'sub_room_2', ada, 'Ada');
+    const woken = json(await get(`/api/myroom?device=${ada}`)), locked = await post('/api/room/enter', { room: id, device: guest });
+    check('rooms of players: when the subscription ends the room falls asleep — nobody gets in, its link says so, nothing is lost; paid for again it wakes as it was, with its name and its password',
+      asleep.mine?.room?.state === 'asleep' && asleep.mine.room.until > Date.now() + 29 * 86_400_000 && asleep.enter.status === 423 && json(asleep.enter)?.asleep === true && asleep.door?.asleep === id && /^main/.test(asleep.door.room) && asleep.knock.no === 'closed'
+      && again.status === 200 && woken?.room?.id === id && woken.room.state === 'live' && woken.room.name === 'The Clubhouse 3' && woken.room.locked === true && locked.status === 401, [asleep.mine, asleep.enter.status, asleep.door, asleep.knock.no, again.status, woken, locked.status]);
+
+    // switched off again: nothing answers any more — and nothing is lost: switched on, the room is there
+    await release({ userRooms: false });
+    const shut = { enter: await post('/api/room/enter', { room: id, device: ada }), knock: await join(id, ada, 'Ada', host.ticket) };
+    made.push(shut.knock);
+    await release({ userRooms: true });
+    const kept = json(await get(`/api/myroom?device=${ada}`));
+    check('rooms of players: switched off again nothing answers any more, and nothing is lost — switched on, the room is there as it was', shut.enter.status === 404 && shut.knock.no === 'closed' && kept?.room?.id === id && kept.room.name === 'The Clubhouse 3', [shut.enter.status, shut.knock.no, kept]);
+  } finally {
+    for (const m of made) { try { m.c.ws.close(); } catch { /* closed */ } }
+    await server.stop();
+    fs.rmSync(file, { force: true });
+  }
+}
+
 // So many connections from one address (door.js): in a room, in all, new ones a minute — and the owner always gets in.
 async function testLimits(start, dist) {
   const file = path.join(os.tmpdir(), `mmf-limits-${process.pid}.json`);
@@ -2279,6 +2420,7 @@ try {
     await section('door', () => testDoor(startWorker, fx.dist));
     await section('limits', () => testLimits(startWorker, fx.dist));
     await section('replay', () => testReplay(startWorker, fx.dist));
+    await section('urooms', () => testUserRooms(startWorker, fx.dist));
     if (process.env.NET_TEST_LOG) fs.writeFileSync(process.env.NET_TEST_LOG, server.log);
     // (the local tool also logs its own failed attempts to reach Cloudflare when offline: not the Worker's)
     const trouble = server.log.split('\n').filter((line) => /\[wrangler:error\]|\[ERROR\]|Uncaught/.test(line));
@@ -2301,6 +2443,7 @@ try {
     await section('limits', () => testLimits(startServer, fx.dist));
     await section('era', () => testEra(startServer, fx.dist));
     await section('replay', () => testReplay(startServer, fx.dist));
+    await section('urooms', () => testUserRooms(startServer, fx.dist));
     const kept = (() => { try { return JSON.parse(fs.readFileSync(path.join(fx.tmp, 'scores.json'), 'utf8')); } catch { return null; } })();
     if (!ONLY.length || ONLY.includes('api')) check('api: the Node server keeps the boards and the visits in its file', kept?.['board:sky']?.all?.length === 2 && kept['board:sky'].all[0].at > 0 && kept['board:shoot']?.day?.list?.[0]?.name === 'Dana' && Object.keys(kept).some((k) => k.startsWith('visit:')), kept);
     check('server: still running at the end, nothing on stderr', server.alive() && !/error|exception/i.test(server.log), server.log);

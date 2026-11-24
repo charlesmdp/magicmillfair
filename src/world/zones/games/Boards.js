@@ -41,8 +41,10 @@ const RIBBONS = { day: ['#e9573f', '#b3261e'], week: ['#2bb3a3', '#14756b'], mon
  * game in gold, four lists (today, this week, this month, all time) with medals for the first three.
  * `lists`: { day, week, month, all }, each [{ name, score }] best first (null while they have not been
  * fetched); `format(score)` writes a score (a time, points); `me`: the visitor's own name, picked out.
+ * `room`: { name, lists } in a room a player made — the board then shows the room on the left and the world
+ * on the right, each today and of all time.
  */
-export function drawScores(ctx, w, h, { title, sub, lists, format, me }) {
+export function drawScores(ctx, w, h, { title, sub, lists, format, me, room = null }) {
   // the night behind, rays fanning out from the title
   const sky = ctx.createLinearGradient(0, 0, 0, h);
   sky.addColorStop(0, '#1b1440'); sky.addColorStop(0.55, '#141a3a'); sky.addColorStop(1, '#0c1226');
@@ -78,7 +80,11 @@ export function drawScores(ctx, w, h, { title, sub, lists, format, me }) {
   ctx.fillText(shrink(ctx, sub.toUpperCase(), w - 140, 22, 700, SANS), w / 2, 128);
   // the four lists
   const top = 152, gap = 14, pw = (w - 76 - gap) / 2, ph = (h - top - 44 - gap) / 2, rows = 5, head = 46, lh = (ph - head - 14) / rows;
-  PERIODS.forEach(([key, label], k) => {
+  // (in a room a player made: the room and the world side by side — [which list, its title, where from, how it is dressed])
+  const where = room ? String(room.name || 'This room').toUpperCase() : '';
+  const panels = room ? [['day', `TODAY · ${where}`, room.lists, 'week'], ['day', 'TODAY · THE WORLD', lists, 'day'], ['all', `ALL TIME · ${where}`, room.lists, 'month'], ['all', 'ALL TIME · THE WORLD', lists, 'all']]
+    : PERIODS.map(([key, label]) => [key, label, lists, key]);
+  panels.forEach(([period, label, from, key], k) => {
     const x0 = 38 + (k % 2) * (pw + gap), y0 = top + Math.floor(k / 2) * (ph + gap), [c0, c1] = RIBBONS[key];
     ctx.fillStyle = key === 'all' ? 'rgba(74, 52, 8, 0.6)' : 'rgba(8, 10, 28, 0.62)'; rounded(ctx, x0, y0, pw, ph, 16); ctx.fill();
     ctx.strokeStyle = key === 'all' ? 'rgba(246, 201, 69, 0.85)' : 'rgba(255, 255, 255, 0.16)'; ctx.lineWidth = key === 'all' ? 3 : 1.5; rounded(ctx, x0, y0, pw, ph, 16); ctx.stroke();
@@ -86,12 +92,12 @@ export function drawScores(ctx, w, h, { title, sub, lists, format, me }) {
     const rg = ctx.createLinearGradient(0, y0, 0, y0 + head);
     rg.addColorStop(0, c0); rg.addColorStop(1, c1);
     ctx.fillStyle = rg; rounded(ctx, x0 + 14, y0 - 6, pw - 28, head, 10); ctx.fill();
-    ctx.fillStyle = key === 'all' ? '#3a2600' : '#fff'; ctx.font = `800 26px ${SANS}`; ctx.textAlign = 'center';
-    ctx.fillText(key === 'all' ? `♛  ${label}  ♛` : label, x0 + pw / 2, y0 - 6 + head / 2 + 1);
-    const list = lists ? lists[key] : null;
+    ctx.fillStyle = key === 'all' ? '#3a2600' : '#fff'; ctx.textAlign = 'center';
+    ctx.fillText(shrink(ctx, key === 'all' ? `♛  ${label}  ♛` : label, pw - 52, 26, 800, SANS), x0 + pw / 2, y0 - 6 + head / 2 + 1);
+    const list = from ? from[period] : null;
     if (!list || !list.length) {
       ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'; ctx.font = `600 25px ${SANS}`;
-      ctx.fillText(list ? (key === 'all' ? 'Be the first!' : 'Nobody yet — your turn') : '…', x0 + pw / 2, y0 + head + (ph - head) / 2);
+      ctx.fillText(list ? (period === 'all' ? 'Be the first!' : 'Nobody yet — your turn') : '…', x0 + pw / 2, y0 + head + (ph - head) / 2);
       return;
     }
     list.slice(0, rows).forEach((e, i) => {

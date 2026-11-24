@@ -2,12 +2,14 @@
 // wants to change, and the settings of it all. The Node server and the notebook of the Worker both answer
 // through doorRoute(); both also ask knock() before a connection enters a room.
 //
-//   GET  /api/door?want=&back=&not=a,b   → { room, label, why, full?, gone?, closed?, pass? }
+//   GET  /api/door?want=&back=&not=a,b   → { room, label, why, full?, gone?, closed?, pass?, own?, locked?, asleep? }
 //        want: a room asked for by its name (a friend's link) · back: the room one was in a moment ago (a
 //        refresh, a new version) · not: rooms that have just said they were full
 //        full: the room that was asked for and had no room · gone: the common room asked for is no more ·
 //        closed: that name is not a room one may open (see `freeRooms` below) · pass: for the owner, a note
 //        that is good for a minute and lets them into that room even when it is full
+//        own: the room is one a player made (urooms.js — while those are switched on): it is there, and getting
+//        in takes a ticket (POST /api/room/enter; `locked`: it has a password) · asleep: such a room, asleep
 //   GET  /api/rooms                       → { rooms: [{ name, label, players, quiet? }], max }   the common rooms, for anybody;
 //        an administrator (their key with the request) gets every room — [{ name, label, players, old, phase? }] —
 //        with { players, old, build, rules, base }
@@ -43,7 +45,8 @@ import { allowed } from './api.js';
 import { cleanRoom } from './protocol.js';
 import { sign, verify } from './token.js';
 import { readRelease, releaseNews } from './release.js';
-import { ROOM_RULES, cleanRules, assign, tidy, openRooms, allRooms, commonIndex, roomLabel } from './rooms.js';
+import { ROOM_RULES, cleanRules, assign, tidy, openRooms, allRooms, commonIndex, roomLabel, headCount } from './rooms.js';
+import { USER_ROOM, isUserRoom, userRoomsOn, userRoom, ticketFor } from './urooms.js';
 import { keptOut } from './bans.js';
 import { itemsOf, holderOf, passLive } from './accounts.js';
 import { wardrobeFrom } from './wardrobe.js';
@@ -122,17 +125,23 @@ export async function settle(ctx, dir, rules, now = ctx.now()) {
  * when it has one. → { banned: kept out, and told so · max: how many the room may hold · pass: the note is good
  * (this connection gets in even when the room is full, and is counted in no limit) · closed: that name is not a
  * room one may open · limit: { of: 'room' | 'total' | 'minute', max } — that address has too many connections
- * already · mute: kept out in silence (bans.js) · wear: what they may be seen wearing (wardrobe.js; null: no check) }.
+ * already · mute: kept out in silence (bans.js) · wear: what they may be seen wearing (wardrobe.js; null: no check) ·
+ * locked: a room a player made (urooms.js), and no good `ticket` for it came with the connection · host: …and this
+ * is the owner of that room · seen: true (the door did answer) }.
  */
-export async function knock(ctx, { room, pass, ip = '', dev = '' }) {
+export async function knock(ctx, { room, pass, ip = '', dev = '', ticket = '' }) {
   const now = ctx.now(), rules = await roomRules(ctx);
   let owner = false;
   if (typeof pass === 'string' && pass) { const p = await verify(await ctx.secret(), pass); owner = !!p && p.o === 1 && p.r === room && Number.isFinite(p.x) && p.x > now; }
   const kept = owner ? '' : await keptOut(ctx, ip, dev);
-  if (kept === 'out') return { banned: true, max: rules.max, pass: false, closed: false };
-  const closed = !owner && !commonIndex(room) && (await readRelease(ctx)).release.freeRooms === false;
+  // a room a player made, while those are switched on: it lets in who holds a ticket for it, and it holds fewer
+  const own = isUserRoom(room) && (await userRoomsOn(ctx)) ? await ticketFor(ctx, room, dev, ticket) : null;
+  const max = own ? Math.min(rules.max, USER_ROOM.max) : rules.max;
+  if (kept === 'out') return { seen: true, banned: true, max, pass: false, closed: false };
+  const closed = !owner && (own ? !own.room : !commonIndex(room) && (await readRelease(ctx)).release.freeRooms === false);
+  const locked = !owner && !!own && own.room && !own.ok;
   let limit = null;
-  const limits = owner || closed || !ip ? null : await addressLimits(ctx);
+  const limits = owner || closed || locked || !ip ? null : await addressLimits(ctx);
   if (limits) {
     const [here, all] = connectionsOf(ctx, ip, room, now);
     if (limits.room && here >= limits.room) limit = { of: 'room', max: limits.room };
@@ -140,7 +149,7 @@ export async function knock(ctx, { room, pass, ip = '', dev = '' }) {
     else if (limits.minute && !ctx.limiter.allow(`conn:${ip}`, limits.minute, 60_000, now)) limit = { of: 'minute', max: limits.minute };
     else ctx.crowd?.held.push({ ip, room, at: now });
   }
-  return { banned: false, max: rules.max, pass: owner, closed, ...(limit && { limit }), ...(kept === 'quiet' && { mute: true }), wear: await wardrobeOf(ctx, dev) };
+  return { seen: true, banned: false, max, pass: owner, closed, ...(locked && { locked: true }), ...(own?.host && { host: true }), ...(limit && { limit }), ...(kept === 'quiet' && { mute: true }), wear: await wardrobeOf(ctx, dev) };
 }
 
 /** The paths above. `owner`: the owner's own key came with the request. Returns an answer, or null for another path. */
@@ -197,6 +206,22 @@ export async function doorRoute(req, ctx, owner) {
   if (!allowed(ctx.limiter, 'door', req.client, now)) return out(429, { error: 'Too many requests.' }, { 'Retry-After': '30' });
   let want = asked(query.get('want')), back = asked(query.get('back')), closed = '';
   const not = String(query.get('not') || '').split(',').map(asked).filter(Boolean).slice(0, 12);
+  // A room a player made (urooms.js), asked for by its name — or gone back to: the door only says that it is
+  // there (getting in takes a ticket). Full, asleep or no more: said, and a common room is given instead.
+  let lost = null;
+  const mine = isUserRoom(want) ? want : isUserRoom(back) ? back : '';
+  if (mine && (await userRoomsOn(ctx))) {
+    const rec = await userRoom(ctx, mine), n = dir.rooms[mine] ? headCount(dir.rooms[mine], now) : 0;
+    // (…unless it has just said it was full: the count kept here may be a few seconds behind)
+    if (rec && rec.state === 'live' && (owner || (n < USER_ROOM.max && !not.includes(mine)))) {
+      const a = assign(dir, { ...rules, max: USER_ROOM.max }, { want: mine, owner }, now);
+      await ctx.keep?.(false);
+      return out(200, { room: a.room, label: rec.name, why: 'own', own: true, locked: !!rec.pw, ...(owner && { pass: await sign(await ctx.secret(), { o: 1, r: a.room, x: now + PASS_MS }) }) });
+    }
+    lost = rec && rec.state === 'live' ? { full: mine, fullLabel: rec.name } : rec ? { asleep: mine, asleepLabel: rec.name } : { gone: mine, goneLabel: mine };
+    if (want === mine) want = '';
+    if (back === mine) back = '';
+  }
   if (!owner && (await readRelease(ctx)).release.freeRooms === false) {
     // (only the common rooms exist: another name is not a room)
     if (want && !commonIndex(want)) { closed = want; want = ''; }
@@ -207,7 +232,7 @@ export async function doorRoute(req, ctx, owner) {
   await ctx.keep?.(a.why === 'new');
   return out(200, {
     room: a.room, label: roomLabel(a.room), why: a.why,
-    ...(a.full && { full: a.full, fullLabel: roomLabel(a.full) }), ...(a.gone && { gone: a.gone, goneLabel: roomLabel(a.gone) }), ...(closed && { closed }),
+    ...(a.full && { full: a.full, fullLabel: roomLabel(a.full) }), ...(a.gone && { gone: a.gone, goneLabel: roomLabel(a.gone) }), ...(closed && { closed }), ...lost,
     // (the owner always gets in: a note for that room, good for a minute — the key itself never goes in an address)
     ...(owner && { pass: await sign(await ctx.secret(), { o: 1, r: a.room, x: now + PASS_MS }) }),
   });

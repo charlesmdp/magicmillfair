@@ -30,6 +30,7 @@ import { restMailer } from '../server/mail.js';
 import { route, addBan } from '../server/routes.js';
 import { knock, roomRules, settle, wardrobeOf, newCrowd, noteCrowd } from '../server/door.js';
 import { noteRoom, staleRooms, packDirectory, readDirectory } from '../server/rooms.js';
+import { isUserRoom } from '../server/urooms.js';
 import { randomId, sameSecret, bearerKey } from '../server/token.js';
 import { NPC_MODEL, cleanTalk, npcReply } from '../server/npc.js';
 import { adminOf, looksNamed, nameAdmin } from '../server/admins.js';
@@ -38,6 +39,7 @@ import { cleanGeo, packGeo, unpackGeo } from '../server/visitors.js';
 const BUILD = 'X-Fair-Build'; // which version of the game is online: read by the Worker from its own files, told to the notebook
 const MAX = 'X-Fair-Max', PASS = 'X-Fair-Pass'; // what the door said of a connection: how many the room may hold, and that it is the owner's
 const WEAR = 'X-Fair-Wear', MUTE = 'X-Fair-Mute'; // …what this visitor may be seen wearing ("m.left": wardrobe.js), and that they are kept out in silence
+const HOST = 'X-Fair-Host'; // …and that they are the owner of that room (a room a player made: server/urooms.js)
 const shape = (dir) => Object.entries(dir.rooms).filter(([, r]) => r.n > 0).map(([name, r]) => `${name}:${r.phase}`).sort().join(',');
 const REPORT_MS = 5000; // a room tells the notebook how many it holds at most this often (at once when it fills from empty, or empties)
 const AGAIN_MS = 5 * 60_000; // …and again after this long, changed or not, when something happens in it: a notebook that forgot hears of it
@@ -49,7 +51,7 @@ const withGeo = (request, url) => {
   const headers = new Headers(request.headers), cf = request.cf || {};
   const geo = packGeo(cleanGeo({ cc: cf.country, city: cf.city, region: cf.region }));
   if (geo) headers.set(GEO, geo); else headers.delete(GEO);
-  for (const name of [BUILD, MAX, PASS, WEAR, MUTE]) headers.delete(name);
+  for (const name of [BUILD, MAX, PASS, WEAR, MUTE, HOST]) headers.delete(name);
   return new Request(url || request.url, new Request(request, { headers }));
 };
 
@@ -95,7 +97,7 @@ export class Room extends DurableObject {
       now: () => Date.now() - EPOCH,
       send: (ws, text) => { try { ws.send(text); } catch { /* closing */ } },
       drop: (ws, code, reason) => this.drop(ws, code, reason),
-      save: (p) => { try { p.conn.serializeAttachment({ id: p.id, name: p.name, color: p.color, kit: p.kit, joined: p.joined, state: p.state, ip: p.ip, ua: p.ua, dev: p.dev, sid: p.sid, build: p.build, admin: p.admin ? p.rank || 'owner' : false, key: p.key, cc: p.cc, city: p.city, since: p.since, badge: !!p.badge, wear: p.wear, wdev: p.wdev, want: p.want, look: p.look, mute: !!p.mute }); } catch { /* closing */ } },
+      save: (p) => { try { p.conn.serializeAttachment({ id: p.id, name: p.name, color: p.color, kit: p.kit, joined: p.joined, state: p.state, ip: p.ip, ua: p.ua, dev: p.dev, sid: p.sid, build: p.build, admin: p.admin ? p.rank || 'owner' : false, key: p.key, cc: p.cc, city: p.city, since: p.since, badge: !!p.badge, wear: p.wear, wdev: p.wdev, want: p.want, look: p.look, mute: !!p.mute, ...(p.host && { host: true }), ...(p.tdev && { tdev: p.tdev }) }); } catch { /* closing */ } },
       // what a browser may be seen wearing: the notebook knows (asked again when the browser says something was bought)
       wardrobe: (dev) => this.notebook('/wardrobe', { dev }).then((r) => (r && 'wear' in r ? r.wear : undefined)),
       wake: () => this.arm(),
@@ -221,7 +223,7 @@ export class Room extends DurableObject {
       // a connection is about to enter a room: is the caller kept out (and how), how many may the room hold, is
       // this the owner, is that name a room, has that address too many connections, what may they be seen wearing
       const q = url.searchParams;
-      return Response.json(await knock(ctx, { room: q.get('room') || '', pass: q.get('pass') || '', ip: q.get('ip') || '', dev: q.get('dev') || '' }));
+      return Response.json(await knock(ctx, { room: q.get('room') || '', pass: q.get('pass') || '', ip: q.get('ip') || '', dev: q.get('dev') || '', ticket: q.get('ticket') || '' }));
     }
     if (url.pathname === '/wardrobe') return Response.json({ wear: await wardrobeOf(ctx, ((await request.json().catch(() => null)) || {}).dev || '') });
     if (url.pathname === '/ban') return Response.json({ added: await addBan({ store, now: () => Date.now() }, (await request.json().catch(() => null)) || {}) });
@@ -353,7 +355,7 @@ export class Room extends DurableObject {
     // (…what this visitor may be seen wearing, and whether they are kept out in silence)
     const worn = /^(\d{1,10})\.(\d{1,9})$/.exec(request.headers.get(WEAR) || '');
     const p = this.relay.add(server, undefined, { ip: request.headers.get('CF-Connecting-IP') || '', ua: request.headers.get('User-Agent') || '', ...unpackGeo(request.headers.get(GEO)), max, pass,
-      ...(worn && { wear: { m: Number(worn[1]), left: Number(worn[2]) }, dev: url.searchParams.get('dev') || '' }), mute: request.headers.get(MUTE) === '1' });
+      dev: url.searchParams.get('dev') || '', ...(worn && { wear: { m: Number(worn[1]), left: Number(worn[2]) } }), mute: request.headers.get(MUTE) === '1', host: request.headers.get(HOST) === '1' });
     p.seen = Date.now();
     this.relay.io.save(p);
     return new Response(null, { status: 101, webSocket: client });
@@ -404,9 +406,9 @@ export class Room extends DurableObject {
 
 // A connection is about to enter a room: is this address or this device kept out, how many may the room hold,
 // is this the owner, is that name a room at all? The notebook knows (asked once per connection).
-async function knockAt(env, ip, dev, room, pass) {
+async function knockAt(env, ip, dev, room, pass, ticket = '') {
   try {
-    const res = await env.ROOMS.get(env.ROOMS.idFromName(NOTEBOOK)).fetch(new Request(`https://notebook/knock?ip=${encodeURIComponent(ip)}&dev=${encodeURIComponent(dev)}&room=${encodeURIComponent(room)}&pass=${encodeURIComponent(pass)}`));
+    const res = await env.ROOMS.get(env.ROOMS.idFromName(NOTEBOOK)).fetch(new Request(`https://notebook/knock?ip=${encodeURIComponent(ip)}&dev=${encodeURIComponent(dev)}&room=${encodeURIComponent(room)}&pass=${encodeURIComponent(pass)}&ticket=${encodeURIComponent(ticket)}`));
     return (await res.json()) || {};
   } catch { return {}; } // (the notebook cannot be reached: let them in — the room has its own limit)
 }
@@ -431,9 +433,11 @@ export default {
       // kept out by the administrator? and what the door says of that room
       const ip = request.headers.get('CF-Connecting-IP') || '', dev = url.searchParams.get('dev') || '';
       const room = cleanRoom(url.searchParams.get('room'));
-      const door = await knockAt(env, ip, dev, room, url.searchParams.get('pass') || '');
+      const door = await knockAt(env, ip, dev, room, url.searchParams.get('pass') || '', url.searchParams.get('ticket') || '');
       if (door.banned) return turnedAway('{"t":"kicked","ban":true}', 4003, 'banned');
       if (door.closed) return turnedAway('{"t":"closed"}', 1013, 'closed'); // (not a room one may open)
+      // (a room a player made: nobody in without a good ticket — nor when the door could not be asked)
+      if (door.locked || (isUserRoom(room) && door.seen !== true)) return turnedAway('{"t":"locked"}', 1013, 'locked');
       if (door.limit) return turnedAway(JSON.stringify({ t: 'limit', of: String(door.limit.of), max: Number(door.limit.max) || 0 }), 1013, 'limit'); // (too many from that address)
       const asked = withGeo(request);
       asked.headers.set(BUILD, await buildId(env, url.origin)); // (the room is told which version is online: it counts who is not on it)
@@ -441,6 +445,7 @@ export default {
       if (door.pass) asked.headers.set(PASS, '1');
       if (door.wear && Number.isInteger(door.wear.m)) asked.headers.set(WEAR, `${door.wear.m}.${Math.max(0, Math.floor(Number(door.wear.left) || 0))}`);
       if (door.mute) asked.headers.set(MUTE, '1');
+      if (door.host) asked.headers.set(HOST, '1');
       return env.ROOMS.get(env.ROOMS.idFromName(room)).fetch(asked);
     }
     if (url.pathname === '/healthz') return new Response('ok');

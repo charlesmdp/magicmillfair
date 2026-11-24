@@ -10,7 +10,7 @@
 // (`perks`), a word of its maker (`why`) and, once held, a way to the page where it is stopped (`manage`).
 
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
-const SHELVES = [['pass', 'Game Pass'], ['gear', 'Gear'], ['paint', 'Paint jobs'], ['fun', 'Just for fun'], ['hats', 'Hats'], ['trails', 'Trails'], ['sponsor', 'Sponsor a game']]; // (the short ones first: they share a line)
+const SHELVES = [['pass', 'Game Pass'], ['gear', 'Gear'], ['paint', 'Paint jobs'], ['fun', 'Just for fun'], ['hats', 'Hats'], ['trails', 'Trails'], ['sponsor', 'Sponsor a game'], ['room', 'A room of your own']]; // (the short ones first: they share a line; the last only while such rooms are sold)
 const RARITY = { legendary: 'Legendary', epic: 'Epic', rare: 'Rare', uncommon: 'Uncommon' };
 
 export class ShopView {
@@ -97,7 +97,7 @@ export class ShopView {
     const b = el('button', `card ${it.rarity}${big ? ' big' : ''}${wide ? ' passcard' : ''}${it.owned ? ' owned' : ''}${it.worn ? ' worn' : ''}`);
     b.type = 'button';
     b.dataset.item = it.id;
-    b.append(el('span', 'shine'), wide ? this._picture(it.id, 420, 264) : it.group === 'sponsor' ? el('div', 'nopic') : this._picture(it.id, 216, 252));
+    b.append(el('span', 'shine'), wide ? this._picture(it.id, 420, 264) : it.group === 'sponsor' || it.group === 'room' ? el('div', 'nopic') : this._picture(it.id, 216, 252));
     if (wide && it.pitch) { const pitch = el('span', 'pitch'); for (const line of it.pitch) pitch.append(el('i', '', line)); b.append(pitch); }
     const foot = el('span', 'foot');
     foot.append(el('b', '', it.name), el('i', `price${it.owned || it.lent ? ' has' : ''}`, it.lent === 'trial' ? 'Free today' : it.worn ? 'Equipped' : it.owned ? (it.group === 'pass' ? 'Active' : 'Owned') : it.lent === 'pass' ? 'With your pass' : it.cost));

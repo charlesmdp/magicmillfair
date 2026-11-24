@@ -53,13 +53,15 @@ function stored(key) {
 // ws(s):// URL of the presence endpoint for a room; `raw` may be relative or http(s). Null when unusable.
 // (`dev`: the random name of this browser — what a ban holds on to, besides the address)
 // (`pass`: the owner's note for that room — see server/door.js — never the key itself)
-function wsUrl(raw, room, dev, pass) {
+// (`ticket`: the note that lets into a room a player made — server/urooms.js — never its password)
+function wsUrl(raw, room, dev, pass, ticket) {
   try {
     const url = new URL(raw, typeof location !== 'undefined' ? location.href : undefined);
     if (/^https?:$/.test(url.protocol)) url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     url.searchParams.set('room', room);
     if (dev) url.searchParams.set('dev', dev);
     if (pass) url.searchParams.set('pass', pass);
+    if (ticket) url.searchParams.set('ticket', ticket);
     return url.href;
   } catch { return null; }
 }
@@ -74,6 +76,9 @@ function apiUrl(raw, path) {
     return url;
   } catch { return null; }
 }
+
+/** The name of a room, as its owner wrote it: shown, never trusted. */
+const cleanLabel = (text) => (typeof text === 'string' ? text.replace(/[\p{C}<>]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 40) : '');
 
 export class Presence {
   /**
@@ -96,6 +101,11 @@ export class Presence {
     this._not = []; // rooms that have just said they were full
     this._turn = this._turned = 0; // (which question to the door is the current one; rooms that said no in a row)
     this._said = null; // what the door said with the room in use (told with the 'room' event)
+    // A room a player made (server/urooms.js): what its owner called it, its password as it was typed (kept
+    // here for as long as the page is open, and nowhere else), and — once in — whether this visitor is its
+    // owner (`host`) and the note that puts their scores on its boards (`member`).
+    this._labels = {}; this._pw = {}; this._owned = null; this._pending = null;
+    this.host = false; this.member = '';
     this.name = cleanName(name ?? stored('mmf.name'), '') || `Visitor ${10 + Math.floor(Math.random() * 90)}`;
     this.color = int(color, 31, int(parseInt(stored('mmf.color'), 10), 31, Math.floor(Math.random() * 16)));
     this.kit = int(kit, 255); // what the avatar shows besides its hat: its paint, its trail (see server/items.js)
@@ -134,13 +144,18 @@ export class Presence {
   /** Players in the room, self included. */
   get count() { return this.peers.size + 1; }
   /** What the room in use is called on the screen. */
-  get label() { return roomLabel(this.room); }
+  get label() { return this._labels[this.room] || roomLabel(this.room); }
+  /** Is the room in use one a player made? */
+  get inOwn() { return !!this._owned && this._owned.room === this.room; }
 
   /**
    * Events: 'status' { mode, count }, 'join' peer, 'leave' peer, 'emote' { id, emote }, 'chat' { id, peer, text,
    * near }, 'identity' peer (renamed), 'admin' { ok }, 'who' { list } (the administrator's view of the room),
    * 'kicked' { ban }, 'room' { room, label, why, moved, full?, gone?, closed? } (a room was entered — `full`:
-   * the room asked for had no room, `gone`: it is no more, `closed`: that name is not a room),
+   * the room asked for had no room, `gone`: it is no more, `closed`: that name is not a room, `asleep`: a room a
+   * player made, which nobody pays for any more, `out`: put out of such a room by its owner; `own`: the room
+   * entered is one a player made, `host`: …and this visitor is its owner),
+   * 'locked' { room, label, wrong, wait } (a room a player made has a password: answer with unlock(password), or giveUp()),
    * 'quiet' { to, label, n } (this room has gone quiet: room `to` holds `n` and has room).
    */
   on(type, fn) { (this._on[type] ||= new Set()).add(fn); return this; }
@@ -154,7 +169,7 @@ export class Presence {
       const explicit = this._url || (import.meta.env && import.meta.env.VITE_WS_URL) || this._query.get('ws');
       const target = explicit || /^https?:$/.test(this._page.protocol) ? wsUrl(explicit || '/ws', this.room, this.device) : null;
       if (target) {
-        this._dial = (room, pass) => new WebSocketTransport(wsUrl(explicit || '/ws', room, this.device, pass), this._handlers('online'), { probeEvery: explicit ? 0 : PROBE_MS });
+        this._dial = (room, pass, ticket) => new WebSocketTransport(wsUrl(explicit || '/ws', room, this.device, pass, ticket), this._handlers('online'), { probeEvery: explicit ? 0 : PROBE_MS });
         this._api = (path) => apiUrl(explicit || '/ws', path);
         this._enter({ want: this._want, back: this._back }); // (the door says which room; the relay is then dialled, and keeps retrying in the background)
       }
@@ -180,22 +195,75 @@ export class Presence {
     } catch { return null; } finally { clearTimeout(timer); }
   }
 
+  // A room a player made (server/urooms.js): its password — or nothing, for a room without one and for its owner —
+  // is exchanged for a ticket. → { ticket, member, host, label } · { locked, wrong, wait, label } · { asleep } ·
+  // { gone } · null (nobody answered).
+  async _ticket(room) {
+    const url = this._api?.('api/room/enter');
+    if (!url || typeof fetch !== 'function') return null;
+    try {
+      const res = await fetch(url, { method: 'POST', cache: 'no-store', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ room, device: this.device, ...(this._pw[room] && { password: this._pw[room] }) }) });
+      const body = /json/.test(res.headers.get('content-type') || '') ? await res.json() : null;
+      if (res.ok && body && typeof body.ticket === 'string') return { ticket: body.ticket, member: typeof body.member === 'string' ? body.member : '', host: body.host === true, label: cleanLabel(body.label) };
+      if (res.status === 401 || (res.status === 429 && body?.locked)) return { locked: true, wrong: !!body?.wrong, wait: res.status === 429, label: cleanLabel(body?.label) };
+      return res.status === 423 ? { asleep: true } : res.status === 404 ? { gone: true } : null;
+    } catch { return null; }
+  }
+
+  /** The password of the room that asked for one ('locked'): tried at once. */
+  unlock(password) {
+    const p = this._pending;
+    if (!p || typeof password !== 'string' || !password) return;
+    this._pending = null;
+    this._pw[p.room] = password.slice(0, 100);
+    if (p.switching) this.switchRoom(p.room); else this._enter(p.ask);
+  }
+  /** …or no password at all: one stays where one is — or, not being anywhere yet, goes to a common room. */
+  giveUp() {
+    const p = this._pending;
+    if (!p) return;
+    this._pending = null;
+    if (!p.switching) { this._want = this._back = ''; this._enter({}); }
+  }
+
   // Enters a room: the door is asked which, then its relay is dialled (the transport keeps retrying by itself).
   async _enter(ask) {
     const turn = ++this._turn;
     const a = await this._askDoor(ask);
     if (turn !== this._turn || this._disposed || this.kicked || !this._dial) return;
-    let room = a?.room;
+    let room = a?.room, ticket = '';
+    if (a?.own && a.pass) this._labels[room] = cleanLabel(a.label) || room; // (the owner of the game: their note opens every door)
+    else if (a?.own) {
+      // a room a player made: getting in takes a ticket — and its password, when it has one
+      const t = await this._ticket(room);
+      if (turn !== this._turn || this._disposed || this.kicked) return;
+      this._labels[room] = t?.label || cleanLabel(a.label) || room;
+      if (t?.locked) {
+        delete this._pw[room];
+        this._pending = { ask, room };
+        return this._emit('locked', { room, label: this._labels[room], wrong: !!t.wrong, wait: !!t.wait });
+      }
+      if (!t?.ticket) {
+        // asleep, no more, or nobody answered: a common room instead (said when it is entered)
+        this._want = this._back = '';
+        this._said = { ...this._said, ...(t?.asleep ? { asleep: room } : { gone: room }) };
+        return this._enter({ not: ask.not });
+      }
+      ticket = t.ticket;
+      this._owned = { room, member: t.member, host: t.host };
+    }
     if (!room) {
       // no door: the room asked for — and, when it has said it was full, the next one ("<room>-2", "<room>-3"…)
       const base = ask.back || ask.want || 'main';
       this._shard = ask.not && ask.not.length ? ((this._shard || 1) % MAX_SHARDS) + 1 : 1;
       room = this._shard === 1 ? base : `${base.slice(0, 44)}-${this._shard}`;
     }
-    this._said = { ...this._said, ...(a && { why: a.why, ...(a.full && { full: a.full }), ...(a.gone && { gone: a.gone }), ...(a.closed && { closed: a.closed }) }) };
+    this._said = { ...this._said, ...(a && { why: a.why, ...(a.full && { full: a.full }), ...(a.gone && { gone: a.gone }), ...(a.closed && { closed: a.closed }), ...(a.asleep && { asleep: a.asleep }) }) };
+    if (a?.fullLabel && a.full) this._labels[a.full] = cleanLabel(a.fullLabel);
+    if (a?.asleepLabel && a.asleep) this._labels[a.asleep] = cleanLabel(a.asleepLabel);
     if (this._ws) this._ws.close();
     this.room = room;
-    this._ws = this._dial(room, a?.pass);
+    this._ws = this._dial(room, a?.pass, ticket);
     this._ws.open();
   }
 
@@ -211,8 +279,21 @@ export class Presence {
     const a = await this._askDoor({ want });
     if (turn !== this._turn || this._disposed || this.kicked) return false;
     if (a && a.room !== want) {
-      this._emit('room', { room: this.room, label: this.label, why: '', moved: false, ...(a.full ? { full: want } : { gone: want }) });
+      if (a.fullLabel && a.full) this._labels[a.full] = cleanLabel(a.fullLabel);
+      this._emit('room', { room: this.room, label: this.label, why: '', moved: false, ...(a.full ? { full: want } : a.asleep ? { asleep: want } : { gone: want }) });
       return false;
+    }
+    let ticket = '';
+    if (a?.own && a.pass) this._labels[want] = cleanLabel(a.label) || want; // (the owner of the game: their note opens every door)
+    else if (a?.own) {
+      // (a room a player made: a ticket first — one stays where one is until the door of that room opens)
+      const t = await this._ticket(want);
+      if (turn !== this._turn || this._disposed || this.kicked) return false;
+      this._labels[want] = t?.label || cleanLabel(a.label) || want;
+      if (t?.locked) { delete this._pw[want]; this._pending = { room: want, switching: true }; this._emit('locked', { room: want, label: this._labels[want], wrong: !!t.wrong, wait: !!t.wait }); return false; }
+      if (!t?.ticket) { this._emit('room', { room: this.room, label: this.label, why: '', moved: false, ...(t?.asleep ? { asleep: want } : { gone: want }) }); return false; }
+      ticket = t.ticket;
+      this._owned = { room: want, member: t.member, host: t.host };
     }
     // (out of the room one was in: those who were there are no longer seen)
     const was = this._ws;
@@ -224,7 +305,7 @@ export class Presence {
     this.room = want;
     this.id = 0;
     this._changed();
-    this._ws = this._dial(want, a?.pass);
+    this._ws = this._dial(want, a?.pass, ticket);
     this._ws.open();
     this._fallback(FALLBACK_MS * 4);
     return true;
@@ -282,7 +363,7 @@ export class Presence {
   }
   /** The administrator: who is in the room (answered by a 'who' event), put someone out, keep them out. */
   who() { if (this.admin && this._tr) this._tr.send({ t: 'who' }); }
-  kick(id) { if (this.admin && this._tr) this._tr.send({ t: 'kick', id }); }
+  kick(id) { if ((this.admin || this.host) && this._tr) this._tr.send({ t: 'kick', id }); } // (…or the owner of a room of their own)
   /** Keeps a visitor out for `hours` (0: for good) — `quiet`: in silence (they stay, and nobody hears them any more). */
   ban(id, hours = 0, quiet = false) { if (this.admin && this._tr) this._tr.send({ t: 'ban', id, h: hours, ...(quiet && { q: 1 }) }); }
   /** Something was bought, or given: the relay asks again what this browser may be seen wearing. */
@@ -360,6 +441,7 @@ export class Presence {
         if (this.kicked) return; // put out: no coming back through the window
         if (tr.limit && tr !== this._tr) return this._limited(tr); // turned away: too many connections from this address
         if ((tr.full || tr.shut) && tr !== this._tr) return this._overflow(tr); // turned away: a full room, or a name that is not a room
+        if (tr.relock && tr !== this._tr) return this._relock(tr); // turned away: the ticket for a room a player made has run out
         if (tr !== this._tr) return;
         this._tr = null; // peers stay frozen for a moment: a quick reconnection will not make them blink
         this._fallback(FALLBACK_MS);
@@ -396,6 +478,30 @@ export class Presence {
     this._again = setTimeout(() => { if (!this._disposed && !this.kicked && !this._ws) this._enter({ want: this._want, back: this._back, not: this._not }); }, this._limitWait[of] || this._limitWait.total);
   }
 
+  // The ticket for a room a player made has run out (the line dropped and came back later): the door is asked again
+  // — the password, if there was one, is still in the memory of this page.
+  _relock(tr) {
+    if (tr !== this._ws || !this._dial) return;
+    tr.close();
+    this._ws = null;
+    this._enter({ want: this.room });
+  }
+
+  // Put out of a room a player made, by its owner: back to the common rooms (the 'room' event then says `out`).
+  _putOut() {
+    const room = this.room;
+    this._turn++;
+    for (const tr of [this._ws]) if (tr) tr.close();
+    this._ws = this._tr = null;
+    for (const id of [...this.peers.keys()]) this._leave(id);
+    this._want = this._back = ''; this._owned = null; this.host = false; this.member = '';
+    this.id = 0;
+    this.mode = 'offline'; // (nowhere, until the door has said which room of the fair)
+    this._changed();
+    this._said = { out: room };
+    this._enter({});
+  }
+
   // The room is full, or its name is not a room: back to the door, which is told (after a few rooms in a row
   // have said no — the fair is full, or the door cannot be reached — a pause, then again from the start).
   _overflow(tr) {
@@ -414,8 +520,9 @@ export class Presence {
     if (!m || typeof m !== 'object' || this._disposed) return;
     if (m.t === 'full') { if (tr !== this._tr) tr.full = true; return; } // (acted upon when the relay then hangs up, see onclose)
     if (m.t === 'closed') { if (tr !== this._tr) tr.shut = true; return; } // (that name is not a room one may open: the same)
+    if (m.t === 'locked') { if (tr !== this._tr) tr.relock = true; return; } // (a room a player made, and no good ticket: the same)
     if (m.t === 'limit') { if (tr !== this._tr) tr.limit = { of: m.of === 'room' || m.of === 'minute' ? m.of : 'total', max: Number(m.max) || 0 }; return; } // (too many from this address: the same)
-    if (m.t === 'kicked') return this._out(!!m.ban);
+    if (m.t === 'kicked') return m.host && !m.ban ? this._putOut() : this._out(!!m.ban); // (by an administrator — or by the owner of a room of their own)
     if (m.t === 'welcome') {
       if (Number.isInteger(m.id)) this._welcome(tr, mode, m);
     } else if (tr !== this._tr) return;
@@ -459,9 +566,13 @@ export class Presence {
       const said = this._said || {}, moved = this._in !== this.room;
       this._said = null; this._not = []; this._turned = 0;
       this._want = this.room; // (from now on this is the room one comes back to, and whose door one knocks at again)
-      if (moved || said.full || said.gone || said.closed) {
+      // (a room a player made: is this visitor its owner, and the note that goes with their scores there)
+      const mine = this._owned && this._owned.room === this.room ? this._owned : (this._owned = null);
+      this.host = !!mine?.host; this.member = mine?.member || '';
+      if (moved || said.full || said.gone || said.closed || said.asleep || said.out) {
         this._in = this._back = this.room;
-        this._emit('room', { room: this.room, label: this.label, why: said.why || '', moved, ...(said.full && said.full !== this.room && { full: said.full }), ...(said.gone && { gone: said.gone }), ...(said.closed && { closed: said.closed }) });
+        this._emit('room', { room: this.room, label: this.label, why: said.why || '', moved, ...(said.full && said.full !== this.room && { full: said.full, fullLabel: this._labels[said.full] || roomLabel(said.full) }), ...(said.gone && { gone: said.gone }), ...(said.closed && { closed: said.closed }),
+          ...(said.asleep && { asleep: said.asleep, asleepLabel: this._labels[said.asleep] || said.asleep }), ...(said.out && { out: said.out, outLabel: this._labels[said.out] || said.out }), ...(mine && { own: true, host: this.host }) });
       }
     }
     this._interval = Math.max(SEND_MS, Number.isFinite(m.tick) ? m.tick : 0);

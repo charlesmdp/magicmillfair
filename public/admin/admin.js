@@ -58,7 +58,7 @@
     caves: ['The caves are safe places', 'In a cave, only those nearby hear what is said.'],
     stats: ['The game in figures', 'The counters, and the page /opendata.'],
     sky: ['The sky villages', 'Hidden: nothing of them. Soon: their gate is there, closed. Open: everything.'],
-    userRooms: ['Rooms made by players', 'Not built yet: this switch does nothing so far.'],
+    userRooms: ['Rooms made by players', 'Off: nothing of them — no card in the shop, no path that answers. On: an account can buy a room of its own ($59 a month): reached by its link only, fifty visitors, a password if its owner wants one, its own boards of scores.'],
     freeRooms: ['Rooms by address', 'Off: only the common rooms exist (you still get in anywhere). On: any name written in the address (?room=a-name) is a room of its own, free.'],
   };
   async function showReleases() {
@@ -117,6 +117,22 @@
       if (r.label && r.label !== r.name) title.append(el('small', '', r.name));
       if (r.old) title.append(Object.assign(el('span', 'tag old', `${r.old} on an older version`)));
       box.append(item(title, `${r.players} visitor${r.players === 1 ? '' : 's'}${r.phase ? ` · ${PHASE[r.phase] || r.phase}` : ' · a room of its own'}`, Object.assign(el('a', '', 'Open it'), { href: `/?room=${encodeURIComponent(r.name)}`, target: '_blank', rel: 'noopener' })));
+    }
+  }
+  // (the rooms that players made — only while they are switched on: the path does not answer otherwise)
+  async function showUserRooms() {
+    const res = await api('/api/urooms');
+    $('urooms-box').hidden = !res.ok;
+    if (!res.ok) return;
+    const box = $('urooms'), rooms = res.body.rooms || [];
+    if (!rooms.length) return empty(box, 'None yet.');
+    box.textContent = '';
+    for (const r of rooms) {
+      const title = el('b', '', `${r.name} `);
+      title.append(el('small', '', r.id));
+      if (r.state !== 'live') title.append(el('span', 'tag old', 'asleep'));
+      box.append(item(title, `of ${r.owner} · since ${when(r.since)} · ${r.locked ? 'has a password' : 'no password'}${r.state !== 'live' && r.until ? ` · freed ${when(r.until)}` : ''}`,
+        r.state === 'live' ? Object.assign(el('a', '', 'Open it'), { href: `/?room=${encodeURIComponent(r.id)}`, target: '_blank', rel: 'noopener' }) : el('span')));
     }
   }
   $('rules-form').onsubmit = async (e) => {
@@ -305,7 +321,7 @@
   }
 
   // ----------------------------------------------------------------------------------------- the office itself
-  const SHOW = { releases: showReleases, rooms: () => { showRooms(); showLimits(); }, scores: () => { showScores(); showFlagged(); }, sponsors: showSponsors, bans: showBans, figures: showFigures, admins: showAdmins };
+  const SHOW = { releases: showReleases, rooms: () => { showRooms(); showLimits(); showUserRooms(); }, scores: () => { showScores(); showFlagged(); }, sponsors: showSponsors, bans: showBans, figures: showFigures, admins: showAdmins };
   const NAMES = { releases: 'Releases', rooms: 'Rooms', scores: 'High scores', sponsors: 'Sponsors & plaques', bans: 'Kept out', figures: 'Figures', admins: 'Administrators' };
   function open(tab) {
     for (const s of document.querySelectorAll('section[data-tab]')) s.hidden = s.dataset.tab !== tab || (s.hasAttribute('data-owner') && !me.owner);

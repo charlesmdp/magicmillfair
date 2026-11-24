@@ -14,6 +14,12 @@ const claims = {
 };
 
 const PERIODS = ['day', 'week', 'month', 'all'];
+// The room one is in, when it is a room a player made (server/urooms.js): its boards are asked for, and written
+// to, with the note of a member that came with the ticket for it. Null in the common rooms.
+let where = null;
+/** Says which room of that kind one is in ({ id, member }), or that one is in none (null). */
+export const scoreRoom = (room) => { where = room && typeof room.id === 'string' && typeof room.member === 'string' && room.member ? { id: room.id, member: room.member } : null; };
+const roomQuery = () => (where ? `&room=${encodeURIComponent(where.id)}&member=${encodeURIComponent(where.member)}` : '');
 const local = {
   // [{ name, score, at }] (the first version kept { name, ms })
   get(board) {
@@ -50,16 +56,21 @@ export class Scores {
   }
 
   /** The lists of every board, asked for in one go: { sky: { day, week, month, all }, race: … }. */
-  static async every() {
-    const body = await callApi(`api/scores?board=all&device=${deviceId()}`), out = {};
-    for (const id of Object.keys(BOARDS)) out[id] = body && body.boards && body.boards[id] ? Scores._tops(body.boards[id]) : new Scores(id)._local();
-    return out;
+  static async every() { return (await Scores.everywhere()).world; }
+  /** …with those of the room one is in, when it is a room a player made: { world: { sky: …, … }, room: null | { sky: …, … } }. */
+  static async everywhere() {
+    const asked = where, body = await callApi(`api/scores?board=all&device=${deviceId()}${roomQuery()}`), world = {};
+    for (const id of Object.keys(BOARDS)) world[id] = body && body.boards && body.boards[id] ? Scores._tops(body.boards[id]) : new Scores(id)._local();
+    const theirs = asked && body?.room?.id === asked.id && body.room.boards ? Object.fromEntries(Object.entries(body.room.boards).map(([id, b]) => [id, Scores._tops(b)])) : null;
+    return { world, room: theirs };
   }
 
   /** The four lists: { day, week, month, all }. */
-  async tops() {
-    const body = await callApi(`api/scores?board=${this.board}&device=${deviceId()}`);
-    return body ? Scores._tops(body) : this._local();
+  async tops() { return (await this.both()).tops; }
+  /** …and those of the room one is in, when it is a room a player made: { tops, room: null | { day, week, month, all } }. */
+  async both() {
+    const asked = where, body = await callApi(`api/scores?board=${this.board}&device=${deviceId()}${roomQuery()}`);
+    return { tops: body ? Scores._tops(body) : this._local(), room: asked && body?.room?.id === asked.id ? Scores._tops(body.room) : null };
   }
 
   /**
@@ -93,6 +104,7 @@ export class Scores {
    * ({ week, month, all }: where the score would stand with an account; 0: not among the ten shown). `taken`:
    * the server would not take it — that name is the name of somebody's account. `log`: the game as it was
    * played (a game of the booths: see Booths.js), which the server plays again before it believes a great score.
+   * `room`: the lists of the room it was made in, when that is a room a player made.
    */
   async submit(name, score, log = null) {
     const run = this.run;
@@ -101,14 +113,14 @@ export class Scores {
     if (run) {
       // (asked without callApi: a refusal has something to say here)
       try {
-        const res = await fetch(`${import.meta.env.BASE_URL}api/scores`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ board: this.board, name, score, run, device: deviceId(), ...(typeof log === 'string' && { log }) }) });
+        const res = await fetch(`${import.meta.env.BASE_URL}api/scores`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ board: this.board, name, score, run, device: deviceId(), ...(typeof log === 'string' && { log }), ...(where && { room: where.id, member: where.member }) }) });
         const said = /json/.test(res.headers.get('content-type') || '') ? await res.json() : null;
         if (res.ok) body = said; else taken = res.status === 409 && said?.taken === true;
       } catch { /* no server within reach */ }
     }
     if (body && (body.tops || body.top)) {
       if (body.guest && typeof body.claim === 'string') claims.set([...claims.get().filter((c) => c.board !== this.board), { board: this.board, note: body.claim, until: Date.now() + 29 * 60_000 }]);
-      return { tops: Scores._tops(body), rank: body.rank, best: body.best, shared: true, ...(body.guest && { guest: true, day: body.day || 0, would: body.would || {} }) };
+      return { tops: Scores._tops(body), rank: body.rank, best: body.best, shared: true, ...(body.guest && { guest: true, day: body.day || 0, would: body.would || {} }), ...(body.room?.tops && { room: Scores._tops(body.room) }) };
     }
     if (taken) return { tops: await this.tops(), rank: 0, best: false, shared: true, taken: true };
     const all = local.get(this.board);

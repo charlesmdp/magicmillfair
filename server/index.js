@@ -23,6 +23,7 @@ import { Limiter, LIMITS, BODY_MAX, allowed, parseBody, mayPost, bodyMax } from 
 import { stripeConfig } from './stripe.js';
 import { restMailer } from './mail.js';
 import { route, addBan } from './routes.js';
+import { isUserRoom } from './urooms.js';
 import { knock, roomRules, settle, wardrobeOf } from './door.js';
 import { newDirectory, noteRoom } from './rooms.js';
 import { adminOf, looksNamed, nameAdmin } from './admins.js';
@@ -315,6 +316,7 @@ function onConnection(ws, roomId, from) {
   ws.on('error', () => {}); // e.g. oversized frame: ws closes the socket itself (1009)
   if (from.banned) { ws.send('{"t":"kicked","ban":true}'); return ws.close(4003, 'banned'); }
   if (from.closed) { ws.send('{"t":"closed"}'); return ws.close(1013, 'closed'); } // (not a room one may open)
+  if (from.locked) { ws.send('{"t":"locked"}'); return ws.close(1013, 'locked'); } // (a room a player made: no good ticket came)
   if (from.limit) { ws.send(JSON.stringify({ t: 'limit', of: from.limit.of, max: from.limit.max })); return ws.close(1013, 'limit'); } // (too many from that address)
   let room = rooms.get(roomId);
   if (!room) {
@@ -367,8 +369,10 @@ server.on('upgrade', (req, socket, head) => {
     // owner (who always gets in), whether that name is a room at all, whether that address has too many
     // connections already — and what this visitor may be seen wearing
     from.dev = q.get('dev') || '';
-    return knock(api, { room: roomId, pass: q.get('pass') || '', ip: from.ip, dev: from.dev }).catch(() => ({})).then((door) => {
+    return knock(api, { room: roomId, pass: q.get('pass') || '', ip: from.ip, dev: from.dev, ticket: q.get('ticket') || '' }).catch(() => ({})).then((door) => {
       from.banned = !!door.banned; from.closed = !!door.closed; from.pass = !!door.pass; from.limit = door.limit || null; from.mute = !!door.mute;
+      // (a room a player made: nobody in without the door's word — and its owner is known as such)
+      from.locked = !!door.locked || (isUserRoom(roomId) && door.seen !== true); from.host = !!door.host;
       if (door.wear) from.wear = door.wear;
       if (Number.isFinite(door.max)) from.max = door.max;
       wss.handleUpgrade(req, socket, head, (ws) => onConnection(ws, roomId, from));

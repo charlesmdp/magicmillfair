@@ -80,6 +80,7 @@ export const NEAR = 40, RANGE = 220; // how many others one is told about in det
 export const BLAST_EVERY = 15 * 60_000; // ms between two presses of the big red button, for a whole room
 const AREA_MS = 400, MAP_MS = 2000; // how often the circles and the map are worked out
 const KEY_TRIES = 5; // wrong administrator keys a connection may send
+const OUT_MS = 3600_000; // put out of a room by its owner: for this long
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const round = (v, k) => Math.round(v * k) / k;
@@ -187,6 +188,8 @@ export class Room {
    */
   add(connection, known, from) {
     if (!known && !from?.pass && this.players.size >= (Number.isFinite(from?.max) ? from.max : this.io.max)) return null;
+    // (`host`: the owner of this room, when it is a room a player made — urooms.js; `tdev`: the browser the
+    // door let in, whatever the page then says of itself)
     const t = this.io.now();
     const p = {
       conn: connection, id: known ? known.id : this.io.id ? this.io.id() : this.nextId, name: 'Visitor', color: 0, kit: 0, joined: false,
@@ -199,6 +202,7 @@ export class Room {
       // (what they may be seen wearing: { m, t } — t: when the free day of the light jetpack ends, on this clock —,
       // the browser it was read for; the colour, the kit and the look they asked for; kept out in silence)
       wear: undefined, wdev: '', want: [0, 0], look: 0, mute: !!(known || from)?.mute,
+      host: !!(known || from)?.host, tdev: cleanDevice((known ? known.tdev : from?.dev) || ''),
     };
     const worn = cleanWardrobe(from?.wear);
     if (worn) { p.wear = { m: worn.m, t: t + worn.left }; p.wdev = cleanDevice(from.dev); }
@@ -287,6 +291,18 @@ export class Room {
     else if (m.t === 'c') this._chat(p, m, t);
     else if (m.t === 'admin') this._admin(p, m);
     else if (p.admin && (m.t === 'who' || m.t === 'kick' || m.t === 'ban' || m.t === 'promote' || m.t === 'demote' || m.t === 'gift')) this._moderate(p, m);
+    else if (p.host && m.t === 'kick') this._putOut(p, m, t);
+  }
+
+  // The owner of a room of their own (urooms.js) puts a visitor out: gone, and not back for an hour — by the
+  // browser the door let in. Never an administrator. (Kept in the memory of the room, and nowhere else.)
+  _putOut(p, m, t) {
+    const target = [...this.players.values()].find((o) => o.id === m.id);
+    if (!target || target === p || target.admin || target.host || !target.joined) return;
+    const dev = target.tdev || target.dev;
+    if (dev) { this.outs ||= new Map(); for (const [k, until] of this.outs) if (until <= t) this.outs.delete(k); this.outs.set(dev, t + OUT_MS); }
+    this.io.send(target.conn, '{"t":"kicked","ban":false,"host":true}');
+    (this.io.kick || this.io.drop)(target.conn, 4001, 'kicked');
   }
 
   // The big red button: one explosion for the whole room, and no other before BLAST_EVERY has gone by.
@@ -413,6 +429,11 @@ export class Room {
   _hello(p, m) {
     const name = cleanName(m.name), badge = m.ad === 1;
     if (!p.dev) p.dev = cleanDevice(m.dev);
+    // (put out of this room by its owner less than an hour ago: not back yet)
+    if (!p.joined && this.outs && !p.admin && (this.outs.get(p.tdev || p.dev) || 0) > this.io.now()) {
+      this.io.send(p.conn, '{"t":"kicked","ban":false,"host":true}');
+      return (this.io.kick || this.io.drop)(p.conn, 4001, 'kicked');
+    }
     // (the wardrobe that came with the connection is that of the browser named in the address: a hello that
     // names another has nothing until its own has been read)
     if (p.wear && p.wdev !== p.dev) { p.wear = { m: 0, t: 0 }; p.wdev = p.dev; this._own(p, this.io.now(), true); }
