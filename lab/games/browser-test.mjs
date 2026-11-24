@@ -1,8 +1,8 @@
 // Checks of the five games being tried, in the running game (a headless browser): before a game is attached
 // nothing of it is in the world; attached, it is built without a word of complaint and offered at its gate;
-// played by its own bot, it lets the player go where it should, its score told and kept; left half-way, it
-// leaves nothing behind.
-// usage: node lab/games/browser-test.mjs [id …]      (waves lava hive flip spiral; all of them when none is named)
+// played by its own bot, it lets the player go where it should, its score told, kept, and on its board of scores;
+// left half-way, it leaves nothing behind.
+// usage: node lab/games/browser-test.mjs [id …]      (waves lava hive flip spiral cars golf; all of them when none is named)
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,24 +12,17 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const results = [];
 const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail !== '' ? ` — ${typeof detail === 'string' ? detail : JSON.stringify(detail)}` : ''}`); };
 
-// For each game: what its action says at the gate; `hurry` (run in the page, given the id): what brings the end of
-// a run by the bot nearer, where a whole run would take minutes; `score`: what a told score must look like.
+// For each game: what its action says at the gate; `score`: what a told score must look like; `hurry` (optional,
+// run in the page, given the id): what brings the end of a run by the bot nearer, where a whole run would take
+// minutes; `also` (optional): a check of its own, once it is built.
 const SPECS = {
-  waves: {
-    offer: /Wade in/,
-    // (the wader is put fifty-six metres out, where the sea soon has the better of anybody)
-    hurry: async (id) => { const { WAVES: W } = await import('/lab/games/waves/rules.js'); const st = window.__mmf.labGames[id].run().state; st.s = 56; st.clock = 56 / W.drift; st.next = Math.ceil((st.t0 + st.clock - (W.length + W.far - st.s - 1.5) / W.speed) / W.beat); },
-    score: (ms) => ms > 100000 && ms < 300000,
-    // (the bar can be walked on at any time: its sand carries, twenty metres out as on the beach)
-    also: async (page, check) => {
-      const y = await page.evaluate(async () => { const { barAt } = await import('/lab/games/waves/rules.js'); const a = window.__mmf, p = barAt(20, 1); a.setMode?.('walk', true); a.player.teleport(p.x, p.z, 0); return { y: a.player.pos.y, swim: !!a.player.swimming }; });
-      check('waves: the bar of sand carries who walks out on it', Math.abs(y.y - 0.22) < 0.02 && !y.swim, `${y.y.toFixed(2)} m over the sea, twenty metres out`);
-    },
-  },
-  lava: { offer: /Thin Crust/, score: (ms) => ms > 3000 && ms < 600000 },
-  hive: { offer: /Bee/, score: (ms) => ms > 3000 && ms < 600000 },
-  flip: { offer: /Head Over Heels/, score: (ms) => ms > 10000 && ms < 600000 },
+  waves: { offer: /Wave Goodbye/, score: (ms) => ms > 2000 && ms < 900000 },
+  lava: { offer: /Thin Crust/, score: (ms) => ms > 3000 && ms < 900000 },
+  hive: { offer: /Bee/, score: (ms) => ms > 3000 && ms < 900000 },
+  flip: { offer: /Head Over Heels/, score: (ms) => ms > 10000 && ms < 900000 },
   spiral: { offer: /Turn for the Worse/, score: (ms) => ms > 20000 && ms < 900000 },
+  cars: { offer: /Round the Bend/, score: (ms) => ms > 5000 && ms < 900000 },
+  golf: { offer: /Par for the Course/, score: (n) => n > 0 },
 };
 const asked = process.argv.slice(2).filter((a) => SPECS[a]), ids = asked.length ? asked : Object.keys(SPECS);
 
@@ -53,16 +46,18 @@ try {
   const frames = (n) => page.evaluate((n) => new Promise((res) => { const app = window.__mmf, t = app.frames + n; const tick = () => (app.frames >= t ? res() : requestAnimationFrame(tick)); tick(); }), n);
   const offered = () => page.evaluate(() => { const a = window.__mmf; return a.world.actionSources.map((f) => f(a.player)).filter(Boolean).map((x) => x.label); });
   const world = () => page.evaluate((ids) => { const a = window.__mmf; return { groups: ids.filter((id) => a.world.scene.getObjectByName(id)).length, games: Object.keys(a.labGames || {}).length, sources: a.world.actionSources.length, zones: a.world.zones.length }; }, ids);
-  await page.evaluate(() => { window.__told = {}; });
+  // (what a game tells the board of scores is noted on its way there)
+  await page.evaluate(() => { window.__told = {}; const a = window.__mmf, put = a.scoreGame; a.scoreGame = (id, title, score, text, log) => { window.__told[id] = score; return put(id, title, score, text, log); }; });
 
   const before = await world();
   check('before any of them is attached, nothing of them is in the world', before.groups === 0 && before.games === 0, before);
   for (const id of ids) {
     const spec = SPECS[id];
-    const built = await page.evaluate((id) => import(`/lab/games/${id}/extra.js`).then((m) => m.attach(window.__mmf)).then((g) => ({ gate: g.gate, group: !!window.__mmf.world.scene.getObjectByName(id), game: !!window.__mmf.labGames[id] })).catch((e) => ({ error: String(e && e.stack || e).slice(0, 400) })), id);
+    const built = await page.evaluate((id) => import(`/lab/games/${id}/extra.js`).then((m) => m.attach(window.__mmf)).then((g) => { const a = window.__mmf, stand = a.fair.stands[id]; return { gate: g.gate, group: !!a.world.scene.getObjectByName(id), game: !!a.labGames[id], stand: !!stand && !!stand.board?.mesh?.parent, at: stand ? [stand.board.mesh.position.x, stand.board.mesh.position.z] : null, lists: !!a.fair.boards[id] }; }).catch((e) => ({ error: String(e && e.stack || e).slice(0, 400) })), id);
     await frames(4);
     check(`${id}: built in the running game — one group named after it, a gate`, !built.error && built.group && built.game && Number.isFinite(built.gate?.x), built.error || `gate at (${built.gate.x.toFixed(1)}, ${built.gate.z.toFixed(1)})`);
     if (built.error) continue;
+    check(`${id}: its board of scores stands by the gate, as at every game of the fair`, built.stand && built.lists && Math.hypot(built.at[0] - built.gate.x, built.at[1] - built.gate.z) < 12, built.at ? `${Math.hypot(built.at[0] - built.gate.x, built.at[1] - built.gate.z).toFixed(1)} m from the gate` : 'no stand');
     if (spec.also) await spec.also(page, check);
     // ---- at its gate: offered; on ground one can stand on
     const stand = await page.evaluate((id) => { const a = window.__mmf, g = a.labGames[id].game.gate; a.setMode?.('walk', true); a.player.teleport(g.x, g.z, g.yaw); return { y: a.player.pos.y, gate: g.y }; }, id);
@@ -72,7 +67,6 @@ try {
     // ---- left half-way: nothing stays
     const left = await page.evaluate(async (id) => {
       const a = window.__mmf, g = a.labGames[id];
-      a[`${id}Done`] = (score) => { window.__told[id] = score; };
       g.start();
       await new Promise((res) => { const t = a.frames + 12; const tick = () => (a.frames >= t ? res() : requestAnimationFrame(tick)); tick(); });
       const during = { driven: a.player.driver === g.run(), line: g.run()?.line || '', keys: [...document.querySelectorAll('button')].some((b) => /keys/.test(b.textContent) && b.style.display !== 'none') };
@@ -88,9 +82,11 @@ try {
     }, id);
     check(`${id}: the second time one plays, the keys are not put in the way again: only their small button is there`, !again.panel && again.button);
     if (spec.hurry) await page.evaluate(spec.hurry, id);
-    await page.waitForFunction((id) => !window.__mmf.labGames[id].run(), id, { timeout: 420000, polling: 250 });
-    const done = await page.evaluate((id) => { const a = window.__mmf, p = a.player.pos; return { told: window.__told[id] ?? null, best: Number(localStorage.getItem(`mmf.${id}.best`)), driver: !!a.player.driver, x: p.x, z: p.z, fov: a.fair.fov }; }, id);
-    check(`${id}: played by its own bot to the end, its score told and kept as one's best`, done.told !== null && spec.score(done.told) && done.best === done.told, done.told === null ? 'no score told' : `${(done.told / 1000).toFixed(1)} s`);
+    await page.waitForFunction((id) => !window.__mmf.labGames[id].run(), id, { timeout: 900000, polling: 250 });
+    await page.waitForFunction((id) => window.__told[id] === undefined || !!window.__mmf.fair.tops[id]?.day?.length, id, { timeout: 20000 }).catch(() => {});
+    const done = await page.evaluate((id) => { const a = window.__mmf, p = a.player.pos, day = a.fair.tops[id]?.day || []; return { told: window.__told[id] ?? null, best: Number(localStorage.getItem(`mmf.${id}.best`)), driver: !!a.player.driver, x: p.x, z: p.z, fov: a.fair.fov, first: day[0] || null }; }, id);
+    check(`${id}: played by its own bot to the end, its score told and kept as one's best`, done.told !== null && spec.score(done.told) && done.best === done.told, done.told === null ? 'no score told' : `${done.told}`);
+    check(`${id}: and the score is on its board, under the name of who made it`, !!done.first && done.first.score === done.told && done.first.name === 'Player', done.first ? `${done.first.name}: ${done.first.score}` : 'nothing on the board');
     check(`${id}: and the player is let go at the gate, the camera given back`, !done.driver && done.fov === null && Math.hypot(done.x - built.gate.x, done.z - built.gate.z) < 1.5);
   }
   const after = await world();

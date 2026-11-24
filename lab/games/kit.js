@@ -24,9 +24,16 @@
 //       anim, riding: false         how the avatar holds itself
 //       drop(player, done)          lets the player go, where one should be then; close()
 //   io: { play(name, options), note(text, ms), splash(x, y, z, strength) }
+//
+// Its board of scores: rules.js says its line — `export const BOARD = { order: 'asc' | 'desc', min, max }`, the
+// one its checks print — and extra.js hands it to `plug` with the name of the game (`name`, `board`, `sub`).
+// The stand is the game's own (four lists under a marquee of bulbs, as at every game of the fair); it is put to
+// the right of the gate unless the game says where: game.boardSpot = { x, z, yaw (the way its face looks), y }.
 import * as THREE from 'three';
 import { canvasBoard } from '../../src/world/zones/games/Boards.js';
 import { keysHelp } from '../../src/extras/help.js';
+import { Scores } from '../../src/net/Scores.js';
+import { BOARDS } from '../../server/scores.js';
 
 export const V = (x, y, z) => new THREE.Vector3(x, y, z);
 export const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -35,20 +42,52 @@ export const lerp = (a, b, t) => a + (b - a) * t;
 export const worldClock = () => performance.timeOrigin + performance.now();
 
 /**
+ * The board of scores of a game, as every game of the fair has one at its entrance: the stand is the game's own
+ * (GamesZone.scoreStand — today, this week, this month, all time, a sponsor's panel above), its lists are kept
+ * as the game keeps them (src/net/Scores.js: by the server when it knows the board, in this browser otherwise),
+ * and a score goes on it the way the game puts one there (`app.scoreGame`: the note that says where one stands,
+ * the line in the chat). Returns the Scores of the board, or null when the game gave no line for one.
+ */
+function boardOf(app, game, o) {
+  const { world } = app, fair = app.fair;
+  if (!o.board || !fair?.boards) return null;
+  // (the table of the boards is the server's: a game being tried adds its line to the copy this page holds —
+  // lab/worker.js does the same for the lab's own server)
+  BOARDS[o.id] ||= o.board;
+  const scores = (fair.boards[o.id] ||= new Scores(o.id));
+  if (!fair.stands[o.id] && world.games?.scoreStand) {
+    const g = game.gate, s = game.boardSpot || { x: g.x - Math.cos(g.yaw) * 4.4 - Math.sin(g.yaw) * 0.5, z: g.z + Math.sin(g.yaw) * 4.4 - Math.cos(g.yaw) * 0.5, yaw: g.yaw + Math.PI };
+    const before = world.sponsorSlots ? world.sponsorSlots.length : 0;
+    const stand = world.games.scoreStand(o.id, s.x, s.z, s.yaw, { title: o.title || `${(o.name || o.id).toUpperCase()} — BEST ${o.more ? 'RUNS' : 'TIMES'}`, sub: o.sub || '', format: o.format || String, y: s.y ?? world.collision.spawnHeight(s.x, s.z) });
+    if (world.sponsorSlots) world.sponsorSlots.length = before; // (a game that is only being tried is not for sale)
+    fair.stands[o.id] = stand;
+    scores.both().then(({ tops }) => stand.setScores(tops, null)).catch(() => {});
+    // (the stand casts a shadow like the rest: the fixed shadows are drawn again, once for all the games attached together)
+    clearTimeout(app._labBake); app._labBake = setTimeout(() => world.bakeShadows?.(), 60);
+  }
+  return scores;
+}
+
+/**
  * Plugs a game into the running game: the action at its gate, the session while it is played, the line of the
- * run, its keys, one's own best (kept in the browser) and the score told to whoever keeps a board
- * (`app.<id>Done?.(score, state)`).
+ * run, its keys, one's own best (kept in the browser), its board of scores.
  *   o.id      its id (the switch of the lab, the name of its group)
+ *   o.name    its name (on its board, in the notes)
  *   o.label   (game) → what the action at the gate says
  *   o.keys    (touch, session) → its keys, " · " between them (see src/extras/help.js)
  *   o.more    true: the higher score is the better one (a time one held); else the lower (a time one took)
  *   o.leave, o.left   what the action says while one plays, and the note when one has left
- *   o.format  (score) → how it is written in the note of a best score
+ *   o.format  (score) → how a score is written (on the board, in the notes)
+ *   o.board   { order: 'asc' | 'desc', min, max }: its line for the boards of scores (BOARD in its rules.js);
+ *             o.title, o.sub: what its stand says above the lists (the title: its name unless said)
+ * Once the game itself keeps the board of a game (app.<id>Done, as for the extras), the score is told to it
+ * instead: `app.<id>Done(score, state)`.
  */
 export function plug(app, game, o) {
   const { world, player, hud } = app, KEY = `mmf.${o.id}.best`;
   const read = () => { try { return parseInt(localStorage.getItem(KEY), 10) || 0; } catch { return 0; } };
   game.setBest?.(read());
+  const scores = boardOf(app, game, o);
   let run = null, saved = false, told = false;
   const io = {
     play: (name, options) => app.audio?.play(name, options),
@@ -71,6 +110,7 @@ export function plug(app, game, o) {
     if (run || app.fair.session || player.dead || player.driver) return null;
     run = game.open(player, io);
     player.driver = run;
+    scores?.start(); // (the server notes when a run begins: a score only counts with that note)
     app.audio?.play('teleport');
     keysHelp(app).set(o.keys(!!app.input.isTouch, run));
     // (the keys are said in full the first time one plays; after that they would only hide what comes, try after
@@ -94,13 +134,13 @@ export function plug(app, game, o) {
       hud.setRun(run.line);
       if (run.over && !saved) {
         saved = true;
-        const score = Math.round(run.score || 0), best = read();
-        if (score && (!best || (o.more ? score > best : score < best))) {
-          try { localStorage.setItem(KEY, String(score)); } catch { /* no storage */ }
-          game.setBest?.(score);
-          hud.note(`${o.format ? `${o.format(score)} — ` : ''}${best ? 'your best yet!' : 'a first score of your own.'}`, 5000);
-        }
-        if (score) app[`${o.id}Done`]?.(score, run.state); // (for whoever keeps a board of the best scores)
+        const score = Math.round(run.score || 0), best = read(), text = o.format ? o.format(score) : String(score);
+        const better = score && (!best || (o.more ? score > best : score < best));
+        if (better) { try { localStorage.setItem(KEY, String(score)); } catch { /* no storage */ } game.setBest?.(score); }
+        // the score goes on the board: by the game itself once it keeps that board, else as the game would put it there
+        if (score && app[`${o.id}Done`]) app[`${o.id}Done`](score, run.state);
+        else if (score && scores && app.scoreGame) app.scoreGame(o.id, o.name || o.id, score, text);
+        else if (better) hud.note(`${text} — ${best ? 'your best yet!' : 'a first score of your own.'}`, 5000);
       }
       if (run.ended) leave(true);
     },
