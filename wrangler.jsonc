@@ -32,12 +32,14 @@
     //   SCORE_SECRET       optional: signs the notes of the game runs (drawn and kept by the Worker otherwise)
     //   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET   open the shop (sk_test_… to try, sk_live_… to sell): see the README, "The shop"
     //   STRIPE_PUBLISHABLE_KEY   optional (pk_test_… / pk_live_…): the payment form is then shown inside the game
+    //   MAIL_FROM, CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_EMAIL_TOKEN   optional: the game can then send an e-mail (a code
+    //                      to set a new password, for accounts that gave an address): see the README, "E-mails"
     // https://<the site>/api/status tells which of them the Worker sees (true / false, never their value).
   },
-  // E-mails (optional: a code to set a new password, for accounts that gave an address). Once the domain is
-  // onboarded to Cloudflare's Email Service (Workers Paid), add here
+  // (E-mails need nothing here: the three secrets above are enough. A binding
   //   "send_email": [{ "name": "EMAIL" }],
-  // and a variable MAIL_FROM (an address of that domain) in "vars". See the README: "E-mails".
+  // is used instead of the token when it is there — add it only once the domain is onboarded to Cloudflare's
+  // Email Service: a binding the account cannot honour makes a deployment fail.)
   "observability": { "enabled": true },
   // No usage statistics sent to Cloudflare by the tool itself.
   "send_metrics": false

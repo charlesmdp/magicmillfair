@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
+import { stubOutside } from './lib/outside.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -25,6 +26,7 @@ const context = await browser.newContext(mobile
   ? { viewport: { width: 844, height: 390 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true, userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36' }
   : { viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
 await context.addInitScript(() => { try { for (const k of ['mmf.run', 'mmf.follow']) if (localStorage.getItem(k) === null) localStorage.setItem(k, '0'); } catch { /* no storage */ } }); // (the tests walk with Shift to run, and turn the camera themselves)
+await stubOutside(context);
 const page = await context.newPage();
 const logs = [];
 page.on('console', (m) => { if (m.type() === 'error') logs.push(`[error] ${m.text().slice(0, 300)}`); });
@@ -79,6 +81,23 @@ try {
   await page.click('[data-act="settings"]');
   await frames(4);
   await shot('6-back');
+  // the settings also lead to the small print (terms of use, privacy) and, where the browser allows it, to full
+  // screen; the page carries the script that counts the visits, after the game's own
+  await page.click('[data-act="settings"]');
+  const extras = await page.evaluate(() => {
+    const scripts = [...document.scripts], own = scripts.findIndex((s) => s.type === 'module'), counter = scripts.findIndex((s) => s.dataset.site && /verify\.js$/.test(s.src));
+    return { full: !!document.querySelector('[data-act="fullscreen"]') && !!document.querySelector('.full-row [data-fs]'), links: [...document.querySelectorAll('.legal-links button')].map((b) => b.textContent).join(), counted: counter >= 0 && (own < 0 || counter > own) && scripts[counter].defer };
+  });
+  await page.evaluate(() => document.querySelector('.legal-links [data-legal="privacy"]').click());
+  await frames(2);
+  const legal = await page.evaluate(() => { const text = document.querySelector('.legal-body').textContent; return { open: document.querySelector('.legal').classList.contains('on'), panel: document.querySelector('.hud .panel').classList.contains('on'), tab: document.querySelector('.legal-tabs .on')?.textContent, sections: document.querySelectorAll('.legal-body section').length, names: ['Cloudflare', 'Stripe', 'Anthropic', 'ship-or-die'].filter((n) => text.includes(n)).length }; });
+  await shot('8-privacy');
+  await page.evaluate(() => document.querySelector('.legal-tabs [data-doc="terms"]').click());
+  const terms = await page.evaluate(() => ({ tab: document.querySelector('.legal-tabs .on')?.textContent, sections: document.querySelectorAll('.legal-body section').length }));
+  await page.evaluate(() => document.querySelector('.legal-x').click());
+  const legalClosed = await page.evaluate(() => !document.querySelector('.legal').classList.contains('on'));
+  console.log(`small print: ${JSON.stringify({ extras, legal, terms, legalClosed })}`);
+  if (!extras.full || extras.links !== 'Terms of use,Privacy' || !extras.counted || !legal.open || legal.panel || legal.tab !== 'Privacy' || legal.sections < 5 || legal.names !== 4 || terms.tab !== 'Terms of use' || terms.sections < 5 || !legalClosed) { failed = true; console.log('FAIL: the small print, the full screen control or the script that counts the visits'); }
   // the minimap opens the large map; a click closes it
   await page.click('.minimap');
   await frames(3);

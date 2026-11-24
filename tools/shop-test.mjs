@@ -90,7 +90,7 @@ try {
   const crown = await card('hat:crown'), jet = await card('jetpack'), lite = await card('jetlite'), gold = await card('paint:gold'), bubbles = await card('trail:bubbles'), fire = await card('fireworks');
   const device = await page.evaluate(() => localStorage.getItem('mmf.device'));
   check('the item shop: its own icon, shelves of cards with a picture and a price — two jetpacks ($30, $5), hats, paints, trails, fireworks',
-    shelves.titles.join() === 'Game Pass,Featured,Gear,Hats,Paint jobs,Trails,Just for fun,Sponsor a game' && shelves.cards >= 26 && /Test mode/.test(shelves.mode) && crown?.tag === '$9.99' && crown.picture && /legendary/.test(crown.cls)
+    shelves.titles.join() === 'Game Pass,Gear,Paint jobs,Just for fun,Hats,Trails,Sponsor a game' && shelves.cards >= 26 && /Test mode/.test(shelves.mode) && crown?.tag === '$9.99' && crown.picture && /legendary/.test(crown.cls)
     && jet?.tag === '$30' && lite?.tag === 'Free today' && gold?.tag === '$19' && bubbles?.tag === '$5' && fire?.tag === '$15', // (the light jetpack: a taste of it on the first day)
     JSON.stringify({ shelves, crown, jet, lite, gold, bubbles, fire }));
   const offer = await pick('hat:crown');

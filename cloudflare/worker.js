@@ -19,6 +19,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { Room as Relay, MAX_FRAME, NEAR, RANGE, BLAST_EVERY, cleanRoom, originAllowed, parseOrigins } from '../server/protocol.js';
 import { Limiter, LIMITS, BODY_MAX, allowed, parseBody, mayPost, bodyMax } from '../server/api.js';
 import { stripeConfig } from '../server/stripe.js';
+import { restMailer } from '../server/mail.js';
 import { route, banned, addBan } from '../server/routes.js';
 import { randomId, sameSecret, bearerKey } from '../server/token.js';
 import { NPC_MODEL, cleanTalk, npcReply } from '../server/npc.js';
@@ -64,7 +65,7 @@ export class Room extends DurableObject {
       now: () => Date.now() - EPOCH,
       send: (ws, text) => { try { ws.send(text); } catch { /* closing */ } },
       drop: (ws, code, reason) => this.drop(ws, code, reason),
-      save: (p) => { try { p.conn.serializeAttachment({ id: p.id, name: p.name, color: p.color, kit: p.kit, joined: p.joined, state: p.state, ip: p.ip, ua: p.ua, dev: p.dev, admin: p.admin ? p.rank || 'owner' : false, key: p.key, cc: p.cc, city: p.city, since: p.since }); } catch { /* closing */ } },
+      save: (p) => { try { p.conn.serializeAttachment({ id: p.id, name: p.name, color: p.color, kit: p.kit, joined: p.joined, state: p.state, ip: p.ip, ua: p.ua, dev: p.dev, sid: p.sid, admin: p.admin ? p.rank || 'owner' : false, key: p.key, cc: p.cc, city: p.city, since: p.since }); } catch { /* closing */ } },
       // whose key: the owner's (the secret ADMIN_KEY), or that of an administrator who was named (the notebook knows them)
       admin: (key) => (sameSecret(key, (env.ADMIN_KEY || '').trim()) ? { rank: 'owner', id: '' } : looksNamed(key) ? this.notebook('/admin-key', { key }).then((r) => r?.who || null) : false),
       promote: (who) => this.notebook('/promote', who).then((r) => r?.made || null),
@@ -114,13 +115,14 @@ export class Room extends DurableObject {
       if (text.length <= max) { raw = text; body = parseBody(text, max); }
     }
     const env = this.env, storage = this.ctx.storage, stripe = (this.stripe ||= stripeConfig(env));
+    const mail = env.EMAIL && env.MAIL_FROM ? (m) => env.EMAIL.send({ from: String(env.MAIL_FROM), to: m.to, subject: m.subject, text: m.text, html: m.html }) : restMailer(env);
     const ctx = (this.apiCtx ||= {
       limiter, now: () => Date.now(),
       store, stripe,
-      // e-mails leave through Cloudflare's Email Service, where the Worker has its binding (EMAIL) and an
-      // address to write from (MAIL_FROM, of a domain onboarded there): see server/mail.js
-      mail: env.EMAIL && env.MAIL_FROM ? (m) => env.EMAIL.send({ from: String(env.MAIL_FROM), to: m.to, subject: m.subject, text: m.text, html: m.html }) : null,
-      flags: { npc: !!env.ANTHROPIC_API_KEY, admin: !!env.ADMIN_KEY, shop: stripe.mode || 'off', mail: !!(env.EMAIL && env.MAIL_FROM) },
+      // e-mails leave through Cloudflare's Email Service: with its binding (EMAIL) where the Worker has one,
+      // through its REST API with three secrets otherwise (see server/mail.js)
+      mail,
+      flags: { npc: !!env.ANTHROPIC_API_KEY, admin: !!env.ADMIN_KEY, shop: stripe.mode || 'off', mail: !!mail },
       // the secret that signs the notes of the runs: given, or drawn once and kept here
       secret: async () => {
         if (!this.signing) {

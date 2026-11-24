@@ -3,7 +3,10 @@
 // No authority over the game: every client shares its own avatar state and a room hands those states on.
 //
 // Protocol (JSON text frames)
-//   client → server   {t:'hello',name,color,v:2,dev?,k?}   {t:'s',p:[x,y,z,yaw],a,f}   {t:'e',e}   {t:'c',m,n?}
+//   client → server   {t:'hello',name,color,v:2,dev?,k?,s?}   {t:'s',p:[x,y,z,yaw],a,f}   {t:'e',e}   {t:'c',m,n?}
+//                     (s: a name the page gave itself when it opened. A page that says hello again — its line
+//                     dropped without the relay noticing: a laptop that slept, a change of network — replaces
+//                     the connection it had before, so that nobody is ever seen twice)
 //                     (k: the "kit" of the avatar — its paint, its trail… one number from 0 to 255, see items.js;
 //                     it comes back as `k` in `join` and in the peers of `welcome`, when it is not 0)
 //                     {t:'g',b}   a score of mine has just gone on board b (relayed as {t:'g',id,b})
@@ -74,6 +77,8 @@ export function cleanChat(text) {
 
 /** The random name a browser gives itself (see src/net/Visits.js): '' when it does not look like one. */
 export const cleanDevice = (s) => (typeof s === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(s) ? s : '');
+/** The name a page gave itself when it opened; '' when it is not one. */
+export const cleanSession = (s) => (typeof s === 'string' && /^[A-Za-z0-9_-]{8,32}$/.test(s) ? s : '');
 
 /** Avatar state of an `s` message, bounded and rounded: [x, y, z, yaw, anim, flags], or null when malformed. */
 export function cleanState(m) {
@@ -142,7 +147,7 @@ export class Room {
 
   /**
    * A connection arrives. Returns its player, or null when the room is full (the host says so and closes).
-   * `known` ({ id, name, color, joined, state, ip, ua, dev, admin, since }) restores a player whose connection
+   * `known` ({ id, name, color, joined, state, ip, ua, dev, sid, admin, since }) restores a player whose connection
    * outlived the host's memory; `from` ({ ip, ua }) is what the host knows of a new one.
    */
   add(connection, known, from) {
@@ -153,13 +158,13 @@ export class Room {
       alive: true, tokens: BURST, stamp: t, chat: CHAT_BURST, chatAt: t,
       state: null, row: '', at: 0, dirty: false, rested: true, // last state, its serialised row, when it came, relay flags
       ver: 0, area: null, sent: null, gone: null, watched: undefined, // (a crowd) version of the state, who they are told about, what was sent
-      ip: String((known || from)?.ip || '').slice(0, 64), ua: String((known || from)?.ua || '').slice(0, 220), dev: '', admin: false, tries: 0, since: known?.since || t,
+      ip: String((known || from)?.ip || '').slice(0, 64), ua: String((known || from)?.ua || '').slice(0, 220), dev: '', sid: '', admin: false, tries: 0, since: known?.since || t,
       // (an administrator: 'owner' or 'admin', and which named key it was; where the connection comes from)
       rank: '', key: '', cc: String((known || from)?.cc || '').slice(0, 2), city: String((known || from)?.city || '').slice(0, 60),
     };
     if (known) {
       p.name = cleanName(known.name); p.color = int(known.color, 31); p.kit = int(known.kit, 255); p.joined = !!known.joined;
-      p.dev = cleanDevice(known.dev); p.admin = !!known.admin;
+      p.dev = cleanDevice(known.dev); p.sid = cleanSession(known.sid); p.admin = !!known.admin;
       p.rank = !known.admin ? '' : known.admin === 'admin' ? 'admin' : 'owner'; p.key = typeof known.key === 'string' ? known.key.slice(0, 12) : '';
       if (Array.isArray(known.state) && known.state.length === 6 && known.state.every(Number.isFinite)) { p.state = known.state; p.row = `[${p.id},${p.state.join(',')}`; p.ver = 1; }
     }
@@ -299,6 +304,12 @@ export class Room {
   _hello(p, m) {
     const name = cleanName(m.name), color = int(m.color, 31), kit = int(m.k, 255);
     if (!p.dev) p.dev = cleanDevice(m.dev);
+    if (!p.sid) {
+      p.sid = cleanSession(m.s);
+      // the same page of the same browser, here already: the connection it had before is not somebody else —
+      // it leaves at once (two tabs are two pages: both stay)
+      if (p.sid && p.dev) for (const o of [...this.players.values()]) if (o !== p && o.sid === p.sid && o.dev === p.dev) { this.remove(o.conn); this.io.drop(o.conn, 4002, 'again'); }
+    }
     if (p.joined && name === p.name && color === p.color && kit === p.kit) return;
     p.name = name; p.color = color; p.kit = kit;
     if (!p.joined) {

@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
+import { stubOutside } from './lib/outside.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -46,6 +47,7 @@ await server.listen();
 const port = server.httpServer.address().port;
 const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
 const page = await browser.newPage();
+await stubOutside(page);
 const problems = [];
 page.on('console', (m) => { if (m.type() === 'error') problems.push(`[console] ${m.text().slice(0, 300)}`); });
 page.on('pageerror', (e) => problems.push(`[page] ${e.message}`));

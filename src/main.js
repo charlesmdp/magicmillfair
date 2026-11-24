@@ -14,6 +14,8 @@ import { ShopView } from './ui/ShopView.js';
 import { Arcade } from './ui/Arcade.js';
 import { AccountView } from './ui/AccountView.js';
 import { PayView } from './ui/PayView.js';
+import { LegalView } from './ui/LegalView.js';
+import { deviceId } from './net/device.js';
 import { Previewer } from './ui/Preview.js';
 import { Sparks } from './world/effects/Sparks.js';
 import { Account } from './net/Account.js';
@@ -59,6 +61,7 @@ const hud = new Hud(ui, { input, isTouch: touch });
 const arcade = new Arcade(ui); // (the screen of the cabinet of the pier: shown while one plays)
 const accountView = new AccountView(ui); // (the card of the account: signing in, making one)
 const payView = new PayView(ui); // (the payment form, when it can be shown inside the game)
+const legalView = new LegalView(ui, { device: deviceId }); // (the terms of use and the privacy policy, opened from the settings)
 if (SHOT && !params.has('ui')) ui.style.display = 'none';
 
 // The view the welcome screen floats over: a slow arc above the mill and its pond.
@@ -887,7 +890,7 @@ async function boot() {
   });
   Object.assign(app, { travel, sky });
   // ---------- the item shop: everything that is sold, on one screen (ui/ShopView.js)
-  const FEATURED = ['jetpack', 'paint:gold', 'fireworks', 'hat:crown'], WEARABLE = ['hat', 'paint', 'trail', 'jetpack', 'jetlite'];
+  const WEARABLE = ['hat', 'paint', 'trail', 'jetpack', 'jetlite'];
   const previewer = new Previewer(engine, factory);
   // (the picture of a place to sponsor: its panel as it stands over the board, under the name of the game)
   const panelPicture = (id, w, h) => {
@@ -941,7 +944,7 @@ async function boot() {
     const list = ITEMS.map((it) => {
       const [type, sub] = it.id.split(':'), owned = shop.has(it.id), lent = shop.lent(it.id), left = lent === 'trial' ? shop.trialLeft(it.id) : 0;
       return {
-        ...it, owned, lent, cost: price(shop.cost(it.id) || it.price), worn: (owned || !!lent) && wornNow(type, sub), wearable: WEARABLE.includes(type), featured: FEATURED.includes(it.id),
+        ...it, owned, lent, cost: price(shop.cost(it.id) || it.price), worn: (owned || !!lent) && wornNow(type, sub), wearable: WEARABLE.includes(type),
         hint: it.id === 'fireworks' ? 'Yours: press V (or the button in the emotes) to light one.' : it.id === 'jetpack' ? 'Yours: jump, then press jump again in the air. With both jetpacks, the one that is on is chosen here.' : it.id === 'jetlite' ? `Yours: jump, then press jump again in the air — once every ${JET_LITE.every} seconds. With both jetpacks, the one that is on is chosen here.` : 'Yours for good: put it on and take it off as you please.',
         ...(lent === 'pass' && { fine: `Yours while you hold the ${PASS.name}. Buy it to keep it for good.` }),
         ...(lent === 'trial' && { fine: `A taste, on the house: yours for ${left > 3600_000 ? `${Math.ceil(left / 3600_000)} more hours` : `${Math.max(1, Math.ceil(left / 60_000))} more minutes`} — jump, then press jump again in the air. After that it is sold here, and it comes with the ${PASS.name}.` }),
@@ -1042,7 +1045,7 @@ async function boot() {
     })
     .on('mailcode', (who) => account.mailCode(who))
     .on('close', () => { document.getElementById('view')?.focus({ preventScroll: true }); });
-  Object.assign(app, { account, accountAction, accountView, payView });
+  Object.assign(app, { account, accountAction, accountView, payView, legalView });
   const equip = (id, on) => {
     const [type, sub] = id.split(':');
     if (type === 'jetpack' || type === 'jetlite') {
@@ -1227,6 +1230,7 @@ async function boot() {
     .on('demote', async (id) => { await callApi(`api/admins?id=${encodeURIComponent(id)}`, { method: 'DELETE', key: who.key }); presence?.demote(id); refreshRoster(); })
     .on('shop', () => openShop())
     .on('account', accountAction)
+    .on('legal', (which) => { hud.closeAll(); input.exitLock(); input.keys.clear(); legalView.open(which); })
     .on('firework', lightFirework)
     .on('drop', () => { look.bouquet = false; look.kinds = undefined; })
     .on('volume', (key, value) => {
@@ -1263,7 +1267,7 @@ async function boot() {
   input.on('drop', () => { if (look.bouquet) { look.bouquet = false; look.kinds = undefined; } });
   input.on('chat', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleChat(true, talking ? talking.brain.ask || `Say something to ${talking.name}…` : undefined); });
   input.on('respawn', () => { if (state.mode === 'walk') { endGame(); spawn(); hud.note('Back to the mill'); } });
-  input.on('menu', () => { accountView.close(); payView.close(); if (fair.session && (!fair.session.over || fair.kind === 'arcade')) { endGame(); hud.note('Game left.'); } hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); hud.toggleChat(false); hud.closeChoice(); hud.closeRoster(); });
+  input.on('menu', () => { accountView.close(); payView.close(); legalView.close(); if (fair.session && (!fair.session.over || fair.kind === 'arcade')) { endGame(); hud.note('Game left.'); } hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); hud.toggleChat(false); hud.closeChoice(); hud.closeRoster(); });
   input.on('map', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleBigMap(); });
   hud.setMap(data.meta.map, PLACES);
   hud.setVillages(world.sky.villages, data.meta.size, villageLabel);

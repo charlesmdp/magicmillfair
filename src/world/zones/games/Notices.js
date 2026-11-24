@@ -1,7 +1,9 @@
-// Things to read on the way from the arrival to the mill: the board of what is new at the fair (what the latest
-// updates brought: the list is app/news.js), and the booth of the sponsors — every game, who sponsors it, what
-// it takes to take its panel (the game opens the list there: see main.js). And, at the top of the ramp of the
-// pier, the arcade cabinet (its game is ui/Arcade.js) with its board of scores.
+// Things to read at the fair. Where one arrives: a banner of welcome across the lane, a little mushroom cloud
+// puffing over each of its posts, and the rules of the fair on a board to the left (there are hardly any).
+// By the poppy field, west of the lane: the boards of what is new, one for each of the latest days something
+// changed (the list is app/news.js). On the way to the mill: the booth of the sponsors — every game, who
+// sponsors it, what it takes to take its panel (the game opens the list there: see main.js). And, at the top
+// of the ramp of the pier, the arcade cabinet (its game is ui/Arcade.js) with its board of scores.
 import * as THREE from 'three';
 import { Parts } from '../../props/MeshBuilder.js';
 import { canvasBoard } from './Boards.js';
@@ -39,32 +41,121 @@ const trefoil = (ctx, x, y, r, ink) => {
   ctx.beginPath(); ctx.arc(x, y, r * 0.2, 0, 7); ctx.fill();
 };
 
-/** The board of what is new: a title, the month, and the latest things — each a few words and one line. */
-function drawNews(ctx, w, h) {
+/** A board of what is new: the day its changes went live, and what they were — each a few words and one line. */
+function drawNews(ctx, w, h, day, latest) {
   const g = ctx.createLinearGradient(0, 0, 0, h);
   g.addColorStop(0, '#14323a'); g.addColorStop(1, '#0c1d26');
   ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
-  tape(ctx, 0, 0, w, 20); tape(ctx, 0, h - 20, w, 20);
+  tape(ctx, 0, 0, w, 16); tape(ctx, 0, h - 16, w, 16);
   ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
-  ctx.fillStyle = '#f2c14e'; ctx.beginPath(); ctx.arc(70, 84, 38, 0, 7); ctx.fill();
-  trefoil(ctx, 70, 84, 30, '#15130f');
-  ctx.fillStyle = '#ffe9a6';
-  ctx.fillText(shrink(ctx, 'WHAT’S NEW', w - 190, 62, 900, SERIF), w / 2 + 40, 70);
+  ctx.fillStyle = '#f2c14e'; ctx.beginPath(); ctx.arc(52, 66, 29, 0, 7); ctx.fill();
+  trefoil(ctx, 52, 66, 23, '#15130f');
   ctx.fillStyle = '#9fd8c8';
-  ctx.fillText(shrink(ctx, `at Atomic Oasis · ${NEWS.date}`.toUpperCase(), w - 190, 21, 700, SANS), w / 2 + 40, 112);
-  const top = 148, rows = Math.min(8, NEWS.items.length), lh = (h - top - 34) / rows;
+  ctx.fillText(shrink(ctx, latest ? 'WHAT’S NEW AT ATOMIC OASIS' : 'WHAT WAS NEW AT ATOMIC OASIS', w - 130, 17, 700, SANS), w / 2 + 34, 46);
+  ctx.fillStyle = '#ffe9a6';
+  ctx.fillText(shrink(ctx, day.date.toUpperCase(), w - 130, 40, 900, SERIF), w / 2 + 34, 80);
+  if (latest) { // (a ribbon across the corner of the newest)
+    ctx.save(); ctx.translate(w - 44, 44); ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = '#e8473a'; ctx.fillRect(-70, -11, 140, 22);
+    ctx.fillStyle = '#fff3e0'; ctx.font = `800 13px ${SANS}`; ctx.fillText('LATEST', 0, 1);
+    ctx.restore();
+  }
+  const top = 116, rows = Math.min(6, day.items.length), lh = Math.min(96, (h - top - 26) / rows);
   ctx.textAlign = 'left';
-  NEWS.items.slice(0, rows).forEach(([title, line], i) => {
+  day.items.slice(0, rows).forEach(([title, line], i) => {
     const y = top + i * lh;
-    ctx.fillStyle = i % 2 ? 'rgba(255, 255, 255, 0.035)' : 'rgba(255, 255, 255, 0.075)'; rounded(ctx, 22, y + 3, w - 44, lh - 6, 12); ctx.fill();
+    ctx.fillStyle = i % 2 ? 'rgba(255, 255, 255, 0.035)' : 'rgba(255, 255, 255, 0.075)'; rounded(ctx, 16, y + 3, w - 32, lh - 6, 10); ctx.fill();
     ctx.fillStyle = '#f2c14e'; ctx.beginPath();
-    for (let k = 0; k < 10; k++) { const a = (k / 10) * Math.PI * 2 - Math.PI / 2, q = k % 2 ? 6 : 14; ctx.lineTo(50 + Math.cos(a) * q, y + lh * 0.36 + Math.sin(a) * q); }
+    for (let k = 0; k < 10; k++) { const a = (k / 10) * Math.PI * 2 - Math.PI / 2, q = k % 2 ? 4.5 : 10.5; ctx.lineTo(37 + Math.cos(a) * q, y + lh * 0.34 + Math.sin(a) * q); }
     ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(shrink(ctx, title, w - 120, 29, 800, SANS), 78, y + lh * 0.3);
-    ctx.fillStyle = '#b9cdd0'; ctx.font = `500 19px ${SANS}`;
-    wrap(ctx, line, w - 120, 2).forEach((s, k) => ctx.fillText(s, 78, y + lh * 0.58 + k * 21));
+    ctx.fillText(shrink(ctx, title, w - 90, 23, 800, SANS), 58, y + lh * 0.3);
+    ctx.fillStyle = '#b9cdd0'; ctx.font = `500 15px ${SANS}`;
+    wrap(ctx, line, w - 90, 2).forEach((t, k) => ctx.fillText(t, 58, y + lh * 0.58 + k * 17));
   });
+}
+
+/** The rules of the fair: there are hardly any. */
+const RULES = [
+  ['Wander.', 'Everywhere. Nothing here is closed, and nobody is waiting for you.'],
+  ['Play.', 'The games of the fair keep your best scores on their boards.'],
+  ['Say hello.', 'Press Enter to talk. Be kind: we all survived the same afternoon.'],
+  ['Take your time.', 'Sit, swim, climb, fly, pick flowers. Or do nothing at all.'],
+  ['You are free.', 'That is the whole idea.'],
+];
+function drawRules(ctx, w, h) {
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#2a1d5e'); g.addColorStop(1, '#17103a');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+  tape(ctx, 0, 0, w, 16); tape(ctx, 0, h - 16, w, 16);
+  ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+  ctx.fillStyle = '#f2c14e'; ctx.beginPath(); ctx.arc(52, 68, 29, 0, 7); ctx.fill();
+  trefoil(ctx, 52, 68, 23, '#15130f');
+  ctx.fillStyle = '#ffe9a6';
+  ctx.fillText(shrink(ctx, 'THE RULES', w - 130, 52, 900, SERIF), w / 2 + 34, 60);
+  ctx.fillStyle = '#c9b8ff';
+  ctx.fillText(shrink(ctx, 'THERE ARE HARDLY ANY', w - 130, 17, 700, SANS), w / 2 + 34, 98);
+  const top = 128, foot = 92, lh = (h - top - foot - 16) / RULES.length;
+  RULES.forEach(([title, line], i) => {
+    const y = top + i * lh;
+    ctx.fillStyle = i % 2 ? 'rgba(255, 255, 255, 0.04)' : 'rgba(255, 255, 255, 0.085)'; rounded(ctx, 16, y + 3, w - 32, lh - 6, 10); ctx.fill();
+    ctx.fillStyle = '#f2c14e'; ctx.beginPath(); ctx.arc(46, y + lh / 2, 19, 0, 7); ctx.fill();
+    ctx.textAlign = 'center'; ctx.fillStyle = '#17103a'; ctx.font = `900 24px ${SERIF}`; ctx.fillText(String(i + 1), 46, y + lh / 2 + 1);
+    ctx.textAlign = 'left'; ctx.fillStyle = '#ffffff';
+    ctx.fillText(shrink(ctx, title, w - 100, 27, 800, SANS), 78, y + lh * 0.3);
+    ctx.fillStyle = '#cfc7e6'; ctx.font = `500 15.5px ${SANS}`;
+    wrap(ctx, line, w - 100, 2).forEach((t, k) => ctx.fillText(t, 78, y + lh * 0.6 + k * 17.5));
+  });
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffe9a6'; ctx.font = `700 15px ${SANS}`;
+  ctx.fillText('M: the map  ·  O: the shop  ·  T: emotes  ·  /kill if you are stuck', w / 2, h - foot + 18, w - 40);
+  ctx.fillStyle = '#9fd8c8'; ctx.font = `600 14.5px ${SANS}`;
+  ctx.fillText('The news of the fair: on the boards by the poppies, behind you.', w / 2, h - foot + 46, w - 40);
+}
+
+/** The banner of the arrival. */
+function drawWelcome(ctx, w, h) {
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#8a1722'); g.addColorStop(1, '#5e0f18');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 8; ctx.strokeRect(6, 6, w - 12, h - 12);
+  // (bulbs along the top and the bottom)
+  for (let k = 0; k < 38; k++) for (const y of [20, h - 20]) { ctx.fillStyle = k % 2 ? '#fff6c8' : '#ffd166'; ctx.beginPath(); ctx.arc(26 + (k * (w - 52)) / 37, y, 4.6, 0, 7); ctx.fill(); }
+  ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+  const text = 'WELCOME TO ATOMIC OASIS';
+  shrink(ctx, text, w - 350, 112, 900, SERIF);
+  ctx.fillStyle = '#2a0508'; ctx.fillText(text, w / 2 + 4, h / 2 + 7);
+  ctx.fillStyle = '#ffe9a6'; ctx.fillText(text, w / 2, h / 2 + 3);
+  for (const x of [92, w - 92]) { ctx.fillStyle = '#f2c14e'; ctx.beginPath(); ctx.arc(x, h / 2, 56, 0, 7); ctx.fill(); trefoil(ctx, x, h / 2, 45, '#15130f'); }
+}
+
+/**
+ * A little mushroom cloud, from the flash to the smoke that thins out: `frames` pictures side by side on one
+ * strip (each `s` pixels square), shown one after the other like an animated picture.
+ */
+function drawPuffs(ctx, s, frames) {
+  const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t)), rgb = (c, al = 1) => `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${al})`;
+  const HOT = [255, 246, 200], FIRE = [255, 170, 60], EMBER = [214, 84, 42], SMOKE = [112, 92, 96];
+  for (let f = 0; f < frames; f++) {
+    const p = f / frames, ox = f * s, cx = ox + s / 2, base = s * 0.93;
+    const rise = Math.min(1, p / 0.5), cool = Math.min(1, Math.max(0, (p - 0.25) / 0.5)), fade = p > 0.72 ? 1 - (p - 0.72) / 0.28 : 1;
+    ctx.save(); ctx.beginPath(); ctx.rect(ox, 0, s, s); ctx.clip();
+    if (p < 0.2) { // the flash, on the ground
+      const r = s * (0.12 + p * 2.1), fl = ctx.createRadialGradient(cx, base, 0, cx, base, r);
+      fl.addColorStop(0, 'rgba(255, 255, 245, 1)'); fl.addColorStop(0.45, 'rgba(255, 224, 130, 0.85)'); fl.addColorStop(1, 'rgba(255, 150, 40, 0)');
+      ctx.fillStyle = fl; ctx.beginPath(); ctx.arc(cx, base, r, Math.PI, 0); ctx.fill();
+    }
+    const top = base - s * 0.6 * rise, cap = s * (0.09 + 0.2 * rise), stem = s * (0.035 + 0.045 * rise);
+    const outer = mix(mix(FIRE, EMBER, cool), SMOKE, Math.max(0, cool * 1.4 - 0.5)), inner = mix(HOT, mix(FIRE, EMBER, cool), cool);
+    ctx.globalAlpha = fade;
+    ctx.fillStyle = rgb(mix(outer, [60, 44, 50], 0.25)); ctx.beginPath(); ctx.ellipse(cx, base, s * (0.1 + 0.2 * rise), s * 0.05, 0, Math.PI, 0); ctx.fill(); // the skirt of dust
+    ctx.fillStyle = rgb(outer); ctx.fillRect(cx - stem, top, stem * 2, base - top); // the stem
+    ctx.fillStyle = rgb(inner, 0.9); ctx.fillRect(cx - stem * 0.45, top, stem * 0.9, base - top);
+    for (const [dx, dy, k] of [[-0.62, 0.2, 0.68], [0.62, 0.2, 0.68], [0, 0, 1], [-0.3, -0.34, 0.6], [0.3, -0.34, 0.6]]) { ctx.fillStyle = rgb(outer); ctx.beginPath(); ctx.arc(cx + dx * cap, top + dy * cap, cap * k, 0, 7); ctx.fill(); }
+    ctx.fillStyle = rgb(inner, 0.95 - cool * 0.5); ctx.beginPath(); ctx.arc(cx, top + cap * 0.06, cap * (0.62 - cool * 0.22), 0, 7); ctx.fill();
+    ctx.fillStyle = rgb(mix(outer, [40, 30, 36], 0.3), 0.55); ctx.beginPath(); ctx.ellipse(cx, top + cap * 0.62, cap * 1.12, cap * 0.2, 0, 0, 7); ctx.fill(); // the shadow under the cap
+    ctx.restore();
+  }
 }
 
 /** The board of the sponsors: every game, and who sponsors it — or what it takes. rows: [{ game, sponsor, offer }]. */
@@ -91,34 +182,96 @@ function drawAds(ctx, w, h, rows) {
 }
 
 /**
- * Builds them in the games zone. Returns { news: { x, z }, ads: { x, z, reach, set(rows) }, arcade: { x, z,
+ * Builds them in the games zone. Returns { news: [{ x, z, date }], welcome: { x, z }, rules: { x, z }, ads: { x, z, reach, set(rows) }, arcade: { x, z,
  * yaw, reach, board }, update(pos) }: `ads` is where one stands to ask at the booth (`set` redraws its
  * board), `arcade` where one stands to play (facing `yaw`), with the board of its scores.
  */
 export function buildNotices(zone) {
   const parts = new Parts(), wood = parts.get('woodDark'), paint = parts.get('paint'), cloth = parts.get('doubleSided'), glow = parts.get('glow');
   const meshes = [];
-  // ---- what is new: a board on two posts under a little roof, a lamp at each end
-  const n = NOTICES.news, ny = zone.ground(n.x, n.z);
-  {
-    const W = 2.6, H = 3.0, board = canvasBoard(768, 886, drawNews, W, H, { both: true });
-    board.mesh.position.set(n.x, ny + 0.75 + H / 2, n.z);
-    board.mesh.rotation.y = n.yaw;
-    board.mesh.name = 'notice-news';
+  // ---- what is new: by the poppy field, a board for each of the latest days something changed (the newest to
+  // the left of who reads them), each on two posts under a little roof, a lamp at each end
+  const n = NOTICES.news, days = NEWS.slice(0, 3), newsAt = [];
+  days.forEach((day, i) => {
+    const k = i - (days.length - 1) / 2, W = 2.2, H = 2.75;
+    // (on an arc: each turned a little towards the one in the middle)
+    const yaw = n.yaw - k * 0.2, ax = Math.cos(n.yaw), az = -Math.sin(n.yaw), fx = Math.sin(n.yaw), fz = Math.cos(n.yaw);
+    const x = n.x + ax * k * n.gap + fx * k * k * 0.45, z = n.z + az * k * n.gap + fz * k * k * 0.45, y = zone.ground(x, z);
+    const board = canvasBoard(560, 700, (ctx, w, h) => drawNews(ctx, w, h, day, i === 0), W, H, { both: true });
+    board.mesh.position.set(x, y + 0.7 + H / 2, z);
+    board.mesh.rotation.y = yaw;
+    board.mesh.name = `notice-news${i}`;
     meshes.push(board.mesh);
-    for (const b of [wood, paint, cloth, glow]) b.place(n.x, ny, n.z, n.yaw);
+    for (const b of [wood, paint, cloth, glow]) b.place(x, y, z, yaw);
     for (const s of [-1, 1]) {
-      wood.tint(1.05, 0.92, 0.75, 1).box(s * (W / 2 + 0.1) - 0.08, -0.3, -0.08, s * (W / 2 + 0.1) + 0.08, 0.75 + H + 0.35, 0.08, { tile: 1 });
-      glow.tint(1.0, 0.86, 0.5, 1).place(s * (W / 2 + 0.1), 0.75 + H + 0.42, 0).lathe([[0.0, 0.0], [0.1, 0.05], [0.12, 0.17], [0.06, 0.27], [0.0, 0.3]], 7).pop();
+      wood.tint(1.05, 0.92, 0.75, 1).box(s * (W / 2 + 0.1) - 0.08, -0.5, -0.08, s * (W / 2 + 0.1) + 0.08, 0.7 + H + 0.35, 0.08, { tile: 1 });
+      glow.tint(1.0, 0.86, 0.5, 1).place(s * (W / 2 + 0.1), 0.7 + H + 0.42, 0).lathe([[0.0, 0.0], [0.1, 0.05], [0.12, 0.17], [0.06, 0.27], [0.0, 0.3]], 7).pop();
     }
-    wood.tint(1.05, 0.92, 0.75, 1).box(-W / 2 - 0.2, 0.75 + H + 0.04, -0.06, W / 2 + 0.2, 0.75 + H + 0.16, 0.06, { tile: 1 });
-    for (let k = 0; k < 10; k++) { // (a striped canopy over it)
-      const c = k % 2 ? [0.97, 0.95, 0.9] : [0.1, 0.55, 0.6], x0 = -W / 2 - 0.3 + (k * (W + 0.6)) / 10, x1 = x0 + (W + 0.6) / 10;
-      cloth.tint(c[0], c[1], c[2], 1).quad(V(x0, 0.75 + H + 0.2, 0.55), V(x1, 0.75 + H + 0.2, 0.55), V(x1, 0.75 + H + 0.5, 0), V(x0, 0.75 + H + 0.5, 0)).quad(V(x1, 0.75 + H + 0.2, -0.55), V(x0, 0.75 + H + 0.2, -0.55), V(x0, 0.75 + H + 0.5, 0), V(x1, 0.75 + H + 0.5, 0));
+    wood.tint(1.05, 0.92, 0.75, 1).box(-W / 2 - 0.2, 0.7 + H + 0.04, -0.06, W / 2 + 0.2, 0.7 + H + 0.16, 0.06, { tile: 1 });
+    for (let q = 0; q < 8; q++) { // (a striped canopy over it)
+      const c = q % 2 ? [0.97, 0.95, 0.9] : [0.1, 0.55, 0.6], x0 = -W / 2 - 0.3 + (q * (W + 0.6)) / 8, x1 = x0 + (W + 0.6) / 8;
+      cloth.tint(c[0], c[1], c[2], 1).quad(V(x0, 0.7 + H + 0.2, 0.55), V(x1, 0.7 + H + 0.2, 0.55), V(x1, 0.7 + H + 0.5, 0), V(x0, 0.7 + H + 0.5, 0)).quad(V(x1, 0.7 + H + 0.2, -0.55), V(x0, 0.7 + H + 0.2, -0.55), V(x0, 0.7 + H + 0.5, 0), V(x1, 0.7 + H + 0.5, 0));
     }
     for (const b of [wood, paint, cloth, glow]) b.pop();
-    const ax = Math.cos(n.yaw), az = -Math.sin(n.yaw);
-    for (const s of [-1, 1]) zone.colliders.push({ type: 'circle', x: n.x + ax * s * (W / 2 + 0.1), z: n.z + az * s * (W / 2 + 0.1), r: 0.2 });
+    const bx = Math.cos(yaw), bz = -Math.sin(yaw);
+    for (const s of [-1, 1]) zone.colliders.push({ type: 'circle', x: x + bx * s * (W / 2 + 0.1), z: z + bz * s * (W / 2 + 0.1), r: 0.2 });
+    newsAt.push({ x: x + Math.sin(yaw) * 2.2, z: z + Math.cos(yaw) * 2.2, date: day.date });
+  });
+  // ---- where one arrives: a banner across the lane — a little mushroom cloud puffs over each of its posts, again
+  // and again, like an animated picture — and, to the left, the rules of the fair
+  const wl = NOTICES.welcome, FRAMES = 12;
+  let puffs = null;
+  {
+    const ax = Math.cos(wl.yaw), az = -Math.sin(wl.yaw), posts = [-1, 1].map((s) => { const x = wl.x + ax * s * wl.half, z = wl.z + az * s * wl.half; return { x, z, y: zone.ground(x, z) }; });
+    const y0 = Math.max(posts[0].y, posts[1].y, zone.ground(wl.x, wl.z)), LOW = 3.05, BH = 1.36, W = wl.half * 2 - 0.3;
+    const banner = canvasBoard(1280, 246, drawWelcome, W, BH, { both: true });
+    banner.mesh.position.set(wl.x, y0 + LOW + BH / 2, wl.z);
+    banner.mesh.rotation.y = wl.yaw;
+    banner.mesh.name = 'notice-welcome';
+    meshes.push(banner.mesh);
+    // (the strip of the little clouds: one picture, shown a frame at a time — a frame later over the other post)
+    const strip = document.createElement('canvas');
+    strip.width = FRAMES * 96; strip.height = 96;
+    drawPuffs(strip.getContext('2d'), 96, FRAMES);
+    const first = new THREE.CanvasTexture(strip);
+    first.colorSpace = THREE.SRGBColorSpace;
+    first.repeat.set(1 / FRAMES, 1);
+    const second = first.clone();
+    second.needsUpdate = true;
+    const quad = new THREE.PlaneGeometry(2.3, 2.3);
+    puffs = { textures: [first, second], frame: -1, x: wl.x, z: wl.z };
+    posts.forEach((q, i) => {
+      wood.tint(0.5, 0.36, 0.26, 1).box(q.x - 0.09, q.y - 0.5, q.z - 0.09, q.x + 0.09, y0 + LOW + BH + 0.12, q.z + 0.09, { tile: 1 });
+      paint.tint(1.5, 1.05, 0.25, 1).place(q.x, y0 + LOW + BH + 0.12, q.z).lathe([[0.0, 0.0], [0.13, 0.04], [0.15, 0.12], [0.07, 0.2], [0.0, 0.22]], 8).pop();
+      const m = new THREE.Mesh(quad, new THREE.MeshBasicMaterial({ map: puffs.textures[i], transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
+      m.position.set(q.x, y0 + LOW + BH + 0.28 + 1.15 * 0.93, q.z);
+      m.rotation.y = wl.yaw;
+      m.name = `notice-puff${i}`;
+      m.renderOrder = 2;
+      meshes.push(m);
+      zone.colliders.push({ type: 'circle', x: q.x, z: q.z, r: 0.2 });
+    });
+  }
+  const ru = NOTICES.rules, ry = zone.ground(ru.x, ru.z);
+  {
+    const W = 2.3, H = 2.9, board = canvasBoard(580, 732, drawRules, W, H, { both: true });
+    board.mesh.position.set(ru.x, ry + 0.7 + H / 2, ru.z);
+    board.mesh.rotation.y = ru.yaw;
+    board.mesh.name = 'notice-rules';
+    meshes.push(board.mesh);
+    for (const b of [wood, paint, cloth, glow]) b.place(ru.x, ry, ru.z, ru.yaw);
+    for (const s of [-1, 1]) {
+      wood.tint(1.05, 0.92, 0.75, 1).box(s * (W / 2 + 0.1) - 0.08, -0.5, -0.08, s * (W / 2 + 0.1) + 0.08, 0.7 + H + 0.35, 0.08, { tile: 1 });
+      glow.tint(1.0, 0.86, 0.5, 1).place(s * (W / 2 + 0.1), 0.7 + H + 0.42, 0).lathe([[0.0, 0.0], [0.1, 0.05], [0.12, 0.17], [0.06, 0.27], [0.0, 0.3]], 7).pop();
+    }
+    wood.tint(1.05, 0.92, 0.75, 1).box(-W / 2 - 0.2, 0.7 + H + 0.04, -0.06, W / 2 + 0.2, 0.7 + H + 0.16, 0.06, { tile: 1 });
+    for (let q = 0; q < 8; q++) {
+      const c = q % 2 ? [0.97, 0.95, 0.9] : [0.72, 0.16, 0.2], x0 = -W / 2 - 0.3 + (q * (W + 0.6)) / 8, x1 = x0 + (W + 0.6) / 8;
+      cloth.tint(c[0], c[1], c[2], 1).quad(V(x0, 0.7 + H + 0.2, 0.55), V(x1, 0.7 + H + 0.2, 0.55), V(x1, 0.7 + H + 0.5, 0), V(x0, 0.7 + H + 0.5, 0)).quad(V(x1, 0.7 + H + 0.2, -0.55), V(x0, 0.7 + H + 0.2, -0.55), V(x0, 0.7 + H + 0.5, 0), V(x1, 0.7 + H + 0.5, 0));
+    }
+    for (const b of [wood, paint, cloth, glow]) b.pop();
+    const bx = Math.cos(ru.yaw), bz = -Math.sin(ru.yaw);
+    for (const s of [-1, 1]) zone.colliders.push({ type: 'circle', x: ru.x + bx * s * (W / 2 + 0.1), z: ru.z + bz * s * (W / 2 + 0.1), r: 0.2 });
   }
   // ---- the booth of the sponsors: a counter under a striped awning, its board above the awning
   const a = NOTICES.ads, ay = zone.ground(a.x, a.z), state = { rows: null };
@@ -191,9 +344,17 @@ export function buildNotices(zone) {
   for (const m of meshes) zone.group.add(m);
   const front = (p, d) => ({ x: p.x + Math.sin(p.yaw) * d, z: p.z + Math.cos(p.yaw) * d });
   return {
-    news: front(n, 2.2),
+    news: newsAt, // (where one stands to read each board, the newest first: [{ x, z, date }])
+    welcome: { x: wl.x, z: wl.z }, rules: front(ru, 2.2),
     arcade: { ...front({ x: cx, z: cz, yaw: cyaw }, 1.2), yaw: cyaw + Math.PI, reach: 1.8, board: runBoard },
     ads: { ...front(a, 2.4), reach: 2.6, set(rows) { state.rows = rows; ads.redraw(); } },
-    update(pos) { for (const m of meshes) m.visible = (pos.x - m.position.x) ** 2 + (pos.z - m.position.z) ** 2 < 230 * 230; },
+    update(pos, time = 0) {
+      for (const m of meshes) m.visible = (pos.x - m.position.x) ** 2 + (pos.z - m.position.z) ** 2 < 230 * 230;
+      // (the little clouds: a new picture seven times a second, while somebody is near enough to see them)
+      if (puffs && (pos.x - puffs.x) ** 2 + (pos.z - puffs.z) ** 2 < 90 * 90) {
+        const f = Math.floor(time * 7) % FRAMES;
+        if (f !== puffs.frame) { puffs.frame = f; puffs.textures[0].offset.x = f / FRAMES; puffs.textures[1].offset.x = ((f + 5) % FRAMES) / FRAMES; }
+      }
+    },
   };
 }

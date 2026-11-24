@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
+import { stubOutside } from './lib/outside.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -52,6 +53,7 @@ const logs = [];
 
 async function visitor(name, swatch) {
   const context = await browser.newContext({ viewport: { width: 960, height: 540 }, deviceScaleFactor: 1 });
+  await stubOutside(context);
   await context.addInitScript(() => { try { for (const k of ['mmf.run', 'mmf.follow']) if (localStorage.getItem(k) === null) localStorage.setItem(k, '0'); } catch { /* no storage */ } }); // (the tests walk with Shift to run, and turn the camera themselves)
   const page = await context.newPage();
   page.on('console', (m) => { if (m.type() === 'error') logs.push(`[${name}] ${m.text().slice(0, 300)}`); });
@@ -179,7 +181,18 @@ try {
   await until(() => alice.page.evaluate(() => window.__mmf.who.admin && window.__mmf.presence.admin), 20000);
   await alice.page.click('.pill.players');
   const seenByAdmin = await until(() => alice.page.evaluate(() => { const more = [...document.querySelectorAll('.roster .more')].map((e) => e.textContent); return more.length === 2 ? { more, acts: [...document.querySelectorAll('.roster .acts button')].map((e) => e.textContent) } : null; }), 20000);
+  // what each connects with is three small pictures; what can be done about somebody stands on one line; everything
+  // that is known unfolds with "See more"
+  const tidy = await alice.page.evaluate(() => {
+    const rows = [...document.querySelectorAll('.roster .list .who')], acts = [...document.querySelectorAll('.roster .list .acts button')].map((b) => Math.round(b.getBoundingClientRect().top));
+    const before = [...document.querySelectorAll('.roster .more')].map((m) => m.hidden || getComputedStyle(m).display === 'none');
+    document.querySelector('.roster .who:not(.me) .seemore').click();
+    const more = document.querySelector('.roster .who:not(.me) .more');
+    return { pictures: rows.map((r) => r.querySelectorAll('.agent svg').length), tip: document.querySelector('.roster .agent').title, lines: new Set(acts).size, folded: before.every(Boolean), unfolded: !more.hidden && getComputedStyle(more).display !== 'none', facts: [...more.querySelectorAll('.facts em')].map((e) => e.textContent), label: document.querySelector('.roster .who:not(.me) .seemore').textContent };
+  });
   await alice.page.screenshot({ path: path.join(OUT, 'roster-admin.png') });
+  check('in that list: three small pictures say what each visitor connects with, the actions stand on one line, and "See more" unfolds everything that is known (address, what the browser says of itself, its identifier)',
+    tidy.pictures.join() === '3,3' && /Chrome \d+ · .+ · computer/.test(tidy.tip) && tidy.lines === 1 && tidy.folded && tidy.unfolded && tidy.facts.join() === 'Address,Browser says,Browser identifier,In this room' && tidy.label === 'See less', JSON.stringify(tidy));
   check('the administrator also sees the address, the browser and the device of each, and can go to them, give them a present, name them, kick or ban', !!seenByAdmin && seenByAdmin.more.every((m) => /127\.0\.0\.1|::1/.test(m) && /Chrome \d+ · /.test(m) && /device /.test(m)) && seenByAdmin.acts.join() === 'Go to,Gift,Make admin,Kick,Ban 1 h,Ban 1 day,Ban for good', JSON.stringify(seenByAdmin));
   const act = (who, label) => who.page.evaluate((label) => { const b = [...document.querySelectorAll('.roster .acts button')].find((e) => e.textContent === label); if (b) b.click(); return !!b; }, label);
   const apart = () => alice.page.evaluate(() => { const a = window.__mmf, o = [...a.presence.peers.values()][0]; return Math.hypot(o.x - a.player.pos.x, o.z - a.player.pos.z); });

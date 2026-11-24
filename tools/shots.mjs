@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
+import { stubOutside } from './lib/outside.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -34,6 +35,7 @@ const browser = await chromium.launch({
 const context = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: dpr, ...(opt.mobile ? { isMobile: true, hasTouch: true } : {}) });
 const page = await context.newPage();
 const logs = [];
+await stubOutside(context);
 page.on('console', (m) => { if (['error', 'warning'].includes(m.type())) logs.push(`[${m.type()}] ${m.text()}`); });
 page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
 const first = shots.find((s) => !s.walk)?.cam || [-60, 46, -52, 126, -18];

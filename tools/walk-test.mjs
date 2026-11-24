@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
+import { stubOutside } from './lib/outside.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -28,6 +29,7 @@ const context = await browser.newContext({ viewport: { width: 960, height: 540 }
 await context.addInitScript(() => { try { for (const k of ['mmf.run', 'mmf.follow']) if (localStorage.getItem(k) === null) localStorage.setItem(k, '0'); } catch { /* no storage */ } });
 const page = await context.newPage();
 const errors = [];
+await stubOutside(context);
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text().slice(0, 300)); });
 page.on('pageerror', (e) => errors.push(e.message));
 
@@ -703,6 +705,29 @@ try {
     check('swimming out to where the sea ends brings the shark', shark.swimming && shark.far < 30 && /fin/.test(shark.warned || '') && shark.cause === 'Eaten by the shark' && shark.t < 15 && !!shark.respawn && shark.respawn.walkable && shark.respawn.y > 0.2 && shark.alive, JSON.stringify(shark));
   }
 
+  // --- where one arrives: a banner across the lane and the rules to the left are what is seen first; the boards
+  // of what is new stand by the poppies, behind — one for each of the latest days something changed
+  {
+    const arrive = await page.evaluate(async () => {
+      const L = await import('/src/world/layout/layout.js'), N = await import('/src/app/news.js');
+      const m = window.__mmf, n = m.world.games.notices, g = m.world.games.group, s = L.SPAWN;
+      m.player.teleport(s.x, s.z, s.yaw + Math.PI);
+      // (which way a newcomer looks, and how far to the side of that a thing stands: 0 straight ahead, 180 behind)
+      const fx = -Math.sin(s.yaw), fz = -Math.cos(s.yaw), off = (x, z) => Math.round((Math.acos(((x - s.x) * fx + (z - s.z) * fz) / Math.hypot(x - s.x, z - s.z)) * 180) / Math.PI);
+      const puff = g.getObjectByName('notice-puff0'), before = puff.material.map.offset.x;
+      await new Promise((r) => { let k = 0; const tick = () => (++k > 40 ? r() : requestAnimationFrame(tick)); tick(); });
+      const flowers = n.news.map((b) => [0, 1, 2, 3, 4, 5, 6, 7].some((k) => /poppy|cornflower/.test(m.world.scatter.flowerNear(b.x - 9 + (k % 4) * 3, b.z - 14 + Math.floor(k / 4) * 5, 6) || '')));
+      return {
+        banner: { there: !!g.getObjectByName('notice-welcome'), ahead: off(n.welcome.x, n.welcome.z), far: +Math.hypot(n.welcome.x - s.x, n.welcome.z - s.z).toFixed(1) },
+        rules: { there: !!g.getObjectByName('notice-rules'), ahead: off(L.NOTICES.rules.x, L.NOTICES.rules.z), left: (L.NOTICES.rules.x - s.x) * fz - (L.NOTICES.rules.z - s.z) * fx > 0 },
+        puffs: { moved: puff.material.map.offset.x !== before, frames: Math.round(1 / puff.material.map.repeat.x) },
+        news: n.news.map((b) => ({ date: b.date, behind: off(b.x, b.z), far: Math.round(Math.hypot(b.x - s.x, b.z - s.z)) })), boards: [0, 1, 2].map((k) => !!g.getObjectByName(`notice-news${k}`)), days: N.NEWS.slice(0, 3).map((d) => d.date), old: !!g.getObjectByName('notice-news'), flowers,
+      };
+    });
+    check('where one arrives: a banner of welcome across the lane (little mushroom clouds puffing over its posts) and the rules to the left are what is seen first; the boards of what is new stand by the poppies, out of that first look — one for each of the three latest days',
+      arrive.banner.there && arrive.banner.ahead < 12 && arrive.banner.far > 7 && arrive.banner.far < 16 && arrive.rules.there && arrive.rules.ahead < 48 && arrive.rules.left && arrive.puffs.moved && arrive.puffs.frames === 12
+      && arrive.news.length === 3 && arrive.boards.every(Boolean) && !arrive.old && arrive.news.every((b, k) => b.date === arrive.days[k] && b.behind > 75 && b.far > 18 && b.far < 45) && arrive.flowers.some(Boolean), JSON.stringify(arrive));
+  }
   // --- the fair: the four booths of the pier, played by a bot through the pointer; the race, driven by a bot
   {
     await place(98, 0, 0);

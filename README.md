@@ -184,6 +184,7 @@ room; `?village=name` arrives straight in a sky village.
 | The booths of the pier | E at the counter; then the mouse aims and its button fires (Space fires too); E or Escape leaves | tap or hold where you aim | |
 | The quad race | E in the paddock; arrows or WASD steer; Shift drifts; Space hops; E gives up | the stick steers; Run drifts; Jump hops | left stick, trigger, A |
 | Stuck somewhere | `/kill` in the chat: WASTED, then back at the mill | the same | |
+| Full screen | the button with four corners at the top right, or Settings → Display (Escape leaves) | the same, where the browser allows it (not on an iPhone) | |
 | Performance figures | P | Settings → Performance figures | |
 | Back to the mill | R | | |
 
@@ -492,8 +493,14 @@ panel that has a sponsor wears a ribbon along its top: *OUR AWESOME SPONSOR*.
 **The booth of the sponsors** stands by the lane where the mill comes into view: a red and white kiosk
 under a board that lists every game of the fair with who sponsors it, or what the first bid is. Step up
 to its counter — *The games and their sponsors* — to pick a game and bid for its panel, without walking
-to each board. And a few steps from the arrival, **the board of what is new** says what the latest
-updates brought (its lines are `src/app/news.js`: rewrite them with each update).
+to each board.
+
+**Where one arrives.** The first thing a newcomer sees is a banner across the lane — *WELCOME TO ATOMIC
+OASIS*, a little mushroom cloud puffing over each of its posts, again and again (twelve pictures on one
+strip, shown seven a second: no video, no animated file) — and, to the left, **the rules of the fair** on a
+board: there are five, and the fifth is "You are free." **The boards of what is new** stand behind, west
+of the lane, by the poppy field: one for each of the three latest days something changed, each headed by
+the day its changes went live (`src/app/news.js` keeps every day: add one at the top with each update).
 
 **What a sponsor sends cannot harm the site or its visitors**: text is cut to one short line and loses
 anything that looks like markup; a link must start with `https://` and opens in a new tab; a logo is
@@ -709,7 +716,7 @@ src/
                            the secret cove, the fall into the sea; Caves.js builds a cave
     zones/games/           the Sky Stones (course.js works out the stones), the boulder, the acid pond, the shark;
                            Booths.js: the four booths of the pier head (and the arrows of light of all ten); Stalls.js: the six
-                           booths of the walk; kit.js: what booths share; Notices.js: the board of what is new, the booth of the
+                           booths of the walk; kit.js: what booths share; Notices.js: the banner and the rules of the arrival, the boards of what is new, the booth of the
                            sponsors, the arcade cabinet; Race.js: the quad race; Boards.js: score boards and sponsor panels
     zones/sky/             the fifty sky villages and the Sky Gate
   player/                  animated avatar and its poses, controller (walk, swim, jump, sit, fly, die), cameras,
@@ -721,7 +728,8 @@ src/
   npc/Npc.js               the characters one can talk to (Billy the alligator): their own lines, or the server's
   net/                     multiplayer presence and chat (WebSocket or between-tabs transport, interpolation),
                            Scores.js (the leaderboards)
-  ui/                      welcome screen, minimap and large map, chat, action prompts, settings, touch controls
+  ui/                      welcome screen, minimap and large map, chat, action prompts, settings, touch controls;
+                           LegalView.js: the terms of use and the privacy policy (their words: app/legal.js)
   app/Benchmark.js         benchmark tour
 server/index.js            Node production server: static files + presence relay + API
 server/protocol.js         the relay itself (protocol, validation, batching), shared by both hostings
@@ -803,6 +811,10 @@ it on per room, and each client rebuilds a smooth motion by interpolation. Emote
 as they come; a line said "to those nearby" only goes to the visitors within twenty metres (the relay does
 the sorting: nobody further away receives it). The relay keeps the last state of those who are connected,
 in memory, and forgets them when they leave (on Cloudflare, a room that everybody has left is deleted).
+Nobody is seen twice: a page gives itself a name when it opens, and says it with its hello — when its
+line drops without the relay noticing (a laptop that slept, a change of network) and it connects again,
+the relay lets the connection it had before go at once, instead of showing a ghost beside the visitor
+until it times out. (Two tabs of one browser are two pages: both stay.)
 Without a reachable relay, the same interface works between the tabs of one browser. The protocol is
 described at the top of `server/protocol.js`, the client interface in `src/net/Presence.js`. The same relay
 runs under Node (`server/index.js`) and on Cloudflare (`cloudflare/worker.js`).
@@ -842,20 +854,49 @@ exists or has an address), and the settings let who is signed in add, change or 
 (`j•••@e•••.org`) and to nobody else; where no e-mail can be sent, none is ever asked for or kept. To
 switch it on at Cloudflare (their Email Service — on the Workers Paid plan — sends to any address):
 
-1. In the Cloudflare dashboard, onboard the domain of the game to *Email Service* (sending): it adds the
-   DNS records that let Cloudflare send in its name.
-2. In `wrangler.jsonc`, add the binding `"send_email": [{ "name": "EMAIL" }]` and, in `"vars"`,
-   `"MAIL_FROM": "hello@your-domain"` (any address of that domain). They are not there by default: a
-   binding the account cannot honour makes a deployment fail.
-3. Deploy, and check `/api/status`. Make an account with your own address and ask for a code.
+1. In the Cloudflare dashboard: *Compute → Email Service → Email Sending → Onboard Domain*, choose the
+   domain of the game, then *Add records and onboard*: Cloudflare adds the DNS records that let it send in
+   that name.
+2. In *Manage account → Account API tokens*: *Create token → Custom token*, with the one permission
+   **Email Sending: Edit**. Copy the token: it is shown once.
+3. In the Worker (*Settings → Variables and Secrets*), add three secrets — like the others, never in a file:
+   `MAIL_FROM` (an address of that domain, for instance `hello@your-domain`: the mailbox need not exist),
+   `CLOUDFLARE_ACCOUNT_ID` (the 32 characters shown on the overview page of *Workers & Pages*) and
+   `CLOUDFLARE_EMAIL_TOKEN` (the token).
+4. Deploy, and check `/api/status`: `"mail": true`. Make an account with your own address and ask for a code.
+   If nothing arrives, the logs of the Worker have a line `[mail] Cloudflare e-mail: …` with Cloudflare's
+   own reason (10102: the token may not send; 10105: the plan of the account does not send).
 
-On the Node server no e-mail is sent; `MAIL_FILE=/some/file` writes each message to that file instead (to
-try things out — the tests use it). `server/mail.js` holds the message and what an address must look like.
+That is all: the game then sends through Cloudflare's REST API, and nothing in `wrangler.jsonc` changes.
+(A Worker that has a `send_email` binding named `EMAIL` uses it instead of the token; it is not there by
+default, because a binding the account cannot honour makes a deployment fail.) The same three variables
+work on the Node server; there, `MAIL_FILE=/some/file` writes each message to that file instead of sending
+it (to try things out — the tests use it). `server/mail.js` holds the message, what an address must look
+like, and both ways of sending.
+
+**The small print.** At the bottom of the settings, *Terms of use* and *Privacy* open a card with two
+tabs (`src/ui/LegalView.js`; the words are in `src/app/legal.js`): a short version at the top of each, then
+sections in plain words — what the fair asks of its visitors, what the shop sells and how a purchase is
+undone, and, for privacy, everything the game keeps and every outside service it uses (Cloudflare, Stripe,
+Anthropic for Billy, and the script that counts the visits). Two lines at the top of `legal.js` are for
+whoever runs the game to fill in: who they are, and an address to write to. Keep the pages true: when the
+game starts to use something new, say so there and change the date.
+
+**The script that counts the visits.** The page carries one script from another site
+(`ship-or-die.com/hackathon/verify.js`, with the identifier of this site): the hackathon the game takes
+part in counts its visits with it. It is the last script of the page, so that the game never waits for it.
+Like any script taken from another site it runs with the page's own rights — it could read what the page
+keeps in the browser —, which is why there is only this one, and why the privacy page names it. To take it
+away, delete its line at the bottom of `index.html` (and its paragraph in `legal.js`). The tests answer it
+themselves, with nothing (`tools/lib/outside.mjs`).
 
 **The administrators.** The owner is whoever knows `ADMIN_KEY` (`/admin <key>` in the chat). Clicking the
-head count (top left) lists who is in the room — for everybody, the names; for an administrator, also the
-country and the town, the address, the browser and the device of each, with buttons to be carried next to
-a visitor (*Go to*), to put them out (*Kick*: they can come back) or to keep them out (*Ban*, for an hour,
+head count (top left) lists who is in the room — for everybody, the names; for an administrator, also
+where each connects from and with what: the country and the town beside the name, three small pictures for
+the browser, the system and the kind of device, and — unfolded by *See more* — everything to the letter
+(the address, what the browser says of itself, its identifier, since when). What can be done about a
+visitor stands on one line under their name: be carried next to them (*Go to*), give them a present
+(*Gift*), put them out (*Kick*: they can come back) or keep them out (*Ban*, for an hour,
 a day or for good: by address and by device; the list of bans is in the same panel, with a button to lift
 each). The address is what the host sees (`CF-Connecting-IP` on Cloudflare): a ban by address also keeps
 out whoever shares it — a school, a mobile operator.
@@ -940,13 +981,13 @@ that is the last point. Going further means a referee: the server replaying the 
 |---|---|
 | `npm run bake` | bakes the world, the statue and the textures again |
 | `npm run bake:statue` | sculpts the golden dog again (`-- --preview=dog.png` also draws it from five sides, `-- --cell=0.012` makes a finer mesh) |
-| `npm test` | 188 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password) |
-| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (131 in all) |
+| `npm test` | 190 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password) |
+| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (132 in all) |
 | `npm run test:shop` | the shop in the real game, on the Node server with test keys and a stand-in for Stripe: a hat bought and worn, the panel of a game sponsored, filled in (with a logo) and approved by the administrator, the stand of the gondolas, a plaque for a companion (bought at a bare plate, engraved with a picture, approved), an account made and signed in to on its card, the payment form inside the game (and Stripe's page when it cannot be shown); and a newcomer: the padlocks of the welcome card and the free day of the jetpack, the Game Pass bought as a subscription, what it lends (black, the largest size, a hat that was never bought), its end and the end of the free day (19 checks) |
 | `npm run test:smoke` | drives the real site: welcome screen, walking, free camera, settings, large map (`-- --mobile` for the touch layout) |
 | `npm run test:audio` | Listens to the sound engine without ears: in headless Chromium it renders a dozen listener scenarios (beach, cliffs, pier, woods, mill, waterfall, cave, sky village, the climb…) and every one-shot effect through an offline audio context, measures level, spectrum, how the loudness moves and how tonal it is, fails on silence or clipping, and times `update()` (about 0.01 ms a frame) |
-| `npm run test:walk` | 49 checks in the real game: pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls and the high clearing above them, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the swim on to the golden cove (the shark stays away; out of the sea on the beach; the stair up to the golden dog; the plaques round its plinth, painted for who climbs up there), the fifty sky villages (prices, places to sit, the board of one for hire, the one dressed as a demonstration), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, sitting down on the ground, the two jetpacks (which is on; the light one's fifteen seconds), big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the four booths of the pier head and the six of the walk (a bot plays each through the pointer, as a visitor would: baskets shot where the hoop is going to be, a tower stacked, a sequence of lamps remembered, fish brought up, alarms answered in a fifth of a second, a cup followed; boards), the arcade cabinet (a bot runs three hundred metres), the quad race (asked for in the paddock, it leaves with the next named start; a bot drives three laps flat out — it never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, and flies off the ramp), the flying theatre (a bot flaps through nine pairs of columns), the acid pond, the shark, change of tier |
-| `npm run test:duo` | 25 checks with two visitors on the production server: they must see each other move, wave, summon an animal, chat and sit down; the largest size and a party hat, sitting on the ground, a bouquet given from hand to hand; the administrator's key in the address, the administrator seeing the game as a visitor does (`-- --cloudflare` for the Cloudflare version) |
+| `npm run test:walk` | 50 checks in the real game: what a newcomer sees first (the banner, the rules; the boards of what is new out of that first look), pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls and the high clearing above them, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the swim on to the golden cove (the shark stays away; out of the sea on the beach; the stair up to the golden dog; the plaques round its plinth, painted for who climbs up there), the fifty sky villages (prices, places to sit, the board of one for hire, the one dressed as a demonstration), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, sitting down on the ground, the two jetpacks (which is on; the light one's fifteen seconds), big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the four booths of the pier head and the six of the walk (a bot plays each through the pointer, as a visitor would: baskets shot where the hoop is going to be, a tower stacked, a sequence of lamps remembered, fish brought up, alarms answered in a fifth of a second, a cup followed; boards), the arcade cabinet (a bot runs three hundred metres), the quad race (asked for in the paddock, it leaves with the next named start; a bot drives three laps flat out — it never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, and flies off the ramp), the flying theatre (a bot flaps through nine pairs of columns), the acid pond, the shark, change of tier |
+| `npm run test:duo` | 26 checks with two visitors on the production server: they must see each other move, wave, summon an animal, chat and sit down; the largest size and a party hat, sitting on the ground, a bouquet given from hand to hand; the administrator's key in the address, the administrator seeing the game as a visitor does (`-- --cloudflare` for the Cloudflare version) |
 | `npm run bench` | benchmark tour for each tier (`-- --mobile` for the phone profile) |
 | `npm run profile` | cost of each system (script, draw calls, triangles) at seven viewpoints |
 | `npm run shots -- name=x,y,z,heading,pitch` | screenshots from a viewpoint |

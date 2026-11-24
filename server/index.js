@@ -18,6 +18,7 @@ import { WebSocketServer } from 'ws';
 import { Room, MAX_FRAME, NEAR, RANGE, cleanRoom, originAllowed, parseOrigins } from './protocol.js';
 import { Limiter, LIMITS, BODY_MAX, allowed, parseBody, mayPost, bodyMax } from './api.js';
 import { stripeConfig } from './stripe.js';
+import { restMailer } from './mail.js';
 import { route, banned, addBan } from './routes.js';
 import { adminOf, looksNamed, nameAdmin } from './admins.js';
 import { geoFromHeaders } from './visitors.js';
@@ -39,8 +40,10 @@ const HEARTBEAT_MS = 15000;
 const SCORES_FILE = path.resolve(process.env.SCORES_FILE || path.join(ROOT, 'data', 'scores.json'));
 const NPC = { apiKey: process.env.ANTHROPIC_API_KEY || '', model: process.env.NPC_MODEL || NPC_MODEL };
 const ADMIN_KEY = (process.env.ADMIN_KEY || '').trim(); // (a space or a new line pasted with it does not count)
-// e-mails: this server sends none. With MAIL_FILE, each message is written to that file instead (see mail.js)
+// e-mails: with MAIL_FILE, each message is written to that file instead of being sent; otherwise they leave
+// through Cloudflare's REST API when its three secrets are given (see mail.js)
 const MAIL_FILE = process.env.MAIL_FILE ? path.resolve(process.env.MAIL_FILE) : '';
+const MAIL = MAIL_FILE ? (m) => fs.promises.appendFile(MAIL_FILE, `${JSON.stringify({ at: Date.now(), ...m })}\n`) : restMailer(process.env);
 // behind a proxy that says where each visitor comes from (Cloudflare's "visitor location" headers): GEO_HEADERS=1
 const GEO_HEADERS = /^(1|true|yes)$/i.test(process.env.GEO_HEADERS || '');
 const geoOf = (req) => (GEO_HEADERS ? geoFromHeaders((name) => req.headers[name]) : null);
@@ -160,8 +163,8 @@ const LIMIT_DAY = LIMITS.npcDay;
 const STRIPE = stripeConfig(process.env);
 const api = {
   store, limiter, now: () => Date.now(), stripe: STRIPE,
-  mail: MAIL_FILE ? (m) => fs.promises.appendFile(MAIL_FILE, `${JSON.stringify({ at: Date.now(), ...m })}\n`) : null,
-  flags: { npc: !!NPC.apiKey, admin: !!ADMIN_KEY, shop: STRIPE.mode || 'off', mail: !!MAIL_FILE },
+  mail: MAIL,
+  flags: { npc: !!NPC.apiKey, admin: !!ADMIN_KEY, shop: STRIPE.mode || 'off', mail: !!MAIL },
   // the secret that signs the notes of the runs: given (SCORE_SECRET), or drawn once and kept with the rest
   async secret() {
     if (!this._secret) {

@@ -20,6 +20,7 @@ import { sign, verify, randomId } from '../server/token.js';
 import { addScore, topsOf, periodKeys, runFits, cleanScore } from '../server/scores.js';
 import { signWebhook, stripeConfig } from '../server/stripe.js';
 import { cleanLogo, cleanText, cleanUrl } from '../server/shop.js';
+import { restMailer } from '../server/mail.js';
 import { visit, localDay } from '../server/routes.js';
 import { cleanTalk, oneSentence } from '../server/npc.js';
 import { cleanGeo, packGeo, unpackGeo } from '../server/visitors.js';
@@ -727,6 +728,27 @@ async function testModeration(start, dist) {
   for (let i = 0; i < 7; i++) guesser.send({ t: 'admin', key: `guess ${i}` });
   const shut = await Promise.race([guesser.closed, sleep(4000)]);
   check('admin: after a few wrong keys the connection is closed', shut !== undefined && guesser.msgs.filter((m) => m.t === 'admin').length <= 5, [shut, guesser.msgs.filter((m) => m.t === 'admin').length]);
+  // nobody twice: a page that connects again (its line dropped without the relay noticing) replaces the
+  // connection it had; two tabs of one browser are two visitors
+  {
+    const TOM = 'device-of-tom-0123456789', ZED = 'device-of-zed-0123456789';
+    const seer = new Client(port, 'twins', from(11)), first = new Client(port, 'twins', from(12, TOM));
+    await seer.hello('Seer', 1);
+    const w1 = await first.hello('Tom', 4, TOM, 'page-one-abcdef');
+    const again = new Client(port, 'twins', from(12, TOM));
+    const w2 = await again.hello('Tom', 4, TOM, 'page-one-abcdef');
+    const left = await seer.wait((m) => m.t === 'leave' && m.id === first.id, 4000), firstEnd = await Promise.race([first.closed, sleep(4000).then(() => 'still open')]);
+    const tab = new Client(port, 'twins', from(12, TOM));
+    const w3 = await tab.hello('Tom', 4, TOM, 'page-two-abcdef');
+    const other2 = new Client(port, 'twins', from(13, ZED));
+    const w4 = await other2.hello('Zed', 6, ZED, 'page-two-abcdef'); // (the name of a page, said by another browser: not that page)
+    await sleep(400);
+    const stayed = !seer.msgs.some((m) => m.t === 'leave' && (m.id === again.id || m.id === tab.id));
+    check('nobody twice: a page that connects again replaces the connection it had — the others see the old one leave at once; two tabs of one browser are two visitors; the name of a page cannot be borrowed by another browser',
+      !!w1 && !!w2 && !!left && firstEnd !== 'still open' && again.id !== first.id && !!w3 && !!w4 && stayed && w3.peers.filter((q) => q.name === 'Tom').length === 1 && w4.peers.filter((q) => q.name === 'Tom').length === 2,
+      [!!w1, !!w2, !!left, firstEnd, !!w3, !!w4, stayed, w3?.peers.map((q) => q.name), w4?.peers.map((q) => q.name)]);
+    await Promise.all([seer, again, tab, other2].map((c) => c.close()));
+  }
   await Promise.all([adm, other, back, sameAddress, sameDevice].map((c) => c.close()));
   await server.stop();
   fs.rmSync(file, { force: true });
@@ -1160,6 +1182,21 @@ function testShopLogic() {
 }
 
 async function testApiLogic() {
+  {
+    // e-mails through Cloudflare's REST API: three secrets, or nothing
+    const asked = [], ok = { ok: true, json: async () => ({ success: true }) }, no = { ok: false, status: 403, json: async () => ({ errors: [{ code: 10102, message: 'Sending domain not onboarded' }] }) };
+    const env = { MAIL_FROM: 'Hello@Example.org', CLOUDFLARE_ACCOUNT_ID: '0123456789abcdef0123456789abcdef', CLOUDFLARE_EMAIL_TOKEN: 'token-of-at-least-twenty-characters' };
+    const send = restMailer(env, async (url, init) => { asked.push({ url, init }); return ok; });
+    await send({ to: 'ada@example.org', subject: 'Hi', text: 'plain', html: '<p>rich</p>' });
+    const body = JSON.parse(asked[0]?.init.body || '{}');
+    let refused = '';
+    try { await restMailer(env, async () => no)({ to: 'ada@example.org', subject: 'Hi', text: 'x', html: 'x' }); } catch (err) { refused = err.message; }
+    check('e-mail: with three secrets — an address to write from, the account, a token — a message leaves through Cloudflare\'s REST API; without them all, none can; a refusal is said',
+      asked[0]?.url === 'https://api.cloudflare.com/client/v4/accounts/0123456789abcdef0123456789abcdef/email/sending/send' && asked[0].init.method === 'POST' && asked[0].init.headers.Authorization === 'Bearer token-of-at-least-twenty-characters'
+      && body.from === 'hello@example.org' && body.to === 'ada@example.org' && body.subject === 'Hi' && body.text === 'plain' && body.html === '<p>rich</p>'
+      && restMailer({ ...env, MAIL_FROM: '' }) === null && restMailer({ ...env, CLOUDFLARE_ACCOUNT_ID: 'nope' }) === null && restMailer({ ...env, CLOUDFLARE_EMAIL_TOKEN: 'short' }) === null && restMailer({}) === null
+      && refused === 'Cloudflare e-mail: 10102 Sending domain not onboarded', [asked[0]?.url, body, refused]);
+  }
   testShopLogic();
   testScoreLogic();
   const D = Date.UTC(2026, 10, 21, 12); // a Saturday

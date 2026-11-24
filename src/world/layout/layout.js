@@ -729,10 +729,15 @@ export const HERO_TREES = [
 ];
 
 // What stands on the way for visitors to read (zones/games/Notices.js): the board of what is new, a few steps
-// from the arrival; the booth of the sponsors, by the lane, where the mill comes into view; and the arcade
+// from the arrival (now: by the poppy field), the banner and the rules where one arrives; the booth of the sponsors, by the lane, where the mill comes into view; and the arcade
 // cabinet at the top of the ramp of the pier (in the frame of the pier), its board of scores across the walk.
 export const NOTICES = {
-  news: { x: -116.4, z: -51, yaw: -2.6 },
+  // (the boards of what is new: by the poppy field, west of the lane — behind whoever arrives, not in front.
+  // (x, z): the middle one; they stand `gap` metres apart on an arc that looks towards the lane)
+  news: { x: -146.8, z: -72, yaw: 1.04, gap: 3.3 },
+  // (what a newcomer sees first: a banner across the lane, `half` metres to each post, and the rules to the left)
+  welcome: { x: -121.05, z: -49, yaw: Math.PI + 0.068, half: 3.7 },
+  rules: { x: -116.9, z: -53.6, yaw: -2.49 },
   ads: { x: -113.8, z: -29.5, yaw: -Math.PI / 2 },
   arcade: { along: 17.6, side: -6.7 },
 };

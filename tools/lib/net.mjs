@@ -76,9 +76,9 @@ export class Client {
     });
   }
 
-  async hello(name, color = 0, dev) {
+  async hello(name, color = 0, dev, session) {
     await this.opened;
-    this.send({ t: 'hello', name, color, v: 2, ...(dev && { dev }) });
+    this.send({ t: 'hello', name, color, v: 2, ...(dev && { dev }), ...(session && { s: session }) });
     const welcome = await this.wait((m) => m.t === 'welcome');
     this.id = welcome ? welcome.id : 0;
     return welcome;

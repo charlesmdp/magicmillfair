@@ -72,6 +72,9 @@ export class Presence {
     this.id = 0; // own id in the room (0 until connected)
     this.mode = 'offline';
     this.device = deviceId();
+    // (a name for this page, for as long as it is open: when its line drops and it connects again, the relay
+    // knows it is the same page and lets the old connection go — nobody is seen twice)
+    this.session = `${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
     this.admin = false; // the relay has recognised an administrator's key
     this.owner = false; // …the owner's
     this.blastReadyAt = 0; // when the big red button may be pressed again (Date.now() clock; 0: now)
@@ -219,7 +222,7 @@ export class Presence {
   _persist() {
     try { localStorage.setItem('mmf.name', this.name); localStorage.setItem('mmf.color', String(this.color)); } catch { /* no storage */ }
   }
-  _hello() { return { t: 'hello', name: this.name, color: this.color, v: 2, dev: this.device, ...(this.kit && { k: this.kit }) }; }
+  _hello() { return { t: 'hello', name: this.name, color: this.color, v: 2, dev: this.device, s: this.session, ...(this.kit && { k: this.kit }) }; }
 
   _handlers(mode) {
     return {

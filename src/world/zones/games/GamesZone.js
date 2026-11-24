@@ -700,7 +700,7 @@ export class GamesZone {
       this.booths.update(dt, time, p, camera);
       this.wing.update(dt, time, p);
       this.race.update?.(p);
-      this.notices.update(p);
+      this.notices.update(p, time);
     }
     if (camera) this._cull(camera.position);
   }

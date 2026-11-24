@@ -20,6 +20,9 @@ const ICON = {
   down: '<svg viewBox="0 0 24 24"><path d="M6 10l6 6 6-6"/></svg>',
   chat: '<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>',
   bag: '<svg viewBox="0 0 24 24"><path d="M5 8h14l-1 12H6z"/><path d="M9 8V7a3 3 0 0 1 6 0v1"/></svg>',
+  // (the four corners of the screen: pulled apart, drawn together)
+  full: '<svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
+  unfull: '<svg viewBox="0 0 24 24"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>',
   hand: '<svg viewBox="0 0 24 24"><path d="M8 12V6a1.5 1.5 0 0 1 3 0v5V4.5a1.5 1.5 0 0 1 3 0V11V6a1.5 1.5 0 0 1 3 0v8c0 4-2.5 6.5-6 6.5S5.5 18 4 14l-1-2.6a1.4 1.4 0 0 1 2.5-1.2z"/></svg>',
 };
 // the emotes on the keys 1 to 0: the six gestures of the model, then cheering on (see EMOTE_LIST)
@@ -54,6 +57,33 @@ const BUILD = typeof __BUILD__ !== 'undefined' ? __BUILD__ : { commit: '', date:
 export const VERSION = `Version ${BUILD.commit || 'local'}${BUILD.date ? ` · built ${BUILD.date} UTC` : ''}`;
 
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
+
+// What a visitor connects with, as small pictures (the administrator's list): browsers, systems, kinds of device.
+const A = (body) => `<svg viewBox="0 0 24 24" aria-hidden="true">${body}</svg>`, RING = '<circle cx="12" cy="12" r="9.2" fill="none" stroke="currentColor" stroke-width="1.8"/>';
+const AGENT = {
+  chrome: A(`${RING}<circle cx="12" cy="12" r="3.6" fill="currentColor"/><path d="M12 8.4h8.3M8.9 13.8 4.7 6.6M15.1 13.8l-4.2 7.3" fill="none" stroke="currentColor" stroke-width="1.8"/>`),
+  safari: A(`${RING}<path d="m16.4 7.6-2.7 6.1-6.1 2.7 2.7-6.1z" fill="currentColor"/>`),
+  firefox: A(`${RING}<path d="M7.2 13.7c0-3.4 2.6-3.9 2.6-6.7 1.9.9 2.9 2.3 3 3.9.9-.5 1.3-1.3 1.4-2.3 1.8 1.7 2.6 3.4 2.6 5.1a4.8 4.8 0 0 1-9.6 0z" fill="currentColor"/>`),
+  edge: A('<path d="M3.2 12.7A8.9 8.9 0 0 1 20.9 11c.3 3-1.7 4.8-4.4 4.8-1.9 0-3.1-.9-3.1-2.1 0-.9.6-1.5.9-1.9H7.9c-.2 4.6 3.3 7.6 7.4 7.8-6 2.6-12.1-.9-12.1-6.9z" fill="currentColor"/>'),
+  opera: A(`${RING}<ellipse cx="12" cy="12" rx="3.6" ry="6" fill="none" stroke="currentColor" stroke-width="2.2"/>`),
+  browser: A(`${RING}<path d="M2.8 12h18.4M12 2.8c3 3.2 3 15.2 0 18.4M12 2.8c-3 3.2-3 15.2 0 18.4" fill="none" stroke="currentColor" stroke-width="1.5"/>`),
+  apple: A('<path d="M15.9 2.8c.1 1.2-.4 2.3-1.1 3.1-.8.8-1.9 1.4-3 1.3-.1-1.1.4-2.3 1.1-3 .8-.9 2-1.4 3-1.4zM19.3 16.9c-.5 1.2-.8 1.7-1.4 2.7-.9 1.4-2.2 3.1-3.8 3.1-1.4 0-1.8-.9-3.7-.9s-2.3.9-3.7.9c-1.6 0-2.8-1.5-3.7-2.9-2.5-3.9-2.8-8.5-1.2-10.9 1.1-1.7 2.9-2.7 4.5-2.7 1.7 0 2.7.9 4.1.9 1.3 0 2.2-.9 4.1-.9 1.5 0 3 .8 4.1 2.2-3.6 2-3 7.1.7 8.5z" fill="currentColor"/>'),
+  windows: A('<path d="M3 5.1 10.8 4v7.4H3zM11.8 3.9 21 2.6v8.8h-9.2zM3 12.4h7.8v7.5L3 18.8zM11.8 12.4H21v9l-9.2-1.3z" fill="currentColor"/>'),
+  android: A('<path d="M4 17.5a8 8 0 0 1 16 0z" fill="currentColor"/><path d="M7.3 6.8 5.7 4M16.7 6.8 18.3 4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="8.6" cy="13.3" r="1.1" fill="#16211b"/><circle cx="15.4" cy="13.3" r="1.1" fill="#16211b"/>'),
+  linux: A('<path d="M12 2.5c2.3 0 3.4 1.9 3.4 4.3 0 2.1 1.5 3.6 2.6 6 1 2.1 1.4 4.3.6 6.2-.5 1.3-3.4 2.5-6.6 2.5s-6.1-1.2-6.6-2.5c-.8-1.9-.4-4.1.6-6.2 1.1-2.4 2.6-3.9 2.6-6 0-2.4 1.1-4.3 3.4-4.3z" fill="currentColor"/><ellipse cx="12" cy="15.5" rx="3.2" ry="4.4" fill="#16211b" opacity=".5"/>'),
+  system: A('<rect x="3.5" y="4.5" width="17" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 20h6M12 16.5V20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>'),
+  computer: A('<rect x="4" y="5" width="16" height="10.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M2 18.5h20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>'),
+  phone: A('<rect x="7.5" y="2.5" width="9" height="19" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M11 18.5h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>'),
+  tablet: A('<rect x="4.5" y="3" width="15" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M11 18h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>'),
+};
+/** Which pictures say what a browser says of itself: { browser, os, device } (names of AGENT). */
+export function agentKinds(ua) {
+  ua = String(ua || '');
+  const browser = /Edg\w*\//.test(ua) ? 'edge' : /OPR\//.test(ua) ? 'opera' : /Firefox\//.test(ua) ? 'firefox' : /(?:Chrome|CriOS)\//.test(ua) ? 'chrome' : /Version\/\d+[\d.]* .*Safari/.test(ua) ? 'safari' : 'browser';
+  const os = /Windows/.test(ua) ? 'windows' : /iPhone|iPad|iPod|Mac OS X/.test(ua) ? 'apple' : /Android/.test(ua) ? 'android' : /CrOS/.test(ua) ? 'chrome' : /Linux/.test(ua) ? 'linux' : 'system';
+  const device = /iPad|Tablet/.test(ua) || (/Android/.test(ua) && !/Mobile/.test(ua)) ? 'tablet' : /Mobi|iPhone|iPod|Android/.test(ua) ? 'phone' : 'computer';
+  return { browser, os, device };
+}
 
 /** "Chrome 141 · Windows · computer" out of what a browser says of itself. */
 export function describeAgent(ua) {
@@ -195,6 +225,7 @@ export class Hud {
         <button class="icon" data-act="chat" title="Chat (Enter)" aria-label="Chat">${ICON.chat}</button>
         <button class="icon" data-act="emote" title="Emotes (T)" aria-label="Emotes">${ICON.smile}</button>
         <button class="icon" data-act="camera" title="Free view (F)" aria-label="Free view" aria-pressed="false">${ICON.cam}</button>
+        <button class="icon" data-act="fullscreen" title="Full screen" aria-label="Full screen" aria-pressed="false" hidden>${ICON.full}</button>
         <button class="icon" data-act="settings" title="Settings" aria-label="Settings">${ICON.gear}</button>
       </div>
       <div class="toast"><small>Now entering</small><span></span></div>
@@ -238,6 +269,7 @@ export class Hud {
         <h3>Display</h3>
         <div class="row"><span>Minimap</span><button class="switch" data-sw="map" aria-pressed="true" aria-label="Minimap"></button></div>
         <div class="row"><span>Performance figures</span><button class="switch" data-sw="stats" aria-pressed="false" aria-label="Performance figures"></button></div>
+        <div class="row full-row" hidden><span>Full screen</span><button class="switch" data-fs aria-pressed="false" aria-label="Full screen"></button></div>
         <h3>Sound</h3>
         <div class="row"><span>Sounds</span><input type="range" class="vol" data-vol="sound" min="0" max="100" step="5" aria-label="Volume of the sounds" /></div>
         <div class="row"><span>Music</span><input type="range" class="vol" data-vol="music" min="0" max="100" step="5" aria-label="Volume of the music" /></div>
@@ -254,6 +286,7 @@ export class Hud {
         <input type="text" maxlength="16" class="name" autocomplete="off" spellcheck="false" />
         <div class="acct" hidden><h3>Account</h3><p class="acct-info"></p><div class="acct-acts"></div></div>
         <p class="net-info"></p>
+        <p class="legal-links"><button type="button" data-legal="terms">Terms of use</button><span aria-hidden="true">·</span><button type="button" data-legal="privacy">Privacy</button></p>
         <p class="version">${VERSION}</p>
       </div>`;
     this.root.append(h);
@@ -288,6 +321,7 @@ export class Hud {
     h.querySelectorAll('[data-act]').forEach((b) => (b.onclick = () => {
       const act = b.dataset.act;
       if (act === 'settings') this.panel.classList.toggle('on');
+      else if (act === 'fullscreen') this.toggleFullscreen();
       else if (act === 'emote') this.emotes.classList.toggle('on');
       else if (act === 'chat') this.toggleChat();
       else this.emit(act);
@@ -365,6 +399,22 @@ export class Hud {
       b.setAttribute('aria-pressed', String(on));
       this.emit('setting', b.dataset.set, on);
     }));
+    // full screen, where the browser lets a page ask for it (an iPhone does not): a button at the top, a switch in the settings
+    {
+      const page = document.documentElement, ask = page.requestFullscreen || page.webkitRequestFullscreen, leave = document.exitFullscreen || document.webkitExitFullscreen;
+      const can = !!ask && !!leave && (document.fullscreenEnabled ?? document.webkitFullscreenEnabled ?? true), isFull = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+      const btn = h.querySelector('[data-act="fullscreen"]'), row = h.querySelector('.full-row'), sw = h.querySelector('[data-fs]');
+      btn.hidden = !can; row.hidden = !can;
+      this.toggleFullscreen = () => {
+        if (!can) return;
+        try { const done = isFull() ? leave.call(document) : ask.call(page, { navigationUI: 'hide' }); done?.catch?.(() => {}); } catch { /* refused: nothing changes */ }
+      };
+      const show = () => { const on = isFull(); btn.setAttribute('aria-pressed', String(on)); sw.setAttribute('aria-pressed', String(on)); btn.innerHTML = on ? ICON.unfull : ICON.full; btn.title = on ? 'Leave full screen' : 'Full screen'; };
+      sw.onclick = () => this.toggleFullscreen();
+      for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, show);
+    }
+    // the small print (ui/LegalView.js)
+    h.querySelectorAll('[data-legal]').forEach((b) => (b.onclick = () => { this.panel.classList.remove('on'); this.emit('legal', b.dataset.legal); }));
     h.querySelectorAll('[data-sw]').forEach((b) => (b.onclick = () => {
       const on = b.getAttribute('aria-pressed') !== 'true';
       b.setAttribute('aria-pressed', String(on));
@@ -377,6 +427,7 @@ export class Hud {
     this.nameInput = name;
     // who is here: opened from the head count
     this.rosterEl = h.querySelector('.roster');
+    this.rosterOpen_ = new Set(); // (the visitors whose every detail is unfolded: "See more")
     h.querySelector('.players').onclick = (e) => { e.currentTarget.blur(); this.emit('roster'); };
     this.rosterEl.querySelector('.close').onclick = () => this.closeRoster();
     this.rosterEl.querySelector('.see-as').onclick = () => { this.closeRoster(); this.emit('visitorview', true); };
@@ -651,21 +702,47 @@ export class Hud {
     list.textContent = '';
     const ago = (t) => { const m = Math.max(0, Math.round((now - t) / 60000)); return m < 1 ? 'just arrived' : m < 60 ? `here for ${m} min` : `here for ${Math.floor(m / 60)} h ${m % 60} min`; };
     for (const p of people) {
-      const row = el('div', `who${p.me ? ' me' : ''}`);
+      const row = el('div', `who visitor${p.me ? ' me' : ''}`);
+      const line = el('div', 'line');
       const dot = el('i'); dot.style.background = hex(p.color);
-      const text = el('span');
+      const text = el('span', 'id');
       const name = el('b'); name.textContent = p.me ? `${p.name} (you)` : p.name;
       const where = el('small'); where.textContent = p.where || '';
       text.append(name, where);
-      row.append(dot, text);
+      line.append(dot, text);
+      row.append(line);
       const d = details?.get(p.id);
       if (admin && d) {
         if (d.cc) name.prepend(flagOf(d.cc), ' ');
         if (d.admin) { const badge = el('em', 'rank'); badge.textContent = d.admin === 'owner' ? 'owner' : 'admin'; name.append(' ', badge); }
+        const place = d.cc ? `${d.city ? `${d.city}, ` : ''}${countryName(d.cc)}` : '';
+        if (place) where.textContent = `${p.where ? `${p.where} · ` : ''}${place}`;
+        // what they connect with, as three small pictures: the browser, the system, the kind of device
+        const kinds = agentKinds(d.ua), agent = el('span', 'agent');
+        agent.title = describeAgent(d.ua);
+        agent.innerHTML = `${AGENT[kinds.browser]}${AGENT[kinds.os]}${AGENT[kinds.device]}`;
+        // …and everything that is known, to the letter, unfolded by "See more"
+        const open = this.rosterOpen_.has(p.id), see = el('button', 'seemore');
+        see.type = 'button'; see.textContent = open ? 'See less' : 'See more'; see.setAttribute('aria-expanded', String(open));
+        line.append(agent, see);
         const more = el('small', 'more');
-        more.textContent = `${d.cc ? `${d.city ? `${d.city}, ` : ''}${countryName(d.cc)} · ` : ''}${d.ip || 'address unknown'} · ${describeAgent(d.ua)}${d.dev ? ` · device ${d.dev.slice(0, 8)}…` : ''} · ${ago(d.since)}`;
-        more.title = d.ua || '';
-        text.append(more);
+        more.hidden = !open;
+        more.textContent = `${place ? `${place} · ` : ''}${d.ip || 'address unknown'} · ${describeAgent(d.ua)}${d.dev ? ` · device ${d.dev.slice(0, 8)}…` : ''} · ${ago(d.since)}`;
+        const facts = el('span', 'facts');
+        for (const [label, value] of [['Address', d.ip], ['Browser says', d.ua], ['Browser identifier', d.dev], ['In this room', ago(d.since)]]) {
+          if (!value) continue;
+          const fact = el('span'); const what = el('em'); what.textContent = label;
+          fact.append(what, String(value));
+          facts.append(fact);
+        }
+        more.append(facts);
+        see.onclick = () => {
+          const on = more.hidden;
+          more.hidden = !on; row.classList.toggle('open', on);
+          if (on) this.rosterOpen_.add(p.id); else this.rosterOpen_.delete(p.id);
+          see.textContent = on ? 'See less' : 'See more'; see.setAttribute('aria-expanded', String(on));
+        };
+        row.classList.toggle('open', open);
         if (!p.me) {
           const acts = el('span', 'acts');
           const act = (label, title, fn, cls = '') => { const b = el('button', cls); b.type = 'button'; b.textContent = label; b.title = title; b.onclick = fn; acts.append(b); };
@@ -680,6 +757,7 @@ export class Hud {
           }
           row.append(acts);
         }
+        row.append(more);
       }
       list.append(row);
     }

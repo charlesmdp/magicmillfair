@@ -10,7 +10,7 @@
 // (`perks`), a word of its maker (`why`) and, once held, a way to the page where it is stopped (`manage`).
 
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
-const SHELVES = [['pass', 'Game Pass'], ['featured', 'Featured'], ['gear', 'Gear'], ['hats', 'Hats'], ['paint', 'Paint jobs'], ['trails', 'Trails'], ['fun', 'Just for fun'], ['sponsor', 'Sponsor a game']];
+const SHELVES = [['pass', 'Game Pass'], ['gear', 'Gear'], ['paint', 'Paint jobs'], ['fun', 'Just for fun'], ['hats', 'Hats'], ['trails', 'Trails'], ['sponsor', 'Sponsor a game']]; // (the short ones first: they share a line)
 const RARITY = { legendary: 'Legendary', epic: 'Epic', rare: 'Rare', uncommon: 'Uncommon' };
 
 export class ShopView {
@@ -52,7 +52,7 @@ export class ShopView {
 
   /**
    * Shows the shop. items: [{ id, name, group, rarity, blurb, cost (what the price tag says: '$9.99'), owned,
-   * worn, wearable, featured }]; mode: 'test' | 'live' | null (nothing is sold: everything is the visitor's).
+   * worn, wearable }]; mode: 'test' | 'live' | null (nothing is sold: everything is the visitor's).
    */
   open({ items, mode, note = '' }) {
     this.items = items;
@@ -64,7 +64,7 @@ export class ShopView {
     this.el.tabIndex = -1;
     this.el.focus({ preventScroll: true });
     const keep = this.picked && items.find((it) => it.id === this.picked);
-    this._pick((keep || items.find((it) => it.featured) || items[0]).id);
+    this._pick((keep || items.find((it) => it.id === 'jetpack') || items[0]).id);
   }
 
   /** The same shop with other facts (something was bought, put on, taken off). */
@@ -97,7 +97,7 @@ export class ShopView {
     const b = el('button', `card ${it.rarity}${big ? ' big' : ''}${wide ? ' passcard' : ''}${it.owned ? ' owned' : ''}${it.worn ? ' worn' : ''}`);
     b.type = 'button';
     b.dataset.item = it.id;
-    b.append(el('span', 'shine'), wide ? this._picture(it.id, 420, 264) : this._picture(it.id, 300, 375));
+    b.append(el('span', 'shine'), wide ? this._picture(it.id, 420, 264) : it.group === 'sponsor' ? el('div', 'nopic') : this._picture(it.id, 216, 252));
     if (wide && it.pitch) { const pitch = el('span', 'pitch'); for (const line of it.pitch) pitch.append(el('i', '', line)); b.append(pitch); }
     const foot = el('span', 'foot');
     foot.append(el('b', '', it.name), el('i', `price${it.owned || it.lent ? ' has' : ''}`, it.lent === 'trial' ? 'Free today' : it.worn ? 'Equipped' : it.owned ? (it.group === 'pass' ? 'Active' : 'Owned') : it.lent === 'pass' ? 'With your pass' : it.cost));
@@ -109,12 +109,12 @@ export class ShopView {
   _draw() {
     this.shelves.textContent = '';
     for (const [group, title] of SHELVES) {
-      const list = group === 'featured' ? this.items.filter((it) => it.featured) : this.items.filter((it) => it.group === group);
+      const list = this.items.filter((it) => it.group === group);
       if (!list.length) continue;
       const shelf = el('section', `shelf shelf-${group}`);
       shelf.append(el('h3', '', title));
       const row = el('div', 'row');
-      for (const it of list) row.append(this._card(it, group === 'featured' || group === 'pass'));
+      for (const it of list) row.append(this._card(it, group === 'pass'));
       shelf.append(row);
       this.shelves.append(shelf);
     }
