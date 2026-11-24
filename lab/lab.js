@@ -5,13 +5,16 @@ import { FEATURES } from '../src/app/config.js';
 import { EXTRAS, loadExtras } from '../src/extras/index.js';
 
 // What only the lab has: tried here, not offered to the game. Off unless asked for.
-const TRIALS = { oak: { name: 'Out on a Limb — the Great Oak (a trial, set aside)', load: () => import('./oak/extra.js') } };
+const TRIALS = {
+  oak: { name: 'Out on a Limb — one floor to try', load: () => import('./oak/floor/extra.js') },
+  oak0: { name: 'Out on a Limb — the Great Oak (the first trial, set aside)', load: () => import('./oak/extra.js') },
+};
 Object.assign(EXTRAS, TRIALS);
 
-const KEY = 'mmf.lab.2', NAMES = { slide: 'Toboggan', oak: 'Grand chêne (essai mis de côté)', caves: 'Grottes : chat de proximité', stats: 'Compteurs et page des chiffres' };
+const KEY = 'mmf.lab.3', NAMES = { slide: 'Toboggan', pond: 'The Endless Pond (trois étangs)', boats: 'Bateaux télécommandés', hill: 'Uphill Battle (la pente aux rondins)', crack: 'Between a Rock (la fissure entre deux aiguilles)', hollow: 'The Hollow Hill (course volante dans la grotte)', oak: 'Chêne : un étage à essayer', oak0: 'Chêne (premier essai, mis de côté)', caves: 'Grottes : chat de proximité', stats: 'Compteurs et page des chiffres' };
 const read = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { return {}; } };
 const query = new URLSearchParams(location.search), saved = read(), on = {};
-for (const id of Object.keys(EXTRAS)) on[id] = query.has(id) ? !/^(0|off|no|false)$/i.test(query.get(id)) : id in TRIALS ? saved[id] === true : saved[id] !== false;
+for (const id of Object.keys(EXTRAS)) on[id] = query.has(id) ? !/^(0|off|no|false)$/i.test(query.get(id)) : id === 'oak0' ? saved[id] === true : saved[id] !== false; // (the first trial of the oak only when asked for)
 
 function panel(app, built) {
   const box = document.createElement('div');
@@ -44,7 +47,13 @@ function panel(app, built) {
     body.append(b);
   };
   if (built.slide?.gate) go('Aller au toboggan', () => { const g = built.slide.gate; return [g.x - Math.sin(g.yaw) * 3, g.z - Math.cos(g.yaw) * 3, g.yaw]; });
-  if (built.oak?.gate) go('Aller au grand chêne', () => { const g = built.oak.gate; return [g.x - Math.sin(g.yaw) * 3, g.z - Math.cos(g.yaw) * 3, g.yaw]; });
+  if (built.pond?.gate) go('Aller à l’Endless Pond', () => { const g = built.pond.gate; return [g.x, g.z, g.yaw]; });
+  if (built.hill?.gate) go('Aller à la pente (Uphill Battle)', () => { const g = built.hill.gate; return [g.x - Math.sin(g.yaw) * 2.5, g.z - Math.cos(g.yaw) * 2.5, g.yaw]; });
+  if (built.crack?.gate) go('Aller à la fissure (Between a Rock)', () => { const g = built.crack.gate; return [g.x, g.z, g.yaw]; });
+  if (built.hollow?.gate) go('Aller à la grotte (The Hollow Hill)', () => { const g = built.hollow.gate; return [g.x, g.z - 1.5, g.yaw]; });
+  if (built.boats?.stand) go('Aller aux bateaux', () => { const g = built.boats.stand; return [g.x - Math.sin(g.yaw) * 2.6, g.z - Math.cos(g.yaw) * 2.6, g.yaw]; });
+  if (built.oak?.gate) go('Aller au chêne (étage d’essai)', () => { const g = built.oak.gate; return [g.x, g.z - 2.5, 0]; });
+  if (built.oak0?.gate) go('Aller au grand chêne', () => { const g = built.oak0.gate; return [g.x - Math.sin(g.yaw) * 3, g.z - Math.cos(g.yaw) * 3, g.yaw]; });
   const note = document.createElement('div');
   note.textContent = 'Ici vous êtes administrateur : caméra libre (touche F), toute la boutique, tous les gestes.';
   note.style.cssText = 'margin-top:6px;opacity:.75;font-size:12px';

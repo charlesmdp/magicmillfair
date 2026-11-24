@@ -4,6 +4,7 @@
 import { Slide } from '../world/zones/games/slide/Slide.js';
 import { SLIDE } from '../world/zones/games/slide/track.js';
 import { botRun } from '../world/zones/games/slide/ride.js';
+import { keysHelp } from './help.js';
 
 const KEY = 'mmf.slide.best';
 
@@ -29,6 +30,7 @@ export function attach(app) {
     ride = null; saved = false;
     app.fair.fov = null;
     hud.setRun(null);
+    keysHelp(app).clear();
     if (finished) s.drop(player); // in the sea where the slide ends, facing the beach: one swims back
     else {
       s.close();
@@ -44,8 +46,8 @@ export function attach(app) {
     ride = slide.open(player, io);
     player.driver = ride;
     app.audio?.play('teleport');
-    hud.note(app.input.isTouch ? 'Keep to the water · the stick steers · the arrow jumps · up: lie back, faster · down: brake'
-      : 'Keep to the water · A / D or the arrows steer · Space jumps · W or Shift: lie back, faster · S: brake · E: leave', 8000);
+    keysHelp(app).set(app.input.isTouch ? 'Keep to the water · the stick steers (in the air too) · the arrow jumps · up: lie back, faster · down: brake'
+      : 'Keep to the water · A / D or the arrows steer (in the air too) · Space jumps · W or Shift: lie back, faster · S: brake · E: leave · H: these keys again');
   };
   world.actionSources.push((p) => {
     if (ride) return ride.over ? null : { label: 'Leave the slide', run: () => leave(false) };
