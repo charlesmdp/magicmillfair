@@ -99,6 +99,9 @@ dans ses fichiers.
    la colline). Rien à faire pour eux d'ici là ; `lab/INTEGRATION.md` dit comment les brancher, ce que la fissure
    ajoute aux collisions (une passerelle sur pilotis, praticable) et quels tableaux de scores ils attendent.
    `node tools/games-test.mjs` les joue de bout en bout dans le vrai jeu : à relancer après la fusion.
+   Chez toi aujourd'hui, `RELEASE` (`src/app/config.js`) et `EXTRA` (`src/main.js`) ne connaissent que `slide`,
+   `caves` et `stats` : ajoute `pond`, `boats`, `hill`, `crack` et `hollow` aux deux, valeur de départ `false`,
+   pour que je puisse les allumer un par un depuis la page d'administration.
 9. **Revoir les touches quand on veut.** Dans les jeux du labo, un petit bouton sous la ligne du jeu
    (« H · keys », « ? keys » sur téléphone) et la touche H réaffichent les touches du jeu en cours, une par ligne
    (`src/extras/help.js`). Je veux la même chose pour **tous les jeux du jeu** (les stands, la course, Mostly Up,

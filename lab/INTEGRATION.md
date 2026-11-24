@@ -38,6 +38,11 @@ That object is the whole of "with or without the slide": it can sit in `src/app/
 server so that a game is opened without a new build. Releasing the slide is changing a `false` into a `true`.
 `loadExtras` can be called again later with more switched on: what is new is attached to the running game.
 
+On the game's branch as it stands this is done already, from the switches of a release: `RELEASE` in
+`src/app/config.js` and the list `EXTRA` in `src/main.js` — which know `slide`, `caves` and `stats` only. A game
+of this page becomes one more switch by adding its name to both (`pond`, `boats`, `hill`, `crack`, `hollow`:
+`false` to begin with). This branch merges into that one without a conflict, and its checks pass there.
+
 ## Trying them
 
 ```bash
