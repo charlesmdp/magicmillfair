@@ -46,7 +46,9 @@
 // at, why, ok, error }].
 import { allowed } from './api.js';
 import { describe, publicPrices, nextBid, AUCTION, CURRENCY } from './catalog.js';
-import { createCheckout, createPortal, verifyWebhook, refundPayment } from './stripe.js';
+import { createCheckout, createPortal, verifyWebhook, refundPayment, endSubscription } from './stripe.js';
+import { noteSale, noteRefund } from './stats.js';
+import { readRelease } from './release.js';
 import { accountOf, addItem, holderOf, itemsOf, passLive, sameOwner } from './accounts.js';
 import { PASS, TRIAL, itemOf } from './items.js';
 
@@ -148,7 +150,17 @@ async function refund(ctx, cfg, pay, amount, why) {
   const entry = { pay, amount, at: ctx.now(), why, ok: true };
   try { await refundPayment(cfg, pay, why, ctx.fetch || fetch); } catch (err) { entry.ok = false; entry.error = String(err.message || err).slice(0, 160); console.error('[shop] refund', entry.error); }
   await ctx.store.put('refunds', [...((await ctx.store.get('refunds')) || []), entry].slice(-100));
+  if (entry.ok) await noteRefund(ctx.store, { cents: amount }, ctx.now()).catch(() => {}); // (the figures: what the shop earned)
   return entry.ok;
+}
+
+/** Has this payment been counted already? (Stripe may say the same thing twice.) The last few hundred are remembered. */
+async function firstTime(ctx, id) {
+  if (typeof id !== 'string' || !id) return true;
+  const seen = (await ctx.store.get('sales:seen')) || [];
+  if (seen.includes(id)) return false;
+  await ctx.store.put('sales:seen', [...seen, id].slice(-300));
+  return true;
 }
 
 /**
@@ -179,6 +191,17 @@ export async function takeBid(ctx, cfg, item, device, amount, pay) {
     if (cur.pay) await refund(ctx, cfg, cur.pay, cur.bid || 0, `outbid on ${item}`);
   }
   return true;
+}
+
+/** What the holder of a place asked to show is shown: its words, its link, its picture. */
+async function publish(ctx, slots, id) {
+  const s = slots[id];
+  if (!s?.draft) return;
+  if (s.draft.logo > 0) { await ctx.store.put(`logo:${id}`, await ctx.store.get(`logo:${id}:draft`)); s.logo = s.draft.logo; }
+  else if (s.draft.logo === 0) { await ctx.store.delete(`logo:${id}`); s.logo = 0; }
+  Object.assign(s, { state: 'live', title: s.draft.title, subtitle: s.draft.subtitle, url: s.draft.url });
+  await ctx.store.delete(`logo:${id}:draft`);
+  s.draft = null;
 }
 
 async function release(ctx, slots, id) {
@@ -264,6 +287,8 @@ export async function shopRoute(req, ctx) {
     if (limited('checkout')) return busy;
     const what = describe(body?.item), device = body?.device;
     if (!what || !DEVICE.test(device || '')) return out(400, { error: 'Nothing of that name is sold.' });
+    // (a sky village is only for hire once the sky is open: the owner's switch)
+    if (what.item.startsWith('village:') && (await readRelease(ctx.store)).release.sky !== 'open') return out(400, { error: 'Nothing of that name is sold.' });
     if (what.kind === 'own' && (await ownedBy(ctx, device)).includes(what.item)) return out(409, { error: 'You already have it.' });
     if (what.kind === 'pass') { const holder = await holderOf(ctx.store, device); if (passLive(holder.pass, now) && !holder.pass.gift) return out(409, { error: 'You already have the pass.' }); }
     let extra = {};
@@ -291,8 +316,13 @@ export async function shopRoute(req, ctx) {
     if (!event) return out(400, { error: 'Not from Stripe.' });
     const o = event.data?.object || {};
     if (event.type === 'checkout.session.completed' && (o.payment_status === 'paid' || o.payment_status === 'no_payment_required')) {
+      // (the figures: what came in, once — a bid that comes too late is given back at once, and counted as given back)
+      if (describe(o.metadata?.item) && (await firstTime(ctx, o.id))) await noteSale(ctx.store, { cents: Number.isInteger(o.amount_total) ? o.amount_total : 0, pass: describe(o.metadata.item).kind === 'pass' }, now).catch(() => {});
       if (describe(o.metadata?.item)?.auction) await takeBid(ctx, cfg, o.metadata.item, o.metadata?.device, o.amount_total, o.payment_intent);
       else await grant(ctx, o.metadata?.item, o.metadata?.device, o.subscription, o.customer);
+    } else if (event.type === 'invoice.paid' && o.billing_reason === 'subscription_cycle') {
+      // a month more of something held by the month (where Stripe is asked to tell of these): money in, nothing new sold
+      if (Number.isInteger(o.amount_paid) && o.amount_paid > 0 && (await firstTime(ctx, o.id))) await noteSale(ctx.store, { cents: o.amount_paid }, now).catch(() => {});
     } else if (event.type === 'customer.subscription.deleted') {
       // the subscription ended: the place is free again — or the Game Pass is handed back
       const slots = await slotsOf(ctx), id = Object.keys(slots).find((k) => slots[k].sub && slots[k].sub === o.id);
@@ -327,8 +357,11 @@ export async function shopRoute(req, ctx) {
       draft.logo = now;
     } else if (body.keepLogo && (s.draft?.logo || s.logo)) draft.logo = s.draft?.logo || -1; // (-1: the picture already shown stays)
     s.draft = draft;
+    // A sponsor is shown at once — the owner looks afterwards, and takes down what should not be there (the
+    // page /admin). A plaque for a companion waits for the fair to have looked at it.
+    if (!plaque) await publish(ctx, slots, id);
     await ctx.store.put('slots', slots);
-    return out(200, { ok: true, state: 'pending' });
+    return out(200, { ok: true, state: plaque ? 'pending' : 'live' });
   }
 
   if (path === '/api/logo') {
@@ -349,6 +382,7 @@ export async function shopRoute(req, ctx) {
   if (path === '/api/sponsors') {
     if (!req.admin) return out(403, { error: 'Forbidden.' });
     const slots = await slotsOf(ctx);
+    let taken = null; // (what was taken down by this very request, if anything: { removed, refunded, stopped })
     if (method === 'POST') {
       const id = body?.slot;
       if (typeof id !== 'string' || !describe(id) || describe(id).kind !== 'slot') return out(400, { error: 'No such place.' });
@@ -368,23 +402,30 @@ export async function shopRoute(req, ctx) {
       } else {
         const s = slots[id];
         if (!s || !s.draft) return out(404, { error: 'Nothing awaits approval there.' });
-        if (body.approve) {
-          if (s.draft.logo > 0) { await ctx.store.put(`logo:${id}`, await ctx.store.get(`logo:${id}:draft`)); s.logo = s.draft.logo; }
-          else if (s.draft.logo === 0) { await ctx.store.delete(`logo:${id}`); s.logo = 0; }
-          Object.assign(s, { state: 'live', title: s.draft.title, subtitle: s.draft.subtitle, url: s.draft.url });
-        }
-        await ctx.store.delete(`logo:${id}:draft`);
-        s.draft = null;
+        if (body.approve) await publish(ctx, slots, id);
+        else { await ctx.store.delete(`logo:${id}:draft`); s.draft = null; }
       }
       await ctx.store.put('slots', slots);
     } else if (method === 'DELETE') {
       const id = query.get('slot') || '';
       if (!slots[id]) return out(404, { error: 'No such place.' });
-      // (a sponsor the administrator takes off an auctioned panel gets their bid back)
-      if (slots[id].pay) { const gone = slots[id]; await refund(ctx, cfg, gone.pay, gone.bid || 0, `removed from ${id}`); await leaveNote(ctx, gone.by, 'The fair took your panel down: your payment has been refunded in full.'); }
+      // The administrator takes a sponsor down. `refund=0`: the money is kept (what was shown broke the rules);
+      // otherwise a bid is given back in full, and of a place paid by the month the month that is running —
+      // which, in any case, stops being paid from now on.
+      const gone = slots[id], back = query.get('refund') !== '0';
+      let refunded = false, stopped = false;
+      if (gone.pay && back) refunded = await refund(ctx, cfg, gone.pay, gone.bid || 0, `removed from ${id}`);
+      if (gone.sub && cfg.key) {
+        try { const done = await endSubscription(cfg, gone.sub, back, ctx.fetch || fetch); stopped = true; refunded = refunded || done.refunded; } catch (err) { console.error('[shop] subscription', String(err.message || err).slice(0, 160)); }
+      }
+      const what = describe(id)?.plaque ? 'plaque' : 'panel';
+      await leaveNote(ctx, gone.by, gone.pay && refunded ? `The fair took your ${what} down: your payment has been refunded in full.`
+        : stopped ? `The fair took your ${what} down: ${refunded ? 'the month you paid has been refunded, and ' : ''}nothing more will be charged for it.` : `The fair took your ${what} down.`);
       await release(ctx, slots, id);
+      taken = { removed: id, refunded, stopped };
     } else if (!reading) return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD, POST, DELETE' });
     return out(200, {
+      ...taken,
       refunds: ((await ctx.store.get('refunds')) || []).slice(-30).reverse(),
       slots: Object.fromEntries(Object.entries(slots).map(([id, s]) => [id, { state: s.state, by: s.by, sub: !!s.sub, at: s.at, ...(s.bid && { bid: s.bid }), ...shown(id, s), draft: draftOf(id, s) }])),
     });

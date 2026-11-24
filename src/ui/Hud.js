@@ -987,7 +987,13 @@ export class Hud {
   setMap(view, zones) { this.mapView = view; this.zones = zones; }
 
   /** The sky villages, for the mega map: [{ name, x, z, color, forHire, price }], and how big the country is. */
-  setVillages(villages, size, label = (v) => v.name) { this.villages = villages; this.megaView = { x0: -size / 2, z0: -size / 2, x1: size / 2, z1: size / 2 }; this._villageLabel = label; }
+  setVillages(villages, size, label = (v) => v.name) {
+    this.villages = villages; this._villageLabel = label;
+    // (no village — they are hidden, or only announced —: no mega map either, which is the map of the villages)
+    this.megaView = villages.length ? { x0: -size / 2, z0: -size / 2, x1: size / 2, z1: size / 2 } : null;
+    this.megaBtn.hidden = !villages.length;
+    if (!villages.length && this.mega) this.setMega(false);
+  }
 
   setMega(on) {
     this.mega = !!on && !!this.megaView;

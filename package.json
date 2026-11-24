@@ -23,6 +23,7 @@
     "test:duo": "node tools/duo.mjs",
     "test:audio": "node tools/audio-test.mjs",
     "test:shop": "node tools/shop-test.mjs",
+    "test:update": "node tools/update-test.mjs",
     "bench": "node tools/bench.mjs",
     "profile": "node tools/profile.mjs",
     "shots": "node tools/shots.mjs"

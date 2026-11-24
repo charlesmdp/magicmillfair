@@ -31,7 +31,7 @@ const PERSONAS = {
       [/\b(shark|swim|sea|requin|nager|mer)\b/i, ['Know your limits and swim just inside them: the shark handles everyone who skips that workshop.']],
       [/\b(mushroom|champignon)\b/i, ['Not every opportunity should be eaten, champ, and the red ones with white spots least of all.']],
       [/\b(temple|stairs|stairway|escalier)\b/i, ['The stairway in the west is long, champ, and so is everything worth standing on top of.']],
-      [/\b(village|sky gate|teleport)/i, ['Step through the Sky Gate by the lane north of the mill: sometimes the view you need is one decision away.']],
+      [/\b(village|sky gate|teleport)/i, ['Step through the Sky Gate by the lane north of the mill: sometimes the view you need is one decision away.'], 'sky'],
       [/\b(war|nuclear|bomb|apocalypse|end of the world|robots?|atomic|guerre|nucléaire|bombe)\b/i, ['The world ended and you still showed up, champ: that is a growth mindset in one sentence.', 'Every apocalypse is a pivot, champ: we lost a planet and kept the big wheel.']],
       [/\b(tired|sad|afraid|scared|fatigu|triste|peur)\b/i, ['Sit down for a minute, champ: dolphins sleep with half a brain at a time, and you are allowed to rest the whole thing.']],
       [/\b(meaning|life|why|sens|vie|pourquoi)\b/i, ['The meaning of life is the next small thing done properly, and yes, that does include breakfast.']],
@@ -50,6 +50,8 @@ const PERSONAS = {
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
 
 export class Npc {
+  static sky = false; // are the sky villages open? (the characters do not speak of them before)
+
   constructor(id) {
     this.id = id;
     this.persona = PERSONAS[id] || PERSONAS.alligator;
@@ -61,7 +63,8 @@ export class Npc {
   greeting() { return pick(this.persona.greet); }
 
   _canned(text) {
-    for (const [test, lines] of this.persona.rules) if (test.test(text)) return pick(lines);
+    // (a line about the sky villages is only said once they are open: Npc.sky, set by the game)
+    for (const [test, lines, about] of this.persona.rules) if ((about !== 'sky' || Npc.sky) && test.test(text)) return pick(lines);
     return pick(this.persona.idle);
   }
 

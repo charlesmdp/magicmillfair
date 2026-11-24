@@ -128,7 +128,9 @@ export class World {
     this.games = new GamesZone(this).build().finish(); // the Sky Stones, and what kills
     this.scene.add(this.games.group);
     this.zones.push(this.games);
-    this.sky = new SkyZone(this).build(); // the villages perched on the mountains, the gate that leads to them
+    // the villages perched on the mountains, the gate that leads to them — or nothing of them, or the gate alone,
+    // closed: `skyStage` ('hidden' | 'soon' | 'open', or a promise of one) is set by the game before load()
+    this.sky = new SkyZone(this, { stage: (await this.skyStage) || 'hidden' }).build();
     this.scene.add(this.sky.group);
     this.zones.push(this.sky);
     this.detail = 1;

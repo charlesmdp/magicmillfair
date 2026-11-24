@@ -32,7 +32,7 @@ const STRIPE_KEY = 'sk_test_magicmillfairtests', STRIPE_HOOK = 'whsec_magicmillf
 const MAIL_FILE = path.join(os.tmpdir(), `mmf-net-test-mail-${process.pid}.jsonl`);
 process.on('exit', () => { try { fs.rmSync(MAIL_FILE, { force: true }); } catch { /* nothing to remove */ } });
 // A stand-in for Stripe: it hands out payment pages and remembers what it was asked.
-const stripe = { asked: [], refunds: [], portals: [], port: 0, server: null };
+const stripe = { asked: [], refunds: [], portals: [], cancelled: [], port: 0, server: null };
 async function startStripe() {
   stripe.port = await freePort();
   stripe.server = http.createServer((req, res) => {
@@ -46,6 +46,13 @@ async function startStripe() {
         if (!old) stripe.refunds.push({ pay, key: req.headers['idempotency-key'], why: form.get('metadata[why]') });
         res.writeHead(old ? 400 : 200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify(old ? { error: { message: 'This payment is too old to be refunded.' } } : { id: `re_test_${stripe.refunds.length}` }));
+      }
+      const sub = /^\/v1\/subscriptions\/(\w+)(\?.*)?$/.exec(req.url);
+      if (sub && req.headers.authorization === `Bearer ${STRIPE_KEY}`) {
+        // something paid by the month: asked about (its last payment), or stopped
+        if (req.method === 'DELETE') stripe.cancelled.push(sub[1]);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify(req.method === 'DELETE' ? { id: sub[1], status: 'canceled' } : { id: sub[1], latest_invoice: { id: 'in_test_1', payment_intent: { id: `pi_month_${sub[1]}` } } }));
       }
       if (req.url === '/v1/billing_portal/sessions' && req.headers.authorization === `Bearer ${STRIPE_KEY}`) {
         stripe.portals.push({ customer: form.get('customer'), back: form.get('return_url') });
@@ -282,6 +289,7 @@ function makeDist() {
   fs.writeFileSync(path.join(dist, 'assets/world/world.json'), JSON.stringify({ trees: Array.from({ length: 500 }, (_, i) => i) }));
   fs.writeFileSync(path.join(dist, 'assets/world/trees.bin'), Buffer.alloc(4096, 7));
   for (const ext of Object.keys(TYPES)) fs.writeFileSync(path.join(dist, 'types', `file.${ext}`), 'x');
+  fs.writeFileSync(path.join(dist, 'version.json'), `${JSON.stringify({ commit: 'abc1234', date: '2026-11-24 00:00' })}\n`); // (what a build writes: which version it is)
   fs.writeFileSync(path.join(tmp, 'secret.txt'), 'TOP-SECRET');
   return { tmp, dist, html, js };
 }
@@ -757,6 +765,94 @@ async function testModeration(start, dist) {
 // Where the visitors come from: counted by day and by country, the last visits kept, for the administrators.
 // (Under Node the server is told, by a proxy's headers, where each request comes from; the local Workers
 // runtime gives every request the same made-up place.)
+// --- what is released (the switches the owner throws), which version is online, a word to every room, the board
+// of a game that waits for its switch, and the figures. A server of its own: nothing here leans on the others.
+async function testRelease(start, dist) {
+  const file = path.join(os.tmpdir(), `mmf-release-${process.pid}.json`);
+  fs.rmSync(file, { force: true });
+  const server = await start({ MAX_PLAYERS: '20', DIST_DIR: dist, SCORES_FILE: file });
+  const { port } = server;
+  const json = (res) => { try { return JSON.parse(res.body.toString()); } catch { return null; } };
+  const call = (target, body, key) => request(port, target, { method: body === undefined ? 'GET' : 'POST', headers: { ...(body !== undefined && { 'content-type': 'application/json' }), ...(key && { authorization: `Bearer ${key}` }) }, ...(body !== undefined && { body: typeof body === 'string' ? body : JSON.stringify(body) }) });
+  try {
+    const st = json(await call('/api/status'));
+    check('release: the status says what is released — the slide off, the caves and the figures on, the sky hidden — and which version is online',
+      st?.ok === true && st.release?.slide === false && st.release.caves === true && st.release.stats === true && st.release.sky === 'hidden' && st.release.userRooms === false && st.build === 'abc1234' && st.refresh === 0, st);
+    // the board of a game that is not released: as if it did not exist
+    const shut = { run: await call('/api/run', { board: 'slide' }), board: await call('/api/scores?board=slide'), all: json(await call('/api/scores?board=all')) };
+    // two visitors, in two rooms
+    const ann = new Client(port, 'rel-a'), bob = new Client(port, 'rel-b');
+    await ann.hello('Ann'); await bob.hello('Bob');
+    const here = async () => json(await call('/api/stats'))?.here;
+    // (a room of the Worker tells the notebook how many it holds: a moment later)
+    let seen = await here();
+    for (let i = 0; i < 50 && seen !== 2; i++) { await sleep(100); seen = await here(); }
+    // only the owner throws a switch
+    const nobody = await call('/api/release', { set: { slide: true } }), wrongKey = await call('/api/release', { set: { slide: true } }, 'not-the-key');
+    const wrong = await call('/api/release', { set: { sky: 'tomorrow' } }, ADMIN_KEY);
+    const res = await call('/api/release', { set: { slide: true, sky: 'soon', nonsense: 1 } }, ADMIN_KEY), set = json(res);
+    const toAnn = await ann.wait((m) => m.t === 'r'), toBob = await bob.wait((m) => m.t === 'r');
+    check('release: only the owner throws a switch, a value that is not one is refused, and every room is told at once',
+      nobody.status === 403 && wrongKey.status === 403 && wrong.status === 400 && res.status === 200 && set.release.slide === true && set.release.sky === 'soon' && set.release.caves === true && !('nonsense' in set.release)
+      && set.rooms === 2 && toAnn?.r?.slide === true && toAnn.v === 'abc1234' && toBob?.r?.sky === 'soon', [nobody.status, wrongKey.status, wrong.status, res.status, set, toAnn, toBob]);
+    // the board of the slide, now that it is released: a note, a score
+    const run = await call('/api/run', { board: 'slide' });
+    const posted = await call('/api/scores', { board: 'slide', name: 'Otter', score: 41000, run: await sign(SCORE_SECRET, { b: 'slide', t: Date.now() - 42000, n: randomId(9) }) });
+    const open = json(await call('/api/scores?board=all'));
+    check('release: the board of a game waits for its switch — no note, no score, not listed; once released it takes a time',
+      shut.run.status === 400 && shut.board.status === 404 && shut.all?.boards && !('slide' in shut.all.boards) && 'sky' in shut.all.boards
+      && run.status === 200 && posted.status === 200 && json(posted).rank === 1 && open.boards.slide?.tops?.all?.[0]?.name === 'Otter', [shut.run.status, shut.board.status, run.status, posted.status, posted.body.toString().slice(0, 120)]);
+    // everybody is asked to refresh
+    const t0 = Date.now();
+    ann.msgs.length = 0;
+    const fr = json(await call('/api/release', { refresh: true }, ADMIN_KEY)), asked = await ann.wait((m) => m.t === 'r' && m.f > 0), later = json(await call('/api/release'));
+    check('release: the owner can ask every page to refresh — said to every room, and to whoever asks later; the switches stay as they were',
+      fr?.refresh >= t0 - 3000 && asked?.f === fr.refresh && later.refresh === fr.refresh && later.release.slide === true && later.release.sky === 'soon' && later.build === 'abc1234', [fr, asked, later]);
+    // a word to every room
+    const word = await call('/api/announce', { text: '  Fireworks   at nine  ' }, ADMIN_KEY), heard = await bob.wait((m) => m.t === 'say'), hush = await call('/api/announce', { text: 'psst' }), empty = await call('/api/announce', { text: '   ' }, ADMIN_KEY);
+    check('release: an administrator says a word to every room at once; nobody else can, and nothing is not a word',
+      word.status === 200 && json(word).rooms === 2 && json(word).said === 'Fireworks at nine' && heard?.m === 'Fireworks at nine' && hush.status === 403 && empty.status === 400, [word.status, word.body.toString(), heard, hush.status, empty.status]);
+    // the figures: sums; a browser adds what it did; who is here; the owner sets what was before; the shop adds and takes back
+    const fig0 = json(await call('/api/stats'));
+    const counted = json(await call('/api/stats', { device: 'd'.repeat(22), d: { keys: 12, metres: 30, secs: 40, moving: 20 }, color: 3, kind: 'computer', os: 'Linux', from: 'direct' }));
+    const fig1 = json(await call('/api/stats'));
+    const setNo = await call('/api/stats/set', { money: 10, passes: 2, people: 100 }), setYes = json(await call('/api/stats/set', { money: 10, passes: 2, people: 100 }, ADMIN_KEY));
+    const hook = async (event) => { const raw = JSON.stringify(event); return request(port, '/api/stripe/webhook', { method: 'POST', headers: { 'content-type': 'application/json', 'stripe-signature': await signWebhook(STRIPE_HOOK, raw) }, body: raw }); };
+    const DEV = 'device-of-fig-0123456789', RIVAL = 'device-of-riv-0123456789';
+    const sale = (id, item, device, amount, extra = {}) => ({ type: 'checkout.session.completed', data: { object: { id, payment_status: 'paid', amount_total: amount, metadata: { item, device }, ...extra } } });
+    await hook(sale('cs_fig_1', 'hat:crown', DEV, 999));
+    await hook(sale('cs_fig_1', 'hat:crown', DEV, 999)); // (Stripe says it twice: counted once)
+    await hook(sale('cs_fig_2', 'pass', DEV, 1900, { subscription: 'sub_fig', customer: 'cus_fig' }));
+    await hook(sale('cs_fig_3', 'board:mole', DEV, 500, { payment_intent: 'pi_fig_1' }));
+    const before = json(await call('/api/stats'));
+    await hook(sale('cs_fig_4', 'board:mole', RIVAL, 800, { payment_intent: 'pi_fig_2' })); // (outbid: the first bid is given back)
+    const after = json(await call('/api/stats'));
+    check('figures: sums that a browser adds to; "here now" is who is connected; the owner alone sets what was before; the shop adds what it sells — once — and takes back what it gives back',
+      fig0?.keys === 0 && seen === 2 && fig0.here === 2 && counted?.counted === true && fig1.keys === 12 && fig1.people === 1 && setNo.status === 403 && setYes?.money === 10 && setYes.passes === 2 && setYes.people === 100
+      && before.money === 10 + 9.99 + 19 + 5 && before.passes === 3 && after.money === before.money + 8 - 5, [fig0?.keys, seen, fig0?.here, counted, fig1?.keys, setNo.status, setYes?.money, before?.money, before?.passes, after?.money]);
+    // the rooms, for the administrators: how many each holds, and how many of them are still on an older version
+    const cat = new Client(port, 'rel-a'), dan = new Client(port, 'rel-b');
+    await cat.opened; await dan.opened;
+    cat.send({ t: 'hello', name: 'Cat', color: 1, v: 2, b: 'deadbeef' }); dan.send({ t: 'hello', name: 'Dan', color: 2, v: 2, b: 'abc1234' });
+    await cat.wait((m) => m.t === 'welcome'); await dan.wait((m) => m.t === 'welcome');
+    let rooms = null;
+    for (let i = 0; i < 90; i++) {
+      // (a room of the Worker counts again a few seconds after it last did, when something happens in it)
+      if (i % 10 === 9) { ann.send({ t: 'ping', c: i }); bob.send({ t: 'ping', c: i }); }
+      rooms = json(await call('/api/rooms', undefined, ADMIN_KEY));
+      if (rooms?.players === 4 && rooms.old === 3) break;
+      await sleep(100);
+    }
+    const noRooms = await call('/api/rooms');
+    check('rooms: the administrators see the rooms that hold somebody — how many each, and how many are still on an older version than the one online',
+      noRooms.status === 403 && rooms?.build === 'abc1234' && rooms.rooms.length === 2 && rooms.rooms[0].name === 'rel-a' && rooms.rooms[0].players === 2 && rooms.rooms[0].old === 2 && rooms.rooms[1].name === 'rel-b' && rooms.rooms[1].players === 2 && rooms.rooms[1].old === 1 && rooms.players === 4 && rooms.old === 3, [noRooms.status, rooms]);
+    ann.ws.close(); bob.ws.close(); cat.ws.close(); dan.ws.close();
+  } finally {
+    await server.stop();
+    fs.rmSync(file, { force: true });
+  }
+}
+
 async function testVisitors(start, dist) {
   const file = path.join(os.tmpdir(), `mmf-visitors-${process.pid}.json`);
   fs.rmSync(file, { force: true });
@@ -879,10 +975,13 @@ async function testShop({ port }) {
   res = await post('/api/checkout', { item: 'hat:crown', device: ann, amount: 1, price: 1 });
   const asked = stripe.asked[0]?.form;
   check('shop: a payment page is asked of Stripe at the price of the catalogue, for this visitor', res.status === 200 && /^https:\/\/checkout\.stripe\.test\//.test(json(res)?.url || '') && asked?.get('mode') === 'payment' && asked.get('line_items[0][price_data][unit_amount]') === '999' && asked.get('line_items[0][price_data][currency]') === 'usd' && asked.get('metadata[item]') === 'hat:crown' && asked.get('metadata[device]') === ann && asked.get('client_reference_id') === ann && asked.get('success_url').endsWith('/?paid=hat%3Acrown'), [res.status, res.body.toString().slice(0, 160), asked?.toString().slice(0, 300)]);
+  // (a sky village is for hire only once the sky is open: the owner's switch)
+  const shutSky = await post('/api/checkout', { item: 'village:eagle-rest', device: bob });
+  await post('/api/release', { set: { sky: 'open' } }, { authorization: `Bearer ${ADMIN_KEY}` });
   res = await post('/api/checkout', { item: 'village:eagle-rest', device: bob });
   const sub = stripe.asked[1]?.form;
   const nothing = await post('/api/checkout', { item: 'hat:invisible', device: ann }), nobody = await post('/api/checkout', { item: 'jetpack', device: 'x' });
-  check('shop: a village is a subscription by the month, at the price of its height; what is not sold is refused', res.status === 200 && sub?.get('mode') === 'subscription' && sub.get('line_items[0][price_data][recurring][interval]') === 'month' && Number(sub.get('line_items[0][price_data][unit_amount]')) >= 1900 && sub.get('subscription_data[metadata][item]') === 'village:eagle-rest' && nothing.status === 400 && nobody.status === 400, [res.status, sub?.toString().slice(0, 200), nothing.status, nobody.status]);
+  check('shop: a village is a subscription by the month, at the price of its height — once the sky is open, not before; what is not sold is refused', shutSky.status === 400 && res.status === 200 && sub?.get('mode') === 'subscription' && sub.get('line_items[0][price_data][recurring][interval]') === 'month' && Number(sub.get('line_items[0][price_data][unit_amount]')) >= 1900 && sub.get('subscription_data[metadata][item]') === 'village:eagle-rest' && nothing.status === 400 && nobody.status === 400, [res.status, sub?.toString().slice(0, 200), nothing.status, nobody.status]);
   // the payment form inside the game: where the publishable key was given, Stripe is asked for a form to embed
   stripe.asked.length = 0;
   const inGame = await post('/api/checkout', { item: 'hat:cowboy', device: ann, embed: true });
@@ -950,7 +1049,7 @@ async function testShop({ port }) {
       && (got.notes || []).length === 3 && got.notes.every((n) => /gift from the fair/.test(n)) && giftPortal.status === 404 && (CF || paysAnyway.status === 200),
       [noGift.status, g1.status, g2.status, g3.status, bad.map((r) => r.status), got.owned, got.pass, got.notes, giftPortal.status, paysAnyway?.status]);
   }
-  // a place to sponsor: paid, then filled in by its holder, then approved by the administrator
+  // a place to sponsor: paid, then filled in by its holder — and shown at once (the owner takes down afterwards what should not be there)
   await hook(paid('tarp:shoot', bob, 'sub_test_1'));
   const taken = await post('/api/checkout', { item: 'tarp:shoot', device: ann });
   const seen = json(await request(port, `/api/shop?device=${ann}`)), held = json(await request(port, `/api/shop?device=${bob}`));
@@ -961,17 +1060,15 @@ async function testShop({ port }) {
   const page = await post('/api/sponsor', { slot: 'tarp:shoot', device: bob, title: 'Acme', logo: Buffer.from('<!doctype html><html><script>alert(1)</script></html>'.padEnd(64)).toString('base64') });
   const liar = await post('/api/sponsor', { slot: 'tarp:shoot', device: bob, title: 'Acme', logo: Buffer.concat([Buffer.from(PNG, 'base64').subarray(0, 8), Buffer.from('<script>alert(1)</script>'.padEnd(60))]).toString('base64') });
   const fine = await post('/api/sponsor', { slot: 'tarp:shoot', device: bob, title: '<script>alert(1)</script> Acme   Robotics & Sons of the North Pole', subtitle: 'Friendly\nmachines <b>since</b> 1999', url: 'https://acme.example/robots?x=1', logo: PNG });
-  const notYet = json(await request(port, `/api/shop?device=${ann}`)).slots['tarp:shoot'], noLogo = await request(port, '/api/logo?slot=tarp:shoot');
-  check('shop: only the holder fills a place in; a link must be https; what is not a picture is refused', intruder.status === 403 && html.status === 400 && svg.status === 400 && page.status === 400 && liar.status === 400 && fine.status === 200 && json(fine)?.state === 'pending', [intruder.status, html.status, svg.status, page.status, liar.status, fine.status]);
-  check('shop: nothing a sponsor sends is shown before it is approved', notYet.state === 'taken' && !notYet.title && noLogo.status === 404, [notYet, noLogo.status]);
+  const before = { fine: json(fine) };
+  check('shop: only the holder fills a place in; a link must be https; what is not a picture is refused', intruder.status === 403 && html.status === 400 && svg.status === 400 && page.status === 400 && liar.status === 400 && fine.status === 200 && before.fine?.state === 'live', [intruder.status, html.status, svg.status, page.status, liar.status, fine.status, before.fine]);
   const noAdmin = await request(port, '/api/sponsors'), list = json(await request(port, '/api/sponsors', { headers: admin }));
-  const draft = list?.slots?.['tarp:shoot']?.draft;
-  const peek = await request(port, draft?.logo || '/nowhere'), look = await request(port, draft?.logo || '/nowhere', { headers: admin });
-  check('shop: the administrator sees what awaits approval — text made harmless, the picture for their eyes only', noAdmin.status === 403 && draft && !/[<>]/.test(draft.title + draft.subtitle) && draft.title.length <= 28 && draft.subtitle === 'Friendly machines b since /b 1999' && draft.url === 'https://acme.example/robots?x=1' && peek.status === 404 && look.status === 200 && look.headers['content-type'] === 'image/png', [noAdmin.status, draft, peek.status, look.status, look.headers['content-type']]);
+  const kept = list?.slots?.['tarp:shoot'];
+  check('shop: the administrator sees every place as it is shown — text made harmless — and nothing of a sponsor waits for approval', noAdmin.status === 403 && kept?.state === 'live' && !kept.draft && !/[<>]/.test(kept.title + kept.subtitle) && kept.title.length <= 28 && kept.subtitle === 'Friendly machines b since /b 1999' && kept.url === 'https://acme.example/robots?x=1', [noAdmin.status, kept]);
   const approve = await post('/api/sponsors', { slot: 'tarp:shoot', approve: true }, admin), sneaky = await post('/api/sponsors', { slot: 'tarp:shoot', approve: true });
   const live = json(await request(port, `/api/shop?device=${ann}`)).slots['tarp:shoot'];
   const logo = await request(port, live?.logo || '/nowhere');
-  check('shop: once approved it is shown to everyone; the picture is served as a picture and nothing else', approve.status === 200 && sneaky.status === 403 && live.state === 'live' && live.url === 'https://acme.example/robots?x=1' && logo.status === 200 && logo.headers['content-type'] === 'image/png' && logo.headers['x-content-type-options'] === 'nosniff' && /sandbox/.test(logo.headers['content-security-policy'] || '') && logo.body.equals(Buffer.from(PNG, 'base64')), [approve.status, sneaky.status, live, logo.status, logo.headers]);
+  check('shop: what a sponsor sends is shown to everyone at once (there is nothing to approve); the picture is served as a picture and nothing else', approve.status === 404 && sneaky.status === 403 && live.state === 'live' && live.url === 'https://acme.example/robots?x=1' && logo.status === 200 && logo.headers['content-type'] === 'image/png' && logo.headers['x-content-type-options'] === 'nosniff' && /sandbox/.test(logo.headers['content-security-policy'] || '') && logo.body.equals(Buffer.from(PNG, 'base64')), [approve.status, sneaky.status, live, logo.status, logo.headers]);
   // the administrator fills a place by hand; a subscription that ends frees its place
   const byHand = await post('/api/sponsors', { slot: 'gondola:7', set: { title: 'Seven Seas Ice Cream', subtitle: 'on the pier since ever', url: 'https://ice.example', logo: JPEG } }, admin);
   const g7 = json(await request(port, '/api/shop')).slots['gondola:7'], g7logo = await request(port, g7?.logo || '/nowhere');
@@ -1058,7 +1155,22 @@ async function testShop({ port }) {
   const off = await request(port, '/api/sponsors?slot=board:mole', { method: 'DELETE', headers: admin });
   const bobTold = json(await request(port, `/api/shop?device=${bob}`));
   check('auction: a sponsor taken off by the administrator gets the bid back; the panel is free again, from a dollar',
-    off.status === 200 && !bobTold.slots['board:mole'] && stripe.refunds.some((r) => r.pay === 'pi_bob_1') && /refunded in full/.test(bobTold.notes?.[0] || ''), [off.status, bobTold.notes, stripe.refunds.map((r) => r.pay)]);
+    off.status === 200 && json(off).removed === 'board:mole' && json(off).refunded === true && !bobTold.slots['board:mole'] && stripe.refunds.some((r) => r.pay === 'pi_bob_1') && /refunded in full/.test(bobTold.notes?.[0] || ''), [off.status, bobTold.notes, stripe.refunds.map((r) => r.pay)]);
+  // taken down without the money back (what was shown broke the rules); a place paid by the month stops being paid
+  // either way — and the month that is running is given back, or not
+  await hook(bidPaid('board:fish', ann, 400, 'pi_ann_9'));
+  const keptBid = await request(port, '/api/sponsors?slot=board:fish&refund=0', { method: 'DELETE', headers: admin });
+  const annKept = json(await request(port, `/api/shop?device=${ann}`));
+  await hook(paid('gondola:3', bob, 'sub_gone_1'));
+  await hook(paid('gondola:4', bob, 'sub_gone_2'));
+  const back = await request(port, '/api/sponsors?slot=gondola:3', { method: 'DELETE', headers: admin }), noBack = await request(port, '/api/sponsors?slot=gondola:4&refund=0', { method: 'DELETE', headers: admin });
+  const bobKept = json(await request(port, `/api/shop?device=${bob}`));
+  check('sponsors: the administrator takes one down with the money back — or without; a place paid by the month stops being paid either way, and its holder is told',
+    keptBid.status === 200 && json(keptBid).refunded === false && !stripe.refunds.some((r) => r.pay === 'pi_ann_9') && !annKept.slots['board:fish'] && /took your panel down\.$/.test(annKept.notes?.at(-1) || '')
+    && json(back).stopped === true && json(back).refunded === true && stripe.cancelled.includes('sub_gone_1') && stripe.refunds.some((r) => r.pay === 'pi_month_sub_gone_1')
+    && json(noBack).stopped === true && json(noBack).refunded === false && stripe.cancelled.includes('sub_gone_2') && !stripe.refunds.some((r) => r.pay === 'pi_month_sub_gone_2')
+    && !bobKept.slots['gondola:3'] && !bobKept.slots['gondola:4'] && /nothing more will be charged/.test((bobKept.notes || []).join(' ')),
+    [keptBid.status, keptBid.body.toString().slice(0, 80), annKept.notes, back.body.toString().slice(0, 80), noBack.body.toString().slice(0, 80), stripe.cancelled, bobKept.notes]);
 }
 // Accounts: nobody needs one; whoever signs in keeps what they bought, their days in a row and their look,
 // from one browser to the next.
@@ -1526,6 +1638,9 @@ async function testCloudflare(server, fx) {
   check('cf: unknown paths → 404, /healthz → ok, /ws without upgrade → 426', res.status === 404 && health.status === 200 && health.body.toString() === 'ok' && plain.status === 426, [res.status, health.status, plain.status]);
   res = await request(port, '/_headers');
   check('cf: the headers file itself is not published', res.status === 404, res.status);
+  const page = await request(port, '/'), which = await request(port, '/version.json');
+  check('cf: the page itself is never kept by a browser (it asks each time), nor the file that says which version is online',
+    /no-cache/.test(page.headers['cache-control'] || '') && which.status === 200 && /no-store/.test(which.headers['cache-control'] || '') && JSON.parse(which.body.toString()).commit === 'abc1234', [page.headers['cache-control'], which.status, which.headers['cache-control']]);
 
   // --- pings: the fixed text is answered by the platform (the relay's own pong carries a clock)
   const p1 = new Client(port, 'edge');
@@ -1619,6 +1734,7 @@ try {
     await section('crowd', () => testCrowd(startWorker, fx.dist));
     await section('moderation', () => testModeration(startWorker, fx.dist));
     await section('visitors', () => testVisitors(startWorker, fx.dist));
+    await section('release', () => testRelease(startWorker, fx.dist));
     if (process.env.NET_TEST_LOG) fs.writeFileSync(process.env.NET_TEST_LOG, server.log);
     // (the local tool also logs its own failed attempts to reach Cloudflare when offline: not the Worker's)
     const trouble = server.log.split('\n').filter((line) => /\[wrangler:error\]|\[ERROR\]|Uncaught/.test(line));
@@ -1636,6 +1752,7 @@ try {
     await section('crowd', () => testCrowd(startServer, fx.dist));
     await section('moderation', () => testModeration(startServer, fx.dist));
     await section('visitors', () => testVisitors(startServer, fx.dist));
+    await section('release', () => testRelease(startServer, fx.dist));
     const kept = (() => { try { return JSON.parse(fs.readFileSync(path.join(fx.tmp, 'scores.json'), 'utf8')); } catch { return null; } })();
     check('api: the Node server keeps the boards and the visits in its file', kept?.['board:sky']?.all?.length === 1 && kept['board:sky'].all[0].at > 0 && kept['board:shoot']?.day?.list?.[0]?.name === 'Dana' && Object.keys(kept).some((k) => k.startsWith('visit:')), kept);
     check('server: still running at the end, nothing on stderr', server.alive() && !/error|exception/i.test(server.log), server.log);

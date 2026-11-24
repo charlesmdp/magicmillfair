@@ -9,6 +9,7 @@ import { BroadcastTransport } from './transports/BroadcastTransport.js';
 import { WebSocketTransport } from './transports/WebSocketTransport.js';
 import { deviceId } from './device.js';
 
+const BUILD = typeof __BUILD__ !== 'undefined' && /^[0-9a-f]{4,12}$/.test(__BUILD__.commit || '') ? __BUILD__.commit : ''; // which version this page is (said with the hello)
 const SEND_MS = 1000 / 12; // own state goes out at ~12 Hz…
 const KEEPALIVE_MS = 2000; // …or every 2 s while nothing changes (unless the relay asks for another period, or none)
 const UNSEEN_MS = 500; // …and only twice a second while nobody is close enough to be told about us (the relay says so)
@@ -222,7 +223,7 @@ export class Presence {
   _persist() {
     try { localStorage.setItem('mmf.name', this.name); localStorage.setItem('mmf.color', String(this.color)); } catch { /* no storage */ }
   }
-  _hello() { return { t: 'hello', name: this.name, color: this.color, v: 2, dev: this.device, s: this.session, ...(this.kit && { k: this.kit }) }; }
+  _hello() { return { t: 'hello', name: this.name, color: this.color, v: 2, dev: this.device, s: this.session, ...(this.kit && { k: this.kit }), ...(BUILD && { b: BUILD }) }; }
 
   _handlers(mode) {
     return {
@@ -275,6 +276,8 @@ export class Presence {
     else if (m.t === 'u') this._states(m);
     else if (m.t === 'm') this._far(m);
     else if (m.t === 'w') this._seen = !!m.n;
+    else if (m.t === 'r') this._emit('release', { release: m.r && typeof m.r === 'object' ? m.r : null, build: typeof m.v === 'string' ? m.v : '', refresh: Number.isFinite(m.f) ? m.f : 0 }); // (what is released has changed)
+    else if (m.t === 'say') { const text = cleanChat(m.m); if (text) this._emit('announce', { text }); } // (a word from the fair, to every room)
     else if (m.t === 'admin') { this.admin = !!m.ok; this.owner = this.admin && !!m.owner; this._emit('admin', { ok: this.admin, owner: this.owner, out: !!m.out }); }
     else if (m.t === 'gift') this._emit('gift', { by: cleanName(m.by || '') });
     else if (m.t === 'promoted') { if (typeof m.key === 'string' && m.key) this._emit('promoted', { key: m.key, by: cleanName(m.by || '') }); else this._emit('promoted', { id: m.id }); }
@@ -323,6 +326,7 @@ export class Presence {
     this.admin = this.owner = false;
     if (tr && mode === 'online' && this._key) tr.send({ t: 'admin', key: this._key });
     this._flush(now());
+    this._emit('welcome', { mode }); // (a relay was reached — again, perhaps, after a delivery restarted it)
   }
 
   // Put out by the administrator: everything stops, and stays stopped.

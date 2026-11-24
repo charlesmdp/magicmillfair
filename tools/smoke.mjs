@@ -92,6 +92,16 @@ try {
   await frames(2);
   const legal = await page.evaluate(() => { const text = document.querySelector('.legal-body').textContent; return { open: document.querySelector('.legal').classList.contains('on'), panel: document.querySelector('.hud .panel').classList.contains('on'), tab: document.querySelector('.legal-tabs .on')?.textContent, sections: document.querySelectorAll('.legal-body section').length, names: ['Cloudflare', 'Stripe', 'Anthropic', 'ship-or-die'].filter((n) => text.includes(n)).length }; });
   await shot('8-privacy');
+  // nothing of the sky villages while they are hidden (the owner's switch; no server here: hidden): no gate, no
+  // village on the mountains, no name on the map, not a word from the alligator
+  const sky = await page.evaluate(async () => {
+    const m = window.__mmf, g = m.world.sky, { Npc } = await import('/src/npc/Npc.js');
+    const said = new Set();
+    for (let k = 0; k < 40; k++) said.add(new Npc('alligator')._canned('where is the sky gate, the village?'));
+    return { stage: g.stage, villages: g.villages.length, meshes: g.group.children.length, gate: !!g.gate.hidden, word: [...said].some((t) => /sky gate|village/i.test(t)), places: !document.querySelector('.bigmap .mega').hidden };
+  });
+  console.log('the sky:', JSON.stringify(sky));
+  if (sky.stage !== 'hidden' || sky.villages || sky.meshes || !sky.gate || sky.word || sky.places) throw new Error(`the sky villages are hidden, yet something of them shows: ${JSON.stringify(sky)}`);
   await page.evaluate(() => document.querySelector('.legal-tabs [data-doc="terms"]').click());
   const terms = await page.evaluate(() => ({ tab: document.querySelector('.legal-tabs .on')?.textContent, sections: document.querySelectorAll('.legal-body section').length }));
   await page.evaluate(() => document.querySelector('.legal-x').click());

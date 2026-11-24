@@ -3,10 +3,14 @@
 // and what is switched on. The Node server and the notebook of the Cloudflare Worker both answer through
 // route(); the characters one talks to (npc.js) call a model and are answered by the hosts themselves.
 //
-//   GET  /api/status                          → { ok, npc, admin, shop, mail, time }   (what is configured: no secret)
+//   GET  /api/status                          → { ok, npc, admin, shop, mail, time, release, refresh, build }   (what is
+//                                                configured — no secret —, what is released and which version is online)
+//   GET | POST /api/release, POST /api/announce    the switches of what is released, a word to every room (release.js)
+//   GET  /api/rooms                           the rooms and how many each holds, for the administrators
+//   GET | POST /api/stats, POST /api/stats/set     the game in figures (stats.js)
 //   POST /api/visit  { device, tz }           → { days, best, today }             (see visit())
 //   GET | POST | DELETE /api/scores, POST /api/run                                 (see scores.js)
-//   GET  /api/admin                           → { ok, owner }   (with an administrator's key: Authorization: Bearer …)
+//   GET  /api/admin                           → { ok, owner, boards }   (with an administrator's key: Authorization: Bearer …)
 //   GET | DELETE /api/admins                  the administrators the owner and the others have named (admins.js)
 //   GET  /api/visitors                        where the visitors come from, for the administrators (visitors.js)
 //   GET | POST | DELETE /api/bans             the administrator's list of who is kept out (see below)
@@ -21,7 +25,10 @@
 // ctx: { store: { get(key), put(key, value), delete(key) } (may be asynchronous), limiter (api.js),
 //        secret(): the signing secret of this deployment, flags: { npc, admin, shop, mail }, now(): ms,
 //        stripe: what is configured for payments (stripe.js),
-//        mail: async ({ to, subject, text, html }) → sends an e-mail, or null where none can be sent (mail.js) }
+//        mail: async ({ to, subject, text, html }) → sends an e-mail, or null where none can be sent (mail.js),
+//        build(): the version of the files the host serves, push(message): tells every room (release.js),
+//        here(): how many visitors are connected (stats.js),
+//        rooms(): [{ name, players, old }] — the rooms that hold somebody (old: on an older version) }
 // An answer is { status, body, headers }, or { status, bytes, headers } for a picture.
 import { allowed } from './api.js';
 import { BOARDS, addScore, cleanScore, removeScore, runFits, topsOf } from './scores.js';
@@ -32,6 +39,9 @@ import { adminOf, listAdmins, removeAdmin } from './admins.js';
 import { cleanGeo, noteVisit, visitorsReport } from './visitors.js';
 import { accountRoute, visitRecord } from './accounts.js';
 import { localDay, visit } from './visits.js';
+import { readRelease, releaseNews, releaseRoute } from './release.js';
+import { statsRoute } from './stats.js';
+import { BOARDS as GAME_NAMES } from './catalog.js';
 
 const out = (status, body, headers = {}) => ({ status, body, headers });
 
@@ -82,14 +92,29 @@ export async function route(req, ctx) {
   const limited = (name) => !allowed(ctx.limiter, name, client, now);
   const busy = out(429, { error: 'Too many requests.' }, { 'Retry-After': '60' });
 
-  if (path === '/api/status') return out(200, { ok: true, ...ctx.flags, time: now });
+  if (path === '/api/status') return out(200, { ok: true, ...ctx.flags, time: now, ...(await releaseNews(ctx)) });
 
   // who is asking: the owner (the host has recognised its key), an administrator the owner or another has
   // named (their key is looked up here), or a visitor
   const owner = !!req.admin;
   if (!owner && req.bearer) req.admin = !!(await adminOf(ctx.store, '', req.bearer));
 
-  if (path === '/api/admin') return req.admin ? out(200, { ok: true, owner }) : out(403, { error: 'Forbidden.' });
+  // (with the boards of scores — their names, and what a score on each is: the back office lists them)
+  if (path === '/api/admin') return req.admin ? out(200, { ok: true, owner, boards: Object.keys(BOARDS).map((id) => ({ id, name: GAME_NAMES[id] || id, unit: BOARDS[id].order !== 'asc' ? 'points' : BOARDS[id].max <= 10_000 ? 'ms' : 'time' })) }) : out(403, { error: 'Forbidden.' });
+
+  if (path === '/api/rooms') {
+    // the rooms that hold somebody: how many, and how many of them are still on an older version of the game
+    if (!req.admin) return out(403, { error: 'Forbidden.' });
+    if (method !== 'GET' && method !== 'HEAD') return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD' });
+    const rooms = ((ctx.rooms && (await ctx.rooms())) || []).filter((r) => r.players > 0).sort((a, b) => b.players - a.players || a.name.localeCompare(b.name));
+    return out(200, { rooms, players: rooms.reduce((sum, r) => sum + r.players, 0), old: rooms.reduce((sum, r) => sum + (r.old || 0), 0), build: (await releaseNews(ctx)).build });
+  }
+
+  // what is released, a word to every room (release.js)
+  const released = await releaseRoute(req, ctx, owner);
+  if (released) return released;
+  // (a board of scores can wait for its game to be released: until then it is as if it did not exist)
+  const shut = async (board) => { const sw = BOARDS[board]?.release; return !!sw && !(await readRelease(ctx.store)).release[sw]; };
 
   if (path === '/api/admins') {
     if (!req.admin) return out(403, { error: 'Forbidden.' });
@@ -141,7 +166,7 @@ export async function route(req, ctx) {
   if (path === '/api/run') {
     if (method !== 'POST') return out(405, { error: 'Method not allowed.' }, { Allow: 'POST' });
     if (limited('run')) return busy;
-    if (!body || !Object.hasOwn(BOARDS, body.board)) return out(400, { error: 'Unknown board.' });
+    if (!body || !Object.hasOwn(BOARDS, body.board) || (await shut(body.board))) return out(400, { error: 'Unknown board.' });
     return out(200, { run: await sign(await ctx.secret(), { b: body.board, t: now, n: randomId(9) }) });
   }
 
@@ -151,10 +176,10 @@ export async function route(req, ctx) {
       if (board === 'all') {
         // every board at once (the game asks for them all when it starts)
         const boards = {};
-        for (const id of Object.keys(BOARDS)) boards[id] = topsOf(await ctx.store.get(`board:${id}`), now);
+        for (const id of Object.keys(BOARDS)) if (!(await shut(id))) boards[id] = topsOf(await ctx.store.get(`board:${id}`), now);
         return out(200, { boards });
       }
-      if (!Object.hasOwn(BOARDS, board)) return out(404, { error: 'Unknown board.' });
+      if (!Object.hasOwn(BOARDS, board) || (await shut(board))) return out(404, { error: 'Unknown board.' });
       return out(200, { board, ...topsOf(await ctx.store.get(`board:${board}`), now) });
     }
     if (method === 'DELETE') {
@@ -168,7 +193,7 @@ export async function route(req, ctx) {
     if (method !== 'POST') return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD, POST, DELETE' });
     if (limited('scores')) return busy;
     const score = cleanScore(body);
-    if (!score) return out(400, { error: 'Not a score.' });
+    if (!score || (await shut(score.board))) return out(400, { error: 'Not a score.' });
     const note = await verify(await ctx.secret(), score.run);
     const why = runFits(note, score, now);
     if (why) return out(400, { error: `Not a score: ${why}.` });
@@ -181,6 +206,10 @@ export async function route(req, ctx) {
   // an account, to keep things from one browser to the next (accounts.js)
   const account = await accountRoute(req, ctx, limited);
   if (account) return account;
+
+  // the game in figures (stats.js)
+  const stats = await statsRoute(req, ctx);
+  if (stats) return stats;
 
   // the shop, the sponsors (shop.js)
   const shop = await shopRoute(req, ctx);

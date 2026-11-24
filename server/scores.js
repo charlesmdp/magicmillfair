@@ -38,6 +38,9 @@ export const BOARDS = {
   fish: { order: 'desc', min: 1, max: 9999, length: 45_000 }, // fish brought up in 45 seconds
   scram: { order: 'asc', min: 130, max: 3000, length: 9_000 }, // the average of five reaction times, in ms: nobody is under 130 — and five alarms take their time
   cups: { order: 'desc', min: 1, max: 9999, length: 5_000, each: 25 }, // the cup that hides the core: every round has to be watched
+  // Mostly Down, the water slide (an extra: src/extras/slide.js): from the top to the sea. `release`: the board
+  // only exists once that switch is on (src/app/config.js: RELEASE)
+  slide: { order: 'asc', min: 30_000, max: 3600_000, release: 'slide' },
   run: { order: 'desc', min: 1, max: 60_000, length: 2_000, each: 12 }, // the arcade cabinet: metres run (52 a second at the fastest), and 25 for an isotope now and then
 };
 export const KEPT = { all: 200, month: 100, week: 100, day: 100 }, SHOWN = 10;

@@ -3,7 +3,9 @@
 // No authority over the game: every client shares its own avatar state and a room hands those states on.
 //
 // Protocol (JSON text frames)
-//   client → server   {t:'hello',name,color,v:2,dev?,k?,s?}   {t:'s',p:[x,y,z,yaw],a,f}   {t:'e',e}   {t:'c',m,n?}
+//   client → server   {t:'hello',name,color,v:2,dev?,k?,s?,b?}   {t:'s',p:[x,y,z,yaw],a,f}   {t:'e',e}   {t:'c',m,n?}
+//                     (b: which version of the game the page is — a few letters; the owner is told how many
+//                     are still on an older one)
 //                     (s: a name the page gave itself when it opened. A page that says hello again — its line
 //                     dropped without the relay noticing: a laptop that slept, a change of network — replaces
 //                     the connection it had before, so that nobody is ever seen twice)
@@ -22,6 +24,10 @@
 //                     {t:'leave',id}   {t:'u',now,s:[[id,x,y,z,yaw,a,f,age]],g?:[id]}   {t:'e',id,e}
 //                     {t:'c',id,m,n?}   {t:'m',p:[id,x,z,…]}   {t:'w',n}   {t:'pong',c,now}   {t:'full'}
 //                     {t:'admin',ok,owner?,out?} (out: the title was taken away)   {t:'who',list:[{id,name,ip,ua,dev,since,cc,city,admin}]}
+//                     {t:'r',r,v,f}   what is released (r: the switches), the version online (v) and when
+//                     every page was last asked to refresh (f) — said to a whole room when the owner changes
+//                     something; {t:'say',m}   a word from the fair to every room (server/release.js). A
+//                     browser that does not know these two ignores them.
 //                     {t:'kicked',ban}   {t:'promoted',key,by} (to who has just been named: the key of their
 //                     own)   {t:'promoted',id} (to who named them)   {t:'gift',by} (to who was given something:
 //                     nothing is given by this message — the shop is, and it only believes the administrator)
@@ -77,6 +83,8 @@ export function cleanChat(text) {
 
 /** The random name a browser gives itself (see src/net/Visits.js): '' when it does not look like one. */
 export const cleanDevice = (s) => (typeof s === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(s) ? s : '');
+/** Which version of the game a page says it is (the short name of a commit); '' when it does not look like one. */
+export const cleanBuild = (s) => (typeof s === 'string' && /^[0-9a-f]{4,12}$/.test(s) ? s : '');
 /** The name a page gave itself when it opened; '' when it is not one. */
 export const cleanSession = (s) => (typeof s === 'string' && /^[A-Za-z0-9_-]{8,32}$/.test(s) ? s : '');
 
@@ -144,6 +152,8 @@ export class Room {
   get size() { return this.players.size; }
   /** Players who said hello. */
   get joined() { let n = 0; for (const p of this.players.values()) if (p.joined) n++; return n; }
+  /** How many are here, and how many of them are not on version `live` ({ players, old }; nobody is old when `live` is not known). */
+  census(live = '') { let players = 0, old = 0; for (const p of this.players.values()) if (p.joined) { players++; if (live && p.build !== live) old++; } return { players, old }; }
 
   /**
    * A connection arrives. Returns its player, or null when the room is full (the host says so and closes).
@@ -158,13 +168,13 @@ export class Room {
       alive: true, tokens: BURST, stamp: t, chat: CHAT_BURST, chatAt: t,
       state: null, row: '', at: 0, dirty: false, rested: true, // last state, its serialised row, when it came, relay flags
       ver: 0, area: null, sent: null, gone: null, watched: undefined, // (a crowd) version of the state, who they are told about, what was sent
-      ip: String((known || from)?.ip || '').slice(0, 64), ua: String((known || from)?.ua || '').slice(0, 220), dev: '', sid: '', admin: false, tries: 0, since: known?.since || t,
+      ip: String((known || from)?.ip || '').slice(0, 64), ua: String((known || from)?.ua || '').slice(0, 220), dev: '', sid: '', build: '', admin: false, tries: 0, since: known?.since || t,
       // (an administrator: 'owner' or 'admin', and which named key it was; where the connection comes from)
       rank: '', key: '', cc: String((known || from)?.cc || '').slice(0, 2), city: String((known || from)?.city || '').slice(0, 60),
     };
     if (known) {
       p.name = cleanName(known.name); p.color = int(known.color, 31); p.kit = int(known.kit, 255); p.joined = !!known.joined;
-      p.dev = cleanDevice(known.dev); p.sid = cleanSession(known.sid); p.admin = !!known.admin;
+      p.dev = cleanDevice(known.dev); p.sid = cleanSession(known.sid); p.build = cleanBuild(known.build); p.admin = !!known.admin;
       p.rank = !known.admin ? '' : known.admin === 'admin' ? 'admin' : 'owner'; p.key = typeof known.key === 'string' ? known.key.slice(0, 12) : '';
       if (Array.isArray(known.state) && known.state.length === 6 && known.state.every(Number.isFinite)) { p.state = known.state; p.row = `[${p.id},${p.state.join(',')}`; p.ver = 1; }
     }
@@ -304,6 +314,7 @@ export class Room {
   _hello(p, m) {
     const name = cleanName(m.name), color = int(m.color, 31), kit = int(m.k, 255);
     if (!p.dev) p.dev = cleanDevice(m.dev);
+    if (!p.build) p.build = cleanBuild(m.b);
     if (!p.sid) {
       p.sid = cleanSession(m.s);
       // the same page of the same browser, here already: the connection it had before is not somebody else —

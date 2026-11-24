@@ -7,6 +7,7 @@
 // It also answers the game's small API (./routes.js): the leaderboards, the visits… (kept in SCORES_FILE, by
 // default data/scores.json) and the characters one can talk to (/api/npc, when ANTHROPIC_API_KEY is set;
 // NPC_MODEL picks the model). ADMIN_KEY is the administrator's key (none: nobody is the administrator).
+// The version online is read from dist/version.json (written by the build); BUILD_ID says it instead (tests).
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -100,6 +101,8 @@ async function serveStatic(req, res, pathname) {
   const file = path.join(DIST, rel);
   if (rel.includes('\0') || !file.startsWith(DIST + path.sep)) return reply(req, res, 403, 'Forbidden.\n'); // path traversal
   const st = await fs.promises.stat(file).catch(() => null);
+  // (a folder that has a page of its own — /opendata, /admin — asked for without its last slash)
+  if (st && st.isDirectory() && (await fs.promises.stat(path.join(file, 'index.html')).then((s) => s.isFile(), () => false))) return reply(req, res, 301, '', { Location: `${pathname}/` });
   if (!st || !st.isFile()) {
     const built = await fs.promises.stat(DIST).then((s) => s.isDirectory(), () => false);
     if (built) return reply(req, res, 404, 'Page introuvable.\n');
@@ -110,6 +113,8 @@ async function serveStatic(req, res, pathname) {
   const textual = TEXTUAL.test(type);
   const immutable = ext !== 'html' && rel.startsWith('/assets/') && isHashed(path.basename(file));
   const headers = {
+    // (the back office is fenced in, as public/_headers says for Cloudflare)
+    ...(rel.startsWith('/admin/') && { 'Content-Security-Policy': "default-src 'self'; img-src 'self' blob: data:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'", 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'X-Robots-Tag': 'noindex, nofollow' }),
     'Content-Type': type,
     'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache', // no-cache = revalidate (ETag)
     ETag: `W/"${st.size.toString(36)}-${Math.round(st.mtimeMs).toString(36)}"`,
@@ -161,9 +166,25 @@ const store = {
 const limiter = new Limiter();
 const LIMIT_DAY = LIMITS.npcDay;
 const STRIPE = stripeConfig(process.env);
+// Which version of the game these files are: written by the build (dist/version.json), read again when it changes.
+const version = { at: 0, commit: '' };
+function buildId() {
+  if (process.env.BUILD_ID) return process.env.BUILD_ID;
+  const t = Date.now();
+  if (t - version.at > 10_000) {
+    version.at = t;
+    try { version.commit = String(JSON.parse(fs.readFileSync(path.join(DIST, 'version.json'), 'utf8')).commit || ''); } catch { version.commit = ''; }
+  }
+  return version.commit;
+}
 const api = {
   store, limiter, now: () => Date.now(), stripe: STRIPE,
   mail: MAIL,
+  // what is released is said to every room at once; how many are connected; which version is online (release.js, stats.js)
+  build: buildId,
+  push: async (message) => { const text = JSON.stringify(message); let told = 0; for (const room of rooms.values()) if (room.joined) { room.broadcast(text); told++; } return told; },
+  here: async () => census().players,
+  rooms: async () => [...rooms].map(([name, room]) => ({ name, ...room.census(buildId()) })),
   flags: { npc: !!NPC.apiKey, admin: !!ADMIN_KEY, shop: STRIPE.mode || 'off', mail: !!MAIL },
   // the secret that signs the notes of the runs: given (SCORE_SECRET), or drawn once and kept with the rest
   async secret() {

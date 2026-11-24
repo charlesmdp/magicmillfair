@@ -375,9 +375,12 @@ the first time the panel is opened (`rankPicture`). The administrator has them a
   over his name. Talk to him (the prompt by his chair, then type): a question or anything else on your
   mind, and he answers in one sentence that sails past the point and lands on it. The conversation is
   between the two of you: nobody else sees it (its lines are marked "only you" in the chat).
-- **The sky villages** *(the Sky Gate is not shown for now: `skyGate` in `src/app/config.js` brings it
-  back, and `?sky=1` at the end of the address shows it to whoever types it; the large map writes the
-  names of the villages, and their prices only if `mapPrices` says so)*: step up to the Sky Gate — the
+- **The sky villages** *(released in three stages by the owner's switch `sky` — see "What is released"
+  below: **hidden**, nothing of them exists — no gate, no village on the mountains, no mega map, not a word
+  from the characters; **soon**, their gate stands on the lawn, closed, under a sign: "Soon, the sky will
+  open"; **open**, everything. `?sky=1` at the end of the address shows them ahead of time to the
+  administrator — whose key the server checks — and on a development page. The large map writes the names
+  of the villages, and their prices only if `mapPrices` says so)*: step up to the Sky Gate — the
   stone ring on the lawn between the arrival and the mill — and choose one of fifty villages perched on
   the mountains: you are carried there, facing the valley. The ring of each village leads back, or on to another village. A village that nobody has taken
   yet says so on its sign, with its price; step up to its board to hire it (see *Sky villages for hire*).
@@ -479,12 +482,15 @@ To keep both pairs at once, name them `STRIPE_TEST_SECRET_KEY`, `STRIPE_TEST_WEB
 
 **Sponsors.** A place that can be sponsored is held by one sponsor at a time, for as long as the
 subscription runs (when it ends, Stripe says so and the place is free again). Its holder goes to it in the
-game — "Set up your panel" — and gives a name, a line under it, a link and a logo. **Nothing is shown before
-the administrator has approved it**: with the administrator's key on, the chat says when something awaits,
-and standing by the place offers "Approve …" and "Refuse it" — **what awaits is painted there for the
-administrator's eyes only**, words and picture, so that the yes or the no is given with the thing in sight
-(a picture that awaits approval is asked for with the administrator's key, never by an address anyone could
-open). The administrator can also fill a place in
+game — "Set up your panel" — and gives a name, a line under it, a link and a logo. **What a sponsor sends
+is shown at once**; the owner looks afterwards, and takes down what should not be there — from the back
+office (the page `/admin`, below): *Refuse and refund* (a bid is given back in full; of a place paid by the
+month, the month that is running, when Stripe says which payment it was) or *Refuse, no refund* — and a place
+paid by the month stops being charged either way (its subscription is ended at Stripe). Its holder is told
+at their next visit. Only **the plaques of the companions still wait for approval** (see further down):
+what awaits is painted there for the administrator's eyes only, words and picture, and standing by it
+offers "Approve …" and "Refuse it" (a picture that awaits approval is asked for with the administrator's
+key, never by an address anyone could open). The administrator can also fill a place in
 by hand, for a sponsor who paid some other way ("Fill this place in") — and there chooses **the colour of
 the panel** behind the sponsor's name and logo (a logo made for a dark ground, a brand with its own
 colour: the words are written light on a dark panel, dark on a light one). Over the board of a game, a
@@ -550,8 +556,8 @@ file): one of only fifty; your name on the sign and on the Mega map; roofs and f
 to your website at the sign; an address of your own to invite people (`?village=its-name`); and a place to
 meet where the nearby chat stays between those who are there.
 
-A village is hired through the shop (see above): its holder then names it, at its sign, and the
-administrator approves. Without the shop, a village is given to a company by editing its line in
+A village is hired through the shop (see above) — once the sky is open: before that the server sells
+none. Its holder then names it, at its sign, and it is shown at once. Without the shop, a village is given to a company by editing its line in
 `src/world/layout/sponsors.js` (name, motto, colours, web address): it then stops being for hire.
 
 **A demonstration.** One village is dressed as an example of what a brand can do with one: the lowest of
@@ -750,7 +756,14 @@ src/
                            LegalView.js: the terms of use and the privacy policy (their words: app/legal.js);
                            SponsorsView.js: the window of the Trading Post, and the photographs the game takes of itself
   app/Benchmark.js         benchmark tour
+  app/Updates.js           what is released and new versions, on the visitor's side: the bar, the refresh at a safe moment
+  extras/                  the lab's extras (the caves, the figures, the slide): loaded when their switch is on
 server/index.js            Node production server: static files + presence relay + API
+server/release.js          the switches of what is released, the version online, a word to every room
+server/stats.js            the game in figures: sums only (the lab's)
+public/admin/              the back office: a page of plain files that asks everything of the API
+public/opendata/           the page of the figures (the lab's)
+lab/                       the lab: its pages, its notes (BRIEF.md, INTEGRATION.md), its own server
 server/protocol.js         the relay itself (protocol, validation, batching), shared by both hostings
 server/api.js  scores.js  npc.js   the API of the game, shared by both hostings: rate limits, leaderboards,
                            the alligator's answers through the Claude API
@@ -961,6 +974,58 @@ what is done is to make cheating pointless or tedious:
 A cheater who writes a program that plays the whole run at human speed still gets on the board; what stops
 that is the last point. Going further means a referee: the server replaying the run from the inputs.
 
+### What is released, new versions, the back office
+
+**The switches.** The code of a novelty is delivered switched off; the owner switches it on, and every
+browser is told at once — no new delivery. The switches are one small object, `RELEASE` in
+`src/app/config.js` (what each is worth where nothing was decided: the slide off, the caves and the figures
+on, the sky villages hidden, players' rooms off); every future switch goes there. The server keeps what the
+owner decided (`server/release.js`, one key in the notebook), says it with `/api/status` and `/api/release`,
+and **tells every room** when it changes (a message of the relay, `{t:'r'}`: a browser that does not know
+it ignores it). On the visitor's side (`src/app/Updates.js`): a switch that goes **on** is applied as the
+game runs — the extras of `src/extras` are loaded then, and only then: nothing of them is downloaded
+before; a switch that goes **off**, or a change of stage of the sky, asks the page to load itself again.
+A browser with no server behind it has nothing switched on.
+
+**New versions.** A build writes which version it is in `version.json` (its commit); the server reads the
+file it serves and says so with its status. A page compares: when the relay is reached again (a delivery
+restarts it, and cuts every connection), every four minutes, and when it is looked at again. If the
+version online is no longer its own, a bar says *A new version of the fair is ready*, counts down
+three quarters of a minute (a button refreshes at once), and the page loads itself again — **at a safe moment
+only**: never during a game of a booth, a race, a timed climb, a ride, a payment, a form, or a sentence
+being typed; it waits. The visitor comes back at the same spot, in the same room, without the welcome card —
+and reads, once, what is new (the latest day of `src/app/news.js`). The owner can also ask every page to
+refresh, and say a word to every room at once (`POST /api/release { refresh: true }`,
+`POST /api/announce { text }`). The page itself is never kept by a browser (`public/_headers`: `no-cache`;
+the bundles, whose names change with their content, are kept for good). `npm run test:update` plays all of
+it for real: two builds, a visitor in the world, the server replaced.
+
+**The back office.** `/admin` is a page of its own, outside the game (`public/admin/`: plain files — it
+holds no secret and asks everything of the API). It opens with the owner's key (the secret `ADMIN_KEY`),
+typed there and sent as a header, never in an address; it is kept for the tab only. Sections: **Releases**
+(every switch, the version online, how many of those connected are still on an older one, *Everybody
+refreshes*, a word to every room — the owner only); **Rooms** (those that hold somebody, and how many);
+**High scores** (every board by period; refuse a line); **Sponsors & plaques** (take a sponsor down, with
+the money back or without; accept or refuse a plaque, its picture in sight; the refunds); **Kept out** (the
+list, add, let back in); **Figures** (the page everybody can read, and what was before the counting began);
+**Administrators**. An administrator the owner has named opens it with their own key and sees all but the
+releases. The page is fenced in by its headers: no script but its own, nothing from another site, never
+framed, never listed, never kept.
+
+**The lab.** Novelties are built on another branch, as *extras* (`src/extras/`: a module with
+`attach(app)`), with their own checks (`node tools/slide-test.mjs`, `node tools/extras-test.mjs`) and a page
+of their own (`lab/`: see `lab/INTEGRATION.md`). The game switches them on through the switches above:
+**the caves are safe places** (nearby chat only), **the game in figures** (counters, the page `/opendata`,
+sums only — `server/stats.js`; the shop tells it what it sold and gave back, the relay how many are
+connected) and, when its switch goes on, **Mostly Down**, the water slide (its board of scores exists from
+that moment). The files of the lab are the lab's: `src/extras/**`, `src/world/zones/games/slide/**`,
+`server/stats.js`, `public/opendata/**`, `public/opendate/**`, `lab/**` and its two tests are not edited here.
+
+**Nothing of the game on the page.** What goes online leaves no `window.__mmf` (nor anything else) for a
+console to pick up; a development page, the lab's pages and the builds the tools make keep it (`__LAB__`,
+`__TEST__`). A speed bump, not a wall: the browser belongs to its visitor — what must hold is checked by
+the server.
+
 ### How many visitors at once?
 
 - **A room holds 250 visitors** (`MAX_PLAYERS`; 48 until this version). The old limit came from the fact
@@ -1000,8 +1065,10 @@ that is the last point. Going further means a referee: the server replaying the 
 |---|---|
 | `npm run bake` | bakes the world, the statue and the textures again |
 | `npm run bake:statue` | sculpts the golden dog again (`-- --preview=dog.png` also draws it from five sides, `-- --cell=0.012` makes a finer mesh) |
-| `npm test` | 190 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password) |
-| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (132 in all) |
+| `npm test` | 197 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password) |
+| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (140 in all) |
+| `npm run test:update` | a delivery from end to end, in the real game: two builds, a visitor in the world, the owner at the back office (`/admin`: the switches, a word to every room, a line refused, somebody kept out, the figures, the sky villages stage by stage), every page asked to refresh but never in the middle of a sentence, then the server replaced by the next version — the page says so, refreshes, comes back at the same spot and says what is new; and a plain build leaves nothing of the game on the page (11 checks) |
+| `node tools/extras-test.mjs`, `node tools/slide-test.mjs` | the lab's own checks of its extras (see `lab/INTEGRATION.md`) |
 | `npm run test:shop` | the shop in the real game, on the Node server with test keys and a stand-in for Stripe: a hat bought and worn, the panel of a game sponsored, filled in (with a logo) and approved by the administrator, the stand of the gondolas, a plaque for a companion (bought at a bare plate, engraved with a picture, approved), an account made and signed in to on its card, the payment form inside the game (and Stripe's page when it cannot be shown); and a newcomer: the padlocks of the welcome card and the free day of the jetpack, the Game Pass bought as a subscription, what it lends (black, the largest size, a hat that was never bought), its end and the end of the free day; the window of the Trading Post (20 checks) |
 | `npm run test:smoke` | drives the real site: welcome screen, walking, free camera, settings, large map (`-- --mobile` for the touch layout) |
 | `npm run test:audio` | Listens to the sound engine without ears: in headless Chromium it renders a dozen listener scenarios (beach, cliffs, pier, woods, mill, waterfall, cave, sky village, the climb…) and every one-shot effect through an offline audio context, measures level, spectrum, how the loudness moves and how tonal it is, fails on silence or clipping, and times `update()` (about 0.01 ms a frame) |

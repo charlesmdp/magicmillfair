@@ -28,7 +28,7 @@ if (CF) {
   server = spawn(process.execPath, [path.join(ROOT, 'node_modules/wrangler/bin/wrangler.js'), 'dev', '--port', String(PORT), '--ip', '127.0.0.1', '--inspector-port', String(PORT + 1), '--show-interactive-dev-session=false', '--var', `ADMIN_KEY:${ADMIN_KEY}`],
     { cwd: ROOT, env: { ...process.env, WRANGLER_SEND_METRICS: 'false' }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
 } else {
-  await build({ root: ROOT, logLevel: 'error' });
+  await build({ root: ROOT, logLevel: 'error', define: { __TEST__: 'true' } }); // (__TEST__: the game leaves window.__mmf on the page, as in development)
   // (its own store, emptied first: a score kept from an earlier run would not be news to anyone)
   const store = path.join(ROOT, 'tools/preview/duo-test-store.json');
   fs.rmSync(store, { force: true });

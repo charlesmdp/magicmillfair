@@ -14,7 +14,11 @@
 // Variables (wrangler.jsonc): MAX_PLAYERS (250 per room), TICK_MS (100), ALLOWED_ORIGINS (default: same host),
 // NPC_MODEL; secrets: ANTHROPIC_API_KEY (without it the characters use the lines kept in the game), ADMIN_KEY
 // (the administrator's key; without it nobody is the administrator), SCORE_SECRET (optional: signs the notes
-// of the game runs; drawn and kept by the notebook otherwise); for tests only: STALE_MS, DEBUG.
+// of the game runs; drawn and kept by the notebook otherwise); for tests only: STALE_MS, DEBUG, BUILD_ID.
+//
+// The rooms tell the notebook how many they hold (when it changes, a few seconds apart at the most): the
+// notebook thus knows which rooms there are, can say something to all of them at once (what is released, a
+// word from the owner: server/release.js), and how many visitors are connected. Only that number is kept.
 import { DurableObject } from 'cloudflare:workers';
 import { Room as Relay, MAX_FRAME, NEAR, RANGE, BLAST_EVERY, cleanRoom, originAllowed, parseOrigins } from '../server/protocol.js';
 import { Limiter, LIMITS, BODY_MAX, allowed, parseBody, mayPost, bodyMax } from '../server/api.js';
@@ -26,6 +30,9 @@ import { NPC_MODEL, cleanTalk, npcReply } from '../server/npc.js';
 import { adminOf, looksNamed, nameAdmin } from '../server/admins.js';
 import { cleanGeo, packGeo, unpackGeo } from '../server/visitors.js';
 
+const BUILD = 'X-Fair-Build'; // which version of the game is online: read by the Worker from its own files, told to the notebook
+const REPORT_MS = 5000; // a room tells the notebook how many it holds at most this often (at once when it fills from empty, or empties)
+
 const NOTEBOOK = '~api'; // the object that keeps the scores (room names are [a-z0-9_-] only)
 const GEO = 'X-Fair-Geo'; // where a request comes from, as Cloudflare knows it: set by the Worker below, and by nobody else
 // The request, handed on to an object with where it comes from (whatever the caller wrote in that header is dropped).
@@ -33,8 +40,22 @@ const withGeo = (request, url) => {
   const headers = new Headers(request.headers), cf = request.cf || {};
   const geo = packGeo(cleanGeo({ cc: cf.country, city: cf.city, region: cf.region }));
   if (geo) headers.set(GEO, geo); else headers.delete(GEO);
+  headers.delete(BUILD);
   return new Request(url || request.url, new Request(request, { headers }));
 };
+
+// The version of the files this Worker serves (dist/version.json, written by the build): asked of the files
+// themselves, and kept a minute — a new delivery starts a new Worker anyway.
+const version = { at: 0, commit: '' };
+async function buildId(env, origin) {
+  if (env.BUILD_ID) return String(env.BUILD_ID);
+  const t = Date.now();
+  if (t - version.at > 60_000 && env.ASSETS) {
+    version.at = t;
+    try { const res = await env.ASSETS.fetch(new Request(new URL('/version.json', origin))); version.commit = res.ok ? String((await res.json()).commit || '') : ''; } catch { version.commit = ''; }
+  }
+  return version.commit;
+}
 
 const PING = '{"t":"ping"}', PONG = '{"t":"pong"}'; // answered without waking the room
 const STALE_MS = 150000; // a connection silent for that long is a ghost (background tabs ping at least once a minute)
@@ -65,7 +86,7 @@ export class Room extends DurableObject {
       now: () => Date.now() - EPOCH,
       send: (ws, text) => { try { ws.send(text); } catch { /* closing */ } },
       drop: (ws, code, reason) => this.drop(ws, code, reason),
-      save: (p) => { try { p.conn.serializeAttachment({ id: p.id, name: p.name, color: p.color, kit: p.kit, joined: p.joined, state: p.state, ip: p.ip, ua: p.ua, dev: p.dev, sid: p.sid, admin: p.admin ? p.rank || 'owner' : false, key: p.key, cc: p.cc, city: p.city, since: p.since }); } catch { /* closing */ } },
+      save: (p) => { try { p.conn.serializeAttachment({ id: p.id, name: p.name, color: p.color, kit: p.kit, joined: p.joined, state: p.state, ip: p.ip, ua: p.ua, dev: p.dev, sid: p.sid, build: p.build, admin: p.admin ? p.rank || 'owner' : false, key: p.key, cc: p.cc, city: p.city, since: p.since }); } catch { /* closing */ } },
       // whose key: the owner's (the secret ADMIN_KEY), or that of an administrator who was named (the notebook knows them)
       admin: (key) => (sameSecret(key, (env.ADMIN_KEY || '').trim()) ? { rank: 'owner', id: '' } : looksNamed(key) ? this.notebook('/admin-key', { key }).then((r) => r?.who || null) : false),
       promote: (who) => this.notebook('/promote', who).then((r) => r?.made || null),
@@ -82,7 +103,26 @@ export class Room extends DurableObject {
       this.relay.add(ws, known).seen = ctx.getWebSocketAutoResponseTimestamp(ws) ? 0 : this.started;
     }
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(PING, PONG));
-    ctx.blockConcurrencyWhile(async () => { const at = await ctx.storage.get('blastAt'); if (Number.isFinite(at)) this.relay.blastAt = at; });
+    this.name = ''; // (a room: the name it goes by — told by the Worker with each connection, kept through sleeps)
+    this.live = ''; // (…and which version of the game is online, as the Worker last said)
+    this.told = { n: -1, old: -1, at: 0 }; // (what the notebook was last told of this room)
+    ctx.blockConcurrencyWhile(async () => {
+      const at = await ctx.storage.get('blastAt'); if (Number.isFinite(at)) this.relay.blastAt = at;
+      const name = await ctx.storage.get('room'); if (typeof name === 'string') this.name = name;
+      const live = await ctx.storage.get('live'); if (typeof live === 'string') this.live = live;
+    });
+  }
+
+  /** Tells the notebook how many this room holds, when that has changed (see the top of this file). */
+  report(now = false) {
+    if (!this.name) return;
+    const t = Date.now(), was = this.told;
+    if (!now && was.n > 0 && t - was.at < REPORT_MS) return; // (nobody is counted more often than that)
+    const { players: n, old } = this.relay.census(this.live);
+    was.at = t;
+    if (n === was.n && old === was.old) return;
+    was.n = n; was.old = old;
+    this.ctx.waitUntil(this.notebook('/room', { room: this.name, n, old }));
   }
 
   /** The big red button may go off again: nothing is kept of the last time. */
@@ -103,7 +143,16 @@ export class Room extends DurableObject {
       return Response.json({ ok });
     }
     const store = { get: (key) => this.ctx.storage.get(key), put: (key, value) => this.ctx.storage.put(key, value), delete: (key) => this.ctx.storage.delete(key) };
-    // (asked by the Worker and by the rooms only: these two paths are not reachable from outside)
+    // (asked by the Worker and by the rooms only: these paths are not reachable from outside)
+    if (url.pathname === '/room') {
+      // a room says how many it holds
+      const said = (await request.json().catch(() => null)) || {}, rooms = await this.directory();
+      if (typeof said.room === 'string' && said.room && Number.isInteger(said.n)) {
+        if (said.n > 0) rooms[said.room] = { n: said.n, old: Number.isInteger(said.old) ? said.old : 0 }; else delete rooms[said.room];
+        await this.ctx.storage.put('rooms', rooms);
+      }
+      return Response.json({ ok: true });
+    }
     if (url.pathname === '/banned') return Response.json({ banned: await banned({ store, now: () => Date.now() }, url.searchParams.get('ip') || '', url.searchParams.get('dev') || '') });
     if (url.pathname === '/ban') return Response.json({ added: await addBan({ store, now: () => Date.now() }, (await request.json().catch(() => null)) || {}) });
     if (url.pathname === '/admin-key') return Response.json({ who: await adminOf(store, '', ((await request.json().catch(() => null)) || {}).key) });
@@ -116,8 +165,14 @@ export class Room extends DurableObject {
     }
     const env = this.env, storage = this.ctx.storage, stripe = (this.stripe ||= stripeConfig(env));
     const mail = env.EMAIL && env.MAIL_FROM ? (m) => env.EMAIL.send({ from: String(env.MAIL_FROM), to: m.to, subject: m.subject, text: m.text, html: m.html }) : restMailer(env);
+    this.build = request.headers.get(BUILD) || '';
     const ctx = (this.apiCtx ||= {
       limiter, now: () => Date.now(),
+      // which version is online (the Worker says so with each request); a word to every room; how many are connected
+      build: () => this.build,
+      push: (message) => this.tellRooms(JSON.stringify(message)),
+      here: async () => Object.values(await this.directory()).reduce((sum, r) => sum + r.n, 0),
+      rooms: async () => Object.entries(await this.directory()).map(([name, r]) => ({ name, players: r.n, old: r.old })),
       store, stripe,
       // e-mails leave through Cloudflare's Email Service: with its binding (EMAIL) where the Worker has one,
       // through its REST API with three secrets otherwise (see server/mail.js)
@@ -141,14 +196,50 @@ export class Room extends DurableObject {
     return Response.json(out.body, { status: out.status, headers: { 'Cache-Control': 'no-store', ...out.headers } });
   }
 
+  /** The notebook: the rooms that hold somebody — how many, and how many of them on an older version ({ name: { n, old } }). */
+  async directory() {
+    if (!this.rooms) {
+      this.rooms = (await this.ctx.storage.get('rooms')) || {};
+      for (const [name, r] of Object.entries(this.rooms)) if (typeof r === 'number') this.rooms[name] = { n: r, old: 0 }; // (as it was first kept)
+    }
+    return this.rooms;
+  }
+
+  /** The notebook says something to every room that holds somebody; resolves to how many rooms heard it. */
+  async tellRooms(text) {
+    const rooms = await this.directory();
+    let told = 0, changed = false;
+    await Promise.all(Object.keys(rooms).map(async (name) => {
+      try {
+        const res = await this.env.ROOMS.get(this.env.ROOMS.idFromName(name)).fetch(new Request('https://room/push', { method: 'POST', body: text }));
+        const { players: n, old = 0 } = await res.json();
+        if (n > 0) told++;
+        // (a room that turned out to be empty — its visitors were dropped by a delivery — is forgotten)
+        if (n !== rooms[name].n || old !== rooms[name].old) { changed = true; if (n > 0) rooms[name] = { n, old }; else delete rooms[name]; }
+      } catch { /* that room cannot be reached just now */ }
+    }));
+    if (changed) await this.ctx.storage.put('rooms', rooms);
+    return told;
+  }
+
   // Reached through the Worker below: a WebSocket handshake, a head count, or the notebook.
   async fetch(request) {
     const url = new URL(request.url);
-    if (url.pathname.startsWith('/api/') || ['/limit', '/banned', '/ban', '/admin-key', '/promote'].includes(url.pathname)) return this.api(request, url);
+    if (url.pathname.startsWith('/api/') || ['/limit', '/banned', '/ban', '/admin-key', '/promote', '/room'].includes(url.pathname)) return this.api(request, url);
+    if (url.pathname === '/push') {
+      // the notebook has something to say to everybody here (not reachable from outside)
+      this.relay.broadcast(await request.text());
+      return Response.json(this.relay.census(this.live));
+    }
     if ((request.headers.get('Upgrade') || '').toLowerCase() !== 'websocket') {
       this.sweep();
       return Response.json({ players: this.relay.joined, ...(this.env.DEBUG ? { up: Date.now() - this.started } : {}) });
     }
+    // (the name this room goes by: the Worker says it with each connection)
+    const named = cleanRoom(url.searchParams.get('room'));
+    if (named !== this.name) { this.name = named; this.ctx.waitUntil(this.ctx.storage.put('room', named)); }
+    const live = request.headers.get(BUILD) || '';
+    if (live && live !== this.live) { this.live = live; this.ctx.waitUntil(this.ctx.storage.put('live', live)); }
     this.sweep();
     const pair = new WebSocketPair();
     const client = pair[0], server = pair[1];
@@ -171,6 +262,7 @@ export class Room extends DurableObject {
     const p = this.relay.players.get(ws);
     if (p) p.seen = Date.now();
     this.relay.receive(ws, typeof message === 'string' ? message : null);
+    this.report();
     this.arm();
   }
 
@@ -193,6 +285,7 @@ export class Room extends DurableObject {
   drop(ws, code, reason) {
     this.relay.remove(ws);
     try { ws.close(code, reason); } catch { /* already closed */ }
+    this.report(this.relay.size === 0); // (the last one out: said at once — nothing more will happen here to say it later)
   }
 
   /** Closes connections that have shown no sign of life for a long time (phones that lost their network…). */
@@ -234,7 +327,9 @@ export default {
         return new Response(null, { status: 101, webSocket: pair[0] });
       }
       const room = cleanRoom(url.searchParams.get('room'));
-      return env.ROOMS.get(env.ROOMS.idFromName(room)).fetch(withGeo(request));
+      const asked = withGeo(request);
+      asked.headers.set(BUILD, await buildId(env, url.origin)); // (the room is told which version is online: it counts who is not on it)
+      return env.ROOMS.get(env.ROOMS.idFromName(room)).fetch(asked);
     }
     if (url.pathname === '/healthz') return new Response('ok');
     if (url.pathname === '/api/presence') {
@@ -252,10 +347,12 @@ export default {
       const notebook = env.ROOMS.get(env.ROOMS.idFromName(NOTEBOOK));
       const client = request.headers.get('CF-Connecting-IP') || '';
       if (url.pathname !== '/api/npc') {
-        // everything the game keeps is in the notebook
+        // everything the game keeps is in the notebook (which is told, each time, which version is online)
         const to = new URL(request.url);
         to.searchParams.set('client', client);
-        return notebook.fetch(withGeo(request, to));
+        const asked = withGeo(request, to);
+        asked.headers.set(BUILD, await buildId(env, url.origin));
+        return notebook.fetch(asked);
       }
       if (!post) return json(405, { error: 'Method not allowed.' }, { Allow: 'POST' });
       if (!env.ANTHROPIC_API_KEY) return json(501, { reply: null, error: 'No model is configured for the characters.' });

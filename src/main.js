@@ -36,7 +36,8 @@ import { RemoteAvatars } from './net/RemoteAvatars.js';
 import { Benchmark } from './app/Benchmark.js';
 import { SPAWN, ZONES, CLIMB, RACE, WING, TRACK, PIER } from './world/layout/layout.js';
 import { VILLAGE_PERKS, VILLAGE_PITCH, money } from './world/layout/sponsors.js';
-import { FEATURES, skyGateOpen } from './app/config.js';
+import { FEATURES, SKY_STAGES, skyAsked } from './app/config.js';
+import { Updates } from './app/Updates.js';
 import { Soundscape } from './audio/Soundscape.js';
 import { Blast } from './world/effects/Blast.js';
 import { BLAST_EVERY } from '../server/protocol.js';
@@ -54,7 +55,10 @@ const canvas = document.getElementById('view');
 const ui = document.getElementById('ui');
 const touch = isMobile() || (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches);
 const app = { ready: false, frames: 0, THREE, version: VERSION };
-window.__mmf = app;
+// The game keeps itself to itself: nothing of it is left on the page for a console to pick up — except while
+// it is being worked on (a development page), on the lab's pages (their build says __LAB__) and in the builds
+// the tools make for their checks (__TEST__). A speed bump, not a wall: the browser belongs to its visitor.
+if (import.meta.env.DEV || typeof __LAB__ !== 'undefined' || typeof __TEST__ !== 'undefined') window.__mmf = app;
 
 const input = new Input(canvas);
 input.enabled = false;
@@ -80,8 +84,16 @@ async function boot() {
   const world = new World(engine);
   const camera = engine.camera, scene = engine.scene, data = world.data;
   Object.assign(app, { engine, world, input, hud });
-  // (the places that have a name — the Sky Gate has none while it is not there)
-  const PLACES = ZONES.filter((z) => !(z.id === 'skygate' && !skyGateOpen()));
+  // The sky villages: hidden, announced ("soon": their gate, closed) or open — the owner's switch `sky` (what
+  // the server says; hidden where there is no server). The administrator may look ahead with ?sky=1 — and so
+  // may a development page, a page of the lab and the tools. Asked while the world loads; built with it.
+  world.skyStage = (async () => {
+    const served = await hasApi(), kept = store.get('mmf.admin');
+    const ahead = skyAsked() && (import.meta.env.DEV || typeof __LAB__ !== 'undefined' || typeof __TEST__ !== 'undefined' || (!!kept && (await checkAdminKey(kept)).ok));
+    return ahead ? 'open' : SKY_STAGES.includes(served?.release?.sky) ? served.release.sky : 'hidden';
+  })();
+  // (the places that have a name — the Sky Gate is added once the world is built, when it is there)
+  const PLACES = ZONES.filter((z) => z.id !== 'skygate');
   canvas.addEventListener('webglcontextlost', (e) => {
     e.preventDefault();
     hud.note('The graphics context was lost. Reload the page (the “Light” quality is advised).', 1e8);
@@ -187,8 +199,16 @@ async function boot() {
   // ---------- presence (other visitors)
   let presence = null, avatars = null;
   let liveScore = () => {}; // (set once the boards exist)
+  let backTo = ''; // (the room one was in before the page loaded itself again: gone back to)
   const startPresence = () => {
-    presence = new Presence({ name, color, kit: packKit(kit) });
+    presence = new Presence({ name, color, kit: packKit(kit), ...(backTo && { room: backTo }) });
+    // what is released has changed (the owner threw a switch): said to the whole room at once
+    presence.on('release', (news) => updates.hear(news));
+    // a word from the fair, to every room
+    presence.on('announce', ({ text }) => { hud.addChat('✦ The fair', 5, text, false, 'important'); hud.note(`The fair: ${text}`, 9000); audio.play('score'); });
+    // the relay was reached again (a delivery restarts it): is this page still the version online?
+    let met = false;
+    presence.on('welcome', ({ mode }) => { if (mode !== 'online') return; if (met) updates.check(); met = true; });
     avatars = new RemoteAvatars({ scene, factory, presence, hud, rank, world });
     presence.on('score', ({ peer, board }) => liveScore(peer, board));
     presence.on('chat', ({ id, peer, text, near, important }) => {
@@ -576,6 +596,8 @@ async function boot() {
   };
   // the sky villages: one is carried there from the Sky Gate, and back through the ring of each village
   const sky = world.sky;
+  if (sky.stage !== 'hidden') PLACES.push(ZONES.find((z) => z.id === 'skygate'));
+  Npc.sky = sky.stage === 'open'; // (nobody speaks of what is not there)
   const travel = (to, word) => {
     const [x, z, facing] = to.arrive;
     player.teleport(x, z, facing);
@@ -730,7 +752,7 @@ async function boot() {
     const place = places.get(id), view = shop.slots[id] || {}, was = view.draft || view, isVillage = !!place.village, isPlaque = !!place.plaque;
     const byHand = who.admin && !view.mine; // (the administrator fills a place in for a sponsor: shown at once)
     const got = await hud.form(isPlaque ? (byHand ? 'This plaque' : 'Their plaque') : isVillage ? 'Your village' : byHand ? 'This panel' : 'Your panel',
-      isPlaque ? (byHand ? 'What you save is engraved at once, for everyone to read.' : 'Their name, a few words — and their picture, if you have one you like. It is engraved once the fair has looked at it.') : byHand ? 'What you save is shown to everyone at once. The colour behind it is yours to choose.' : 'It is shown once the fair has looked at it. Keep it short: it is painted on a sign.', [
+      isPlaque ? (byHand ? 'What you save is engraved at once, for everyone to read.' : 'Their name, a few words — and their picture, if you have one you like. It is engraved once the fair has looked at it.') : byHand ? 'What you save is shown to everyone at once. The colour behind it is yours to choose.' : 'It is shown at once, to everyone. Keep it short — it is painted on a sign — and fit for a fair: what is not is taken down.', [
         { key: 'title', label: isPlaque ? 'Their name (22 letters at most)' : isVillage ? 'Its name (22 letters at most)' : 'Your name (28 letters at most)', value: was.title || '', max: isVillage || isPlaque ? 22 : 28 },
         { key: 'subtitle', label: isPlaque ? 'A few words (40 letters at most)' : isVillage ? 'A line under it (34 letters at most)' : 'A line under it (40 letters at most)', value: was.subtitle || '', max: isVillage ? 34 : 40 },
         ...(isPlaque ? [] : [{ key: 'url', label: 'Your website (https://…)', value: was.url || '', max: 200, hint: 'https://' }]),
@@ -742,7 +764,7 @@ async function boot() {
     let logo = null;
     if (got.logo) { logo = await logoData(got.logo, 256, isPlaque); if (!logo) { hud.note('That picture cannot be used: a PNG, a JPEG or a WebP, please.', 6000); return; } }
     const wrong = byHand ? await shop.set(id, { title: got.title, subtitle: got.subtitle, url: got.url, logo, ...(got.bg !== undefined && { bg: got.bg }) }, who.key) : await shop.fill(id, { title: got.title, subtitle: got.subtitle, url: got.url, logo });
-    hud.note(wrong || (byHand ? 'Done: it is shown to everyone.' : isPlaque ? 'Sent. Their plaque will be engraved as soon as the fair has looked at it.' : 'Sent. It will be shown as soon as it is approved.'), 7000);
+    hud.note(wrong || (byHand || !isPlaque ? 'Done: it is shown to everyone.' : 'Sent. Their plaque will be engraved as soon as the fair has looked at it.'), 7000);
     if (!wrong) { if (who.admin) pending = (await shop.all(who.key)) || {}; await refreshShop(); }
   };
   let pending = {}; // the administrator: every place as the server keeps it (drafts included)
@@ -901,6 +923,40 @@ async function boot() {
     return near(p, [ads.x, ads.z], ads.reach) ? { label: 'The games and their sponsors', run: openTrading } : null;
   });
   Object.assign(app, { sponsorsView, openTrading });
+  // ---------- what is released, and new versions (app/Updates.js; the switches: RELEASE in app/config.js)
+  // The extras of src/extras are loaded when their switch is on — as the game runs when it goes on later;
+  // one that goes off again is only undone by loading the page again.
+  const EXTRA = ['slide', 'caves', 'stats'];
+  const applyRelease = (release, before) => {
+    const on = Object.fromEntries(EXTRA.map((k) => [k, release[k] === true]));
+    if (EXTRA.some((k) => on[k])) import('./extras/index.js').then(({ loadExtras }) => loadExtras(app, on)).catch((err) => console.error('[extras]', err));
+    // (the sky is built with the world: another stage of it is another world)
+    return !!before && (EXTRA.some((k) => before[k] === true && !on[k]) || (before.sky !== undefined && before.sky !== release.sky));
+  };
+  // (never in the middle of a game, a race, a timed climb, a ride, a payment, a form or a sentence)
+  const busyNow = () => !!fair.session || world.games.run.state === 'running' || !!app.slideRide?.() || player.riding || shopView.isOpen || payView.isOpen || accountView.isOpen || sponsorsView.isOpen
+    || hud.chatOpen || !!hud.chatInput?.value || !!document.querySelector('.chooser.on') || /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName || '');
+  const updates = new Updates(ui, {
+    build: typeof __BUILD__ !== 'undefined' ? __BUILD__.commit || '' : '',
+    status: async () => { try { const res = await fetch(`${import.meta.env.BASE_URL}api/status`, { cache: 'no-store' }); return res.ok && /json/.test(res.headers.get('content-type') || '') ? await res.json() : null; } catch { return null; } },
+    now: sharedNow,
+    safe: () => !busyNow(),
+    leave: () => {
+      // (in the world: one comes back at the same spot, in the same room — as after a change of quality)
+      if (input.enabled && !SHOT) store.set('mmf.resume', JSON.stringify({ x: player.pos.x, z: player.pos.z, yaw: rig.yaw, room: presence?.room || '' }), true);
+      location.reload();
+    },
+    apply: applyRelease,
+    // (the tools shorten the countdown: ?count=4 — on a development page, or in a build made for them)
+    ...((import.meta.env.DEV || typeof __TEST__ !== 'undefined') && params.has('count') && { count: Number(params.get('count')) }),
+  });
+  Object.assign(app, { updates, busyNow });
+  // (the slide, when it is switched on: the server notes when a ride begins — a time only counts with that
+  // note — and the slide says when it ends: the time goes on its board of scores)
+  fair.boards.slide = new Scores('slide');
+  app.slideDone = (ms) => scoreGame('slide', GAME_NAMES.slide, ms, formatTime(ms));
+  let sliding = false;
+  world.zones.push({ update: () => { const on = !!app.slideRide?.(); if (on && !sliding) fair.boards.slide.start(); sliding = on; } });
   // a village for hire: what it brings, what it costs, and the way to take it
   const hireVillage = (v) => {
     if (!shop.open) { hud.note('Hiring opens soon. Come back shortly!', 5200); return; }
@@ -908,7 +964,7 @@ async function boot() {
       .then(async (i) => { if (i !== 0) return; hud.note('Opening the payment page…', 8000); const wrong = await shop.buy(`village:${v.id}`); if (wrong) hud.note(wrong, 7000); });
   };
   world.actionSources.push((p) => {
-    if (!sky.gate.hidden && near(p, [sky.gate.x, sky.gate.z], 3.6)) return { label: 'Travel to a sky village', run: chooseVillage };
+    if (!sky.gate.hidden && near(p, [sky.gate.x, sky.gate.z], 3.6)) return sky.gate.closed ? { label: 'The Sky Gate', run: () => { hud.note('Soon, the sky will open. Not yet — but look up now and then.', 5200); audio.play('pick'); } } : { label: 'Travel to a sky village', run: chooseVillage };
     const v = sky.villageAt(p.pos.x, p.pos.z);
     return v && near(p, v.ring, 3.2) ? { label: 'Back to the valley', run: () => travel(sky.gate, 'Back in the valley') } : null;
   });
@@ -1001,6 +1057,7 @@ async function boot() {
     }
     // the panel over the board of each game, to the highest bidder (only while things are sold)
     if (shop.open) for (const [game, title] of Object.entries(GAME_NAMES)) {
+      if (!places.has(`board:${game}`)) continue; // (a game whose board has no panel, or that is not there yet)
       const id = `board:${game}`, view = shop.slots[id], least = shop.least(id), mine = !!view?.mine;
       list.push({
         id, name: title, group: 'sponsor', rarity: view ? 'epic' : 'rare', owned: mine, wearable: false,
@@ -1546,10 +1603,12 @@ async function boot() {
     return;
   }
   hud.setProgress(1);
+  hasApi().then((first) => updates.start(first)); // (what is released, which version is online: followed from here on)
   const resume = (() => { try { return JSON.parse(store.get('mmf.resume', true)); } catch { return null; } })();
   store.del('mmf.resume', true);
   if (resume && Number.isFinite(resume.x) && Number.isFinite(resume.z)) {
-    // back from a quality change: straight into the world, where we were
+    // back from a quality change, or from a new version: straight into the world, where we were (and in the same room)
+    if (typeof resume.room === 'string') backTo = resume.room;
     player.teleport(resume.x, resume.z, (resume.yaw || 0) + Math.PI);
     rig.snap(player.pos, resume.yaw || 0);
     hud.splash.classList.add('done');
@@ -1563,6 +1622,7 @@ async function boot() {
     hud.setName(name);
     store.set('mmf.name', name); store.set('mmf.color', String(color));
   }
+  updates.welcomeBack(); // (back from a new version: what is new, once)
   // an address may lead straight to a sky village: ?village=its-name (or its number)
   const invited = params.get('village') ? sky.find(params.get('village')) : null;
   if (invited) travel(invited, `Welcome to ${invited.name}`);

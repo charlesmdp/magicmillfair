@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<meta name="referrer" content="no-referrer" />
+<title>Atomic Oasis — the back office</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="/admin/admin.css" />
+</head>
+<body>
+<!-- The back office of the fair: what is released, the rooms, the boards of scores, the sponsors and the plaques,
+     who is kept out, the figures. A page of plain files: it holds no secret and can do nothing by itself —
+     everything it does, it asks of the game's API with the key typed below (sent as a header, never in an
+     address), and the server decides. Its script is admin.js; nothing from another site is loaded here. -->
+<main>
+  <header class="top">
+    <div>
+      <h1>Atomic <em>Oasis</em> <span>the back office</span></h1>
+      <p class="sub" id="who">Type your key to open it.</p>
+    </div>
+    <div class="facts" id="facts" hidden>
+      <div><b id="fact-build">—</b><span>version online</span></div>
+      <div><b id="fact-here">—</b><span>connected</span></div>
+      <div><b id="fact-old">—</b><span>on an older version</span></div>
+      <button type="button" id="signout" class="ghost">Sign out</button>
+    </div>
+  </header>
+
+  <section class="card" id="login">
+    <h2>Your key</h2>
+    <p class="hint">The owner's key (the secret <code>ADMIN_KEY</code> — the one of <code>/admin &lt;key&gt;</code> in the chat), or the key of an administrator the owner has named. It stays in this tab only, and is forgotten when the tab is closed.</p>
+    <form id="login-form" autocomplete="off">
+      <input type="password" id="key" placeholder="The key" autocomplete="off" spellcheck="false" aria-label="The key" />
+      <button type="submit">Open</button>
+      <button type="button" id="use-game" class="ghost" hidden>Use the key this browser has in the game</button>
+    </form>
+    <p class="error" id="login-error" hidden></p>
+  </section>
+
+  <div id="office" hidden>
+    <nav class="tabs" id="tabs"></nav>
+
+    <section class="card" data-tab="releases" data-owner>
+      <h2>Releases</h2>
+      <p class="hint">What is switched on, for everybody, as the game runs — no delivery needed. A switch that goes on is applied at once in every browser; one that goes off asks every page to refresh at a safe moment (never in the middle of a game, a payment or a sentence).</p>
+      <div id="switches" class="switches"></div>
+      <div class="row">
+        <button type="button" id="refresh-all" class="warn">Everybody refreshes</button>
+        <span class="hint" id="refresh-note"></span>
+      </div>
+      <h3>A word to every room</h3>
+      <form id="announce-form" class="row">
+        <input type="text" id="announce" maxlength="200" placeholder="Fireworks at nine, on the pier!" aria-label="An announcement" />
+        <button type="submit">Say it everywhere</button>
+      </form>
+      <p class="hint" id="announce-note"></p>
+    </section>
+
+    <section class="card" data-tab="rooms">
+      <h2>Rooms</h2>
+      <p class="hint">The rooms that hold somebody right now. Per room: the chat, who one sees, the big red button. Shared by all: the boards of scores, announcements, what is released.</p>
+      <div id="rooms" class="list"></div>
+    </section>
+
+    <section class="card" data-tab="scores">
+      <h2>High scores</h2>
+      <p class="hint">Every board, by period. Refusing a line takes that name off the four lists of its board.</p>
+      <div class="row"><select id="board" aria-label="Board"></select><select id="period" aria-label="Period"><option value="day">Today</option><option value="week">This week</option><option value="month">This month</option><option value="all" selected>All time</option></select></div>
+      <div id="scores" class="list"></div>
+    </section>
+
+    <section class="card" data-tab="sponsors">
+      <h2>Sponsors</h2>
+      <p class="hint">What a sponsor sends is shown at once. Take down what should not be there: with the money back (a bid in full; of a place paid by the month, the month that is running) or without. A place paid by the month stops being charged either way.</p>
+      <div id="sponsors" class="list"></div>
+      <h3>Plaques of the companions — awaiting your approval</h3>
+      <p class="hint">A plaque is engraved once you have looked at it.</p>
+      <div id="plaques" class="list"></div>
+      <h3>Plaques engraved</h3>
+      <div id="engraved" class="list"></div>
+      <h3>Refunds</h3>
+      <div id="refunds" class="list"></div>
+    </section>
+
+    <section class="card" data-tab="bans">
+      <h2>Kept out</h2>
+      <p class="hint">By address and by browser. From the game, "Who is here" does the same with one click.</p>
+      <form id="ban-form" class="row wrap">
+        <input type="text" id="ban-ip" placeholder="Address (optional)" aria-label="Address" />
+        <input type="text" id="ban-dev" placeholder="Browser identifier (optional)" aria-label="Browser identifier" />
+        <input type="text" id="ban-name" placeholder="Name (a note for you)" maxlength="16" aria-label="Name" />
+        <select id="ban-hours" aria-label="For how long"><option value="1">1 hour</option><option value="24">1 day</option><option value="168">1 week</option><option value="0">For good</option></select>
+        <button type="submit">Keep out</button>
+      </form>
+      <p class="error" id="ban-error" hidden></p>
+      <div id="bans" class="list"></div>
+    </section>
+
+    <section class="card" data-tab="figures">
+      <h2>Figures</h2>
+      <p class="hint">The page everybody can read: <a href="/opendata/" target="_blank" rel="noopener">The game in figures</a>. The counting starts the day it is switched on: set here what was before.</p>
+      <div id="figures" class="tiles"></div>
+      <form id="figures-form" class="row wrap" data-owner>
+        <label>Earned so far ($)<input type="number" id="fig-money" min="0" step="0.01" /></label>
+        <label>Game Passes sold<input type="number" id="fig-passes" min="0" step="1" /></label>
+        <label>Visitors ever<input type="number" id="fig-people" min="0" step="1" /></label>
+        <button type="submit">Set these</button>
+      </form>
+      <p class="hint" id="figures-note"></p>
+    </section>
+
+    <section class="card" data-tab="admins">
+      <h2>Administrators</h2>
+      <p class="hint">Named from the game ("Who is here" → Make admin). Only the owner takes the title away.</p>
+      <div id="admins" class="list"></div>
+    </section>
+  </div>
+  <p class="foot">Atomic Oasis · the back office · <a href="/">back to the fair</a></p>
+</main>
+<div class="toast" id="toast" role="status"></div>
+<script src="/admin/admin.js" defer></script>
+</body>
+</html>

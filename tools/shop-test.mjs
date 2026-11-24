@@ -40,7 +40,7 @@ const stripe = http.createServer((req, res) => {
 });
 await new Promise((resolve) => stripe.listen(STRIPE_PORT, '127.0.0.1', resolve));
 
-await build({ root: ROOT, logLevel: 'error' });
+await build({ root: ROOT, logLevel: 'error', define: { __TEST__: 'true' } }); // (__TEST__: the game leaves window.__mmf on the page, as in development)
 fs.rmSync(path.join(ROOT, 'tools/preview/shop-test-store.json'), { force: true }); // (what an earlier run sold is not for sale twice)
 const server = spawn(process.execPath, [path.join(ROOT, 'server/index.js')], {
   env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', ADMIN_KEY, STRIPE_SECRET_KEY: STRIPE_KEY, STRIPE_WEBHOOK_SECRET: HOOK, STRIPE_API: `http://127.0.0.1:${STRIPE_PORT}`, SCORES_FILE: path.join(ROOT, 'tools/preview/shop-test-store.json') },
@@ -160,21 +160,16 @@ try {
   await inputs.nth(2).fill('https://acme.example/');
   await inputs.nth(3).setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: LOGO });
   await page.click('.chooser .fields .save');
-  await page.waitForFunction(() => window.__mmf.shop.slots['board:shoot']?.draft, null, { timeout: 20000 });
+  await page.waitForFunction(() => window.__mmf.shop.slots['board:shoot']?.state === 'live', null, { timeout: 20000 });
   const sent = await page.evaluate(() => ({ view: window.__mmf.shop.slots['board:shoot'], note: document.querySelector('.hud .note')?.textContent }));
   const publicView = await (await fetch(`${BASE}/api/shop`)).json();
-  check('the holder fills the panel in (name, line, link, logo): it awaits approval, nobody else sees it yet', sent.view.draft.title === 'Acme b Robotics /b' && sent.view.draft.url === 'https://acme.example/' && !!sent.view.draft.logo && publicView.slots['board:shoot'].state === 'taken' && !publicView.slots['board:shoot'].title, JSON.stringify({ sent, publicView: publicView.slots }));
+  check('the holder fills the panel in (name, line, link, logo): it is shown at once, to everyone — nothing waits for approval', sent.view.title === 'Acme b Robotics /b' && sent.view.url === 'https://acme.example/' && !!sent.view.logo && !sent.view.draft && /shown to everyone/.test(sent.note || '') && publicView.slots['board:shoot'].state === 'live' && publicView.slots['board:shoot'].title === 'Acme b Robotics /b', JSON.stringify({ sent, publicView: publicView.slots }));
 
-  // ---- the administrator approves it, by the panel
-  await page.evaluate((key) => window.__mmf.adminKey(key), ADMIN_KEY);
-  await page.waitForFunction(() => [...document.querySelectorAll('.prompt.on span')].some((e) => /^Approve/.test(e.textContent)), null, { timeout: 20000 });
-  const asks = await prompts();
-  await page.keyboard.press('KeyE');
-  await page.waitForFunction(() => window.__mmf.shop.slots['board:shoot']?.state === 'live', null, { timeout: 20000 });
+  // ---- as everybody sees it: its link, its logo — a picture and nothing else
   await frames(10);
   const live = await page.evaluate(() => ({ view: window.__mmf.shop.slots['board:shoot'], prompts: [...document.querySelectorAll('.prompt.on span')].map((e) => e.textContent) }));
   const logo = await fetch(`${BASE}${live.view.logo}`);
-  check('the administrator is offered to approve or refuse it there; approved, it is shown to all, with its link and its logo', asks[0] === 'Approve "Acme b Robotics /b"' && asks[1] === 'Refuse it' && live.view.title === 'Acme b Robotics /b' && logo.status === 200 && logo.headers.get('content-type') === 'image/png' && logo.headers.get('x-content-type-options') === 'nosniff', JSON.stringify({ asks, live, logo: logo.status }));
+  check('the panel as everybody sees it: its holder may change it or follow its link; its logo is served as a picture and nothing else', live.prompts.includes('Set up your panel') && live.prompts.includes('Visit Acme b Robotics /b') && logo.status === 200 && logo.headers.get('content-type') === 'image/png' && logo.headers.get('x-content-type-options') === 'nosniff', JSON.stringify({ live, logo: logo.status }));
   await page.screenshot({ path: path.join(ROOT, 'tools/preview/shop-panel.png') });
 
   // ---- the Trading Post: every game on a card, with who sponsors it; a free panel is bid for from there

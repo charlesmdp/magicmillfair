@@ -34,7 +34,7 @@ export const TERMS = () => ({
     ] },
     { icon: '📣', title: 'Sponsors and plaques', text: [
       'The panel of a game goes to the highest bid, paid once; whoever is outbid is refunded in full, automatically. Other places (a gondola, a backdrop, a village) are by the month.',
-      'A plaque for a companion is paid once and stays for as long as the game exists. Nothing a sponsor or the holder of a plaque sends — words, pictures, links — is shown before an administrator has approved it, and it can be taken down later if it turns out to break these terms. Send only what you have the right to show.',
+      'A plaque for a companion is paid once and stays for as long as the game exists. What a sponsor sends — words, a picture, a link — is shown at once; a plaque is engraved once an administrator has looked at it. Either can be taken down at any time if it breaks these terms — with or without a refund, as the administrator judges; a place paid by the month then stops being charged. Send only what you have the right to show.',
     ] },
     { icon: '🧾', title: 'Accounts', text: [
       'An account is optional: a name and a password that keep what is yours on every device. Choose a password you use nowhere else, and keep the recovery code that is shown once — passwords are never stored in a readable form, so nobody can read yours back to you.',

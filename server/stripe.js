@@ -106,6 +106,27 @@ export async function refundPayment(cfg, pay, why = '', fetcher = fetch) {
 }
 
 /**
+ * Stops, at once, something paid by the month (`sub`: the subscription). With `refund`, the payment of the month
+ * that is running is given back too, when Stripe says which it was. Resolves to { refunded }; throws when the
+ * subscription cannot be stopped.
+ */
+export async function endSubscription(cfg, sub, refund = false, fetcher = fetch) {
+  const headers = { Authorization: `Bearer ${cfg.key}` }, at = `${cfg.api}/v1/subscriptions/${encodeURIComponent(sub)}`;
+  let pay = '';
+  if (refund) {
+    const seen = await (await fetcher(`${at}?expand[]=latest_invoice.payment_intent`, { headers })).json().catch(() => null);
+    const pi = seen?.latest_invoice?.payment_intent;
+    pay = typeof pi === 'string' ? pi : typeof pi?.id === 'string' ? pi.id : '';
+  }
+  const res = await fetcher(at, { method: 'DELETE', headers });
+  const body = await res.json().catch(() => null);
+  if (!res.ok || !body || body.error) throw new Error(`Stripe: ${body?.error?.message || res.status}`);
+  let refunded = false;
+  if (pay) { try { await refundPayment(cfg, pay, 'taken down by the fair', fetcher); refunded = true; } catch { refunded = false; } }
+  return { refunded };
+}
+
+/**
  * Is this really Stripe speaking? `raw`: the body exactly as received, `header`: its Stripe-Signature.
  * Returns the event (an object), or null: forged, damaged, or older than `tolerance` seconds.
  */

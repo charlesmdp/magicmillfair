@@ -13,9 +13,9 @@ import { Polygon } from '../../Areas.js';
 import { fallsMaterial } from '../../water/Falls.js';
 import { seatAt } from '../../../player/PlayerController.js';
 import { SKY } from '../../layout/layout.js';
-import { skyGateOpen } from '../../../app/config.js';
 import { SPONSORS, sponsorId, VILLAGE_PRICES, VILLAGE_PERKS, VILLAGE_PITCH, money } from '../../layout/sponsors.js';
 import { drawEmblem } from './emblems.js';
+import { canvasBoard } from '../games/Boards.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const STONE = [1.05, 1.02, 0.96], WALL = [1.75, 1.66, 1.46], DARK = [0.2, 0.2, 0.24], WOOD = [0.62, 0.44, 0.28];
@@ -126,8 +126,10 @@ function orcaFountain(stone, skin, fins, water, cx, cz, turn) {
 }
 
 export class SkyZone {
-  constructor(world) {
+  /** `stage`: 'open' (the villages and their gate), 'soon' (the gate alone, closed) or 'hidden' (nothing at all). */
+  constructor(world, { stage = 'open' } = {}) {
     this.world = world;
+    this.stage = stage === 'soon' || stage === 'hidden' ? stage : 'open';
     this.data = world.data;
     this.group = new THREE.Group();
     this.group.name = 'zone:sky';
@@ -149,23 +151,36 @@ export class SkyZone {
   }
 
   build() {
-    const sites = this.data.meta.sky || [];
-    // the price of each: ten prices, as many villages at each, from the lowest shelf to the highest
-    const order = sites.map((_, i) => i).sort((a, b) => sites[a].y - sites[b].y || a - b), tier = [];
-    order.forEach((i, rank) => { tier[i] = Math.min(VILLAGE_PRICES.length - 1, Math.floor((rank * VILLAGE_PRICES.length) / sites.length)); });
-    sites.forEach((site, i) => this._village(site, i, SPONSORS[i] || { name: `Sky Village ${i + 1}`, motto: '', color: [0.5, 0.5, 0.5], forHire: true }, tier[i]));
+    if (this.stage === 'hidden') {
+      // nothing of the sky: no village on the mountains, no gate, not a stone (where the gate would stand is
+      // kept, for the game to know the spot)
+      const G = SKY.gate, y = this.data.heightAt(G.x, G.z);
+      this.gate = { x: G.x, z: G.z, y, yaw: G.yaw, arrive: [G.x + Math.sin(G.yaw) * 2.4, G.z + Math.cos(G.yaw) * 2.4, G.yaw], hidden: true };
+      this._cull = () => {};
+      return this;
+    }
+    const open = this.stage === 'open';
+    if (open) {
+      const sites = this.data.meta.sky || [];
+      // the price of each: ten prices, as many villages at each, from the lowest shelf to the highest
+      const order = sites.map((_, i) => i).sort((a, b) => sites[a].y - sites[b].y || a - b), tier = [];
+      order.forEach((i, rank) => { tier[i] = Math.min(VILLAGE_PRICES.length - 1, Math.floor((rank * VILLAGE_PRICES.length) / sites.length)); });
+      sites.forEach((site, i) => this._village(site, i, SPONSORS[i] || { name: `Sky Village ${i + 1}`, motto: '', color: [0.5, 0.5, 0.5], forHire: true }, tier[i]));
+    }
     this._gate();
     this.group.updateMatrixWorld(true);
     for (const [key, roots] of Object.entries(this._roots)) this.group.add(mergeStatic(roots, key));
-    this._buildPortals();
-    this._buildSigns();
-    this._buildPerks();
-    this._buildBrands();
-    this._torrents();
+    if (this._portals.length) this._buildPortals();
+    if (open) {
+      this._buildSigns();
+      this._buildPerks();
+      this._buildBrands();
+      this._torrents();
+    } else this._soon();
     this.group.updateMatrixWorld(true);
     this.group.traverse((o) => { if (o.isMesh) o.layers.disable(LAYER.REFLECT); });
     const k = this.world.engine.tier.phone ? 0.6 : 1;
-    this._cull = distanceCuller(this.group, [[/^sky\d:matte$/, 1300], [/^sky\d:/, 420 * k], [/^skyv\d+:/, 150], [/^skygate:/, 600 * k], [/^sky-(portals|signs|perks|torrents)$/, Infinity], [/^sky-brand$/, 260]]);
+    this._cull = distanceCuller(this.group, [[/^sky\d:matte$/, 1300], [/^sky\d:/, 420 * k], [/^skyv\d+:/, 150], [/^skygate:/, 600 * k], [/^sky-(portals|signs|perks|torrents)$/, Infinity], [/^sky-brand$/, 260], [/^skygate-soon$/, 320]]);
     return this;
   }
 
@@ -176,8 +191,8 @@ export class SkyZone {
     this.group.add(g);
   }
 
-  /** A stone ring standing on a slab, to walk through: centre (x, y, z) at ground level, facing `yaw`. */
-  _ring(parts, x, y, z, yaw, tone = STONE) {
+  /** A stone ring standing on a slab, to walk through: centre (x, y, z) at ground level, facing `yaw` (`lit`: the light whirls inside it). */
+  _ring(parts, x, y, z, yaw, tone = STONE, lit = true) {
     const b = parts.get('matte'), sx = Math.cos(yaw), sz = -Math.sin(yaw); // across the ring
     b.tint(tone[0], tone[1], tone[2], 1).cylinder(x, y - 0.5, z, RING + 0.9, RING + 1.0, 0.62, 14);
     const cy = y + 0.12 + RING + 0.25;
@@ -187,7 +202,7 @@ export class SkyZone {
       if (prev) b.tint(tone[0] * (0.86 + 0.14 * (k % 2)), tone[1] * (0.86 + 0.14 * (k % 2)), tone[2] * (0.86 + 0.14 * (k % 2)), 1).rod(prev, p, 0.2, 6, { caps: k === 1 || k === 18 });
       prev = p;
     }
-    this._portals.push([V(x, cy, z), V(sx, 0, sz), V(0, 1, 0)]);
+    if (lit) this._portals.push([V(x, cy, z), V(sx, 0, sz), V(0, 1, 0)]);
     for (const s of [-1, 1]) this.colliders.push({ type: 'circle', x: x + sx * s * (RING + 0.25), z: z + sz * s * (RING + 0.25), r: 0.3 });
     this.platforms.push({ type: 'disc', x, z, r: RING + 0.9, y: y + 0.12, clearance: 1.0 });
   }
@@ -329,22 +344,43 @@ export class SkyZone {
 
   // The Sky Gate, in the valley: a bigger ring on three steps, lanterns, a signpost
   _gate() {
-    const G = SKY.gate, parts = new Parts(), y = this.data.heightAt(G.x, G.z);
-    // (not shown for now: see FEATURES.skyGate — where it would stand is kept, for whoever comes back from a village)
-    if (!skyGateOpen()) { this.gate = { x: G.x, z: G.z, y, yaw: G.yaw, arrive: [G.x + Math.sin(G.yaw) * 2.4, G.z + Math.cos(G.yaw) * 2.4, G.yaw], hidden: true }; return; }
+    const G = SKY.gate, parts = new Parts(), y = this.data.heightAt(G.x, G.z), open = this.stage === 'open';
     const m = parts.get('matte'), glow = parts.get('glow');
     m.tint(STONE[0] * 0.92, STONE[1] * 0.92, STONE[2] * 0.92, 1).cylinder(G.x, y - 0.6, G.z, 3.4, 3.6, 0.66, 18);
     this.platforms.push({ type: 'disc', x: G.x, z: G.z, r: 3.4, y: y + 0.06, clearance: 1.0 });
-    this._ring(parts, G.x, y + 0.06, G.z, G.yaw, [1.12, 1.06, 0.92]);
+    this._ring(parts, G.x, y + 0.06, G.z, G.yaw, [1.12, 1.06, 0.92], open); // (closed: no light in it yet)
     const sx = Math.cos(G.yaw), sz = -Math.sin(G.yaw), fx = Math.sin(G.yaw), fz = Math.cos(G.yaw);
     for (const g of [-1, 1]) {
       const lx = G.x + sx * g * 2.9 + fx * 1.6, lz = G.z + sz * g * 2.9 + fz * 1.6;
       m.tint(DARK[0], DARK[1], DARK[2], 1).rod(V(lx, y - 0.2, lz), V(lx, y + 2.5, lz), 0.045, 6);
-      glow.tint(0.6, 0.85, 1, 1).box(lx - 0.1, y + 2.5, lz - 0.1, lx + 0.1, y + 2.82, lz + 0.1);
+      if (open) glow.tint(0.6, 0.85, 1, 1).box(lx - 0.1, y + 2.5, lz - 0.1, lx + 0.1, y + 2.82, lz + 0.1);
+      else m.tint(DARK[0] * 1.6, DARK[1] * 1.6, DARK[2] * 1.8, 1).box(lx - 0.1, y + 2.5, lz - 0.1, lx + 0.1, y + 2.82, lz + 0.1); // (its lamps are not lit yet)
       this.colliders.push({ type: 'circle', x: lx, z: lz, r: 0.2 });
     }
-    this.gate = { x: G.x, z: G.z, y, yaw: G.yaw, arrive: [G.x + fx * 2.4, G.z + fz * 2.4, G.yaw] };
+    this.gate = { x: G.x, z: G.z, y, yaw: G.yaw, arrive: [G.x + fx * 2.4, G.z + fz * 2.4, G.yaw], ...(!open && { closed: true }) };
     this._add('skygate', parts);
+  }
+
+  /** The gate that is not open yet: a sign hangs across its ring. */
+  _soon() {
+    const g = this.gate, cy = g.y + 0.18 + RING + 0.1;
+    const sign = canvasBoard(640, 320, (ctx, w, h) => {
+      const sky = ctx.createLinearGradient(0, 0, 0, h);
+      sky.addColorStop(0, '#1b1440'); sky.addColorStop(1, '#3a2a78');
+      ctx.fillStyle = sky; ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 10; ctx.strokeRect(9, 9, w - 18, h - 18);
+      // (a few stars, a thin moon)
+      ctx.fillStyle = '#fff6c8';
+      for (let k = 0; k < 26; k++) { const x = 30 + ((k * 137) % (w - 60)), yy = 26 + ((k * 71) % 90), r = 1.2 + (k % 3) * 0.7; ctx.beginPath(); ctx.arc(x, yy, r, 0, 7); ctx.fill(); }
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#ffe9a6'; ctx.font = "900 108px Georgia, 'Times New Roman', serif"; ctx.fillText('SOON', w / 2, 132);
+      ctx.fillStyle = '#ffffff'; ctx.font = '800 40px system-ui, sans-serif'; ctx.fillText('THE SKY WILL OPEN', w / 2, 214, w - 60);
+      ctx.fillStyle = '#c9b8ff'; ctx.font = '600 22px system-ui, sans-serif'; ctx.fillText('Fifty mountain tops are getting dressed.', w / 2, 266, w - 60);
+    }, 2.3, 1.15, { both: true });
+    sign.mesh.position.set(g.x, cy, g.z);
+    sign.mesh.rotation.y = g.yaw;
+    sign.mesh.name = 'skygate-soon';
+    this.group.add(sign.mesh);
   }
 
   _buildPortals() {
