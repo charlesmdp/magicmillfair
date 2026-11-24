@@ -7,6 +7,8 @@ export const NEWS = [
     date: '24 November 2026',
     items: [
       ['A banner, and the rules', 'Where you arrive: a welcome, and a board that says how the fair works. It is short.'],
+      ['Wooden signposts', 'At the forks of the paths: planks painted by hand point the way to the games, and say how far.'],
+      ['The Trading Post', 'On the plaza at the foot of the pier: every game on a card, a photograph of it, and who sponsors it.'],
       ['Full screen', 'The button with four corners, top right — or in the settings: the fair on the whole screen.'],
       ['A lighter item shop', 'Everything it sells on one page, with hardly any scrolling (O).'],
       ['These boards', 'One for each day something changed. They stand by the poppies now.'],

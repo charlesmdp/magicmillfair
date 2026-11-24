@@ -177,6 +177,29 @@ try {
   check('the administrator is offered to approve or refuse it there; approved, it is shown to all, with its link and its logo', asks[0] === 'Approve "Acme b Robotics /b"' && asks[1] === 'Refuse it' && live.view.title === 'Acme b Robotics /b' && logo.status === 200 && logo.headers.get('content-type') === 'image/png' && logo.headers.get('x-content-type-options') === 'nosniff', JSON.stringify({ asks, live, logo: logo.status }));
   await page.screenshot({ path: path.join(ROOT, 'tools/preview/shop-panel.png') });
 
+  // ---- the Trading Post: every game on a card, with who sponsors it; a free panel is bid for from there
+  await page.evaluate(() => window.__mmf.adminKey(''));
+  await page.evaluate(() => { const m = window.__mmf, a = m.world.games.notices.ads; m.player.teleport(a.x, a.z, Math.PI); });
+  await frames(8);
+  const postAsk = await prompts();
+  await page.keyboard.press('KeyE');
+  await page.waitForSelector('.trading.on', { timeout: 20000 });
+  await page.waitForFunction(() => document.querySelectorAll('.tp-card canvas').length >= 14, null, { timeout: 120000 });
+  const post = await page.evaluate(() => {
+    const card = (id) => { const c = document.querySelector(`.tp-card[data-id="${id}"]`); return c && { cls: c.className, tag: c.querySelector('.tp-tag').textContent, who: c.querySelector('.tp-who').textContent, logo: c.querySelector('.tp-logo')?.getAttribute('src') || '', price: c.querySelector('.tp-price')?.textContent || '', acts: [...c.querySelectorAll('.tp-acts button')].map((b) => b.textContent) }; };
+    return { shoot: card('board:shoot'), mole: card('board:mole'), count: document.querySelector('.tp-count').textContent, wheel: [...document.querySelectorAll('.tp-extra')].map((x) => x.textContent).find((t) => /big wheel/.test(t)) || '', markup: !!document.querySelector('.tp-who b b') };
+  });
+  await page.screenshot({ path: path.join(ROOT, 'tools/preview/shop-trading.png') });
+  await page.evaluate(() => [...document.querySelectorAll('.tp-card[data-id="board:mole"] .tp-acts button')].find((b) => /^Sponsor/.test(b.textContent)).click());
+  await page.waitForSelector('.chooser.on .fields', { timeout: 20000 });
+  const postBid = await page.evaluate(() => ({ title: document.querySelector('.chooser h2').textContent, open: !!document.querySelector('.trading.on') }));
+  await page.keyboard.press('Escape');
+  await frames(3);
+  check('the Trading Post shows who sponsors what: the holder of a panel sees theirs with its logo, a free game says from how much — and its button asks for a bid',
+    postAsk.includes('The games and their sponsors') && /is-mine/.test(post.shoot.cls) && post.shoot.tag === 'Yours' && /Acme b Robotics \/b/.test(post.shoot.who) && post.shoot.logo === live.view.logo && !post.markup
+    && /is-free/.test(post.mole.cls) && post.mole.price === 'From $1' && post.mole.acts.join() === 'Sponsor this game · from $1' && /^1 of 14 games sponsored$/.test(post.count) && /24 free · \$29 a month/.test(post.wheel)
+    && postBid.title === 'Sponsor Whack-a-Mole' && !postBid.open, JSON.stringify({ postAsk, post, postBid }));
+
   // ---- a gondola, at the stand of the wheel
   await page.evaluate(() => { const m = window.__mmf, b = m.world.pier.sponsorBooth; m.player.teleport(b[0], b[1], 0); });
   await frames(8);

@@ -1,15 +1,18 @@
 // Things to read at the fair. Where one arrives: a banner of welcome across the lane, a little mushroom cloud
 // puffing over each of its posts, and the rules of the fair on a board to the left (there are hardly any).
 // By the poppy field, west of the lane: the boards of what is new, one for each of the latest days something
-// changed (the list is app/news.js). On the way to the mill: the booth of the sponsors — every game, who
-// sponsors it, what it takes to take its panel (the game opens the list there: see main.js). And, at the top
-// of the ramp of the pier, the arcade cabinet (its game is ui/Arcade.js) with its board of scores.
+// changed (the list is app/news.js). On the plaza at the foot of the pier, the Trading Post: the booth of the
+// sponsors — every game, who sponsors it, what it takes to take its panel (the game opens its window there:
+// see main.js and ui/SponsorsView.js). At the top of the ramp of the pier, the arcade cabinet (its game is
+// ui/Arcade.js) with its board of scores. And, at the forks of the paths, the wooden signposts (Signposts.js).
 import * as THREE from 'three';
 import { Parts } from '../../props/MeshBuilder.js';
 import { canvasBoard } from './Boards.js';
+import { buildSignposts, paintPlank } from './Signposts.js';
+import { paintWords } from '../../props/handpaint.js';
 import { NEWS } from '../../../app/news.js';
 import { arcadeTitle } from '../../../ui/Arcade.js';
-import { NOTICES, PIER, pierToWorld } from '../../layout/layout.js';
+import { NOTICES, PIER, TRADING, pierToWorld } from '../../layout/layout.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const SERIF = "Georgia, 'Times New Roman', serif", SANS = 'system-ui, sans-serif';
@@ -301,8 +304,31 @@ export function buildNotices(zone) {
     paint.tint(1.5, 1.05, 0.25, 1).place(-1.2, 1.12, 0.9).lathe([[0.12, 0.0], [0.11, 0.05], [0.06, 0.13], [0.0, 0.15]], 9).pop();
     paint.tint(1.4, 1.38, 1.3, 1).box(0.7, 1.12, 0.6, 1.3, 1.2, 1.05);
     for (let k = 0; k < 13; k++) glow.tint(1.0, 0.86, 0.5, 1).place(-1.8 + k * 0.3, 3.55 + 2.68, 0).lathe([[0.0, -0.06], [0.055, 0.0], [0.0, 0.06]], 6).pop();
+    // the name of the place, painted on a plank that hangs from the awning on two cords
+    for (const px of [-1.15, 1.15]) wood.tint(0.4, 0.3, 0.22, 1).box(px - 0.012, 2.1, 1.93, px + 0.012, 2.34, 1.955);
+    // a red carpet up to the counter, between brass posts and their ropes: business is business
+    paint.tint(0.74, 0.07, 0.1, 1).box(-1.05, 0, 1.45, 1.05, 0.025, 5.6, { faces: 'XxZY' });
+    for (const s of [-1, 1]) {
+      paint.tint(1.45, 1.0, 0.24, 1).box(s * 1.05 - 0.05, 0, 1.45, s * 1.05 + 0.05, 0.03, 5.6, { faces: 'XxZY' });
+      for (const pz of [2.55, 5.35]) {
+        paint.tint(1.5, 1.05, 0.25, 1).place(s * 1.5, 0, pz).lathe([[0.15, 0.0], [0.15, 0.03], [0.035, 0.06], [0.03, 0.84], [0.065, 0.88], [0.065, 0.95], [0.0, 1.0]], 8).pop();
+        zone.colliders.push({ type: 'circle', x: a.x + Math.cos(a.yaw) * s * 1.5 + Math.sin(a.yaw) * pz, z: a.z - Math.sin(a.yaw) * s * 1.5 + Math.cos(a.yaw) * pz, r: 0.16 });
+      }
+      // (the rope hangs a little between its two posts)
+      const sag = [[2.55, 0.9], [3.25, 0.76], [3.95, 0.71], [4.65, 0.76], [5.35, 0.9]];
+      for (let k = 1; k < sag.length; k++) paint.tint(0.62, 0.05, 0.09, 1).rod(V(s * 1.5, sag[k - 1][1], sag[k - 1][0]), V(s * 1.5, sag[k][1], sag[k][0]), 0.022, 5);
+    }
     for (const b of [wood, paint, cloth, glow]) b.pop();
     zone.colliders.push({ type: 'box', x: a.x, z: a.z, hw: 2.15, hl: 1.4, yaw: a.yaw });
+    const name = canvasBoard(600, 108, (ctx, w, h) => {
+      paintPlank(ctx, 0, 0, w, h, 'trading');
+      ctx.strokeStyle = 'rgba(40, 22, 8, 0.55)'; ctx.lineWidth = 5; ctx.strokeRect(2.5, 2.5, w - 5, h - 5);
+      paintWords(ctx, TRADING.name.toUpperCase(), w / 2, h / 2 + 27, 54, { align: 'center', seed: 'trading' });
+    }, 2.8, 0.5, { both: true });
+    name.mesh.position.set(a.x + Math.sin(a.yaw) * 1.945, ay + 1.86, a.z + Math.cos(a.yaw) * 1.945);
+    name.mesh.rotation.y = a.yaw;
+    name.mesh.name = 'notice-trading';
+    meshes.push(name.mesh);
   }
   // ---- the arcade cabinet: a screen that shows the title of its game, a marquee, a stick and two buttons
   const c = NOTICES.arcade, [cx, cz] = pierToWorld(c.along, c.side), cy = PIER.deckY, cyaw = -PIER.heading + (c.side > 0 ? Math.PI : 0);
@@ -340,10 +366,14 @@ export function buildNotices(zone) {
     const [bx, bz] = pierToWorld(c.along, -Math.sign(c.side) * 7.25);
     runBoard = zone.scoreStand('run', bx, bz, cyaw + Math.PI, { title: 'MELTDOWN RUN', sub: 'The longest run away from the reactor', format: (s) => `${s} m`, width: 2.7, y: cy, pixels: 0.75 });
   }
+  // ---- the wooden signposts, at the forks of the paths (their posts are of the same wood as the rest)
+  const signs = buildSignposts(zone, wood, zone.race?.paddock ? { race: [zone.race.paddock.x, zone.race.paddock.z] } : {});
+  zone.group.add(signs.mesh);
   zone._add(parts, 'notices');
   for (const m of meshes) zone.group.add(m);
   const front = (p, d) => ({ x: p.x + Math.sin(p.yaw) * d, z: p.z + Math.cos(p.yaw) * d });
   return {
+    signposts: signs.posts, // (the wooden signposts: [{ id, x, z, arms: [{ to, text, under, far, yaw }] }])
     news: newsAt, // (where one stands to read each board, the newest first: [{ x, z, date }])
     welcome: { x: wl.x, z: wl.z }, rules: front(ru, 2.2),
     arcade: { ...front({ x: cx, z: cz, yaw: cyaw }, 1.2), yaw: cyaw + Math.PI, reach: 1.8, board: runBoard },

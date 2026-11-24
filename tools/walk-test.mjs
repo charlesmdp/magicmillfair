@@ -728,6 +728,68 @@ try {
       arrive.banner.there && arrive.banner.ahead < 12 && arrive.banner.far > 7 && arrive.banner.far < 16 && arrive.rules.there && arrive.rules.ahead < 48 && arrive.rules.left && arrive.puffs.moved && arrive.puffs.frames === 12
       && arrive.news.length === 3 && arrive.boards.every(Boolean) && !arrive.old && arrive.news.every((b, k) => b.date === arrive.days[k] && b.behind > 75 && b.far > 18 && b.far < 45) && arrive.flowers.some(Boolean), JSON.stringify(arrive));
   }
+  // --- the wooden signposts at the forks of the paths, and the Trading Post: the booth of the sponsors, on the
+  // plaza at the foot of the pier, a long way from the arrival; its window shows every game with a photograph
+  {
+    const signs = await page.evaluate(async () => {
+      const L = await import('/src/world/layout/layout.js');
+      const m = window.__mmf, n = m.world.games.notices, g = m.world.games.group, s = L.SPAWN, pd = m.world.games.race.paddock;
+      const deg = (r) => Math.round((r * 180) / Math.PI);
+      // how far a post stands from the middle of a path, less half the width of that path (what is left of clear ground)
+      const clear = (p) => {
+        let least = 99;
+        for (const path of L.PATHS) {
+          if (path.id === 'island') continue;
+          for (let i = 1; i < path.points.length; i++) {
+            const [ax, az] = path.points[i - 1], [bx, bz] = path.points[i], dx = bx - ax, dz = bz - az;
+            const t = Math.max(0, Math.min(1, ((p.x - ax) * dx + (p.z - az) * dz) / (dx * dx + dz * dz)));
+            least = Math.min(least, Math.hypot(p.x - ax - dx * t, p.z - az - dz * t) - path.width / 2);
+          }
+        }
+        return +least.toFixed(2);
+      };
+      const posts = n.signposts.map((p) => ({
+        id: p.id, clear: clear(p),
+        arms: p.arms.map((a) => {
+          // (which way the plank points, and which way the thing really is: the angle between the two)
+          const at = a.to === 'race' ? [pd.x, pd.z] : L.WAYS[a.to].at, dx = Math.cos(a.yaw), dz = -Math.sin(a.yaw), tx = at[0] - p.x, tz = at[1] - p.z;
+          return { to: a.to, text: a.text, under: a.under, off: deg(Math.acos(Math.max(-1, Math.min(1, (dx * tx + dz * tz) / Math.hypot(tx, tz))))), far: Math.round(Math.hypot(tx, tz)) };
+        }),
+      }));
+      const mesh = g.getObjectByName('signposts'), ads = n.ads;
+      const fx = -Math.sin(s.yaw), fz = -Math.cos(s.yaw);
+      m.player.teleport(ads.x, ads.z, Math.PI);
+      return {
+        posts, planks: mesh ? mesh.geometry.index.count / 18 : 0, picture: mesh ? [mesh.material.map.image.width, mesh.material.map.image.height] : null,
+        first: n.signposts[0] && { far: Math.round(Math.hypot(n.signposts[0].x - s.x, n.signposts[0].z - s.z)), ahead: deg(Math.acos(((n.signposts[0].x - s.x) * fx + (n.signposts[0].z - s.z) * fz) / Math.hypot(n.signposts[0].x - s.x, n.signposts[0].z - s.z))) },
+        booth: { far: Math.round(Math.hypot(ads.x - s.x, ads.z - s.z)), name: !!g.getObjectByName('notice-trading'), board: !!g.getObjectByName('notice-ads'), plaza: +Math.hypot(ads.x - L.PROMENADE.plaza.x, ads.z - L.PROMENADE.plaza.z).toFixed(1) },
+      };
+    });
+    await frames(12);
+    const atBooth = { ask: await prompt(), zone: await page.evaluate(() => document.querySelector('.zone')?.textContent || '') };
+    await page.keyboard.press('KeyE');
+    await page.waitForSelector('.trading.on', { timeout: 20000 });
+    await page.waitForFunction(() => document.querySelectorAll('.tp-card canvas').length >= 14, null, { timeout: 120000 });
+    const win = await page.evaluate(() => {
+      const cards = [...document.querySelectorAll('.tp-card')];
+      // (a photograph is a picture of something: not one flat colour)
+      const lively = (c) => { const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let lo = 255, hi = 0; for (let i = 0; i < d.length; i += 4 * 97) { const v = d[i] + d[i + 1] + d[i + 2]; lo = Math.min(lo, v); hi = Math.max(hi, v); } return hi - lo > 120; };
+      return { cards: cards.map((c) => c.querySelector('h3').textContent), tags: [...new Set(cards.map((c) => c.querySelector('.tp-tag').textContent))], photos: cards.filter((c) => { const p = c.querySelector('canvas'); return p && lively(p); }).length, extras: [...document.querySelectorAll('.tp-extra b')].map((b) => b.textContent), count: document.querySelector('.tp-count').textContent, sky: /sky|village/i.test(document.querySelector('.trading').textContent) };
+    });
+    await page.screenshot({ path: path.join(OUT, 'trading-post.png') });
+    await page.keyboard.press('Escape');
+    await frames(3);
+    const shut = await page.evaluate(() => !document.querySelector('.trading.on'));
+    const arms = signs.posts.flatMap((p) => p.arms.map((a) => ({ ...a, post: p.id })));
+    check('wooden signposts stand at the forks of the paths (beside them, never on them): each plank names a game, points its way — never more than 70° off where the thing is — and says how far',
+      signs.posts.length >= 8 && signs.planks === arms.length && arms.length >= 24 && signs.picture && signs.picture[0] <= 1024 && signs.posts.every((p) => p.clear > 0.25)
+      && arms.every((a) => a.off <= 70 && a.text.length > 3) && arms.filter((a) => a.far >= 35).every((a) => /\d+0 M$/.test(a.under)) && ['pier', 'flappy', 'climb', 'race'].every((to) => arms.filter((a) => a.to === to).length >= 3)
+      && signs.first.far > 12 && signs.first.far < 30 && signs.first.ahead < 30, JSON.stringify(signs.posts.map((p) => [p.id, p.clear, p.arms.map((a) => `${a.to}:${a.off}°${a.under ? ` ${a.under}` : ''}`).join(' ')])));
+    check('the Trading Post: the booth of the sponsors stands on the plaza at the foot of the pier, a long way from the arrival; its window shows every game on a card with a photograph taken on the spot, and what else a sponsor can have (nothing of what is not open yet)',
+      signs.booth.far > 100 && signs.booth.name && signs.booth.board && signs.booth.plaza < 15 && atBooth.ask.includes('The games and their sponsors') && atBooth.zone === 'The Trading Post'
+      && win.cards.length === 14 && win.cards.includes('Mostly Up') && win.cards.includes('Meltdown Run') && win.photos === 14 && win.tags.join() === 'Free' && win.extras.includes('The big wheel') && /of 14 games sponsored/.test(win.count) && !win.sky && shut,
+      JSON.stringify({ booth: signs.booth, atBooth, win, shut }));
+  }
   // --- the fair: the four booths of the pier, played by a bot through the pointer; the race, driven by a bot
   {
     await place(98, 0, 0);

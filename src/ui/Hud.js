@@ -516,7 +516,7 @@ export class Hud {
       ok.type = 'button'; ok.textContent = save;
       const send = () => done(Object.fromEntries(fields.map((f) => [f.key, f.type === 'file' ? inputs[f.key].files[0] || null : f.type === 'password' ? inputs[f.key].value : inputs[f.key].value.trim()])));
       ok.onclick = (e) => { e.stopPropagation(); send(); };
-      for (const f of fields) if (f.type !== 'file') inputs[f.key].addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); send(); } e.stopPropagation(); });
+      for (const f of fields) if (f.type !== 'file') inputs[f.key].addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); send(); } else if (e.key === 'Escape') { e.preventDefault(); done(null); } e.stopPropagation(); });
       list.append(ok);
       close.onclick = (e) => { e.stopPropagation(); done(null); };
       box.onclick = (e) => { if (e.target === box) done(null); };

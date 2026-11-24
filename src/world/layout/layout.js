@@ -728,9 +728,45 @@ export const HERO_TREES = [
     .map(([u, species, scale, off]) => { const p = islandPath(u); return [Math.round((p.x + p.nx * off) * 10) / 10, Math.round((p.z + p.nz * off) * 10) / 10, species, scale]; }),
 ];
 
-// What stands on the way for visitors to read (zones/games/Notices.js): the board of what is new, a few steps
-// from the arrival (now: by the poppy field), the banner and the rules where one arrives; the booth of the sponsors, by the lane, where the mill comes into view; and the arcade
-// cabinet at the top of the ramp of the pier (in the frame of the pier), its board of scores across the walk.
+// The Trading Post: where sponsors come to do business — the booth of the sponsors and its red carpet, on the
+// north side of the plaza at the foot of the pier: on everybody's way to the games, and a long way from where
+// one arrives. (x, z): the booth; `yaw`: which way its counter looks (0: south, across the plaza).
+export const TRADING = { name: 'The Trading Post', x: -1.5, z: -8.2, yaw: 0 };
+
+// Wooden signposts at the forks of the paths (zones/games/Signposts.js): a post, and planks nailed to it that
+// point the way to the games, their names painted by hand. WAYS: what a plank can point to — its words, and
+// where the thing is (the plank says how far). SIGNPOSTS: where the posts stand, and for each of its planks
+// what it points to and a point on the way there: a plank points along the path to take, not through the pond.
+export const WAYS = {
+  pier: { text: 'PIER GAMES', more: '10 BOOTHS', at: [43, 9] },
+  flappy: { text: WING.name, at: [WING.x, WING.z] },
+  climb: { text: CLIMB.name, at: CLIMB.gate },
+  race: { text: RACE.name, at: [-50, -92] },
+  trading: { text: 'TRADING POST', more: 'SPONSORS', at: [TRADING.x, TRADING.z] },
+  mill: { text: 'THE MILL', at: [-118, -14] },
+};
+export const SIGNPOSTS = [
+  // past the banner of the arrival, on the left of the lane: everything is ahead, the race is behind
+  { id: 'arrival', x: -117.3, z: -42.4, arms: [['pier', [-108, -31.5]], ['flappy', [-109.2, -31]], ['climb', [-110.6, -30.6]], ['race', [-112, -62]]] },
+  // where the lane ends in front of the mill and the path down the valley begins
+  { id: 'mill', x: -111.9, z: -31.6, arms: [['pier', [-97, -33.5]], ['flappy', [-97, -31.8]], ['climb', [-97, -30]], ['race', [-114, -46]]] },
+  // where the path through the fields leaves the lane
+  { id: 'fields', x: -116.3, z: -97.4, arms: [['race', [-92, -92.5]], ['pier', [-104, -84]], ['mill', [-117.6, -76]]] },
+  // half way down the valley
+  { id: 'valley', x: -61.4, z: -24.9, arms: [['pier', [-52.7, -19.9]], ['flappy', [-52.4, -18.6]], ['mill', [-70.1, -19.9]]] },
+  // where the path comes out on the plaza
+  { id: 'plaza', x: -17.9, z: 0.6, arms: [['pier', [16, 6]], ['flappy', [WING.x, WING.z]], ['trading', [TRADING.x, TRADING.z + 2.4]], ['climb', [18, 30]], ['race', [-27, -16.5]]] },
+  // on the boardwalk south of the pier, where the path of the shore leaves it — and where that path forks to the climb
+  { id: 'shore', x: 20.2, z: 52.4, arms: [['climb', [4, 47.5]], ['pier', [18.5, 16]]] },
+  { id: 'climb', x: 6.4, z: 47.6, arms: [['climb', [3.4, 63]], ['pier', [18, 51.6]]] },
+  // by the paddock of the race, and at the far end of the path through the fields, on the beach
+  { id: 'paddock', x: -41.6, z: -91.2, arms: [['pier', [-23.5, -82.7]], ['climb', [-24.4, -81.2]], ['mill', [-59.7, -82.7]]] },
+  { id: 'beach', x: 24.6, z: -83.4, arms: [['race', [8, -88]], ['pier', [22.5, -54]], ['climb', [24.5, -54]]] },
+];
+
+// What stands on the way for visitors to read (zones/games/Notices.js): the banner and the rules where one
+// arrives; the boards of what is new, by the poppy field; the booth of the sponsors, at the Trading Post; and
+// the arcade cabinet at the top of the ramp of the pier (in the frame of the pier), its board of scores across the walk.
 export const NOTICES = {
   // (the boards of what is new: by the poppy field, west of the lane — behind whoever arrives, not in front.
   // (x, z): the middle one; they stand `gap` metres apart on an arc that looks towards the lane)
@@ -738,7 +774,7 @@ export const NOTICES = {
   // (what a newcomer sees first: a banner across the lane, `half` metres to each post, and the rules to the left)
   welcome: { x: -121.05, z: -49, yaw: Math.PI + 0.068, half: 3.7 },
   rules: { x: -116.9, z: -53.6, yaw: -2.49 },
-  ads: { x: -113.8, z: -29.5, yaw: -Math.PI / 2 },
+  ads: { x: TRADING.x, z: TRADING.z, yaw: TRADING.yaw },
   arcade: { along: 17.6, side: -6.7 },
 };
 
@@ -764,6 +800,7 @@ export const ZONES = [
   { id: 'cove', name: 'The Secret Cove', x: COVE.x, z: COVE.z + 2, r: 36, hidden: true }, // (not named on the map)
   { id: 'camp', name: 'The Camp', x: CAMP.x, z: CAMP.z, r: 26 },
   { id: 'climb', name: CLIMB.name, x: CLIMB.x, z: CLIMB.z, r: 24 },
+  { id: 'trading', name: TRADING.name, x: TRADING.x, z: TRADING.z + 2, r: 13 },
   { id: 'skygate', name: 'The Sky Gate', x: SKY.gate.x, z: SKY.gate.z, r: 9 },
   { id: 'lounge', name: 'The Beach Lounge', x: BEACH_LOUNGE.x, z: BEACH_LOUNGE.z, r: 20 },
   { id: 'deck', name: 'The Pond Deck', x: POND_DECK.x, z: POND_DECK.z, r: 12 },

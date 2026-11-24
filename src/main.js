@@ -15,6 +15,7 @@ import { Arcade } from './ui/Arcade.js';
 import { AccountView } from './ui/AccountView.js';
 import { PayView } from './ui/PayView.js';
 import { LegalView } from './ui/LegalView.js';
+import { SponsorsView, Photographer } from './ui/SponsorsView.js';
 import { deviceId } from './net/device.js';
 import { Previewer } from './ui/Preview.js';
 import { Sparks } from './world/effects/Sparks.js';
@@ -62,6 +63,7 @@ const arcade = new Arcade(ui); // (the screen of the cabinet of the pier: shown 
 const accountView = new AccountView(ui); // (the card of the account: signing in, making one)
 const payView = new PayView(ui); // (the payment form, when it can be shown inside the game)
 const legalView = new LegalView(ui, { device: deviceId }); // (the terms of use and the privacy policy, opened from the settings)
+const sponsorsView = new SponsorsView(ui); // (the window of the Trading Post: the games and their sponsors)
 if (SHOT && !params.has('ui')) ui.style.display = 'none';
 
 // The view the welcome screen floats over: a slow arc above the mill and its pond.
@@ -842,29 +844,63 @@ async function boot() {
       hud.note(`You hold out your bouquet to ${best.name}.`, 4000);
     } } : null;
   });
-  // the booth of the sponsors, on the way to the mill: every game, who sponsors it, and the way to take its panel
+  // the Trading Post, on the plaza at the foot of the pier: every game on a card — a photograph of it, who
+  // sponsors it, the way to take its panel (ui/SponsorsView.js)
   const boardIds = () => Object.keys(GAME_NAMES).map((k) => `board:${k}`).filter((id) => places.has(id));
-  const sponsorLine = (id) => { const v = shop.slots[id], d = who.admin && pending[id]?.draft; return d ? `Awaiting approval: ${d.title}` : v?.mine ? 'Yours: set it up' : v?.state === 'live' ? v.title : v ? 'Taken' : shop.open ? `Free · from ${price(shop.least(id))}` : 'Free'; };
   const adRows = () => boardIds().map((id) => { const v = shop.slots[id]; return { game: GAME_NAMES[id.split(':')[1]], sponsor: v?.state === 'live' ? v.title : '', offer: shop.open ? `from ${price(shop.least(id))}` : 'free' }; });
+  // the stand of the wheel: its gondolas, who sponsors them, which are free
+  const gondolaIds = () => Array.from({ length: world.pier.gondolas || 0 }, (_, k) => `gondola:${k + 1}`);
+  const chooseGondola = () => {
+    const ids = gondolaIds();
+    const say = (id) => { const v = shop.slots[id], d = who.admin && pending[id]?.draft; return d ? `Awaiting approval: ${d.title}` : v?.mine ? 'Yours: set it up' : v?.state === 'live' ? v.title : v ? 'Taken' : shop.open ? `Free · ${price(shop.prices.gondola)} a month` : 'Free'; };
+    hud.choose('The gondolas of the big wheel', 'Twenty-four gondolas, a banner on each: its sponsor goes round with the wheel, in sight of the whole bay.', ids.map((id, k) => ({ label: `Gondola ${k + 1}`, note: say(id), color: shop.slots[id]?.state === 'live' ? [0.9, 0.7, 0.2] : [0.5, 0.55, 0.6] })))
+      .then((i) => { if (i === null) return; const acts = placeActions(ids[i]); if (acts.length) acts[0].run(); else hud.note(shop.open ? 'That one is taken.' : 'The shop is not open yet. Come back soon!', 4000); });
+  };
+  world.actionSources.push((p) => (world.pier.sponsorBooth && near(p, world.pier.sponsorBooth, 2.6) ? { label: 'The gondolas and their sponsors', run: chooseGondola } : null));
+  const photographer = new Photographer(engine);
+  /** A photograph of a game as it stands right now: from in front of it, a little to the side. */
+  const photoOf = (key) => {
+    const b = world.games.booths.list.find((q) => q.id === key), W = 480, H = 300;
+    if (b) {
+      const fx = Math.sin(b.yaw), fz = Math.cos(b.yaw), sx = Math.cos(b.yaw), sz = -Math.sin(b.yaw);
+      // (the stalls along the walk face each other: no room to step back, so a wider eye, closer)
+      const [out, side, up, fov] = Math.abs(b.side) < 10 ? [5.5, 2.7, 2.5, 70] : [9.5, 3.2, 2.6, 50];
+      return photographer.shoot([b.x + fx * out + sx * side, b.y + up, b.z + fz * out + sz * side], [b.x - fx * 0.8, b.y + 1.9, b.z - fz * 0.8], W, H, fov);
+    }
+    const cab = world.games.notices.arcade;
+    if (key === 'run') return photographer.shoot([cab.x + 1.6, PIER.deckY + 1.7, cab.z + 3.0], [cab.x, PIER.deckY + 1.35, cab.z], W, H, 50);
+    if (key === 'wing') return photographer.shoot([WING.x + 11.2, 5.6, WING.z - 9.6], [WING.x, 5.8, WING.z], W, H, 50);
+    if (key === 'sky') return photographer.shoot([CLIMB.x + 3, CLIMB.y + 1.6, CLIMB.z - 12], [CLIMB.x, CLIMB.y + 20, CLIMB.z], W, H, 78); // (from the foot of the climb, looking up its stones)
+    if (key === 'race') { const pd = world.games.race.paddock, g = world.groundAt(pd.x, pd.z); return photographer.shoot([pd.x - 14, g + 3.6, pd.z + 9], [pd.x + 2, g + 2, pd.z - 3], W, H, 56); }
+    return null;
+  };
+  const openTrading = () => {
+    if (sponsorsView.isOpen || fair.session) return;
+    hud.closeAll();
+    input.exitLock();
+    input.keys.clear(); // (nothing stays pressed behind the window)
+    const first = (a) => (/^Visit /.test(a.label) ? 1 : 0); // (what one comes for first: the panel; its sponsor's site after)
+    const cards = boardIds().map((id) => {
+      const key = id.split(':')[1], v = shop.slots[id], d = who.admin && pending[id]?.draft;
+      const state = d ? 'pending' : v?.mine ? 'mine' : v?.state === 'live' ? 'live' : v ? 'taken' : 'free';
+      const sponsor = d ? { title: d.title, subtitle: d.subtitle } : v?.state === 'live' ? { title: v.title, subtitle: v.subtitle, logo: v.logo, url: v.url } : null;
+      const says = !shop.open ? '' : !v ? `From ${price(shop.least(id))}` : v.mine ? '' : `Its sponsor paid ${price(v.bid || 0)}`;
+      return { id, name: GAME_NAMES[key], state, sponsor, price: says, acts: placeActions(id).sort((a, b) => first(a) - first(b)), photo: () => photoOf(key), stamp: `${state}|${sponsor?.title || ''}|${sponsor?.logo || ''}|${v?.bg || ''}` };
+    });
+    const extras = [];
+    const gondolas = gondolaIds(), freeG = gondolas.filter((id) => !shop.slots[id]).length;
+    if (gondolas.length) extras.push({ title: 'The big wheel', text: `${gondolas.length} gondolas, a banner on each, in sight of the whole bay · ${freeG} free${shop.open ? ` · ${price(shop.prices.gondola)} a month` : ''}`, act: { label: 'Choose a gondola', run: chooseGondola } });
+    if (places.has('tarp:shoot')) { const v = shop.slots['tarp:shoot'], act = placeActions('tarp:shoot')[0]; extras.push({ title: 'The backdrop of Bullseye Alley', text: v?.state === 'live' ? `Held by ${v.title}.` : `The whole wall behind the targets${shop.open && !v ? ` · ${price(shop.prices.tarp)} a month` : v ? ' · taken' : ''}`, act: act ? { label: act.label.length > 34 ? 'Take the backdrop' : act.label, run: act.run } : null }); }
+    if (plaques?.count) { const taken = Array.from({ length: plaques.count }, (_, k) => `plaque:${k + 1}`).filter((id) => shop.slots[id]).length; extras.push({ title: 'A plaque for a companion', text: `${plaques.count} brass plates round the golden dog, ${taken} of them taken${shop.open ? ` · ${price(shop.prices.plaque)}, once` : ''}. They are chosen on the spot: swim north along the cliffs to the Golden Cove, then climb.`, act: null }); }
+    sponsorsView.open({ cards, extras, note: shop.open ? '' : 'The shop is not open yet: sponsoring starts soon. Meanwhile, here is every game and who sponsors it.' });
+    audio.play('pick');
+  };
+  sponsorsView.on('close', () => { document.getElementById('view')?.focus({ preventScroll: true }); });
   world.actionSources.unshift((p) => { // (the first thing to do at the booth, whatever grows at its foot)
     const ads = world.games.notices.ads;
-    if (!near(p, [ads.x, ads.z], ads.reach)) return null;
-    return { label: 'The games and their sponsors', run: () => {
-      const ids = boardIds();
-      hud.choose('Sponsor a game', 'Your name, a line, your logo and a link over the board of scores of a game, in sight of everybody who plays it. The highest bid holds the panel; whoever is outbid is refunded in full.', ids.map((id) => ({ label: GAME_NAMES[id.split(':')[1]], note: sponsorLine(id), color: shop.slots[id]?.state === 'live' ? [0.9, 0.7, 0.2] : [0.5, 0.55, 0.6] })))
-        .then((i) => { if (i === null) return; const acts = placeActions(ids[i]); if (acts.length) acts[0].run(); else hud.note(shop.open ? 'That one is taken.' : 'The shop is not open yet. Come back soon!', 4000); });
-    } };
+    return near(p, [ads.x, ads.z], ads.reach) ? { label: 'The games and their sponsors', run: openTrading } : null;
   });
-  // the stand of the wheel: its gondolas, who sponsors them, which are free
-  world.actionSources.push((p) => {
-    if (!world.pier.sponsorBooth || !near(p, world.pier.sponsorBooth, 2.6)) return null;
-    return { label: 'The gondolas and their sponsors', run: () => {
-      const ids = Array.from({ length: world.pier.gondolas }, (_, k) => `gondola:${k + 1}`);
-      const say = (id) => { const v = shop.slots[id], d = who.admin && pending[id]?.draft; return d ? `Awaiting approval: ${d.title}` : v?.mine ? 'Yours: set it up' : v?.state === 'live' ? v.title : v ? 'Taken' : shop.open ? `Free · ${price(shop.prices.gondola)} a month` : 'Free'; };
-      hud.choose('The gondolas of the big wheel', 'Twenty-four gondolas, a banner on each: its sponsor goes round with the wheel, in sight of the whole bay.', ids.map((id, k) => ({ label: `Gondola ${k + 1}`, note: say(id), color: shop.slots[id]?.state === 'live' ? [0.9, 0.7, 0.2] : [0.5, 0.55, 0.6] })))
-        .then((i) => { if (i === null) return; const acts = placeActions(ids[i]); if (acts.length) acts[0].run(); else hud.note(shop.open ? 'That one is taken.' : 'The shop is not open yet. Come back soon!', 4000); });
-    } };
-  });
+  Object.assign(app, { sponsorsView, openTrading });
   // a village for hire: what it brings, what it costs, and the way to take it
   const hireVillage = (v) => {
     if (!shop.open) { hud.note('Hiring opens soon. Come back shortly!', 5200); return; }
@@ -1267,7 +1303,7 @@ async function boot() {
   input.on('drop', () => { if (look.bouquet) { look.bouquet = false; look.kinds = undefined; } });
   input.on('chat', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleChat(true, talking ? talking.brain.ask || `Say something to ${talking.name}…` : undefined); });
   input.on('respawn', () => { if (state.mode === 'walk') { endGame(); spawn(); hud.note('Back to the mill'); } });
-  input.on('menu', () => { accountView.close(); payView.close(); legalView.close(); if (fair.session && (!fair.session.over || fair.kind === 'arcade')) { endGame(); hud.note('Game left.'); } hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); hud.toggleChat(false); hud.closeChoice(); hud.closeRoster(); });
+  input.on('menu', () => { accountView.close(); payView.close(); legalView.close(); sponsorsView.close(); if (fair.session && (!fair.session.over || fair.kind === 'arcade')) { endGame(); hud.note('Game left.'); } hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); hud.toggleChat(false); hud.closeChoice(); hud.closeRoster(); });
   input.on('map', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleBigMap(); });
   hud.setMap(data.meta.map, PLACES);
   hud.setVillages(world.sky.villages, data.meta.size, villageLabel);
