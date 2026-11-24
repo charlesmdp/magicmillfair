@@ -274,6 +274,15 @@ async function boot() {
     presence.on('kicked', ({ ban }) => hud.banner(ban ? 'The administrator has banned you from the fair.' : 'The administrator has put you out of this room. Reload the page to come back in.'));
     // something was given by an administrator: the shop is asked again (it says what, in the chat)
     presence.on('gift', () => { refreshShop().then(() => { audio.play('victory'); hud.note('A gift from the fair has just arrived: look in the item shop!', 7000); }); });
+    let limitTold = 0; // (said once in a while: the page tries again by itself)
+    presence.on('limit', ({ of, max }) => {
+      if (Date.now() - limitTold < 10 * 60_000) return;
+      limitTold = Date.now();
+      const text = of === 'minute' ? 'Many visitors are arriving from your network at once: the fair lets you in within a minute. You are on your own until then.'
+        : `Too many visitors are connected from your network (${max} at the most): you are on your own for now — the fair lets you in as soon as one of them leaves.`;
+      hud.note(text, 9000);
+      hud.addChat('✦', 5, text, true);
+    });
     presence.on('who', ({ list, now }) => { roster.details = new Map(list.map((p) => [p.id, p])); roster.now = now; if (hud.rosterOpen) showRoster(); });
     presence.on('admin', ({ ok, out }) => {
       if (ok && hud.rosterOpen) presence.who();
@@ -512,14 +521,32 @@ async function boot() {
     if (mine >= 0 && at < mine && (theirsPast < 0 || minePast < 0 || theirsPast > minePast)) { hud.note(`${peer.name} just beat your score at ${title}!`, 6000); audio.play('fail', { volume: 0.5 }); }
     else audio.play('score', { volume: 0.5 });
   };
+  // Scores belong to accounts (server/scores.js). Without one a score is on the list of the day only: the
+  // visitor is told where it stands today — and, when it would be among the ten of a longer list, offered an
+  // account to keep it (the score made as a guest is then claimed: see accountChanged).
+  const whereOf = (r) => (r.guest ? (r.day ? `#${r.day} today` : 'not on the board today') : r.rank ? `#${r.rank} of all time` : 'not on the board this time');
+  const offerAccount = (r) => {
+    if (!r.guest || !r.best || account.name) return;
+    const w = r.would || {}, [n, when] = w.all ? [w.all, 'of all time'] : w.month ? [w.month, 'this month'] : w.week ? [w.week, 'this week'] : [0, ''];
+    if (!n) return;
+    hud.offer(`You would be #${n} ${when} — create an account to keep it (free: a name and a password).`, 'Create an account', () => accountAction('create'), 30000, 'Not now');
+  };
+  const nameTaken = (text) => {
+    const line = `${text} — not kept: "${name}" is the name of somebody's account. Sign in if it is yours (Settings), or play under another name.`;
+    hud.note(line, 10000);
+    hud.addChat('✦', 5, line, true);
+  };
   /** The game is over: its score goes on the board (a time for the race, points for a booth). */
   const scoreGame = (id, title, score, text) => {
-    fair.boards[id].submit(name, score).then(({ tops, rank: place, best, shared }) => {
+    fair.boards[id].submit(name, score).then((r) => {
+      const { tops, rank: place, best, shared } = r;
       showBoard(id, tops);
+      if (r.taken) return nameTaken(text);
       if (shared) presence?.sendScore(id);
-      const where = place ? `#${place} of all time` : 'not on the board this time';
-      hud.note(`${text} — ${best ? where : 'your best stands'}${shared ? '' : ' (kept in this browser only)'}`, 8000);
-      if (place && place <= 10 && best) hud.addChat('✦', 5, `${title}: ${name} — ${text} (#${place})`, true);
+      hud.note(`${text} — ${best ? whereOf(r) : 'your best stands'}${shared ? '' : ' (kept in this browser only)'}`, 8000);
+      const shown = r.guest ? r.day : place;
+      if (shown && shown <= 10 && best) hud.addChat('✦', 5, `${title}: ${name} — ${text} (#${shown}${r.guest ? ' today' : ''})`, true);
+      offerAccount(r);
     });
   };
   const playBooth = (booth) => {
@@ -644,13 +671,16 @@ async function boot() {
       rank.play('dragon', me.root);
       presence?.sendEmote(emoteIndex('dragon'));
       if (!clean) { hud.note(`${formatTime(ms)} — but a cheat was on: not recorded`, 7000); return; }
-      skyScores.submit(name, ms).then(({ tops, rank: place, best, shared }) => {
+      skyScores.submit(name, ms).then((r) => {
+        const { tops, rank: place, best, shared } = r;
         world.games.setScores(lists(tops));
         fair.tops.sky = tops;
+        if (r.taken) return nameTaken(formatTime(ms));
         if (shared) presence?.sendScore('sky');
-        const where = place ? `#${place} of all time` : 'not on the board this time';
-        hud.note(`${formatTime(ms)} — ${best ? where : 'your best time stands'}${shared ? '' : ' (kept in this browser only)'}`, 8000);
-        hud.addChat('✦', 5, `${CLIMB.name}: ${name} reached the top in ${formatTime(ms)}${place ? ` (#${place})` : ''}`, true);
+        hud.note(`${formatTime(ms)} — ${best ? whereOf(r) : 'your best time stands'}${shared ? '' : ' (kept in this browser only)'}`, 8000);
+        const shown = r.guest ? r.day : place;
+        hud.addChat('✦', 5, `${CLIMB.name}: ${name} reached the top in ${formatTime(ms)}${shown ? ` (#${shown}${r.guest ? ' today' : ''})` : ''}`, true);
+        offerAccount(r);
       });
     },
   };
@@ -780,10 +810,15 @@ async function boot() {
     world.games.notices.ads.set(adRows()); // (the board of the booth of the sponsors)
   };
   let shopKnown = false; // (has the server said what is theirs yet?)
+  let ownedWas = null; // (what this browser had the last time the relay was told)
   const refreshShop = async () => {
     await shop.load();
     shopKnown = true;
     shop.everything = who.admin;
+    // (the relay only shows the others what a visitor has: it is told to ask again when that changes)
+    const ownedNow = `${[...(shop.owned || [])].sort().join()}|${shop.hasPass ? 1 : 0}`;
+    if (ownedWas !== null && ownedNow !== ownedWas) presence?.own();
+    ownedWas = ownedNow;
     // (nothing is worn that is not theirs — or lent: the Game Pass lends every hat)
     if (look.hat && !owns(HATS[look.hat].id)) look.hat = 0;
     // (a colour of the pass, a size: back to everybody's when the pass is gone)
@@ -1157,6 +1192,13 @@ async function boot() {
   const accountChanged = async () => {
     showAccount();
     await refreshShop();
+    // (on the boards, "me" is the account from now on — and what was scored as a guest in the last half hour counts for it)
+    world.games.setMe(account.name || name);
+    if (account.name) Scores.claim().then(({ claimed, boards }) => {
+      if (!claimed.length) return;
+      for (const id of claimed) { if (id === 'sky') { world.games.setScores(lists(boards.sky)); fair.tops.sky = boards.sky; } else if (fair.boards[id]) showBoard(id, boards[id]); presence?.sendScore(id); }
+      hud.addChat('✦', 5, `Your score${claimed.length > 1 ? 's' : ''} of a moment ago now count${claimed.length > 1 ? '' : 's'} for the week, the month and all time, under the name ${account.name}.`, true);
+    });
     const v = await countVisit(name);
     who.days = v.days;
     showEmotes();
@@ -1287,7 +1329,7 @@ async function boot() {
     input.keys.clear();
     return payView.open(shop.pk, secret, { title: 'Payment', test: shop.mode === 'test', paid: () => arrived(item) });
   };
-  account.load().then(showAccount);
+  account.load().then(() => { showAccount(); if (account.name) world.games.setMe(account.name); }); // (on the boards, "me" is the account when there is one)
   hud.setSettings(settings);
   hud.setVolume(volume);
   showEmotes();
@@ -1389,7 +1431,7 @@ async function boot() {
     .on('roomlink', (room) => copyRoomLink(room))
     .on('visitorview', (on) => visitorView(on))
     .on('kick', (id) => { presence?.kick(id); setTimeout(refreshRoster, 500); })
-    .on('ban', (id, hours) => { presence?.ban(id, hours); setTimeout(refreshRoster, 800); })
+    .on('ban', (id, hours, quiet) => { presence?.ban(id, hours, !!quiet); if (quiet) hud.note('Muted: they play on and notice nothing — nobody hears them any more. "Kept out", below, lifts it.', 7000); setTimeout(refreshRoster, 800); })
     .on('unban', async ({ kind, key }) => { await callApi(`api/bans?${kind}=${encodeURIComponent(key)}`, { method: 'DELETE', key: who.key }); refreshRoster(); })
     .on('promote', (id) => { presence?.promote(id); })
     .on('goto', (to) => goTo(to))
@@ -1415,7 +1457,7 @@ async function boot() {
     .on('size', (i) => { if (i && !shop.hasPass) return; size = i; store.set('mmf.size', SIZES[size]); keepProfile(); })
     .on('sit', () => sitDown())
     .on('gift', (to) => giftTo(to))
-    .on('name', (n) => { if (!n) return; name = n; presence?.setIdentity(name, color); store.set('mmf.name', name); world.games.setMe(name); keepProfile(); })
+    .on('name', (n) => { if (!n) return; name = n; presence?.setIdentity(name, color); store.set('mmf.name', name); world.games.setMe(account.name || name); keepProfile(); })
     .on('quality', (q) => {
       // a tier changes shaders, textures and shadow maps: simplest and safest is a clean restart at the same spot
       if (q === 'auto') store.del('mmf.quality'); else store.set('mmf.quality', q);

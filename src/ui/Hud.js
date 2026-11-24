@@ -758,6 +758,7 @@ export class Hud {
       if (admin && d) {
         if (d.cc) name.prepend(flagOf(d.cc), ' ');
         if (d.admin) { const badge = el('em', 'rank'); badge.textContent = d.admin === 'owner' ? 'owner' : 'admin'; name.append(' ', badge); }
+        if (d.muted) { const hush = el('em', 'rank muted'); hush.textContent = 'muted'; hush.title = 'Kept out in silence: nobody hears them, and they do not know'; name.append(' ', hush); }
         const place = d.cc ? `${d.city ? `${d.city}, ` : ''}${countryName(d.cc)}` : '';
         if (place) where.textContent = `${p.where ? `${p.where} · ` : ''}${place}`;
         // what they connect with, as three small pictures: the browser, the system, the kind of device
@@ -793,6 +794,8 @@ export class Hud {
           if (d.dev) act('Gift', 'Give them something from the shop, or the Game Pass for a while', () => { this.closeRoster(); this.emit('gift', { id: p.id, name: p.name, dev: d.dev }); }, 'good');
           if (!d.admin) act('Make admin', 'Name them an administrator: their browser keeps a key of its own', () => this.emit('promote', p.id), 'good');
           if (d.admin !== 'owner' || owner) { // (nobody but the owner puts the owner out)
+            // (in silence: they stay and notice nothing — nobody reads them, their scores and what they sponsor show to them alone)
+            if (!d.muted) act('Mute', 'Keep out in silence, for good: they play on and notice nothing, but nobody hears them (lift it under "Kept out")', () => this.emit('ban', p.id, 0, true));
             act('Kick', 'Put out of the room (they can come back)', () => this.emit('kick', p.id));
             act('Ban 1 h', 'Keep out for an hour (address and device)', () => this.emit('ban', p.id, 1));
             act('Ban 1 day', 'Keep out for a day', () => this.emit('ban', p.id, 24));
@@ -862,7 +865,7 @@ export class Hud {
         const row = el('div', 'who');
         const text = el('span');
         const name = el('b'); name.textContent = b.name || '?';
-        const what = el('small'); what.textContent = `${b.kind === 'ip' ? `address ${b.key}` : `device ${String(b.key).slice(0, 8)}…`} · ${b.until ? `until ${new Date(b.until).toLocaleString()}` : 'for good'}`;
+        const what = el('small'); what.textContent = `${b.quiet ? 'in silence · ' : ''}${b.kind === 'ip' ? `address ${b.key}` : b.kind === 'acct' ? `account ${b.key}` : `device ${String(b.key).slice(0, 8)}…`} · ${b.until ? `until ${new Date(b.until).toLocaleString()}` : 'for good'}`;
         text.append(name, what);
         const lift = el('button'); lift.type = 'button'; lift.textContent = 'Lift'; lift.onclick = () => this.emit('unban', { kind: b.kind, key: b.key });
         const acts = el('span', 'acts'); acts.append(lift);
@@ -875,9 +878,9 @@ export class Hud {
 
   /**
    * A proposal one may take or leave (a room gone quiet offers another): `text`, a button `yes` that calls
-   * `fn`, another to stay; it goes away by itself after `ms`. Null takes it away.
+   * `fn`, another (`no`) to leave things as they are; it goes away by itself after `ms`. Null takes it away.
    */
-  offer(text, yes = '', fn = () => {}, ms = 40000) {
+  offer(text, yes = '', fn = () => {}, ms = 40000, no = 'Stay here') {
     if (!this.offerEl) {
       if (!text) return;
       this.offerEl = el('div', 'offer-bar', '<span class="update-dot" aria-hidden="true"></span><span class="offer-text"></span><button type="button" class="offer-yes"></button><button type="button" class="offer-no">Stay here</button>');
@@ -892,6 +895,7 @@ export class Hud {
     const y = bar.querySelector('.offer-yes');
     y.textContent = yes;
     y.onclick = () => { bar.classList.remove('on'); fn(); };
+    bar.querySelector('.offer-no').textContent = no;
     bar.querySelector('.offer-no').onclick = () => bar.classList.remove('on');
     requestAnimationFrame(() => bar.classList.add('on'));
     this._offer = setTimeout(() => bar.classList.remove('on'), ms);

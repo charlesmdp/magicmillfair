@@ -135,6 +135,7 @@ try {
   await office.click('#tabs [data-tab="scores"]');
   await office.waitForFunction(() => document.getElementById('board').options.length > 5, null, { timeout: 20000 });
   await office.selectOption('#board', 'bell');
+  await office.selectOption('#period', 'day'); // (posted without an account: it is on the list of the day, and on no other)
   await office.waitForFunction(() => /Cheater/.test(document.getElementById('scores').textContent), null, { timeout: 20000 });
   const line = await office.evaluate(() => ({ boards: document.getElementById('board').options.length, row: document.querySelector('#scores .item').textContent }));
   await office.click('#scores .item button');

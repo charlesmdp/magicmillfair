@@ -8,6 +8,7 @@ export const NEWS = [
     items: [
       ['Get life advice', 'An easel where you arrive, planks at the mill and by the pond: they lead to Billy — who now follows what the two of you were saying.'],
       ['Nearby first', 'The chat opens on "Nearby": those within twenty metres read you. The button left of the line (or Tab) talks to the whole oasis.'],
+      ['Scores belong to accounts', 'Without one you are on the board of the day. With one — free: a name, a password — the week, the month and all time are yours too. Every board starts again.'],
       ['Rooms of the right size', 'The fair shares its visitors out between rooms of about fifty. "Who is here" lists them: change with a click, or copy a link for a friend.'],
       ['How it all came to this', 'To the right of the arrival, an old page under a roof: the story of the last afternoon. The opening tells it only once now.'],
       ['Wooden signposts', 'At the forks of the paths: planks painted by hand point the way to the games, and say how far.'],

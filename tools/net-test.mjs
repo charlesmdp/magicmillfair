@@ -23,6 +23,8 @@ import { cleanLogo, cleanText, cleanUrl } from '../server/shop.js';
 import { restMailer } from '../server/mail.js';
 import { visit, localDay } from '../server/routes.js';
 import { cleanTalk, oneSentence } from '../server/npc.js';
+import { wardrobeFrom, fitLook, fitKit, fitColor, mayLight, HAT_IDS, FIREWORK } from '../server/wardrobe.js';
+import { ITEMS, packKit } from '../server/items.js';
 import { cleanGeo, packGeo, unpackGeo } from '../server/visitors.js';
 
 // what the test servers are given: the secret that signs the notes of the runs, the administrator's key
@@ -91,7 +93,7 @@ function check(name, ok, detail) {
 async function startServer(env = {}, port = 0) {
   port = port || (await freePort());
   const proc = spawn(process.execPath, [path.join(ROOT, 'server/index.js')], {
-    env: { ...process.env, ALLOWED_ORIGINS: '', MAX_PLAYERS: '', DIST_DIR: '', HOST: '127.0.0.1', TICK_HZ: '20', ANTHROPIC_API_KEY: '', NPC_MODEL: '', SCORE_SECRET, ADMIN_KEY, MAIL_FILE, FREE_ROOMS: '1', ...shopEnv(), ...env, PORT: String(port) },
+    env: { ...process.env, ALLOWED_ORIGINS: '', MAX_PLAYERS: '', DIST_DIR: '', HOST: '127.0.0.1', TICK_HZ: '20', ANTHROPIC_API_KEY: '', NPC_MODEL: '', SCORE_SECRET, ADMIN_KEY, MAIL_FILE, FREE_ROOMS: '1', ADDRESS_LIMITS: '0', ...shopEnv(), ...env, PORT: String(port) },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   const server = { port, proc, log: '', alive: () => proc.exitCode === null && proc.signalCode === null };
@@ -128,6 +130,7 @@ async function startWorker(env = {}, port = 0) {
   if (env.STALE_MS) config.vars.STALE_MS = env.STALE_MS;
   if (env.NEAR) config.vars.NEAR = env.NEAR;
   config.vars.FREE_ROOMS = env.FREE_ROOMS ?? '1'; // (the rooms by address: open on the test servers — most checks give each its own room)
+  config.vars.ADDRESS_LIMITS = env.ADDRESS_LIMITS ?? '0'; // (no limit by address: here everybody comes from one — the limits have a test of their own)
   fs.writeFileSync(path.join(dir, 'wrangler.json'), JSON.stringify(config));
   const proc = spawn(process.execPath, [
     path.join(ROOT, 'node_modules/wrangler/bin/wrangler.js'), 'dev', '--config', path.join(dir, 'wrangler.json'),
@@ -368,12 +371,12 @@ async function testProtocol(server) {
   const wa = await a.hello('Ada', 3);
   check('ws: welcome carries id, clock, tick and no peer for the first player',
     !!wa && Number.isInteger(wa.id) && wa.id > 0 && Number.isFinite(wa.now) && wa.tick === TICK && Array.isArray(wa.peers) && wa.peers.length === 0, wa);
-  a.send({ t: 's', p: [1.23456, 2.34567, -3.33333, 0.123456], a: 2, f: 5 });
+  a.send({ t: 's', p: [1.23456, 2.34567, -3.33333, 0.123456], a: 2, f: 33 });
   await sleep(TICK * 3);
   const b = new Client(port, 't1');
   const wb = await b.hello('Bob', 4);
   check('ws: welcome lists the players already there, with their last state',
-    !!wb && wb.id !== a.id && JSON.stringify(wb.peers) === JSON.stringify([{ id: a.id, name: 'Ada', color: 3, p: [1.23, 2.35, -3.33, 0.123], a: 2, f: 5 }]), wb);
+    !!wb && wb.id !== a.id && JSON.stringify(wb.peers) === JSON.stringify([{ id: a.id, name: 'Ada', color: 3, p: [1.23, 2.35, -3.33, 0.123], a: 2, f: 33 }]), wb);
   const joined = await a.wait((m) => m.t === 'join');
   check('ws: the others get a join', JSON.stringify(joined) === JSON.stringify({ t: 'join', id: b.id, name: 'Bob', color: 4 }), joined);
   const c = new Client(port, 't1');
@@ -390,20 +393,26 @@ async function testProtocol(server) {
   check('http: /api/presence?room= counts one room', census1.room === 't1' && census1.players === 3 && (await headCount(port, 't2')) === 1 && (await headCount(port, 'nobody')) === 0, res.body.toString());
 
   // States: batched to the others, rounded, clamped, never echoed.
-  a.send({ t: 's', p: [10.004, 20.006, 99999, 7.5], a: 3, f: 200 });
+  a.send({ t: 's', p: [10.004, 20.006, 99999, 7.5], a: 3, f: 224 });
   const u = await b.wait((m) => m.t === 'u' && m.s.some((r) => r[0] === a.id && r[1] === 10));
   const row = u && u.s.find((r) => r[0] === a.id);
   check('ws: a state reaches the others in a batch', !!u && Number.isFinite(u.now), u);
-  check('ws: values are rounded (2 decimals, yaw 3) and clamped', !!row && JSON.stringify(row.slice(0, 7)) === JSON.stringify([a.id, 10, 20.01, 2000, round3(7.5 - Math.PI * 2), 3, 200]), row);
+  check('ws: values are rounded (2 decimals, yaw 3) and clamped', !!row && JSON.stringify(row.slice(0, 7)) === JSON.stringify([a.id, 10, 20.01, 2000, round3(7.5 - Math.PI * 2), 3, 224]), row);
   check('ws: rows carry their age at tick time', !!row && Number.isInteger(row[7]) && row[7] >= 0 && row[7] <= TICK * 3, row);
   a.send({ t: 's', p: [-1e9, -1e9, 0, 0], a: 99, f: -1 });
   const low = await c.wait((m) => m.t === 'u' && m.s.some((r) => r[0] === a.id && r[1] === -2000));
   check('ws: out-of-range values are clamped or reset', !!low && JSON.stringify(low.s.find((r) => r[0] === a.id).slice(1, 7)) === '[-2000,-100,0,0,0,0]', low);
-  a.send({ t: 's', p: [5, 1, 5, 0], a: 10, f: 0x1a42 });
+  // (a look that is everybody's: the free camera, a bouquet, a quad, a big head, a disguise, a size from a secret word)
+  a.send({ t: 's', p: [5, 1, 5, 0], a: 10, f: 0x2ce1 });
   const wide = await c.wait((m) => m.t === 'u' && m.s.some((r) => r[0] === a.id && r[1] === 5));
   a.send({ t: 's', p: [6, 1, 5, 0], a: 16, f: 70000 });
   const over = await c.wait((m) => m.t === 'u' && m.s.some((r) => r[0] === a.id && r[1] === 6));
-  check('ws: the look of an avatar is sixteen bits (a size, a disguise, more hats), an animation one of sixteen; beyond that, nothing', wide?.s.find((r) => r[0] === a.id)?.slice(5, 7).join() === `10,${0x1a42}` && over?.s.find((r) => r[0] === a.id)?.slice(5, 7).join() === '0,0', [wide, over]);
+  check('ws: the look of an avatar is sixteen bits (a size, a disguise…), an animation one of sixteen; beyond that, nothing', wide?.s.find((r) => r[0] === a.id)?.slice(5, 7).join() === `10,${0x2ce1}` && over?.s.find((r) => r[0] === a.id)?.slice(5, 7).join() === '0,0', [wide, over]);
+  // …and what is sold shows on those who have it only: a hat, the flame of a jetpack, a size of the pass come off
+  // a visitor who bought nothing (here one whose browser gave no name: not even the free day of the light jetpack)
+  a.send({ t: 's', p: [7, 1, 5, 0], a: 0, f: 0x1a42 | 16 });
+  const bare = await c.wait((m) => m.t === 'u' && m.s.some((r) => r[0] === a.id && r[1] === 7));
+  check('ws: a hat, a flame, a size that were not bought are not shown to the others — the rest of the look is', bare?.s.find((r) => r[0] === a.id)?.[6] === 0x840, bare);
 
   // Two players moving in the same tick: one batch for the third, each of them only gets the other one.
   let both = null;
@@ -667,6 +676,50 @@ async function testModeration(start, dist) {
   adm.send({ t: 'c', m: 'psst', n: 1 }); adm.send({ t: 'c', m: 'hello all' });
   const near = await bob.wait((m) => m.t === 'c' && m.m === 'psst'), all = await eve.wait((m) => m.t === 'c' && m.m === 'hello all');
   check('chat: a line said to those nearby stops at twenty metres; a line to everyone does not', near?.n === 1 && !!all && all.n === undefined && !eve.msgs.some((m) => m.t === 'c' && m.m === 'psst'), [near, all]);
+  // kept out in silence: the visitor stays and notices nothing — but nobody hears them any more, a score of
+  // theirs is announced to nobody, and the big red button only goes off for them. It holds when they come back,
+  // until it is lifted.
+  {
+    const DEVM = 'device-of-mia-0123456789ab', key = { authorization: `Bearer ${ADMIN_KEY}` };
+    const mia = new Client(port, 'mod', from(6, DEVM));
+    await mia.hello('Mia', 4, DEVM);
+    mia.send({ t: 's', p: [1, 1, 0, 0], a: 0, f: 0 });
+    mia.send({ t: 'c', m: 'before' });
+    const before = await bob.wait((m) => m.t === 'c' && m.m === 'before');
+    adm.send({ t: 'ban', id: mia.id, h: 1, q: 1 });
+    await sleep(600); // (the list is kept by the notebook)
+    mia.send({ t: 'c', m: 'after' }); mia.send({ t: 'g', b: 'bell' }); mia.send({ t: 'n' }); mia.send({ t: 'e', e: 2 });
+    const show = await mia.wait((m) => m.t === 'n' && m.id === mia.id), wave = await bob.wait((m) => m.t === 'e' && m.id === mia.id);
+    await sleep(TICK * 4);
+    const unheard = !bob.msgs.some((m) => (m.t === 'c' && m.m === 'after') || (m.t === 'g' && m.id === mia.id) || m.t === 'n');
+    adm.send({ t: 'who' });
+    const marked = await adm.wait((m) => m.t === 'who' && m.list.some((p) => p.id === mia.id && p.muted === true));
+    const quiet = (json(await request(port, '/api/bans', { headers: key }))?.bans || []).filter((b) => b.name === 'Mia');
+    check('admin: kept out in silence — the visitor stays, sees their own show and is seen waving, but what they write, a score of theirs and their red button reach nobody; the list says so',
+      !!before && mia.code === null && !mia.msgs.some((m) => m.t === 'kicked') && !!show && !!wave && unheard && !!marked && quiet.length === 2 && quiet.every((b) => b.quiet === true) && quiet.some((b) => b.kind === 'dev' && b.key === DEVM), { before, show, wave, unheard, quiet });
+    mia.ws.close();
+    await bob.wait((m) => m.t === 'leave' && m.id === mia.id);
+    const mia2 = new Client(port, 'mod', from(6, DEVM));
+    const again = await mia2.hello('Mia', 4, DEVM);
+    mia2.send({ t: 'c', m: 'still here' });
+    await sleep(TICK * 6);
+    const still = !!again && mia2.code === null && !bob.msgs.some((m) => m.t === 'c' && m.m === 'still here');
+    // lifted: she is heard again at once, without having to come back
+    for (const b of quiet) await request(port, `/api/bans?${b.kind}=${encodeURIComponent(b.key)}`, { method: 'DELETE', headers: key });
+    await sleep(400);
+    mia2.send({ t: 'c', m: 'at last' });
+    const heard = await bob.wait((m) => m.t === 'c' && m.m === 'at last');
+    // …and set from the back office, by her browser: it holds at once too
+    await request(port, '/api/bans', { method: 'POST', headers: { ...key, 'content-type': 'application/json' }, body: JSON.stringify({ dev: DEVM, name: 'Mia', hours: 1, quiet: true }) });
+    await sleep(400);
+    mia2.send({ t: 'c', m: 'hushed again' });
+    await sleep(TICK * 6);
+    const hushed = !bob.msgs.some((m) => m.t === 'c' && m.m === 'hushed again');
+    await request(port, `/api/bans?dev=${DEVM}`, { method: 'DELETE', headers: key });
+    mia2.ws.close();
+    await bob.wait((m) => m.t === 'leave' && m.id === mia2.id);
+    check('admin: who is kept out in silence is still unheard when they come back — until it is lifted, which holds at once; so does a silence set from the back office', still && !!heard && hushed, { still, heard, hushed });
+  }
   // put out
   adm.send({ t: 'kick', id: bob.id });
   const out = await bob.wait((m) => m.t === 'kicked');
@@ -820,7 +873,7 @@ async function testRelease(start, dist) {
     const open = json(await call('/api/scores?board=all'));
     check('release: the board of a game waits for its switch — no note, no score, not listed; once released it takes a time',
       shut.run.status === 400 && shut.board.status === 404 && shut.all?.boards && !('slide' in shut.all.boards) && 'sky' in shut.all.boards
-      && run.status === 200 && posted.status === 200 && json(posted).rank === 1 && open.boards.slide?.tops?.all?.[0]?.name === 'Otter', [shut.run.status, shut.board.status, run.status, posted.status, posted.body.toString().slice(0, 120)]);
+      && run.status === 200 && posted.status === 200 && json(posted).day === 1 && open.boards.slide?.tops?.day?.[0]?.name === 'Otter', [shut.run.status, shut.board.status, run.status, posted.status, posted.body.toString().slice(0, 120)]);
     // everybody is asked to refresh
     const t0 = Date.now();
     ann.msgs.length = 0;
@@ -906,7 +959,12 @@ async function testVisitors(start, dist) {
 
 async function testApi({ port }) {
   const json = (res) => { try { return JSON.parse(res.body.toString()); } catch { return null; } };
-  const post = (target, body, headers = {}) => request(port, target, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
+  const post = (target, body, headers = {}, from) => request(port, target, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body), ...(from && { from }) });
+  // scores belong to accounts: Ada, Bob and Dana have one each, made from a browser of their own (and from another
+  // address than the rest of this test: what an address may ask of the accounts is counted)
+  const dev = { ada: randomId(16), bob: randomId(16), dana: randomId(16), gil: randomId(16), hal: randomId(16) }, ELSEWHERE = '127.0.0.41', GUESTS = '127.0.0.42';
+  const signUp = (name, device) => post('/api/account', { action: 'create', device, name, password: 'a good password' }, {}, ELSEWHERE);
+  const signed = [await signUp('Ada', dev.ada), await signUp('Bob', dev.bob), await signUp('Dana', dev.dana)].map((r) => r.status).join();
   // the note of a run that started `ago` ms ago, as the server would have signed it
   const note = (board, ago) => sign(SCORE_SECRET, { b: board, t: Date.now() - ago, n: randomId(9) });
   let res = await request(port, '/api/status');
@@ -928,19 +986,19 @@ async function testApi({ port }) {
   refused.push((await post('/api/scores', { board: 'sky', name: 'Hasty', score: 240000, run: fresh })).status); // 2: a 240 s climb, seconds after its start
   check('api: no score without the note of its run, nor one that claims more time than has passed', refused.join() === '400,400', refused);
   const adaNote = await note('sky', 250000);
-  res = await post('/api/scores', { board: 'sky', name: '  Ada   <b>Lovelace</b> the first ', score: 240000.4, run: adaNote }); // 3
+  res = await post('/api/scores', { board: 'sky', name: '  Ada   <b>Lovelace</b> the first ', score: 240000.4, run: adaNote, device: dev.ada }); // 3
   const first = json(res);
-  check('api: a time is recorded in the four lists, the name cleaned', res.status === 200 && first?.rank === 1 && first.best === true && ['day', 'week', 'month', 'all'].every((p) => first.tops[p][0]?.score === 240000 && first.tops[p][0].name === 'Ada bLovelace/b' && first.tops[p][0].at === undefined) && first.top[0].ms === 240000, res.body.toString().slice(0, 240));
+  check('api: a time is recorded in the four lists — under the name of the account, whatever name the page gives', signed === '200,200,200' && res.status === 200 && first?.rank === 1 && first.best === true && first.guest === undefined && ['day', 'week', 'month', 'all'].every((p) => first.tops[p][0]?.score === 240000 && first.tops[p][0].name === 'Ada' && first.tops[p][0].at === undefined) && first.top[0].ms === 240000, [signed, res.body.toString().slice(0, 240)]);
   res = await post('/api/scores', { board: 'sky', name: 'Twice', score: 240000, run: adaNote }); // 4: the same note again
   check('api: the note of a run counts once', res.status === 400, res.status);
-  res = await post('/api/scores', { board: 'sky', name: 'Bob', ms: 200000, run: await note('sky', 205000) }); // 5 (`ms`: what the first version of the game sends)
+  res = await post('/api/scores', { board: 'sky', name: 'Bob', ms: 200000, run: await note('sky', 205000), device: dev.bob }); // 5 (`ms`: what the first version of the game sends)
   const second = json(res);
-  res = await post('/api/scores', { board: 'sky', name: 'ada blovelace/B', score: 300000, run: await note('sky', 300000) }); // 6
+  res = await post('/api/scores', { board: 'sky', name: 'ada', score: 300000, run: await note('sky', 300000), device: dev.ada }); // 6
   const third = json(res);
-  check('api: best first; a slower time changes nothing, whatever the case of the name', second?.rank === 1 && second.tops.all.map((e) => e.name).join() === 'Bob,Ada bLovelace/b' && third?.rank === 2 && third.best === false && third.tops.all[1].score === 240000, [second, third]);
+  check('api: best first; a slower time changes nothing', second?.rank === 1 && second.tops.all.map((e) => e.name).join() === 'Bob,Ada' && third?.rank === 2 && third.best === false && third.tops.all[1].score === 240000, [second, third]);
   // a game played for points: the best is the highest, and the game cannot be over before it has lasted
   const soon = await post('/api/scores', { board: 'shoot', name: 'Quick', score: 500, run: await note('shoot', 5000) }); // 7
-  res = await post('/api/scores', { board: 'shoot', name: 'Dana', score: 120, run: await note('shoot', 50000) }); // 8
+  res = await post('/api/scores', { board: 'shoot', name: 'Dana', score: 120, run: await note('shoot', 50000), device: dev.dana }); // 8
   check('api: a board of points — not before the game has lasted, then recorded', soon.status === 400 && res.status === 200 && json(res).tops.day[0].score === 120 && json(res).rank === 1, [soon.status, res.status, res.body.toString().slice(0, 120)]);
   res = await post('/api/scores', { board: 'sky', name: 'Carol', score: 210000, run: await note('sky', 215000) });
   const limited = res.status;
@@ -958,7 +1016,34 @@ async function testApi({ port }) {
   const noDel = await request(port, '/api/scores?board=sky&name=Bob', { method: 'DELETE' });
   const del = await request(port, '/api/scores?board=sky&name=bob', { method: 'DELETE', headers: { authorization: `Bearer ${ADMIN_KEY}` } });
   res = await request(port, '/api/scores?board=sky');
-  check('api: only the administrator\'s key opens /api/admin and takes a line off a board', anon.status === 403 && wrong.status === 403 && admin.status === 200 && noDel.status === 403 && del.status === 200 && json(del).removed > 0 && json(res).tops.all.map((e) => e.name).join() === 'Ada bLovelace/b', [anon.status, wrong.status, admin.status, noDel.status, del.status, res.body.toString().slice(0, 120)]);
+  check('api: only the administrator\'s key opens /api/admin and takes a line off a board', anon.status === 403 && wrong.status === 403 && admin.status === 200 && noDel.status === 403 && del.status === 200 && json(del).removed > 0 && json(res).tops.all.map((e) => e.name).join() === 'Ada', [anon.status, wrong.status, admin.status, noDel.status, del.status, res.body.toString().slice(0, 120)]);
+  // without an account: on the list of the day only — told where the score would stand in the others, and given a
+  // note to claim it with; never under the name of an account. (From another address: this one has posted enough.)
+  {
+    const key = { authorization: `Bearer ${ADMIN_KEY}` }, lists = async (q = '') => json(await request(port, `/api/scores?board=sky${q}`))?.tops;
+    const gil = json(await post('/api/scores', { board: 'sky', name: 'Gil', score: 190000, run: await note('sky', 195000), device: dev.gil }, {}, GUESTS));
+    const borrowed = await post('/api/scores', { board: 'sky', name: 'ADA', score: 150000, run: await note('sky', 155000), device: dev.gil }, {}, GUESTS);
+    const after = await lists();
+    check('scores: a visitor without an account is on the list of the day only — and is told where they would stand in the others; nobody posts under the name of an account',
+      gil?.guest === true && gil.day === 1 && gil.rank === 0 && gil.best === true && gil.would?.week === 1 && gil.would.month === 1 && gil.would.all === 1 && typeof gil.claim === 'string' && gil.tops.day[0].name === 'Gil' && gil.tops.all.map((e) => e.name).join() === 'Ada'
+      && borrowed.status === 409 && json(borrowed)?.taken === true && after.day.map((e) => e.name).join() === 'Gil,Ada' && ['week', 'month', 'all'].every((p) => after[p].map((e) => e.name).join() === 'Ada'), [gil, borrowed.status, after]);
+    // …an account made within the half hour: the note is handed back, and the score counts everywhere — once
+    const noAccount = await post('/api/scores/claim', { device: dev.gil, claims: [gil?.claim] }, {}, GUESTS);
+    const madeGil = await signUp('Gil', dev.gil);
+    const claimed = json(await post('/api/scores/claim', { device: dev.gil, claims: [gil?.claim, 'not a note'] }, {}, GUESTS)), twice = json(await post('/api/scores/claim', { device: dev.gil, claims: [gil?.claim] }, {}, GUESTS));
+    const forged = json(await post('/api/scores/claim', { device: dev.gil, claims: [await sign('another secret', { c: 1, b: 'sky', s: 100000, x: Date.now() + 60000, n: 'abc' }), await sign(SCORE_SECRET, { c: 1, b: 'sky', s: 100000, x: Date.now() - 1000, n: 'old' })] }, {}, GUESTS));
+    const withIt = await lists();
+    check('scores: an account made within the half hour claims the score with the note the server gave — it then counts for the week, the month and all time; once, and only with a note of the server that has not expired',
+      noAccount.status === 403 && madeGil.status === 200 && claimed?.claimed.join() === 'sky' && claimed.name === 'Gil' && claimed.boards.sky.tops.all[0].name === 'Gil' && twice?.claimed.length === 0 && forged?.claimed.length === 0
+      && ['week', 'month', 'all'].every((p) => withIt[p].map((e) => `${e.name}:${e.score}`).join() === 'Gil:190000,Ada:240000'), [noAccount.status, madeGil.status, claimed, twice, forged, withIt]);
+    // kept out in silence: the score shows on that visitor's screen, and nowhere else
+    await post('/api/bans', { dev: dev.hal, name: 'Hal', hours: 1, quiet: true }, key);
+    const hal = json(await post('/api/scores', { board: 'sky', name: 'Hal', score: 170000, run: await note('sky', 175000), device: dev.hal }, {}, GUESTS));
+    const forAll = await lists(), forHal = await lists(`&device=${dev.hal}`), everyHal = json(await request(port, `/api/scores?board=all&device=${dev.hal}`))?.boards?.sky?.tops;
+    await request(port, `/api/bans?dev=${dev.hal}`, { method: 'DELETE', headers: key });
+    check('scores: the score of a visitor kept out in silence shows to them — as if nothing was the matter — and to nobody else',
+      hal?.guest === true && hal.day === 1 && hal.tops.day[0].name === 'Hal' && forHal.day[0].name === 'Hal' && everyHal?.day[0].name === 'Hal' && !forAll.day.some((e) => e.name === 'Hal') && forAll.day[0].name === 'Gil', [hal, forAll.day, forHal.day]);
+  }
   // visits: the days in a row of a device
   const device = randomId(16);
   const v1 = json(await post('/api/visit', { device, tz: -60 })), v2 = json(await post('/api/visit', { device, tz: -60 }));
@@ -1022,6 +1107,49 @@ async function testShop({ port }) {
   const mine = json(await request(port, `/api/shop?device=${ann}`)), theirs = json(await request(port, `/api/shop?device=${bob}`));
   const again = await post('/api/checkout', { item: 'hat:crown', device: ann });
   check('shop: what Stripe says was paid is theirs — once, and theirs only; it is not sold to them twice', ok1.status === 200 && ok2.status === 200 && ok3.status === 200 && mine.owned.join() === 'hat:crown,jetpack' && !theirs.owned.length && again.status === 409, [mine.owned, theirs.owned, again.status]);
+  // what one is seen wearing is what one has (wardrobe.js): Ann owns a crown and the jetpack, Bob nothing — both
+  // say they wear a crown, a flame, a size of the pass, gold paint and a colour of the pass
+  {
+    const CROWN = 6 << 1, look = CROWN | 16 | (2 << 8) | 32; // (a crown, a jetpack burning, the size "Jumbo", a bouquet)
+    const watcher = new Client(port, 'wardrobe'), wa = new Client(port, 'wardrobe', { dev: ann }), wb = new Client(port, 'wardrobe', { dev: bob });
+    await watcher.hello('Watcher', 0);
+    for (const [c, name, dev] of [[wa, 'Ann', ann], [wb, 'Bob', bob]]) { await c.opened; c.send({ t: 'hello', name, color: 20, v: 2, dev, k: packKit({ paint: 1 }) }); await c.wait((m) => m.t === 'welcome'); c.id = c.msgs.find((m) => m.t === 'welcome').id; }
+    const cards = [await watcher.wait((m) => m.t === 'join' && m.id === wa.id), await watcher.wait((m) => m.t === 'join' && m.id === wb.id)];
+    wa.send({ t: 's', p: [1, 1, 1, 0], a: 0, f: look }); wb.send({ t: 's', p: [2, 1, 1, 0], a: 0, f: look }); watcher.send({ t: 's', p: [3, 1, 1, 0], a: 0, f: look });
+    const rowOf = async (c, x) => (await watcher.wait((m) => m.t === 'u' && m.s.some((r) => r[0] === c.id && r[1] === x)))?.s.find((r) => r[0] === c.id)?.[6];
+    const seen = [await rowOf(wa, 1), await rowOf(wb, 2)];
+    const mine = (await wa.wait((m) => m.t === 'u' && m.s.some((r) => r[0] === watcher.id)))?.s.find((r) => r[0] === watcher.id)?.[6];
+    wb.send({ t: 'e', e: FIREWORK }); wa.send({ t: 'e', e: 2 });
+    await watcher.wait((m) => m.t === 'e' && m.id === wa.id);
+    const lit = watcher.msgs.some((m) => m.t === 'e' && m.id === wb.id);
+    check('wardrobe: what was bought shows (a crown, the flame of the jetpack); what was not is brought back to the plain robot — hat, size, paint, colour, a firework nobody bought; the free day of the light jetpack counts, for a browser that has one',
+      cards[0]?.color === 4 && cards[0].k === undefined && cards[1]?.color === 4 && seen[0] === (CROWN | 16 | 32) && seen[1] === (16 | 32) && mine === 32 && !lit, { cards, seen, mine, lit });
+    // a present while he is there: the page says "something is new", the relay asks again — and the crown he was
+    // asking for shows, without his sending anything more
+    await post('/api/gift', { device: bob, item: 'hat:crown' }, { authorization: `Bearer ${ADMIN_KEY}` });
+    wb.send({ t: 'own' });
+    const crowned = await until(() => watcher.msgs.filter((m) => m.t === 'u').flatMap((m) => m.s).filter((r) => r[0] === wb.id).pop()?.[6] === (CROWN | 16 | 32), 6000);
+    // an administrator may wear anything
+    watcher.send({ t: 'admin', key: ADMIN_KEY });
+    await watcher.wait((m) => m.t === 'admin');
+    const free = await until(() => wa.msgs.filter((m) => m.t === 'u').flatMap((m) => m.s).filter((r) => r[0] === watcher.id).pop()?.[6] === look, 6000);
+    check('wardrobe: what is given, or bought, shows as soon as the page says so ({t:\'own\'}: the relay asks the notebook again); an administrator may wear anything', !!crowned && !!free, { crowned, free });
+    for (const c of [watcher, wa, wb]) c.ws.close();
+    // (the rules themselves)
+    const now = 1_000_000_000_000, none = { m: 0, t: 0 }, w = (items, pass) => { const g = wardrobeFrom(items, pass, now - 10 * 86_400_000, now); return { m: g.m, t: now + g.left }; };
+    const hats = fs.readFileSync(path.join(ROOT, 'src/player/Cosmetics.js'), 'utf8').split('export const HATS = [')[1].split('];')[0].match(/id: '([a-z]+)'/g).map((s) => s.slice(5, -1));
+    const sold = ITEMS.map((it) => it.id).filter((id) => id.startsWith('hat:')).map((id) => id.slice(4));
+    const fresh = wardrobeFrom([], false, 0, now), old = wardrobeFrom([], false, now - 2 * 86_400_000, now);
+    check('wardrobe: the rules — a hat needs to be owned (or the pass), a flame needs a jetpack (or the pass, or the free day), the sizes and the second rows of colours come with the pass, paints and trails are bought; the numbers of the hats are those of the game',
+      HAT_IDS.join() === hats.join() && sold.every((h) => HAT_IDS.includes(h)) && FIREWORK === 31
+      && fitLook(CROWN | 16, none, now) === 0 && fitLook(CROWN, w(['hat:crown']), now) === CROWN && fitLook(CROWN, w(['hat:cap']), now) === 0 && fitLook(CROWN | 16 | (3 << 8), w([], true), now) === (CROWN | 16 | (3 << 8))
+      && fitLook(16, w(['jetlite']), now) === 16 && fitLook(16, { m: 0, t: now + 5 }, now) === 16 && fitLook(16, { m: 0, t: now - 5 }, now) === 0 && fitLook(0x1000 | (4 << 1), w(['hat:party']), now) === (0x1000 | (4 << 1))
+      && fitLook(0x2000 | 0x400 | 32 | 64 | 128 | 1, none, now) === (0x2000 | 0x400 | 32 | 64 | 128 | 1) && fitLook(CROWN | 16 | (2 << 8), true, now) === (CROWN | 16 | (2 << 8)) && fitLook(CROWN, undefined, now) === CROWN
+      && fitKit(packKit({ paint: 1, trail: 2, pet: 1 }), w(['paint:gold'])) === packKit({ paint: 1 }) && fitKit(packKit({ paint: 1, trail: 2 }), w(['trail:confetti'], true)) === packKit({ trail: 2 }) && fitKit(packKit({ paint: 7 }), w(['paint:gold'])) === 0
+      && fitColor(20, none) === 4 && fitColor(20, w([], true)) === 20 && fitColor(7, none) === 7 && fitColor(31, undefined) === 31
+      && !mayLight(none) && mayLight(w(['fireworks'])) && mayLight(true) && fresh.left === 24 * 3600_000 && old.left === 0,
+      { hats, HAT_IDS, fresh, old });
+  }
   // the Game Pass: by the month. Whoever holds it is lent every hat and the light jetpack; Stripe's word ends it.
   {
     const cat = randomId(16), dan = randomId(16), eli = randomId(16), far = { 'x-forwarded-for': '10.6.6.1' }; // (an address of their own: these do not count against what the other checks may ask)
@@ -1088,6 +1216,16 @@ async function testShop({ port }) {
   const live = json(await request(port, `/api/shop?device=${ann}`)).slots['tarp:shoot'];
   const logo = await request(port, live?.logo || '/nowhere');
   check('shop: what a sponsor sends is shown to everyone at once (there is nothing to approve); the picture is served as a picture and nothing else', approve.status === 404 && sneaky.status === 403 && live.state === 'live' && live.url === 'https://acme.example/robots?x=1' && logo.status === 200 && logo.headers['content-type'] === 'image/png' && logo.headers['x-content-type-options'] === 'nosniff' && /sandbox/.test(logo.headers['content-security-policy'] || '') && logo.body.equals(Buffer.from(PNG, 'base64')), [approve.status, sneaky.status, live, logo.status, logo.headers]);
+  // …but what a visitor who is kept out in silence had put up is shown to them alone, until it is lifted
+  {
+    const seenBy = async (device) => json(await request(port, `/api/shop?device=${device}`)).slots['tarp:shoot'];
+    const [holder, other] = (await seenBy(ann))?.mine ? [ann, bob] : [bob, ann];
+    await post('/api/bans', { dev: holder, name: 'Sponsor', hours: 1, quiet: true }, admin);
+    const toOthers = await seenBy(other), toThem = await seenBy(holder);
+    await request(port, `/api/bans?dev=${holder}`, { method: 'DELETE', headers: admin });
+    const again = await seenBy(other);
+    check('shop: what a sponsor who is kept out in silence had put up is shown to them alone — and to everybody again once it is lifted', toOthers?.state === 'taken' && toOthers.title === undefined && toThem?.state === 'live' && toThem.mine === true && again?.state === 'live', [toOthers, toThem?.state, again?.state]);
+  }
   // the administrator fills a place by hand; a subscription that ends frees its place
   const byHand = await post('/api/sponsors', { slot: 'gondola:7', set: { title: 'Seven Seas Ice Cream', subtitle: 'on the pier since ever', url: 'https://ice.example', logo: JPEG } }, admin);
   const g7 = json(await request(port, '/api/shop')).slots['gondola:7'], g7logo = await request(port, g7?.logo || '/nowhere');
@@ -1444,8 +1582,8 @@ async function testPresence(server) {
   check('presence: a peer without state is not visible yet', bobSeenByAda?.visible === false, bobSeenByAda);
 
   const ada = b.peers.get(a.id);
-  const w = await walk(a, b, ada, 0, 3, [1.5, -2, 0.5, 2, 9]); // y, z, yaw, anim, flags
-  check('presence: remote avatar follows, a little in the past', w.follows && near(w.seen.y, 1.5, 0.01) && near(w.seen.z, -2, 0.01) && near(w.seen.yaw, 0.5, 0.01) && w.seen.anim === 2 && w.seen.flags === 9, w);
+  const w = await walk(a, b, ada, 0, 3, [1.5, -2, 0.5, 2, 33]); // y, z, yaw, anim, flags
+  check('presence: remote avatar follows, a little in the past', w.follows && near(w.seen.y, 1.5, 0.01) && near(w.seen.z, -2, 0.01) && near(w.seen.yaw, 0.5, 0.01) && w.seen.anim === 2 && w.seen.flags === 33, w);
   check('presence: interpolated motion is continuous (no jump, no step back)', w.smooth, w);
   check('presence: speed is about the walking speed', near(w.speed, 3, 0.8), w.speed);
   check('presence: remote avatar stops exactly where the player stopped', w.stopped && ada.anim === 0 && ada.flags === 0, { x: ada.x, expected: w.stop, speed: ada.speed });
@@ -1703,7 +1841,7 @@ async function testCloudflare(server, fx) {
   await h1.hello('Un', 2);
   const h2 = new Client(port, 'sleepy');
   await h2.hello('Deux', 3);
-  h1.send({ t: 's', p: [12.5, 3, -7.25, 1], a: 1, f: 4 });
+  h1.send({ t: 's', p: [12.5, 3, -7.25, 1], a: 1, f: 32 });
   await h2.wait((m) => m.t === 'u' && m.s.some((r) => r[0] === h1.id && r[1] === 12.5));
   const quietSince = Date.now();
   for (let i = 0; i < 8; i++) { await sleep(2000); h1.send('{"t":"ping"}'); h2.send('{"t":"ping"}'); } // answered at the edge
@@ -1713,7 +1851,7 @@ async function testCloudflare(server, fx) {
   const h3 = new Client(port, 'sleepy');
   const w3 = await h3.hello('Trois', 5);
   check('cf: after waking up, a newcomer still learns who is there and where',
-    !!w3 && JSON.stringify(w3.peers) === JSON.stringify([{ id: h1.id, name: 'Un', color: 2, p: [12.5, 3, -7.25, 1], a: 1, f: 4 }, { id: h2.id, name: 'Deux', color: 3 }]) && new Set([h1.id, h2.id, h3.id]).size === 3, w3);
+    !!w3 && JSON.stringify(w3.peers) === JSON.stringify([{ id: h1.id, name: 'Un', color: 2, p: [12.5, 3, -7.25, 1], a: 1, f: 32 }, { id: h2.id, name: 'Deux', color: 3 }]) && new Set([h1.id, h2.id, h3.id]).size === 3, w3);
   h2.send({ t: 's', p: [1, 2, 3, 0], a: 0, f: 0 });
   const woke1 = await h1.wait((m) => m.t === 'u' && m.s.some((r) => r[0] === h2.id && r[1] === 1));
   const woke3 = await h3.wait((m) => m.t === 'u' && m.s.some((r) => r[0] === h2.id && r[1] === 1));
@@ -1874,6 +2012,92 @@ async function testDoor(start, dist) {
   }
 }
 
+// The boards from before scores belonged to accounts are put away, once — nothing of them is lost, nothing of them shows.
+async function testEra(start, dist) {
+  const file = path.join(os.tmpdir(), `mmf-era-${process.pid}.json`);
+  const old = { 'board:sky': [{ name: 'Old Timer', ms: 150000, at: 5 }], 'board:shoot': { v: 2, all: [{ name: 'Somebody', score: 900, at: 7 }], day: { key: '2026-01-01', list: [] }, week: { key: '2026-W01', list: [] }, month: { key: '2026-01', list: [] } }, 'visit:abc': { day: 1, days: 3, best: 3 } };
+  fs.writeFileSync(file, JSON.stringify(old));
+  const server = await start({ DIST_DIR: dist, SCORES_FILE: file });
+  const json = (res) => { try { return JSON.parse(res.body.toString()); } catch { return null; } };
+  try {
+    const boards = json(await request(server.port, '/api/scores?board=all'))?.boards, again = json(await request(server.port, '/api/scores?board=sky'));
+    const read = () => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
+    await until(() => !!read()?.['scores:era'], 4000);
+    const kept = read();
+    check('scores: the boards from before scores belonged to accounts are put away as they were — shown nowhere, lost nowhere — and the lists start again; the rest of what is kept is left alone',
+      !!boards && Object.values(boards).every((b) => ['day', 'week', 'month', 'all'].every((p) => b.tops[p].length === 0)) && again?.top.length === 0
+      && JSON.stringify(kept?.['board0:sky']) === JSON.stringify(old['board:sky']) && JSON.stringify(kept['board0:shoot']) === JSON.stringify(old['board:shoot']) && !kept['board:sky'] && !kept['board:shoot'] && kept['scores:era'].v === 1 && kept['visit:abc']?.days === 3,
+      [boards && Object.keys(boards).length, kept && Object.keys(kept)]);
+  } finally {
+    await server.stop();
+    fs.rmSync(file, { force: true });
+  }
+}
+
+// So many connections from one address (door.js): in a room, in all, new ones a minute — and the owner always gets in.
+async function testLimits(start, dist) {
+  const file = path.join(os.tmpdir(), `mmf-limits-${process.pid}.json`);
+  fs.rmSync(file, { force: true });
+  const server = await start({ MAX_PLAYERS: '20', ADDRESS_LIMITS: '1', DIST_DIR: dist, SCORES_FILE: file });
+  const { port } = server, A = '127.0.0.31', B = '127.0.0.32';
+  const json = (res) => { try { return JSON.parse(res.body.toString()); } catch { return null; } };
+  const key = { authorization: `Bearer ${ADMIN_KEY}` }, set = async (body) => json(await request(port, '/api/limits', { method: 'POST', headers: { ...key, 'content-type': 'application/json' }, body: JSON.stringify(body) }));
+  // (each visitor of this test comes from the address it says: the servers see where a connection really comes from)
+  const join = async (room, from, name, pass) => {
+    const c = new Client(port, room, { localAddress: from, ...(pass && { pass }) });
+    await c.opened;
+    const no = await c.wait((m) => m.t === 'limit', 500);
+    if (no) return { c, limit: no, code: await Promise.race([c.closed, sleep(3000)]) };
+    return { c, welcome: await c.hello(name, 1) };
+  };
+  const made = [];
+  try {
+    const base = json(await request(port, '/api/limits', { headers: key })), noKey = await request(port, '/api/limits');
+    const narrow = await set({ room: 2, total: 3, minute: 6 });
+    check('limits: so many connections from one address — wide as delivered (30 in a room, 60 in all, 120 new ones a minute), the owner\'s to change',
+      base?.on === true && base.limits.room === 30 && base.limits.total === 60 && base.limits.minute === 120 && noKey.status === 403 && narrow?.limits.room === 2 && narrow.limits.total === 3 && narrow.limits.minute === 6, [base, noKey.status, narrow]);
+    const a1 = await join('la', A, 'A1'), a2 = await join('la', A, 'A2'), a3 = await join('la', A, 'A3');
+    const a4 = await join('lb', A, 'A4'), a5 = await join('lb', A, 'A5'), b1 = await join('la', B, 'B1');
+    made.push(a1, a2, a3, a4, a5, b1);
+    check('limits: a third connection from one address in a room is told so and hung up on; so is a fourth in all; another address is not concerned',
+      !!a1.welcome && !!a2.welcome && a3.limit?.of === 'room' && a3.limit.max === 2 && a3.code === 1013 && !!a4.welcome && a5.limit?.of === 'total' && a5.limit.max === 3 && !!b1.welcome, [a3.limit, a3.code, a5.limit, !!b1.welcome]);
+    // the owner always gets in: the door gives them a note for that room
+    const door = json(await request(port, '/api/door?want=la', { headers: key, from: A }));
+    const boss = await join('la', A, 'Owner', door?.pass);
+    made.push(boss);
+    check('limits: the owner always gets in', door?.room === 'la' && !!door.pass && !!boss.welcome, [door?.room, !!door?.pass, boss.limit]);
+    // two of them leave: there is room for that address again (the door hears of it within a few seconds)
+    a1.c.ws.close(); a2.c.ws.close();
+    let a6 = null;
+    for (let k = 0; k < 16 && !a6?.welcome; k++) { await sleep(1000); a6 = await join('la', A, 'A6'); }
+    made.push(a6);
+    // new ones a minute, from an address that has not come yet: the second is the last
+    await set({ room: 20, total: 20, minute: 2 });
+    const C = '127.0.0.33', a7 = await join('lc', C, 'C1'), a8 = await join('lc', C, 'C2'), a9 = await join('lc', C, 'C3'), b2 = await join('lc', B, 'B2');
+    made.push(a7, a8, a9, b2);
+    // the page itself (src/net/Presence.js): told that its address has too many connections it says so, stays on
+    // its own meanwhile, and comes in by itself when there is room
+    await set({ room: 20, total: 1, minute: 0 });
+    const held = await join('lp', '127.0.0.1', 'Held');
+    made.push(held);
+    const pia = new Presence({ name: 'Pia', room: 'lp', url: `ws://127.0.0.1:${port}/ws`, limitWait: { minute: 400, total: 400 } }), said = [];
+    pia.on('limit', (e) => said.push(e));
+    pia.connect();
+    const refused = await until(() => said.length > 0, 8000), alone = pia.mode;
+    held.c.ws.close();
+    const cameIn = await until(() => pia.mode === 'online', 20000);
+    pia.dispose();
+    check('limits: the page says so when its address has too many connections, stays on its own meanwhile, and comes in by itself when there is room', !!held.welcome && refused && said[0].of === 'total' && said[0].max === 1 && alone !== 'online' && cameIn, [said.slice(0, 2), alone, pia.mode]);
+    const back = await set({ reset: true });
+    check('limits: when some have left that address may come in again; a third new connection in a minute is told to wait; the owner puts the limits back as they were',
+      !!a6?.welcome && !!a7.welcome && !!a8.welcome && a9.limit?.of === 'minute' && a9.limit.max === 2 && !!b2.welcome && back?.limits.total === 60, [!!a6?.welcome, !!a7.welcome, !!a8.welcome, a9.limit, back?.limits]);
+  } finally {
+    for (const v of made) try { v?.c.ws.close(); } catch { /* closed */ }
+    await server.stop();
+    fs.rmSync(file, { force: true });
+  }
+}
+
 const uncaught = [];
 const warn = console.warn;
 process.on('uncaughtException', (err) => uncaught.push(err));
@@ -1903,6 +2127,7 @@ try {
     await section('visitors', () => testVisitors(startWorker, fx.dist));
     await section('release', () => testRelease(startWorker, fx.dist));
     await section('door', () => testDoor(startWorker, fx.dist));
+    await section('limits', () => testLimits(startWorker, fx.dist));
     if (process.env.NET_TEST_LOG) fs.writeFileSync(process.env.NET_TEST_LOG, server.log);
     // (the local tool also logs its own failed attempts to reach Cloudflare when offline: not the Worker's)
     const trouble = server.log.split('\n').filter((line) => /\[wrangler:error\]|\[ERROR\]|Uncaught/.test(line));
@@ -1922,8 +2147,10 @@ try {
     await section('visitors', () => testVisitors(startServer, fx.dist));
     await section('release', () => testRelease(startServer, fx.dist));
     await section('door', () => testDoor(startServer, fx.dist));
+    await section('limits', () => testLimits(startServer, fx.dist));
+    await section('era', () => testEra(startServer, fx.dist));
     const kept = (() => { try { return JSON.parse(fs.readFileSync(path.join(fx.tmp, 'scores.json'), 'utf8')); } catch { return null; } })();
-    check('api: the Node server keeps the boards and the visits in its file', kept?.['board:sky']?.all?.length === 1 && kept['board:sky'].all[0].at > 0 && kept['board:shoot']?.day?.list?.[0]?.name === 'Dana' && Object.keys(kept).some((k) => k.startsWith('visit:')), kept);
+    if (!ONLY.length || ONLY.includes('api')) check('api: the Node server keeps the boards and the visits in its file', kept?.['board:sky']?.all?.length === 2 && kept['board:sky'].all[0].at > 0 && kept['board:shoot']?.day?.list?.[0]?.name === 'Dana' && Object.keys(kept).some((k) => k.startsWith('visit:')), kept);
     check('server: still running at the end, nothing on stderr', server.alive() && !/error|exception/i.test(server.log), server.log);
   }
 } catch (err) {

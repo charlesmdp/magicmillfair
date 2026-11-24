@@ -51,6 +51,8 @@ export function accountName(text) {
   return /^[\p{L}\p{N}][\p{L}\p{N} _-]{1,14}[\p{L}\p{N}]$/u.test(s) ? s : '';
 }
 const keyOf = (name) => `acct:${name.toLowerCase()}`;
+/** Is that the name of an account (whatever its capitals)? */
+export const isAccountName = async (store, name) => !!accountName(name) && !!(await store.get(keyOf(accountName(name))));
 const goodPassword = (p) => typeof p === 'string' && p.length >= 8 && p.length <= 100;
 /** The look of a robot, as an account keeps it (anything else is dropped). */
 function cleanProfile(p) {

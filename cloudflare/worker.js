@@ -27,8 +27,8 @@ import { Room as Relay, MAX_FRAME, NEAR, RANGE, BLAST_EVERY, cleanRoom, originAl
 import { Limiter, LIMITS, BODY_MAX, allowed, parseBody, mayPost, bodyMax } from '../server/api.js';
 import { stripeConfig } from '../server/stripe.js';
 import { restMailer } from '../server/mail.js';
-import { route, banned, addBan } from '../server/routes.js';
-import { knock, roomRules, settle } from '../server/door.js';
+import { route, addBan } from '../server/routes.js';
+import { knock, roomRules, settle, wardrobeOf, newCrowd, noteCrowd } from '../server/door.js';
 import { noteRoom, staleRooms, packDirectory, readDirectory } from '../server/rooms.js';
 import { randomId, sameSecret, bearerKey } from '../server/token.js';
 import { NPC_MODEL, cleanTalk, npcReply } from '../server/npc.js';
@@ -37,6 +37,7 @@ import { cleanGeo, packGeo, unpackGeo } from '../server/visitors.js';
 
 const BUILD = 'X-Fair-Build'; // which version of the game is online: read by the Worker from its own files, told to the notebook
 const MAX = 'X-Fair-Max', PASS = 'X-Fair-Pass'; // what the door said of a connection: how many the room may hold, and that it is the owner's
+const WEAR = 'X-Fair-Wear', MUTE = 'X-Fair-Mute'; // …what this visitor may be seen wearing ("m.left": wardrobe.js), and that they are kept out in silence
 const shape = (dir) => Object.entries(dir.rooms).filter(([, r]) => r.n > 0).map(([name, r]) => `${name}:${r.phase}`).sort().join(',');
 const REPORT_MS = 5000; // a room tells the notebook how many it holds at most this often (at once when it fills from empty, or empties)
 const AGAIN_MS = 5 * 60_000; // …and again after this long, changed or not, when something happens in it: a notebook that forgot hears of it
@@ -48,7 +49,7 @@ const withGeo = (request, url) => {
   const headers = new Headers(request.headers), cf = request.cf || {};
   const geo = packGeo(cleanGeo({ cc: cf.country, city: cf.city, region: cf.region }));
   if (geo) headers.set(GEO, geo); else headers.delete(GEO);
-  for (const name of [BUILD, MAX, PASS]) headers.delete(name);
+  for (const name of [BUILD, MAX, PASS, WEAR, MUTE]) headers.delete(name);
   return new Request(url || request.url, new Request(request, { headers }));
 };
 
@@ -94,7 +95,10 @@ export class Room extends DurableObject {
       now: () => Date.now() - EPOCH,
       send: (ws, text) => { try { ws.send(text); } catch { /* closing */ } },
       drop: (ws, code, reason) => this.drop(ws, code, reason),
-      save: (p) => { try { p.conn.serializeAttachment({ id: p.id, name: p.name, color: p.color, kit: p.kit, joined: p.joined, state: p.state, ip: p.ip, ua: p.ua, dev: p.dev, sid: p.sid, build: p.build, admin: p.admin ? p.rank || 'owner' : false, key: p.key, cc: p.cc, city: p.city, since: p.since, badge: !!p.badge }); } catch { /* closing */ } },
+      save: (p) => { try { p.conn.serializeAttachment({ id: p.id, name: p.name, color: p.color, kit: p.kit, joined: p.joined, state: p.state, ip: p.ip, ua: p.ua, dev: p.dev, sid: p.sid, build: p.build, admin: p.admin ? p.rank || 'owner' : false, key: p.key, cc: p.cc, city: p.city, since: p.since, badge: !!p.badge, wear: p.wear, wdev: p.wdev, want: p.want, look: p.look, mute: !!p.mute }); } catch { /* closing */ } },
+      // what a browser may be seen wearing: the notebook knows (asked again when the browser says something was bought)
+      wardrobe: (dev) => this.notebook('/wardrobe', { dev }).then((r) => (r && 'wear' in r ? r.wear : undefined)),
+      wake: () => this.arm(),
       // whose key: the owner's (the secret ADMIN_KEY), or that of an administrator who was named (the notebook knows them)
       admin: (key) => (sameSecret(key, (env.ADMIN_KEY || '').trim()) ? { rank: 'owner', id: '' } : looksNamed(key) ? this.notebook('/admin-key', { key }).then((r) => r?.who || null) : false),
       promote: (who) => this.notebook('/promote', who).then((r) => r?.made || null),
@@ -135,7 +139,8 @@ export class Room extends DurableObject {
     was.at = t;
     if (n === was.n && old === was.old && t - (was.said || 0) < AGAIN_MS) return;
     was.n = n; was.old = old; was.said = t;
-    this.ctx.waitUntil(this.notebook('/room', { room: this.name, n, old }).then((heard) => {
+    // (with how many connections each address has here: the door counts them, and keeps them nowhere)
+    this.ctx.waitUntil(this.notebook('/room', { room: this.name, n, old, by: this.relay.addresses() }).then((heard) => {
       if (heard && heard.ok) return;
       // (the notebook did not hear: said again a little later)
       was.n = -1;
@@ -173,6 +178,14 @@ export class Room extends DurableObject {
       // the rooms and their door (server/door.js): the directory, writing it down, a word to one room
       maxPlayers: Math.floor(number(env.MAX_PLAYERS, 200, 1, 4096)),
       releaseBase: /^(1|true|yes)$/i.test(String(env.FREE_ROOMS || '')) ? { freeRooms: true } : undefined, // (tests only: the rooms by address open where the owner decided nothing)
+      // who is connected from where, as the rooms say it (in memory only) — and no limit by address at all in the tests that ask for it
+      crowd: (this.crowd ||= newCrowd()),
+      // kept out in silence from now on, or no longer: every room is told (bans.js)
+      hush: async (who, on) => {
+        const dir = await this.directory(false), text = JSON.stringify({ ...who, on: !!on });
+        await Promise.all(Object.keys(dir.rooms).map((name) => this.env.ROOMS.get(this.env.ROOMS.idFromName(name)).fetch(new Request('https://room/hush', { method: 'POST', body: text })).catch(() => {})));
+      },
+      ...(/^(0|false|off|no)$/i.test(String(env.ADDRESS_LIMITS || '')) && { addressLimits: false }),
       directory: () => this.directory(),
       keep: (structure) => this.keep(structure),
       settleLater: () => this.settleSoon(),
@@ -198,17 +211,19 @@ export class Room extends DurableObject {
       if (typeof said.room === 'string' && said.room && Number.isInteger(said.n)) {
         const dir = await this.directory(false), rules = await roomRules(ctx);
         noteRoom(dir, said.room, said.n, Number.isInteger(said.old) ? said.old : 0, Date.now(), rules);
+        noteCrowd(ctx.crowd, said.room, said.by, Date.now());
         this.settleSoon();
         await this.keep();
       }
       return Response.json({ ok: true });
     }
     if (url.pathname === '/knock') {
-      // a connection is about to enter a room: is the caller kept out, how many may the room hold, is this the owner, is that name a room
+      // a connection is about to enter a room: is the caller kept out (and how), how many may the room hold, is
+      // this the owner, is that name a room, has that address too many connections, what may they be seen wearing
       const q = url.searchParams;
-      const [out, door] = await Promise.all([banned(ctx, q.get('ip') || '', q.get('dev') || ''), knock(ctx, { room: q.get('room') || '', pass: q.get('pass') || '' })]);
-      return Response.json({ banned: out, ...door });
+      return Response.json(await knock(ctx, { room: q.get('room') || '', pass: q.get('pass') || '', ip: q.get('ip') || '', dev: q.get('dev') || '' }));
     }
+    if (url.pathname === '/wardrobe') return Response.json({ wear: await wardrobeOf(ctx, ((await request.json().catch(() => null)) || {}).dev || '') });
     if (url.pathname === '/ban') return Response.json({ added: await addBan({ store, now: () => Date.now() }, (await request.json().catch(() => null)) || {}) });
     if (url.pathname === '/admin-key') return Response.json({ who: await adminOf(store, '', ((await request.json().catch(() => null)) || {}).key) });
     if (url.pathname === '/promote') return Response.json({ made: await nameAdmin(store, (await request.json().catch(() => null)) || {}, Date.now()) });
@@ -302,7 +317,12 @@ export class Room extends DurableObject {
   // Reached through the Worker below: a WebSocket handshake, a head count, or the notebook.
   async fetch(request) {
     const url = new URL(request.url);
-    if (url.pathname.startsWith('/api/') || ['/limit', '/knock', '/ban', '/admin-key', '/promote', '/room'].includes(url.pathname)) return this.api(request, url);
+    if (url.pathname.startsWith('/api/') || ['/limit', '/knock', '/ban', '/admin-key', '/promote', '/room', '/wardrobe'].includes(url.pathname)) return this.api(request, url);
+    if (url.pathname === '/hush') {
+      // the notebook says who is kept out in silence from now on, or no longer (not reachable from outside)
+      const w = (await request.json().catch(() => null)) || {};
+      return Response.json({ n: this.relay.hush({ ip: typeof w.ip === 'string' ? w.ip : '', dev: typeof w.dev === 'string' ? w.dev : '' }, !!w.on) });
+    }
     if (url.pathname === '/push') {
       // the notebook has something to say to everybody here (not reachable from outside)
       this.relay.broadcast(await request.text());
@@ -330,7 +350,10 @@ export class Room extends DurableObject {
       return new Response(null, { status: 101, webSocket: client });
     }
     this.ctx.acceptWebSocket(server);
-    const p = this.relay.add(server, undefined, { ip: request.headers.get('CF-Connecting-IP') || '', ua: request.headers.get('User-Agent') || '', ...unpackGeo(request.headers.get(GEO)), max, pass });
+    // (…what this visitor may be seen wearing, and whether they are kept out in silence)
+    const worn = /^(\d{1,10})\.(\d{1,9})$/.exec(request.headers.get(WEAR) || '');
+    const p = this.relay.add(server, undefined, { ip: request.headers.get('CF-Connecting-IP') || '', ua: request.headers.get('User-Agent') || '', ...unpackGeo(request.headers.get(GEO)), max, pass,
+      ...(worn && { wear: { m: Number(worn[1]), left: Number(worn[2]) }, dev: url.searchParams.get('dev') || '' }), mute: request.headers.get(MUTE) === '1' });
     p.seen = Date.now();
     this.relay.io.save(p);
     return new Response(null, { status: 101, webSocket: client });
@@ -411,10 +434,13 @@ export default {
       const door = await knockAt(env, ip, dev, room, url.searchParams.get('pass') || '');
       if (door.banned) return turnedAway('{"t":"kicked","ban":true}', 4003, 'banned');
       if (door.closed) return turnedAway('{"t":"closed"}', 1013, 'closed'); // (not a room one may open)
+      if (door.limit) return turnedAway(JSON.stringify({ t: 'limit', of: String(door.limit.of), max: Number(door.limit.max) || 0 }), 1013, 'limit'); // (too many from that address)
       const asked = withGeo(request);
       asked.headers.set(BUILD, await buildId(env, url.origin)); // (the room is told which version is online: it counts who is not on it)
       if (Number.isFinite(door.max)) asked.headers.set(MAX, String(door.max));
       if (door.pass) asked.headers.set(PASS, '1');
+      if (door.wear && Number.isInteger(door.wear.m)) asked.headers.set(WEAR, `${door.wear.m}.${Math.max(0, Math.floor(Number(door.wear.left) || 0))}`);
+      if (door.mute) asked.headers.set(MUTE, '1');
       return env.ROOMS.get(env.ROOMS.idFromName(room)).fetch(asked);
     }
     if (url.pathname === '/healthz') return new Response('ok');

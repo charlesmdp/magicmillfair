@@ -9,6 +9,7 @@
 // NPC_MODEL picks the model). ADMIN_KEY is the administrator's key (none: nobody is the administrator).
 // The version online is read from dist/version.json (written by the build); BUILD_ID says it instead (tests).
 // FREE_ROOMS=1: the rooms by address (?room=a-name) are open where the owner decided nothing (tests, development).
+// ADDRESS_LIMITS=0: no limit on how many connections one address may have (tests that all come from one address).
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -21,8 +22,8 @@ import { Room, MAX_FRAME, NEAR, RANGE, cleanRoom, originAllowed, parseOrigins } 
 import { Limiter, LIMITS, BODY_MAX, allowed, parseBody, mayPost, bodyMax } from './api.js';
 import { stripeConfig } from './stripe.js';
 import { restMailer } from './mail.js';
-import { route, banned, addBan } from './routes.js';
-import { knock, roomRules, settle } from './door.js';
+import { route, addBan } from './routes.js';
+import { knock, roomRules, settle, wardrobeOf } from './door.js';
 import { newDirectory, noteRoom } from './rooms.js';
 import { adminOf, looksNamed, nameAdmin } from './admins.js';
 import { geoFromHeaders } from './visitors.js';
@@ -192,6 +193,15 @@ const api = {
   // (FREE_ROOMS=1: any name written in the address is a room of its own where the owner decided nothing — the
   // tests and the development server; as delivered, only the common rooms exist: see door.js)
   releaseBase: /^(1|true|yes)$/i.test(process.env.FREE_ROOMS || '') ? { freeRooms: true } : undefined,
+  // how many connections an address has — [in that room, in all]: counted here, each time it is asked (door.js)
+  connections: (ip, name) => {
+    let here = 0, all = 0;
+    for (const [id, room] of rooms) for (const p of room.players.values()) if (p.ip === ip) { all++; if (id === name) here++; }
+    return [here, all];
+  },
+  ...(/^(0|false|off|no)$/i.test(process.env.ADDRESS_LIMITS || '') && { addressLimits: false }),
+  // kept out in silence from now on, or no longer: said to whoever is connected (bans.js)
+  hush: (who, on) => { for (const room of rooms.values()) room.hush(who, on); },
   directory: async () => {
     const t = Date.now(), live = buildId(), rules = await roomRules(api);
     for (const [name, room] of rooms) { const c = room.census(live); noteRoom(directory, name, c.players, c.old, t, rules); }
@@ -292,6 +302,8 @@ const io = {
   admin: (key) => (sameSecret(key, ADMIN_KEY) ? { rank: 'owner', id: '' } : looksNamed(key) ? adminOf(store, '', key) : false),
   promote: (who) => nameAdmin(store, who, Date.now()),
   ban: (who) => { addBan(api, who).catch((err) => console.error('[ban]', err.message)); },
+  // what a browser may be seen wearing: asked again when it says something was bought (wardrobe.js)
+  wardrobe: (dev) => wardrobeOf(api, dev),
 };
 
 function census() {
@@ -303,6 +315,7 @@ function onConnection(ws, roomId, from) {
   ws.on('error', () => {}); // e.g. oversized frame: ws closes the socket itself (1009)
   if (from.banned) { ws.send('{"t":"kicked","ban":true}'); return ws.close(4003, 'banned'); }
   if (from.closed) { ws.send('{"t":"closed"}'); return ws.close(1013, 'closed'); } // (not a room one may open)
+  if (from.limit) { ws.send(JSON.stringify({ t: 'limit', of: from.limit.of, max: from.limit.max })); return ws.close(1013, 'limit'); } // (too many from that address)
   let room = rooms.get(roomId);
   if (!room) {
     rooms.set(roomId, (room = new Room({ ...io, fired: (at) => { if (blasts.size > 5000) blasts.clear(); blasts.set(roomId, at); } })));
@@ -350,10 +363,13 @@ server.on('upgrade', (req, socket, head) => {
     // who is knocking: the address, the browser, the name the browser gave itself (what a ban holds on to)
     const q = new URLSearchParams(query), roomId = cleanRoom(q.get('room'));
     const from = { ip: String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '', ua: String(req.headers['user-agent'] || ''), ...geoOf(req) };
-    // kept out? and what the door says of that room: how many it may hold, whether this is the owner (who
-    // always gets in), whether that name is a room at all
-    return Promise.all([banned(api, from.ip, q.get('dev') || '').catch(() => false), knock(api, { room: roomId, pass: q.get('pass') || '' }).catch(() => ({}))]).then(([out, door]) => {
-      from.banned = out; from.closed = !!door.closed; from.pass = !!door.pass;
+    // what the door says: kept out (told so, or in silence)? how many that room may hold, whether this is the
+    // owner (who always gets in), whether that name is a room at all, whether that address has too many
+    // connections already — and what this visitor may be seen wearing
+    from.dev = q.get('dev') || '';
+    return knock(api, { room: roomId, pass: q.get('pass') || '', ip: from.ip, dev: from.dev }).catch(() => ({})).then((door) => {
+      from.banned = !!door.banned; from.closed = !!door.closed; from.pass = !!door.pass; from.limit = door.limit || null; from.mute = !!door.mute;
+      if (door.wear) from.wear = door.wear;
       if (Number.isFinite(door.max)) from.max = door.max;
       wss.handleUpgrade(req, socket, head, (ws) => onConnection(ws, roomId, from));
     });

@@ -122,6 +122,21 @@
     if (said(res, 'The door follows these numbers from now on.')) { document.activeElement?.blur(); showRooms(); }
   };
   $('rules-reset').onclick = async () => { if (said(await api('/api/rooms/rules', { method: 'POST', body: { reset: true } }), 'Back to the usual numbers.')) showRooms(); };
+  // (how many connections one address may have: in a room, in all, new ones a minute)
+  async function showLimits() {
+    const res = await api('/api/limits');
+    if (!res.ok) return;
+    const { limits, base, on } = res.body;
+    if (!$('limits-form').contains(document.activeElement)) for (const k of ['room', 'total', 'minute']) $(`limit-${k}`).value = limits[k];
+    $('limits-note').textContent = on ? `The usual: ${base.room} in one room, ${base.total} in all, ${base.minute} new ones a minute.` : 'Switched off on this server (ADDRESS_LIMITS=0): nothing is counted.';
+  }
+  $('limits-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const body = {};
+    for (const k of ['room', 'total', 'minute']) if ($(`limit-${k}`).value !== '') body[k] = Number($(`limit-${k}`).value);
+    if (said(await api('/api/limits', { method: 'POST', body }), 'The door counts with these numbers from now on.')) { document.activeElement?.blur(); showLimits(); }
+  };
+  $('limits-reset').onclick = async () => { if (said(await api('/api/limits', { method: 'POST', body: { reset: true } }), 'Back to the usual numbers.')) showLimits(); };
 
   // ------------------------------------------------------------------------------------------------ the scores
   let boards = null;
@@ -222,17 +237,18 @@
     if (!list.length) return empty(box, 'Nobody is kept out.');
     box.textContent = '';
     for (const b of list) {
-      box.append(item(`${b.name || 'Somebody'} — ${b.kind === 'ip' ? 'address' : 'browser'} ${b.key}`, `${b.until ? `until ${when(b.until)}` : 'for good'} · since ${when(b.at)}`,
-        button('Let back in', 'ghost small', async () => { if (said(await api(`/api/bans?${b.kind === 'ip' ? 'ip' : 'dev'}=${encodeURIComponent(b.key)}`, { method: 'DELETE' }), 'Let back in.')) showBans(); })));
+      const kind = b.kind === 'ip' ? 'ip' : b.kind === 'acct' ? 'acct' : 'dev';
+      box.append(item(`${b.name || 'Somebody'} — ${kind === 'ip' ? 'address' : kind === 'acct' ? 'account' : 'browser'} ${b.key}`, `${b.quiet ? 'in silence · ' : ''}${b.until ? `until ${when(b.until)}` : 'for good'} · since ${when(b.at)}`,
+        button(b.quiet ? 'Lift' : 'Let back in', 'ghost small', async () => { if (said(await api(`/api/bans?${kind}=${encodeURIComponent(b.key)}`, { method: 'DELETE' }), b.quiet ? 'Lifted: they are heard again.' : 'Let back in.')) showBans(); })));
     }
   }
   $('ban-form').onsubmit = async (e) => {
     e.preventDefault();
-    const ip = $('ban-ip').value.trim(), dev = $('ban-dev').value.trim(), err = $('ban-error');
+    const ip = $('ban-ip').value.trim(), dev = $('ban-dev').value.trim(), acct = $('ban-acct').value.trim(), quiet = $('ban-quiet').checked, err = $('ban-error');
     err.hidden = true;
-    if (!ip && !dev) { err.textContent = 'An address or a browser identifier is needed (both are shown in "Who is here", in the game).'; err.hidden = false; return; }
-    const res = await api('/api/bans', { method: 'POST', body: { ...(ip && { ip }), ...(dev && { dev }), name: $('ban-name').value.trim(), hours: Number($('ban-hours').value) } });
-    if (said(res, 'Kept out from now on.')) { $('ban-ip').value = $('ban-dev').value = $('ban-name').value = ''; showBans(); }
+    if (!ip && !dev && !acct) { err.textContent = 'An address, a browser identifier or the name of an account is needed (the first two are shown in "Who is here", in the game).'; err.hidden = false; return; }
+    const res = await api('/api/bans', { method: 'POST', body: { ...(ip && { ip }), ...(dev && { dev }), ...(acct && { acct }), name: $('ban-name').value.trim() || acct, hours: Number($('ban-hours').value), ...(quiet && { quiet: true }) } });
+    if (said(res, quiet ? 'Kept out in silence from now on (a visitor who is connected: from their next connection).' : 'Kept out from now on.')) { $('ban-ip').value = $('ban-dev').value = $('ban-acct').value = $('ban-name').value = ''; $('ban-quiet').checked = false; showBans(); }
   };
 
   // ------------------------------------------------------------------------------------------------- the figures
@@ -270,7 +286,7 @@
   }
 
   // ----------------------------------------------------------------------------------------- the office itself
-  const SHOW = { releases: showReleases, rooms: showRooms, scores: showScores, sponsors: showSponsors, bans: showBans, figures: showFigures, admins: showAdmins };
+  const SHOW = { releases: showReleases, rooms: () => { showRooms(); showLimits(); }, scores: showScores, sponsors: showSponsors, bans: showBans, figures: showFigures, admins: showAdmins };
   const NAMES = { releases: 'Releases', rooms: 'Rooms', scores: 'High scores', sponsors: 'Sponsors & plaques', bans: 'Kept out', figures: 'Figures', admins: 'Administrators' };
   function open(tab) {
     for (const s of document.querySelectorAll('section[data-tab]')) s.hidden = s.dataset.tab !== tab || (s.hasAttribute('data-owner') && !me.owner);

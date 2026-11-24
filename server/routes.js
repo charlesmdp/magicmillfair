@@ -31,16 +31,17 @@
 //        directory(), keep(), tell(room, message), maxPlayers: the rooms and their door (door.js) }
 // An answer is { status, body, headers }, or { status, bytes, headers } for a picture.
 import { allowed } from './api.js';
-import { BOARDS, addScore, cleanScore, removeScore, runFits, topsOf } from './scores.js';
+import { BOARDS, PERIODS, addScore, cleanScore, removeScore, runFits, topsOf, topsWith, wouldRank } from './scores.js';
 import { randomId, sign, verify } from './token.js';
 import { cleanName } from './protocol.js';
 import { shopRoute } from './shop.js';
 import { adminOf, listAdmins, removeAdmin } from './admins.js';
 import { cleanGeo, noteVisit, visitorsReport } from './visitors.js';
-import { accountRoute, visitRecord } from './accounts.js';
+import { accountRoute, visitRecord, accountOf, isAccountName } from './accounts.js';
 import { localDay, visit } from './visits.js';
 import { readRelease, releaseNews, releaseRoute } from './release.js';
 import { doorRoute } from './door.js';
+import { banned, addBan, bansRoute, anyQuiet, keptOut } from './bans.js';
 import { statsRoute } from './stats.js';
 import { BOARDS as GAME_NAMES } from './catalog.js';
 
@@ -48,36 +49,10 @@ const out = (status, body, headers = {}) => ({ status, body, headers });
 
 export { localDay, visit };
 
-const DEVICE = /^[A-Za-z0-9_-]{16,64}$/, ADDRESS = /^[0-9a-fA-F:.]{2,64}$/;
+const DEVICE = /^[A-Za-z0-9_-]{16,64}$/;
 
-// --- Who is kept out: by address and by device (the random name a browser gave itself), for a time or for good.
-// Kept under one key: { ip: { address: entry }, dev: { device: entry } }, entry = { until (ms, 0 = for good),
-// name (as they were called), at }.
-const liveBans = (bans, now) => {
-  const out = { ip: {}, dev: {} };
-  for (const kind of ['ip', 'dev']) for (const [k, e] of Object.entries(bans?.[kind] || {})) if (e && (e.until === 0 || e.until > now)) out[kind][k] = e;
-  return out;
-};
-
-/** Is this address, or this device, kept out? */
-export async function banned(ctx, ip, dev) {
-  const bans = await ctx.store.get('bans');
-  if (!bans) return false;
-  const live = liveBans(bans, ctx.now());
-  return (!!ip && Object.hasOwn(live.ip, ip)) || (!!dev && Object.hasOwn(live.dev, dev));
-}
-
-/** Keeps an address and / or a device out for `hours` (0: for good). */
-export async function addBan(ctx, { ip, dev, name, hours }) {
-  const now = ctx.now(), bans = liveBans(await ctx.store.get('bans'), now);
-  const h = Math.max(0, Math.min(87600, Number(hours) || 0));
-  const entry = { until: h > 0 ? now + h * 3600_000 : 0, name: cleanName(name || ''), at: now };
-  let added = 0;
-  if (typeof ip === 'string' && ADDRESS.test(ip)) { bans.ip[ip] = entry; added++; }
-  if (typeof dev === 'string' && DEVICE.test(dev)) { bans.dev[dev] = entry; added++; }
-  if (added) await ctx.store.put('bans', bans);
-  return added;
-}
+// (who is kept out, and how: bans.js)
+export { banned, addBan };
 
 async function used(ctx, nonce, expires) {
   // notes already spent, until they would have expired anyway
@@ -86,6 +61,22 @@ async function used(ctx, nonce, expires) {
   spent[nonce] = expires;
   await ctx.store.put('runs:used', spent);
   return false;
+}
+
+// The boards from before scores belonged to accounts are put away, once: `board0:<id>` (see scores.js).
+const ERA = 1, CLAIM_MS = 30 * 60_000;
+function newEra(ctx) {
+  ctx.era ||= (async () => {
+    if (((await ctx.store.get('scores:era')) || {}).v >= ERA) return;
+    for (const id of Object.keys(BOARDS)) {
+      const old = await ctx.store.get(`board:${id}`);
+      if (!old || (await ctx.store.get(`board0:${id}`))) continue;
+      await ctx.store.put(`board0:${id}`, old);
+      await ctx.store.delete(`board:${id}`);
+    }
+    await ctx.store.put('scores:era', { v: ERA, at: ctx.now() });
+  })().catch((err) => { ctx.era = null; throw err; });
+  return ctx.era;
 }
 
 export async function route(req, ctx) {
@@ -130,20 +121,9 @@ export async function route(req, ctx) {
     return out(200, await visitorsReport(ctx.store, now));
   }
 
-  if (path === '/api/bans') {
-    if (!req.admin) return out(403, { error: 'Forbidden.' });
-    const bans = liveBans(await ctx.store.get('bans'), now);
-    if (method === 'POST') {
-      if (!(await addBan(ctx, body || {}))) return out(400, { error: 'Nobody to keep out.' });
-    } else if (method === 'DELETE') {
-      const ip = query.get('ip') || '', dev = query.get('dev') || '';
-      const had = (Object.hasOwn(bans.ip, ip) ? (delete bans.ip[ip], 1) : 0) + (Object.hasOwn(bans.dev, dev) ? (delete bans.dev[dev], 1) : 0);
-      if (had) await ctx.store.put('bans', bans);
-      return out(200, { removed: had });
-    } else if (method !== 'GET' && method !== 'HEAD') return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD, POST, DELETE' });
-    const live = liveBans(await ctx.store.get('bans'), now);
-    return out(200, { bans: ['ip', 'dev'].flatMap((kind) => Object.entries(live[kind]).map(([key, e]) => ({ kind, key, ...e }))) });
-  }
+  // who is kept out — by address, by browser, by account; told so, or in silence (bans.js)
+  const kept = await bansRoute(req, ctx);
+  if (kept) return kept;
 
   if (path === '/api/visit') {
     if (method !== 'POST') return out(405, { error: 'Method not allowed.' }, { Allow: 'POST' });
@@ -168,17 +148,44 @@ export async function route(req, ctx) {
     return out(200, { run: await sign(await ctx.secret(), { b: body.board, t: now, n: randomId(9) }) });
   }
 
-  if (path === '/api/scores') {
+  if (path === '/api/scores' || path === '/api/scores/claim') {
+    await newEra(ctx);
+    const browser = (d) => (typeof d === 'string' && DEVICE.test(d) ? d : '');
+    // (kept out in silence: what they score is theirs to see alone — most of the time nobody is, and nothing is looked up)
+    const hushed = async (device) => (await anyQuiet(ctx)) && (await keptOut(ctx, client, device)) === 'quiet';
+    const shadowOf = async (device) => (device ? (await ctx.store.get(`shadow:${device}`)) || null : null);
+
+    if (path === '/api/scores/claim') {
+      // an account has just been made: the scores of the last half hour, made as a guest, count for it after all
+      if (method !== 'POST') return out(405, { error: 'Method not allowed.' }, { Allow: 'POST' });
+      if (limited('scores')) return busy;
+      const device = browser(body?.device), acct = device ? await accountOf(ctx.store, device) : null;
+      if (!acct) return out(403, { error: 'Sign in first.' });
+      const hush = await hushed(device), own = hush ? (await shadowOf(device)) || {} : null, claimed = [], boards = {};
+      for (const token of Array.isArray(body.claims) ? body.claims.slice(0, 20) : []) {
+        const c = typeof token === 'string' ? await verify(await ctx.secret(), token) : null;
+        if (!c || c.c !== 1 || !Object.hasOwn(BOARDS, c.b) || !Number.isFinite(c.s) || !(c.x > now) || typeof c.n !== 'string' || (await shut(c.b))) continue;
+        if (await used(ctx, `claim:${c.n}`, c.x)) continue;
+        if (hush) own[c.b] = addScore(own[c.b], c.b, { name: acct.name, score: c.s }, now).state;
+        else await ctx.store.put(`board:${c.b}`, addScore(await ctx.store.get(`board:${c.b}`), c.b, { name: acct.name, score: c.s }, now).state);
+        if (!claimed.includes(c.b)) claimed.push(c.b);
+      }
+      if (hush && claimed.length) await ctx.store.put(`shadow:${device}`, own);
+      for (const id of claimed) boards[id] = hush ? topsWith(await ctx.store.get(`board:${id}`), own[id], id, now) : topsOf(await ctx.store.get(`board:${id}`), now);
+      return out(200, { claimed, boards, name: acct.name });
+    }
+
     if (method === 'GET' || method === 'HEAD') {
-      const board = query.get('board') || 'sky';
+      const board = query.get('board') || 'sky', own = await shadowOf(browser(query.get('device')));
+      const show = async (id) => { const stored = await ctx.store.get(`board:${id}`); return own?.[id] ? topsWith(stored, own[id], id, now) : topsOf(stored, now); };
       if (board === 'all') {
         // every board at once (the game asks for them all when it starts)
         const boards = {};
-        for (const id of Object.keys(BOARDS)) if (!(await shut(id))) boards[id] = topsOf(await ctx.store.get(`board:${id}`), now);
+        for (const id of Object.keys(BOARDS)) if (!(await shut(id))) boards[id] = await show(id);
         return out(200, { boards });
       }
       if (!Object.hasOwn(BOARDS, board) || (await shut(board))) return out(404, { error: 'Unknown board.' });
-      return out(200, { board, ...topsOf(await ctx.store.get(`board:${board}`), now) });
+      return out(200, { board, ...(await show(board)) });
     }
     if (method === 'DELETE') {
       if (!req.admin) return out(403, { error: 'Forbidden.' });
@@ -195,10 +202,31 @@ export async function route(req, ctx) {
     const note = await verify(await ctx.secret(), score.run);
     const why = runFits(note, score, now);
     if (why) return out(400, { error: `Not a score: ${why}.` });
+    // whose score: that of the account this browser is signed in to — or a guest's, who is on the list of the
+    // day only, and never under the name of an account
+    const device = browser(body.device), acct = device ? await accountOf(ctx.store, device) : null, guest = !acct;
+    const name = acct ? acct.name : score.name;
+    if (guest && (await isAccountName(ctx.store, name))) return out(409, { error: 'That name belongs to an account: sign in to play under it, or pick another name.', taken: true });
     if (await used(ctx, note.n, note.t + BOARDS[score.board].max + 3600_000)) return out(400, { error: 'Not a score: this run was already counted.' });
-    const { state, rank, best } = addScore(await ctx.store.get(`board:${score.board}`), score.board, score, now);
-    await ctx.store.put(`board:${score.board}`, state);
-    return out(200, { board: score.board, ...topsOf(state, now), rank, best });
+    const stored = await ctx.store.get(`board:${score.board}`), periods = guest ? ['day'] : PERIODS, line = { name, score: score.score };
+    let added, tops;
+    if (await hushed(device)) {
+      const own = (await shadowOf(device)) || {};
+      added = addScore(own[score.board], score.board, line, now, periods);
+      if (device) await ctx.store.put(`shadow:${device}`, { ...own, [score.board]: added.state });
+      tops = topsWith(stored, added.state, score.board, now);
+      added.rank = tops.tops.all.findIndex((e) => e.name.toLowerCase() === name.toLowerCase()) + 1;
+      added.day = tops.tops.day.findIndex((e) => e.name.toLowerCase() === name.toLowerCase()) + 1;
+    } else {
+      added = addScore(stored, score.board, line, now, periods);
+      await ctx.store.put(`board:${score.board}`, added.state);
+      tops = topsOf(added.state, now);
+    }
+    return out(200, {
+      board: score.board, ...tops, rank: added.rank, best: added.best,
+      // (a guest: where they stand today, where they would stand with an account — and a note to claim it with)
+      ...(guest && { guest: true, day: added.day, would: wouldRank(stored, score.board, score.score, now), claim: await sign(await ctx.secret(), { c: 1, b: score.board, s: score.score, x: now + CLAIM_MS, n: randomId(9) }) }),
+    });
   }
 
   // an account, to keep things from one browser to the next (accounts.js)

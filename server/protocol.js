@@ -17,8 +17,11 @@
 //                     {t:'g',b}   a score of mine has just gone on board b (relayed as {t:'g',id,b})
 //                     {t:'n'}     the big red button: answered {t:'n',id,wait} to the whole room when it goes
 //                                 off (wait: ms before the next one), {t:'n',wait} to the sender when it is too soon
+//                     {t:'own'}   something was bought, or given: the relay asks again what this visitor has
+//                     (what an avatar shows — colour, kit, look — is brought back to that: see wardrobe.js)
 //                     {t:'ping',c}   {t:'admin',key}   and, from an administrator: {t:'who'}   {t:'kick',id}
-//                     {t:'ban',id,h}   {t:'promote',id} (names that visitor an administrator)   {t:'demote',key}
+//                     {t:'ban',id,h,q?} (q: in silence — the visitor stays, and is no longer heard: see below)
+//                     {t:'promote',id} (names that visitor an administrator)   {t:'demote',key}
 //                     {t:'gift',id} (that visitor has been given something: their game asks the shop again)
 //                     (the owner: the administrator whose key has that id is one no more)   {t:'c',m,i:1} (a
 //                     line on the "important" channel: relayed to the whole room, marked as such)
@@ -35,6 +38,8 @@
 //                     everybody here (the door's offer, see rooms.js — nobody is moved)
 //                     {t:'closed'}   said instead of a welcome, before hanging up: that name is not a room one
 //                     may open (door.js: the switch freeRooms)
+//                     {t:'limit',of,max}   said instead of a welcome, before hanging up: too many connections from
+//                     this address already (of: 'room', 'total' or 'minute' — door.js)
 //                     {t:'kicked',ban}   {t:'promoted',key,by} (to who has just been named: the key of their
 //                     own)   {t:'promoted',id} (to who named them)   {t:'gift',by} (to who was given something:
 //                     nothing is given by this message — the shop is, and it only believes the administrator)
@@ -58,6 +63,13 @@
 // country), put someone out (kick) or keep them out (ban: the host keeps the list), name another visitor
 // administrator (the host draws the key: io.promote), and speak on the "important" channel. Only the owner
 // takes the title away, and nobody but the owner puts the owner out.
+//
+// Kept out in silence (`mute`: the host says so when the connection arrives, or an administrator does it from the
+// room). The visitor notices nothing: they play, move and wave as before, and everybody sees them — but what
+// they write is relayed to nobody, a score of theirs is announced to nobody, and the big red button only goes
+// off on their own screen.
+
+import { fitColor, fitKit, fitLook, mayLight, cleanWardrobe, FIREWORK } from './wardrobe.js';
 
 export const MAX_FRAME = 2048; // bytes
 export const RATE = 40, BURST = RATE * 2; // messages per second, averaged over 2 s (token bucket)
@@ -140,7 +152,10 @@ export class Room {
    *   admin(key)                       optional: whose key is this? false, true or 'owner', 'admin', or
    *                                    { rank: 'owner' | 'admin', id } — or a promise of one of these (default: nobody's)
    *   promote({ name, by })            optional: names an administrator; resolves to { key, id } (the key to hand over) or null
-   *   ban({ ip, dev, name, hours })    optional: keep someone out from now on (0 hours: for good)
+   *   ban({ ip, dev, name, hours, quiet })   optional: keep someone out from now on (0 hours: for good; quiet: in silence)
+   *   wardrobe(dev)                    optional: what that browser has ({ m, left }, see wardrobe.js; null: nothing
+   *                                    is sold, everything is everybody's), or a promise of it
+   *   wake()                           optional: something is waiting to be flushed that no message brought
    *   fired(at)                        optional: the big red button went off at `at` (relay clock): a host that
    *                                    forgets its rooms keeps it, and gives it back by setting room.blastAt
    */
@@ -166,7 +181,9 @@ export class Room {
    * A connection arrives. Returns its player, or null when the room is full (the host says so and closes).
    * `known` ({ id, name, color, joined, state, ip, ua, dev, sid, admin, since }) restores a player whose connection
    * outlived the host's memory; `from` ({ ip, ua }) is what the host knows of a new one — with `max` when the
-   * door has its own idea of how many the room may hold just now, and `pass` for the owner, who always gets in.
+   * door has its own idea of how many the room may hold just now, `pass` for the owner, who always gets in,
+   * `wear` (and `dev`, the browser it was read for): what this visitor may be seen wearing — without it nothing
+   * is checked —, and `mute` for a visitor who is kept out in silence.
    */
   add(connection, known, from) {
     if (!known && !from?.pass && this.players.size >= (Number.isFinite(from?.max) ? from.max : this.io.max)) return null;
@@ -179,16 +196,39 @@ export class Room {
       ip: String((known || from)?.ip || '').slice(0, 64), ua: String((known || from)?.ua || '').slice(0, 220), dev: '', sid: '', build: '', admin: false, tries: 0, since: known?.since || t,
       // (an administrator: 'owner' or 'admin', and which named key it was; where the connection comes from)
       rank: '', key: '', cc: String((known || from)?.cc || '').slice(0, 2), city: String((known || from)?.city || '').slice(0, 60),
+      // (what they may be seen wearing: { m, t } — t: when the free day of the light jetpack ends, on this clock —,
+      // the browser it was read for; the colour, the kit and the look they asked for; kept out in silence)
+      wear: undefined, wdev: '', want: [0, 0], look: 0, mute: !!(known || from)?.mute,
     };
+    const worn = cleanWardrobe(from?.wear);
+    if (worn) { p.wear = { m: worn.m, t: t + worn.left }; p.wdev = cleanDevice(from.dev); }
     if (known) {
       p.name = cleanName(known.name); p.color = int(known.color, 31); p.kit = int(known.kit, 255); p.joined = !!known.joined;
       p.dev = cleanDevice(known.dev); p.sid = cleanSession(known.sid); p.build = cleanBuild(known.build); p.admin = !!known.admin; p.badge = !!known.badge;
       p.rank = !known.admin ? '' : known.admin === 'admin' ? 'admin' : 'owner'; p.key = typeof known.key === 'string' ? known.key.slice(0, 12) : '';
       if (Array.isArray(known.state) && known.state.length === 6 && known.state.every(Number.isFinite)) { p.state = known.state; p.row = `[${p.id},${p.state.join(',')}`; p.ver = 1; }
+      if (known.wear && Number.isInteger(known.wear.m) && Number.isFinite(known.wear.t)) { p.wear = { m: known.wear.m, t: known.wear.t }; p.wdev = cleanDevice(known.wdev); }
+      // (what they asked for: as it was kept — or, from before it was, what they were shown as)
+      p.want = Array.isArray(known.want) ? [int(known.want[0], 31), int(known.want[1], 255)] : [p.color, p.kit];
+      p.look = Number.isInteger(known.look) ? known.look & 0xffff : p.state ? p.state[5] : 0;
     }
     if (p.id >= this.nextId) this.nextId = p.id + 1;
     this.players.set(connection, p);
     return p;
+  }
+
+  /** Kept out in silence from now on — or no longer (`on`): whoever is here from that address, or with that browser. Returns how many. */
+  hush({ ip, dev }, on) {
+    let n = 0;
+    for (const p of this.players.values()) if ((ip && p.ip === ip) || (dev && p.dev === dev)) { p.mute = !!on; this.io.save?.(p); n++; }
+    return n;
+  }
+
+  /** How many connections each address has in this room: { address: n } (the door counts them: door.js). */
+  addresses() {
+    const by = {};
+    for (const p of this.players.values()) if (p.ip) by[p.ip] = (by[p.ip] || 0) + 1;
+    return by;
   }
 
   /** The connection is gone (safe to call twice). */
@@ -233,6 +273,7 @@ export class Room {
     else if (!p.joined) return;
     else if (m.t === 's') this._state(p, m, t);
     else if (m.t === 'e' && Number.isInteger(m.e) && m.e >= 0 && m.e <= 31) {
+      if (m.e === FIREWORK && !mayLight(this._wear(p))) return; // (a firework from a box nobody bought)
       const out = `{"t":"e","id":${p.id},"e":${m.e}}`;
       if (this.crowded) this.around(p, this.range, out); else this.broadcast(out, p);
     } else if (m.t === 'g' && typeof m.b === 'string' && /^[a-z]{2,8}$/.test(m.b)) {
@@ -240,8 +281,9 @@ export class Room {
       // of it is taken from this message). At most one every three seconds from each visitor.
       if (p.scored !== undefined && t - p.scored < 3000) return;
       p.scored = t;
-      this.broadcast(`{"t":"g","id":${p.id},"b":"${m.b}"}`, p);
-    } else if (m.t === 'n') this._blast(p, t);
+      if (!p.mute) this.broadcast(`{"t":"g","id":${p.id},"b":"${m.b}"}`, p);
+    } else if (m.t === 'own') this._own(p, t);
+    else if (m.t === 'n') this._blast(p, t);
     else if (m.t === 'c') this._chat(p, m, t);
     else if (m.t === 'admin') this._admin(p, m);
     else if (p.admin && (m.t === 'who' || m.t === 'kick' || m.t === 'ban' || m.t === 'promote' || m.t === 'demote' || m.t === 'gift')) this._moderate(p, m);
@@ -251,6 +293,8 @@ export class Room {
   _blast(p, t) {
     const left = this.blastAt === undefined ? 0 : this.blastAt + BLAST_EVERY - t;
     if (left > 0) return this.io.send(p.conn, `{"t":"n","wait":${Math.ceil(left)}}`);
+    // (kept out in silence: the show is on their screen alone, and the room's button is still ready)
+    if (p.mute) return this.io.send(p.conn, `{"t":"n","id":${p.id},"wait":${BLAST_EVERY}}`);
     this.blastAt = t;
     this.io.fired?.(t);
     const text = `{"t":"n","id":${p.id},"wait":${BLAST_EVERY}}`;
@@ -265,6 +309,7 @@ export class Room {
     const text = cleanChat(m.m);
     if (!text) return;
     p.chat -= 1;
+    if (p.mute) return; // (kept out in silence: nobody hears)
     if (m.i && p.admin) this.broadcast(JSON.stringify({ t: 'c', id: p.id, m: text, i: 1 }), p); // (the "important" channel: an administrator's)
     else if (m.n) this.around(p, CHAT_NEAR, JSON.stringify({ t: 'c', id: p.id, m: text, n: 1 }));
     else this.broadcast(JSON.stringify({ t: 'c', id: p.id, m: text }), p);
@@ -281,7 +326,7 @@ export class Room {
       const was = p.admin;
       p.admin = ok; p.rank = ok ? (who.rank === 'admin' ? 'admin' : 'owner') : ''; p.key = ok ? String(who.id || '').slice(0, 12) : '';
       this.io.send(p.conn, `{"t":"admin","ok":${ok}${p.rank === 'owner' ? ',"owner":true' : ''}}`);
-      if (was !== ok) this._badge(p);
+      if (was !== ok) this._shown(p, true); // (an administrator may wear anything, and a badge; one who is no more, only what they have)
       this.io.save?.(p);
     };
     let answer = false;
@@ -291,13 +336,13 @@ export class Room {
 
   _moderate(p, m) {
     if (m.t === 'who') {
-      const list = [...this.players.values()].filter((o) => o.joined).map((o) => ({ id: o.id, name: o.name, ip: o.ip, ua: o.ua, dev: o.dev, since: o.since, cc: o.cc, city: o.city, admin: o.rank }));
+      const list = [...this.players.values()].filter((o) => o.joined).map((o) => ({ id: o.id, name: o.name, ip: o.ip, ua: o.ua, dev: o.dev, since: o.since, cc: o.cc, city: o.city, admin: o.rank, ...(o.mute && { muted: true }) }));
       return this.io.send(p.conn, JSON.stringify({ t: 'who', now: this.io.now(), list }));
     }
     if (m.t === 'demote') {
       // the owner has taken the title away from whoever holds that key: they are an administrator no more
       if (p.rank !== 'owner' || typeof m.key !== 'string' || !m.key) return;
-      for (const o of this.players.values()) if (o.rank === 'admin' && o.key === m.key) { o.admin = false; o.rank = o.key = ''; this.io.send(o.conn, '{"t":"admin","ok":false,"out":true}'); this._badge(o); this.io.save?.(o); }
+      for (const o of this.players.values()) if (o.rank === 'admin' && o.key === m.key) { o.admin = false; o.rank = o.key = ''; this.io.send(o.conn, '{"t":"admin","ok":false,"out":true}'); this._shown(o, true); this.io.save?.(o); }
       return;
     }
     const target = [...this.players.values()].find((o) => o.id === m.id);
@@ -316,19 +361,63 @@ export class Room {
     }
     if (target.rank === 'owner' && p.rank !== 'owner') return; // (nobody but the owner puts the owner out)
     const ban = m.t === 'ban';
+    if (ban && m.q) {
+      // kept out in silence: they stay, and from now on nobody hears them (see the top of this file)
+      this.io.ban?.({ ip: target.ip, dev: target.dev, name: target.name, hours: clamp(Number(m.h) || 0, 0, 87600), quiet: true });
+      target.mute = true;
+      this.io.save?.(target);
+      return;
+    }
     if (ban) this.io.ban?.({ ip: target.ip, dev: target.dev, name: target.name, hours: clamp(Number(m.h) || 0, 0, 87600) });
     this.io.send(target.conn, `{"t":"kicked","ban":${ban}}`);
     (this.io.kick || this.io.drop)(target.conn, ban ? 4003 : 4001, ban ? 'banned' : 'kicked');
   }
 
-  // The badge of an administrator who wants it known has just appeared, or gone: the others are told.
-  _badge(p) {
-    if (p.joined && p.badge) this.broadcast(JSON.stringify({ t: 'join', id: p.id, name: p.name, color: p.color, ...(p.kit && { k: p.kit }), ...(p.admin && { ad: 1 }) }), p);
+  // What this visitor may be seen wearing: anything for an administrator, their wardrobe otherwise (none: no check).
+  _wear(p) { return p.admin ? true : p.wear; }
+
+  // What the others are told of a visitor: a name, a colour, a kit — and the badge of an administrator who wants it known.
+  _card(p) { return JSON.stringify({ t: 'join', id: p.id, name: p.name, color: p.color, ...(p.kit && { k: p.kit }), ...(p.admin && p.badge && { ad: 1 }) }); }
+
+  // What the others see of a visitor is worked out again — what they have has just been read again, or (`rank`)
+  // whether they are an administrator has changed: the colour and the kit they asked for, their badge, the look
+  // of their last state. The others are told what is no longer the same.
+  _shown(p, rank = false) {
+    const w = this._wear(p), color = fitColor(p.want[0], w), kit = fitKit(p.want[1], w), told = color !== p.color || kit !== p.kit || (rank && p.badge);
+    p.color = color; p.kit = kit;
+    if (p.joined && told) this.broadcast(this._card(p), p);
+    const look = p.state ? fitLook(p.look, w, this.io.now()) : 0;
+    if (p.state && look !== p.state[5]) {
+      p.state = [...p.state.slice(0, 5), look];
+      p.row = `[${p.id},${p.state.join(',')}`; p.at = Math.max(this.io.now(), p.at + 1); p.dirty = true; p.rested = false; p.ver++;
+      this.moved = this.unmapped = this.pending = true;
+      this.io.wake?.();
+    }
+  }
+
+  // Something was bought, or given: what this visitor has is asked again (at most every two seconds).
+  _own(p, t, now = false) {
+    if (!this.io.wardrobe || !p.dev || (!now && p.asked !== undefined && t - p.asked < 2000)) return;
+    p.asked = t;
+    Promise.resolve().then(() => this.io.wardrobe(p.dev)).then((given) => {
+      if (this.players.get(p.conn) !== p) return; // (gone in the meantime)
+      const w = cleanWardrobe(given);
+      // (null: nothing is sold here — everything is everybody's, nothing is checked)
+      p.wear = w ? { m: w.m, t: this.io.now() + w.left } : given === null ? undefined : p.wear;
+      p.wdev = p.dev;
+      this._shown(p);
+      this.io.save?.(p);
+    }).catch(() => {});
   }
 
   _hello(p, m) {
-    const name = cleanName(m.name), color = int(m.color, 31), kit = int(m.k, 255), badge = m.ad === 1;
+    const name = cleanName(m.name), badge = m.ad === 1;
     if (!p.dev) p.dev = cleanDevice(m.dev);
+    // (the wardrobe that came with the connection is that of the browser named in the address: a hello that
+    // names another has nothing until its own has been read)
+    if (p.wear && p.wdev !== p.dev) { p.wear = { m: 0, t: 0 }; p.wdev = p.dev; this._own(p, this.io.now(), true); }
+    p.want = [int(m.color, 31), int(m.k, 255)];
+    const color = fitColor(p.want[0], this._wear(p)), kit = fitKit(p.want[1], this._wear(p));
     if (!p.build) p.build = cleanBuild(m.b);
     if (!p.sid) {
       p.sid = cleanSession(m.s);
@@ -351,13 +440,15 @@ export class Room {
       this.io.send(p.conn, JSON.stringify(welcome));
       this.pending = true; // (the crowd may have just become one)
     }
-    this.broadcast(JSON.stringify({ t: 'join', id: p.id, name, color, ...(kit && { k: kit }), ...(p.admin && badge && { ad: 1 }) }), p);
+    this.broadcast(this._card(p), p);
     this.io.save?.(p);
   }
 
   _state(p, m, t) {
     const state = cleanState(m);
     if (!state) return;
+    p.look = state[5];
+    state[5] = fitLook(state[5], this._wear(p), t); // (a hat, a flame, a size that are not theirs are not shown)
     const row = `[${p.id},${state.join(',')}`; // closed with its age when a flush sends it
     const at = Math.max(t, p.at + 1); // strictly increasing per player: clients order states by time
     if (row !== p.row) { p.row = row; p.state = state; p.at = at; p.dirty = true; p.rested = false; p.ver++; this.moved = this.unmapped = true; this.io.save?.(p); }

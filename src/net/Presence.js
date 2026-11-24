@@ -81,7 +81,9 @@ export class Presence {
    * `room`: a room asked for by its name (else the one the address names with ?room=, if any); `back`: the room
    * this visitor was in a moment ago (a refresh, a new version) — gone back to if it has room.
    */
-  constructor({ room, back, name, color, kit = 0, url } = {}) {
+  constructor({ room, back, name, color, kit = 0, url, limitWait } = {}) {
+    // (how long one waits before trying again when the address has too many connections: door.js)
+    this._limitWait = { minute: 20_000, total: 60_000, ...limitWait };
     this._page = typeof location !== 'undefined' ? location : { search: '', pathname: '', protocol: '' };
     this._query = new URLSearchParams(this._page.search);
     this._url = url;
@@ -281,7 +283,10 @@ export class Presence {
   /** The administrator: who is in the room (answered by a 'who' event), put someone out, keep them out. */
   who() { if (this.admin && this._tr) this._tr.send({ t: 'who' }); }
   kick(id) { if (this.admin && this._tr) this._tr.send({ t: 'kick', id }); }
-  ban(id, hours = 0) { if (this.admin && this._tr) this._tr.send({ t: 'ban', id, h: hours }); }
+  /** Keeps a visitor out for `hours` (0: for good) — `quiet`: in silence (they stay, and nobody hears them any more). */
+  ban(id, hours = 0, quiet = false) { if (this.admin && this._tr) this._tr.send({ t: 'ban', id, h: hours, ...(quiet && { q: 1 }) }); }
+  /** Something was bought, or given: the relay asks again what this browser may be seen wearing. */
+  own() { if (this._tr) this._tr.send({ t: 'own' }); }
   /**
    * The big red button. True when the relay was asked (it answers the whole room with a 'blast' event, or
    * this visitor alone with 'blastWait' when it is too soon); false when there is no relay to ask.
@@ -327,6 +332,7 @@ export class Presence {
     this._disposed = true;
     this._turn++;
     clearTimeout(this._timer);
+    clearTimeout(this._again);
     for (const tr of [this._ws, this._bc]) if (tr) tr.close();
     this._ws = this._bc = this._tr = null;
     this.peers.clear();
@@ -352,6 +358,7 @@ export class Presence {
       },
       onclose: (tr) => {
         if (this.kicked) return; // put out: no coming back through the window
+        if (tr.limit && tr !== this._tr) return this._limited(tr); // turned away: too many connections from this address
         if ((tr.full || tr.shut) && tr !== this._tr) return this._overflow(tr); // turned away: a full room, or a name that is not a room
         if (tr !== this._tr) return;
         this._tr = null; // peers stay frozen for a moment: a quick reconnection will not make them blink
@@ -375,6 +382,20 @@ export class Presence {
     }, delay);
   }
 
+  // Too many connections from this address (server/door.js). In that room: the door is asked for another. In
+  // all, or too many new ones just now: one waits — alone meanwhile — and tries again ('limit' says so).
+  _limited(tr) {
+    if (tr !== this._ws || !this._dial) return;
+    const { of, max } = tr.limit;
+    if (of === 'room') { tr.full = true; return this._overflow(tr); }
+    tr.close();
+    this._ws = null;
+    this._emit('limit', { of, max });
+    this._fallback(0);
+    clearTimeout(this._again);
+    this._again = setTimeout(() => { if (!this._disposed && !this.kicked && !this._ws) this._enter({ want: this._want, back: this._back, not: this._not }); }, this._limitWait[of] || this._limitWait.total);
+  }
+
   // The room is full, or its name is not a room: back to the door, which is told (after a few rooms in a row
   // have said no — the fair is full, or the door cannot be reached — a pause, then again from the start).
   _overflow(tr) {
@@ -393,6 +414,7 @@ export class Presence {
     if (!m || typeof m !== 'object' || this._disposed) return;
     if (m.t === 'full') { if (tr !== this._tr) tr.full = true; return; } // (acted upon when the relay then hangs up, see onclose)
     if (m.t === 'closed') { if (tr !== this._tr) tr.shut = true; return; } // (that name is not a room one may open: the same)
+    if (m.t === 'limit') { if (tr !== this._tr) tr.limit = { of: m.of === 'room' || m.of === 'minute' ? m.of : 'total', max: Number(m.max) || 0 }; return; } // (too many from this address: the same)
     if (m.t === 'kicked') return this._out(!!m.ban);
     if (m.t === 'welcome') {
       if (Number.isInteger(m.id)) this._welcome(tr, mode, m);

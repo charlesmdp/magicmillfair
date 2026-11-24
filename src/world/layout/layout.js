@@ -780,7 +780,7 @@ export const NOTICES = {
   welcome: { x: -121.05, z: -49, yaw: Math.PI + 0.068, half: 3.7 },
   rules: { x: -116.9, z: -53.6, yaw: -2.49 },
   // (…and, to the right, how it all came to this: the story of the opening, told another way)
-  story: { x: -125.9, z: -52.3, yaw: 2.62 },
+  story: { x: -125.35, z: -52.0, yaw: 2.62 },
   // (…and, beside whoever arrives, on the left of the lane: an easel of painted planks — a life coach is not
   // far; the planks of the signposts take over further on. `yaw`: which way its front looks)
   advice: { x: -119.75, z: -60.5, yaw: -2.8 },

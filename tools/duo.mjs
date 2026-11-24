@@ -175,6 +175,16 @@ try {
   const live = await until(() => bob.page.evaluate(() => [...document.querySelectorAll('.chat .log p')].map((e) => e.textContent).find((l) => /Ring the Bell: Alice — 7,777 points \(#1 today\)/.test(l)) || null), 20000);
   const shownToBob = await bob.page.evaluate(() => window.__mmf.fair.tops.bell?.day?.[0] || null);
   check('a score made by Alice is shown to Bob as soon as she finishes: a line in the chat, his board up to date', !!live && shownToBob?.name === 'Alice' && shownToBob.score === 7777, JSON.stringify({ live, shownToBob }));
+  // …made without an account: it is on the board of the day, and its author is offered an account when it
+  // would be among the ten of a longer list
+  {
+    const offered = await until(() => alice.page.evaluate(() => { const b = document.querySelector('.offer-bar.on'); return b ? { text: b.querySelector('.offer-text').textContent, yes: b.querySelector('.offer-yes').textContent, no: b.querySelector('.offer-no').textContent } : null; }), 20000);
+    const boards = await alice.page.evaluate(async () => (await (await fetch('/api/scores?board=bell')).json()).tops);
+    if (offered) await alice.page.click('.offer-bar .offer-no');
+    const gone = await until(() => alice.page.evaluate(() => !document.querySelector('.offer-bar.on')), 10000);
+    check('a score made without an account is on the board of the day only — and its author is offered an account when it would be among the ten of all time',
+      /You would be #1 of all time — create an account to keep it/.test(offered?.text || '') && offered.yes === 'Create an account' && offered.no === 'Not now' && !!gone && boards.day[0]?.name === 'Alice' && boards.day[0].score === 7777 && boards.all.length === 0 && boards.week.length === 0, JSON.stringify({ offered, boards }));
+  }
   // who is here: everybody sees the names; the administrator also sees where from, and can put someone out
   await bob.page.click('.pill.players');
   await frames(bob, 3);
@@ -200,7 +210,7 @@ try {
   await alice.page.screenshot({ path: path.join(OUT, 'roster-admin.png') });
   check('in that list: three small pictures say what each visitor connects with, the actions stand on one line, and "See more" unfolds everything that is known (address, what the browser says of itself, its identifier)',
     tidy.pictures.join() === '3,3' && /Chrome \d+ · .+ · computer/.test(tidy.tip) && tidy.lines === 1 && tidy.folded && tidy.unfolded && tidy.facts.join() === 'Address,Browser says,Browser identifier,In this room' && tidy.label === 'See less', JSON.stringify(tidy));
-  check('the administrator also sees the address, the browser and the device of each, and can go to them, give them a present, name them, kick or ban', !!seenByAdmin && seenByAdmin.more.every((m) => /127\.0\.0\.1|::1/.test(m) && /Chrome \d+ · /.test(m) && /device /.test(m)) && seenByAdmin.acts.join() === 'Go to,Gift,Make admin,Kick,Ban 1 h,Ban 1 day,Ban for good', JSON.stringify(seenByAdmin));
+  check('the administrator also sees the address, the browser and the device of each, and can go to them, give them a present, name them, mute, kick or ban', !!seenByAdmin && seenByAdmin.more.every((m) => /127\.0\.0\.1|::1/.test(m) && /Chrome \d+ · /.test(m) && /device /.test(m)) && seenByAdmin.acts.join() === 'Go to,Gift,Make admin,Mute,Kick,Ban 1 h,Ban 1 day,Ban for good', JSON.stringify(seenByAdmin));
   const act = (who, label) => who.page.evaluate((label) => { const b = [...document.querySelectorAll('.roster .acts button')].find((e) => e.textContent === label); if (b) b.click(); return !!b; }, label);
   const apart = () => alice.page.evaluate(() => { const a = window.__mmf, o = [...a.presence.peers.values()][0]; return Math.hypot(o.x - a.player.pos.x, o.z - a.player.pos.z); });
   // the administrator is carried next to a visitor; a click on the large map carries them to that spot
@@ -246,6 +256,40 @@ try {
     const bobHas = await bob.page.evaluate(() => { const a = window.__mmf; return a.who.admin ? 'admin' : document.querySelector('.roster .wear').hidden; });
     check('an administrator may wear a badge on their name, for everybody around to see, and take it off again; a visitor is offered no such thing',
       offer.hidden === false && /Wear the ADMIN badge/.test(offer.text) && plainTag && !plainTag.admin && worn?.badge === 'Admin' && /Take my ADMIN badge off/.test(on.text) && on.kept === '1' && !!bare && bare.badge === '' && off === '0' && bobHas === true, JSON.stringify({ offer, plainTag, worn, on, bare, off, bobHas }));
+  }
+  // kept out in silence: Alice mutes Bob from the list. He notices nothing — he reads his own lines — but she no
+  // longer does; lifted (under "Kept out"), he is heard again at once
+  {
+    const sayToAll = async (v, text) => {
+      await v.page.keyboard.press('Enter');
+      await frames(v, 2);
+      for (let k = 0; k < 3 && (await v.page.evaluate(() => document.querySelector('.chat .chan').textContent)) !== 'Everyone'; k++) await v.page.keyboard.press('Tab');
+      await v.page.keyboard.type(text);
+      await v.page.keyboard.press('Enter');
+    };
+    const reads = (v, text) => v.page.evaluate((t) => [...document.querySelectorAll('.chat .log p')].some((e) => e.textContent.endsWith(t)), text);
+    await alice.page.click('.pill.players');
+    await frames(alice, 3);
+    await alice.page.evaluate(() => [...document.querySelectorAll('.roster .list .acts button')].find((b) => b.textContent === 'Mute').click());
+    const marked = await until(() => alice.page.evaluate(() => !!document.querySelector('.roster .list .rank.muted') && [...document.querySelectorAll('.roster .bans .who small')].filter((e) => /^in silence/.test(e.textContent)).length), 20000);
+    await alice.page.keyboard.press('Escape');
+    await sayToAll(bob, 'can anybody hear me');
+    await new Promise((r) => setTimeout(r, 2500));
+    const silent = { his: await reads(bob, 'can anybody hear me'), hers: await reads(alice, 'can anybody hear me'), told: await bob.page.evaluate(() => /put you out|kept out|muted/i.test(document.querySelector('.hud').textContent)) };
+    // lifted
+    await alice.page.click('.pill.players');
+    for (let k = 0; k < 4; k++) {
+      const left = await until(() => alice.page.evaluate(() => { const b = [...document.querySelectorAll('.roster .bans .who')].find((r) => /^in silence/.test(r.querySelector('small').textContent))?.querySelector('button'); if (!b) return 'none'; b.click(); return 'lifted'; }), 10000);
+      if (left === 'none') break;
+      await new Promise((r) => setTimeout(r, 1200));
+    }
+    const unmarked = await until(() => alice.page.evaluate(() => !document.querySelector('.roster .list .rank.muted') && ![...document.querySelectorAll('.roster .bans .who small')].some((e) => /^in silence/.test(e.textContent))), 20000);
+    await alice.page.keyboard.press('Escape');
+    await new Promise((r) => setTimeout(r, 2200)); // (a line every two seconds)
+    await sayToAll(bob, 'and now');
+    const heard = await until(() => reads(alice, 'and now'), 20000);
+    check('kept out in silence from the list of who is here: the visitor reads their own line and is told nothing, nobody else reads it; lifted, they are heard again at once',
+      marked === 2 && silent.his && !silent.hers && !silent.told && !!unmarked && !!heard, JSON.stringify({ marked, silent, unmarked, heard }));
   }
   // naming another administrator: Bob's browser is handed a key of its own; the owner takes the title away
   await alice.page.click('.pill.players');

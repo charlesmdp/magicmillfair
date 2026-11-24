@@ -101,6 +101,34 @@ try {
   const hook = await pay('hat:crown', device);
   await enter('&paid=hat%3Acrown');
   await page.waitForFunction(() => window.__mmf.me.look?.hat === 6, null, { timeout: 30000 });
+  // …and on their head for the others too — which a hat that was not bought is not: the relay checks what each
+  // visitor has (server/wardrobe.js). A stranger joins the room and says they wear a crown as well.
+  const seenWorn = await (async () => {
+    await page.waitForFunction(() => window.__mmf.presence?.mode === 'online' && window.__mmf.presence.id > 0, null, { timeout: 30000 });
+    const room = await page.evaluate(() => window.__mmf.presence.room), me = await page.evaluate(() => window.__mmf.presence.id), CROWN = 6 << 1;
+    const ws = new WebSocket(`ws://127.0.0.1:${PORT}/ws?room=${room}&dev=stranger-0123456789abcdef`), looks = new Map();
+    let id = 0;
+    ws.addEventListener('message', (e) => {
+      const m = JSON.parse(e.data);
+      if (m.t === 'welcome') { id = m.id; for (const p of m.peers) if (Number.isInteger(p.f)) looks.set(p.id, p.f); }
+      if (m.t === 'u') for (const r of m.s) looks.set(r[0], r[6]);
+    });
+    await new Promise((resolve, reject) => { ws.addEventListener('open', resolve); ws.addEventListener('error', reject); });
+    ws.send(JSON.stringify({ t: 'hello', name: 'Stranger', color: 3, v: 2, dev: 'stranger-0123456789abcdef' }));
+    for (let k = 0; k < 100 && !id; k++) await new Promise((r) => setTimeout(r, 100));
+    const at = await page.evaluate(() => { const p = window.__mmf.player.pos; return [p.x + 1.5, p.y, p.z + 1.5]; });
+    ws.send(JSON.stringify({ t: 's', p: [...at, 0], a: 0, f: CROWN }));
+    await page.keyboard.down('KeyW'); await frames(6); await page.keyboard.up('KeyW'); // (a step: the page says where it is, and what it wears)
+    let theirs = null, mine = null;
+    for (let k = 0; k < 150 && (theirs === null || mine === undefined || mine === null); k++) {
+      await new Promise((r) => setTimeout(r, 100));
+      theirs = await page.evaluate((id) => { const p = window.__mmf.presence.peers.get(id); return p && p.visible ? p.flags : null; }, id);
+      mine = looks.get(me);
+    }
+    ws.close();
+    return { theirs, mine, crown: CROWN };
+  })();
+  check('what is worn shows to the others when it was bought, and only then: the crown that was paid for is seen on its buyer — a stranger who says they wear one is seen without', ((seenWorn.mine >> 1) & 7) === 6 && seenWorn.theirs !== null && (seenWorn.theirs & 0x100e) === 0, JSON.stringify(seenWorn));
   await page.click('.shop-icon');
   await page.waitForSelector('.shop.on', { timeout: 20000 });
   const got = await pick('hat:crown'), crown2 = await card('hat:crown'), cowboy = await card('hat:cowboy');
@@ -108,14 +136,16 @@ try {
   await frames(3);
   const off = await page.evaluate(() => ({ hat: window.__mmf.me.look?.hat, tag: document.querySelector('.shop .card[data-item="hat:crown"] .price').textContent, url: location.search }));
   // the light jetpack: bought, it flies — a third as long as the real one
+  await page.evaluate(() => { const p = window.__mmf.presence, own = p.own.bind(p); window.__owns = 0; p.own = () => { window.__owns++; own(); }; });
   await pay('jetlite', device);
   await page.evaluate(() => window.__mmf.refreshShop());
+  const toldRelay = await page.evaluate(() => window.__owns); // (something new is theirs: the relay is told to ask again what they have)
   const tank = await page.evaluate(() => { const a = window.__mmf; return { tank: a.player.tank, lite: a.shop.owns('jetlite'), full: a.shop.owns('jetpack'), canFly: a.player.canFly(a.player.pos), tag: document.querySelector('.shop .card[data-item="jetlite"] .price').textContent }; });
   await page.keyboard.press('Escape');
   await frames(3);
   const closed = await page.evaluate(() => !document.querySelector('.shop').classList.contains('on'));
   check('back from the payment page the hat is theirs and on their head; it comes off and goes back on in the shop; the others are still for sale', hook === 200 && got.acts.join() === 'Take it off' && crown2.tag === 'Equipped' && cowboy.tag === '$9.99' && off.hat === 0 && off.tag === 'Owned' && !/paid/.test(off.url) && closed, JSON.stringify({ got, crown2, cowboy, off, closed }));
-  check('the light jetpack is on as soon as it is theirs, with its small tank (a third of a second of thrust)', tank.lite && !tank.full && tank.canFly && Math.abs(tank.tank - 0.3) < 0.01 && tank.tag === 'Equipped', JSON.stringify(tank));
+  check('the light jetpack is on as soon as it is theirs, with its small tank (a third of a second of thrust) — and the relay is told that something new is theirs', tank.lite && !tank.full && tank.canFly && Math.abs(tank.tank - 0.3) < 0.01 && tank.tag === 'Equipped' && toldRelay === 1, JSON.stringify({ ...tank, toldRelay }));
 
   // ---- a sponsor: the panel of the shooting gallery goes to the highest bidder, from a dollar
   const slot = await page.evaluate(() => { const m = window.__mmf, s = m.world.sponsorSlots.find((q) => q.id === 'board:shoot'); m.player.teleport(s.x, s.z, 0); return { x: s.x, z: s.z }; });
@@ -256,9 +286,18 @@ try {
   await page.keyboard.press('Escape');
   await frames(3);
   await page.evaluate(() => window.__mmf.equip('hat:crown', true));
+  // (scores belong to accounts: made as a guest, a score is on the board of the day — and when it would be among
+  // the ten of a longer list, its author is offered an account. The offer leads to the card.)
+  await page.evaluate(() => window.__mmf.fair.boards.bell.start());
+  await new Promise((r) => setTimeout(r, 2600)); // (a game of the striker lasts a few seconds: the server knows)
+  await page.evaluate(() => window.__mmf.scoreGame('bell', 'Ring the Bell', 4321, '4,321 on the scale'));
+  await page.waitForSelector('.offer-bar.on', { timeout: 20000 });
+  const asGuestScore = await page.evaluate(() => ({ offer: document.querySelector('.offer-bar .offer-text').textContent, yes: document.querySelector('.offer-bar .offer-yes').textContent, note: document.querySelector('.hud .note').textContent, tops: window.__mmf.fair.tops.bell }));
   await page.click('[data-act="settings"]');
   const guestSays = await page.evaluate(() => document.querySelector('.acct-info').textContent);
-  await page.click('.acct-acts .main');
+  await page.click('[data-act="settings"]');
+  await frames(2);
+  await page.click('.offer-bar .offer-yes');
   await page.waitForSelector('.account.on .sheet[data-mode="create"]', { timeout: 20000 });
   // (what is plainly wrong is said under its field, and nothing is sent)
   await page.fill('.account input[name="name"]', 'x');
@@ -277,6 +316,12 @@ try {
   await page.waitForFunction(() => !document.querySelector('.account').classList.contains('on'), null, { timeout: 20000 });
   await page.click('[data-act="settings"]');
   const signed = await page.evaluate(() => ({ name: window.__mmf.account.name, says: document.querySelector('.acct-info').textContent, acts: [...document.querySelectorAll('.acct-acts button')].map((b) => b.textContent) }));
+  // (the score made a moment ago as a guest counts for the account: the page handed back the note the server gave)
+  await page.waitForFunction(() => [...document.querySelectorAll('.chat .log p')].some((e) => /now counts for the week, the month and all time, under the name Shop Tester/.test(e.textContent)), null, { timeout: 30000 });
+  const claimedScore = { page: await page.evaluate(() => window.__mmf.fair.tops.bell), server: (await (await fetch(`${BASE}/api/scores?board=bell`)).json()).tops };
+  check('a score made without an account is on the board of the day, and its author is offered an account ("You would be #1 of all time"); the offer opens the card, and once the account is made the score counts for the week, the month and all time under its name',
+    /You would be #1 of all time — create an account to keep it/.test(asGuestScore.offer) && asGuestScore.yes === 'Create an account' && /#1 today/.test(asGuestScore.note) && asGuestScore.tops.day[0]?.score === 4321 && asGuestScore.tops.all.length === 0
+    && ['week', 'month', 'all'].every((p) => claimedScore.server[p][0]?.name === 'Shop Tester' && claimedScore.server[p][0].score === 4321) && claimedScore.page.all[0]?.name === 'Shop Tester', JSON.stringify({ asGuestScore, claimedScore }));
   await page.click('[data-act="settings"]');
   await new Promise((r) => setTimeout(r, 2200)); // (the look is kept a moment after it changes)
   // another browser: a guest with nothing; signed in, everything is there

@@ -867,7 +867,7 @@ Without a reachable relay, the same interface works between the tabs of one brow
 described at the top of `server/protocol.js`, the client interface in `src/net/Presence.js`. The same relay
 runs under Node (`server/index.js`) and on Cloudflare (`cloudflare/worker.js`).
 
-**What is stored**: the leaderboards (for each board, a name, a score and a date, in four lists), for each
+**What is stored**: the leaderboards (for each board, a name, a score and a date, in four lists — and, put away, the boards from before scores belonged to accounts), for each
 device — a random number drawn by the browser — the days in a row it has come back and the country and
 town it last came from, the visits counted by day and by country with the last three hundred of them (see
 *Where the visitors come from*), the administrators' list of who is kept out, and the administrators who
@@ -944,9 +944,9 @@ where each connects from and with what: the country and the town beside the name
 the browser, the system and the kind of device, and — unfolded by *See more* — everything to the letter
 (the address, what the browser says of itself, its identifier, since when). What can be done about a
 visitor stands on one line under their name: be carried next to them (*Go to*), give them a present
-(*Gift*), put them out (*Kick*: they can come back) or keep them out (*Ban*, for an hour,
+(*Gift*), put them out (*Kick*: they can come back), keep them out (*Ban*, for an hour,
 a day or for good: by address and by device; the list of bans is in the same panel, with a button to lift
-each). The address is what the host sees (`CF-Connecting-IP` on Cloudflare): a ban by address also keeps
+each) — or keep them out **in silence** (*Mute*: see "Cheating" below). The address is what the host sees (`CF-Connecting-IP` on Cloudflare): a ban by address also keeps
 out whoever shares it — a school, a mobile operator.
 
 - **Naming other administrators**: *Make admin*, by a visitor's name in that list. Their browser is handed
@@ -981,7 +981,36 @@ server only knows the place when a proxy in front of it says so (Cloudflare's "v
 with `GEO_HEADERS=1`).
 
 **Cheating.** Everything a visitor does runs in their own browser, so nothing here can be made cheat-proof;
-what is done is to make cheating pointless or tedious:
+what is done is to make cheating pointless or tedious — and the checks that count are on the server:
+- **what one is seen wearing is what one has.** The relay only carries numbers (a colour, a paint, a trail, a
+  hat, the flame of a jetpack, a size), and a browser that has been tampered with could set them to
+  anything. Before a connection enters a room, the door reads what that browser — or its account — really
+  has (`server/wardrobe.js`: what was bought or given, the Game Pass, the free day of the light jetpack), and
+  the relay brings the rest back to the plain robot: for the others, a hat that was not bought is no hat. It
+  is read again when the page says something was bought or given (`{t:'own'}`), so a purchase shows at once.
+  An administrator may wear anything; where nothing is sold (no Stripe key) nothing is checked. A tampered
+  browser can still show *itself* what it likes: what is checked is what the others see;
+- **scores belong to accounts.** Everybody plays and sees their score, but a visitor without an account is on
+  the list **of the day** only; the week, the month and all time take an account (free: a name and a
+  password). A score that would be among the ten of one of those lists is told so — *You would be #3 this
+  week — create an account to keep it* — and the server gives a note with it, good for half an hour: once
+  the account is made, the page hands the note back and the score counts after all (nothing is kept about
+  the guest meanwhile). With an account, a score goes under **the name of the account**, whatever name the
+  robot goes by: nobody else can write under it — a guest who plays under the name of somebody's account is
+  told to sign in or to pick another name. The boards from before this rule were written under free names:
+  they were put away as they were (`board0:<id>` in the notebook — shown nowhere, deleted by nobody), and
+  the lists started again;
+- **so many connections from one address**: 30 in one room, 60 in all, 120 new ones a minute — wide on
+  purpose (a school, a café or a phone network share one address), and the owner's to change in the back
+  office (0 switches one off). A connection over one of them is told which, and comes in as soon as there is
+  room; the owner is never refused. Who is connected from where is counted in memory and written nowhere
+  (`ADDRESS_LIMITS=0` switches it all off: tests that come from one address);
+- **kept out in silence** (*Mute*, in the list of who is here, or "in silence" in the back office — by
+  browser, by address, by account). The visitor is not told and notices nothing: they play, move and wave as
+  before, under their own name, and everybody sees them. But what they write is relayed to nobody, a score
+  of theirs is kept apart and shown to them alone, the big red button only goes off on their own screen, and
+  what they sponsor — a panel, a plaque — is shown to them alone. It holds from one visit to the next, until
+  it is lifted;
 - a score only counts with the note of its run: a token signed by the server when the run starts (`POST
   /api/run`), which says when. A climb announced as 150 seconds must arrive at least 130 seconds after its
   note; a 45-second game cannot be over in 10; a note counts once. Posting a made-up score therefore takes
@@ -1133,8 +1162,8 @@ tests, `npm run dev`) has it open.
 |---|---|
 | `npm run bake` | bakes the world, the statue and the textures again |
 | `npm run bake:statue` | sculpts the golden dog again (`-- --preview=dog.png` also draws it from five sides, `-- --cell=0.012` makes a finer mesh) |
-| `npm test` | 209 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password) |
-| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (152 in all) |
+| `npm test` | 225 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password) |
+| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (167 in all) |
 | `npm run test:update` | a delivery from end to end, in the real game: two builds, a visitor in the world, the owner at the back office (`/admin`: the switches, a word to every room, a line refused, somebody kept out, the figures, the sky villages stage by stage), every page asked to refresh but never in the middle of a sentence, then the server replaced by the next version — the page says so, refreshes, comes back at the same spot and says what is new; and a plain build leaves nothing of the game on the page (12 checks) |
 | `node tools/extras-test.mjs`, `node tools/slide-test.mjs` | the lab's own checks of its extras (see `lab/INTEGRATION.md`) |
 | `npm run test:load` | a crowd at the door, with the real rules: 600 connections arrive in twenty seconds and walk (everybody gets in, rooms of about fifty, the lists say what is true, a state reaches the neighbours in time), 230 more follow one link (that room holds 200, never one more; the relay refuses whoever comes without asking; the owner still gets in), then most leave (the rooms that have emptied are offered a livelier one, nobody is moved or cut off) — 11 checks; `-- --cloudflare` plays it against the real Worker in the local Workers runtime, `-- --visitors=400` changes the crowd |
@@ -1143,7 +1172,7 @@ tests, `npm run dev`) has it open.
 | `npm run test:smoke` | drives the real site: welcome screen, walking, free camera, settings, large map, the story of the opening told once (`-- --mobile` for the touch layout) |
 | `npm run test:audio` | Listens to the sound engine without ears: in headless Chromium it renders a dozen listener scenarios (beach, cliffs, pier, woods, mill, waterfall, cave, sky village, the climb…) and every one-shot effect through an offline audio context, measures level, spectrum, how the loudness moves and how tonal it is, fails on silence or clipping, and times `update()` (about 0.01 ms a frame) |
 | `npm run test:walk` | 54 checks in the real game: what a newcomer sees first (the banner, the rules, the story on its board, the easel of life advice; the boards of what is new out of that first look), who hears the chat (it opens on Nearby, says so, and is told how to reach everybody), the wooden signposts (beside the paths, each plank pointing the way of what it names), the Trading Post and its window of photographs, pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls and the high clearing above them, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the swim on to the golden cove (the shark stays away; out of the sea on the beach; the stair up to the golden dog; the plaques round its plinth, painted for who climbs up there), the fifty sky villages (prices, places to sit, the board of one for hire, the one dressed as a demonstration), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, sitting down on the ground, the two jetpacks (which is on; the light one's fifteen seconds), big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the four booths of the pier head and the six of the walk (a bot plays each through the pointer, as a visitor would: baskets shot where the hoop is going to be, a tower stacked, a sequence of lamps remembered, fish brought up, alarms answered in a fifth of a second, a cup followed; boards), the arcade cabinet (a bot runs three hundred metres), the quad race (asked for in the paddock, it leaves with the next named start; a bot drives three laps flat out — it never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, and flies off the ramp), the flying theatre (a bot flaps through nine pairs of columns), the acid pond, the shark, change of tier |
-| `npm run test:duo` | 30 checks with two visitors on the production server: they must see each other move, wave, summon an animal, chat (nearby first, then to everyone) and sit down; the administrator's badge worn and taken off; the rooms (a room that fills, the offer of a livelier one, the list, a link); the largest size and a party hat, sitting on the ground, a bouquet given from hand to hand; the administrator's key in the address, the administrator seeing the game as a visitor does (`-- --cloudflare` for the Cloudflare version) |
+| `npm run test:duo` | 32 checks with two visitors on the production server: they must see each other move, wave, summon an animal, chat (nearby first, then to everyone) and sit down; the administrator's badge worn and taken off; the rooms (a room that fills, the offer of a livelier one, the list, a link); the largest size and a party hat, sitting on the ground, a bouquet given from hand to hand; the administrator's key in the address, the administrator seeing the game as a visitor does (`-- --cloudflare` for the Cloudflare version) |
 | `npm run bench` | benchmark tour for each tier (`-- --mobile` for the phone profile) |
 | `npm run profile` | cost of each system (script, draw calls, triangles) at seven viewpoints |
 | `npm run shots -- name=x,y,z,heading,pitch` | screenshots from a viewpoint |

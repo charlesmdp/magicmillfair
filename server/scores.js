@@ -1,11 +1,25 @@
 // Leaderboards of the fair's games, independent of where they are kept: server/index.js (a JSON file) and
 // cloudflare/worker.js (the storage of a Durable Object) both go through this (see routes.js).
 //
-//   GET    /api/scores?board=sky                    → { board, tops: { day, week, month, all }, top }
-//   GET    /api/scores?board=all                    → { boards: { sky: { tops, top }, race: … } }
+//   GET    /api/scores?board=sky[&device=]          → { board, tops: { day, week, month, all }, top }
+//   GET    /api/scores?board=all[&device=]          → { boards: { sky: { tops, top }, race: … } }
 //   POST   /api/run     { board }                   → { run }      a signed note of when the run started
-//   POST   /api/scores  { board, name, score, run } → { board, tops, top, rank, best }
+//   POST   /api/scores  { board, name, score, run, device } → { board, tops, top, rank, best }
+//          …and, for a visitor without an account: { guest: true, day, would: { week, month, all }, claim }
+//   POST   /api/scores/claim { device, claims: [claim…] }   → { claimed: [board…], boards }
 //   DELETE /api/scores?board=sky&name=Somebody      → { removed }  (the administrator only)
+//
+// Scores belong to accounts. Everybody plays, and sees their score — but:
+//   - with an account (free), a score goes on the four lists under the name of the account, whatever name the
+//     robot goes by: nobody else can write under it (409 { taken } for a visitor who plays under that name);
+//   - without one, it goes on the list of the day only. The answer says where it would stand in the others
+//     (`would`: 1 = first, 0 = beyond the ten that are shown) and carries a `claim` — a note signed by the
+//     server, good for half an hour: the page hands it back once an account has been made, and the score
+//     counts for the week, the month and all time after all. Nothing is kept about the guest meanwhile.
+// The boards from before scores belonged to accounts were written under free names: they are put away, once
+// (`board0:<id>`, shown nowhere, deleted by nobody), and the lists start again.
+// A visitor who is kept out in silence (bans.js) plays on: their scores are kept apart (`shadow:<device>`) and
+// mixed into the lists they are shown — theirs alone (`device`, with a GET, says who is asking).
 //
 // Each list holds one line per name, best first: [{ name, score }]. `top` is the all-time list again, as the
 // first version of the game expects it ({ name, ms }). Four lists per board: the day, the week (from Monday),
@@ -81,25 +95,46 @@ export function boardState(stored, at = Date.now()) {
 }
 
 /**
- * Adds a score to the four lists of a board. Returns { state, rank, best }: rank in the all-time list
- * (1 = first, 0 = not listed), best = a personal all-time best.
+ * Adds a score to the lists of a board — the four of them, or those of `periods` (the day alone, for a visitor
+ * without an account). Returns { state, rank, day, best }: rank in the all-time list and in that of the day
+ * (1 = first, 0 = not listed), best = a personal best in the widest of those lists.
  */
-export function addScore(stored, board, { name, score }, at = Date.now()) {
+export function addScore(stored, board, { name, score }, at = Date.now(), periods = PERIODS) {
   const state = boardState(stored, at), asc = BOARDS[board].order === 'asc';
   const better = (a, b) => (asc ? a < b : a > b);
   let best = false;
-  for (const p of PERIODS) {
+  for (const p of periods) {
     let list = p === 'all' ? state.all : state[p].list;
     const mine = list.find((e) => key(e.name) === key(name));
     if (mine && !better(score, mine.score)) continue;
-    if (p === 'all') best = true;
+    if (p === periods[periods.length - 1]) best = true;
     list = list.filter((e) => e !== mine);
     list.push({ name, score, at });
     list.sort((a, b) => (asc ? a.score - b.score : b.score - a.score) || a.at - b.at);
     list = list.slice(0, KEPT[p]);
     if (p === 'all') state.all = list; else state[p].list = list;
   }
-  return { state, rank: state.all.findIndex((e) => key(e.name) === key(name)) + 1, best };
+  return { state, rank: state.all.findIndex((e) => key(e.name) === key(name)) + 1, day: state.day.list.findIndex((e) => key(e.name) === key(name)) + 1, best };
+}
+
+/** Where a score would stand in the lists it is not on: { week, month, all } (1 = first; 0: beyond the ten that are shown). */
+export function wouldRank(stored, board, score, at = Date.now()) {
+  const state = boardState(stored, at), asc = BOARDS[board].order === 'asc';
+  const place = (list) => { const n = list.filter((e) => (asc ? e.score <= score : e.score >= score)).length + 1; return n <= SHOWN ? n : 0; };
+  return { week: place(state.week.list), month: place(state.month.list), all: place(state.all) };
+}
+
+/** What a board shows to one visitor whose own lines are kept apart (`own`: a state of theirs alone): the lists, with theirs mixed in. */
+export function topsWith(stored, own, board, at = Date.now()) {
+  const state = boardState(stored, at), mine = boardState(own, at), asc = BOARDS[board].order === 'asc';
+  const mix = (a, b) => {
+    const by = new Map();
+    for (const e of [...a, ...b]) { const was = by.get(key(e.name)); if (!was || (asc ? e.score < was.score : e.score > was.score)) by.set(key(e.name), e); }
+    return [...by.values()].sort((x, y) => (asc ? x.score - y.score : y.score - x.score) || x.at - y.at);
+  };
+  const mixed = { v: 2, all: mix(state.all, mine.all) };
+  for (const p of ['day', 'week', 'month']) mixed[p] = { key: state[p].key, list: mix(state[p].list, mine[p].list) };
+  return topsOf(mixed, at);
 }
 
 /** Takes a name off every list of a board. Returns { state, removed }. */

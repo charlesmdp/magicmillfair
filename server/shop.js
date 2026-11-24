@@ -50,6 +50,7 @@ import { createCheckout, createPortal, verifyWebhook, refundPayment, endSubscrip
 import { noteSale, noteRefund } from './stats.js';
 import { readRelease } from './release.js';
 import { accountOf, addItem, holderOf, itemsOf, passLive, sameOwner } from './accounts.js';
+import { quietOnes } from './bans.js';
 import { PASS, TRIAL, itemOf } from './items.js';
 
 const out = (status, body, headers = {}) => ({ status, body, headers });
@@ -108,6 +109,22 @@ const bytesOf = (data) => Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
 const slotsOf = async (ctx) => (await ctx.store.get('slots')) || {};
 const ownedBy = (ctx, device) => itemsOf(ctx.store, device);
 /** The browsers that are this visitor: this one, and the others of its account. */
+/**
+ * Is what this slot shows hidden from everybody but its holder (a sponsor, the author of a plaque, who is kept
+ * out in silence: bans.js)? Returns the test — most of the time nobody is, and it looks nothing up.
+ */
+async function hiddenBy(ctx) {
+  const quiet = await quietOnes(ctx);
+  if (!quiet.dev.size && !quiet.acct.size) return async () => false;
+  const names = new Map();
+  return async (s) => {
+    if (!s?.by) return false;
+    if (quiet.dev.has(s.by)) return true;
+    if (!quiet.acct.size) return false;
+    if (!names.has(s.by)) names.set(s.by, ((await accountOf(ctx.store, s.by))?.name || '').toLowerCase());
+    return quiet.acct.has(names.get(s.by));
+  };
+}
 const selves = async (ctx, device) => { const acct = DEVICE.test(device || '') ? await accountOf(ctx.store, device) : null; return new Set(acct ? [...acct.devices, device] : device ? [device] : []); };
 const logoUrl = (id, version, draft) => `/api/logo?slot=${encodeURIComponent(id)}${draft ? '&draft=1' : ''}&v=${version}`;
 const shown = (id, s) => ({ title: s.title || '', subtitle: s.subtitle || '', url: s.url || '', logo: s.logo ? logoUrl(id, s.logo) : null, ...(s.bg && { bg: s.bg }) });
@@ -234,9 +251,10 @@ export async function shopRoute(req, ctx) {
 
   if (path === '/api/shop') {
     if (!reading) return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD' });
-    const device = query.get('device') || '', mine = DEVICE.test(device), slots = await slotsOf(ctx), view = {}, me = mine ? await selves(ctx, device) : new Set();
+    const device = query.get('device') || '', mine = DEVICE.test(device), slots = await slotsOf(ctx), view = {}, me = mine ? await selves(ctx, device) : new Set(), hidden = await hiddenBy(ctx);
     for (const [id, s] of Object.entries(slots)) {
-      view[id] = s.state === 'live' ? { state: 'live', ...shown(id, s) } : { state: 'taken' };
+      // (what somebody kept out in silence had put up is shown to them alone)
+      view[id] = s.state === 'live' && (me.has(s.by) || !(await hidden(s))) ? { state: 'live', ...shown(id, s) } : { state: 'taken' };
       if (describe(id)?.auction) Object.assign(view[id], { bid: s.bid || 0, next: nextBid(s.bid || 0) }); // (what it went for, what beats it)
       if (mine && me.has(s.by)) Object.assign(view[id], { mine: true, paid: true, draft: draftOf(id, s) });
     }
