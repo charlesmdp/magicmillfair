@@ -2,7 +2,7 @@
 // them is there; switched on, each is built without a word of complaint and offers itself at its gate; the
 // planks of the cleft carry; the cleft, the cave and the slope are played through by their own bots and let
 // the player go where they should, their time told to whoever keeps a board; a game left half-way leaves
-// nothing behind; the cave is drawn only for who flies in it.
+// nothing behind; the cave is drawn only for who flies in it; on the ponds one gets from the first to the second.
 // usage: node tools/games-test.mjs
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -60,7 +60,7 @@ try {
   const during = await page.evaluate(() => { const a = window.__mmf, c = a.cleftClimb(); return { driven: a.player.driver === c, y: a.player.pos.y, line: c.line, keys: [...document.querySelectorAll('button')].some((b) => /keys/.test(b.textContent) && b.style.display !== 'none') }; });
   await page.waitForFunction(() => !window.__mmf.cleftClimb(), null, { timeout: 180000 });
   const done = await page.evaluate(() => { const a = window.__mmf; return { told: window.__told.crack, best: Number(localStorage.getItem('mmf.crack.best')), y: a.player.pos.y, x: a.player.pos.x, z: a.player.pos.z, driver: !!a.player.driver, keys: [...document.querySelectorAll('button')].some((b) => /keys/.test(b.textContent) && b.style.display !== 'none') }; });
-  check('the cleft is climbed by its bot in the running game: the keys are offered meanwhile, the time is told and kept', during.driven && during.keys && /The Squeeze|The Brambles/.test(during.line) && done.told > 15000 && done.told < 45000 && done.best === done.told, `${(done.told / 1000).toFixed(1)} s`);
+  check('the cleft is climbed by its bot in the running game: the keys are offered meanwhile, the time is told and kept', during.driven && during.keys && /m of 40|to a wall/.test(during.line) && done.told > 9000 && done.told < 150000 && done.best === done.told, `${(done.told / 1000).toFixed(1)} s`);
   check('and the climber is put back on the planks before it, free again', !done.driver && !done.keys && Math.abs(done.y - CLEFT.floor) < 0.05 && Math.hypot(done.x - gates.crack.x, done.z - gates.crack.z) < 0.5);
 
   // ---- the cave: the lap of the bot is the lap the rules foretell
@@ -80,6 +80,16 @@ try {
   await frames(20);
   const left = await page.evaluate(() => { const a = window.__mmf; a.leaveHollow(false); const p = a.player.pos; return { flight: !!a.hollowFlight(), driver: !!a.player.driver, above: p.y - a.world.data.heightAt(p.x, p.z), fov: a.fair.fov, rings: a.extras.hollow.rings.every((m) => m.visible) && !a.extras.hollow.inside.visible }; });
   check('a flight left half-way leaves nothing behind: the player outside, the camera given back, every ring lit again', !left.flight && !left.driver && Math.abs(left.above) < 0.1 && left.fov === null && left.rings);
+
+  // ---- the ponds: fifteen seconds on the first, then on to the second by oneself
+  await at(gates.pond.x, gates.pond.z);
+  const pondOffer = (await offered()).join(' | ');
+  await page.evaluate(() => { const a = window.__mmf; a.pondDone = (ms, stage) => { window.__told.pond = [ms, stage]; }; a.runPond(); a.pondRun().auto = true; });
+  await page.waitForFunction(() => { const r = window.__mmf.pondRun(); return r && r.state.stage === 1 && r.state.mode === 'run' && r.state.t > 1; }, null, { timeout: 180000 });
+  const second = await page.evaluate(() => { const a = window.__mmf, r = a.pondRun(), p = a.player.pos; return { line: r.line, held: r.state.held, x: p.x, z: p.z }; });
+  check('the ponds: one is offered the run at the gate; fifteen seconds on the first pond, and the runner is on the second by itself', /Endless Pond/.test(pondOffer) && /Pond 2 of 3/.test(second.line) && second.held > 15 && second.held < 18 && Math.hypot(second.x + 124.5, second.z - 56) < 8.5, second.line);
+  const quit = await page.evaluate(() => { const a = window.__mmf; a.leavePond(false); return { run: !!a.pondRun(), driver: !!a.player.driver, told: window.__told.pond || null }; });
+  check('a run left half-way lets the player go, and is not told as a score', !quit.run && !quit.driver && quit.told === null);
 
   // ---- the slope: the bot climbs it with the next start
   await at(gates.hill.x, gates.hill.z);

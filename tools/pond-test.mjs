@@ -65,10 +65,15 @@ const whenArm = (stage, i, a, lead = 0) => { const arm = PS[stage].arms[i]; for 
   const jumper = on(1, 0, edge - 0.6, quiet(1, edge + 0.3)); let went = false; const evJ = run(jumper, 4, (q, inp) => { if (!went && q.a >= edge - 0.04) { went = true; inp.jump = true; } else inp.jump = q.h > 0 && q.vh < 0.4 && q.jumps === 1; });
   check('who only jumps falls in it', jumper.over && jumper.why === 'gap' && evJ.some((e) => e.type === 'again'));
   const gate = p.arms.findIndex((a) => a.kind === 'wall'), G = p.arms[gate], a0 = G.swing[0];
-  const back = (speedAt(p, 0, 2) * 0.5) / p.rings[1].r, c = (() => { for (let c0 = 20; c0 < 900; c0 += 0.01) { if (Math.abs(armAt(G, c0 + 0.5) - a0) > 0.01 || Math.abs(wrap(armAt(p.arms.find((q) => q.kind === 'high'), c0 + 0.5) - a0 + Math.PI) - Math.PI) < 2.2) continue; let ok = true; for (let d = 0; d < 0.9; d += 0.05) if (!support(p, 1, a0 - back + (speedAt(p, 0, 2) * d) / p.rings[1].r, c0 + d, -0.1)) ok = false; if (ok) return c0; } return -1; })();
-  const tries = [['jump', (inp) => { inp.jump = true; }], ['slide', (inp) => { inp.down = true; }], ['nothing', () => {}]].map(([name, act]) => { const st = on(1, 1, a0 - back, c); run(st, 0.9, (q, inp, t) => { if (Math.abs(t - 0.28) < P.step / 2) act(inp); }); return `${name}: ${st.why || 'through'}`; });
-  const outside = (() => { const st = on(1, 0, a0 - (speedAt(p, 0, 2) * 0.5) / p.rings[0].r, c); run(st, 0.9); return st.over; })();
-  check('a gate swings over its rafts: neither jumped nor slid under — one is on the stones when it comes', c > 0 && tries.every((t) => /wall/.test(t)) && !outside, tries.join(', '));
+  // (a moment when the gate comes to the middle of its swing three tenths of a second on, with a raft under the runner all the
+  // way to it; and another such moment with the curtain far from there, for one who is on the stones)
+  const lead = 0.3, back = (speedAt(p, 0, 2) * lead) / p.rings[1].r, hiArm = p.arms.find((q) => q.kind === 'high');
+  const moment = (ok) => { for (let c0 = 20; c0 < 2000; c0 += 0.01) if (Math.abs(armAt(G, c0 + lead) - a0) <= 0.01 && ok(c0)) return c0; return -1; };
+  const c = moment((c0) => { for (let d = 0; d < 0.55; d += 0.05) if (!support(p, 1, a0 - back + (speedAt(p, 0, 2) * d) / p.rings[1].r, c0 + d, -0.1)) return false; return true; });
+  const c2 = moment((c0) => Math.abs(wrap(armAt(hiArm, c0 + lead) - a0 + Math.PI) - Math.PI) > 2.2);
+  const tries = [['jump', (inp) => { inp.jump = true; }], ['slide', (inp) => { inp.down = true; }], ['nothing', () => {}]].map(([name, act]) => { const st = on(1, 1, a0 - back, c); run(st, 0.5, (q, inp, t) => { if (Math.abs(t - 0.08) < P.step / 2) act(inp); }); return `${name}: ${st.why || 'through'}`; });
+  const outside = (() => { const st = on(1, 0, a0 - (speedAt(p, 0, 2) * lead) / p.rings[0].r, c2); run(st, 0.5); return st.over; })();
+  check('a gate swings over its rafts: neither jumped nor slid under — one is on the stones when it comes', c > 0 && c2 > 0 && tries.every((t) => /wall/.test(t)) && !outside, tries.join(', '));
   const sector = [G.swing[0] - G.swing[1] - 0.15, G.swing[0] + G.swing[1] + 0.15]; let holesThere = 0, runUp = 0;
   for (let k = 0; k < R.stones; k++) { const mid = (k + 0.5) * slot; if (R.holes.includes(k) && mid > sector[0] && mid < sector[1]) holesThere++; }
   for (let k = from - 1; k >= 0 && !R.holes.includes(k); k--) runUp++;

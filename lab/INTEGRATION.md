@@ -6,16 +6,16 @@ on over the game as it stands, each on its own, and with every switch off the ga
 | Switch | What it is | Its files | Its checks |
 |---|---|---|---|
 | `slide` | **Mostly Down**, the water slide | `src/world/zones/games/slide/`, `src/extras/slide.js` | `node tools/slide-test.mjs` |
-| `pond` | **The Endless Pond**, a circuit one runs round and round on the Great Pond | `src/world/zones/games/pond/`, `src/extras/pond.js` | `node tools/pond-test.mjs` (26) |
+| `pond` | **The Endless Pond**, three circuits on the Great Pond: fifteen seconds, twenty, then as long as one can | `src/world/zones/games/pond/`, `src/extras/pond.js` | `node tools/pond-test.mjs` (29) |
 | `boats` | **The Little Regatta**, radio-controlled boats racing on the Great Pond | `src/world/zones/games/boats/`, `src/extras/boats.js` | `node tools/boats-test.mjs` (18) |
 | `hill` | **Uphill Battle**, up a long slope while logs, barrels and boulders roll down it | `src/world/zones/games/hill/`, `src/extras/hill.js` | `node tools/hill-test.mjs` (12) |
-| `crack` | **Between a Rock**, up a cleft of the sea cliff, from wall to wall | `src/world/zones/games/crack/`, `src/extras/crack.js` | `node tools/crack-test.mjs` (26) |
+| `crack` | **Between a Rock**, up a cleft between two needles of rock, from wall to wall | `src/world/zones/games/crack/`, `src/extras/crack.js` | `node tools/crack-test.mjs` (27) |
 | `hollow` | **The Hollow Hill**, a race flown under the ground, one lap against the clock | `src/world/zones/games/hollow/`, `src/extras/hollow.js` | `node tools/hollow-test.mjs` (29) |
 | `caves` | The caves are safe places: nearby chat only | `src/extras/caves.js` | `node tools/extras-test.mjs` (15, with the next) |
 | `stats` | The game in figures: counters, the page `/opendata`, a line in the settings | `src/extras/stats.js`, `server/stats.js`, `public/opendata/`, `public/opendate/` | the same |
 
-`node tools/games-test.mjs` (14) plays the cleft, the cave and the slope through in the running game, in a headless
-browser: with every switch off nothing of them is there; switched on they are built, offered at their gates,
+`node tools/games-test.mjs` (16) plays the cleft, the cave, the slope and the first two ponds in the running game, in a
+headless browser: with every switch off nothing of them is there; switched on they are built, offered at their gates,
 played by their own bots, and the player is let go where it should be.
 
 Also here: the icon (`lab/favicon/`, the "reactor" colours), the lab page with its switches (`lab/`), a server
@@ -90,18 +90,26 @@ screen; not tried on a real phone.
 
 ## The Endless Pond
 
-A circuit not fourteen metres across on the Great Pond, off its east bank (a jetty leads to it): an outer ring of
-stones that never move, and inside it rafts of logs that drift the other way — the shorter way round, with gaps
-that are never where they were. The legs run by themselves, **each lap a little faster than the last**, until the
-water. It is not only a matter of jumping: one jumps (again in the air: further), dives back down, slides, steps to
-the other ring; each ring has its arm turning about the post — a low beam over the logs, a curtain over the stones
-— so that whichever comes, the other ring is clear of it; and fireflies caught make lily pads, which put back on the
-circuit, once, who falls in. What moves goes by the clock of the world: several visitors run at once on the same
-pond, each seen by the others (they are where the game puts them), each with their own run.
+Three circuits along the east bank of the Great Pond, one after the other; a jetty leads to the first, and one
+never begins anywhere else. On each the legs run by themselves, on stones that never move and on rafts of logs
+that drift, and one jumps the gaps (again in the air: further), dives back down, slides, steps to the next ring.
 
-Its score is laps, to a tenth; the extra calls `app.pondDone?.(tenths, ms)` when a run ends. For the game's boards:
-`pond: { order: 'desc', … }` in `BOARDS` (the checks print a rule), and
-`app.pondDone = (tenths) => scoreGame('pond', POND.name, tenths, `${(tenths / 10).toFixed(1)} laps`)`.
+| | rings | arms | for how long |
+|---|---|---|---|
+| The First Pond | one, of stones | a low beam (jumped) | 15 s |
+| The Second Pond | stones outside, rafts inside | a curtain over the stones (slid under), a gate that swings over the rafts (neither jumped nor slid under) | 20 s |
+| The Last Pond | stones, rafts, rafts | a low beam, a curtain, two gates — and faster each second, to thirteen metres a second | as long as one can |
+
+On the second pond one has to change ring whether one wants to or not: a stretch of its stones is missing, far too
+long to jump — there one is on the rafts — and when the gate swings over the rafts one is on the stones. When a
+pond's time is up one runs out to a line of stones and along it to the next by oneself: nothing can happen on the
+way, and it is not counted. Fireflies caught make lily pads, which put back on the circuit, once, who falls in.
+What moves goes by the clock of the world: several visitors run at once, each with their own run.
+
+Its score is how long one held, in milliseconds (it was laps); the extra calls `app.pondDone?.(ms, pond)` when a
+run ends in the water (`pond`: 0, 1 or 2, the one reached). For the game's boards: `pond: { order: 'desc', min: 1000,
+max: 3600_000 }` in `BOARDS`, and `app.pondDone = (ms) => scoreGame('pond', POND.name, ms, formatTime(ms))`.
+The regatta keeps out of the three circuits (`REGATTA.keepOut`).
 
 ## The Little Regatta
 
@@ -134,26 +142,30 @@ The extra calls `app.hillDone?.(ms)`. For the game's boards: `hill: { order: 'as
 
 ## Between a Rock
 
-A cleft between two ribs of rock laid on the sea cliff at the south end of the bay (it leans back against the
-cliff, fifteen degrees): forty metres from the planks at its foot to a bell at its lip. One goes up it from wall
-to wall: a kick off one wall carries across to the other, where one holds a moment — then slides. Who does
-nothing goes down; a kick taken while sliding is a weaker one. Five stretches of eight metres, each wider than
-the last (a kick gains 1.6 m at the bottom, less than a metre at the top), each adding one thing: nothing; thorns,
-which throw off whoever lands in them; polished rock, on which one hardly holds; moss, on which one does not;
-stones that come down one wall or the other by the clock of the world. A net at the top of each stretch: one goes
-up through it, and it catches whoever falls — never more than eight metres lost.
+Two needles of layered rock stand in the sea before the cliff at the south end of the bay, and between them a
+cleft: forty metres from the planks at its foot to a bell at the top. It is played like any game of walls:
 
-Two beads of light on the walls show where a kick taken now would land (the white one), and a steep kick (the
-small yellow one, "up" held); they turn red when that is into thorns or under a stone. That is what makes it a
-game of reading the way up and not of hammering a key: the checks have a climber that only kicks, thrown off a
-dozen times and not up in a minute, and one that reads the beads, up in twenty seconds.
+- left and right: one walks on a ledge, steers a little in the air, and holds on to a wall;
+- the jump: off the planks or a ledge it is a jump; off a wall it is a kick, which carries across to the other
+  wall and up (1.7 m where the cleft is narrow, hardly a metre at the top);
+- on a wall one slides: slowly while one holds towards it, faster with nothing held, fast where water runs down
+  the rock; "down" lets go. Nobody climbs a single wall.
 
-**What it adds to the world** (only when it is on): the two ribs and what is between them (one group, `cleft`,
-which casts its shadow), a walkway on piles from the sand of the beach to a landing before the cleft — and, so
-that one can walk there, `collision.addPlatform` (the planks), `collision.addArea` (a polygon round them: the
-landing stands a few metres beyond the edge of the bay) and two `collision.addBox` (the feet of the ribs).
+Seven ledges jut from the walls, to stand on and as roofs: stones come down by the clock of the world — along a
+wall or down the middle, none below thirteen metres, more of them the higher one is — and a stone knocks one off:
+for a moment one holds nothing, and falls. **There is no net**: who falls catches a wall again, lands on a ledge,
+or goes back to the planks. The way of the next jump is drawn in dots before the climber; a trail of stardust
+follows a kick. The checks have a climber that reads the cleft (12 to 15 s) and one that only hammers the jump
+(it never leaves the planks: it takes a wall).
 
-The extra calls `app.crackDone?.(ms)`. For the game's boards: `crack: { order: 'asc', min: 10_000, max: 1800_000 }`.
+**What it adds to the world** (only when it is on): the two needles, their ledges, what grows on them, the fall
+down the cliff behind (one group, `cleft`; the rock and the leaves are two materials of its own, which give them
+a light of their own — the cleft is in the shade of the cliff all day —, and the water is the game's own falling
+water, `fallsRibbon`); a walkway on piles from the sand of the beach to a landing before the cleft and the planks
+between the needles — and, so that one can walk there, `collision.addPlatform` (the planks), `collision.addArea`
+(a polygon round them) and two `collision.addBox` (the feet of the needles).
+
+The extra calls `app.crackDone?.(ms)`. For the game's boards: `crack: { order: 'asc', min: 7000, max: 1800_000 }`.
 
 ## The Hollow Hill
 
