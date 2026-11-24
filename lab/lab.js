@@ -8,7 +8,7 @@ import { EXTRAS, loadExtras } from '../src/extras/index.js';
 const TRIALS = { oak: { name: 'Out on a Limb — the Great Oak (a trial, set aside)', load: () => import('./oak/extra.js') } };
 Object.assign(EXTRAS, TRIALS);
 
-const KEY = 'mmf.lab.2', NAMES = { slide: 'Toboggan', oak: 'Grand chêne (essai mis de côté)', caves: 'Grottes : chat de proximité', stats: 'Compteurs et page des chiffres' };
+const KEY = 'mmf.lab.2', NAMES = { slide: 'Toboggan', pond: 'The Endless Pond (course sur l’étang)', boats: 'Bateaux télécommandés', oak: 'Grand chêne (essai mis de côté)', caves: 'Grottes : chat de proximité', stats: 'Compteurs et page des chiffres' };
 const read = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { return {}; } };
 const query = new URLSearchParams(location.search), saved = read(), on = {};
 for (const id of Object.keys(EXTRAS)) on[id] = query.has(id) ? !/^(0|off|no|false)$/i.test(query.get(id)) : id in TRIALS ? saved[id] === true : saved[id] !== false;
@@ -44,6 +44,8 @@ function panel(app, built) {
     body.append(b);
   };
   if (built.slide?.gate) go('Aller au toboggan', () => { const g = built.slide.gate; return [g.x - Math.sin(g.yaw) * 3, g.z - Math.cos(g.yaw) * 3, g.yaw]; });
+  if (built.pond?.gate) go('Aller à l’Endless Pond', () => { const g = built.pond.gate; return [g.x + 2.2, g.z, g.yaw]; });
+  if (built.boats?.stand) go('Aller aux bateaux', () => { const g = built.boats.stand; return [g.x - Math.sin(g.yaw) * 2.6, g.z - Math.cos(g.yaw) * 2.6, g.yaw]; });
   if (built.oak?.gate) go('Aller au grand chêne', () => { const g = built.oak.gate; return [g.x - Math.sin(g.yaw) * 3, g.z - Math.cos(g.yaw) * 3, g.yaw]; });
   const note = document.createElement('div');
   note.textContent = 'Ici vous êtes administrateur : caméra libre (touche F), toute la boutique, tous les gestes.';

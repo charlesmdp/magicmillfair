@@ -9,6 +9,7 @@
 export const EXTRAS = {
   slide: { name: 'Mostly Down — the water slide', load: () => import('./slide.js') },
   pond: { name: 'The Endless Pond — round and round, every lap faster', load: () => import('./pond.js') },
+  boats: { name: 'The Little Regatta — radio-controlled boats on the pond', load: () => import('./boats.js') },
   caves: { name: 'The caves are safe places: nearby chat only', load: () => import('./caves.js') },
   stats: { name: 'The game in figures: counters, the page /opendata', load: () => import('./stats.js') },
 };
