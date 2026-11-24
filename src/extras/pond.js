@@ -3,9 +3,10 @@
 // See index.js (the switches) and lab/INTEGRATION.md (its board of scores).
 import { Pond } from '../world/zones/games/pond/Pond.js';
 import { POND } from '../world/zones/games/pond/ring.js';
+import { formatTime } from '../world/zones/games/course.js';
 import { keysHelp } from './help.js';
 
-const KEY = 'mmf.pond.best';
+const KEY = 'mmf.pond.held'; // (how long one held, in ms: the three ponds are scored by time)
 
 /** Builds the circuit on the Great Pond of `app` (the game, once it runs) and lets the player run it. Returns it. */
 export function attach(app) {
@@ -43,8 +44,8 @@ export function attach(app) {
     run = pond.open(player, io);
     player.driver = run;
     app.audio?.play('teleport');
-    keysHelp(app).set(app.input.isTouch ? 'The legs run by themselves · the arrow jumps (again in the air: further) · stick down: slide, or dive · stick aside: the other ring'
-      : 'The legs run by themselves · Space jumps (again in the air: further) · S: slide, or dive · A / D: the other ring · E: leave · H: these keys again');
+    keysHelp(app).set(app.input.isTouch ? 'The legs run by themselves · the arrow jumps (again in the air: further) · stick down: slide, or dive · stick aside: to the next ring, outwards or inwards · three ponds: 15 s, 20 s, then as long as you can'
+      : 'The legs run by themselves · Space jumps (again in the air: further) · S: slide, or dive · A / D: to the next ring, outwards or inwards · three ponds: 15 s, 20 s, then as long as you can · E: leave · H: these keys again');
   };
   world.actionSources.push((p) => {
     if (run) return run.over ? null : { label: 'Leave the pond', run: () => leave(false) };
@@ -61,9 +62,9 @@ export function attach(app) {
       hud.setRun(run.line);
       if (run.over && !saved) {
         saved = true;
-        const laps = run.laps, best = read();
-        if (laps > best) { try { localStorage.setItem(KEY, String(laps)); } catch { /* no storage */ } pond.setBest(laps); hud.note(best ? `${laps.toFixed(1)} laps: your best run yet!` : `${laps.toFixed(1)} laps — a first run on the board.`, 5000); }
-        app.pondDone?.(Math.round(laps * 10), run.time); // (for whoever keeps a board of the best runs: tenths of a lap, and how long it lasted)
+        const ms = run.held, best = read();
+        if (ms > best) { try { localStorage.setItem(KEY, String(ms)); } catch { /* no storage */ } pond.setBest(ms); hud.note(best ? `Held ${formatTime(ms)}: your best run yet!` : `Held ${formatTime(ms)} — a first run on the board.`, 5000); }
+        app.pondDone?.(ms, run.stage); // (for whoever keeps a board of the best runs: how long one held, in ms, and the pond reached: 0, 1 or 2)
       }
       if (run.ended) leave(true);
     },

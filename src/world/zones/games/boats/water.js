@@ -21,7 +21,7 @@ export const REGATTA = {
   width: 6.4, // m between the two buoys of a gate
   stand: { from: [-146, 71], towards: [0.25, 1] }, // where one steers from: the bank reached from there, going that way (found when it is built)
   // where no boat goes: the circuit of The Endless Pond, the deck on its piles
-  keepOut: [{ x: -124.5, z: 56, r: 9.3 }],
+  keepOut: [{ x: -124.5, z: 56, r: 9.3 }, { x: -130.5, z: 69.5, r: 5.3 }, { x: -116.5, z: 31, r: 11.4 }], // (the three circuits of The Endless Pond)
   box: { x0: -161.2, x1: -143.8, z0: 30.8, z1: 44.2 },
   step: 1 / 120,
   top: 10.5, accel: 10, back: 3.5, // m/s flat out; m/s² ahead, astern
