@@ -559,7 +559,7 @@ export class PierZone {
     // one carries a board half as wide again as the car, from under its floor to above its rim — what is read
     // from the walk of the pier. Each says the number of its car: the booth of the sponsors names them so.
     const banners = (() => {
-      const COLS = 6, CW = 384, CH = 144, ROWS = Math.ceil(N / COLS), canvas = document.createElement('canvas');
+      const COLS = 6, CW = 320, CH = 120, STUB = 46, ROWS = Math.ceil(N / COLS), canvas = document.createElement('canvas');
       canvas.width = COLS * CW; canvas.height = ROWS * CH;
       const ctx = canvas.getContext('2d'), tex = new THREE.CanvasTexture(canvas), state = new Array(N).fill(null);
       tex.colorSpace = THREE.SRGBColorSpace;
@@ -568,16 +568,16 @@ export class PierZone {
         ctx.translate((i % COLS) * CW, Math.floor(i / COLS) * CH);
         ctx.beginPath(); ctx.rect(0, 0, CW, CH); ctx.clip();
         ctx.clearRect(0, 0, CW, CH);
-        drawSponsor(ctx, CW, CH, state[i], { what: `gondola ${i + 1}` });
         if (state[i]) {
-          // (the number of the car, in a roundel at the corner: "Gondola 7" at the booth is this one)
-          const r = CH * 0.15, cx = CW - r - 9, cy = r + 9;
-          ctx.fillStyle = '#7a1420'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
-          ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 3; ctx.stroke();
-          ctx.fillStyle = '#f6e7b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-          ctx.font = `800 ${Math.round(r * (i + 1 > 9 ? 1.05 : 1.25))}px system-ui, sans-serif`;
-          ctx.fillText(String(i + 1), cx, cy + 1);
-        }
+          // its sponsor's panel and, on a stub at its end, the number of the car: "Gondola 7" at the booth is this one
+          drawSponsor(ctx, CW - STUB, CH, state[i], { what: `gondola ${i + 1}` });
+          const x = CW - STUB;
+          ctx.fillStyle = '#7a1420'; ctx.fillRect(x, 0, STUB, CH);
+          ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 4; ctx.strokeRect(x + 2, 4, STUB - 6, CH - 8);
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillStyle = '#f2c14e'; ctx.font = '700 13px system-ui, sans-serif'; ctx.fillText('No.', x + STUB / 2 - 1, CH * 0.3);
+          ctx.fillStyle = '#f6e7b8'; ctx.font = `800 ${i + 1 > 9 ? 27 : 34}px Georgia, 'Times New Roman', serif`; ctx.fillText(String(i + 1), x + STUB / 2 - 1, CH * 0.58);
+        } else drawSponsor(ctx, CW, CH, null, { what: `gondola ${i + 1}` });
         ctx.restore();
         tex.needsUpdate = true;
       };
@@ -650,12 +650,12 @@ export class PierZone {
     this.wheelPivot = pivot;
     /**
      * Where to stand to photograph gondola `n` as it is right now, banner first: { from, at } (in the world) —
-     * a dozen metres before the wheel on the side of the shore, level with the car.
+     * a few metres before the wheel on the side of the shore, level with the car.
      */
     this.gondolaView = (n) => {
       const a = angle + ((n - 1) / N) * Math.PI * 2, y = Math.sin(a) * R, z = Math.cos(a) * R;
       pivot.updateWorldMatrix(true, false);
-      const from = pivot.localToWorld(new THREE.Vector3(-12.5, y - 2.3, z + 1.6)), at = pivot.localToWorld(new THREE.Vector3(-1.4, y - 2.5, z));
+      const from = pivot.localToWorld(new THREE.Vector3(-7.4, y - 1.9, z + 1.3)), at = pivot.localToWorld(new THREE.Vector3(-1.4, y - 2.2, z));
       return { from: from.toArray(), at: at.toArray() };
     };
     {
