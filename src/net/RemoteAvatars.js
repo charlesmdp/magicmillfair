@@ -31,7 +31,7 @@ export class RemoteAvatars {
       it.character.setColor(peer.color);
       this._kit(it);
       it.tag.remove();
-      it.tag = this.hud.tag(peer.id, peer.name, peer.color);
+      it.tag = this._tag(peer);
     });
     presence.on('emote', ({ id, emote }) => {
       const it = this.items.get(id);
@@ -44,12 +44,19 @@ export class RemoteAvatars {
     for (const peer of presence.peers.values()) this._add(peer);
   }
 
+  // The name over a visitor — with a badge when they are an administrator who lets it be known.
+  _tag(peer) {
+    const tag = this.hud.tag(peer.id, peer.name, peer.color, peer.admin ? 'Admin' : '');
+    if (peer.admin) tag.classList.add('is-admin');
+    return tag;
+  }
+
   _add(peer) {
     if (this.items.has(peer.id)) return;
     const character = this.factory.create(peer.color);
     character.root.visible = false;
     this.scene.add(character.root);
-    const it = { peer, character, tag: this.hud.tag(peer.id, peer.name, peer.color), shown: false, trail: 0 };
+    const it = { peer, character, tag: this._tag(peer), shown: false, trail: 0 };
     this.items.set(peer.id, it);
     this._kit(it);
   }

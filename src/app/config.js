@@ -17,6 +17,10 @@ export const RELEASE = {
   stats: true, // the game in figures: the counters and the page /opendata (an extra)
   sky: 'hidden', // the sky villages: 'hidden' (nothing of them), 'soon' (their gate, closed), 'open'
   userRooms: false, // rooms that players make for themselves
+  // any name written in the address (?room=a-name) is a room of its own, free. Off — as the fair is delivered —
+  // only the common rooms exist, for everybody but the owner. (A server started with FREE_ROOMS=1 has it on
+  // where nobody decided: the tests and the development server are.)
+  freeRooms: false,
 };
 export const SKY_STAGES = ['hidden', 'soon', 'open'];
 /** Switches made clean: only those above, each of its kind; what is missing or wrong is as in `base`. */

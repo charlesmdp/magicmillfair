@@ -570,6 +570,24 @@ try {
     await frames(4);
     const said = await page.evaluate(() => ({ log: [...document.querySelectorAll('.chat .log p')].map((e) => e.textContent), bubble: document.querySelector('.tag.self .bubble')?.textContent, focus: document.activeElement === document.querySelector('.chat input') }));
     check('Enter opens the chat, the line shows in the log and over the avatar', typing && said.log.some((l) => l.endsWith('Hello valley')) && said.bubble === 'Hello valley' && !said.focus, JSON.stringify(said));
+    // who hears: the chat opens on "Nearby" and says so above the box; the first three lines said nearby are told
+    // how to talk to the whole oasis; Tab (or the button) switches, and the choice is this browser's from then on
+    {
+      const hints = () => page.evaluate(() => [...document.querySelectorAll('.chat .log p')].filter((e) => /Only people close to you \(20 m\) can read what you say\. Switch to "Everyone"/.test(e.textContent)).length);
+      const box = () => page.evaluate(() => ({ button: document.querySelector('.chat .chan').textContent, heard: document.querySelector('.chat .heard').textContent, shown: getComputedStyle(document.querySelector('.chat .heard')).display !== 'none', kept: localStorage.getItem('mmf.chan') }));
+      const line = async (text, keys = []) => { await page.keyboard.press('Enter'); await frames(2); for (const k of keys) await page.keyboard.press(k); const b = await box(); await page.keyboard.type(text); await page.keyboard.press('Enter'); await frames(3); return b; };
+      const first = { marked: said.log.some((l) => /nearby Hello valley$/.test(l)), hints: await hints() };
+      const wide = await line('Hello everyone', ['Tab']);
+      const unmarked = await page.evaluate(() => { const p = [...document.querySelectorAll('.chat .log p')].find((e) => /Hello everyone$/.test(e.textContent)); return !!p && !p.classList.contains('near'); });
+      const stays = await line('still everyone');
+      const afterAll = await hints();
+      const back = await line('one', ['Tab']);
+      await line('two'); await line('three');
+      const total = await hints();
+      check('the chat opens on "Nearby" and says who hears; the first three lines said nearby are told how to reach the whole oasis; Tab switches, and the choice is kept',
+        first.marked && first.hints === 1 && wide.button === 'Everyone' && wide.shown && /whole oasis/.test(wide.heard) && wide.kept === 'all' && unmarked && stays.button === 'Everyone' && afterAll === 1
+        && back.button === 'Nearby' && /within 20 m/.test(back.heard) && back.kept === 'near' && total === 3, JSON.stringify({ first, wide, unmarked, stays, afterAll, back, total }));
+    }
     // a gesture on a key, an emote by its name; the animals of light are earned by coming back day after day
     await page.keyboard.press('Digit7');
     await frames(3);
@@ -720,6 +738,9 @@ try {
       return {
         banner: { there: !!g.getObjectByName('notice-welcome'), ahead: off(n.welcome.x, n.welcome.z), far: +Math.hypot(n.welcome.x - s.x, n.welcome.z - s.z).toFixed(1) },
         rules: { there: !!g.getObjectByName('notice-rules'), ahead: off(L.NOTICES.rules.x, L.NOTICES.rules.z), left: (L.NOTICES.rules.x - s.x) * fz - (L.NOTICES.rules.z - s.z) * fx > 0 },
+        story: { there: !!g.getObjectByName('notice-story'), ahead: off(L.NOTICES.story.x, L.NOTICES.story.z), left: (L.NOTICES.story.x - s.x) * fz - (L.NOTICES.story.z - s.z) * fx > 0, far: +Math.hypot(L.NOTICES.story.x - s.x, L.NOTICES.story.z - s.z).toFixed(1) },
+        advice: { there: !!g.getObjectByName('notice-advice'), words: g.getObjectByName('notice-advice')?.userData.words || '', left: (L.NOTICES.advice.x - s.x) * fz - (L.NOTICES.advice.z - s.z) * fx > 0, far: +Math.hypot(L.NOTICES.advice.x - s.x, L.NOTICES.advice.z - s.z).toFixed(1), billy: Math.round(Math.hypot(L.WAYS.billy.at[0] - L.POND_DECK.x, L.WAYS.billy.at[1] - L.POND_DECK.z)) },
+        planks: n.signposts.filter((p) => p.arms.some((a) => a.to === 'billy')).map((p) => `${p.id}: ${p.arms.find((a) => a.to === 'billy').text}`),
         puffs: { moved: puff.material.map.offset.x !== before, frames: Math.round(1 / puff.material.map.repeat.x) },
         news: n.news.map((b) => ({ date: b.date, behind: off(b.x, b.z), far: Math.round(Math.hypot(b.x - s.x, b.z - s.z)) })), boards: [0, 1, 2].map((k) => !!g.getObjectByName(`notice-news${k}`)), days: N.NEWS.slice(0, 3).map((d) => d.date), old: !!g.getObjectByName('notice-news'), flowers,
       };
@@ -727,6 +748,9 @@ try {
     check('where one arrives: a banner of welcome across the lane (little mushroom clouds puffing over its posts) and the rules to the left are what is seen first; the boards of what is new stand by the poppies, out of that first look — one for each of the three latest days',
       arrive.banner.there && arrive.banner.ahead < 12 && arrive.banner.far > 7 && arrive.banner.far < 16 && arrive.rules.there && arrive.rules.ahead < 48 && arrive.rules.left && arrive.puffs.moved && arrive.puffs.frames === 12
       && arrive.news.length === 3 && arrive.boards.every(Boolean) && !arrive.old && arrive.news.every((b, k) => b.date === arrive.days[k] && b.behind > 75 && b.far > 18 && b.far < 45) && arrive.flowers.some(Boolean), JSON.stringify(arrive));
+    check('…and, on arriving: to the right, a board tells how it all came to this (the story of the opening, another way); beside one, an easel says where life advice is to be had — and planks at the mill and by the pond point the rest of the way to Billy',
+      arrive.story.there && !arrive.story.left && arrive.story.ahead < 48 && arrive.story.far > 5 && arrive.story.far < 14 && arrive.advice.there && arrive.advice.left && arrive.advice.far < 3.5 && /^GET LIFE ADVICE · ASK BILLY · \d+0 M$/.test(arrive.advice.words) && arrive.advice.billy < 20
+      && arrive.planks.join() === 'mill: GET LIFE ADVICE,pondside: GET LIFE ADVICE', JSON.stringify({ story: arrive.story, advice: arrive.advice, planks: arrive.planks }));
   }
   // --- the wooden signposts at the forks of the paths, and the Trading Post: the booth of the sponsors, on the
   // plaza at the foot of the pier, a long way from the arrival; its window shows every game with a photograph

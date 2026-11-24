@@ -8,7 +8,7 @@ import { createServer } from 'vite';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RELAY_PORT = process.env.RELAY_PORT || '8787';
 const relay = spawn(process.execPath, [path.join(ROOT, 'server/index.js')], {
-  env: { ...process.env, PORT: RELAY_PORT, HOST: '127.0.0.1' },
+  env: { FREE_ROOMS: '1', ...process.env, PORT: RELAY_PORT, HOST: '127.0.0.1' }, // (in development any ?room=a-name is a room of its own)
   stdio: ['ignore', 'ignore', 'inherit'], // its banner would point at the wrong port: keep errors only
 });
 relay.on('exit', (code) => { if (code) console.error(`The presence relay stopped (code ${code}).`); });

@@ -38,7 +38,7 @@ async function make(commit, dir, test = true) {
 
 let server = null, serverLog = '';
 async function serve(dist) {
-  server = spawn(process.execPath, [path.join(ROOT, 'server/index.js')], { env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', ADMIN_KEY, SCORE_SECRET, DIST_DIR: dist, SCORES_FILE: path.join(TMP, 'store.json'), BUILD_ID: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  server = spawn(process.execPath, [path.join(ROOT, 'server/index.js')], { env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', ADMIN_KEY, SCORE_SECRET, FREE_ROOMS: '1', DIST_DIR: dist, SCORES_FILE: path.join(TMP, 'store.json'), BUILD_ID: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
   server.stdout.on('data', (d) => { serverLog += d; });
   server.stderr.on('data', (d) => { serverLog += d; });
   for (let i = 0; i < 300; i++) { try { if ((await fetch(`${BASE}/healthz`)).ok) return; } catch { /* not up yet */ } await sleep(100); }
@@ -119,6 +119,18 @@ try {
   await office.click('#tabs [data-tab="rooms"]');
   await office.waitForFunction(() => document.querySelector('#rooms .item'), null, { timeout: 20000 });
   const roomsSeen = await office.evaluate(() => [...document.querySelectorAll('#rooms .item')].map((r) => r.textContent));
+  // (the rules of the door are settings of the back office: a new room at 40 rather than 50, then back to the usual)
+  await office.waitForFunction(() => document.getElementById('rule-open').value === '50', null, { timeout: 20000 });
+  const usual = await office.evaluate(() => ['max', 'open', 'start', 'low'].map((k) => document.getElementById(`rule-${k}`).value).join());
+  await office.fill('#rule-open', '40');
+  await office.click('#rules-form button[type=submit]');
+  await office.waitForFunction(() => /follows these numbers/.test(document.getElementById('toast').textContent), null, { timeout: 20000 });
+  const ruled = (await api('/api/rooms')).body?.rules;
+  await office.click('#rules-reset');
+  await office.waitForFunction(() => /usual numbers/.test(document.getElementById('toast').textContent), null, { timeout: 20000 });
+  const unruled = (await api('/api/rooms')).body?.rules;
+  check('the back office: the rules of the rooms are settings — the owner changes when a new room opens, the door follows at once, and "Back to the usual" undoes it',
+    usual === '200,50,20,8' && ruled?.open === 40 && ruled.max === 200 && unruled?.open === 50, JSON.stringify({ usual, ruled, unruled }));
   const posted = await fetch(`${BASE}/api/scores`, { method: 'POST', headers: { 'content-type': 'application/json', origin: BASE }, body: JSON.stringify({ board: 'bell', name: 'Cheater', score: 9999, run: await sign(SCORE_SECRET, { b: 'bell', t: Date.now() - 6000, n: randomId(9) }) }) });
   await office.click('#tabs [data-tab="scores"]');
   await office.waitForFunction(() => document.getElementById('board').options.length > 5, null, { timeout: 20000 });

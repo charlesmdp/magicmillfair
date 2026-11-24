@@ -11,22 +11,23 @@
 //
 // Kept under one key, `release`: { set: { … only what the owner decided … }, refresh: when everybody was last
 // asked to refresh (ms) }. What the host provides (ctx): build() → the version of the files it serves ('' when
-// it cannot tell), push(message) → tells every room, resolves to how many rooms were told.
+// it cannot tell), push(message) → tells every room, resolves to how many rooms were told; releaseBase →
+// optional: what a switch is worth on this host where nobody decided ({ freeRooms: true } on a test server).
 import { RELEASE, cleanRelease } from '../src/app/config.js';
 import { cleanChat } from './protocol.js';
 
 const KEY = 'release';
 const out = (status, body, headers = {}) => ({ status, body, headers });
 
-/** The switches as they stand ({ release, refresh }): what the owner decided, over what the code says. */
-export async function readRelease(store) {
-  const kept = (await store.get(KEY)) || {};
-  return { release: cleanRelease(kept.set), refresh: Number.isFinite(kept.refresh) ? kept.refresh : 0 };
+/** The switches as they stand ({ release, refresh }): what the owner decided, over what the host and the code say. */
+export async function readRelease(ctx) {
+  const kept = (await ctx.store.get(KEY)) || {};
+  return { release: cleanRelease(kept.set, cleanRelease(ctx.releaseBase)), refresh: Number.isFinite(kept.refresh) ? kept.refresh : 0 };
 }
 
 /** What a browser is told about releases and versions: with the status, when it asks, and when something changes. */
 export async function releaseNews(ctx) {
-  const { release, refresh } = await readRelease(ctx.store);
+  const { release, refresh } = await readRelease(ctx);
   let build = '';
   try { build = String((await ctx.build?.()) || '').slice(0, 40); } catch { build = ''; }
   return { release, refresh, build };

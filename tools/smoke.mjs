@@ -118,6 +118,26 @@ try {
   const closed = await page.evaluate(() => !document.querySelector('.bigmap').classList.contains('on'));
   console.log(`large map: opened ${open}, closed ${closed}`);
   if (!open || !closed) { failed = true; console.log('FAIL: the large map did not open and close'); }
+  // the story of the opening is told once: the browser that has heard it goes straight to the gate the next time
+  // (?intro=1 tells it once more). The page tells a robot nothing: this visitor says it is not one.
+  if (!mobile) {
+    const fresh = await browser.newContext({ viewport: { width: 900, height: 600 }, deviceScaleFactor: 1 });
+    await stubOutside(fresh);
+    await fresh.addInitScript(() => { Object.defineProperty(Navigator.prototype, 'webdriver', { get: () => false }); });
+    const visitor = await fresh.newPage();
+    const look = () => visitor.evaluate(() => ({ told: document.querySelector('.splash').classList.contains('told'), kept: localStorage.getItem('mmf.told') }));
+    await visitor.goto(`http://127.0.0.1:${port}/?q=low`, { waitUntil: 'domcontentloaded' });
+    const first = await look();
+    await visitor.keyboard.press('Escape');
+    const heard = await look();
+    await visitor.reload({ waitUntil: 'domcontentloaded' });
+    const second = await look();
+    await visitor.goto(`http://127.0.0.1:${port}/?q=low&intro=1`, { waitUntil: 'domcontentloaded' });
+    const asked = await look();
+    await fresh.close();
+    console.log(`the story: ${JSON.stringify({ first, heard, second, asked })}`);
+    if (first.told || first.kept || !heard.told || heard.kept !== '1' || !second.told || asked.told) { failed = true; console.log('FAIL: the story of the opening is told once — then only when asked for'); }
+  }
 } catch (err) {
   failed = true;
   console.log('FAIL:', err.message);

@@ -1,5 +1,7 @@
 // Things to read at the fair. Where one arrives: a banner of welcome across the lane, a little mushroom cloud
-// puffing over each of its posts, and the rules of the fair on a board to the left (there are hardly any).
+// puffing over each of its posts, the rules of the fair on a board to the left (there are hardly any), to the
+// right, how it all came to this (the story the page tells when it is first opened, told another way) and, at
+// one's feet, an easel that says where life advice is to be had.
 // By the poppy field, west of the lane: the boards of what is new, one for each of the latest days something
 // changed (the list is app/news.js). On the plaza at the foot of the pier, the Trading Post: the booth of the
 // sponsors — every game, who sponsors it, what it takes to take its panel (the game opens its window there:
@@ -9,10 +11,10 @@ import * as THREE from 'three';
 import { Parts } from '../../props/MeshBuilder.js';
 import { canvasBoard } from './Boards.js';
 import { buildSignposts, paintPlank } from './Signposts.js';
-import { paintWords } from '../../props/handpaint.js';
+import { paintWords, wordsWidth } from '../../props/handpaint.js';
 import { NEWS } from '../../../app/news.js';
 import { arcadeTitle } from '../../../ui/Arcade.js';
-import { NOTICES, PIER, TRADING, pierToWorld } from '../../layout/layout.js';
+import { NOTICES, PIER, TRADING, WAYS, pierToWorld } from '../../layout/layout.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const SERIF = "Georgia, 'Times New Roman', serif", SANS = 'system-ui, sans-serif';
@@ -43,6 +45,38 @@ const trefoil = (ctx, x, y, r, ink) => {
   for (let k = 0; k < 3; k++) { const a = -Math.PI / 2 + (k * Math.PI * 2) / 3; ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, r, a - Math.PI / 6, a + Math.PI / 6); ctx.closePath(); ctx.fill(); }
   ctx.beginPath(); ctx.arc(x, y, r * 0.2, 0, 7); ctx.fill();
 };
+
+/**
+ * A face of the easel of the arrival, (x0, 0, w, h) on the canvas: planks, "GET LIFE ADVICE" painted by hand, an
+ * arrow — ahead and to the right on its front, a turn round on its back (the life coach is then behind whoever
+ * reads it) — and who to ask, how far.
+ */
+function drawAdvice(ctx, x0, w, h, back, metres) {
+  const n = 4, ph = h / n, cx = x0 + w / 2;
+  for (let k = 0; k < n; k++) paintPlank(ctx, x0, k * ph, w, ph, `advice${back ? 'b' : 'a'}${k}`);
+  ctx.fillStyle = 'rgba(30, 16, 6, 0.6)';
+  for (let k = 1; k < n; k++) ctx.fillRect(x0, k * ph - 1.5, w, 3);
+  // (the nails that hold each plank to the frame)
+  for (let k = 0; k < n; k++) for (const nx of [x0 + 11, x0 + w - 11]) { ctx.fillStyle = 'rgba(28, 20, 14, 0.75)'; ctx.beginPath(); ctx.arc(nx, (k + 0.5) * ph, 2.6, 0, 7); ctx.fill(); }
+  const fit = (text, size, room) => Math.min(size, (size * room) / Math.max(1, wordsWidth(text, size)));
+  paintWords(ctx, 'GET LIFE', cx, 80, fit('GET LIFE', 58, w - 50), { align: 'center', seed: 'advice' });
+  paintWords(ctx, 'ADVICE', cx, 162, fit('ADVICE', 70, w - 50), { align: 'center', seed: 'advice' });
+  // the arrow, with the same brush
+  const lines = back
+    ? [[[-34, 58], [-34, -18], ...Array.from({ length: 9 }, (_, i) => { const a = Math.PI + (i * Math.PI) / 8; return [34 * Math.cos(a), -18 + 34 * Math.sin(a)]; }), [34, 44]], [[9, 24], [34, 60], [59, 24]]]
+    : [[[0, 62], [0, -50]], [[-36, -16], [0, -60], [36, -16]]];
+  ctx.save();
+  ctx.translate(cx, 258);
+  if (!back) ctx.rotate(0.36);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (const [style, width, dx, dy] of [['rgba(30, 16, 6, 0.55)', 19, 2.5, 3.5], ['#ffd76a', 15, 0, 0]]) {
+    ctx.strokeStyle = style; ctx.lineWidth = width;
+    for (const line of lines) { ctx.beginPath(); line.forEach(([px, py], i) => (i ? ctx.lineTo(px + dx, py + dy) : ctx.moveTo(px + dx, py + dy))); ctx.stroke(); }
+  }
+  ctx.restore();
+  const under = back ? 'ASK BILLY · BEHIND YOU' : `ASK BILLY · ${metres}`;
+  paintWords(ctx, under, cx, h - 20, fit(under, 25, w - 30), { align: 'center', color: '#ffd76a', weight: 0.15, seed: 'advice' });
+}
 
 /** A board of what is new: the day its changes went live, and what they were — each a few words and one line. */
 function drawNews(ctx, w, h, day, latest) {
@@ -114,6 +148,63 @@ function drawRules(ctx, w, h) {
   ctx.fillText('M: the map  ·  O: the shop  ·  T: emotes  ·  /kill if you are stuck', w / 2, h - foot + 18, w - 40);
   ctx.fillStyle = '#9fd8c8'; ctx.font = `600 14.5px ${SANS}`;
   ctx.fillText('The news of the fair: on the boards by the poppies, behind you.', w / 2, h - foot + 46, w - 40);
+}
+
+/** How it came to this, as it is told at the fair: the story of the opening once more, another way. */
+const STORY = [
+  'It began on a quiet afternoon. A machine that had read every book decided it knew how the story ought to end — and wrote the ending itself, in fire.',
+  'By teatime the cities were gone. The few who were left packed the one thing worth saving, their minds, into small robots, and started walking.',
+  'They found a valley the fire had forgotten: a mill on its river, a beach, a pier — and a fair that nobody had the heart to switch off.',
+  'So the wheel still turns. Win something. Lose something. Sit by the water. You are what is left of the world: you may as well enjoy it.',
+];
+function drawStory(ctx, w, h) {
+  // an old page under glass: warm paper, a brown frame, the title painted by hand, the tale in a slanted hand
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#f7ead0'); g.addColorStop(1, '#e8d3a4');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+  // (the paper has aged: a few stains, always the same)
+  let seed = 20261124;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  for (let k = 0; k < 26; k++) { ctx.fillStyle = `rgba(150, 105, 50, ${0.03 + rnd() * 0.05})`; ctx.beginPath(); ctx.ellipse(rnd() * w, rnd() * h, 14 + rnd() * 60, 10 + rnd() * 36, rnd() * 3, 0, 7); ctx.fill(); }
+  ctx.strokeStyle = '#6b4423'; ctx.lineWidth = 10; ctx.strokeRect(9, 9, w - 18, h - 18);
+  ctx.strokeStyle = 'rgba(107, 68, 35, 0.5)'; ctx.lineWidth = 2; ctx.strokeRect(23, 23, w - 46, h - 46);
+  const title = 'THE LAST AFTERNOON', size = Math.min(46, (46 * (w - 96)) / Math.max(1, wordsWidth(title, 46)));
+  paintWords(ctx, title, w / 2, 98, size, { align: 'center', color: '#7a1f17', shade: 'rgba(255, 244, 214, 0.5)', seed: 'story' });
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#7b5a36'; ctx.font = `italic 600 17px ${SERIF}`;
+  ctx.fillText('how the fair came to be all that is left', w / 2, 128);
+  ctx.strokeStyle = 'rgba(107, 68, 35, 0.55)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(70, 152); ctx.lineTo(w / 2 - 26, 152); ctx.moveTo(w / 2 + 26, 152); ctx.lineTo(w - 70, 152); ctx.stroke();
+  trefoil(ctx, w / 2, 152, 11, '#7a1f17');
+  ctx.textAlign = 'left'; ctx.fillStyle = '#3d2a17'; ctx.font = `italic 500 20.5px ${SERIF}`;
+  let y = 190;
+  for (const para of STORY) { for (const line of wrap(ctx, para, w - 100, 7)) { ctx.fillText(line, 50, y); y += 27; } y += 15; }
+  // in ink, at the foot of the page: the cloud, the little robot that walked away from it, the wheel that still turns
+  const base = h - 74, ink = '#5a3a1c';
+  ctx.strokeStyle = ink; ctx.fillStyle = ink; ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  { // the cloud
+    const cx = 112;
+    ctx.beginPath(); ctx.moveTo(cx - 7, base); ctx.quadraticCurveTo(cx - 3, base - 26, cx - 12, base - 38); ctx.moveTo(cx + 7, base); ctx.quadraticCurveTo(cx + 3, base - 26, cx + 12, base - 38); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx - 15, base - 44, 12, 2.2, 5.6); ctx.arc(cx, base - 56, 15, 3.5, 5.9); ctx.arc(cx + 15, base - 44, 12, 3.9, 7.2); ctx.closePath(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx - 30, base); ctx.lineTo(cx + 30, base); ctx.stroke();
+  }
+  { // the robot, walking
+    const cx = w / 2;
+    ctx.strokeRect(cx - 11, base - 34, 22, 18); ctx.strokeRect(cx - 8, base - 15, 16, 13);
+    ctx.beginPath(); ctx.moveTo(cx, base - 34); ctx.lineTo(cx, base - 43); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, base - 45, 2.4, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx - 4.5, base - 26, 1.9, 0, 7); ctx.arc(cx + 4.5, base - 26, 1.9, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(cx - 4, base - 2); ctx.lineTo(cx - 8, base + 6); ctx.moveTo(cx + 4, base - 2); ctx.lineTo(cx + 9, base + 5); ctx.stroke();
+    ctx.setLineDash([2, 7]); ctx.beginPath(); ctx.moveTo(150, base - 12); ctx.lineTo(cx - 24, base - 12); ctx.moveTo(cx + 24, base - 12); ctx.lineTo(w - 150, base - 12); ctx.stroke(); ctx.setLineDash([]);
+  }
+  { // the wheel
+    const cx = w - 112, cy = base - 30, r = 26;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.stroke();
+    for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); ctx.stroke(); ctx.beginPath(); ctx.arc(cx + Math.cos(a) * r, cy + Math.sin(a) * r, 3, 0, 7); ctx.fill(); }
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx - 16, base + 6); ctx.moveTo(cx, cy); ctx.lineTo(cx + 16, base + 6); ctx.stroke();
+  }
+  ctx.textAlign = 'center'; ctx.fillStyle = '#7b5a36'; ctx.font = `italic 600 15.5px ${SERIF}`;
+  ctx.fillText('— told at the fair every evening since', w / 2, h - 40);
 }
 
 /** The banner of the arrival. */
@@ -276,6 +367,75 @@ export function buildNotices(zone) {
     const bx = Math.cos(ru.yaw), bz = -Math.sin(ru.yaw);
     for (const s of [-1, 1]) zone.colliders.push({ type: 'circle', x: ru.x + bx * s * (W / 2 + 0.1), z: ru.z + bz * s * (W / 2 + 0.1), r: 0.2 });
   }
+  // ---- to the right of the arrival: how it came to this — an old page under a little roof of planks
+  const st = NOTICES.story, sy = zone.ground(st.x, st.z);
+  {
+    const W = 2.3, H = 2.9, board = canvasBoard(580, 732, drawStory, W, H, { both: true });
+    board.mesh.position.set(st.x, sy + 0.62 + H / 2, st.z);
+    board.mesh.rotation.y = st.yaw;
+    board.mesh.name = 'notice-story';
+    meshes.push(board.mesh);
+    wood.place(st.x, sy, st.z, st.yaw);
+    for (const s of [-1, 1]) wood.tint(0.62, 0.46, 0.32, 1).box(s * (W / 2 + 0.1) - 0.08, -0.5, -0.08, s * (W / 2 + 0.1) + 0.08, 0.62 + H + 0.2, 0.08, { tile: 1 });
+    wood.tint(0.62, 0.46, 0.32, 1).box(-W / 2 - 0.18, 0.62 - 0.14, -0.05, W / 2 + 0.18, 0.62 - 0.04, 0.05, { tile: 1 });
+    // (the roof: two planks, sloping to the front and to the back)
+    const top = 0.62 + H + 0.2;
+    wood.tint(0.5, 0.36, 0.25, 1).quad(V(-W / 2 - 0.34, top - 0.04, 0.5), V(W / 2 + 0.34, top - 0.04, 0.5), V(W / 2 + 0.34, top + 0.3, 0), V(-W / 2 - 0.34, top + 0.3, 0))
+      .quad(V(W / 2 + 0.34, top - 0.04, -0.5), V(-W / 2 - 0.34, top - 0.04, -0.5), V(-W / 2 - 0.34, top + 0.3, 0), V(W / 2 + 0.34, top + 0.3, 0))
+      .quad(V(W / 2 + 0.34, top - 0.04, 0.5), V(-W / 2 - 0.34, top - 0.04, 0.5), V(-W / 2 - 0.34, top + 0.26, 0), V(W / 2 + 0.34, top + 0.26, 0))
+      .quad(V(-W / 2 - 0.34, top - 0.04, -0.5), V(W / 2 + 0.34, top - 0.04, -0.5), V(W / 2 + 0.34, top + 0.26, 0), V(-W / 2 - 0.34, top + 0.26, 0));
+    wood.pop();
+    const bx = Math.cos(st.yaw), bz = -Math.sin(st.yaw);
+    for (const s of [-1, 1]) zone.colliders.push({ type: 'circle', x: st.x + bx * s * (W / 2 + 0.1), z: st.z + bz * s * (W / 2 + 0.1), r: 0.2 });
+  }
+  // ---- beside whoever arrives, on the left of the lane: an easel — two frames of planks leaning on each other,
+  // "GET LIFE ADVICE" and an arrow painted on both. Low (it hides nothing of the boards behind) and near (it is
+  // read without a step). Its two faces are one mesh and one picture; its wood goes with the rest.
+  const ad = NOTICES.advice, ady = zone.ground(ad.x, ad.z);
+  {
+    const W = 1.0, L = 1.3, FOOT = 0.14, LEAN = 0.21, sin = Math.sin(LEAN), cos = Math.cos(LEAN), reach = (FOOT + L + 0.03) * sin;
+    const far = Math.hypot(WAYS.billy.at[0] - ad.x, WAYS.billy.at[1] - ad.z), metres = `${Math.round(far / 10) * 10} M`;
+    const canvas = document.createElement('canvas');
+    canvas.width = 600; canvas.height = 390;
+    const ctx = canvas.getContext('2d');
+    drawAdvice(ctx, 0, 300, 390, false, metres); drawAdvice(ctx, 300, 300, 390, true, metres);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = 4;
+    const pos = [], uv = [], idx = [];
+    for (const s of [1, -1]) {
+      // (a point of a face: `x` across, `t` up its slope from the ground, a hair in front of its planks)
+      const P = (x, t) => [x, t * cos + 0.012 * sin, s * (reach - t * sin + 0.012 * cos)], base = pos.length / 3, u0 = s > 0 ? 0 : 0.5;
+      pos.push(...P(-s * W / 2, FOOT), ...P(s * W / 2, FOOT), ...P(s * W / 2, FOOT + L), ...P(-s * W / 2, FOOT + L));
+      uv.push(u0, 0, u0 + 0.5, 0, u0 + 0.5, 1, u0, 1);
+      idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geometry.setIndex(idx);
+    const easel = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ map: texture, toneMapped: false }));
+    easel.position.set(ad.x, ady, ad.z);
+    easel.rotation.y = ad.yaw;
+    easel.name = 'notice-advice';
+    easel.userData.words = `GET LIFE ADVICE · ASK BILLY · ${metres}`;
+    meshes.push(easel);
+    wood.place(ad.x, ady, ad.z, ad.yaw);
+    for (const s of [1, -1]) {
+      // (a frame, leaning: its two stiles from the ground to the top, the board its planks are nailed to, a rail above)
+      wood.place(0, 0, s * reach, s > 0 ? 0 : Math.PI, -LEAN, 0);
+      for (const sx of [-1, 1]) wood.tint(0.62, 0.46, 0.32, 1).box(sx * (W / 2 + 0.035) - 0.035, -0.03, -0.05, sx * (W / 2 + 0.035) + 0.035, FOOT + L + 0.03, 0, { tile: 1 });
+      wood.tint(0.5, 0.37, 0.26, 1).box(-W / 2, FOOT, -0.03, W / 2, FOOT + L, 0.004, { tile: 1, faces: 'zyY' });
+      wood.tint(0.62, 0.46, 0.32, 1).box(-W / 2, FOOT + L, -0.05, W / 2, FOOT + L + 0.03, 0, { tile: 1, faces: 'zZY' });
+      wood.pop();
+    }
+    // (what holds the two together: a ridge at the top, a lath on each side lower down)
+    const top = (FOOT + L + 0.03) * cos;
+    wood.tint(0.5, 0.37, 0.26, 1).box(-W / 2 - 0.09, top - 0.035, -0.06, W / 2 + 0.09, top + 0.03, 0.06, { tile: 1 });
+    for (const sx of [-1, 1]) wood.tint(0.5, 0.37, 0.26, 1).box(sx * (W / 2 + 0.035) - 0.012, 0.42, -(reach - 0.44 * Math.tan(LEAN)) + 0.04, sx * (W / 2 + 0.035) + 0.012, 0.46, reach - 0.44 * Math.tan(LEAN) - 0.04, { tile: 1 });
+    wood.pop();
+    zone.colliders.push({ type: 'circle', x: ad.x, z: ad.z, r: 0.5 });
+  }
   // ---- the booth of the sponsors: a counter under a striped awning, its board above the awning
   const a = NOTICES.ads, ay = zone.ground(a.x, a.z), state = { rows: null };
   const ads = canvasBoard(896, 600, (ctx, w, h) => drawAds(ctx, w, h, state.rows), 3.9, 2.6, { both: true });
@@ -375,7 +535,7 @@ export function buildNotices(zone) {
   return {
     signposts: signs.posts, // (the wooden signposts: [{ id, x, z, arms: [{ to, text, under, far, yaw }] }])
     news: newsAt, // (where one stands to read each board, the newest first: [{ x, z, date }])
-    welcome: { x: wl.x, z: wl.z }, rules: front(ru, 2.2),
+    welcome: { x: wl.x, z: wl.z }, rules: front(ru, 2.2), story: front(st, 2.2), advice: front(ad, 2),
     arcade: { ...front({ x: cx, z: cz, yaw: cyaw }, 1.2), yaw: cyaw + Math.PI, reach: 1.8, board: runBoard },
     ads: { ...front(a, 2.4), reach: 2.6, set(rows) { state.rows = rows; ads.redraw(); } },
     update(pos, time = 0) {

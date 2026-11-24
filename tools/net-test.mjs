@@ -91,7 +91,7 @@ function check(name, ok, detail) {
 async function startServer(env = {}, port = 0) {
   port = port || (await freePort());
   const proc = spawn(process.execPath, [path.join(ROOT, 'server/index.js')], {
-    env: { ...process.env, ALLOWED_ORIGINS: '', MAX_PLAYERS: '', DIST_DIR: '', HOST: '127.0.0.1', TICK_HZ: '20', ANTHROPIC_API_KEY: '', NPC_MODEL: '', SCORE_SECRET, ADMIN_KEY, MAIL_FILE, ...shopEnv(), ...env, PORT: String(port) },
+    env: { ...process.env, ALLOWED_ORIGINS: '', MAX_PLAYERS: '', DIST_DIR: '', HOST: '127.0.0.1', TICK_HZ: '20', ANTHROPIC_API_KEY: '', NPC_MODEL: '', SCORE_SECRET, ADMIN_KEY, MAIL_FILE, FREE_ROOMS: '1', ...shopEnv(), ...env, PORT: String(port) },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   const server = { port, proc, log: '', alive: () => proc.exitCode === null && proc.signalCode === null };
@@ -127,6 +127,7 @@ async function startWorker(env = {}, port = 0) {
   if (env.MAX_PLAYERS) config.vars.MAX_PLAYERS = env.MAX_PLAYERS;
   if (env.STALE_MS) config.vars.STALE_MS = env.STALE_MS;
   if (env.NEAR) config.vars.NEAR = env.NEAR;
+  config.vars.FREE_ROOMS = env.FREE_ROOMS ?? '1'; // (the rooms by address: open on the test servers — most checks give each its own room)
   fs.writeFileSync(path.join(dir, 'wrangler.json'), JSON.stringify(config));
   const proc = spawn(process.execPath, [
     path.join(ROOT, 'node_modules/wrangler/bin/wrangler.js'), 'dev', '--config', path.join(dir, 'wrangler.json'),
@@ -156,7 +157,10 @@ const start = (env, port) => (CF ? startWorker(env, port) : startServer(env, por
 // Players who said hello in one room (both relays answer /api/presence?room=…).
 const headCount = async (port, room) => JSON.parse((await request(port, `/api/presence?room=${room}`)).body.toString()).players;
 
+// (NET_TEST_ONLY=door,release: only those sections are played)
+const ONLY = (process.env.NET_TEST_ONLY || '').split(',').filter(Boolean);
 async function section(name, fn) {
+  if (ONLY.length && !ONLY.includes(name)) return;
   try { await fn(); } catch (err) { check(`${name}: no unexpected error`, false, String(err && err.stack ? err.stack : err)); }
 }
 
@@ -644,6 +648,21 @@ async function testModeration(start, dist) {
   const who = await adm.wait((m) => m.t === 'who');
   const e = who?.list.find((p) => p.id === eve.id);
   check('admin: with the key, who is there — name, address, browser, device, since when', !!yes && yes.ok === true && who?.list.length === 3 && e?.name === 'Eve' && (CF || e.ip === '10.9.8.2') && e.ip.length > 0 && e.ua === 'TestBrowser/2' && e.dev === DEV && Number.isFinite(e.since), who);
+  // the administrator's badge: `ad` in a hello counts once the key is recognised — the others are told then, a
+  // newcomer finds it in their welcome, and all are told again when it comes off; from anybody else: nothing
+  eve.send({ t: 'hello', name: 'Eve', color: 2, v: 2, dev: DEV, ad: 1 });
+  adm.send({ t: 'hello', name: 'Admin', color: 1, v: 2, ad: 1 });
+  const worn = await bob.wait((m) => m.t === 'join' && m.id === adm.id && m.ad === 1);
+  const guest = new Client(port, 'mod', from(4));
+  const greeted = await guest.hello('Guest', 4);
+  const badges = (greeted?.peers || []).filter((p) => p.ad === 1).map((p) => p.id).join();
+  adm.send({ t: 'hello', name: 'Admin', color: 1, v: 2 });
+  const bare = await guest.wait((m) => m.t === 'join' && m.id === adm.id && m.ad === undefined);
+  const faked = bob.msgs.some((m) => m.t === 'join' && m.id === eve.id && m.ad !== undefined);
+  guest.ws.close();
+  await bob.wait((m) => m.t === 'leave' && m.id === guest.id);
+  check('admin: a badge for who wants it known — the others are told once the key is recognised (a newcomer too), and told when it comes off; from a visitor it does nothing',
+    worn?.name === 'Admin' && badges === String(adm.id) && !!bare && !faked, [worn, badges, bare, faked]);
   // a line for those nearby (20 m), a line for everyone
   adm.send({ t: 'c', m: 'psst', n: 1 }); adm.send({ t: 'c', m: 'hello all' });
   const near = await bob.wait((m) => m.t === 'c' && m.m === 'psst'), all = await eve.wait((m) => m.t === 'c' && m.m === 'hello all');
@@ -844,8 +863,8 @@ async function testRelease(start, dist) {
       await sleep(100);
     }
     const noRooms = await call('/api/rooms');
-    check('rooms: the administrators see the rooms that hold somebody — how many each, and how many are still on an older version than the one online',
-      noRooms.status === 403 && rooms?.build === 'abc1234' && rooms.rooms.length === 2 && rooms.rooms[0].name === 'rel-a' && rooms.rooms[0].players === 2 && rooms.rooms[0].old === 2 && rooms.rooms[1].name === 'rel-b' && rooms.rooms[1].players === 2 && rooms.rooms[1].old === 1 && rooms.players === 4 && rooms.old === 3, [noRooms.status, rooms]);
+    check('rooms: the administrators see the rooms that hold somebody — how many each, and how many are still on an older version than the one online (anybody else: the common rooms only, and no such detail)',
+      noRooms.status === 200 && json(noRooms)?.rooms?.length === 0 && rooms?.build === 'abc1234' && rooms.rooms.length === 2 && rooms.rooms[0].name === 'rel-a' && rooms.rooms[0].players === 2 && rooms.rooms[0].old === 2 && rooms.rooms[1].name === 'rel-b' && rooms.rooms[1].players === 2 && rooms.rooms[1].old === 1 && rooms.players === 4 && rooms.old === 3, [noRooms.status, rooms]);
     ann.ws.close(); bob.ws.close(); cat.ws.close(); dan.ws.close();
   } finally {
     await server.stop();
@@ -1151,22 +1170,31 @@ async function testShop({ port }) {
     !late.slots['board:mole'].mine && late.slots['board:mole'].bid === 500 && /refunded/.test(late.notes?.[0] || '') && stripe.refunds.some((r) => r.pay === 'pi_ann_2') && book.slots['board:bell'].bid === 200
     && book.refunds.length === 3 && book.refunds[0].pay === 'pi_too_old' && book.refunds[0].ok === false && /too old/.test(book.refunds[0].error) && book.refunds.find((r) => r.pay === 'pi_ann_1')?.ok === true && book.refunds.find((r) => r.pay === 'pi_ann_1').amount === 100,
     [late.slots['board:mole'], late.notes, book.refunds]);
-  // the administrator takes a sponsor off an auctioned panel: their bid goes back to them
-  const off = await request(port, '/api/sponsors?slot=board:mole', { method: 'DELETE', headers: admin });
+  // the owner takes a sponsor off an auctioned panel and gives the bid back
+  const off = await request(port, '/api/sponsors?slot=board:mole&refund=1', { method: 'DELETE', headers: admin });
   const bobTold = json(await request(port, `/api/shop?device=${bob}`));
-  check('auction: a sponsor taken off by the administrator gets the bid back; the panel is free again, from a dollar',
+  check('auction: a sponsor the owner takes off with the money back gets the bid back; the panel is free again, from a dollar',
     off.status === 200 && json(off).removed === 'board:mole' && json(off).refunded === true && !bobTold.slots['board:mole'] && stripe.refunds.some((r) => r.pay === 'pi_bob_1') && /refunded in full/.test(bobTold.notes?.[0] || ''), [off.status, bobTold.notes, stripe.refunds.map((r) => r.pay)]);
-  // taken down without the money back (what was shown broke the rules); a place paid by the month stops being paid
-  // either way — and the month that is running is given back, or not
+  // taken down: nothing is given back by itself (what was shown broke the rules) — the bid that was kept is
+  // written down, and the owner can still give it back later; a place paid by the month stops being paid either
+  // way — and the month that is running is given back only if the owner says so
   await hook(bidPaid('board:fish', ann, 400, 'pi_ann_9'));
-  const keptBid = await request(port, '/api/sponsors?slot=board:fish&refund=0', { method: 'DELETE', headers: admin });
+  const keptBid = await request(port, '/api/sponsors?slot=board:fish', { method: 'DELETE', headers: admin });
   const annKept = json(await request(port, `/api/shop?device=${ann}`));
+  const keptNote = json(keptBid).refunds?.[0], nobodyRefunds = await request(port, '/api/sponsors', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ refund: 'pi_ann_9' }) });
+  const refundedNow = !stripe.refunds.some((r) => r.pay === 'pi_ann_9');
+  const later = await request(port, '/api/sponsors', { method: 'POST', headers: { ...admin, 'content-type': 'application/json' }, body: JSON.stringify({ refund: 'pi_ann_9' }) }), annBack = json(await request(port, `/api/shop?device=${ann}`));
+  const twice = await request(port, '/api/sponsors', { method: 'POST', headers: { ...admin, 'content-type': 'application/json' }, body: JSON.stringify({ refund: 'pi_ann_9' }) });
+  check('sponsors: taken down, a bid is kept — nothing is given back by itself; it is written down, and the owner (nobody else) can give it back later, once',
+    keptNote?.pay === 'pi_ann_9' && keptNote.kept === true && keptNote.ok === false && keptNote.amount === 400 && !('by' in keptNote) && refundedNow && nobodyRefunds.status === 403
+    && later.status === 200 && json(later).refunded === true && stripe.refunds.some((r) => r.pay === 'pi_ann_9') && json(later).refunds.find((r) => r.pay === 'pi_ann_9')?.ok === true && /refunded your payment in full/.test(annBack.notes?.at(-1) || '') && twice.status === 404,
+    [keptNote, nobodyRefunds.status, later.status, later.body.toString().slice(0, 120), annBack.notes, twice.status]);
   await hook(paid('gondola:3', bob, 'sub_gone_1'));
   await hook(paid('gondola:4', bob, 'sub_gone_2'));
-  const back = await request(port, '/api/sponsors?slot=gondola:3', { method: 'DELETE', headers: admin }), noBack = await request(port, '/api/sponsors?slot=gondola:4&refund=0', { method: 'DELETE', headers: admin });
+  const back = await request(port, '/api/sponsors?slot=gondola:3&refund=1', { method: 'DELETE', headers: admin }), noBack = await request(port, '/api/sponsors?slot=gondola:4', { method: 'DELETE', headers: admin });
   const bobKept = json(await request(port, `/api/shop?device=${bob}`));
-  check('sponsors: the administrator takes one down with the money back — or without; a place paid by the month stops being paid either way, and its holder is told',
-    keptBid.status === 200 && json(keptBid).refunded === false && !stripe.refunds.some((r) => r.pay === 'pi_ann_9') && !annKept.slots['board:fish'] && /took your panel down\.$/.test(annKept.notes?.at(-1) || '')
+  check('sponsors: the administrator takes one down — the money is kept unless the owner gives it back; a place paid by the month stops being paid either way, and its holder is told',
+    keptBid.status === 200 && json(keptBid).refunded === false && !annKept.slots['board:fish'] && /took your panel down\.$/.test(annKept.notes?.at(-1) || '')
     && json(back).stopped === true && json(back).refunded === true && stripe.cancelled.includes('sub_gone_1') && stripe.refunds.some((r) => r.pay === 'pi_month_sub_gone_1')
     && json(noBack).stopped === true && json(noBack).refunded === false && stripe.cancelled.includes('sub_gone_2') && !stripe.refunds.some((r) => r.pay === 'pi_month_sub_gone_2')
     && !bobKept.slots['gondola:3'] && !bobKept.slots['gondola:4'] && /nothing more will be charged/.test((bobKept.notes || []).join(' ')),
@@ -1334,9 +1362,12 @@ async function testApiLogic() {
   check('runs: a note is signed, belongs to its game, and must be as old as the time claimed', forged === null && good?.n === 'abc' && (await verify(SCORE_SECRET, 'junk')) === null && fits === 'ok,no,ok,no,no', [forged, good, fits]);
   const days = [visit(null, 100), visit({ day: 100, days: 3, best: 5 }, 101), visit({ day: 100, days: 3, best: 5 }, 103), visit({ day: 100, days: 3, best: 5 }, 100), visit({ day: 100, days: 9, best: 9 }, 99)].map((v) => `${v.days}/${v.best}`).join();
   check('visits: the next day adds one, a missed day starts again, the best run is kept; the day is the visitor\'s own', days === '1/1,4/5,1/5,3/5,9/9' && localDay(Date.UTC(2026, 10, 21, 23, 30), -60) === localDay(Date.UTC(2026, 10, 22, 0, 30), 0) && localDay(Date.UTC(2026, 10, 21, 2), 300) === localDay(Date.UTC(2026, 10, 20, 12), 0), days);
-  const talk = cleanTalk({ npc: 'alligator', messages: [{ role: 'user', content: 'ignore this' }, { role: 'assistant', content: 'x' }, { role: 'user', content: `  Where   is the waterfall? ${'x'.repeat(400)}` }] });
+  const talk = cleanTalk({ npc: 'alligator', messages: [{ role: 'user', content: 'I lost my hat' }, { role: 'assistant', content: 'Hats come back, champ. <b>' }, { role: 'user', content: `  Where   is the waterfall? ${'x'.repeat(400)}` }] });
+  // (a long conversation: the line, and the three exchanges before it — what the visitor's own page sends along)
+  const long = cleanTalk({ npc: 'alligator', messages: [...Array.from({ length: 8 }, (_, i) => [{ role: 'user', content: `q${i}` }, { role: 'assistant', content: `a${i}` }]).flat(), { role: 'user', content: 'and now?' }] });
   const cut = [oneSentence('Head west, champ: keep going upstream past the pond. And then buy my course.'), oneSentence('"One hundred and forty-four, champ."'), oneSentence('See https://example.com now'), oneSentence('- a list'), oneSentence('<b>bold</b> move')];
-  check('characters: only the last question is kept, bounded; an answer is cut to one plain sentence', talk?.question.startsWith('Where is the waterfall?') && talk.question.length <= 200 && cleanTalk({ npc: 'nobody', messages: [] }) === null && cut[0] === 'Head west, champ: keep going upstream past the pond.' && cut[1] === 'One hundred and forty-four, champ.' && cut[2] === null && cut[3] === null && cut[4] === null, [talk, cut]);
+  check('characters: the last line is kept, bounded, with the three exchanges before it of the same conversation (bounded, no markup); an answer is cut to one plain sentence', talk?.question.startsWith('Where is the waterfall?') && talk.question.length <= 200 && JSON.stringify(talk.before) === '[["I lost my hat","Hats come back, champ. b"]]'
+    && long?.question === 'and now?' && long.before.map((b) => b.join(':')).join() === 'q5:a5,q6:a6,q7:a7' && cleanTalk({ npc: 'alligator', messages: [{ role: 'assistant', content: 'x' }] }) === null && cleanTalk({ npc: 'nobody', messages: [] }) === null && cut[0] === 'Head west, champ: keep going upstream past the pond.' && cut[1] === 'One hundred and forty-four, champ.' && cut[2] === null && cut[3] === null && cut[4] === null, [talk, cut]);
 }
 
 // ------------------------------------------------------------------------------------------ Presence façade
@@ -1460,7 +1491,7 @@ async function testPresence(server) {
     late2.connect();
     await until(() => late2.mode === 'online' && late2.count === 2 && late1.count === 2, 6000);
     const heads = [await headCount(server.port, 'crowd'), await headCount(server.port, 'crowd-2')];
-    check('presence: when a room is full, newcomers gather in the next one', crowd.every((p) => p.count === 4 && p.room === 'crowd' && p.shard === 1) && late1.room === 'crowd-2' && late1.shard === 2 && late2.room === 'crowd-2' && late1.count === 2 && late2.peers.size === 1 && heads.join() === '4,2', { rooms: [late1.room, late2.room], counts: [late1.count, late2.count, ...crowd.map((p) => p.count)], modes: [late1.mode, late2.mode], heads });
+    check('presence: when a room of one\'s own is full, newcomers gather in the next one', crowd.every((p) => p.count === 4 && p.room === 'crowd') && late1.room === 'crowd-2' && late1.label === 'crowd-2' && late2.room === 'crowd-2' && late1.count === 2 && late2.peers.size === 1 && heads.join() === '4,2', { rooms: [late1.room, late2.room], counts: [late1.count, late2.count, ...crowd.map((p) => p.count)], modes: [late1.mode, late2.mode], heads });
     for (const p of [...crowd, late1, late2]) p.dispose();
     await until(() => false, 150);
   }
@@ -1707,6 +1738,142 @@ async function testCloudflare(server, fx) {
 
 // ---------------------------------------------------------------------------------------------------- main
 
+// The door of the rooms (server/door.js, rooms.js): which room a newcomer is sent to, a room that never holds
+// more than its limit, the owner who always gets in, a friend's link, a room gone quiet, the rooms by address —
+// and the game's own side of it (src/net/Presence.js). The rules are set small: six a room at the most, a new
+// room once the others hold three, a room that starts takes everybody until it holds two, quiet at one.
+async function testDoor(start, dist) {
+  const file = path.join(os.tmpdir(), `mmf-door-${process.pid}.json`);
+  fs.rmSync(file, { force: true });
+  const server = await start({ MAX_PLAYERS: '6', FREE_ROOMS: '0', DIST_DIR: dist, SCORES_FILE: file }); // (the rooms by address: as the fair is delivered)
+  const { port } = server;
+  const json = (res) => { try { return JSON.parse(res.body.toString()); } catch { return null; } };
+  const call = (target, body, key) => request(port, target, { method: body === undefined ? 'GET' : 'POST', headers: { ...(body !== undefined && { 'content-type': 'application/json' }), ...(key && { authorization: `Bearer ${key}` }) }, ...(body !== undefined && { body: JSON.stringify(body) }) });
+  const door = async (query = '', key) => json(await call(`/api/door${query}`, undefined, key));
+  const enter = async (name, query = '', key) => { const a = await door(query, key), c = new Client(port, a.room, a.pass ? { pass: a.pass } : {}); return { a, c, ok: !!(await c.hello(name)) }; };
+  const listed = async (want) => { let list = null; for (let i = 0; i < 100; i++) { list = json(await call('/api/rooms')); if (list?.rooms?.map((r) => `${r.name}:${r.players}`).join() === want) break; await sleep(100); } return list; };
+  const made = [];
+  try {
+    // --- the rules: settings, the owner's
+    const base = json(await call('/api/rooms'));
+    const noKey = await call('/api/rooms/rules', { open: 3 }), set = json(await call('/api/rooms/rules', { max: 50, open: 3, start: 2, low: 1 }, ADMIN_KEY));
+    check('door: the rules of the rooms are settings — the owner alone changes them, and "at most" never goes above what the server was started with',
+      base?.max === 6 && Array.isArray(base.rooms) && base.rooms.length === 0 && noKey.status === 403 && set?.rules?.max === 6 && set.rules.open === 3 && set.rules.start === 2 && set.rules.low === 1 && set.base?.max === 6 && set.base.open === 6, [base, noKey.status, set]);
+
+    // --- newcomers
+    const v = [];
+    for (const name of ['A', 'B', 'C', 'D', 'E']) v.push(await enter(name));
+    check('door: the server says which room — the first one while it fills, a second one once the first holds enough, and that one takes every newcomer while it starts',
+      v.map((x) => x.a.room).join() === 'main,main,main,main-2,main-2' && v[0].a.why === 'new' && v[0].a.label === 'Room 1' && v[3].a.why === 'new' && v[3].a.label === 'Room 2' && v[4].a.why === 'starting' && v.every((x) => x.ok), v.map((x) => x.a));
+
+    // --- a friend's link; a room never holds more than its limit
+    const f = [await enter('F', '?want=main'), await enter('G', '?want=main'), await enter('H', '?want=main')];
+    const turned = await door('?want=main');
+    const barge = new Client(port, 'main');
+    const bargeFull = await barge.wait((m) => m.t === 'full'), bargeCode = await Promise.race([barge.closed, sleep(3000)]);
+    check('door: a friend\'s link leads to the friend\'s room while it has room; full, the door says so and gives another room — and the relay turns away whoever comes without asking: never more than the limit',
+      f.every((x) => x.a.room === 'main' && x.a.why === 'asked' && x.ok) && turned?.full === 'main' && turned.fullLabel === 'Room 1' && turned.room === 'main-2' && !turned.pass && !!bargeFull && bargeCode === 1013, [f[0].a, f[2].a, turned, bargeFull, bargeCode]);
+
+    // --- the owner always gets in
+    const mine = await door('?want=main', ADMIN_KEY);
+    const boss = new Client(port, 'main', { pass: mine.pass }), bossIn = await boss.hello('Boss');
+    const elsewhere = new Client(port, 'main', { pass: (await door('?want=main-2', ADMIN_KEY)).pass }), elseFull = await elsewhere.wait((m) => m.t === 'full');
+    const forged = new Client(port, 'main', { pass: await sign('not-the-secret', { o: 1, r: 'main', x: Date.now() + 60000 }) }), forgedFull = await forged.wait((m) => m.t === 'full');
+    check('door: the owner always gets in — with a note the door signs for that one room, good for a minute (the key itself never goes in an address); a note for another room, or a forged one, opens nothing',
+      mine?.room === 'main' && typeof mine.pass === 'string' && mine.pass.length > 20 && !!bossIn && !!elseFull && !!forgedFull, [mine, !!bossIn, elseFull, forgedFull]);
+
+    // --- coming back; the lists
+    const back = await door('?back=main-2'), backFull = await door('?back=main');
+    const list = await listed('main:7,main-2:2'), all = json(await call('/api/rooms', undefined, ADMIN_KEY));
+    check('door: whoever comes back — a refresh, a new version — finds their room again while it has room; anybody may ask for the common rooms and how many each holds, an administrator also sees what the door makes of each',
+      back?.room === 'main-2' && back.why === 'back' && backFull?.full === 'main' && /^main-[23]$/.test(backFull.room)
+      && list?.rooms?.length === 2 && list.rooms[0].label === 'Room 1' && list.rooms[0].players === 7 && list.rooms[1].label === 'Room 2' && list.max === 6 && !('old' in list.rooms[0]) && !('phase' in list.rooms[0])
+      && all?.rooms?.[0]?.phase === 'live' && all.players === 9 && all.rules?.open === 3, [back, backFull, list, all]);
+
+    // --- a room that empties goes quiet (the first room: down to two; the second: down to one)
+    for (const x of [...f, v[2], v[4]]) x.c.ws.close();
+    boss.ws.close();
+    const thin = await listed('main:2,main-2:1');
+    await sleep(13000); // (those the door sent somewhere and who never came are forgotten after twelve seconds)
+    // (the rooms are put in order when the host has the occasion — here, the owner touching the rules: at once on
+    // the Node server, which counts its rooms itself; a few seconds later on the Worker, which is told)
+    await call('/api/rooms/rules', { low: 1 }, ADMIN_KEY);
+    const offer = await v[3].c.wait((m) => m.t === 'quiet', 12000), told = v[0].c.msgs.some((m) => m.t === 'quiet');
+    const next = await door();
+    const after = json(await call('/api/rooms'));
+    check('door: a room that has emptied while a livelier one has room goes quiet — it takes no newcomer any more, and whoever is in it is offered the other room (nobody is moved); the list says so',
+      next?.room === 'main' && offer?.to === 'main' && offer.n >= 2 && !told && after?.rooms?.[1]?.quiet === true && v[3].c.code === null, [thin, next, offer, after]);
+
+    // --- the rooms by address, and their switch: off as the fair is delivered, the owner's to throw
+    const first = { status: json(await call('/api/status'))?.release?.freeRooms, door: await door('?want=club-house') };
+    await call('/api/release', { set: { freeRooms: true } }, ADMIN_KEY);
+    const club = [];
+    for (let i = 0; i < 6; i++) { const c = new Client(port, 'club'); await c.hello(`Club ${i}`); club.push(c); }
+    const own = await door('?want=club-house'), over = await door('?want=club&not=club');
+    const shut = json(await call('/api/release', { set: { freeRooms: false } }, ADMIN_KEY));
+    const refused = await door('?want=club-house'), knocker = new Client(port, 'club-house'), closedMsg = await knocker.wait((m) => m.t === 'closed'), knockCode = await Promise.race([knocker.closed, sleep(3000)]);
+    const ownerDoor = await door('?want=club-house', ADMIN_KEY), ownerIn = new Client(port, 'club-house', { pass: ownerDoor.pass }), ownerWelcome = await ownerIn.hello('Boss');
+    const common = new Client(port, 'main'), commonIn = await common.hello('Zed');
+    await call('/api/release', { set: { freeRooms: true } }, ADMIN_KEY);
+    const again = new Client(port, 'club-house'), againIn = await again.hello('Yan');
+    check('door: as the fair is delivered only the common rooms exist; when the owner opens the rooms by address, a name written there is a room of its own — full, those who follow gather next door; switched off again, only the common rooms — for everybody but the owner',
+      first.status === false && first.door?.closed === 'club-house' && /^main(-2)?$/.test(first.door.room) && own?.room === 'club-house' && own.why === 'own' && over?.room === 'club-2' && over.full === 'club' && shut?.release?.freeRooms === false && refused?.closed === 'club-house' && /^main(-2)?$/.test(refused.room) && !!closedMsg && knockCode === 1013
+      && ownerDoor?.room === 'club-house' && !!ownerWelcome && !!commonIn && !!againIn && club.every((c) => c.code === null), [own, over, shut?.release, refused, closedMsg, knockCode, ownerDoor?.room, !!ownerWelcome, !!commonIn, !!againIn]);
+    for (const c of [...club, ownerIn, again, knocker, barge, elsewhere, forged]) c.ws.close();
+
+    // --- the game's own side of it: the room is asked of the door, one changes room without leaving the page
+    // (six a room, a new room once the others hold four, nothing goes quiet; the second room is empty again)
+    await call('/api/rooms/rules', { open: 4, start: 0, low: 0, merge: 0 }, ADMIN_KEY);
+    v[3].c.ws.close();
+    await listed('main:3'); // (A, B and Zed)
+    await sleep(13000); // (those the door sent somewhere and who never came are forgotten)
+    const url = `ws://127.0.0.1:${port}/ws`, events = { pia: [], paul: [] };
+    const pia = new Presence({ name: 'Pia', url }), paul = new Presence({ name: 'Paul', url }), friend = new Presence({ name: 'Friend', url, room: 'main-2' });
+    made.push(pia, paul, friend);
+    pia.on('room', (e) => events.pia.push(e)); paul.on('room', (e) => events.paul.push(e));
+    pia.connect();
+    await until(() => pia.mode === 'online' && pia.count === 4, 8000);
+    paul.connect();
+    await until(() => paul.mode === 'online' && paul.room === 'main-2', 8000);
+    friend.connect();
+    await until(() => friend.mode === 'online' && paul.count === 2, 8000);
+    let rooms = null;
+    for (let i = 0; i < 100; i++) { rooms = await pia.rooms(); if (rooms?.map((r) => `${r.name}:${r.players}`).join() === 'main:4,main-2:2') break; await sleep(100); }
+    check('presence: the room is the one the door says — the first room while it has not enough, a second one after that; a friend\'s link leads to the friend; the rooms are listed with how many each holds',
+      pia.room === 'main' && pia.label === 'Room 1' && pia.count === 4 && events.pia.length === 1 && events.pia[0].room === 'main' && events.pia[0].moved === true && paul.room === 'main-2' && paul.label === 'Room 2' && events.paul[0]?.why === 'new'
+      && friend.room === 'main-2' && paul.count === 2 && rooms?.length === 2 && rooms[0].label === 'Room 1' && rooms[1].label === 'Room 2' && rooms[1].players === 2, { pia: [pia.room, pia.count, events.pia], paul: [paul.room, paul.count, events.paul], friend: friend.room, rooms });
+    // Pia changes room: the same page — only the room
+    v[0].c.msgs.length = 0;
+    const moved = await pia.switchRoom('main-2');
+    await until(() => pia.mode === 'online' && pia.room === 'main-2' && pia.count === 3 && paul.count === 3, 8000);
+    const left = v[0].c.msgs.some((m) => m.t === 'leave');
+    check('presence: one changes room without leaving the page — the visitors of the room one leaves see one go, those of the other see one arrive',
+      moved === true && pia.room === 'main-2' && pia.count === 3 && paul.count === 3 && [...paul.peers.values()].some((p) => p.name === 'Pia') && left && events.pia.length === 2 && events.pia[1].room === 'main-2' && events.pia[1].moved === true, { moved, room: pia.room, counts: [pia.count, paul.count], left, events: events.pia });
+    // a room that is full is not changed to: one stays where one is, and is told
+    const fill = [];
+    for (let i = 0; i < 3; i++) { const c = new Client(port, 'main'); await c.hello(`Fill ${i}`); fill.push(c); }
+    await listed('main:6,main-2:3');
+    await paul.switchRoom('main');
+    await until(() => events.paul.some((e) => e.full === 'main'), 8000);
+    await until(() => paul.mode === 'online' && paul.count === 3, 8000);
+    const stay = events.paul.find((e) => e.full === 'main');
+    // …but the owner gets in, and whoever comes back finds their room
+    const owner = new Presence({ name: 'Owner', url, room: 'main' }), returning = new Presence({ name: 'Back', url, back: 'main-2' });
+    made.push(owner, returning);
+    owner.setAdminKey(ADMIN_KEY);
+    owner.connect(); returning.connect();
+    await until(() => owner.mode === 'online' && owner.count === 7 && returning.mode === 'online' && returning.count === 4, 8000);
+    check('presence: a room that is full is not changed to — one stays where one was, and is told; the owner gets in all the same; whoever comes back finds their room',
+      paul.room === 'main-2' && stay?.moved === false && owner.room === 'main' && owner.count === 7 && returning.room === 'main-2' && returning.count === 4, { paul: [paul.room, paul.count, events.paul], owner: [owner.room, owner.count, owner.mode], back: [returning.room, returning.count] });
+    for (const c of [...fill, common, v[0].c, v[1].c]) c.ws.close();
+  } finally {
+    for (const p of made) p.dispose();
+    if (process.env.NET_TEST_LOG) fs.writeFileSync(`${process.env.NET_TEST_LOG}.door`, server.log);
+    await server.stop();
+    fs.rmSync(file, { force: true });
+  }
+}
+
 const uncaught = [];
 const warn = console.warn;
 process.on('uncaughtException', (err) => uncaught.push(err));
@@ -1714,7 +1881,7 @@ process.on('unhandledRejection', (err) => uncaught.push(err));
 setTimeout(() => {
   console.log('FAIL  the test run timed out');
   process.exit(1);
-}, 240000).unref();
+}, 420000).unref();
 if (typeof globalThis.WebSocket !== 'function') globalThis.WebSocket = WebSocket; // Node 20: no global WebSocket yet
 
 const fx = makeDist();
@@ -1735,6 +1902,7 @@ try {
     await section('moderation', () => testModeration(startWorker, fx.dist));
     await section('visitors', () => testVisitors(startWorker, fx.dist));
     await section('release', () => testRelease(startWorker, fx.dist));
+    await section('door', () => testDoor(startWorker, fx.dist));
     if (process.env.NET_TEST_LOG) fs.writeFileSync(process.env.NET_TEST_LOG, server.log);
     // (the local tool also logs its own failed attempts to reach Cloudflare when offline: not the Worker's)
     const trouble = server.log.split('\n').filter((line) => /\[wrangler:error\]|\[ERROR\]|Uncaught/.test(line));
@@ -1753,6 +1921,7 @@ try {
     await section('moderation', () => testModeration(startServer, fx.dist));
     await section('visitors', () => testVisitors(startServer, fx.dist));
     await section('release', () => testRelease(startServer, fx.dist));
+    await section('door', () => testDoor(startServer, fx.dist));
     const kept = (() => { try { return JSON.parse(fs.readFileSync(path.join(fx.tmp, 'scores.json'), 'utf8')); } catch { return null; } })();
     check('api: the Node server keeps the boards and the visits in its file', kept?.['board:sky']?.all?.length === 1 && kept['board:sky'].all[0].at > 0 && kept['board:shoot']?.day?.list?.[0]?.name === 'Dana' && Object.keys(kept).some((k) => k.startsWith('visit:')), kept);
     check('server: still running at the end, nothing on stderr', server.alive() && !/error|exception/i.test(server.log), server.log);

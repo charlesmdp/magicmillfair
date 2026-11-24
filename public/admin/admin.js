@@ -54,6 +54,7 @@
     stats: ['The game in figures', 'The counters, and the page /opendata.'],
     sky: ['The sky villages', 'Hidden: nothing of them. Soon: their gate is there, closed. Open: everything.'],
     userRooms: ['Rooms made by players', 'Not built yet: this switch does nothing so far.'],
+    freeRooms: ['Rooms by address', 'Off: only the common rooms exist (you still get in anywhere). On: any name written in the address (?room=a-name) is a room of its own, free.'],
   };
   async function showReleases() {
     const res = await api('/api/release');
@@ -96,16 +97,31 @@
   async function showRooms() {
     const res = await api('/api/rooms');
     if (!res.ok) return;
-    const { rooms, players, old, build } = res.body, box = $('rooms');
+    const { rooms, players, old, build, rules, base } = res.body, box = $('rooms');
     $('fact-here').textContent = String(players); $('fact-old').textContent = String(old); if (build) $('fact-build').textContent = build;
+    // (the rules of the door: shown as they stand — not while the owner is typing in them)
+    if (rules && !$('rules-form').contains(document.activeElement)) {
+      for (const k of ['max', 'open', 'start', 'low']) { $(`rule-${k}`).value = rules[k]; if (k === 'max' && base) $(`rule-${k}`).max = base.max; }
+      $('rules-note').textContent = base ? `The usual: at most ${base.max}, a new room at ${base.open}, starting under ${base.start}, quiet at ${base.low}. "At most" can be lowered here, never raised above ${base.max}.` : '';
+    }
     if (!rooms.length) return empty(box, 'Nobody is connected right now.');
     box.textContent = '';
+    const PHASE = { starting: 'starting: every newcomer goes there', live: 'takes newcomers', quiet: 'quiet: takes no newcomer' };
     for (const r of rooms) {
-      const title = el('b', '', r.name);
+      const title = el('b', '', r.label && r.label !== r.name ? `${r.label} ` : r.name);
+      if (r.label && r.label !== r.name) title.append(el('small', '', r.name));
       if (r.old) title.append(Object.assign(el('span', 'tag old', `${r.old} on an older version`)));
-      box.append(item(title, `${r.players} visitor${r.players === 1 ? '' : 's'}`, Object.assign(el('a', '', 'Open it'), { href: `/?room=${encodeURIComponent(r.name)}`, target: '_blank', rel: 'noopener' })));
+      box.append(item(title, `${r.players} visitor${r.players === 1 ? '' : 's'}${r.phase ? ` · ${PHASE[r.phase] || r.phase}` : ' · a room of its own'}`, Object.assign(el('a', '', 'Open it'), { href: `/?room=${encodeURIComponent(r.name)}`, target: '_blank', rel: 'noopener' })));
     }
   }
+  $('rules-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const body = {};
+    for (const k of ['max', 'open', 'start', 'low']) if ($(`rule-${k}`).value !== '') body[k] = Number($(`rule-${k}`).value);
+    const res = await api('/api/rooms/rules', { method: 'POST', body });
+    if (said(res, 'The door follows these numbers from now on.')) { document.activeElement?.blur(); showRooms(); }
+  };
+  $('rules-reset').onclick = async () => { if (said(await api('/api/rooms/rules', { method: 'POST', body: { reset: true } }), 'Back to the usual numbers.')) showRooms(); };
 
   // ------------------------------------------------------------------------------------------------ the scores
   let boards = null;
@@ -155,13 +171,14 @@
     live.textContent = wait.textContent = done.textContent = back.textContent = '';
     const down = (id, s) => {
       const acts = [];
+      // (nothing is given back by itself: the owner decides — at once, or later from the list of refunds)
       const take = (refund) => async () => {
-        if (!confirm(refund ? `Take this down and give the money back?` : `Take this down and keep the money?`)) return;
-        const out = await api(`/api/sponsors?slot=${encodeURIComponent(id)}${refund ? '' : '&refund=0'}`, { method: 'DELETE' });
+        if (!confirm(refund ? 'Take this down and give the money back?' : s.sub ? 'Take this down? Its subscription stops: nothing more is charged. What was paid is kept.' : s.bid ? 'Take this down? The money is kept — you can still give it back afterwards, from the list of refunds below.' : 'Take this down?')) return;
+        const out = await api(`/api/sponsors?slot=${encodeURIComponent(id)}${refund ? '&refund=1' : ''}`, { method: 'DELETE' });
         if (said(out, `Taken down${out.body?.refunded ? ', refunded' : ''}${out.body?.stopped ? ', its subscription stopped' : ''}.`)) showSponsors();
       };
-      if (s.bid || s.sub) acts.push(button('Refuse and refund', 'danger small', take(true)), button('Refuse, no refund', 'ghost small', take(false)));
-      else acts.push(button('Take down', 'danger small', take(false)));
+      acts.push(button('Take down', 'danger small', take(false)));
+      if ((s.bid || s.sub) && me.owner) acts.push(button('Take down and refund', 'ghost small', take(true)));
       return acts;
     };
     for (const [id, s] of Object.entries(slots).sort((a, b) => (b[1].at || 0) - (a[1].at || 0))) {
@@ -184,7 +201,16 @@
     if (!live.children.length) empty(live, 'No sponsor yet.');
     if (!wait.children.length) empty(wait, 'Nothing awaits your approval.');
     if (!done.children.length) empty(done, 'No plaque is engraved yet.');
-    for (const r of refunds || []) back.append(item(`${money(r.amount || 0)} — ${r.why || ''}`, `${when(r.at)} · ${r.ok ? 'given back' : `NOT given back: ${r.error || 'Stripe refused'} — to be done by hand in Stripe`}`));
+    for (const r of refunds || []) {
+      // (what was kept, or what Stripe refused to give back: the owner can give it back from here)
+      const later = !r.ok && r.pay && me.owner ? [button(r.kept ? 'Refund now' : 'Try again', 'small', async () => {
+        if (!confirm(`Give ${money(r.amount || 0)} back?`)) return;
+        const out = await api('/api/sponsors', { method: 'POST', body: { refund: r.pay } });
+        if (out.ok && !out.body?.refunded) toast('Stripe refused: to be done by hand in Stripe.', true); else said(out, 'Given back.');
+        showSponsors();
+      })] : [];
+      back.append(item(`${money(r.amount || 0)} — ${r.why || ''}`, `${when(r.at)} · ${r.ok ? 'given back' : r.kept && !r.error ? 'kept: not given back' : `NOT given back: ${r.error || 'Stripe refused'} — to be done by hand in Stripe`}`, ...later));
+    }
     if (!back.children.length) empty(back, 'No refund so far.');
   }
 

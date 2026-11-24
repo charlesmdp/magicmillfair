@@ -15,7 +15,9 @@ const KEEPALIVE_MS = 2000; // …or every 2 s while nothing changes (unless the 
 const UNSEEN_MS = 500; // …and only twice a second while nobody is close enough to be told about us (the relay says so)
 const FALLBACK_MS = 2500; // no server after that long: same-browser presence takes over
 const PROBE_MS = 30000; // then the same-origin server is probed again at this period
-const MAX_SHARDS = 16; // how many rooms in a row are tried when they are full
+const MAX_SHARDS = 16; // (no door to ask — a server from before there was one —: how many rooms in a row are tried when they are full)
+const DOOR_MS = 4000; // the door is given this long to say which room
+const TURNS = 6; // rooms that say no in a row before a pause
 
 const now = () => performance.now();
 const round = (v, k) => Math.round(v * k) / k;
@@ -38,34 +40,60 @@ export function cleanRoom(room) {
   return String(room ?? '').toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48).replace(/-+$/, '');
 }
 
+/** How a room is called on the screen: the common rooms are "Room 1", "Room 2"…; any other goes by its name. */
+export function roomLabel(room) {
+  const m = /^main(?:-([1-9]\d{0,3}))?$/.exec(String(room || ''));
+  return m ? `Room ${m[1] || 1}` : String(room || '');
+}
+
 function stored(key) {
   try { return localStorage.getItem(key); } catch { return null; }
 }
 
 // ws(s):// URL of the presence endpoint for a room; `raw` may be relative or http(s). Null when unusable.
 // (`dev`: the random name of this browser — what a ban holds on to, besides the address)
-function wsUrl(raw, room, dev) {
+// (`pass`: the owner's note for that room — see server/door.js — never the key itself)
+function wsUrl(raw, room, dev, pass) {
   try {
     const url = new URL(raw, typeof location !== 'undefined' ? location.href : undefined);
     if (/^https?:$/.test(url.protocol)) url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     url.searchParams.set('room', room);
     if (dev) url.searchParams.set('dev', dev);
+    if (pass) url.searchParams.set('pass', pass);
     return url.href;
   } catch { return null; }
 }
 
+// The API of the server whose relay is at `raw` (…/ws): …/api/<path>. Null when unusable.
+function apiUrl(raw, path) {
+  try {
+    const url = new URL(raw, typeof location !== 'undefined' ? location.href : undefined);
+    if (/^wss?:$/.test(url.protocol)) url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
+    url.pathname = url.pathname.replace(/ws\/?$/, '') + path;
+    url.search = '';
+    return url;
+  } catch { return null; }
+}
+
 export class Presence {
-  /** @param {{ room?: string, name?: string, color?: number, url?: string }} [options] */
-  constructor({ room, name, color, kit = 0, url } = {}) {
+  /**
+   * @param {{ room?: string, back?: string, name?: string, color?: number, url?: string }} [options]
+   * `room`: a room asked for by its name (else the one the address names with ?room=, if any); `back`: the room
+   * this visitor was in a moment ago (a refresh, a new version) — gone back to if it has room.
+   */
+  constructor({ room, back, name, color, kit = 0, url } = {}) {
     this._page = typeof location !== 'undefined' ? location : { search: '', pathname: '', protocol: '' };
     this._query = new URLSearchParams(this._page.search);
     this._url = url;
-    this.room = cleanRoom(room) || cleanRoom(this._query.get('room'))
-      || cleanRoom(this._page.pathname.replace(/\/index\.html?$/i, '').replace(/_/g, '-')) || 'main';
-    // A room holds a limited number of visitors: when it is full the relay says so, and the next ones gather
-    // in "<room>-2", then "<room>-3"… `room` is the one in use, `shard` its number (1 = the room asked for).
-    this.baseRoom = this.room;
-    this.shard = 1;
+    // Which room: the door of the server decides (server/door.js, rooms.js) — the common rooms are shared out
+    // between the visitors; a room asked for by its name is the one, if it has room. `room` is the one in use
+    // (before the door has answered: the one asked for), `label` what it is called on the screen.
+    this._want = cleanRoom(room) || cleanRoom(this._query.get('room')) || cleanRoom(this._page.pathname.replace(/\/index\.html?$/i, '').replace(/_/g, '-'));
+    this._back = cleanRoom(back);
+    this.room = this._back || this._want || 'main';
+    this._not = []; // rooms that have just said they were full
+    this._turn = this._turned = 0; // (which question to the door is the current one; rooms that said no in a row)
+    this._said = null; // what the door said with the room in use (told with the 'room' event)
     this.name = cleanName(name ?? stored('mmf.name'), '') || `Visitor ${10 + Math.floor(Math.random() * 90)}`;
     this.color = int(color, 31, int(parseInt(stored('mmf.color'), 10), 31, Math.floor(Math.random() * 16)));
     this.kit = int(kit, 255); // what the avatar shows besides its hat: its paint, its trail (see server/items.js)
@@ -78,6 +106,7 @@ export class Presence {
     this.session = `${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
     this.admin = false; // the relay has recognised an administrator's key
     this.owner = false; // …the owner's
+    this.badge = false; // an administrator who wants it known (the relay tells the others once the key is recognised)
     this.blastReadyAt = 0; // when the big red button may be pressed again (Date.now() clock; 0: now)
     this.kicked = null; // { ban } once the administrator has put this visitor out
     /**
@@ -102,11 +131,15 @@ export class Presence {
 
   /** Players in the room, self included. */
   get count() { return this.peers.size + 1; }
+  /** What the room in use is called on the screen. */
+  get label() { return roomLabel(this.room); }
 
   /**
    * Events: 'status' { mode, count }, 'join' peer, 'leave' peer, 'emote' { id, emote }, 'chat' { id, peer, text,
    * near }, 'identity' peer (renamed), 'admin' { ok }, 'who' { list } (the administrator's view of the room),
-   * 'kicked' { ban }.
+   * 'kicked' { ban }, 'room' { room, label, why, moved, full?, gone?, closed? } (a room was entered — `full`:
+   * the room asked for had no room, `gone`: it is no more, `closed`: that name is not a room),
+   * 'quiet' { to, label, n } (this room has gone quiet: room `to` holds `n` and has room).
    */
   on(type, fn) { (this._on[type] ||= new Set()).add(fn); return this; }
   off(type, fn) { this._on[type]?.delete(fn); return this; }
@@ -119,13 +152,91 @@ export class Presence {
       const explicit = this._url || (import.meta.env && import.meta.env.VITE_WS_URL) || this._query.get('ws');
       const target = explicit || /^https?:$/.test(this._page.protocol) ? wsUrl(explicit || '/ws', this.room, this.device) : null;
       if (target) {
-        this._dial = (room) => new WebSocketTransport(wsUrl(explicit || '/ws', room, this.device), this._handlers('online'), { probeEvery: explicit ? 0 : PROBE_MS });
-        this._ws = this._dial(this.room);
-        this._ws.open(); // keeps retrying in the background, whatever the fallback does
+        this._dial = (room, pass) => new WebSocketTransport(wsUrl(explicit || '/ws', room, this.device, pass), this._handlers('online'), { probeEvery: explicit ? 0 : PROBE_MS });
+        this._api = (path) => apiUrl(explicit || '/ws', path);
+        this._enter({ want: this._want, back: this._back }); // (the door says which room; the relay is then dialled, and keeps retrying in the background)
       }
       this._fallback(target ? FALLBACK_MS : 0);
     } catch (err) { console.warn('[presence]', err); }
     return this;
+  }
+
+  // Asks the door which room (server/door.js). Null when there is no door to ask: a server from before there
+  // was one, plain files, no network, or too many questions.
+  async _askDoor({ want, back, not } = {}) {
+    const url = this._api?.('api/door');
+    if (!url || typeof fetch !== 'function') return null;
+    if (want) url.searchParams.set('want', want);
+    if (back) url.searchParams.set('back', back);
+    if (not && not.length) url.searchParams.set('not', not.join(','));
+    const stop = typeof AbortController === 'function' ? new AbortController() : null, timer = setTimeout(() => stop?.abort(), DOOR_MS);
+    try {
+      // (the owner's key, when this visitor has it: the door answers with a note that lets them into a full room)
+      const res = await fetch(url, { cache: 'no-store', ...(stop && { signal: stop.signal }), ...(this._key && { headers: { Authorization: `Bearer ${encodeURIComponent(this._key)}` } }) });
+      const body = res.ok && /json/.test(res.headers.get('content-type') || '') ? await res.json() : null;
+      return body && typeof body.room === 'string' && body.room && cleanRoom(body.room) === body.room ? body : null;
+    } catch { return null; } finally { clearTimeout(timer); }
+  }
+
+  // Enters a room: the door is asked which, then its relay is dialled (the transport keeps retrying by itself).
+  async _enter(ask) {
+    const turn = ++this._turn;
+    const a = await this._askDoor(ask);
+    if (turn !== this._turn || this._disposed || this.kicked || !this._dial) return;
+    let room = a?.room;
+    if (!room) {
+      // no door: the room asked for — and, when it has said it was full, the next one ("<room>-2", "<room>-3"…)
+      const base = ask.back || ask.want || 'main';
+      this._shard = ask.not && ask.not.length ? ((this._shard || 1) % MAX_SHARDS) + 1 : 1;
+      room = this._shard === 1 ? base : `${base.slice(0, 44)}-${this._shard}`;
+    }
+    this._said = { ...this._said, ...(a && { why: a.why, ...(a.full && { full: a.full }), ...(a.gone && { gone: a.gone }), ...(a.closed && { closed: a.closed }) }) };
+    if (this._ws) this._ws.close();
+    this.room = room;
+    this._ws = this._dial(room, a?.pass);
+    this._ws.open();
+  }
+
+  /**
+   * Leaves this room for another, without loading the page again: the avatar stays where it stands. The door
+   * is asked first; when that room has no room, or is no more, nothing changes and the 'room' event says why
+   * (`full` or `gone`, with `moved: false`). Resolves to true when the other room is being entered.
+   */
+  async switchRoom(name) {
+    const want = cleanRoom(name);
+    if (!want || want === this.room || !this._dial || this._disposed || this.kicked) return false;
+    const turn = ++this._turn;
+    const a = await this._askDoor({ want });
+    if (turn !== this._turn || this._disposed || this.kicked) return false;
+    if (a && a.room !== want) {
+      this._emit('room', { room: this.room, label: this.label, why: '', moved: false, ...(a.full ? { full: want } : { gone: want }) });
+      return false;
+    }
+    // (out of the room one was in: those who were there are no longer seen)
+    const was = this._ws;
+    this._ws = this._tr = null;
+    if (was) was.close();
+    for (const id of [...this.peers.keys()]) this._leave(id);
+    this._back = this.room; // (should the other room say no after all, this one is gone back to)
+    this._want = want; this._not = []; this._said = a ? { why: a.why } : null;
+    this.room = want;
+    this.id = 0;
+    this._changed();
+    this._ws = this._dial(want, a?.pass);
+    this._ws.open();
+    this._fallback(FALLBACK_MS * 4);
+    return true;
+  }
+
+  /** The rooms one may change to: [{ name, label, players, quiet? }] (the common rooms), or null when there is nobody to ask. */
+  async rooms() {
+    const url = this._api?.('api/rooms');
+    if (!url || typeof fetch !== 'function' || this.mode !== 'online') return null;
+    try {
+      const res = await fetch(url, { cache: 'no-store' });
+      const body = res.ok && /json/.test(res.headers.get('content-type') || '') ? await res.json() : null;
+      return body && Array.isArray(body.rooms) ? body.rooms.filter((r) => r && typeof r.name === 'string' && Number.isFinite(r.players)).map((r) => ({ name: r.name, label: roomLabel(r.name), players: r.players, quiet: !!r.quiet })) : null;
+    } catch { return null; }
   }
 
   /** Call every frame with the local avatar state; sends are throttled and skipped while nothing changes. */
@@ -187,6 +298,13 @@ export class Presence {
   /** The owner has taken the title away (see /api/admins): whoever holds that key in this room loses it at once. */
   demote(key) { if (this.owner && this._tr) this._tr.send({ t: 'demote', key }); }
 
+  /** An administrator lets it be known (a badge on their name, for everybody around), or no longer does. */
+  setBadge(on) {
+    if (this.badge === !!on) return;
+    this.badge = !!on;
+    if (this._tr) this._tr.send(this._hello());
+  }
+
   setIdentity(name, color, kit = this.kit) {
     this.kit = int(kit, 255);
     this.name = cleanName(name, this.name);
@@ -207,6 +325,7 @@ export class Presence {
 
   dispose() {
     this._disposed = true;
+    this._turn++;
     clearTimeout(this._timer);
     for (const tr of [this._ws, this._bc]) if (tr) tr.close();
     this._ws = this._bc = this._tr = null;
@@ -223,7 +342,7 @@ export class Presence {
   _persist() {
     try { localStorage.setItem('mmf.name', this.name); localStorage.setItem('mmf.color', String(this.color)); } catch { /* no storage */ }
   }
-  _hello() { return { t: 'hello', name: this.name, color: this.color, v: 2, dev: this.device, s: this.session, ...(this.kit && { k: this.kit }), ...(BUILD && { b: BUILD }) }; }
+  _hello() { return { t: 'hello', name: this.name, color: this.color, v: 2, dev: this.device, s: this.session, ...(this.kit && { k: this.kit }), ...(BUILD && { b: BUILD }), ...(this.badge && { ad: 1 }) }; }
 
   _handlers(mode) {
     return {
@@ -233,7 +352,7 @@ export class Presence {
       },
       onclose: (tr) => {
         if (this.kicked) return; // put out: no coming back through the window
-        if (tr.full && tr !== this._tr) return this._overflow(tr); // turned away from a full room
+        if ((tr.full || tr.shut) && tr !== this._tr) return this._overflow(tr); // turned away: a full room, or a name that is not a room
         if (tr !== this._tr) return;
         this._tr = null; // peers stay frozen for a moment: a quick reconnection will not make them blink
         this._fallback(FALLBACK_MS);
@@ -256,19 +375,24 @@ export class Presence {
     }, delay);
   }
 
-  // The room is full: try the next one (after sixteen of them, start again from the first a little later).
+  // The room is full, or its name is not a room: back to the door, which is told (after a few rooms in a row
+  // have said no — the fair is full, or the door cannot be reached — a pause, then again from the start).
   _overflow(tr) {
     if (tr !== this._ws || !this._dial) return;
+    const room = this.room, shut = !!tr.shut;
     tr.close();
-    this.shard = this.shard >= MAX_SHARDS ? 1 : this.shard + 1;
-    this.room = this.shard === 1 ? this.baseRoom : `${this.baseRoom.slice(0, 44)}-${this.shard}`;
-    this._ws = this._dial(this.room);
-    if (this.shard === 1) setTimeout(() => { if (!this._disposed) this._ws.open(); }, 8000); else this._ws.open();
+    this._ws = null;
+    if (shut) { if (this._want === room) this._want = ''; if (this._back === room) this._back = ''; this._said = { ...this._said, closed: room }; }
+    else if (room === this._want) this._said = { ...this._said, full: room };
+    this._not = [...new Set([...this._not, room])].slice(-10);
+    const go = () => { if (!this._disposed && !this.kicked) this._enter({ want: this._want, back: this._back === room ? '' : this._back, not: this._not }); };
+    if (++this._turned % TURNS === 0) { this._not = []; this._shard = 0; setTimeout(go, 8000); } else go();
   }
 
   _message(tr, mode, m) {
     if (!m || typeof m !== 'object' || this._disposed) return;
     if (m.t === 'full') { if (tr !== this._tr) tr.full = true; return; } // (acted upon when the relay then hangs up, see onclose)
+    if (m.t === 'closed') { if (tr !== this._tr) tr.shut = true; return; } // (that name is not a room one may open: the same)
     if (m.t === 'kicked') return this._out(!!m.ban);
     if (m.t === 'welcome') {
       if (Number.isInteger(m.id)) this._welcome(tr, mode, m);
@@ -278,6 +402,7 @@ export class Presence {
     else if (m.t === 'w') this._seen = !!m.n;
     else if (m.t === 'r') this._emit('release', { release: m.r && typeof m.r === 'object' ? m.r : null, build: typeof m.v === 'string' ? m.v : '', refresh: Number.isFinite(m.f) ? m.f : 0 }); // (what is released has changed)
     else if (m.t === 'say') { const text = cleanChat(m.m); if (text) this._emit('announce', { text }); } // (a word from the fair, to every room)
+    else if (m.t === 'quiet') { const to = cleanRoom(m.to); if (to && to !== this.room) this._emit('quiet', { to, label: roomLabel(to), n: Number.isFinite(m.n) ? Math.max(0, Math.floor(m.n)) : 0 }); } // (this room has gone quiet: another has room)
     else if (m.t === 'admin') { this.admin = !!m.ok; this.owner = this.admin && !!m.owner; this._emit('admin', { ok: this.admin, owner: this.owner, out: !!m.out }); }
     else if (m.t === 'gift') this._emit('gift', { by: cleanName(m.by || '') });
     else if (m.t === 'promoted') { if (typeof m.key === 'string' && m.key) this._emit('promoted', { key: m.key, by: cleanName(m.by || '') }); else this._emit('promoted', { id: m.id }); }
@@ -305,8 +430,18 @@ export class Presence {
   _welcome(tr, mode, m) {
     clearTimeout(this._timer);
     if (this._bc && tr !== this._bc) { this._bc.close(); this._bc = null; }
-    if (tr) tr.full = false;
+    if (tr) tr.full = tr.shut = false;
     this._tr = tr; this.mode = mode; this.id = m.id;
+    if (tr && mode === 'online') {
+      // a room was entered: said once for each (with what the door had to say about the one that was asked for)
+      const said = this._said || {}, moved = this._in !== this.room;
+      this._said = null; this._not = []; this._turned = 0;
+      this._want = this.room; // (from now on this is the room one comes back to, and whose door one knocks at again)
+      if (moved || said.full || said.gone || said.closed) {
+        this._in = this._back = this.room;
+        this._emit('room', { room: this.room, label: this.label, why: said.why || '', moved, ...(said.full && said.full !== this.room && { full: said.full }), ...(said.gone && { gone: said.gone }), ...(said.closed && { closed: said.closed }) });
+      }
+    }
     this._interval = Math.max(SEND_MS, Number.isFinite(m.tick) ? m.tick : 0);
     // `idle`: how often to repeat an unchanged state. 0 = never (a relay that keeps the last state of everyone
     // and sleeps while its room is quiet); absent = our default (tabs talking to each other need it).
@@ -332,6 +467,7 @@ export class Presence {
   // Put out by the administrator: everything stops, and stays stopped.
   _out(ban) {
     this.kicked = { ban };
+    this._turn++;
     clearTimeout(this._timer);
     for (const tr of [this._ws, this._bc]) if (tr) tr.close();
     this._ws = this._bc = this._tr = null;
@@ -344,10 +480,10 @@ export class Presence {
   // Adds a peer, or updates the identity of a known one. `stamp` (server time) is only given by a welcome.
   _join(info, stamp) {
     if (!info || !Number.isInteger(info.id) || info.id === this.id) return false;
-    const name = cleanName(info.name), color = int(info.color, 31), kit = int(info.k, 255);
+    const name = cleanName(info.name), color = int(info.color, 31), kit = int(info.k, 255), admin = info.ad === 1; // (admin: an administrator who lets it be known)
     let peer = this.peers.get(info.id);
     const known = !!peer;
-    if (!known) this.peers.set(info.id, (peer = { id: info.id, name, color, kit, x: 0, y: 0, z: 0, yaw: 0, anim: 0, flags: 0, speed: 0, visible: false, far: false }));
+    if (!known) this.peers.set(info.id, (peer = { id: info.id, name, color, kit, admin, x: 0, y: 0, z: 0, yaw: 0, anim: 0, flags: 0, speed: 0, visible: false, far: false }));
     if (!known || stamp !== undefined) {
       // A welcome starts a new timeline (the server clock may have restarted): never reuse an old track.
       const track = new Track(this._interval), t = now();
@@ -357,8 +493,8 @@ export class Presence {
       track.sample(t, peer);
     }
     if (!known) this._emit('join', peer);
-    else if (peer.name !== name || peer.color !== color || peer.kit !== kit) {
-      peer.name = name; peer.color = color; peer.kit = kit;
+    else if (peer.name !== name || peer.color !== color || peer.kit !== kit || peer.admin !== admin) {
+      peer.name = name; peer.color = color; peer.kit = kit; peer.admin = admin;
       this._emit('identity', peer);
     }
     return true;

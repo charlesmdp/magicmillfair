@@ -6,9 +6,13 @@ export const NEWS = [
   {
     date: '24 November 2026',
     items: [
-      ['A banner, and the rules', 'Where you arrive: a welcome, and a board that says how the fair works. It is short.'],
+      ['Get life advice', 'An easel where you arrive, planks at the mill and by the pond: they lead to Billy — who now follows what the two of you were saying.'],
+      ['Nearby first', 'The chat opens on "Nearby": those within twenty metres read you. The button left of the line (or Tab) talks to the whole oasis.'],
+      ['Rooms of the right size', 'The fair shares its visitors out between rooms of about fifty. "Who is here" lists them: change with a click, or copy a link for a friend.'],
+      ['How it all came to this', 'To the right of the arrival, an old page under a roof: the story of the last afternoon. The opening tells it only once now.'],
       ['Wooden signposts', 'At the forks of the paths: planks painted by hand point the way to the games, and say how far.'],
       ['The Trading Post', 'On the plaza at the foot of the pier: every game on a card, a photograph of it, and who sponsors it.'],
+      ['A banner, and the rules', 'Where you arrive: a welcome, and a board that says how the fair works. It is short.'],
       ['The caves are safe places', 'In a cave, only those nearby hear what you say: the chat stays on "Nearby" until you are out.'],
       ['The game in figures', 'Keys pressed, kilometres walked, visitors, countries: in the settings, and on the page /opendata.'],
       ['Full screen', 'The button with four corners, top right — or in the settings: the fair on the whole screen.'],

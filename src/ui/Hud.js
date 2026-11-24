@@ -251,13 +251,13 @@ export class Hud {
       </div>
       <div class="chat">
         <div class="log" aria-live="polite"></div>
-        <form class="say"><div class="line"><button type="button" class="chan" title="Who hears you (Tab)">Everyone</button><input type="text" maxlength="200" placeholder="Say something…" autocomplete="off" spellcheck="false" enterkeyhint="send" aria-label="Chat message" /></div><small class="tip">Stuck somewhere? Type <b>/kill</b> · an emote by its name: <b>/wave</b>, <b>/cheer</b>…</small></form>
+        <form class="say"><div class="heard" aria-live="polite"></div><div class="line"><button type="button" class="chan" title="Who hears you: click to change (or press Tab)">Everyone</button><input type="text" maxlength="200" placeholder="Say something…" autocomplete="off" spellcheck="false" enterkeyhint="send" aria-label="Chat message" /></div><small class="tip">Stuck somewhere? Type <b>/kill</b> · an emote by its name: <b>/wave</b>, <b>/cheer</b>…</small></form>
       </div>
       <div class="chooser" role="dialog" aria-label="Choose">
         <div class="sheet"><h2></h2><p class="lead"></p><div class="list"></div><button class="close" type="button">Stay here</button></div>
       </div>
       <div class="roster" role="dialog" aria-label="Visitors">
-        <div class="sheet"><h2>Who is here</h2><p class="lead"></p><button class="see-as" type="button" hidden>See the game as a visitor does</button><div class="body"><div class="list"></div><div class="admins"></div><div class="bans"></div><div class="visitors"></div></div><button class="close" type="button">Close</button></div>
+        <div class="sheet"><h2>Who is here</h2><p class="lead"></p><button class="see-as" type="button" hidden>See the game as a visitor does</button><button class="see-as wear" type="button" hidden></button><div class="body"><div class="rooms"></div><div class="list"></div><div class="admins"></div><div class="bans"></div><div class="visitors"></div></div><button class="close" type="button">Close</button></div>
       </div>
       <div class="flash" aria-hidden="true"></div>
       <div class="banner" role="alert"></div>
@@ -338,19 +338,30 @@ export class Hud {
     this.chatLog = this.chatEl.querySelector('.log');
     this.chatForm = this.chatEl.querySelector('.say');
     this.chatInput = this.chatForm.querySelector('input');
-    // who hears a line: everyone in the room, or those within twenty metres (Tab, or the button, switches)
+    // who hears a line: those within twenty metres ("Nearby") or everyone in the room — the button, or Tab,
+    // switches, and a line above the box says which it is. The chat opens on Nearby until the visitor has
+    // chosen otherwise (their choice is kept by this browser); nothing is decided before it is first opened.
     this.chatChannel = 'all';
+    this._chanPick = (() => { try { const kept = localStorage.getItem('mmf.chan'); return kept === 'all' || kept === 'near' ? kept : ''; } catch { return ''; } })(); // ('': never chose)
     this.chanBtn = this.chatForm.querySelector('.chan');
+    const heard = this.chatForm.querySelector('.heard');
     const channel = (to) => {
       if (to === 'important' && !this._admin) to = 'all';
       this.chatChannel = to;
       this.chanBtn.textContent = to === 'near' ? 'Nearby' : to === 'important' ? 'Important' : 'Everyone';
       this.chanBtn.classList.toggle('near', to === 'near');
       this.chanBtn.classList.toggle('important', to === 'important');
+      heard.className = `heard ${to}`;
+      heard.textContent = to === 'near' ? 'Only visitors within 20 m hear you. The green button (or Tab) switches to the whole oasis.'
+        : to === 'important' ? 'An announcement: everyone reads it, in red.' : 'The whole oasis hears you. The button (or Tab) switches to those nearby only.';
       if (!this._chatTo) this.chatInput.placeholder = to === 'near' ? 'Say something to those within 20 m…' : to === 'important' ? 'An announcement to everyone, in red…' : 'Say something to everyone…';
     };
     // (an administrator has a third channel: "important", shown to all in another colour)
-    const nextChannel = () => channel(this.chatChannel === 'all' ? 'near' : this.chatChannel === 'near' && this._admin ? 'important' : 'all');
+    const nextChannel = () => {
+      channel(this.chatChannel === 'all' ? 'near' : this.chatChannel === 'near' && this._admin ? 'important' : 'all');
+      // (the visitor's own choice: the chat opens on it from now on)
+      if (this.chatChannel !== 'important') { this._chanPick = this.chatChannel; try { localStorage.setItem('mmf.chan', this.chatChannel); } catch { /* private mode */ } }
+    };
     this.chanBtn.onclick = () => { nextChannel(); this.chatInput.focus({ preventScroll: true }); };
     this.chanBtn.addEventListener('mousedown', (e) => e.preventDefault()); // (the field keeps the focus)
     this._channel = channel;
@@ -431,6 +442,7 @@ export class Hud {
     h.querySelector('.players').onclick = (e) => { e.currentTarget.blur(); this.emit('roster'); };
     this.rosterEl.querySelector('.close').onclick = () => this.closeRoster();
     this.rosterEl.querySelector('.see-as').onclick = () => { this.closeRoster(); this.emit('visitorview', true); };
+    this.rosterEl.querySelector('.wear').onclick = () => this.emit('badge');
     h.querySelector('.as-visitor').onclick = (e) => { e.currentTarget.blur(); this.emit('visitorview', false); };
     // what is said while the page is in the background is still received: the title of the tab counts it, and
     // a line in the log marks where one had stopped reading
@@ -691,15 +703,46 @@ export class Hud {
    * until }]), `admins` ([{ id, name, by, at }]: those who were named) and `visitors` (where people come
    * from: see server/visitors.js) add what only they may see and do: 'kick' (id), 'ban' (id, hours), 'unban'
    * ({ kind, key }), 'promote' (id) and — the owner only — 'demote' (the id of a named administrator) are emitted.
+   * `room` ({ name, label }: the one one is in) and `rooms` ([{ name, label, players, quiet }]: the common rooms)
+   * list the rooms above the visitors: 'room' (a name) asks to change to it, 'roomlink' (a name) for a link to it.
    */
-  showRoster({ people, mode, admin = false, owner = false, details = null, bans = null, admins = null, visitors = null, now = 0 }) {
+  showRoster({ people, mode, admin = false, owner = false, details = null, bans = null, admins = null, visitors = null, now = 0, rooms = null, room = null, badge = false }) {
     const box = this.rosterEl, list = box.querySelector('.list'), bansEl = box.querySelector('.bans'), adminsEl = box.querySelector('.admins'), visitorsEl = box.querySelector('.visitors');
     if (!this.rosterOpen) { this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this.toggleBigMap(false); this.input.exitLock(); }
     box.querySelector('h2').textContent = people.length > 1 ? `Who is here — ${people.length} visitors` : 'Who is here';
     box.querySelector('.see-as').hidden = !admin;
+    // (an administrator may let it be known: a badge on their name, for everybody around — 'badge' is emitted)
+    const wear = box.querySelector('.wear');
+    wear.hidden = !admin;
+    wear.textContent = badge ? 'Take my ADMIN badge off' : 'Wear the ADMIN badge (everybody around sees it)';
+    wear.classList.toggle('on', badge);
     box.querySelector('.lead').textContent = mode === 'online' ? (admin ? `You are ${owner ? 'the owner' : 'an administrator'}: you also see where each visitor connects from, can put them out, and can name other administrators.` : 'Everyone in this room.')
       : mode === 'local' ? 'No server here: only the tabs of this browser see each other.' : 'Offline: nobody else can be seen.';
     list.textContent = '';
+    // the rooms: the one one is in, and those one may change to (a click — the page is not loaded again)
+    const roomsEl = box.querySelector('.rooms');
+    roomsEl.textContent = '';
+    if (mode === 'online' && room) {
+      const others = (rooms || []).filter((r) => r.name !== room.name);
+      const head = el('h3'); head.textContent = others.length ? 'The rooms' : 'Your room';
+      roomsEl.append(head);
+      const line = (r, here) => {
+        const row = el('div', `who room${here ? ' here' : ''}${r.quiet ? ' quiet' : ''}`);
+        const text = el('span', 'id'), name = el('b'), small = el('small'), acts = el('span', 'acts'), b = el('button');
+        name.textContent = r.label;
+        small.textContent = `${r.players === 1 ? '1 visitor' : `${r.players} visitors`}${here ? ' · you are here' : r.quiet ? ' · quiet' : ''}`;
+        text.append(name, small);
+        b.type = 'button';
+        if (here) { b.textContent = 'Copy a link for a friend'; b.title = 'Whoever opens it joins you in this room, if it has room'; b.onclick = () => this.emit('roomlink', r.name); }
+        else { b.className = 'good'; b.textContent = 'Go there'; b.title = `Change to ${r.label}: you stay where you stand`; b.onclick = () => { this.closeRoster(); this.emit('room', r.name); }; }
+        acts.append(b);
+        row.append(text, acts);
+        return row;
+      };
+      roomsEl.append(line({ name: room.name, label: room.label, players: people.length }, true));
+      for (const r of others) roomsEl.append(line(r, false));
+      if (others.length) { const note = el('p', 'rooms-note'); note.textContent = 'Each room has its own visitors, its own chat and its own big red button. The scores, the shop and the news of the fair are the same in all of them.'; roomsEl.append(note); }
+    }
     const ago = (t) => { const m = Math.max(0, Math.round((now - t) / 60000)); return m < 1 ? 'just arrived' : m < 60 ? `here for ${m} min` : `here for ${Math.floor(m / 60)} h ${m % 60} min`; };
     for (const p of people) {
       const row = el('div', `who visitor${p.me ? ' me' : ''}`);
@@ -830,6 +873,30 @@ export class Hud {
     box.classList.add('on');
   }
 
+  /**
+   * A proposal one may take or leave (a room gone quiet offers another): `text`, a button `yes` that calls
+   * `fn`, another to stay; it goes away by itself after `ms`. Null takes it away.
+   */
+  offer(text, yes = '', fn = () => {}, ms = 40000) {
+    if (!this.offerEl) {
+      if (!text) return;
+      this.offerEl = el('div', 'offer-bar', '<span class="update-dot" aria-hidden="true"></span><span class="offer-text"></span><button type="button" class="offer-yes"></button><button type="button" class="offer-no">Stay here</button>');
+      this.offerEl.setAttribute('role', 'status');
+      for (const ev of ['mousedown', 'touchstart', 'wheel']) this.offerEl.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
+      this.root.append(this.offerEl);
+    }
+    const bar = this.offerEl;
+    clearTimeout(this._offer);
+    if (!text) { bar.classList.remove('on'); return; }
+    bar.querySelector('.offer-text').textContent = text;
+    const y = bar.querySelector('.offer-yes');
+    y.textContent = yes;
+    y.onclick = () => { bar.classList.remove('on'); fn(); };
+    bar.querySelector('.offer-no').onclick = () => bar.classList.remove('on');
+    requestAnimationFrame(() => bar.classList.add('on'));
+    this._offer = setTimeout(() => bar.classList.remove('on'), ms);
+  }
+
   /** A message that stays (put out by the administrator, for instance); null takes it away. */
   banner(text) {
     this.bannerEl.textContent = text || '';
@@ -863,6 +930,9 @@ export class Hud {
     if (open) {
       this._chatTo = to;
       this.chanBtn.style.display = to ? 'none' : '';
+      this.chatForm.querySelector('.heard').style.display = to ? 'none' : '';
+      // (the chat opens on Nearby — unless "Everyone" is what the visitor chose themselves)
+      if (!to && this.chatChannel === 'all' && this._chanPick !== 'all') this.chatChannel = 'near';
       if (to) this.chatInput.placeholder = to; else this._channel(this.chatChannel);
     }
     this.chatEl.classList.toggle('typing', open);
@@ -962,12 +1032,14 @@ export class Hud {
     this._tn = setTimeout(() => this.noteEl.classList.remove('show'), ms);
   }
 
-  setPresence(mode, count, shard = 1) {
+  /** `room` ({ label, several }): the room one is in, named when the fair has several of them. */
+  setPresence(mode, count, room = null) {
     const dot = this.hud.querySelector('.players .dot');
     dot.className = `dot ${mode === 'online' ? 'online' : mode === 'local' ? 'local' : ''}`;
-    this.hud.querySelector('.players .count').textContent = count <= 1 ? (mode === 'online' ? 'Online · on your own' : 'On your own') : `${count} visitors`;
+    const where = mode === 'online' && room && room.several ? `${room.label} · ` : '';
+    this.hud.querySelector('.players .count').textContent = count <= 1 ? (mode === 'online' ? (where ? `${where}on your own` : 'Online · on your own') : 'On your own') : `${where}${count} visitors`;
     this.hud.querySelector('.net-info').textContent = mode === 'online'
-      ? (shard > 1 ? `Connected, in room ${shard}: the first rooms are full. To be sure to meet someone, share an address ending in ?room=a-name-of-your-own.` : 'Connected: everyone who opens this address sees each other.')
+      ? (where ? `Connected, in ${room.label}: the fair has several rooms just now. "Who is here" lists them — you change with a click, or copy a link for a friend to join you.` : 'Connected: everyone who opens this address sees each other.')
       : mode === 'local'
         ? 'Local mode: only the tabs of this browser see each other (no presence server found).'
         : 'Offline.';

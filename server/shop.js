@@ -146,6 +146,20 @@ async function leaveNote(ctx, device, text) {
 }
 
 /** Gives a payment back, and writes it down (a refund that fails is kept for the administrator). */
+// What was kept when something was taken down — or could not be given back — given back after all: the owner's
+// choice, from the list of refunds. True when Stripe did it, false when it refused, null when there is no such payment.
+async function refundLater(ctx, cfg, pay) {
+  const list = (await ctx.store.get('refunds')) || [], entry = [...list].reverse().find((e) => e.pay === pay && !e.ok);
+  if (!entry) return null;
+  try { await refundPayment(cfg, pay, entry.why, ctx.fetch || fetch); entry.ok = true; entry.at = ctx.now(); delete entry.kept; delete entry.error; } catch (err) { entry.error = String(err.message || err).slice(0, 160); console.error('[shop] refund', entry.error); }
+  await ctx.store.put('refunds', list);
+  if (entry.ok) {
+    await noteRefund(ctx.store, { cents: entry.amount }, ctx.now()).catch(() => {});
+    if (entry.by) await leaveNote(ctx, entry.by, 'The fair has refunded your payment in full.');
+  }
+  return entry.ok;
+}
+
 async function refund(ctx, cfg, pay, amount, why) {
   const entry = { pay, amount, at: ctx.now(), why, ok: true };
   try { await refundPayment(cfg, pay, why, ctx.fetch || fetch); } catch (err) { entry.ok = false; entry.error = String(err.message || err).slice(0, 160); console.error('[shop] refund', entry.error); }
@@ -288,7 +302,7 @@ export async function shopRoute(req, ctx) {
     const what = describe(body?.item), device = body?.device;
     if (!what || !DEVICE.test(device || '')) return out(400, { error: 'Nothing of that name is sold.' });
     // (a sky village is only for hire once the sky is open: the owner's switch)
-    if (what.item.startsWith('village:') && (await readRelease(ctx.store)).release.sky !== 'open') return out(400, { error: 'Nothing of that name is sold.' });
+    if (what.item.startsWith('village:') && (await readRelease(ctx)).release.sky !== 'open') return out(400, { error: 'Nothing of that name is sold.' });
     if (what.kind === 'own' && (await ownedBy(ctx, device)).includes(what.item)) return out(409, { error: 'You already have it.' });
     if (what.kind === 'pass') { const holder = await holderOf(ctx.store, device); if (passLive(holder.pass, now) && !holder.pass.gift) return out(409, { error: 'You already have the pass.' }); }
     let extra = {};
@@ -383,7 +397,13 @@ export async function shopRoute(req, ctx) {
     if (!req.admin) return out(403, { error: 'Forbidden.' });
     const slots = await slotsOf(ctx);
     let taken = null; // (what was taken down by this very request, if anything: { removed, refunded, stopped })
-    if (method === 'POST') {
+    if (method === 'POST' && typeof body?.refund === 'string') {
+      // the owner gives back what was kept when something was taken down (or what Stripe had refused to give back)
+      if (!req.owner) return out(403, { error: 'Only the owner gives money back.' });
+      const done = await refundLater(ctx, cfg, body.refund);
+      if (done === null) return out(404, { error: 'No such payment waits to be given back.' });
+      taken = { refunded: done };
+    } else if (method === 'POST') {
       const id = body?.slot;
       if (typeof id !== 'string' || !describe(id) || describe(id).kind !== 'slot') return out(400, { error: 'No such place.' });
       if (body.set) {
@@ -409,12 +429,15 @@ export async function shopRoute(req, ctx) {
     } else if (method === 'DELETE') {
       const id = query.get('slot') || '';
       if (!slots[id]) return out(404, { error: 'No such place.' });
-      // The administrator takes a sponsor down. `refund=0`: the money is kept (what was shown broke the rules);
-      // otherwise a bid is given back in full, and of a place paid by the month the month that is running —
-      // which, in any case, stops being paid from now on.
-      const gone = slots[id], back = query.get('refund') !== '0';
+      // The administrator takes a sponsor down. Nothing is given back by itself: the money is kept unless the
+      // owner says otherwise — `refund=1`: a bid is given back in full, and of a place paid by the month the month
+      // that is running. A place paid by the month stops being paid from now on in any case. A bid that was
+      // kept is written down with the refunds: the owner can still give it back later.
+      const gone = slots[id], back = query.get('refund') === '1';
+      if (back && !req.owner) return out(403, { error: 'Only the owner gives money back.' });
       let refunded = false, stopped = false;
       if (gone.pay && back) refunded = await refund(ctx, cfg, gone.pay, gone.bid || 0, `removed from ${id}`);
+      else if (gone.pay) await ctx.store.put('refunds', [...((await ctx.store.get('refunds')) || []), { pay: gone.pay, amount: gone.bid || 0, at: now, why: `taken down from ${id}`, ok: false, kept: true, by: gone.by }].slice(-100));
       if (gone.sub && cfg.key) {
         try { const done = await endSubscription(cfg, gone.sub, back, ctx.fetch || fetch); stopped = true; refunded = refunded || done.refunded; } catch (err) { console.error('[shop] subscription', String(err.message || err).slice(0, 160)); }
       }
@@ -426,7 +449,8 @@ export async function shopRoute(req, ctx) {
     } else if (!reading) return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD, POST, DELETE' });
     return out(200, {
       ...taken,
-      refunds: ((await ctx.store.get('refunds')) || []).slice(-30).reverse(),
+      // (the money given back — and what was kept, or could not be given back: `kept`, `ok: false`)
+      refunds: ((await ctx.store.get('refunds')) || []).slice(-30).reverse().map(({ by, ...r }) => r),
       slots: Object.fromEntries(Object.entries(slots).map(([id, s]) => [id, { state: s.state, by: s.by, sub: !!s.sub, at: s.at, ...(s.bid && { bid: s.bid }), ...shown(id, s), draft: draftOf(id, s) }])),
     });
   }

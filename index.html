@@ -39,18 +39,18 @@
           <button class="skip" type="button">Skip</button>
         </div>
         <script>
-          // a click, a key or its end reveal the gate; who has heard the story before is told it faster; a page
-          // that comes back from a change of quality, a screenshot or a robot (unless ?intro=1) is not told at all
+          // a click, a key or its end reveal the gate. The story is told once: a browser that has heard it goes
+          // straight to the gate (a board by the arrival tells it again, another way) — ?intro=1 tells it once
+          // more; a page that comes back from a change of quality, a screenshot or a robot is not told at all
           (function () {
-            var s = document.querySelector('.splash'), q = location.search, again = false, skip = /[?&](shot|bench)\b/.test(q) || (navigator.webdriver && !/[?&]intro=1\b/.test(q));
-            try { again = localStorage.getItem('mmf.told') === '1'; skip = skip || !!sessionStorage.getItem('mmf.resume'); } catch (e) {}
-            if (skip) { s.classList.add('told'); return; }
-            if (again) s.classList.add('again');
+            var s = document.querySelector('.splash'), q = location.search, told = false, again = /[?&]intro=1\b/.test(q), skip = /[?&](shot|bench)\b/.test(q) || (navigator.webdriver && !again);
+            try { told = localStorage.getItem('mmf.told') === '1'; skip = skip || !!sessionStorage.getItem('mmf.resume'); } catch (e) {}
+            if (skip || (told && !again)) { s.classList.add('told'); return; }
             function key(e) { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') end(); }
             function end() { s.classList.add('told'); removeEventListener('keydown', key, true); try { localStorage.setItem('mmf.told', '1'); } catch (e) {} }
             s.querySelector('.intro').addEventListener('click', end);
             addEventListener('keydown', key, true);
-            setTimeout(end, again ? 9800 : 17400);
+            setTimeout(end, 17400);
           })();
         </script>
         <div class="card">

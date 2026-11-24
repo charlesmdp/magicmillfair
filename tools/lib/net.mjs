@@ -21,9 +21,11 @@ export function freePort() {
   });
 }
 
-export function request(port, target, { method = 'GET', headers = {}, body } = {}) {
+// (`from`: the local address to call from — any 127.x.y.z is this machine: a server that only believes the address
+// a connection comes from then sees as many addresses as there are callers)
+export function request(port, target, { method = 'GET', headers = {}, body, from } = {}) {
   return new Promise((resolve, reject) => {
-    const req = http.request({ host: '127.0.0.1', port, path: target, method, headers, agent: false }, (res) => {
+    const req = http.request({ host: '127.0.0.1', port, path: target, method, headers, agent: false, ...(from && { localAddress: from }) }, (res) => {
       const chunks = [];
       res.on('data', (chunk) => chunks.push(chunk));
       res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) }));
@@ -41,8 +43,8 @@ export class Client {
     this.waiters = [];
     this.id = 0;
     this.code = null; // close code once closed
-    const { dev, ...wsOptions } = options; // `dev`: the name the browser gave itself, as the game passes it
-    this.ws = new WebSocket(`ws://127.0.0.1:${port}/ws${room ? `?room=${encodeURIComponent(room)}` : '?'}${dev ? `&dev=${dev}` : ''}`, wsOptions);
+    const { dev, pass, ...wsOptions } = options; // `dev`: the name the browser gave itself, as the game passes it; `pass`: the owner's note for that room
+    this.ws = new WebSocket(`ws://127.0.0.1:${port}/ws${room ? `?room=${encodeURIComponent(room)}` : '?'}${dev ? `&dev=${dev}` : ''}${pass ? `&pass=${encodeURIComponent(pass)}` : ''}`, wsOptions);
     this.opened = new Promise((resolve) => {
       this.ws.once('open', () => resolve(true));
       this.ws.once('error', () => resolve(false));

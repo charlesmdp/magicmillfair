@@ -1,7 +1,9 @@
 // Characters one can talk to. The words come from the server when it has a brain to lend (POST /api/npc, see
 // server/npc.js); otherwise from a handful of lines kept here, so that the character is never mute.
 // Billy the alligator is a life coach: one says anything to him — a question or not — and he answers one
-// sentence at a time. What is said to him, and what he answers, is seen by nobody else.
+// sentence at a time. What is said to him, and what he answers, is seen by nobody else. He follows the
+// conversation: its last three exchanges go with each line — kept by this page alone, for this visitor alone
+// (another visitor starts from nothing), and forgotten after ten minutes of silence.
 import { hasApi, callApi } from '../net/api.js';
 
 const PERSONAS = {
@@ -58,6 +60,8 @@ export class Npc {
     this.name = this.persona.name;
     this.ask = this.persona.ask;
     this.title = this.persona.title || '';
+    this.talk = []; // [[what was said, what was answered], …]: the last exchanges of this visitor's conversation
+    this.talkAt = 0;
   }
 
   greeting() { return pick(this.persona.greet); }
@@ -73,8 +77,14 @@ export class Npc {
     let answer = null;
     // (the server says whether it has a brain to lend: without one, the lines kept here)
     if ((await hasApi())?.npc) {
-      const body = await callApi('api/npc', { method: 'POST', body: { npc: this.id, messages: [{ role: 'user', content: text }] } });
-      if (body && typeof body.reply === 'string' && body.reply.trim()) answer = body.reply.trim().slice(0, 200);
+      if (Date.now() - this.talkAt > 10 * 60_000) this.talk = [];
+      const messages = [...this.talk.flatMap(([said, answered]) => [{ role: 'user', content: said }, { role: 'assistant', content: answered }]), { role: 'user', content: text }];
+      const body = await callApi('api/npc', { method: 'POST', body: { npc: this.id, messages } });
+      if (body && typeof body.reply === 'string' && body.reply.trim()) {
+        answer = body.reply.trim().slice(0, 200);
+        this.talk = [...this.talk, [text, answer]].slice(-3);
+        this.talkAt = Date.now();
+      }
     }
     return answer || this._canned(text);
   }

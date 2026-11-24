@@ -744,12 +744,14 @@ export const WAYS = {
   race: { text: RACE.name, at: [-50, -92] },
   trading: { text: 'TRADING POST', more: 'SPONSORS', at: [TRADING.x, TRADING.z] },
   mill: { text: 'THE MILL', at: [-118, -14] },
+  // (Billy the alligator, life coach, on the deck over the great pond: where its gangway leaves the bank)
+  billy: { text: 'GET LIFE ADVICE', more: 'ASK BILLY', at: [POND_DECK.gangway[0][0], POND_DECK.gangway[0][1]] },
 };
 export const SIGNPOSTS = [
   // past the banner of the arrival, on the left of the lane: everything is ahead, the race is behind
   { id: 'arrival', x: -117.3, z: -42.4, arms: [['pier', [-108, -31.5]], ['flappy', [-109.2, -31]], ['climb', [-110.6, -30.6]], ['race', [-112, -62]]] },
   // where the lane ends in front of the mill and the path down the valley begins
-  { id: 'mill', x: -111.9, z: -31.6, arms: [['pier', [-97, -33.5]], ['flappy', [-97, -31.8]], ['climb', [-97, -30]], ['race', [-114, -46]]] },
+  { id: 'mill', x: -111.9, z: -31.6, arms: [['pier', [-97, -33.5]], ['flappy', [-97, -31.8]], ['climb', [-97, -30]], ['race', [-114, -46]], ['billy', [-124, -14]]] },
   // where the path through the fields leaves the lane
   { id: 'fields', x: -116.3, z: -97.4, arms: [['race', [-92, -92.5]], ['pier', [-104, -84]], ['mill', [-117.6, -76]]] },
   // half way down the valley
@@ -762,6 +764,9 @@ export const SIGNPOSTS = [
   // by the paddock of the race, and at the far end of the path through the fields, on the beach
   { id: 'paddock', x: -41.6, z: -91.2, arms: [['pier', [-23.5, -82.7]], ['climb', [-24.4, -81.2]], ['mill', [-59.7, -82.7]]] },
   { id: 'beach', x: 24.6, z: -83.4, arms: [['race', [8, -88]], ['pier', [22.5, -54]], ['climb', [24.5, -54]]] },
+  // …and where the path round the great pond leaves the yard of the mill: his deck is just along it (the plank
+  // points along the first steps of the path, so that it is read from the yard and not seen edge on)
+  { id: 'pondside', x: -134.8, z: 6.3, arms: [['billy', [-140.5, 7.2]]] },
 ];
 
 // What stands on the way for visitors to read (zones/games/Notices.js): the banner and the rules where one
@@ -774,6 +779,11 @@ export const NOTICES = {
   // (what a newcomer sees first: a banner across the lane, `half` metres to each post, and the rules to the left)
   welcome: { x: -121.05, z: -49, yaw: Math.PI + 0.068, half: 3.7 },
   rules: { x: -116.9, z: -53.6, yaw: -2.49 },
+  // (…and, to the right, how it all came to this: the story of the opening, told another way)
+  story: { x: -125.9, z: -52.3, yaw: 2.62 },
+  // (…and, beside whoever arrives, on the left of the lane: an easel of painted planks — a life coach is not
+  // far; the planks of the signposts take over further on. `yaw`: which way its front looks)
+  advice: { x: -119.75, z: -60.5, yaw: -2.8 },
   ads: { x: TRADING.x, z: TRADING.z, yaw: TRADING.yaw },
   arcade: { along: 17.6, side: -6.7 },
 };

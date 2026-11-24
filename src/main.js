@@ -26,7 +26,7 @@ import { CameraRig } from './player/CameraRig.js';
 import { Interact } from './player/Interact.js';
 import { RankEmotes, rankPicture } from './player/RankEmotes.js';
 import { Hud, VERSION } from './ui/Hud.js';
-import { Presence, cleanChat } from './net/Presence.js';
+import { Presence, cleanChat, cleanRoom, roomLabel } from './net/Presence.js';
 import { Npc } from './npc/Npc.js';
 import { Scores } from './net/Scores.js';
 import { countVisit } from './net/Visits.js';
@@ -199,9 +199,37 @@ async function boot() {
   // ---------- presence (other visitors)
   let presence = null, avatars = null;
   let liveScore = () => {}; // (set once the boards exist)
-  let backTo = ''; // (the room one was in before the page loaded itself again: gone back to)
+  // (the room one was in before the page loaded itself again — a refresh, a new version —: gone back to, as
+  // long as the address still asks for the same thing)
+  let backTo = (() => { try { const kept = JSON.parse(store.get('mmf.room', true)); return kept && kept.asked === (params.get('room') || '') ? cleanRoom(kept.room) : ''; } catch { return ''; } })();
+  let inRoom = ''; // (the room one is in, once one is in one)
+  const roomInfo = () => (presence && presence.mode === 'online' ? { name: presence.room, label: presence.label, several: /^Room (?!1$)/.test(presence.label) || (roster.rooms || []).some((r) => r.name !== presence.room) } : null);
   const startPresence = () => {
-    presence = new Presence({ name, color, kit: packKit(kit), ...(backTo && { room: backTo }) });
+    presence = new Presence({ name, color, kit: packKit(kit), ...(backTo && { back: backTo }) });
+    // which room: said when one is entered — and when the one that was asked for could not be
+    presence.on('room', (e) => {
+      // (the address follows the room, when it names one: a friend who is given this address joins the right room)
+      if (params.has('room') && cleanRoom(params.get('room')) !== e.room) {
+        try { const u = new URL(location.href); u.searchParams.set('room', e.room); history.replaceState(history.state, '', u); params.set('room', e.room); } catch { /* an address that cannot be rewritten */ }
+      }
+      store.set('mmf.room', JSON.stringify({ room: e.room, asked: params.get('room') || '' }), true);
+      // (a name the address did not ask for — a page served under a folder of its own — is not worth a word)
+      const lost = e.closed ? (params.has('room') ? `"${e.closed}" is not a room of the fair` : '') : e.full ? `${roomLabel(e.full)} is full` : e.gone ? `${roomLabel(e.gone)} is no longer open` : '';
+      if (lost) hud.note(e.moved ? `${lost}: you are in ${e.label}.` : `${lost}: you stay in ${e.label}.`, 7000);
+      else if (e.moved && inRoom) {
+        hud.note(`You are in ${e.label} now.`, 4500);
+        hud.addChat('✦', 5, `You are in ${e.label} now: who you see and the chat are those of this room.`, true);
+      }
+      if (e.moved) hud.offer(null);
+      inRoom = e.room;
+      refreshRooms();
+    });
+    // this room has gone quiet, another has room: an offer — nobody is moved
+    presence.on('quiet', ({ to, label, n }) => {
+      const text = `This room has gone quiet. ${label} has ${n} visitor${n === 1 ? '' : 's'}, and room for you.`;
+      hud.addChat('✦', 5, `${text} "Who is here" lists the rooms: you change with a click, and stay where you stand.`, true);
+      if (!busyNow()) hud.offer(text, `Join ${label}`, () => changeRoom(to));
+    });
     // what is released has changed (the owner threw a switch): said to the whole room at once
     presence.on('release', (news) => updates.hear(news));
     // a word from the fair, to every room
@@ -254,9 +282,10 @@ async function boot() {
       if (!ok && who.admin && !who.owner) (out ? adminKey('') : adminKey(who.key)).then(() => { if (!who.admin) hud.note('You are an administrator no more.', 6000); });
     });
     if (who.key) presence.setAdminKey(who.key);
+    presence.setBadge(badgeOn && who.admin);
     // no toast when the list is merely rebuilt because the connection changed (local <-> online)
     let shownMode = presence.mode;
-    presence.on('status', ({ mode, count }) => { shownMode = mode; hud.setPresence(mode, count, presence.shard); });
+    presence.on('status', ({ mode, count }) => { shownMode = mode; hud.setPresence(mode, count, roomInfo()); });
     // (in a crowd, comings and goings are not announced)
     presence.on('join', (peer) => { if (presence.mode === shownMode && presence.count <= 30) hud.note(`${peer.name} joined`); if (hud.rosterOpen) showRoster(); });
     presence.on('leave', (peer) => { if (presence.mode === shownMode && presence.count <= 30) hud.note(`${peer.name} left`); if (hud.rosterOpen) showRoster(); });
@@ -265,7 +294,29 @@ async function boot() {
   };
 
   // ---------- who is here (and, for the administrator, where from; putting out, keeping out)
-  const roster = { details: null, bans: null, admins: null, visitors: null, now: 0 };
+  const roster = { details: null, bans: null, admins: null, visitors: null, rooms: null, now: 0 };
+  let badgeOn = store.get('mmf.badge') === '1'; // (an administrator who lets it be known: a badge on their name)
+  // the rooms one may change to (the common rooms: how many each holds): asked when a room is entered, when the
+  // list is opened, and now and then
+  const refreshRooms = async () => {
+    roster.rooms = presence ? await presence.rooms() : null;
+    if (presence) hud.setPresence(presence.mode, presence.count, roomInfo());
+    if (hud.rosterOpen) showRoster();
+  };
+  setInterval(() => { if (presence?.mode === 'online' && !document.hidden) refreshRooms(); }, 4 * 60_000);
+  // to another room, without loading the page again: one stays where one stands
+  const changeRoom = async (to) => {
+    if (!presence || presence.mode !== 'online') return;
+    if (fair.session || world.games.run.state === 'running' || player.riding) { hud.note('Finish what you are doing first: then change room.', 4500); return; }
+    hud.note(`Joining ${roomLabel(to)}…`, 3000);
+    await presence.switchRoom(to);
+  };
+  // a link for a friend: whoever opens it joins this room, if it has room
+  const copyRoomLink = async (room) => {
+    const u = new URL(location.href);
+    u.search = ''; u.hash = ''; u.searchParams.set('room', room);
+    try { await navigator.clipboard.writeText(u.href); hud.note('Link copied: whoever opens it joins you in this room, if it has room.', 5500); } catch { hud.note(u.href, 14000); }
+  };
   const showRoster = () => {
     const p = player.pos, zoneOf = (x, z) => { let best = null, bd = 1; for (const zn of PLACES) { if (zn.hidden) continue; const d = Math.hypot(x - zn.x, z - zn.z) / zn.r; if (d < bd) { bd = d; best = zn; } } return best ? best.name : ''; };
     const people = [{ id: presence?.id || 0, name, color, me: true, where: zoneOf(p.x, p.z) }];
@@ -275,7 +326,7 @@ async function boot() {
         people.push({ id: o.id, name: o.name, color: o.color, where: known ? `${d < 1000 ? `${Math.round(d)} m away` : 'far away'}${zoneOf(o.x, o.z) ? ` · ${zoneOf(o.x, o.z)}` : ''}` : '' });
       }
     }
-    hud.showRoster({ people, mode: presence?.mode || 'offline', admin: who.admin && presence?.admin, owner: who.owner, details: roster.details, bans: roster.bans, admins: roster.admins, visitors: roster.visitors, now: roster.now });
+    hud.showRoster({ people, mode: presence?.mode || 'offline', admin: who.admin && presence?.admin, owner: who.owner, details: roster.details, bans: roster.bans, admins: roster.admins, visitors: roster.visitors, now: roster.now, rooms: roster.rooms, room: roomInfo(), badge: badgeOn });
   };
   const refreshRoster = async () => {
     if (!who.admin) return;
@@ -398,6 +449,15 @@ async function boot() {
     if (!sent) { hud.note('Not so fast: a line every two seconds'); return; }
     hud.addChat(name, color, sent, true, important ? 'important' : near ? 'near' : '');
     hud.say(hud.selfTag, sent);
+    // the first three lines said nearby: a word on who reads them, and on how to talk to everybody (a cave has
+    // its own rule, and says so itself)
+    if (near && !player.cave) {
+      const told = Number(store.get('mmf.nearTold')) || 0;
+      if (told < 3) {
+        store.set('mmf.nearTold', String(told + 1));
+        hud.addChat('✦', 5, 'Only people close to you (20 m) can read what you say. Switch to "Everyone" — the green button left of the box, or Tab — to chat with the whole oasis.', true);
+      }
+    }
   };
   // the climb: a clock while climbing, the board of the best times at the gate
   const skyScores = new Scores('sky');
@@ -1252,6 +1312,7 @@ async function boot() {
     }
     if (!who.admin) { who.key = ''; who.owner = false; }
     presence?.setAdminKey(who.key);
+    presence?.setBadge(badgeOn && who.admin);
     hud.setAdmin(who.admin);
     pending = who.admin ? (await shop.all(who.key)) || {} : {};
     refreshShop();
@@ -1284,6 +1345,7 @@ async function boot() {
       if (state.mode === 'free') toggleCamera();
       who.admin = false; who.owner = false; who.key = '';
       presence?.setAdminKey('');
+      presence?.setBadge(false);
       hud.setAdmin(false);
       pending = {};
       refreshShop();
@@ -1313,7 +1375,18 @@ async function boot() {
     .on('interact', () => { if (fair.session) { if (!fair.session.over || fair.kind === 'arcade') { endGame(); hud.note('Game left.'); } } else interact.press(0); })
     .on('interact2', () => interact.press(1))
     .on('say', say)
-    .on('roster', () => { showRoster(); refreshRoster(); })
+    .on('roster', () => { showRoster(); refreshRoster(); refreshRooms(); })
+    .on('room', (to) => changeRoom(to))
+    .on('badge', () => {
+      // the administrator's badge: worn or not, as they choose — kept by this browser, shown by the relay only
+      // while their key is recognised
+      badgeOn = !badgeOn;
+      store.set('mmf.badge', badgeOn ? '1' : '0');
+      presence?.setBadge(badgeOn && who.admin);
+      hud.note(badgeOn ? 'Your ADMIN badge is on: everybody who sees you sees it.' : 'Your ADMIN badge is off.', 5000);
+      if (hud.rosterOpen) showRoster();
+    })
+    .on('roomlink', (room) => copyRoomLink(room))
     .on('visitorview', (on) => visitorView(on))
     .on('kick', (id) => { presence?.kick(id); setTimeout(refreshRoster, 500); })
     .on('ban', (id, hours) => { presence?.ban(id, hours); setTimeout(refreshRoster, 800); })

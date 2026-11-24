@@ -3,7 +3,10 @@
 // No authority over the game: every client shares its own avatar state and a room hands those states on.
 //
 // Protocol (JSON text frames)
-//   client → server   {t:'hello',name,color,v:2,dev?,k?,s?,b?}   {t:'s',p:[x,y,z,yaw],a,f}   {t:'e',e}   {t:'c',m,n?}
+//   client → server   {t:'hello',name,color,v:2,dev?,k?,s?,b?,ad?}   {t:'s',p:[x,y,z,yaw],a,f}   {t:'e',e}   {t:'c',m,n?}
+//                     (ad: 1 — an administrator who wants it known: once the relay has recognised their key, the
+//                     others are told so — `ad` in `join` and in the peers of `welcome` — and show a badge; from
+//                     anybody else it changes nothing)
 //                     (b: which version of the game the page is — a few letters; the owner is told how many
 //                     are still on an older one)
 //                     (s: a name the page gave itself when it opened. A page that says hello again — its line
@@ -28,6 +31,10 @@
 //                     every page was last asked to refresh (f) — said to a whole room when the owner changes
 //                     something; {t:'say',m}   a word from the fair to every room (server/release.js). A
 //                     browser that does not know these two ignores them.
+//                     {t:'quiet',to,n}   this room has gone quiet: room `to` holds `n` visitors and has room for
+//                     everybody here (the door's offer, see rooms.js — nobody is moved)
+//                     {t:'closed'}   said instead of a welcome, before hanging up: that name is not a room one
+//                     may open (door.js: the switch freeRooms)
 //                     {t:'kicked',ban}   {t:'promoted',key,by} (to who has just been named: the key of their
 //                     own)   {t:'promoted',id} (to who named them)   {t:'gift',by} (to who was given something:
 //                     nothing is given by this message — the shop is, and it only believes the administrator)
@@ -158,10 +165,11 @@ export class Room {
   /**
    * A connection arrives. Returns its player, or null when the room is full (the host says so and closes).
    * `known` ({ id, name, color, joined, state, ip, ua, dev, sid, admin, since }) restores a player whose connection
-   * outlived the host's memory; `from` ({ ip, ua }) is what the host knows of a new one.
+   * outlived the host's memory; `from` ({ ip, ua }) is what the host knows of a new one — with `max` when the
+   * door has its own idea of how many the room may hold just now, and `pass` for the owner, who always gets in.
    */
   add(connection, known, from) {
-    if (!known && this.players.size >= this.io.max) return null;
+    if (!known && !from?.pass && this.players.size >= (Number.isFinite(from?.max) ? from.max : this.io.max)) return null;
     const t = this.io.now();
     const p = {
       conn: connection, id: known ? known.id : this.io.id ? this.io.id() : this.nextId, name: 'Visitor', color: 0, kit: 0, joined: false,
@@ -174,7 +182,7 @@ export class Room {
     };
     if (known) {
       p.name = cleanName(known.name); p.color = int(known.color, 31); p.kit = int(known.kit, 255); p.joined = !!known.joined;
-      p.dev = cleanDevice(known.dev); p.sid = cleanSession(known.sid); p.build = cleanBuild(known.build); p.admin = !!known.admin;
+      p.dev = cleanDevice(known.dev); p.sid = cleanSession(known.sid); p.build = cleanBuild(known.build); p.admin = !!known.admin; p.badge = !!known.badge;
       p.rank = !known.admin ? '' : known.admin === 'admin' ? 'admin' : 'owner'; p.key = typeof known.key === 'string' ? known.key.slice(0, 12) : '';
       if (Array.isArray(known.state) && known.state.length === 6 && known.state.every(Number.isFinite)) { p.state = known.state; p.row = `[${p.id},${p.state.join(',')}`; p.ver = 1; }
     }
@@ -270,8 +278,10 @@ export class Room {
       const who = !answer ? null : answer === true ? { rank: 'owner', id: '' } : typeof answer === 'string' ? { rank: answer === 'admin' ? 'admin' : 'owner', id: '' } : answer;
       const ok = !!who;
       if (!ok) p.tries++;
+      const was = p.admin;
       p.admin = ok; p.rank = ok ? (who.rank === 'admin' ? 'admin' : 'owner') : ''; p.key = ok ? String(who.id || '').slice(0, 12) : '';
       this.io.send(p.conn, `{"t":"admin","ok":${ok}${p.rank === 'owner' ? ',"owner":true' : ''}}`);
+      if (was !== ok) this._badge(p);
       this.io.save?.(p);
     };
     let answer = false;
@@ -287,7 +297,7 @@ export class Room {
     if (m.t === 'demote') {
       // the owner has taken the title away from whoever holds that key: they are an administrator no more
       if (p.rank !== 'owner' || typeof m.key !== 'string' || !m.key) return;
-      for (const o of this.players.values()) if (o.rank === 'admin' && o.key === m.key) { o.admin = false; o.rank = o.key = ''; this.io.send(o.conn, '{"t":"admin","ok":false,"out":true}'); this.io.save?.(o); }
+      for (const o of this.players.values()) if (o.rank === 'admin' && o.key === m.key) { o.admin = false; o.rank = o.key = ''; this.io.send(o.conn, '{"t":"admin","ok":false,"out":true}'); this._badge(o); this.io.save?.(o); }
       return;
     }
     const target = [...this.players.values()].find((o) => o.id === m.id);
@@ -311,8 +321,13 @@ export class Room {
     (this.io.kick || this.io.drop)(target.conn, ban ? 4003 : 4001, ban ? 'banned' : 'kicked');
   }
 
+  // The badge of an administrator who wants it known has just appeared, or gone: the others are told.
+  _badge(p) {
+    if (p.joined && p.badge) this.broadcast(JSON.stringify({ t: 'join', id: p.id, name: p.name, color: p.color, ...(p.kit && { k: p.kit }), ...(p.admin && { ad: 1 }) }), p);
+  }
+
   _hello(p, m) {
-    const name = cleanName(m.name), color = int(m.color, 31), kit = int(m.k, 255);
+    const name = cleanName(m.name), color = int(m.color, 31), kit = int(m.k, 255), badge = m.ad === 1;
     if (!p.dev) p.dev = cleanDevice(m.dev);
     if (!p.build) p.build = cleanBuild(m.b);
     if (!p.sid) {
@@ -321,14 +336,14 @@ export class Room {
       // it leaves at once (two tabs are two pages: both stay)
       if (p.sid && p.dev) for (const o of [...this.players.values()]) if (o !== p && o.sid === p.sid && o.dev === p.dev) { this.remove(o.conn); this.io.drop(o.conn, 4002, 'again'); }
     }
-    if (p.joined && name === p.name && color === p.color && kit === p.kit) return;
-    p.name = name; p.color = color; p.kit = kit;
+    if (p.joined && name === p.name && color === p.color && kit === p.kit && badge === p.badge) return;
+    p.name = name; p.color = color; p.kit = kit; p.badge = badge;
     if (!p.joined) {
       p.joined = true;
       // (in a crowd, where the others are comes with the first batch of those around)
       const crowded = this.joined > this.near + 1;
       const peers = [...this.players.values()].filter((o) => o.joined && o !== p)
-        .map((o) => ({ id: o.id, name: o.name, color: o.color, ...(o.kit && { k: o.kit }), ...(o.state && !crowded && { p: o.state.slice(0, 4), a: o.state[4], f: o.state[5] }) }));
+        .map((o) => ({ id: o.id, name: o.name, color: o.color, ...(o.kit && { k: o.kit }), ...(o.admin && o.badge && { ad: 1 }), ...(o.state && !crowded && { p: o.state.slice(0, 4), a: o.state[4], f: o.state[5] }) }));
       const welcome = { t: 'welcome', id: p.id, now: this.io.now(), tick: this.io.tick, near: this.near, peers };
       if (this.io.idle !== undefined) welcome.idle = this.io.idle;
       // (the big red button: how long before it is ready again, how long ago it went off)
@@ -336,7 +351,7 @@ export class Room {
       this.io.send(p.conn, JSON.stringify(welcome));
       this.pending = true; // (the crowd may have just become one)
     }
-    this.broadcast(JSON.stringify({ t: 'join', id: p.id, name, color, ...(kit && { k: kit }) }), p);
+    this.broadcast(JSON.stringify({ t: 'join', id: p.id, name, color, ...(kit && { k: kit }), ...(p.admin && badge && { ad: 1 }) }), p);
     this.io.save?.(p);
   }
 

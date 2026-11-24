@@ -21,7 +21,7 @@
   "vars": {
     // How many visitors a room holds before the next ones gather in another (each is told in detail about
     // the forty nearest: see server/protocol.js).
-    "MAX_PLAYERS": "250",
+    "MAX_PLAYERS": "200",
     "TICK_MS": "100",
     // Comma separated origins allowed to open the multiplayer socket. Empty: the site's own address only.
     "ALLOWED_ORIGINS": ""

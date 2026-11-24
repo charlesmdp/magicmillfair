@@ -1,13 +1,14 @@
 // Atomic Oasis — production server: static files from dist/ plus the multiplayer presence relay on /ws.
 // The server has no authority over the game: every client shares its own avatar state and the server only
 // batches those states to the other members of the room at a fixed tick.
-// Environment: PORT (8787), HOST (0.0.0.0), TICK_HZ (12), MAX_PLAYERS (250, per room), DIST_DIR (../dist) and
+// Environment: PORT (8787), HOST (0.0.0.0), TICK_HZ (12), MAX_PLAYERS (200, per room), DIST_DIR (../dist) and
 // ALLOWED_ORIGINS (comma separated origins allowed to open the WebSocket; default: same host and localhost).
 // The relay itself (protocol, validation, batching) is in ./protocol.js, shared with the Cloudflare version.
 // It also answers the game's small API (./routes.js): the leaderboards, the visits… (kept in SCORES_FILE, by
 // default data/scores.json) and the characters one can talk to (/api/npc, when ANTHROPIC_API_KEY is set;
 // NPC_MODEL picks the model). ADMIN_KEY is the administrator's key (none: nobody is the administrator).
 // The version online is read from dist/version.json (written by the build); BUILD_ID says it instead (tests).
+// FREE_ROOMS=1: the rooms by address (?room=a-name) are open where the owner decided nothing (tests, development).
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -21,6 +22,8 @@ import { Limiter, LIMITS, BODY_MAX, allowed, parseBody, mayPost, bodyMax } from 
 import { stripeConfig } from './stripe.js';
 import { restMailer } from './mail.js';
 import { route, banned, addBan } from './routes.js';
+import { knock, roomRules, settle } from './door.js';
+import { newDirectory, noteRoom } from './rooms.js';
 import { adminOf, looksNamed, nameAdmin } from './admins.js';
 import { geoFromHeaders } from './visitors.js';
 import { randomId, sameSecret, bearerKey } from './token.js';
@@ -35,7 +38,7 @@ const DIST = path.resolve(process.env.DIST_DIR || path.join(ROOT, 'dist'));
 const PORT = Math.floor(env('PORT', 8787, 0, 65535));
 const HOST = process.env.HOST || '0.0.0.0';
 const TICK_HZ = env('TICK_HZ', 12, 1, 60);
-const MAX_PLAYERS = Math.floor(env('MAX_PLAYERS', 250, 1, 4096)); // per room
+const MAX_PLAYERS = Math.floor(env('MAX_PLAYERS', 200, 1, 4096)); // per room (the owner can lower it from the back office, never raise it)
 const ALLOWED_ORIGINS = parseOrigins(process.env.ALLOWED_ORIGINS);
 const HEARTBEAT_MS = 15000;
 const SCORES_FILE = path.resolve(process.env.SCORES_FILE || path.join(ROOT, 'data', 'scores.json'));
@@ -184,7 +187,18 @@ const api = {
   build: buildId,
   push: async (message) => { const text = JSON.stringify(message); let told = 0; for (const room of rooms.values()) if (room.joined) { room.broadcast(text); told++; } return told; },
   here: async () => census().players,
-  rooms: async () => [...rooms].map(([name, room]) => ({ name, ...room.census(buildId()) })),
+  // the rooms and their door (door.js, rooms.js): here the rooms are simply counted, each time it is asked
+  maxPlayers: MAX_PLAYERS,
+  // (FREE_ROOMS=1: any name written in the address is a room of its own where the owner decided nothing — the
+  // tests and the development server; as delivered, only the common rooms exist: see door.js)
+  releaseBase: /^(1|true|yes)$/i.test(process.env.FREE_ROOMS || '') ? { freeRooms: true } : undefined,
+  directory: async () => {
+    const t = Date.now(), live = buildId(), rules = await roomRules(api);
+    for (const [name, room] of rooms) { const c = room.census(live); noteRoom(directory, name, c.players, c.old, t, rules); }
+    for (const name of Object.keys(directory.rooms)) if (!rooms.has(name)) noteRoom(directory, name, 0, 0, t, rules);
+    return directory;
+  },
+  tell: async (name, message) => { rooms.get(name)?.broadcast(JSON.stringify(message)); },
   flags: { npc: !!NPC.apiKey, admin: !!ADMIN_KEY, shop: STRIPE.mode || 'off', mail: !!MAIL },
   // the secret that signs the notes of the runs: given (SCORE_SECRET), or drawn once and kept with the rest
   async secret() {
@@ -253,6 +267,7 @@ async function onRequest(req, res) {
 // ------------------------------------------------------------------------------------------------- presence
 
 const rooms = new Map(); // room id → Room
+const directory = newDirectory(); // what the door knows of them (rooms.js): which take newcomers, who is on their way
 const blasts = new Map(); // room id → when its big red button last went off (a room that empties is forgotten; this is not)
 let nextId = 1;
 
@@ -287,6 +302,7 @@ function census() {
 function onConnection(ws, roomId, from) {
   ws.on('error', () => {}); // e.g. oversized frame: ws closes the socket itself (1009)
   if (from.banned) { ws.send('{"t":"kicked","ban":true}'); return ws.close(4003, 'banned'); }
+  if (from.closed) { ws.send('{"t":"closed"}'); return ws.close(1013, 'closed'); } // (not a room one may open)
   let room = rooms.get(roomId);
   if (!room) {
     rooms.set(roomId, (room = new Room({ ...io, fired: (at) => { if (blasts.size > 5000) blasts.clear(); blasts.set(roomId, at); } })));
@@ -316,6 +332,8 @@ function heartbeat() {
     p.alive = false;
     p.conn.ping();
   }
+  // (the door puts its rooms in order: one that has emptied goes quiet, and its visitors are offered another)
+  settle(api).catch((err) => console.error('[door]', err.message));
 }
 
 // ------------------------------------------------------------------------------------------------ bootstrap
@@ -330,11 +348,14 @@ server.on('upgrade', (req, socket, head) => {
   const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
   if (pathname === '/ws' && originAllowed(req.headers.origin, host, ALLOWED_ORIGINS)) {
     // who is knocking: the address, the browser, the name the browser gave itself (what a ban holds on to)
-    const q = new URLSearchParams(query);
+    const q = new URLSearchParams(query), roomId = cleanRoom(q.get('room'));
     const from = { ip: String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '', ua: String(req.headers['user-agent'] || ''), ...geoOf(req) };
-    return banned(api, from.ip, q.get('dev') || '').catch(() => false).then((out) => {
-      from.banned = out;
-      wss.handleUpgrade(req, socket, head, (ws) => onConnection(ws, cleanRoom(q.get('room')), from));
+    // kept out? and what the door says of that room: how many it may hold, whether this is the owner (who
+    // always gets in), whether that name is a room at all
+    return Promise.all([banned(api, from.ip, q.get('dev') || '').catch(() => false), knock(api, { room: roomId, pass: q.get('pass') || '' }).catch(() => ({}))]).then(([out, door]) => {
+      from.banned = out; from.closed = !!door.closed; from.pass = !!door.pass;
+      if (Number.isFinite(door.max)) from.max = door.max;
+      wss.handleUpgrade(req, socket, head, (ws) => onConnection(ws, roomId, from));
     });
   }
   socket.on('error', () => {});

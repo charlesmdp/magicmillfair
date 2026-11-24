@@ -6,7 +6,7 @@
 //   GET  /api/status                          → { ok, npc, admin, shop, mail, time, release, refresh, build }   (what is
 //                                                configured — no secret —, what is released and which version is online)
 //   GET | POST /api/release, POST /api/announce    the switches of what is released, a word to every room (release.js)
-//   GET  /api/rooms                           the rooms and how many each holds, for the administrators
+//   GET  /api/door, GET /api/rooms, POST /api/rooms/rules    which room a visitor goes to, the rooms, their rules (door.js)
 //   GET | POST /api/stats, POST /api/stats/set     the game in figures (stats.js)
 //   POST /api/visit  { device, tz }           → { days, best, today }             (see visit())
 //   GET | POST | DELETE /api/scores, POST /api/run                                 (see scores.js)
@@ -28,7 +28,7 @@
 //        mail: async ({ to, subject, text, html }) → sends an e-mail, or null where none can be sent (mail.js),
 //        build(): the version of the files the host serves, push(message): tells every room (release.js),
 //        here(): how many visitors are connected (stats.js),
-//        rooms(): [{ name, players, old }] — the rooms that hold somebody (old: on an older version) }
+//        directory(), keep(), tell(room, message), maxPlayers: the rooms and their door (door.js) }
 // An answer is { status, body, headers }, or { status, bytes, headers } for a picture.
 import { allowed } from './api.js';
 import { BOARDS, addScore, cleanScore, removeScore, runFits, topsOf } from './scores.js';
@@ -40,6 +40,7 @@ import { cleanGeo, noteVisit, visitorsReport } from './visitors.js';
 import { accountRoute, visitRecord } from './accounts.js';
 import { localDay, visit } from './visits.js';
 import { readRelease, releaseNews, releaseRoute } from './release.js';
+import { doorRoute } from './door.js';
 import { statsRoute } from './stats.js';
 import { BOARDS as GAME_NAMES } from './catalog.js';
 
@@ -97,24 +98,21 @@ export async function route(req, ctx) {
   // who is asking: the owner (the host has recognised its key), an administrator the owner or another has
   // named (their key is looked up here), or a visitor
   const owner = !!req.admin;
+  req.owner = owner; // (money is given back by the owner alone: shop.js)
   if (!owner && req.bearer) req.admin = !!(await adminOf(ctx.store, '', req.bearer));
 
   // (with the boards of scores — their names, and what a score on each is: the back office lists them)
   if (path === '/api/admin') return req.admin ? out(200, { ok: true, owner, boards: Object.keys(BOARDS).map((id) => ({ id, name: GAME_NAMES[id] || id, unit: BOARDS[id].order !== 'asc' ? 'points' : BOARDS[id].max <= 10_000 ? 'ms' : 'time' })) }) : out(403, { error: 'Forbidden.' });
 
-  if (path === '/api/rooms') {
-    // the rooms that hold somebody: how many, and how many of them are still on an older version of the game
-    if (!req.admin) return out(403, { error: 'Forbidden.' });
-    if (method !== 'GET' && method !== 'HEAD') return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD' });
-    const rooms = ((ctx.rooms && (await ctx.rooms())) || []).filter((r) => r.players > 0).sort((a, b) => b.players - a.players || a.name.localeCompare(b.name));
-    return out(200, { rooms, players: rooms.reduce((sum, r) => sum + r.players, 0), old: rooms.reduce((sum, r) => sum + (r.old || 0), 0), build: (await releaseNews(ctx)).build });
-  }
+  // which room a visitor is sent to, the rooms and how many each holds, the rules of it all (door.js)
+  const door = await doorRoute(req, ctx, owner);
+  if (door) return door;
 
   // what is released, a word to every room (release.js)
   const released = await releaseRoute(req, ctx, owner);
   if (released) return released;
   // (a board of scores can wait for its game to be released: until then it is as if it did not exist)
-  const shut = async (board) => { const sw = BOARDS[board]?.release; return !!sw && !(await readRelease(ctx.store)).release[sw]; };
+  const shut = async (board) => { const sw = BOARDS[board]?.release; return !!sw && !(await readRelease(ctx)).release[sw]; };
 
   if (path === '/api/admins') {
     if (!req.admin) return out(403, { error: 'Forbidden.' });
