@@ -211,7 +211,9 @@ your colour, your size, your hat, the quality tier. What the server keeps: the b
 a random number drawn by each browser, the days in a row it has visited.
 
 Letter shortcuts (M, F, T, P, R, B…) go by the letter printed on the key, whatever the keyboard; walking goes
-by the place of the keys. Settings also offers *The camera turns with the character*.
+by the place of the keys — W A S D on an American keyboard, the same four keys whatever is printed on them
+elsewhere. The camera turns with the walker by itself; Settings offers *The camera always stays behind the
+character* for who wants it to turn as fast as they do (off unless asked for).
 
 **Commands** are typed in the chat and sent to nobody: `/kill`, `/sit`, the emotes by name — and a few
 secret words that do silly things. They are written nowhere: the game only knows their fingerprints (see

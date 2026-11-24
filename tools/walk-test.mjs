@@ -1030,7 +1030,7 @@ try {
           if (s.laps !== laps.length) laps.push(+S.clock.toFixed(2));
         }
         input.move.x = 0; input.move.y = 0;
-        const out = { ask, start: /^(Red|Blue|Green|Yellow|Purple|Orange)$/.test(s.start.name) && s.start.wait >= 3.2 && s.start.wait <= 8.3, over: s.over, time: s.time, laps, air, boost, top, still, flight, lamps, slowest: +slowest.toFixed(1), widest: +widest.toFixed(2), off, riding: player.riding, quad: !!player.driver };
+        const out = { ask, start: /^(Red|Blue|Green|Yellow|Purple|Orange)$/.test(s.start.name) && s.start.wait >= 0.55 && s.start.wait <= 5.7, over: s.over, time: s.time, laps, air, boost, top, still, flight, lamps, slowest: +slowest.toFixed(1), widest: +widest.toFixed(2), off, riding: player.riding, quad: !!player.driver };
         for (let k = 0; k < 60 * 4 && app.fair.session; k++) app.fairStep(dt);
         out.after = { closed: !app.fair.session, riding: player.riding, driver: !!player.driver, d: Math.hypot(player.pos.x - r.start.x, player.pos.z - r.start.z) };
         out.keys = keys; out.keysGone = !keysOn();

@@ -158,10 +158,13 @@ async function boot() {
   scene.add(world.sparks.mesh);
   const timers = {}; // cheats that wear off: name → seconds left
   // habits kept from one visit to the next
-  // (running, and the camera that turns with the character, are on unless the visitor switched them off)
-  const settings = { run: store.get('mmf.run') !== '0', follow: store.get('mmf.follow') !== '0' };
+  // (running is on unless the visitor switched it off; the camera that always stays behind the character is
+  // off unless they switched it on. The camera turns with the walker for everybody — it was a setting that
+  // nobody left off: only the tools still switch it off, for a camera that stays where they put it)
+  const settings = { run: store.get('mmf.run') !== '0', behind: store.get('mmf.behind') === '1' };
   player.autoRun = settings.run;
-  rig.follow = settings.follow;
+  rig.follow = !((import.meta.env.DEV || typeof __LAB__ !== 'undefined' || typeof __TEST__ !== 'undefined') && store.get('mmf.follow') === '0');
+  rig.behind = settings.behind;
   // who is visiting: `admin` once the server has recognised the administrator's key; `days`: visits in a row
   const who = { admin: false, owner: false, key: '', days: 1 };
   app.who = who;
@@ -1601,7 +1604,7 @@ async function boot() {
       settings[key] = on;
       store.set(`mmf.${key}`, on ? '1' : '0');
       player.autoRun = settings.run;
-      rig.follow = settings.follow;
+      rig.behind = settings.behind;
     })
     .on('color', (i) => { if (i >= FREE_COLORS && !shop.hasPass) return; color = i; me.setColor(i); store.set('mmf.color', String(color)); presence?.setIdentity(name, color); shopView.stale(); keepProfile(); })
     .on('size', (i) => { if (i && !shop.hasPass) return; size = i; store.set('mmf.size', SIZES[size]); keepProfile(); })

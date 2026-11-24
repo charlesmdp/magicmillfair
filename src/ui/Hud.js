@@ -275,7 +275,7 @@ export class Hud {
         <div class="row"><span>Music</span><input type="range" class="vol" data-vol="music" min="0" max="100" step="5" aria-label="Volume of the music" /></div>
         <h3>Controls</h3>
         <div class="row"><span>Run by default <small>(Shift walks)</small></span><button class="switch" data-set="run" aria-pressed="false" aria-label="Run by default"></button></div>
-        <div class="row"><span>The camera turns with the character</span><button class="switch" data-set="follow" aria-pressed="false" aria-label="The camera turns with the character"></button></div>
+        <div class="row"><span>The camera always stays behind the character <small>(it turns as fast as they do)</small></span><button class="switch" data-set="behind" aria-pressed="false" aria-label="The camera always stays behind the character"></button></div>
         <h3>Hats, jetpacks, paint</h3>
         <button class="open-shop" type="button">Open the item shop</button>
         <h3>Your robot</h3>
