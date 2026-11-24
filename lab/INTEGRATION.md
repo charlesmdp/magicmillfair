@@ -1,6 +1,6 @@
 # The extras: what is on this branch, and what it takes to make each part of the game
 
-Everything here was added **without changing a file of the game**: only new files. Five things can be switched
+Everything here was added **without changing a file of the game**: only new files. Eight things can be switched
 on over the game as it stands, each on its own, and with every switch off the game is exactly the game as it was.
 
 | Switch | What it is | Its files | Its checks |
@@ -8,8 +8,15 @@ on over the game as it stands, each on its own, and with every switch off the ga
 | `slide` | **Mostly Down**, the water slide | `src/world/zones/games/slide/`, `src/extras/slide.js` | `node tools/slide-test.mjs` |
 | `pond` | **The Endless Pond**, a circuit one runs round and round on the Great Pond | `src/world/zones/games/pond/`, `src/extras/pond.js` | `node tools/pond-test.mjs` (26) |
 | `boats` | **The Little Regatta**, radio-controlled boats racing on the Great Pond | `src/world/zones/games/boats/`, `src/extras/boats.js` | `node tools/boats-test.mjs` (18) |
+| `hill` | **Uphill Battle**, up a long slope while logs, barrels and boulders roll down it | `src/world/zones/games/hill/`, `src/extras/hill.js` | `node tools/hill-test.mjs` (12) |
+| `crack` | **Between a Rock**, up a cleft of the sea cliff, from wall to wall | `src/world/zones/games/crack/`, `src/extras/crack.js` | `node tools/crack-test.mjs` (26) |
+| `hollow` | **The Hollow Hill**, a race flown under the ground, one lap against the clock | `src/world/zones/games/hollow/`, `src/extras/hollow.js` | `node tools/hollow-test.mjs` (29) |
 | `caves` | The caves are safe places: nearby chat only | `src/extras/caves.js` | `node tools/extras-test.mjs` (15, with the next) |
 | `stats` | The game in figures: counters, the page `/opendata`, a line in the settings | `src/extras/stats.js`, `server/stats.js`, `public/opendata/`, `public/opendate/` | the same |
+
+`node tools/games-test.mjs` (13) plays the cleft, the cave and the slope through in the running game, in a headless
+browser: with every switch off nothing of them is there; switched on they are built, offered at their gates,
+played by their own bots, and the player is let go where it should be.
 
 Also here: the icon (`lab/favicon/`, the "reactor" colours), the lab page with its switches (`lab/`), a server
 for the lab (`lab/worker.js`, `lab/wrangler.jsonc`). What else lies under `lab/` is the lab's own (trials that
@@ -24,7 +31,7 @@ one the game keeps in `window.__mmf`). `src/extras/index.js` loads those that ar
 others is downloaded. In `src/main.js`, once the game runs (after `app.ready = true`):
 
 ```js
-import('./extras/index.js').then(({ loadExtras }) => loadExtras(app, { slide: false, pond: false, boats: false, caves: true, stats: true }));
+import('./extras/index.js').then(({ loadExtras }) => loadExtras(app, { slide: false, pond: false, boats: false, hill: false, crack: false, hollow: false, caves: true, stats: true }));
 ```
 
 That object is the whole of "with or without the slide": it can sit in `src/app/config.js`, or come from the
@@ -38,7 +45,7 @@ npx vite --config lab/vite.config.js
 ```
 
 then open `/lab/`. It is the whole game, with a small panel ("LABO") of switches and a button that takes one to
-the slide. The switches are also in the address: `/lab/?slide=0&caves=1`. On that page the visitor is the
+each game. The switches are also in the address: `/lab/?slide=0&caves=1`. On that page the visitor is the
 administrator of their own browser (the camera with F, the whole shop, every gesture), and the build defines
 `__LAB__` so that the game may go on exposing `window.__mmf` there once it no longer does in production.
 
@@ -98,11 +105,82 @@ buoys each), from before the circuit of The Endless Pond, west along the deck, t
 its far half, round, and back along the south bank — a hundred and fifty-seven metres a lap. One steers from a
 stand on the south bank, the camera riding low behind one's boat, against the clock and against three boats that
 sail by themselves (one starts behind them). A boat gathers way, slides when thrown into a turn, bounces off the
-bank, the buoys and the others, and has a burst of speed that comes back after a few seconds.
+bank, the buoys and the others, and has a burst of speed that comes back after a few seconds — how much of it
+there is shows as a gauge at the end of the line of the run.
 
 The boats are seen only by who races: each visitor has a race of their own (showing them to others would take a
 message of the game's network, which an extra cannot add). The extra calls `app.boatsDone?.(ms, place)`; for the
 game's boards `boats: { order: 'asc', min: 37_000, max: 1800_000 }` (the checks print the rule).
+
+## Uphill Battle
+
+A long open slope between the Great Pond and the old tree, sixty-six metres between two ropes, from an arch to a
+bell. One runs up it; things come down it: logs lie across (jumped, or gone round), barrels wander from side to
+side, boulders are wide — and neither is jumped. All are let go at the top, but the boulders are stopped two
+thirds of the way down and the barrels one third: it gets worse as one climbs. What hits carries one back down a
+few metres, never to the start.
+
+**A start every ten seconds, each with its name** (Red, Blue, Green… as for the quad race): what rolls goes by the
+clock of the world and the climbs leave together, so friends who take the same start run side by side with the
+same logs coming at them. The action at the gate says which start is next and in how long.
+
+The extra calls `app.hillDone?.(ms)`. For the game's boards: `hill: { order: 'asc', min: 9000, max: 600_000 }`
+(the checks print the rule).
+
+## Between a Rock
+
+A cleft between two ribs of rock laid on the sea cliff at the south end of the bay (it leans back against the
+cliff, fifteen degrees): forty metres from the planks at its foot to a bell at its lip. One goes up it from wall
+to wall: a kick off one wall carries across to the other, where one holds a moment — then slides. Who does
+nothing goes down; a kick taken while sliding is a weaker one. Five stretches of eight metres, each wider than
+the last (a kick gains 1.6 m at the bottom, less than a metre at the top), each adding one thing: nothing; thorns,
+which throw off whoever lands in them; polished rock, on which one hardly holds; moss, on which one does not;
+stones that come down one wall or the other by the clock of the world. A net at the top of each stretch: one goes
+up through it, and it catches whoever falls — never more than eight metres lost.
+
+Two beads of light on the walls show where a kick taken now would land (the white one), and a steep kick (the
+small yellow one, "up" held); they turn red when that is into thorns or under a stone. That is what makes it a
+game of reading the way up and not of hammering a key: the checks have a climber that only kicks, thrown off a
+dozen times and not up in a minute, and one that reads the beads, up in twenty seconds.
+
+**What it adds to the world** (only when it is on): the two ribs and what is between them (one group, `cleft`,
+which casts its shadow), a walkway on piles from the sand of the beach to a landing before the cleft — and, so
+that one can walk there, `collision.addPlatform` (the planks), `collision.addArea` (a polygon round them: the
+landing stands a few metres beyond the edge of the bay) and two `collision.addBox` (the feet of the ribs).
+
+The extra calls `app.crackDone?.(ms)`. For the game's boards: `crack: { order: 'asc', min: 10_000, max: 1800_000 }`.
+
+## The Hollow Hill
+
+A race flown under the ground: one lap of a great cave dug in the hill behind the sea cliff — a ring of galleries
+and halls 558 metres round, from eight to thirty metres wide, never less than nine metres of rock over it, its
+floor above the sea. Nothing of it shows outside but the mouth of a mine at the foot of the cliff, by the walkway
+of the cleft, where one asks to fly (one is put in the Start Hall; a count of three; at the end one is put back
+outside).
+
+One flies by oneself and only steers — left and right, up and down — and bursts, on a gauge shown at the end of
+the line of the run: a full one lasts three seconds, it comes back by itself in sixteen, and each of the eighteen
+rings flown through gives a third of it back. The inside of a bend is the shorter way: in the Screw one gains a
+quarter on who flies the middle. What one hits — columns, teeth of rock from the roof and from the floor, boulders,
+arches over the lake, curtains of rock with one hole, beams of crystal — does not end the flight: it throws one
+aside and all but stops one, and the clock runs on. The walls rub.
+
+Ten stretches, each with its own light (painted in the vertices, like the game's other caves; the mesh casts no
+shadow and is not in the shadow pass): The Start Hall, The Lantern Gallery, The Forest of Columns, The Teeth, The
+Screw (once and a quarter round a pillar, going down, under glow-worms), The Lake, The Curtains, The Narrows, The
+Crystal Hall, The Way Home.
+
+The extra calls `app.hollowDone?.(ms, knocks)`. For the game's boards: `hollow: { order: 'asc', min: 16_000, max: 600_000 }`
+(the bot's clean lap is 23.07 s; the checks print the rule). The flyer of another visitor is seen where the game
+puts it, as for the slide: each has a flight of their own in the same cave.
+
+## The keys of a game, at any time
+
+While one of these games is on, a small button under the line of the run ("H · keys" — "? keys" on a phone) and
+the H key show its keys again, a line for each, in a panel of their own (`src/extras/help.js`: `keysHelp(app).set(text)`
+when a game opens, `.clear()` when it closes; the keys are given with " · " between them). The game's own games
+could use the same two calls. The note of the game (`hud.note`) is one line, cut short on a narrow screen: that is
+why the keys are not said there.
 
 ## The caves are safe places
 

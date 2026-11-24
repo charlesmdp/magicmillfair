@@ -251,7 +251,7 @@ export class Hollow {
    */
   open(player, io) {
     const H = HOLLOW, C = course(), events = [], input = { x: 0, y: 0, burst: false }, st = startFlight();
-    const S = { cam: null, look: V(0, 0, 0), after: 0, acc: 0, last: 9, shake: 0, fov: 70, was: false }, _t = V(0, 0, 0), pose = {}, p = {};
+    const S = { cam: null, look: V(0, 0, 0), after: 0, acc: 0, last: 9, shake: 0, fov: 70, was: false, hold: false }, _t = V(0, 0, 0), pose = {}, p = {};
     for (const m of this.rings) m.visible = true;
     const session = {
       hollow: this, over: false, ended: false, time: 0, line: '', riding: false, anim: ANIM.swim, state: st, auto: false,
@@ -262,7 +262,10 @@ export class Hollow {
           S.acc += Math.min(dt, 0.25);
           while (S.acc >= H.step && !st.over) { S.acc -= H.step; botInput(st, input); stepFlight(st, H.step, input, events); }
         } else {
-          input.x = control ? inp.move.x : 0; input.y = control ? inp.move.y : 0; input.burst = control && !!(inp.rise || inp.run);
+          // (the burst: held on a keyboard — Space, or Shift; on a touch screen a tap of the arrow starts it, another stops it)
+          if (control && inp.isTouch && inp.jump) S.hold = !S.hold;
+          if (st.gauge <= 0 || st.stun > 0 || !st.gone) S.hold = false;
+          input.x = control ? inp.move.x : 0; input.y = control ? inp.move.y : 0; input.burst = control && (inp.rise > 0 || !!inp.run || S.hold);
           if (!st.over) stepFlight(st, dt, input, events);
         }
         for (const e of events) {

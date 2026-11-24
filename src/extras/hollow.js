@@ -32,7 +32,7 @@ export function attach(app) {
     flight = cave.open(player, io);
     player.driver = flight;
     app.audio?.play('teleport');
-    keysHelp(app).set(app.input.isTouch ? 'You fly by yourself · the stick steers: left, right, up, down · hold the arrow to burst (the gauge is on the line above; the rings fill it) · what you hit all but stops you'
+    keysHelp(app).set(app.input.isTouch ? 'You fly by yourself · the stick steers: left, right, up, down · tap the arrow to burst, tap again to stop (the gauge is on the line above; the rings fill it) · what you hit all but stops you'
       : 'You fly by yourself · A / D: left, right · W / S: up, down · hold Space (or Shift) to burst — the gauge is on the line above, the rings fill it · what you hit all but stops you · E: leave · H: these keys again');
   };
   world.actionSources.push((p) => {
