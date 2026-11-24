@@ -157,7 +157,7 @@ export class Hollow {
       } else if (t.kind === 'beam') {
         // a great crystal from wall to wall
         const d = p2.clone().sub(p1).normalize(), a = p1.clone().addScaledVector(d, -1.5), b = p2.clone().addScaledVector(d, 1.5);
-        glow.tint(col[0] * 0.34, col[1] * 0.34, col[2] * 0.34, 1).rod(a, b, t.r1 * 0.96, 6, { caps: false });
+        glow.tint(col[0] * 0.24, col[1] * 0.24, col[2] * 0.24, 1).rod(a, b, t.r1 * 0.96, 6, { caps: false });
         glow.tint(0.5, 0.5, 0.55, 1).rod(a, b, t.r1 * 0.3, 4, { caps: false });
       }
     }
