@@ -137,7 +137,7 @@ export function course() {
   hole(305, 2.6); high(312.6);
   stairs(318.5, 2.4, 2.6); hole(323.5, 3.6);
   mill(331.5, 2.0, 0.9);
-  fence(336.5, 1); fence(340.6, -1);
+  fence(336.5, 1); fence(341.6, -1);
   hole(343.2, 1.4, -H, 0.35); // (the track is already going: only the side by the rail is left, to the first plank)
   plank(344.6, 5.2, 0.85, 1); hole(349.8, 2.2); plank(352, 4.6, -0.85, 1); hole(356.6, 1.9); plank(358.5, LENGTH - 358.5 + 0.5, 0, 1.2);
 
@@ -404,9 +404,6 @@ export function botInput(st, out = { side: 0, jump: false, down: false, crouch: 
   }
   return out;
 }
-
-/** The keys of who does nothing at all. */
-export function naiveInput(st, out = { side: 0, jump: false, down: false, crouch: false }) { out.side = 0; out.jump = out.down = out.crouch = false; return out; }
 
 /** Runs with the bot from a start at `t0` (the clock of the world, s): { time (ms), attempts, outs, over, keys, clock (s it took in all) }. */
 export function botRun(t0 = 0, limit = 400) {

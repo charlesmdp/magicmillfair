@@ -5,16 +5,16 @@
 // start sees the same; who only watches is shown a round that began with the minute.
 import * as THREE from 'three';
 import { Parts, MeshBuilder } from '../../../src/world/props/MeshBuilder.js';
-import { LAYER, staticCaster } from '../../../src/render/Shadows.js';
+import { staticCaster } from '../../../src/render/Shadows.js';
 import { ANIM } from '../../../src/player/Character.js';
 import { makeMaterial, GLSL_COMMON, GLSL_SHADOW, GLSL_LIGHTING, GLSL_SURFACE } from '../../../src/render/globals.js';
 import { surfaceMaterial } from '../../../src/render/SurfaceMaterial.js';
 import { PIER, pierToWorld } from '../../../src/world/layout/layout.js';
 import { formatTime } from '../../../src/world/zones/games/course.js';
-import { V, clamp, worldClock, nextStart, STARTS, gateArch } from '../kit.js';
-import { LAVA, CELLS, FIELD, GONE, RISING, UP, WARN, SINKING, makeRound, columnAt, cellAt, startRun, stepRun, botInput } from './rules.js';
+import { V, worldClock, nextStart, STARTS, gateArch } from '../kit.js';
+import { LAVA, CELLS, FIELD, GONE, RISING, WARN, SINKING, makeRound, columnAt, cellAt, startRun, stepRun, botInput } from './rules.js';
 
-const TAU = Math.PI * 2, S3 = Math.sqrt(3);
+const TAU = Math.PI * 2;
 const TONES = { Red: '#e23b2e', Blue: '#2f7fe6', Green: '#2fae4f', Yellow: '#f2c14e', Purple: '#9a5be0', Orange: '#f08a24' };
 const INNER = FIELD + 1.9; // m from the middle: where the lava meets the rock of the crater
 const SHOW = 60; // s: who only watches is shown a round that began so long ago at most
@@ -142,7 +142,6 @@ export class Lava {
     this.best = 0;
     /** The clock everybody shares (ms): the starts are counted on it. */
     this.clock = worldClock;
-    this._shown = { n: NaN, t: NaN };
   }
 
   build() {
@@ -339,7 +338,13 @@ export class Lava {
         for (const e of events) this._tell(e, io);
         events.length = 0;
         // (the column under the feet begins to warn: a tick, once)
-        if (!st.over && st.ground) { const c = cellAt(st.x, st.z); if (c >= 0 && columnAt(st.round, c, st.clock, S.o).state === WARN) { const key = c * 1000 + st.round.lives[c].length; if (S.warned !== key) { S.warned = key; io.play('tick', { volume: 0.7 }); } } }
+        if (!st.over && st.ground) {
+          const c = cellAt(st.x, st.z);
+          if (c >= 0 && columnAt(st.round, c, st.clock, S.o).state === WARN) {
+            const key = c * 1000 + st.round.lives[c].length;
+            if (S.warned !== key) { if (S.warned === null) io.note('Your column glows: it is about to sink. Off it!', 2200); S.warned = key; io.play('tick', { volume: 0.7 }); }
+          }
+        }
         if (st.over) {
           // in the lava: one goes down into it, and that is the end of the round
           S.after += dt; S.sunk = Math.min(1.5, S.sunk + dt * 0.75);
@@ -377,4 +382,3 @@ export class Lava {
     else if (e.type === 'out') { io.play('fail'); io.note(e.time > 0 ? `In the lava! You held ${formatTime(e.time)}.` : 'In the lava before the round had even left.', 3200); }
   }
 }
-void LAYER; void UP; void S3; void clamp;

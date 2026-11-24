@@ -49,7 +49,7 @@ export function plug(app, game, o) {
   const { world, player, hud } = app, KEY = `mmf.${o.id}.best`;
   const read = () => { try { return parseInt(localStorage.getItem(KEY), 10) || 0; } catch { return 0; } };
   game.setBest?.(read());
-  let run = null, saved = false;
+  let run = null, saved = false, told = false;
   const io = {
     play: (name, options) => app.audio?.play(name, options),
     note: (text, ms = 2600) => hud.note(text, ms),
@@ -73,6 +73,10 @@ export function plug(app, game, o) {
     player.driver = run;
     app.audio?.play('teleport');
     keysHelp(app).set(o.keys(!!app.input.isTouch, run));
+    // (the keys are said in full the first time one plays; after that they would only hide what comes, try after
+    // try: the panel is shut again at once — its small button and the H key still show them)
+    if (told) document.querySelector('button[title="Show the keys of this game again"]')?.click();
+    told = true;
     return run;
   };
   world.actionSources.push((p) => {

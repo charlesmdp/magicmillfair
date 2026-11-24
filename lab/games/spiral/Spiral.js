@@ -108,6 +108,12 @@ export class Spiral {
         paint.tint(...(k % 2 ? BLACK : YELLOW), 1).quad(at(h.s0 - 0.34, a, 0.012), at(h.s0 - 0.34, b, 0.012), at(h.s0 - 0.02, b, 0.012), at(h.s0 - 0.02, a, 0.012));
       }
     }
+    // ---- under the planks of the last stretch, a net of dark cloth: against it they show, and the turn below does not
+    for (let s = 343.2; s < LENGTH + 0.5; s += 1.5) {
+      const e = Math.min(LENGTH + 0.5, s + 1.5);
+      paint.tint(0.035, 0.05, 0.13, 1).quad(at(s, -H, -3.1), at(s, H, -3.1), at(e, H, -3.1), at(e, -H, -3.1));
+      paint.tint(0.035, 0.05, 0.13, 1).quad(at(s, H, -3.12), at(s, -H, -3.12), at(e, -H, -3.12), at(e, H, -3.12));
+    }
     // ---- what holds it: a beam and a strut from the wall, twelve to a turn
     for (let s = S0 + 0.4; s < S1; s += TURN / 12) {
       if (holes.some((h) => s > h.s0 - 0.2 && s < h.s1 + 0.2)) continue; // (none under a hole: nothing there looks like something to step on)

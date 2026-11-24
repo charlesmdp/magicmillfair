@@ -1,13 +1,14 @@
 // Checks of Thin Crust, without a browser: the islet stands in the open sea, clear of the pier; the field is
 // sixty-one columns, one step of which is jumped and two are not; a round is the same for everybody and not the
-// next one's; a column warns before it sinks; fewer and fewer stand; nothing is unfair for the first minute; who
-// only stands there is soon in the lava; a column that sinks takes one down with it, the side of a higher one is
-// a wall; a bot holds a good while; the same run on every device.
+// next one's; a column warns before it sinks; fewer and fewer stand; nothing is unfair to begin with — a column
+// that warns has a neighbour to step to, later one to jump to; who only stands there is soon in the lava; a
+// column that sinks takes one down with it, the side of a higher one is a wall; a bot that sees no more than a
+// player holds a good while, a slower one too; the same run on every device.
 // usage: node lab/games/lava/test.mjs
 import { check, done, ground } from '../check.mjs';
 import { PIER, pierToWorld, BOUNDS } from '../../../src/world/layout/layout.js';
 import { nextStart, STARTS } from '../kit.js';
-import { LAVA, CELLS, FIELD, GONE, UP, WARN, SINKING, cellAt, makeRound, columnAt, topAt, standingAt, targetAt, warnTime, startRun, stepRun, botInput, botRun, idleInput } from './rules.js';
+import { LAVA, CELLS, FIELD, GONE, UP, WARN, SINKING, cellAt, makeRound, fairFor, columnAt, topAt, standingAt, targetAt, warnTime, startRun, stepRun, botInput, botRun, idleInput } from './rules.js';
 
 const L = LAVA, height = await ground();
 const run = (st, secs, drive, stop) => { const input = { x: 0, y: 0, jump: false }, events = [], seen = []; for (let t = 0; t < secs && !st.over; t += L.step) { input.jump = false; drive?.(st, input, t); stepRun(st, L.step, input, events); for (const e of events) seen.push({ ...e, at: st.clock }); events.length = 0; if (stop?.(st, seen)) break; } return seen; };
@@ -56,22 +57,22 @@ const on = (round, cell, wait = 0) => { const st = startRun(0, wait, cell); st.r
       if (k === 0) heights[l.level]++;
       if (!(l.rise <= l.up && l.up <= l.warn && l.warn <= l.sink && l.sink <= l.gone) || (k && ls[k - 1].gone > l.rise)) order = false;
       if (l.warn === Infinity) return;
-      first = Math.min(first, l.warn); least = Math.min(least, l.sink - l.warn); if (l.warn < 20) early = Math.min(early, l.sink - l.warn);
+      first = Math.min(first, l.warn); least = Math.min(least, l.sink - l.warn); if (l.warn < 15) early = Math.min(early, l.sink - l.warn);
       if (l.warn >= L.reach) return;
-      // is there somewhere to go from it: a neighbour that stands when it sinks, and half a second more, no higher than a step?
+      // is there somewhere to go from it, in the round as it was finally written: a neighbour to be seen when the
+      // warning begins, that stands when the column sinks and half a second more, no higher than a step?
       fairChecked++;
-      const holds = (y, up) => R.lives[y].some((m) => m.up <= l.sink - 0.35 && m.sink >= l.sink + 0.55 && L.tops[m.level] <= L.tops[l.level] + up);
-      if (CELLS[c].n.some((y) => holds(y, 0.95))) return;
-      if (l.warn >= L.fair && CELLS[c].far.some((f) => holds(f.i, f.gap ? 0.05 : 0.95))) { wide++; return; }
+      if (fairFor(R.lives, c, l, false)) { const y = CELLS[c].n.find((j) => R.lives[j].some((m) => m.rise <= l.warn && m.up <= l.sink - 0.35 && m.sink >= l.sink + 0.55 && L.tops[m.level] <= L.tops[l.level] + 0.95)); if (y === undefined) unfair++; return; }
+      if (l.warn >= L.fair && fairFor(R.lives, c, l, true)) { wide++; return; }
       unfair++;
     }));
   }
   const mean = counts.map((a) => a.reduce((s, v) => s + v, 0) / a.length);
   check('what a column does is in order: it comes up, stands, warns, sinks — and is gone before it comes back', order && lives > 10000, `${lives} lives of columns in sixty rounds; rings, thirds, sweeps, the rim, one by one: ${[...kinds].join(', ')}`);
-  check('nothing warns before two and a half seconds; a column warns before it sinks — 1.4 s early in a round, never less than half a second', first >= L.grace && Math.abs(early - 1.4) < 1e-9 && least > 0.549 && Math.abs(warnTime(0) - 1.4) < 1e-9, `the first warning at ${first.toFixed(2)} s; the shortest ${least.toFixed(2)} s`);
+  check('nothing warns before two and a half seconds; a column warns before it sinks — 1.4 s for the first quarter of a minute, less and less after, never under half a second', first >= L.grace && Math.abs(early - 1.4) < 1e-9 && least > 0.549 && Math.abs(warnTime(0) - 1.4) < 1e-9, `the first warning at ${first.toFixed(2)} s; the shortest ${least.toFixed(2)} s`);
   check('the columns stand at three heights, the middle of the field level', heights[0] > heights[1] && heights[1] > heights[2] && heights[2] > 0 && [9000, 9001, 9002, 9003].every((n) => CELLS.every((c, i) => c.ring > 1 || makeRound(n).lives[i][0].level === 0)), `${heights.map((h) => Math.round((h / 60 / 61) * 100)).join(' % / ')} % of them`);
   check('fewer and fewer stand as the round goes on', mean.every((m, k) => !k || m < mean[k - 1]) && mean[0] === 61 && mean[2] > 30 && mean[4] < 26 && mean[6] < 8 && targetAt(0) === 61 && targetAt(200) === 2, mean.map((m, k) => `${[0, 15, 30, 45, 60, 75, 90, 120][k]} s: ${m.toFixed(0)}`).join(' · '));
-  check(`nothing unfair for ${L.fair} s: a column that warns has a neighbour to step to, no higher than one step; then, to ${L.reach} s, at least one to jump to`, unfair === 0 && fairChecked > 5000, `${fairChecked} warnings looked at, ${wide} of them (after ${L.fair} s) with only a jump to make`);
+  check(`nothing unfair to begin with: for ${L.fair} s a column that warns has a neighbour to step to, no higher than one step; then, to ${L.reach} s, at least one to jump to`, unfair === 0 && fairChecked > 5000 && L.fair >= 30 && L.reach >= L.fair + 20, `${fairChecked} warnings looked at, ${wide} of them (after ${L.fair} s) with only a jump to make`);
 }
 {
   // ---- the columns under the feet
@@ -108,7 +109,9 @@ const on = (round, cell, wait = 0) => { const st = startRun(0, wait, cell); st.r
   check('hammering the jump on the spot saves nobody', hops.every((t) => t < 36000), hops.map((t) => (t / 1000).toFixed(0)).join(' · ') + ' s');
   const runs = []; for (let k = 0; k < 12; k++) runs.push(botRun(5000 + k));
   const good = runs.filter((r) => r.time >= 30000).length, best = Math.max(...runs.map((r) => r.time)), worst = Math.min(...runs.map((r) => r.time));
-  check('a bot holds half a minute and more on most of twelve starts, and in the end the lava has it too', good >= 10 && runs.every((r) => r.over && r.time > 12000) && best < 200000, runs.map((r) => (r.time / 1000).toFixed(1)).join(' · ') + ' s');
+  check(`a bot that sees no more than a player holds the ${L.fair} s in which nothing is unfair on every one of twelve starts, a minute on most — and in the end the lava has it too`, good === 12 && runs.every((r) => r.over && r.time > L.fair * 1000) && runs.filter((r) => r.time >= 60000).length >= 9 && best < 200000, runs.map((r) => (r.time / 1000).toFixed(1)).join(' · ') + ' s');
+  const slow = []; for (let k = 0; k < 12; k++) slow.push(botRun(5000 + k, 300, 0.6));
+  check('one that looks about itself only every six tenths of a second holds half a minute on most of them too', slow.filter((r) => r.time >= 30000).length >= 9 && slow.every((r) => r.over), slow.map((r) => (r.time / 1000).toFixed(1)).join(' · ') + ' s');
   check('every round ends: it is beyond holding long before nothing rises any more', best < (L.end - 60) * 1000 && standingAt(makeRound(5000), L.end + 20) === 0, `the longest ${(best / 1000).toFixed(1)} s, the shortest ${(worst / 1000).toFixed(1)} s`);
   const at = (dt) => { const st = startRun(5003), input = { x: 0, y: 0, jump: false }; let acc = 0; for (let t = 0; t < 300 && !st.over; t += dt) { acc += dt; while (acc >= L.step && !st.over) { acc -= L.step; botInput(st, input); stepRun(st, L.step, input, null); } } return st.time; };
   check('the same run at 30 and at 144 frames a second', at(1 / 30) === at(1 / 144) && at(1 / 30) === runs[3].time);

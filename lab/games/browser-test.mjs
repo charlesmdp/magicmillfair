@@ -82,7 +82,11 @@ try {
     check(`${id}: while it is played the player is driven, the line of the run and the keys are shown`, left.during.driven && left.during.line.length > 3 && left.during.keys, left.during.line);
     check(`${id}: left half-way it leaves nothing behind: the player free at the gate, the camera given back, no score told`, !left.run && !left.driver && left.fov === null && left.told === null && !left.keys && Math.hypot(left.x - built.gate.x, left.z - built.gate.z) < 1.5);
     // ---- played by its own bot to the end
-    await page.evaluate((id) => { const a = window.__mmf, g = a.labGames[id]; a.player.teleport(g.game.gate.x, g.game.gate.z, g.game.gate.yaw); g.start(); g.run().auto = true; }, id);
+    const again = await page.evaluate((id) => {
+      const a = window.__mmf, g = a.labGames[id]; a.player.teleport(g.game.gate.x, g.game.gate.z, g.game.gate.yaw); g.start(); g.run().auto = true;
+      return { panel: [...document.querySelectorAll('div')].some((d) => d.style.top === '84px' && d.style.display === 'block'), button: [...document.querySelectorAll('button')].some((b) => /keys/.test(b.textContent) && b.style.display !== 'none') };
+    }, id);
+    check(`${id}: the second time one plays, the keys are not put in the way again: only their small button is there`, !again.panel && again.button);
     if (spec.hurry) await page.evaluate(spec.hurry, id);
     await page.waitForFunction((id) => !window.__mmf.labGames[id].run(), id, { timeout: 420000, polling: 250 });
     const done = await page.evaluate((id) => { const a = window.__mmf, p = a.player.pos; return { told: window.__told[id] ?? null, best: Number(localStorage.getItem(`mmf.${id}.best`)), driver: !!a.player.driver, x: p.x, z: p.z, fov: a.fair.fov }; }, id);

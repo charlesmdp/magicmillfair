@@ -94,11 +94,10 @@ const windowOf = (key, from, to, u = 0) => { let n = 0; for (let k = 0; k < 240;
   const walk = go(runner(before(c2.s0, 3.5)), gap.s1 + 3, press(['jump', c2.s0, 2.6], ['jump', d2.s0, 1.6])), leap = go(runner(before(c2.s0, 3.5)), gap.s1 + 3, press(['jump', c2.s0, 2.6], ['jump', d2.s0, 1.6], ['jump', d2.s1, 1.2]));
   check('where the track is missing behind the stairs, one jumps off the high crate — who walks off it goes down the hole', !!gap && walk.out === 'hole' && !leap.out, `a hole of ${(gap.s1 - gap.s0).toFixed(1)} m behind a crate of ${d2.top} m`);
   // (the planks of the last turn: the first one, by the rail)
-  const planks = things.filter((t) => t.kind === 'hole' && t.s0 > 5.5 * TURN && (t.u0 > -H || t.u1 < H) && t.s1 - t.s0 > 3), p = planks[0], mid = planks.find((t) => t.s0 === p.s0 && t !== p), c = (Math.max(p.u0, mid.u0) + Math.min(p.u1, mid.u1)) / 2 || (p.u1 + mid.u0) / 2;
+  const planks = things.filter((t) => t.kind === 'hole' && t.s0 > 5.5 * TURN && (t.u0 > -H || t.u1 < H) && t.s1 - t.s0 > 3), p = planks[0], mid = planks.find((t) => t.s0 === p.s0 && t !== p);
   const edge = [p, mid].map((t) => (t.u0 > -H ? t.u0 : t.u1)).sort((x, y) => x - y), centre = (edge[0] + edge[1]) / 2;
   const onIt = go(runner(p.s0 + 0.5, centre), p.s1 - 0.5), offIt = go(runner(p.s0 + 0.5, centre - 1.4), p.s1 - 0.5);
   check('the planks before the bell: on one, one runs; beside it, there is nothing', !onIt.out && offIt.out === 'hole' && Number.isFinite(floorAt(p.s0 + 1, centre)) && floorAt(p.s0 + 1, centre - 1.4) === -Infinity, `${(edge[1] - edge[0]).toFixed(1)} m wide`);
-  void c;
   // (down in the air: a dive; the stick held: one lands sliding)
   const bare = before(high.s, 5.4), far = go(runner(bare), bare + 4.8, press(['jump', bare + 0.5, 0])), short = go(runner(bare), bare + 4.8, press(['jump', bare + 0.5, 0], ['down', bare + 1.6, 0]));
   const landAt = (r) => { let s = 0; const q = runner(bare); go(q, bare + 4.8, (st, input) => { r(st, input); if (!s && st.jumps === 0 && !st.air && st.s > bare + 1) s = st.s; }); return s; };
