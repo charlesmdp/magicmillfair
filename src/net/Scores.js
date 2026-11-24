@@ -62,11 +62,16 @@ export class Scores {
     return body ? Scores._tops(body) : this._local();
   }
 
-  /** A run begins: the server notes when (a score only counts with that note). Never throws, need not be awaited. */
+  /**
+   * A run begins: the server notes when (a score only counts with that note) and draws the seed of the game —
+   * what is left to chance in a game of the booths comes from it, so that the server can play the game again.
+   * Resolves to { seed } (null: no server, or none given). Never throws, need not be awaited.
+   */
   async start() {
     this.run = null;
     const body = await callApi('api/run', { method: 'POST', body: { board: this.board } });
     this.run = body && typeof body.run === 'string' ? body.run : null;
+    return this.run && Number.isInteger(body.seed) ? { seed: body.seed } : null;
   }
 
   /**
@@ -86,16 +91,17 @@ export class Scores {
    * Record a score. Resolves to { tops, rank (1 = first, 0 = not listed), best (a personal best), shared (kept
    * by the server) } — and, for a visitor without an account: guest: true, day (their rank today), would
    * ({ week, month, all }: where the score would stand with an account; 0: not among the ten shown). `taken`:
-   * the server would not take it — that name is the name of somebody's account.
+   * the server would not take it — that name is the name of somebody's account. `log`: the game as it was
+   * played (a game of the booths: see Booths.js), which the server plays again before it believes a great score.
    */
-  async submit(name, score) {
+  async submit(name, score, log = null) {
     const run = this.run;
     this.run = null;
     let body = null, taken = false;
     if (run) {
       // (asked without callApi: a refusal has something to say here)
       try {
-        const res = await fetch(`${import.meta.env.BASE_URL}api/scores`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ board: this.board, name, score, run, device: deviceId() }) });
+        const res = await fetch(`${import.meta.env.BASE_URL}api/scores`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ board: this.board, name, score, run, device: deviceId(), ...(typeof log === 'string' && { log }) }) });
         const said = /json/.test(res.headers.get('content-type') || '') ? await res.json() : null;
         if (res.ok) body = said; else taken = res.status === 409 && said?.taken === true;
       } catch { /* no server within reach */ }

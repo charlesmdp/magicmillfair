@@ -165,6 +165,20 @@
       box.append(row);
     });
   }
+  // (the scores the server played again and did not believe: the owner's to take, or to let go)
+  async function showFlagged() {
+    const res = await api('/api/flagged');
+    if (!res.ok) return;
+    const box = $('flagged'), list = res.body.flagged || [];
+    if (!list.length) return empty(box, 'None: every great score came out of its game.');
+    box.textContent = '';
+    for (const f of list) {
+      const info = me.boards.find((b) => b.id === f.board), decide = async (accept) => { if (said(await api('/api/flagged', { method: 'POST', body: { id: f.id, accept } }), accept ? 'On the board.' : 'Let go.')) { showFlagged(); if (accept) showScores(); } };
+      const acts = el('span', 'row');
+      acts.append(button('Take it', 'small', () => decide(true)), button('Let it go', 'ghost small', () => decide(false)));
+      box.append(item(`${f.name} — ${info?.name || f.board}: ${scoreText(info?.unit || 'points', f.score)}`, `${f.why}${f.guest ? ' · no account' : ''} · ${when(f.at)}`, acts));
+    }
+  }
   $('board').onchange = () => showScores(false);
   $('period').onchange = () => showScores(false);
 
@@ -286,7 +300,7 @@
   }
 
   // ----------------------------------------------------------------------------------------- the office itself
-  const SHOW = { releases: showReleases, rooms: () => { showRooms(); showLimits(); }, scores: showScores, sponsors: showSponsors, bans: showBans, figures: showFigures, admins: showAdmins };
+  const SHOW = { releases: showReleases, rooms: () => { showRooms(); showLimits(); }, scores: () => { showScores(); showFlagged(); }, sponsors: showSponsors, bans: showBans, figures: showFigures, admins: showAdmins };
   const NAMES = { releases: 'Releases', rooms: 'Rooms', scores: 'High scores', sponsors: 'Sponsors & plaques', bans: 'Kept out', figures: 'Figures', admins: 'Administrators' };
   function open(tab) {
     for (const s of document.querySelectorAll('section[data-tab]')) s.hidden = s.dataset.tab !== tab || (s.hasAttribute('data-owner') && !me.owner);

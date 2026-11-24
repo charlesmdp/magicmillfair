@@ -117,6 +117,12 @@ export function addScore(stored, board, { name, score }, at = Date.now(), period
   return { state, rank: state.all.findIndex((e) => key(e.name) === key(name)) + 1, day: state.day.list.findIndex((e) => key(e.name) === key(name)) + 1, best };
 }
 
+/** Would this score be among the first `n` of one of these lists (as they stand, whoever makes it)? */
+export function wouldEnter(stored, board, score, periods, n = 5, at = Date.now()) {
+  const state = boardState(stored, at), asc = BOARDS[board].order === 'asc';
+  return periods.some((p) => { const list = p === 'all' ? state.all : state[p].list; return list.filter((e) => (asc ? e.score <= score : e.score >= score)).length < n; });
+}
+
 /** Where a score would stand in the lists it is not on: { week, month, all } (1 = first; 0: beyond the ten that are shown). */
 export function wouldRank(stored, board, score, at = Date.now()) {
   const state = boardState(stored, at), asc = BOARDS[board].order === 'asc';

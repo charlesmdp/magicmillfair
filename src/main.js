@@ -30,7 +30,7 @@ import { Presence, cleanChat, cleanRoom, roomLabel } from './net/Presence.js';
 import { Npc } from './npc/Npc.js';
 import { Scores } from './net/Scores.js';
 import { countVisit } from './net/Visits.js';
-import { callApi, checkAdminKey, hasApi, sharedNow } from './net/api.js';
+import { callApi, checkAdminKey, hasApi, noApi, sharedNow } from './net/api.js';
 import { formatTime } from './world/zones/games/course.js';
 import { RemoteAvatars } from './net/RemoteAvatars.js';
 import { Benchmark } from './app/Benchmark.js';
@@ -537,8 +537,8 @@ async function boot() {
     hud.addChat('✦', 5, line, true);
   };
   /** The game is over: its score goes on the board (a time for the race, points for a booth). */
-  const scoreGame = (id, title, score, text) => {
-    fair.boards[id].submit(name, score).then((r) => {
+  const scoreGame = (id, title, score, text, log = null) => {
+    fair.boards[id].submit(name, score, log).then((r) => {
       const { tops, rank: place, best, shared } = r;
       showBoard(id, tops);
       if (r.taken) return nameTaken(text);
@@ -549,10 +549,17 @@ async function boot() {
       offerAccount(r);
     });
   };
+  // A game starts: the server notes when, and draws the seed of the game — what is left to chance in it comes from
+  // that seed, so that the server can play the game again (server/replay.js). Without a server there is nothing
+  // to wait for: the device's own dice, at once. (`fair.seed`: a rehearsal — the next games are played with it.)
+  const seedOf = (board) => {
+    const started = fair.boards[board].start();
+    if (Number.isInteger(fair.seed)) return fair.seed;
+    return noApi() ? null : started.then((r) => r?.seed);
+  };
   const playBooth = (booth) => {
     if (fair.session || player.dead) return;
-    fair.boards[booth.id].start();
-    fair.session = world.games.booths.open(booth, fairIo); fair.kind = 'booth'; fair.after = 0;
+    fair.session = world.games.booths.open(booth, fairIo, seedOf(booth.id)); fair.kind = 'booth'; fair.after = 0;
     player.riding = false;
     player.teleport(booth.stand[0], booth.stand[1], booth.stand[2]);
     me.root.visible = !fair.session.firstPerson;
@@ -576,8 +583,7 @@ async function boot() {
   // the flying theatre: up on the stage with a pair of wings; the game holds the flyer, the scenery goes by
   const playWing = () => {
     if (fair.session || player.dead) return;
-    fair.boards.wing.start();
-    fair.session = world.games.wing.open(player, fairIo); fair.kind = 'wing'; fair.after = 0;
+    fair.session = world.games.wing.open(player, fairIo, seedOf('wing')); fair.kind = 'wing'; fair.after = 0;
     player.riding = false;
     player.driver = fair.session.driver;
     me.setWings(true);
@@ -589,8 +595,7 @@ async function boot() {
   const playArcade = () => {
     if (fair.session || player.dead) return;
     const spot = world.games.notices.arcade;
-    fair.boards.run.start();
-    fair.session = arcade.open(fairIo, `#${AVATAR_COLORS[color].toString(16).padStart(6, '0')}`); fair.kind = 'arcade'; fair.after = 0;
+    fair.session = arcade.open(fairIo, `#${AVATAR_COLORS[color].toString(16).padStart(6, '0')}`, seedOf('run')); fair.kind = 'arcade'; fair.after = 0;
     player.riding = false;
     player.teleport(spot.x, spot.z, spot.yaw);
     input.consumeClicks();
@@ -621,8 +626,8 @@ async function boot() {
       input.consumeClicks();
       player.update(dt, rig.heading, false);
       if (s.over) {
-        if (fair.after === 0) { fair.after = 0.01; if (s.score > 0) scoreGame('run', GAME_NAMES.run, s.score, `${s.score.toLocaleString('en-US')} m`); }
-        else if ((fair.after += dt) > 0.7 && keys.jump && !fair.heldJump) { fair.boards.run.start(); s.restart(); fair.after = 0; } // (another run)
+        if (fair.after === 0) { fair.after = 0.01; if (s.score > 0) scoreGame('run', GAME_NAMES.run, s.score, `${s.score.toLocaleString('en-US')} m`, s.log()); }
+        else if ((fair.after += dt) > 0.7 && keys.jump && !fair.heldJump) { s.restart(seedOf('run')); fair.after = 0; } // (another run)
       }
       fair.heldJump = keys.jump;
       s.step(dt, keys);
@@ -644,7 +649,7 @@ async function boot() {
       if (s.over && fair.after === 0) {
         fair.after = 0.01;
         audio.play(s.score > 0 ? 'victory' : 'fail');
-        if (s.score > 0) scoreGame(s.booth.id, s.booth.name, s.score, s.booth.format ? s.booth.format(s.score) : `${s.score} ${s.booth.unit ? (s.score === 1 ? s.booth.unit.replace(/s$/, '') : s.booth.unit) : s.booth.seconds ? 'points' : 'on the scale'}`); else hud.note('Nothing this time. Have another go!', 4000);
+        if (s.score > 0) scoreGame(s.booth.id, s.booth.name, s.score, s.booth.format ? s.booth.format(s.score) : `${s.score} ${s.booth.unit ? (s.score === 1 ? s.booth.unit.replace(/s$/, '') : s.booth.unit) : s.booth.seconds ? 'points' : 'on the scale'}`, s.log()); else hud.note('Nothing this time. Have another go!', 4000);
       }
       if (fair.after > 0 && (fair.after += dt) > 1.6) endGame();
     } else {

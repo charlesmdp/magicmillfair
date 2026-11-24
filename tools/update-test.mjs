@@ -136,6 +136,10 @@ try {
   await office.waitForFunction(() => document.getElementById('board').options.length > 5, null, { timeout: 20000 });
   await office.selectOption('#board', 'bell');
   await office.selectOption('#period', 'day'); // (posted without an account: it is on the list of the day, and on no other)
+  // (a great score that came with no game: the server did not believe it — it waits here, with the reason; the owner takes it)
+  await office.waitForFunction(() => /Cheater/.test(document.getElementById('flagged').textContent), null, { timeout: 20000 });
+  const doubted = await office.evaluate(() => ({ board: /Nobody on this list/.test(document.getElementById('scores').textContent), row: document.querySelector('#flagged .item').textContent }));
+  await office.click('#flagged .item button');
   await office.waitForFunction(() => /Cheater/.test(document.getElementById('scores').textContent), null, { timeout: 20000 });
   const line = await office.evaluate(() => ({ boards: document.getElementById('board').options.length, row: document.querySelector('#scores .item').textContent }));
   await office.click('#scores .item button');
@@ -159,10 +163,10 @@ try {
   await office.screenshot({ path: path.join(ROOT, 'tools/preview/admin-figures.png'), fullPage: true });
   await office.click('#tabs [data-tab="sponsors"]');
   await office.waitForFunction(() => /No sponsor yet/.test(document.getElementById('sponsors').textContent), null, { timeout: 20000 });
-  check('the back office: a word said to every room is read in the game; the rooms are listed with who is in them; a line is refused on a board; somebody is kept out and let back in; the figures are set',
+  check('the back office: a word said to every room is read in the game; the rooms are listed with who is in them; a great score that came with no game waits for the owner, who takes it — then refuses the line; somebody is kept out and let back in; the figures are set',
     /The fair/.test(word.chat || '') && /Fireworks at nine, on the pier!/.test(word.chat) && /heard in 1 room/.test(word.note) && roomsSeen.length === 1 && /fair/.test(roomsSeen[0]) && /1 visitor/.test(roomsSeen[0])
-    && posted.status === 200 && line.boards >= 14 && /Cheater/.test(line.row) && /9,999/.test(line.row) && struck === 0 && /Mallory/.test(keptOut) && /address 203\.0\.113\.9/.test(keptOut),
-    JSON.stringify({ word, roomsSeen, posted: posted.status, line, struck, keptOut: keptOut.slice(0, 80) }));
+    && posted.status === 200 && doubted.board && /Cheater/.test(doubted.row) && /no game came with it/.test(doubted.row) && line.boards >= 14 && /Cheater/.test(line.row) && /9,999/.test(line.row) && struck === 0 && /Mallory/.test(keptOut) && /address 203\.0\.113\.9/.test(keptOut),
+    JSON.stringify({ word, roomsSeen, posted: posted.status, doubted, line, struck, keptOut: keptOut.slice(0, 80) }));
   await office.click('#tabs [data-tab="releases"]');
   await office.screenshot({ path: path.join(ROOT, 'tools/preview/admin-releases.png'), fullPage: true });
 

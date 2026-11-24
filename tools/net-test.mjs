@@ -25,6 +25,10 @@ import { visit, localDay } from '../server/routes.js';
 import { cleanTalk, oneSentence } from '../server/npc.js';
 import { wardrobeFrom, fitLook, fitKit, fitColor, mayLight, HAT_IDS, FIREWORK } from '../server/wardrobe.js';
 import { ITEMS, packKit } from '../server/items.js';
+import { __make as gameOf, replay, agrees } from '../server/replay.js';
+import { sessionOf, packLog, rngOf } from '../src/world/zones/games/core.js';
+import { flightOf, flightLog } from '../src/world/zones/games/WingRules.js';
+import { runOf, runLog } from '../src/ui/ArcadeRules.js';
 import { cleanGeo, packGeo, unpackGeo } from '../server/visitors.js';
 
 // what the test servers are given: the secret that signs the notes of the runs, the administrator's key
@@ -998,15 +1002,18 @@ async function testApi({ port }) {
   check('api: best first; a slower time changes nothing', second?.rank === 1 && second.tops.all.map((e) => e.name).join() === 'Bob,Ada' && third?.rank === 2 && third.best === false && third.tops.all[1].score === 240000, [second, third]);
   // a game played for points: the best is the highest, and the game cannot be over before it has lasted
   const soon = await post('/api/scores', { board: 'shoot', name: 'Quick', score: 500, run: await note('shoot', 5000) }); // 7
-  res = await post('/api/scores', { board: 'shoot', name: 'Dana', score: 120, run: await note('shoot', 50000), device: dev.dana }); // 8
-  check('api: a board of points — not before the game has lasted, then recorded', soon.status === 400 && res.status === 200 && json(res).tops.day[0].score === 120 && json(res).rank === 1, [soon.status, res.status, res.body.toString().slice(0, 120)]);
+  // (a great score at a booth is played again by the server: this one comes out of a game really played, with the seed of its note)
+  let gallery = null;
+  for (let hand = 1; hand < 20 && !(gallery && gallery.score >= 10); hand++) gallery = playBooth('shoot', 5150, hand);
+  res = await post('/api/scores', { board: 'shoot', name: 'Dana', score: gallery.score, run: await sign(SCORE_SECRET, { b: 'shoot', t: Date.now() - 50000, n: randomId(9), s: 5150 }), log: gallery.log, device: dev.dana }); // 8
+  check('api: a board of points — not before the game has lasted, then recorded', soon.status === 400 && res.status === 200 && gallery.score >= 10 && json(res).tops.day[0].score === gallery.score && json(res).rank === 1, [soon.status, res.status, res.body.toString().slice(0, 120)]);
   res = await post('/api/scores', { board: 'sky', name: 'Carol', score: 210000, run: await note('sky', 215000) });
   const limited = res.status;
   res = await request(port, '/api/scores?board=sky');
   check('api: a ninth POST within the minute is turned away; the board is unchanged', limited === 429 && json(res)?.tops.all.length === 2 && json(res).tops.all[0].name === 'Bob', [limited, res.body.toString().slice(0, 160)]);
   res = await request(port, '/api/scores?board=all');
   const every = json(res)?.boards || {};
-  check('api: every board in one request (the four booths, the race, the climb, the flying theatre)', res.status === 200 && ['sky', 'race', 'wing', 'shoot', 'mole', 'milk', 'bell'].every((id) => every[id] && ['day', 'week', 'month', 'all'].every((p) => Array.isArray(every[id].tops[p]))) && every.sky.tops.all[0].name === 'Bob' && every.shoot.tops.all[0].score === 120 && !every.race.tops.all.length, [res.status, res.body.toString().slice(0, 200)]);
+  check('api: every board in one request (the four booths, the race, the climb, the flying theatre)', res.status === 200 && ['sky', 'race', 'wing', 'shoot', 'mole', 'milk', 'bell'].every((id) => every[id] && ['day', 'week', 'month', 'all'].every((p) => Array.isArray(every[id].tops[p]))) && every.sky.tops.all[0].name === 'Bob' && every.shoot.tops.all[0].score === gallery.score && !every.race.tops.all.length, [res.status, res.body.toString().slice(0, 200)]);
   res = await request(port, '/api/scores?board=nope');
   const put = await request(port, '/api/scores', { method: 'PUT' });
   check('api: unknown board → 404, other methods → 405', res.status === 404 && put.status === 405, [res.status, put.status]);
@@ -2034,6 +2041,124 @@ async function testEra(start, dist) {
   }
 }
 
+// A game of a booth, really played — here by a hand that strikes when the needle is high (the bell), or that wanders
+// and clicks (the others) — with the seed `seed`: { score, log } as the page would send them.
+function playBooth(board, seed, hand = 1) {
+  const { def, make } = gameOf(board), game = make(), s = sessionOf(def, game, seed), rnd = rngOf(hand * 7919 + 13);
+  let dx = 0, dy = -0.1, down = false, red = 0;
+  for (let k = 0; k < 75 * 70 && !s.over; k++) {
+    if (rnd() < 0.08) { dx = (rnd() - 0.5) * 1.6; dy = (rnd() - 0.5) * 1.1; } else { dx += (rnd() - 0.5) * 0.02; dy += (rnd() - 0.5) * 0.02; }
+    if (rnd() < 0.03) down = !down;
+    // (the bell: struck when the needle is high; SCRAM!: the alarm answered a dozen steps after it shows; the others: now and then)
+    red = game.phase === 'alarm' ? red + 1 : 0;
+    const l = Math.hypot(dx, dy, 1), strike = board === 'bell' ? (s.gauge !== null && s.gauge > 0.8 + 0.03 * hand ? 1 : 0) : board === 'scram' ? (red === 10 + hand ? 1 : 0) : rnd() < 0.07 ? 1 : 0;
+    s.tick(1 / 60, dx / l, dy / l, -1 / l, strike, down, true, null);
+  }
+  return { score: s.score, log: packLog(s.words), over: s.over };
+}
+
+// A flight of the flying theatre, by a bot that flaps through `goal` pairs of columns then lets itself fall — and a
+// run at the arcade cabinet, by one that jumps and ducks for `until` metres then meets what comes:
+// { score, words, log, over } as the page would send them.
+function playWing(seed, goal) {
+  const f = flightOf(seed), log = flightLog();
+  for (let k = 0; k < 120 * 600 && !f.S.over; k++) {
+    const ahead = f.pairs.filter((p) => p.x > -3.3).sort((a, b) => a.x - b.x)[0], target = (ahead && ahead.x < 6 ? ahead.y : 3.3) - 0.3;
+    const flap = !f.S.fallen && f.S.score < goal && (!f.S.flying || (f.S.y < target && f.S.vy < 1.2));
+    log.step(flap); f.tick(flap);
+  }
+  return { score: f.S.score, words: log.words(), log: packLog(log.words()), over: f.S.over };
+}
+function playRun(seed, until) {
+  const r = runOf(seed), log = runLog(), s = r.s;
+  for (let k = 0; k < 120 * 1200 && !s.over; k++) {
+    const next = s.things.filter((o) => !o.gone && o.kind !== 'iso').map((o) => ({ kind: o.kind, gap: o.x + 2 - (s.x + 84), wide: o.w - 4 })).filter((o) => o.gap + o.wide > -20).sort((a, b) => a.gap - b.gap)[0];
+    let keys = 0;
+    if (next && s.score < until) { if (next.kind === 'drone') keys = next.gap < 40 && next.gap + next.wide > -24 ? 2 : 0; else if (next.kind !== 'high') keys = next.gap < s.speed * 0.27 - next.wide / 2 - 9 && next.gap > -4 ? 1 : 0; }
+    log.step(keys); r.tick(keys);
+  }
+  return { score: s.score, words: log.words(), log: packLog(log.words()), over: s.over };
+}
+
+// The referee (server/replay.js): a great score at a booth is played again by the server, from the seed of its note
+// and the log that came with it. What does not come out of its game is not put on the board, and waits for the owner.
+async function testReplay(start, dist) {
+  const file = path.join(os.tmpdir(), `mmf-replay-${process.pid}.json`);
+  fs.rmSync(file, { force: true });
+  const server = await start({ DIST_DIR: dist, SCORES_FILE: file });
+  const { port } = server;
+  const json = (res) => { try { return JSON.parse(res.body.toString()); } catch { return null; } };
+  const key = { authorization: `Bearer ${ADMIN_KEY}` };
+  // (what an address may post is counted: each of these visitors comes from an address of their own)
+  let who = 60;
+  const post = (target, body, headers = {}) => request(port, target, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body), from: `127.0.0.${who++}` });
+  const noteOf = (board, ago, seed) => sign(SCORE_SECRET, { b: board, t: Date.now() - ago, n: randomId(9), ...(seed !== undefined && { s: seed }) });
+  const board = async (id, q = '') => json(await request(port, `/api/scores?board=${id}${q}`))?.tops;
+  try {
+    const run = json(await post('/api/run', { board: 'bell' })), mine = await verify(SCORE_SECRET, run?.run);
+    const SEED = 424242, honest = playBooth('bell', SEED), other = playBooth('bell', SEED + 1), again = replay('bell', SEED, honest.log);
+    // (…and a game of quick answers: how fast is told by the steps that were written down, not by the clock of a machine)
+    const alarms = playBooth('scram', 606);
+    check('replay: the note of a run carries the seed of its game — and a game played again from its log ends with the same score, here as on the server',
+      Number.isInteger(run?.seed) && run.seed >= 0 && run.seed <= 0xffffffff && mine?.s === run.seed && typeof mine.v === 'string' && honest.over && honest.score >= 3000 && again?.score === honest.score && agrees('bell', honest.score, again)
+      && !agrees('bell', honest.score + 1, again) && !agrees('bell', honest.score, { ...again, over: false }) && alarms.over && alarms.score >= 150 && alarms.score <= 260 && agrees('scram', alarms.score, replay('scram', 606, alarms.log)) && replay('bell', SEED, 'not a log') === null && replay('sky', SEED, honest.log) === null, [run?.seed, honest.score, again]);
+    // a game really played: its score goes on the board
+    const devs = { honest: randomId(16), liar: randomId(16), bare: randomId(16), swap: randomId(16) };
+    const fair = json(await post('/api/scores', { board: 'bell', name: 'Honest', score: honest.score, run: await noteOf('bell', 6000, SEED), log: honest.log, device: devs.honest }));
+    // the same game with a better score claimed; a score with no game at all; a game played with another seed
+    const liar = json(await post('/api/scores', { board: 'bell', name: 'Liar', score: 9999, run: await noteOf('bell', 6000, SEED), log: honest.log, device: devs.liar }));
+    const bare = json(await post('/api/scores', { board: 'bell', name: 'Bare', score: 9998, run: await noteOf('bell', 6000, SEED), device: devs.bare }));
+    const swap = json(await post('/api/scores', { board: 'bell', name: 'Swap', score: Math.max(honest.score + 1, other.score + 600), run: await noteOf('bell', 6000, SEED), log: other.log, device: devs.swap }));
+    const forAll = await board('bell'), forLiar = await board('bell', `&device=${devs.liar}`);
+    check('replay: a score that comes out of its game goes on the board; one that does not — a better score claimed, no game at all, the game of another seed — is answered as if it did, shown to its author, and to nobody else',
+      fair?.day === 1 && forAll?.day.map((e) => e.name).join() === 'Honest' && liar?.tops.day[0].name === 'Liar' && liar.day === 1 && bare?.tops.day[0].name === 'Bare' && swap?.tops.day.some((e) => e.name === 'Swap')
+      && forLiar.day[0].name === 'Liar' && forLiar.day.some((e) => e.name === 'Honest'), [fair?.day, forAll?.day, liar?.day, forLiar?.day]);
+    // …and waits for the owner: who takes one onto the board after all, and lets another go
+    const nobody = await request(port, '/api/flagged');
+    const flagged = json(await request(port, '/api/flagged', { headers: key }))?.flagged || [];
+    const pick = (name) => flagged.find((f) => f.name === name);
+    const took = json(await request(port, '/api/flagged', { method: 'POST', headers: { ...key, 'content-type': 'application/json' }, body: JSON.stringify({ id: pick('Bare')?.id, accept: true }) }));
+    const gone = json(await request(port, '/api/flagged', { method: 'POST', headers: { ...key, 'content-type': 'application/json' }, body: JSON.stringify({ id: pick('Liar')?.id, accept: false }) }));
+    const after = await board('bell');
+    check('replay: what the server did not believe waits for the owner, with the reason — taken, it goes on the board; let go, it is forgotten',
+      nobody.status === 403 && flagged.length === 3 && /played again, it gives \d+$/.test(pick('Liar')?.why || '') && flagged.every((f) => Object.keys(f).sort().join() === 'at,board,guest,id,name,score,why') && /no game came with it/.test(pick('Bare')?.why || '') && /played again/.test(pick('Swap')?.why || '')
+      && took?.flagged.length === 2 && gone?.flagged.length === 1 && gone.flagged[0].name === 'Swap' && after.day.map((e) => `${e.name}:${e.score}`).join() === `Bare:9998,Honest:${honest.score}`, [nobody.status, flagged, after?.day]);
+    // a game with a clock and a pointer that wanders (the moles): its log is longer, and is believed the same way
+    let moles = null;
+    for (let hand = 1; hand < 12 && !(moles && moles.score >= 20); hand++) moles = playBooth('mole', 77, hand);
+    const whack = json(await post('/api/scores', { board: 'mole', name: 'Whacker', score: moles.score, run: await noteOf('mole', 50000, 77), log: moles.log, device: randomId(16) }));
+    // …and a score that changes nothing at the top of a board is not played again: five better ones stand above it
+    for (let k = 0; k < 5; k++) { const g = playBooth('bell', 900 + k, 2); await post('/api/scores', { board: 'bell', name: `Top ${k}`, score: g.score, run: await noteOf('bell', 6000, 900 + k), log: g.log, device: randomId(16) }); }
+    const small = json(await post('/api/scores', { board: 'bell', name: 'Small', score: 5, run: await noteOf('bell', 6000, 1), device: randomId(16) }));
+    const last = await board('bell'), still = json(await request(port, '/api/flagged', { headers: key }))?.flagged || [];
+    check('replay: a game with a clock is believed the same way (a log of some forty kilobytes); a score that would not enter the first five of a list is not played again',
+      whack?.day === 1 && moles.score >= 20 && moles.log.length > 20000 && moles.log.length < 80000 && (await board('mole'))?.day[0]?.name === 'Whacker'
+      && last.day.length === 8 && last.day[7].name === 'Small' && small?.day === 8 && still.length === 1, [whack?.day, moles.score, moles.log.length, last?.day.map((e) => e.name), still.length]);
+    // the flying theatre and the arcade cabinet: when one flapped, which keys were down — a few hundred characters, and
+    // believed the same way. A column more than was flown, a flight cut before its end: not believed.
+    let flight = null, runner = null;
+    for (let seed = 31; seed < 60 && !(flight && flight.score === 12); seed++) flight = { seed, ...playWing(seed, 12) };
+    for (let seed = 71; seed < 99 && !(runner && runner.score >= 400); seed++) runner = { seed, ...playRun(seed, 400) };
+    const cut = [...flight.words], steps = ((cut[0] | (cut[1] << 16)) >>> 0) - 60;
+    cut[0] = steps & 0xffff; cut[1] = steps >>> 16;
+    const fly = (name, score, log, seed = flight.seed) => noteOf('wing', 120000, seed).then((run) => post('/api/scores', { board: 'wing', name, score, run, log, device: randomId(16) })).then(json);
+    const flew = await fly('Flyer', flight.score, flight.log), more = await fly('Higher', flight.score + 1, flight.log), short = await fly('Shorter', flight.score, packLog(cut));
+    const ran = json(await post('/api/scores', { board: 'run', name: 'Runner', score: runner.score, run: await noteOf('run', 120000, runner.seed), log: runner.log, device: randomId(16) }));
+    // …and a game that began before a delivery and ended after it: the reason says so (its rules may have changed)
+    const late = json(await post('/api/scores', { board: 'run', name: 'Late', score: runner.score + 30, run: await sign(SCORE_SECRET, { b: 'run', t: Date.now() - 120000, n: randomId(9), s: runner.seed, v: 'the-one-before' }), log: runner.log, device: randomId(16) }));
+    const wings = await board('wing'), runs = await board('run'), end = json(await request(port, '/api/flagged', { headers: key }))?.flagged || [];
+    const said = (name) => end.find((f) => f.name === name)?.why || '';
+    check('replay: a flight and a run at the arcade are believed the same way (what was flapped, what was pressed: a few hundred characters); a column more than was flown, a flight cut before its end, are not — and a game a delivery came in the middle of says so',
+      flight.over && flight.score === 12 && runner.over && runner.score >= 400 && flight.log.length < 600 && runner.log.length < 2000 && flew?.day === 1 && ran?.day === 1
+      && wings.day.map((e) => `${e.name}:${e.score}`).join() === 'Flyer:12' && runs.day.map((e) => e.name).join() === 'Runner' && more?.day === 1 && short?.day >= 1 && late?.day === 1
+      && said('Higher') === 'played again, it gives 12' && said('Shorter') === 'played again, it gives 12 and does not end' && said('Late') === `played again, it gives ${runner.score} (a delivery came during this game: its rules may have changed)` && end.length === 4,
+      [flight.score, flight.log.length, runner.score, runner.log.length, flew?.day, ran?.day, wings?.day, runs?.day, end.map((f) => `${f.name}: ${f.why}`)]);
+  } finally {
+    await server.stop();
+    fs.rmSync(file, { force: true });
+  }
+}
+
 // So many connections from one address (door.js): in a room, in all, new ones a minute — and the owner always gets in.
 async function testLimits(start, dist) {
   const file = path.join(os.tmpdir(), `mmf-limits-${process.pid}.json`);
@@ -2128,6 +2253,7 @@ try {
     await section('release', () => testRelease(startWorker, fx.dist));
     await section('door', () => testDoor(startWorker, fx.dist));
     await section('limits', () => testLimits(startWorker, fx.dist));
+    await section('replay', () => testReplay(startWorker, fx.dist));
     if (process.env.NET_TEST_LOG) fs.writeFileSync(process.env.NET_TEST_LOG, server.log);
     // (the local tool also logs its own failed attempts to reach Cloudflare when offline: not the Worker's)
     const trouble = server.log.split('\n').filter((line) => /\[wrangler:error\]|\[ERROR\]|Uncaught/.test(line));
@@ -2149,6 +2275,7 @@ try {
     await section('door', () => testDoor(startServer, fx.dist));
     await section('limits', () => testLimits(startServer, fx.dist));
     await section('era', () => testEra(startServer, fx.dist));
+    await section('replay', () => testReplay(startServer, fx.dist));
     const kept = (() => { try { return JSON.parse(fs.readFileSync(path.join(fx.tmp, 'scores.json'), 'utf8')); } catch { return null; } })();
     if (!ONLY.length || ONLY.includes('api')) check('api: the Node server keeps the boards and the visits in its file', kept?.['board:sky']?.all?.length === 2 && kept['board:sky'].all[0].at > 0 && kept['board:shoot']?.day?.list?.[0]?.name === 'Dana' && Object.keys(kept).some((k) => k.startsWith('visit:')), kept);
     check('server: still running at the end, nothing on stderr', server.alive() && !/error|exception/i.test(server.log), server.log);

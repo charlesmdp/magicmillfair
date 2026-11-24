@@ -288,10 +288,20 @@ try {
   await page.evaluate(() => window.__mmf.equip('hat:crown', true));
   // (scores belong to accounts: made as a guest, a score is on the board of the day — and when it would be among
   // the ten of a longer list, its author is offered an account. The offer leads to the card.)
-  await page.evaluate(() => window.__mmf.fair.boards.bell.start());
-  await new Promise((r) => setTimeout(r, 2600)); // (a game of the striker lasts a few seconds: the server knows)
-  await page.evaluate(() => window.__mmf.scoreGame('bell', 'Ring the Bell', 4321, '4,321 on the scale'));
+  // (the visitor really plays the bell: the server plays the game again before it believes a great score)
+  await page.evaluate(() => new Promise((done) => {
+    const a = window.__mmf, booth = a.world.games.booths.list.find((b) => b.id === 'bell');
+    a.playBooth(booth);
+    const tick = () => {
+      const s = a.fair.session;
+      if (!s) return done(true);
+      if (!s.over && s.gauge !== null && s.gauge > 0.85) a.input._clicks++;
+      requestAnimationFrame(tick);
+    };
+    tick();
+  }));
   await page.waitForSelector('.offer-bar.on', { timeout: 20000 });
+  const struck = await page.evaluate(() => window.__mmf.fair.tops.bell.day[0].score);
   const asGuestScore = await page.evaluate(() => ({ offer: document.querySelector('.offer-bar .offer-text').textContent, yes: document.querySelector('.offer-bar .offer-yes').textContent, note: document.querySelector('.hud .note').textContent, tops: window.__mmf.fair.tops.bell }));
   await page.click('[data-act="settings"]');
   const guestSays = await page.evaluate(() => document.querySelector('.acct-info').textContent);
@@ -320,8 +330,8 @@ try {
   await page.waitForFunction(() => [...document.querySelectorAll('.chat .log p')].some((e) => /now counts for the week, the month and all time, under the name Shop Tester/.test(e.textContent)), null, { timeout: 30000 });
   const claimedScore = { page: await page.evaluate(() => window.__mmf.fair.tops.bell), server: (await (await fetch(`${BASE}/api/scores?board=bell`)).json()).tops };
   check('a score made without an account is on the board of the day, and its author is offered an account ("You would be #1 of all time"); the offer opens the card, and once the account is made the score counts for the week, the month and all time under its name',
-    /You would be #1 of all time — create an account to keep it/.test(asGuestScore.offer) && asGuestScore.yes === 'Create an account' && /#1 today/.test(asGuestScore.note) && asGuestScore.tops.day[0]?.score === 4321 && asGuestScore.tops.all.length === 0
-    && ['week', 'month', 'all'].every((p) => claimedScore.server[p][0]?.name === 'Shop Tester' && claimedScore.server[p][0].score === 4321) && claimedScore.page.all[0]?.name === 'Shop Tester', JSON.stringify({ asGuestScore, claimedScore }));
+    /You would be #1 of all time — create an account to keep it/.test(asGuestScore.offer) && asGuestScore.yes === 'Create an account' && /#1 today/.test(asGuestScore.note) && struck > 0 && asGuestScore.tops.day[0]?.score === struck && asGuestScore.tops.all.length === 0
+    && ['week', 'month', 'all'].every((p) => claimedScore.server[p][0]?.name === 'Shop Tester' && claimedScore.server[p][0].score === struck) && claimedScore.page.all[0]?.name === 'Shop Tester', JSON.stringify({ asGuestScore, claimedScore }));
   await page.click('[data-act="settings"]');
   await new Promise((r) => setTimeout(r, 2200)); // (the look is kept a moment after it changes)
   // another browser: a guest with nothing; signed in, everything is there

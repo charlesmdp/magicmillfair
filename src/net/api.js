@@ -1,7 +1,7 @@
 // Is there a server behind this site — the game's small API (server/routes.js) — or only files? Asked once,
 // with a plain GET, so that a site of plain files is not sent requests it can only answer with errors.
 
-let asked = null, ahead = 0; // (`ahead`: how far the server's clock is ahead of this device's, ms)
+let asked = null, ahead = 0, none = false; // (`ahead`: how far the server's clock is ahead of this device's, ms; `none`: asked, and there is no server)
 
 /** Resolves to what the server says of itself ({ ok, npc, admin, shop, time }), or to null when there is none. */
 export function hasApi() {
@@ -15,9 +15,13 @@ export function hasApi() {
         return body && body.ok === true ? body : null;
       })
       .catch(() => null);
+    asked.then((body) => { none = !body; });
   }
   return asked;
 }
+
+/** Is it known, here and now, that there is no server behind this site? (false: there is one, or nobody asked yet) */
+export const noApi = () => none;
 
 /**
  * The time it is for everybody (ms): the server's clock, as near as one request can tell — the same on every

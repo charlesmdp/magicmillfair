@@ -16,19 +16,14 @@ import { Parts } from '../../props/MeshBuilder.js';
 import { ANIM } from '../../../player/Character.js';
 import { WING } from '../../layout/layout.js';
 import { canvasBoard } from './Boards.js';
+// (the stage in numbers, and the rules of a flight: what the server plays a flight again with)
+import { clamp, HALF, FLOOR, TOP, ROOF, DEPTH, WALL, PLANE, FLYER, COLUMN, BODY, WAVES, CEILING, START_Y, TICK, BEGAN, FLAPPED, PASSED, HIT, SPLASH, flightOf, flightLog } from './WingRules.js';
+import { packLog, seedWait } from './core.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
-const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
-// the stage, in its own frame: x across (to the right of who looks at it), y up, z towards the audience
-const HALF = WING.width / 2, FLOOR = 0.7, TOP = FLOOR + WING.height, ROOF = TOP + 2.5, DEPTH = 3.5, WALL = 0.5;
-const PLANE = -1.05, FLYER = -2.4; // how deep one flies, and where across the stage
-const COLUMN = { r: 0.42, lip: 0.56, length: 3.0, apart: 5.2, from: HALF - 0.55, count: 3 };
-const GRAVITY = 15, FLAP = 5.5, BODY = 0.4, WAVES = FLOOR + 0.44, CEILING = TOP - 0.25; // (BODY: the ring round the flyer; WAVES: the line of foam)
 /** How large the flyer is made for the flight (the ring is then about as large as it is). */
 export const FLYER_SCALE = 0.5;
 const RED = [0.8, 0.1, 0.1], CREAM = [1.3, 1.24, 1.08], GOLD = [1.5, 1.05, 0.25], NAVY = [0.07, 0.12, 0.32];
-/** How fast the scenery goes by, and how wide the gap is, after `n` pairs of columns. */
-const speedAt = (n) => Math.min(6.2, 3.6 + n * 0.075), gapAt = (n) => Math.max(1.8, 2.45 - n * 0.02);
 
 // a cloth that scrolls: `draw(ctx, w, h)` paints one turn of it (what leaves on the left comes back on the right)
 function scroll(w, h, draw, alpha) {
@@ -267,25 +262,24 @@ export class Wing {
   near(x, z) { return !!this.spot && (x - this.spot.x) ** 2 + (z - this.spot.z) ** 2 < this.spot.r ** 2; }
 
   /**
-   * A flight starts. `io`: { play(sound, options), feathers(x, y, z, n) }. Returns the session — { booth (what
-   * the game is, for the board), view (the camera), step(dt, time, aim), over, score, line, driver (what moves
-   * the player: see PlayerController.driver), close() }. `aim.clicks`: how many flaps were asked for this frame.
+   * A flight starts. `io`: { play(sound, options), feathers(x, y, z, n) }; `seeded`: the seed of the flight — a
+   * promise of the one the server drew for this run, or a whole number (a rehearsal); none: the device's own
+   * dice (the flight cannot be played again by the server).
+   * Returns the session — { booth (what the game is, for the board), view (the camera), step(dt, time, aim),
+   * over, score, line, log() (when one flapped, for the server; null without a seed), driver (what moves the
+   * player: see PlayerController.driver), close() }. `aim.clicks`: how many flaps were asked for this frame.
+   * The rules are WingRules.js: a flight is stepped 120 times a second, whatever the screen.
    */
-  open(player, io) {
-    // (`this.seed`: set it and the next flight meets those gaps and no others — a rehearsal, a test)
-    const S = { y: FLOOR + WING.height * 0.55, vy: 0, t: 0, flying: false, fallen: 0, beat: 0, score: 0, seed: this.seed ?? ((Math.random() * 1e9) | 0) };
-    this.seed = undefined;
-    // (the gaps: never two far apart in height one after the other — what can be flown, however fast it goes)
-    let lastY = S.y;
-    const rnd = () => { S.seed = (S.seed * 1664525 + 1013904223) | 0; return (S.seed >>> 8) / 16777216; };
-    const next = () => {
-      const gap = gapAt(S.score + 2), lo = WAVES + 0.41 + gap / 2, hi = CEILING - 0.3 - gap / 2;
-      lastY = clamp(lastY + (rnd() * 2 - 1) * 1.9, lo, hi);
-      return { y: lastY, gap };
+  open(player, io, seeded = null) {
+    let flight = null, S = { y: START_Y, vy: 0, flying: false, fallen: 0, beat: 0, score: 0 }, written = null, held = 0, asked = false, hover = 0;
+    const begin = (given) => {
+      if (flight) return;
+      const seed = Number.isInteger(given) ? given : undefined;
+      flight = flightOf(seed ?? ((Math.random() * 1e9) | 0), this.pairs);
+      S = flight.S; session.state = S;
+      written = seed !== undefined ? flightLog() : null;
+      this._place();
     };
-    // the stage is cleared: the first pair comes in from the right after a moment
-    this.pairs.forEach((p, k) => Object.assign(p, next(), { x: COLUMN.from + 3.5 + k * COLUMN.apart, passed: false }));
-    this._place();
     const pos = new THREE.Vector3(), heading = this.yaw + Math.PI / 2; // (one flies towards the right of the stage)
     const off = new THREE.Vector3(0, 0.95 * FLYER_SCALE, 0), _p = new THREE.Vector3(), _q = new THREE.Vector3(); // from the feet of the flyer to its middle
     const session = {
@@ -305,37 +299,31 @@ export class Wing {
       },
       step: (dt, time, aim) => {
         if (session.over) return;
-        S.t += dt;
-        S.beat = Math.max(0, S.beat - dt * 3.2);
-        if (S.fallen) {
-          // the fall: straight down into the waves, and the flight is over
-          S.vy -= GRAVITY * 1.5 * dt; S.y += S.vy * dt;
-          if (S.y < WAVES - 0.5) { if (S.fallen === 1) { S.fallen = 2; io.play('splash', { volume: 0.7 }); } if ((S.t - S.hit) > 0.9) session.over = true; S.y = Math.max(S.y, FLOOR - 0.6); }
-          return;
+        hover += dt;
+        if (!flight) { this._drift(dt * 1.2); return; } // (not before the server has said which seed: a moment)
+        if (aim.clicks > 0) asked = true;
+        if (!S.flying && !asked) { this._drift(dt * 1.2); return; } // (waiting: it hovers, the clouds drift)
+        held += Math.min(dt, 0.1);
+        const before = S.scrolled;
+        let ev = 0;
+        while (held >= TICK && !S.over) {
+          held -= TICK;
+          written?.step(asked);
+          ev |= flight.tick(asked);
+          asked = false;
         }
-        if (aim.clicks > 0) {
-          if (!S.flying) { S.flying = true; io.play('start'); }
-          S.vy = FLAP; S.beat = 1;
-          io.play('flap', { volume: 0.7 });
-        }
-        if (!S.flying) { S.y = FLOOR + WING.height * 0.55 + Math.sin(S.t * 2.6) * 0.18; this._drift(dt * 1.2); return; } // (waiting: it hovers, the clouds drift)
-        S.vy -= GRAVITY * dt; S.y += S.vy * dt;
-        if (S.y > CEILING - BODY) { S.y = CEILING - BODY; S.vy = Math.min(S.vy, 0); } // (the pelmet: one bumps one's head, no more)
-        this._scroll(speedAt(S.score) * dt, next);
-        let hit = S.y - BODY < WAVES;
-        for (const p of this.pairs) {
-          const dx = p.x - FLYER;
-          if (Math.abs(dx) < COLUMN.lip + BODY * 0.9 && (S.y - BODY < p.y - p.gap / 2 || S.y + BODY > p.y + p.gap / 2)) hit = true;
-          if (!p.passed && dx < -COLUMN.lip) { p.passed = true; S.score++; session.score = S.score; io.play('coin', { volume: 0.6 }); }
-        }
-        if (hit) {
-          S.fallen = 1; S.hit = S.t; S.vy = Math.max(S.vy, 2.5);
-          io.play('whack', { volume: 0.8 });
-          const w = this.at(FLYER, S.y, PLANE);
-          io.feathers?.(w.x, w.y, w.z, 22);
-        }
-        session.line = `${WING.name} · ${S.score}`;
+        this._drift(S.scrolled - before);
+        this._place();
+        if (ev & BEGAN) io.play('start');
+        if (ev & FLAPPED) io.play('flap', { volume: 0.7 });
+        if (ev & PASSED) io.play('coin', { volume: 0.6 });
+        if (ev & HIT) { io.play('whack', { volume: 0.8 }); const w = this.at(FLYER, S.y, PLANE); io.feathers?.(w.x, w.y, w.z, 22); }
+        if (ev & SPLASH) io.play('splash', { volume: 0.7 });
+        session.score = S.score;
+        session.over = S.over;
+        if (!S.fallen) session.line = `${WING.name} · ${S.score}`;
       },
+      log: () => (written && S.over ? packLog(written.words()) : null),
       /** Where the flyer is, how it holds itself: the player is put there every frame. */
       driver: {
         anim: ANIM.swim, riding: false,
@@ -344,10 +332,11 @@ export class Wing {
           // pose swings the body about its feet, so where the feet go is worked out from where the body was)
           const bones = pl.character.bones, waist = bones && (bones.Abdomen || bones.Torso || bones.Body);
           if (bones?.Head && waist) { bones.Head.getWorldPosition(_p); waist.getWorldPosition(_q); _p.add(_q).multiplyScalar(0.5).sub(pl.pos); if (_p.length() < 2) off.lerp(_p, 0.35); }
-          pos.copy(this.at(FLYER, S.y, PLANE)).sub(off);
+          const y = S.y + (S.flying || S.fallen ? 0 : Math.sin(hover * 2.6) * 0.18);
+          pos.copy(this.at(FLYER, y, PLANE)).sub(off);
           pl.pos.copy(pos);
           this.ring.visible = !S.fallen;
-          this.ring.position.set(FLYER, S.y, PLANE + 0.4);
+          this.ring.position.set(FLYER, y, PLANE + 0.4);
           pl.yaw = heading;
           // (nose up on a flap, nose down in the fall; tumbling once hit)
           pl.pitch = S.fallen ? pl.pitch + dt * 9 : clamp(-S.vy * 0.07, -0.5, 0.6) - 0.25;
@@ -366,6 +355,8 @@ export class Wing {
       },
     };
     this.session = session;
+    // (a promise: the server is drawing the seed — a moment, a few seconds at the most; else at once)
+    if (typeof seeded?.then === 'function') { seeded.then(begin, () => begin()); setTimeout(begin, seedWait()); } else begin(seeded);
     return session;
   }
 

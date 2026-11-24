@@ -4,7 +4,7 @@ import { originAllowed } from './protocol.js';
 
 export const BODY_MAX = 4096; // bytes of JSON a POST may carry
 /** …except these two: what a sponsor sends (a picture with it) and what Stripe sends. */
-export const BIG_BODY = { '/api/sponsor': 180_000, '/api/sponsors': 180_000, '/api/stripe/webhook': 262_144 };
+export const BIG_BODY = { '/api/sponsor': 180_000, '/api/sponsors': 180_000, '/api/stripe/webhook': 262_144, '/api/scores': 400_000 }; // (a score comes with the log of its game)
 export const bodyMax = (path) => BIG_BODY[path] || BODY_MAX;
 
 /** Counts what each client does: allow(key, max, windowMs) is true while `key` stays under `max` per window. */

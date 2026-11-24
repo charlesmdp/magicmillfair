@@ -12,6 +12,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import { stubOutside } from './lib/outside.mjs';
+import { replay, agrees } from '../server/replay.js';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -870,9 +871,8 @@ try {
           }
           for (const f of fish) bot.prev.set(f, f.position.x);
         } else if (booth.id === 'scram') {
-          // the red: a real fifth of a second, then the click (never on the blue, never before)
-          if (G.phase === 'alarm' && !bot.seen) { bot.seen = true; await new Promise((r) => setTimeout(r, 185)); input._clicks++; }
-          if (G.phase !== 'alarm') bot.seen = false;
+          // the red: a fifth of a second by the clock of the game — six steps of this bot —, then the click (never on the blue, never before)
+          if (G.phase === 'alarm') { bot.red = (bot.red || 0) + 1; if (bot.red === 6) input._clicks++; } else bot.red = 0;
         } else if (booth.id === 'cups') {
           // the cup that was lifted is followed with the eyes (it is the same cup all along); after five rounds, another one
           const cups = named(/:cup\d$/).filter((c) => c.visible), stage = +(s.line.match(/round (\d+)/) || [0, 1])[1];
@@ -883,7 +883,9 @@ try {
       const v = new T.Vector3(), m = new T.Matrix4(), dt = 1 / 30;
       const point = (w) => { v.copy(w).project(cam); input.pointer.x = (v.x * 0.5 + 0.5) * window.innerWidth; input.pointer.y = (-v.y * 0.5 + 0.5) * window.innerHeight; };
       for (const booth of g.booths.list) {
-        app.playBooth(booth);
+        // (a rehearsal: the game is played with a seed, as when a server draws one — what is written down of it can then be played again)
+        const seed = (Math.random() * 4294967296) >>> 0;
+        app.fair.seed = seed; app.playBooth(booth); app.fair.seed = undefined;
         const s = app.fair.session, dyn = booth.dyn;
         let n = 0, sight = false, hidden = false;
         const bot = {};
@@ -908,21 +910,31 @@ try {
           app.fairStep(dt);
           if (n === 150) { sight = document.querySelector('.sight').classList.contains('on'); hidden = !app.me.root.visible; }
         }
-        const line = s.line, score = s.score, over = s.over;
+        const line = s.line, score = s.score, over = s.over, log = s.log();
         for (let k = 0; k < 80 && app.fair.session; k++) app.fairStep(dt);
-        out[booth.id] = { score, over, line, sight, hidden, seconds: n * dt, closed: !app.fair.session, shown: app.me.root.visible };
+        out[booth.id] = { score, over, line, sight, hidden, seconds: n * dt, closed: !app.fair.session, shown: app.me.root.visible, seed, log };
       }
       input.pointer.down = false;
       return out;
     });
     await frames(20);
+    // (what each game wrote down, set apart: tens of kilobytes that no message needs to show)
+    const written = Object.fromEntries(Object.entries(fair).map(([id, f]) => { const w = { seed: f.seed, log: f.log }; delete f.log; return [id, w]; }));
     const boards = await page.evaluate(() => Object.fromEntries(Object.entries(window.__mmf.fair.boards).map(([k, b]) => [k, b._local().all[0]?.score || 0])));
     check('the four booths of the pier are offered at their counters and played with the pointer: targets, moles, the clown, the bell', ask.includes(`Play ${offered}`) && fair.shoot.score > 300 && fair.mole.score > 100 && fair.milk.score > 150 && fair.bell.score >= 4000 && fair.bell.score <= 9999 && ['shoot', 'mole', 'milk'].every((id) => fair[id].over && fair[id].sight && fair[id].hidden && fair[id].seconds > 47 && fair[id].closed && fair[id].shown) && fair.bell.over && !fair.bell.sight && fair.bell.closed, JSON.stringify(fair));
     check('each score goes on the board of its booth', ['shoot', 'mole', 'milk', 'bell', 'hoop', 'stack', 'geiger', 'fish', 'scram', 'cups'].every((id) => boards[id] === fair[id].score), JSON.stringify(boards));
     const walk6 = Object.fromEntries(['hoop', 'stack', 'geiger', 'fish', 'scram', 'cups'].map((id) => [id, { score: fair[id].score, over: fair[id].over, closed: fair[id].closed, seconds: +fair[id].seconds.toFixed(1), line: fair[id].line }]));
     check('the six booths along the walk of the pier, each played by a bot that does what a visitor would: baskets shot where the hoop is going to be, twelve floors stacked just right, a sequence of lamps remembered for six rounds, fish brought up, five alarms answered in about a fifth of a second, the cup followed for five rounds',
       fair.hoop.score >= 20 && fair.hoop.over && fair.hoop.seconds > 47 && fair.stack.score >= 300 && fair.stack.over && fair.geiger.score >= 270 && fair.geiger.over && fair.fish.score >= 40 && fair.fish.over && fair.fish.seconds > 47
-      && fair.scram.over && fair.scram.score >= 150 && fair.scram.score <= 700 && fair.cups.over && fair.cups.score >= 150 && ['hoop', 'stack', 'geiger', 'fish', 'scram', 'cups'].every((id) => fair[id].closed && fair[id].shown), JSON.stringify(walk6));
+      && fair.scram.over && fair.scram.score >= 150 && fair.scram.score <= 300 && fair.cups.over && fair.cups.score >= 150 && ['hoop', 'stack', 'geiger', 'fish', 'scram', 'cups'].every((id) => fair[id].closed && fair[id].shown), JSON.stringify(walk6));
+    // the referee (server/replay.js): each of those ten games is played again, where nothing is shown, from what the page
+    // wrote down of it — its seed, every step of the pointer — and must end with the very score the page counted
+    {
+      const again = Object.fromEntries(Object.entries(written).map(([id, w]) => [id, replay(id, w.seed, w.log)]));
+      check('the referee of the server plays each of the ten games again from what the page wrote down of it (the seed, every step of the pointer) and ends with the very same score',
+        Object.keys(again).length === 10 && Object.entries(again).every(([id, r]) => agrees(id, fair[id].score, r)),
+        JSON.stringify(Object.fromEntries(Object.entries(again).map(([id, r]) => [id, `${fair[id].score} → ${r ? `${r.score}${r.over ? '' : ' (not over)'}` : 'no log'} · seed ${written[id].seed} · ${Math.round((written[id].log || '').length / 1024)} KB`]))));
+    }
     // the arcade cabinet at the top of the ramp of the pier: a bot runs — over what stands on the road, under what flies low
     {
       await page.evaluate(() => { const m = window.__mmf, c = m.world.games.notices.arcade; m.player.teleport(c.x, c.z, c.yaw); });
@@ -930,7 +942,8 @@ try {
       const askRun = await prompt();
       const run = await page.evaluate(() => {
         const app = window.__mmf, { input } = app, K = input.keys, dt = 1 / 60, screen = document.querySelector('.arcade');
-        app.playArcade();
+        const seed = (Math.random() * 4294967296) >>> 0;
+        app.fair.seed = seed; app.playArcade(); app.fair.seed = undefined;
         const s = app.fair.session, open = screen.classList.contains('on');
         let n = 0, jumps = 0, ducks = 0, wasJump = false, wasDuck = false;
         for (; n < 60 * 120 && app.fair.session === s && !s.over; n++) {
@@ -948,7 +961,7 @@ try {
           app.fairStep(dt);
         }
         K.delete('Space'); K.delete('ArrowDown');
-        const out = { open, score: s.score, over: s.over, seconds: +(n * dt).toFixed(1), jumps, ducks, line: s.line };
+        const out = { open, score: s.score, over: s.over, seconds: +(n * dt).toFixed(1), jumps, ducks, line: s.line, seed, log: s.log() };
         for (let k = 0; k < 20; k++) app.fairStep(dt);
         out.still = !!app.fair.session; // (a run that is over leaves the screen up: another go is one jump away)
         app.endGame();
@@ -957,8 +970,9 @@ try {
       });
       await frames(12);
       const kept = await page.evaluate(() => window.__mmf.fair.boards.run._local().all[0]?.score || 0);
-      check('the arcade cabinet of the pier: Meltdown Run is played on a screen of its own — a bot jumps what stands on the road and ducks what flies low for three hundred metres —, the run goes on its board, and one walks away',
-        askRun.includes('Play Meltdown Run') && run.open && run.over && run.score >= 300 && run.score < 900 && run.jumps > 5 && run.still && run.closed && kept === run.score, JSON.stringify({ askRun, run, kept }));
+      const ranAgain = replay('run', run.seed, run.log);
+      check('the arcade cabinet of the pier: Meltdown Run is played on a screen of its own — a bot jumps what stands on the road and ducks what flies low for three hundred metres —, the run goes on its board, and one walks away; the referee, given which keys were down and when, runs the same run to the same metre',
+        askRun.includes('Play Meltdown Run') && run.open && run.over && run.score >= 300 && run.score < 900 && run.jumps > 5 && run.still && run.closed && kept === run.score && agrees('run', run.score, ranAgain) && run.log.length < 4000, JSON.stringify({ askRun, run, kept, ranAgain }));
     }
     // the race
     const race = await page.evaluate(() => {
@@ -1000,8 +1014,7 @@ try {
       player.teleport(g.spot.x, g.spot.z, g.spot.yaw);
       return new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(() => {
         const ask = [...document.querySelectorAll('.prompt.on span')].map((e) => e.textContent);
-        g.seed = 20240607;
-        app.playWing();
+        app.fair.seed = 20240607; app.playWing(); app.fair.seed = undefined; // (a rehearsal: those gaps and no others)
         const s = app.fair.session, S = s.state, goal = 9;
         let k = 0, flaps = 0, top = 0, low = 99, waited = 0;
         // (before the first flap: it hovers, and no column is on the stage)
@@ -1014,7 +1027,7 @@ try {
           flaps += flap; top = Math.max(top, S.y); if (!S.fallen) low = Math.min(low, S.y);
         }
         app.input.consumeClicks = real;
-        const out = { ask, score: s.score, over: s.over, flaps, frames: k, top, low, waited, wings: !!player.character.wings?.visible, anim: player.anim, flyer: g.inside(player.pos.x, player.pos.y + 1, player.pos.z), line: s.line };
+        const out = { ask, score: s.score, over: s.over, flaps, frames: k, top, low, waited, wings: !!player.character.wings?.visible, anim: player.anim, flyer: g.inside(player.pos.x, player.pos.y + 1, player.pos.z), line: s.line, log: s.log() };
         for (let q = 0; q < 60 * 4 && app.fair.session; q++) app.fairStep(dt);
         out.after = { closed: !app.fair.session, driver: !!player.driver, wings: !!player.character.wings?.visible, d: Math.hypot(player.pos.x - g.spot.x, player.pos.z - g.spot.z), pitch: player.pitch };
         res(out);
@@ -1022,9 +1035,10 @@ try {
     });
     await frames(20);
     const flown = await page.evaluate(() => window.__mmf.fair.boards.wing._local().all[0]?.score || 0);
-    check('the flying theatre: asked for before the stage; wings on, a bot flaps through nine pairs of columns, falls into the waves, and the flight goes on the board',
+    const flownAgain = replay('wing', 20240607, wing.log);
+    check('the flying theatre: asked for before the stage; wings on, a bot flaps through nine pairs of columns, falls into the waves, and the flight goes on the board; the referee, given when it flapped, flies the same flight',
       wing.ask.includes('Play Flappy Robot') && wing.waited === 30 && wing.score === 9 && wing.over && wing.flaps > 12 && wing.top < 5.9 && wing.low > 1.0 && wing.wings && wing.anim === 4 && wing.flyer && wing.line === 'Flappy Robot · 9'
-      && wing.after.closed && !wing.after.driver && !wing.after.wings && wing.after.d < 0.5 && wing.after.pitch === 0 && flown === 9, JSON.stringify(wing));
+      && wing.after.closed && !wing.after.driver && !wing.after.wings && wing.after.d < 0.5 && wing.after.pitch === 0 && flown === 9 && agrees('wing', 9, flownAgain) && wing.log.length < 400, JSON.stringify({ ...wing, flownAgain }));
     const best = await page.evaluate(() => window.__mmf.fair.boards.race._local().all[0]?.score || 0);
     check('the quad race: asked for in the paddock, it leaves with the next start (they have names, one every five seconds), the lights, three laps flat out — the bot never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, the pads, a real flight off the ramp, the time on the board', race.ask.some((t) => /^Race: 3 laps on a quad · (Red|Blue|Green|Yellow|Purple|Orange) start in \d s$/.test(t)) && race.start && race.over && race.laps.length === 3 && race.time > 46000 && race.time < 62000 && race.slowest >= 18 && race.off === 0 && race.widest < 3.75 && race.still > 150 && race.lamps > 20 && race.air > 120 && race.flight > 45 && race.boost > 100 && race.top > 24 && race.riding && race.quad && race.after.closed && !race.after.riding && !race.after.driver && best === race.time, JSON.stringify(race));
   }

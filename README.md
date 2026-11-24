@@ -753,7 +753,8 @@ src/
                            the secret cove, the fall into the sea; Caves.js builds a cave
     zones/games/           the Sky Stones (course.js works out the stones), the boulder, the acid pond, the shark;
                            Booths.js: the four booths of the pier head (and the arrows of light of all ten); Stalls.js: the six
-                           booths of the walk; kit.js: what booths share; Notices.js: the banner and the rules of the arrival, the boards of what is new, the booth of the
+                           booths of the walk; PierGames.js, WingRules.js, core.js: the rules of the games, with nothing of the 3D
+                           library in them (the server plays a game again with these: `server/replay.js`); kit.js: what booths share; Notices.js: the banner and the rules of the arrival, the boards of what is new, the booth of the
                            sponsors (the Trading Post), the arcade cabinet; Signposts.js: the wooden signposts; Race.js: the quad race;
                            Boards.js: score boards and sponsor panels
     zones/sky/             the fifty sky villages and the Sky Gate
@@ -775,6 +776,7 @@ src/
 server/index.js            Node production server: static files + presence relay + API
 server/release.js          the switches of what is released, the version online, a word to every room
 server/door.js             the door of the rooms: which room a visitor goes to, the lists, the rules, who gets in
+server/replay.js           the referee: a game played again from its seed and what the page wrote down of it
 server/rooms.js            …and its reasoning: the common rooms, when one opens, starts, goes quiet
 server/stats.js            the game in figures: sums only (the lab's)
 public/admin/              the back office: a page of plain files that asks everything of the API
@@ -1011,6 +1013,19 @@ what is done is to make cheating pointless or tedious — and the checks that co
   of theirs is kept apart and shown to them alone, the big red button only goes off on their own screen, and
   what they sponsor — a panel, a plaque — is shown to them alone. It holds from one visit to the next, until
   it is lifted;
+- **a great score is played again.** Twelve games — the ten booths of the pier, the flying theatre, the
+  arcade cabinet — are written so that the server can play a game again: what a game leaves to chance comes
+  from a **seed** the server draws with the note of the run, and the page writes down what the player did
+  (every step of the pointer at a booth, when one flapped, which keys were down: from a hundred characters
+  to some sixty kilobytes) and sends it with the score. When the score would enter **the first five of one
+  of its lists**, the server plays the game again — the rules of a game are the very code the page runs,
+  with nothing to show (`server/replay.js`) — and wants the game to end, with that very score. A score that
+  does not come out of its game is refused **without a word**: its author sees it on the board, nobody else
+  does, and it waits in the back office (*Scores the server did not believe*) with the reason — *played
+  again, it gives 742*, *no game came with it* — for the owner to take onto the board or to let go.
+  **Nothing of a game is kept**, believed or not: a name, a score, the reason. So that a game goes the same
+  way on every machine, its rules use a sine, a cosine and dice of their own (`core.js`), steps of a written
+  length, and nothing a browser is free to round its own way;
 - a score only counts with the note of its run: a token signed by the server when the run starts (`POST
   /api/run`), which says when. A climb announced as 150 seconds must arrive at least 130 seconds after its
   note; a 45-second game cannot be over in 10; a note counts once. Posting a made-up score therefore takes
@@ -1020,8 +1035,11 @@ what is done is to make cheating pointless or tedious — and the checks that co
 - the game's own secret codes disqualify a run in the browser itself;
 - the administrator can take any line off a board (`DELETE /api/scores?board=…&name=…` with the key) and
   ban whoever posted it.
-A cheater who writes a program that plays the whole run at human speed still gets on the board; what stops
-that is the last point. Going further means a referee: the server replaying the run from the inputs.
+What a replay proves: that the score comes out of a game really played to its end, with the seed the server
+drew — the targets were where the seed put them, the clicks landed on them. It does not prove that a person
+played: a program that plays well still gets on the board; what stops that is the last point. The three
+courses (the Sky Stones, the quad race, the slide) are not played again — a course is the whole world, not a
+booth: they keep their bounds in time (see *Known limits*).
 
 ### What is released, new versions, the back office
 
@@ -1162,8 +1180,8 @@ tests, `npm run dev`) has it open.
 |---|---|
 | `npm run bake` | bakes the world, the statue and the textures again |
 | `npm run bake:statue` | sculpts the golden dog again (`-- --preview=dog.png` also draws it from five sides, `-- --cell=0.012` makes a finer mesh) |
-| `npm test` | 225 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password) |
-| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (167 in all) |
+| `npm test` | 230 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password) |
+| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (172 in all) |
 | `npm run test:update` | a delivery from end to end, in the real game: two builds, a visitor in the world, the owner at the back office (`/admin`: the switches, a word to every room, a line refused, somebody kept out, the figures, the sky villages stage by stage), every page asked to refresh but never in the middle of a sentence, then the server replaced by the next version — the page says so, refreshes, comes back at the same spot and says what is new; and a plain build leaves nothing of the game on the page (12 checks) |
 | `node tools/extras-test.mjs`, `node tools/slide-test.mjs` | the lab's own checks of its extras (see `lab/INTEGRATION.md`) |
 | `npm run test:load` | a crowd at the door, with the real rules: 600 connections arrive in twenty seconds and walk (everybody gets in, rooms of about fifty, the lists say what is true, a state reaches the neighbours in time), 230 more follow one link (that room holds 200, never one more; the relay refuses whoever comes without asking; the owner still gets in), then most leave (the rooms that have emptied are offered a livelier one, nobody is moved or cut off) — 11 checks; `-- --cloudflare` plays it against the real Worker in the local Workers runtime, `-- --visitors=400` changes the crowd |
@@ -1171,7 +1189,7 @@ tests, `npm run dev`) has it open.
 | `npm run test:shop` | the shop in the real game, on the Node server with test keys and a stand-in for Stripe: a hat bought and worn, the panel of a game sponsored, filled in (with a logo) and approved by the administrator, the stand of the gondolas, a plaque for a companion (bought at a bare plate, engraved with a picture, approved), an account made and signed in to on its card, the payment form inside the game (and Stripe's page when it cannot be shown); and a newcomer: the padlocks of the welcome card and the free day of the jetpack, the Game Pass bought as a subscription, what it lends (black, the largest size, a hat that was never bought), its end and the end of the free day; the window of the Trading Post (20 checks) |
 | `npm run test:smoke` | drives the real site: welcome screen, walking, free camera, settings, large map, the story of the opening told once (`-- --mobile` for the touch layout) |
 | `npm run test:audio` | Listens to the sound engine without ears: in headless Chromium it renders a dozen listener scenarios (beach, cliffs, pier, woods, mill, waterfall, cave, sky village, the climb…) and every one-shot effect through an offline audio context, measures level, spectrum, how the loudness moves and how tonal it is, fails on silence or clipping, and times `update()` (about 0.01 ms a frame) |
-| `npm run test:walk` | 54 checks in the real game: what a newcomer sees first (the banner, the rules, the story on its board, the easel of life advice; the boards of what is new out of that first look), who hears the chat (it opens on Nearby, says so, and is told how to reach everybody), the wooden signposts (beside the paths, each plank pointing the way of what it names), the Trading Post and its window of photographs, pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls and the high clearing above them, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the swim on to the golden cove (the shark stays away; out of the sea on the beach; the stair up to the golden dog; the plaques round its plinth, painted for who climbs up there), the fifty sky villages (prices, places to sit, the board of one for hire, the one dressed as a demonstration), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, sitting down on the ground, the two jetpacks (which is on; the light one's fifteen seconds), big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the four booths of the pier head and the six of the walk (a bot plays each through the pointer, as a visitor would: baskets shot where the hoop is going to be, a tower stacked, a sequence of lamps remembered, fish brought up, alarms answered in a fifth of a second, a cup followed; boards), the arcade cabinet (a bot runs three hundred metres), the quad race (asked for in the paddock, it leaves with the next named start; a bot drives three laps flat out — it never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, and flies off the ramp), the flying theatre (a bot flaps through nine pairs of columns), the acid pond, the shark, change of tier |
+| `npm run test:walk` | 55 checks in the real game (each of the twelve games a bot plays there is then played again by the server's referee, from what the page wrote down, and must end with the very same score): what a newcomer sees first (the banner, the rules, the story on its board, the easel of life advice; the boards of what is new out of that first look), who hears the chat (it opens on Nearby, says so, and is told how to reach everybody), the wooden signposts (beside the paths, each plank pointing the way of what it names), the Trading Post and its window of photographs, pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls and the high clearing above them, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the swim on to the golden cove (the shark stays away; out of the sea on the beach; the stair up to the golden dog; the plaques round its plinth, painted for who climbs up there), the fifty sky villages (prices, places to sit, the board of one for hire, the one dressed as a demonstration), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, sitting down on the ground, the two jetpacks (which is on; the light one's fifteen seconds), big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the four booths of the pier head and the six of the walk (a bot plays each through the pointer, as a visitor would: baskets shot where the hoop is going to be, a tower stacked, a sequence of lamps remembered, fish brought up, alarms answered in a fifth of a second, a cup followed; boards), the arcade cabinet (a bot runs three hundred metres), the quad race (asked for in the paddock, it leaves with the next named start; a bot drives three laps flat out — it never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, and flies off the ramp), the flying theatre (a bot flaps through nine pairs of columns), the acid pond, the shark, change of tier |
 | `npm run test:duo` | 32 checks with two visitors on the production server: they must see each other move, wave, summon an animal, chat (nearby first, then to everyone) and sit down; the administrator's badge worn and taken off; the rooms (a room that fills, the offer of a livelier one, the list, a link); the largest size and a party hat, sitting on the ground, a bouquet given from hand to hand; the administrator's key in the address, the administrator seeing the game as a visitor does (`-- --cloudflare` for the Cloudflare version) |
 | `npm run bench` | benchmark tour for each tier (`-- --mobile` for the phone profile) |
 | `npm run profile` | cost of each system (script, draw calls, triangles) at seven viewpoints |
@@ -1242,6 +1260,13 @@ Game and multiplayer
   every jump can be made; whether people find the top as hard as intended — or too hard — is unknown until
   they try. Times are measured by each player's own browser and sent as they are: a cheater can post any
   time the server finds believable. The cheat codes of the game itself disqualify a run; nothing more.
+- **The referee** (a great score played again by the server) was only ever tried with Chromium. The rules of
+  the games are written to give the same digits in every browser, but no game was played in Safari or in
+  Firefox here: if one of them ever disagreed, an honest score would wait in the back office instead of
+  going on its board — nobody is told anything, the owner takes it. The same can happen to a game that began
+  before a delivery and ended after it, when the delivery changed the rules of that very game (the reason
+  then says so). And playing a long game again costs the server a few milliseconds of processor: only scores
+  that would enter the first five of a list are played again.
 - **The boulder, the shark** follow each visitor's own clock: two visitors standing side by side see the
   boulder in the same place only as far as their devices agree on the time (usually within a second).
 - **No e-mail was ever sent for real**: the Node server only writes them to a file, and the three lines

@@ -13,7 +13,7 @@
 // `mesh(geometry, name, material)`, and returns the game — { view, firstPerson, crosshair, reset(),
 // step(dt, t, time, aim, io), score, and, for a game without a clock, over and line() }. `t` is the time
 // played (below zero: nobody plays, or the count before the start — then aim and io are null).
-import { V, lerp, clamp, clamp01, HALF, BACK, FRONT, geometry, hitZ, hitY } from './kit.js';
+import { V, lerp, clamp, clamp01, HALF, BACK, FRONT, geometry, hitZ, hitY, dice, sin, cos, hypot, shuffle } from './core.js';
 
 /** id (also the board of its scores), name, where it stands on the pier (along, side), its colour, how long a game lasts (0: until it is lost). */
 export const STALLS = [
@@ -28,17 +28,16 @@ export const STALLS = [
 /** A disc that faces +Z. */
 const round = (b, x, y, z, r, c, n = 14) => {
   const pts = [];
-  for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; pts.push(V(x + Math.cos(a) * r, y + Math.sin(a) * r, z)); }
+  for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; pts.push(V(x + cos(a) * r, y + sin(a) * r, z)); }
   b.tint(c[0], c[1], c[2], 1).poly(pts);
 };
 /** A ball about the origin. */
 const sphere = (b, r, sides = 9, rows = 6) => {
   const p = [];
-  for (let i = 0; i <= rows; i++) { const a = -Math.PI / 2 + (Math.PI * i) / rows; p.push([Math.max(0, Math.cos(a)) * r, Math.sin(a) * r]); }
+  for (let i = 0; i <= rows; i++) { const a = -Math.PI / 2 + (Math.PI * i) / rows; p.push([Math.max(0, cos(a)) * r, sin(a) * r]); }
   b.lathe(p, sides);
 };
 const hearts = (n) => '♥'.repeat(Math.max(0, n));
-const rnd = (a, b) => a + Math.random() * (b - a);
 
 // ---------------------------------------------------------------------------
 // Buzzer Beater. Hold the button: a needle climbs a meter on the wall (and comes down again); let go, and the
@@ -48,6 +47,9 @@ const rnd = (a, b) => a + Math.random() * (b - a);
 // less as the seconds go by. A row of baskets pays more each time.
 
 function hoop(parts, booth, mesh) {
+  // (what is left to chance is drawn from the seed of the game when it is played for a score: the server draws the same)
+  let roll = Math.random;
+  const rnd = (a, b) => a + roll() * (b - a);
   const paint = parts.get('paint'), wood = parts.get('woodDark');
   const RIM_Y = 2.5, RIM_Z = -2.9, RIM_R = 0.3, BALL = 0.15, G = 9.8, T = 1.0, BOARD_Z = RIM_Z - 0.4, NEAR = -0.4, FAR = -4.4;
   // the court: a varnished floor with the lines of a key; the back wall: the stands at night, under two floodlights
@@ -76,9 +78,9 @@ function hoop(parts, booth, mesh) {
     b.tint(1.4, 0.35, 0.1, 1);
     for (const [x0, y0, x1, y1] of [[-0.26, 0.02, 0.26, 0.06], [-0.26, 0.36, 0.26, 0.4], [-0.26, 0.02, -0.22, 0.4], [0.22, 0.02, 0.26, 0.4]]) b.box(x0, y0, -0.4, x1, y1, -0.392, { faces: 'Z' });
     b.box(-0.04, -0.03, -0.4, 0.04, 0.01, -RIM_R + 0.02);
-    for (let k = 0; k < 12; k++) { const a0 = (k / 12) * Math.PI * 2, a1 = ((k + 1) / 12) * Math.PI * 2; b.rod(V(Math.cos(a0) * RIM_R, 0, Math.sin(a0) * RIM_R), V(Math.cos(a1) * RIM_R, 0, Math.sin(a1) * RIM_R), 0.022, 4); }
+    for (let k = 0; k < 12; k++) { const a0 = (k / 12) * Math.PI * 2, a1 = ((k + 1) / 12) * Math.PI * 2; b.rod(V(cos(a0) * RIM_R, 0, sin(a0) * RIM_R), V(cos(a1) * RIM_R, 0, sin(a1) * RIM_R), 0.022, 4); }
     b.tint(1.45, 1.45, 1.45, 1);
-    for (let k = 0; k < 8; k++) { const a0 = (k / 8) * Math.PI * 2, a1 = ((k + 0.5) / 8) * Math.PI * 2; b.rod(V(Math.cos(a0) * RIM_R, 0, Math.sin(a0) * RIM_R), V(Math.cos(a1) * 0.19, -0.36, Math.sin(a1) * 0.19), 0.009, 3); }
+    for (let k = 0; k < 8; k++) { const a0 = (k / 8) * Math.PI * 2, a1 = ((k + 0.5) / 8) * Math.PI * 2; b.rod(V(cos(a0) * RIM_R, 0, sin(a0) * RIM_R), V(cos(a1) * 0.19, -0.36, sin(a1) * 0.19), 0.009, 3); }
   }), 'hoop');
   const lamps = mesh(geometry((b) => { for (let k = 0; k < 7; k++) b.tint(1.0, 0.9, 0.4, 1).box(-0.6 + k * 0.2 - 0.05, 0.64, -0.4, -0.6 + k * 0.2 + 0.05, 0.74, -0.36); }, 'glow'), 'lamps', 'glow');
   const balls = [0, 1, 2].map((k) => {
@@ -99,11 +101,11 @@ function hoop(parts, booth, mesh) {
   };
   const game = {
     view: { pos: [0, 1.75, 2.6], look: [0, 2.05, -3.2], fov: 60 }, firstPerson: true, crosshair: true, sweet,
-    reset() { game.score = 0; game.gauge = null; game.at = 0; charge = 0; dir = 1; held = false; cool = 0; streak = 0; flash = 0; for (const s of shots) s.on = false; },
+    reset(seed) { roll = dice(seed); game.score = 0; game.gauge = null; game.at = 0; charge = 0; dir = 1; held = false; cool = 0; streak = 0; flash = 0; phase = rnd(0, 6); hx = 0; for (const s of shots) s.on = false; },
     step(dt, t, time, aim, io) {
       const p = t < 0 ? 0 : clamp01(t / 45);
       phase += dt * (0.85 + 0.95 * p);
-      hx = (0.5 + 1.5 * clamp01(Math.max(0, t) / 20)) * clamp(1.3 * Math.sin(phase), -1, 1);
+      hx = (0.5 + 1.5 * clamp01(Math.max(0, t) / 20)) * clamp(1.3 * sin(phase), -1, 1);
       game.at = hx;
       rig.position.set(hx, RIM_Y, RIM_Z);
       if (flash > 0) flash -= dt;
@@ -120,7 +122,7 @@ function hoop(parts, booth, mesh) {
           if (s.v.z < 0 && s.p.z - BALL < BOARD_Z && s.p.z > BOARD_Z - 0.35 && Math.abs(s.p.x - hx) < 0.67 && s.p.y > RIM_Y - 0.14 && s.p.y < RIM_Y + 0.66) { s.p.z = BOARD_Z + BALL; s.v.z *= -0.5; s.clean = false; io?.play('land', { volume: 0.4 }); }
           // down through the plane of the ring: in, on the ring, or beside it
           if (!s.scored && s.v.y < 0 && y0 >= RIM_Y && s.p.y < RIM_Y) {
-            const d = Math.hypot(s.p.x - hx, s.p.z - RIM_Z);
+            const d = hypot(s.p.x - hx, s.p.z - RIM_Z);
             if (d < RIM_R - 0.09) {
               const swish = s.clean && d < 0.1, pts = 10 + 5 * Math.min(streak, 6) + (swish ? 5 : 0);
               s.scored = true; game.score += pts; streak++; flash = 0.6;
@@ -171,6 +173,9 @@ function hoop(parts, booth, mesh) {
 // faster than the last. The tower sinks into its plinth as it grows, so that its top stays in front of the eyes.
 
 function stack(parts, booth, mesh) {
+  // (what is left to chance is drawn from the seed of the game when it is played for a score: the server draws the same)
+  let roll = Math.random;
+  const rnd = (a, b) => a + roll() * (b - a);
   const paint = parts.get('paint');
   const H = 0.24, D = 1.0, W0 = 1.7, Z = -1.7, BASE = 0.9, SPAN = 2.3, N = 10;
   // dusk over a city: a sky in bands, a low sun, towers with their windows lit; a plinth edged with hazard tape
@@ -198,7 +203,7 @@ function stack(parts, booth, mesh) {
   const game = {
     view: { pos: [0, 2.3, 3.2], look: [0, 1.85, Z], fov: 56 }, firstPerson: true, crosshair: false,
     line: () => `${floors.length - 1} floor${floors.length === 2 ? '' : 's'} · ${game.score} pts`,
-    reset() { game.score = 0; game.over = false; floors = [{ x: 0, w: W0 }]; w = W0; streak = 0; sink = 0; fall = null; lost = 0; sdir = -1; next(); chip.visible = false; },
+    reset(seed) { roll = dice(seed); game.score = 0; game.over = false; floors = [{ x: 0, w: W0 }]; w = W0; streak = 0; sink = 0; fall = null; lost = 0; sdir = -1; next(); chip.visible = false; },
     step(dt, t, time, aim, io) {
       const n = floors.length, top = floors[n - 1];
       sink += (Math.max(0, n - 4) * H - sink) * Math.min(1, dt * 6);
@@ -257,6 +262,9 @@ function stack(parts, booth, mesh) {
 // sequence is shown again. A round pays ten points a lamp, and up to half as much again for answering briskly.
 
 function geiger(parts, booth, mesh) {
+  // (what is left to chance is drawn from the seed of the game when it is played for a score: the server draws the same)
+  let roll = Math.random;
+  const rnd = (a, b) => a + roll() * (b - a);
   const paint = parts.get('paint');
   const X = [-2.1, -0.7, 0.7, 2.1], Y = 1.65, R = 0.56, ZW = BACK + 0.05;
   const COL = [[0.2, 0.9, 0.3], [1.0, 0.85, 0.15], [1.0, 0.25, 0.2], [0.25, 0.55, 1.0]], RATE = [0.75, 0.9, 1.12, 1.35];
@@ -267,7 +275,7 @@ function geiger(parts, booth, mesh) {
   X.forEach((x, k) => {
     round(paint, x, Y, ZW, R + 0.11, [0.1, 0.11, 0.13], 18);
     round(paint, x, Y, ZW + 0.004, R, COL[k].map((c) => c * 0.26), 18);
-    for (let j = 0; j < 6; j++) { const a = (j / 6) * Math.PI * 2; round(paint, x + Math.cos(a) * (R + 0.055), Y + Math.sin(a) * (R + 0.055), ZW + 0.006, 0.025, [0.6, 0.62, 0.65], 6); }
+    for (let j = 0; j < 6; j++) { const a = (j / 6) * Math.PI * 2; round(paint, x + cos(a) * (R + 0.055), Y + sin(a) * (R + 0.055), ZW + 0.006, 0.025, [0.6, 0.62, 0.65], 6); }
   });
   round(paint, 0, 0.62, ZW, 0.36, [0.92, 0.9, 0.82], 16);
   paint.tint(0.75, 0.1, 0.08, 1).quad(V(-0.02, 0.6, ZW + 0.005), V(0.02, 0.6, ZW + 0.005), V(0.2, 0.86, ZW + 0.005), V(0.17, 0.88, ZW + 0.005));
@@ -279,14 +287,14 @@ function geiger(parts, booth, mesh) {
   });
   const glow = [0, 0, 0, 0];
   let seq = [], phase = 'pause', i = 0, timer = 0, lives = 3, stage = 1, took = 0, idle = 0;
-  const draw = () => { let k; do k = Math.floor(Math.random() * 4); while (seq.length > 1 && seq[seq.length - 1] === k && seq[seq.length - 2] === k); return k; };
+  const draw = () => { let k; do k = Math.floor(roll() * 4); while (seq.length > 1 && seq[seq.length - 1] === k && seq[seq.length - 2] === k); return k; };
   const game = {
     view: { pos: [0, 1.72, 2.5], look: [0, 1.66, -3.2], fov: 58 }, firstPerson: true, crosshair: true,
     line: () => `round ${stage} · ${game.score} pts · ${hearts(lives)}`,
-    reset() { game.score = 0; game.over = false; seq = []; seq.push(draw()); seq.push(draw()); phase = 'pause'; game.phase = phase; timer = 1.0; lives = 3; stage = 1; i = 0; glow.fill(0); },
+    reset(seed) { roll = dice(seed); game.score = 0; game.over = false; seq = []; seq.push(draw()); seq.push(draw()); phase = 'pause'; game.phase = phase; timer = 1.0; lives = 3; stage = 1; i = 0; glow.fill(0); },
     step(dt, t, time, aim, io) {
       for (let k = 0; k < 4; k++) { glow[k] -= dt; lit[k].visible = glow[k] > 0; }
-      if (t < 0 || !aim) { if ((idle -= dt) <= 0) { idle = 0.6; glow[Math.floor(Math.random() * 4)] = 0.3; } return; }
+      if (t < 0 || !aim) { if ((idle -= dt) <= 0) { idle = 0.6; glow[Math.floor(roll() * 4)] = 0.3; } return; }
       if (game.over) return;
       timer -= dt;
       const on = Math.max(0.2, 0.5 - 0.03 * stage);
@@ -299,7 +307,7 @@ function geiger(parts, booth, mesh) {
       } else if (phase === 'input') {
         took += dt;
         let k = -1;
-        if (aim.clicks) { const h = hitZ(aim, ZW); if (h) { let bd = R + 0.16; X.forEach((x, j) => { const d = Math.hypot(h[0] - x, h[1] - Y); if (d < bd) { bd = d; k = j; } }); } }
+        if (aim.clicks) { const h = hitZ(aim, ZW); if (h) { let bd = R + 0.16; X.forEach((x, j) => { const d = hypot(h[0] - x, h[1] - Y); if (d < bd) { bd = d; k = j; } }); } }
         if (k >= 0 && k === seq[i]) {
           glow[k] = 0.22; io.play('checkpoint', { rate: RATE[k], volume: 0.7 });
           i++; timer = 5;
@@ -332,12 +340,15 @@ function geiger(parts, booth, mesh) {
 // something that glows sink through the water: a hook that touches one loses its fish, and fifteen points.
 
 function fish(parts, booth, mesh) {
+  // (what is left to chance is drawn from the seed of the game when it is played for a score: the server draws the same)
+  let roll = Math.random;
+  const rnd = (a, b) => a + roll() * (b - a);
   const paint = parts.get('paint');
   const Z = -2.2, TOP = 2.5, X0 = -2.65, X1 = 2.65, Y0 = 0.6;
   // the water, darker towards the bottom; the sky over it and the crests of the waves; a bed of sand, weeds, a drum half buried
   for (let k = 0; k < 5; k++) paint.tint(0.04 + 0.03 * k, 0.17 + 0.09 * k, 0.36 + 0.11 * k, 1).box(-HALF, 0.3 + k * 0.46, BACK, HALF, 0.3 + (k + 1) * 0.46, BACK + 0.04, { faces: 'Z' });
   paint.tint(0.6, 0.84, 1.05, 1).box(-HALF, 2.6, BACK, HALF, 3.1, BACK + 0.04, { faces: 'Z' });
-  for (let k = 0; k < 12; k++) { const pts = []; for (let a = 0; a <= 6; a++) pts.push(V(-HALF + 0.25 + k * 0.5 + Math.cos((Math.PI * a) / 6) * 0.27, 2.56 + Math.sin((Math.PI * a) / 6) * 0.1, BACK + 0.045)); paint.tint(1.3, 1.4, 1.5, 1).poly(pts); }
+  for (let k = 0; k < 12; k++) { const pts = []; for (let a = 0; a <= 6; a++) pts.push(V(-HALF + 0.25 + k * 0.5 + cos((Math.PI * a) / 6) * 0.27, 2.56 + sin((Math.PI * a) / 6) * 0.1, BACK + 0.045)); paint.tint(1.3, 1.4, 1.5, 1).poly(pts); }
   paint.tint(0.9, 0.78, 0.5, 1).box(-HALF, 0, BACK, HALF, 0.34, -0.7, { faces: 'YZ' });
   for (let k = 0; k < 11; k++) {
     const x = -2.8 + k * 0.56 + ((k * 13) % 5) * 0.03, z = BACK + 0.25 + ((k * 7) % 4) * 0.5, h = 0.5 + ((k * 11) % 6) * 0.14, lean = ((k % 3) - 1) * 0.16;
@@ -366,14 +377,18 @@ function fish(parts, booth, mesh) {
   const drums = [0, 1].map((i) => {
     const m = mesh(geometry((b) => { b.tint(1.25, 1.0, 0.1, 1).cylinder(0, -0.16, 0, 0.15, 0.15, 0.32, 9); b.tint(0.06, 0.06, 0.06, 1).cylinder(0, -0.05, 0, 0.154, 0.154, 0.1, 9, { capTop: false, capBottom: false }); }), `drum${i}`);
     m.visible = false;
-    return { m, on: false, x: 0, y: 0, wait: 6 + i * 3.5, ph: rnd(0, 6) };
+    return { m, on: false, x: 0, y: 0, sx: 0, wait: 6 + i * 3.5, ph: rnd(0, 6) };
   });
   const line = mesh(geometry((b) => b.tint(1.4, 1.4, 1.4, 1).box(-0.007, 0, -0.007, 0.007, 1, 0.007)), 'line');
   const hook = mesh(geometry((b) => { b.tint(1.5, 1.1, 0.3, 1).box(-0.012, -0.16, -0.012, 0.012, 0, 0.012).box(-0.012, -0.18, -0.012, 0.09, -0.156, 0.012).box(0.066, -0.18, -0.012, 0.09, -0.1, 0.012); b.tint(1.3, 0.2, 0.15, 1); sphere(b, 0.035, 6, 4); }), 'hook');
   let hx = 0, hy = TOP, carry = null, stun = 0;
   const game = {
     view: { pos: [0, 1.75, 2.6], look: [0, 1.5, Z], fov: 58 }, firstPerson: true, crosshair: true,
-    reset() { game.score = 0; game.carry = false; hx = 0; hy = TOP; carry = null; stun = 0; for (const d of drums) { d.on = false; d.wait = rnd(5, 9); } },
+    reset(seed) {
+      roll = dice(seed); game.score = 0; game.carry = false; hx = 0; hy = TOP; carry = null; stun = 0;
+      for (const f of shoal) { f.on = false; f.wait = rnd(0, 2.5) * (f.k.pts === 100 ? 4 : 1); f.ph = rnd(0, 6); }
+      for (const d of drums) { d.on = false; d.wait = rnd(5, 9); d.ph = rnd(0, 6); d.sx = 0; }
+    },
     step(dt, t, time, aim, io) {
       const playing = t >= 0 && !!aim, p = t < 0 ? 0 : clamp01(t / 45);
       // the fish swim across, each at its depth; one that leaves comes back a moment later
@@ -381,18 +396,19 @@ function fish(parts, booth, mesh) {
         if (f === carry) continue;
         if (!f.on) {
           if ((f.wait -= dt) > 0) { f.m.visible = false; continue; }
-          f.on = true; f.dir = Math.random() < 0.5 ? 1 : -1; f.x = f.dir > 0 ? X0 - 0.6 : X1 + 0.6; f.y0 = rnd(f.k.y[0], f.k.y[1]); f.v = rnd(f.k.v[0], f.k.v[1]) * (1 + 0.25 * p);
+          f.on = true; f.dir = roll() < 0.5 ? 1 : -1; f.x = f.dir > 0 ? X0 - 0.6 : X1 + 0.6; f.y0 = rnd(f.k.y[0], f.k.y[1]); f.v = rnd(f.k.v[0], f.k.v[1]) * (1 + 0.25 * p);
         }
-        f.x += f.dir * f.v * dt; f.y = f.y0 + 0.05 * Math.sin(time * 2.2 + f.ph);
+        f.x += f.dir * f.v * dt; f.y = f.y0 + 0.05 * sin(time * 2.2 + f.ph);
         if (f.x < X0 - 0.7 || f.x > X1 + 0.7) { f.on = false; f.wait = rnd(0.6, 2.6) * (f.k.pts === 100 ? 4 : 1); }
-        f.m.visible = f.on; f.m.position.set(f.x, f.y, Z); f.m.rotation.set(0, f.dir > 0 ? 0 : Math.PI, 0.12 * Math.sin(time * 9 + f.ph));
+        f.m.visible = f.on; f.m.position.set(f.x, f.y, Z); f.m.rotation.set(0, f.dir > 0 ? 0 : Math.PI, 0.12 * sin(time * 9 + f.ph));
       }
       // the drums sink
       for (const d of drums) {
         if (!d.on) { if (playing && (d.wait -= dt) <= 0) { d.on = true; d.x = rnd(X0 + 0.3, X1 - 0.3); d.y = TOP + 0.3; } d.m.visible = d.on; continue; }
         d.y -= (0.42 + 0.3 * p) * dt;
         if (d.y < Y0 - 0.4) { d.on = false; d.wait = rnd(2.5, 6) * (1 - 0.4 * p); }
-        d.m.visible = d.on; d.m.position.set(d.x + 0.12 * Math.sin(time * 1.7 + d.ph), d.y, Z); d.m.rotation.z = 0.3 * Math.sin(time * 1.3 + d.ph);
+        d.sx = d.x + 0.12 * sin(time * 1.7 + d.ph); // (it sways as it sinks)
+        d.m.visible = d.on; d.m.position.set(d.sx, d.y, Z); d.m.rotation.z = 0.3 * sin(time * 1.3 + d.ph);
       }
       // the hook: towards where one points, at the pace of a hook (slower with a big fish on)
       if (playing) {
@@ -400,8 +416,8 @@ function fish(parts, booth, mesh) {
         hx += clamp(tx - hx, -3.2 * pull * dt, 3.2 * pull * dt);
         hy += clamp(ty - hy, -2.3 * dt, 2.9 * pull * dt);
         if (stun > 0) stun -= dt;
-        if (!carry && stun <= 0) for (const f of shoal) if (f.on && Math.hypot(f.x - hx, f.y - (hy - 0.12)) < f.k.len * 0.5 + 0.08) { carry = f; io.play('pick', { volume: 0.8 }); break; }
-        for (const d of drums) if (d.on && Math.hypot(d.m.position.x - hx, d.y - (hy - 0.1)) < 0.25) {
+        if (!carry && stun <= 0) for (const f of shoal) if (f.on && hypot(f.x - hx, f.y - (hy - 0.12)) < f.k.len * 0.5 + 0.08) { carry = f; io.play('pick', { volume: 0.8 }); break; }
+        for (const d of drums) if (d.on && hypot(d.sx - hx, d.y - (hy - 0.1)) < 0.25) {
           d.on = false; d.wait = rnd(2.5, 6); stun = 0.7;
           game.score = Math.max(0, game.score - 15);
           if (carry) { carry.on = true; carry.x = hx; carry.y0 = clamp(hy - 0.2, carry.k.y[0], carry.k.y[1]); carry = null; }
@@ -413,7 +429,7 @@ function fish(parts, booth, mesh) {
           carry.on = false; carry.wait = rnd(0.8, 2.4) * (carry.k.pts === 100 ? 4 : 1); carry.m.visible = false; carry = null;
         }
       } else { hx += (0 - hx) * Math.min(1, dt * 2); hy += (TOP - 0.3 - hy) * Math.min(1, dt * 2); if (carry) { carry.on = false; carry = null; } }
-      if (carry) { carry.m.visible = true; carry.m.position.set(hx, hy - 0.2 - carry.k.len * 0.3, Z); carry.m.rotation.set(0, 0, Math.PI / 2 + 0.3 * Math.sin(time * 22)); }
+      if (carry) { carry.m.visible = true; carry.m.position.set(hx, hy - 0.2 - carry.k.len * 0.3, Z); carry.m.rotation.set(0, 0, Math.PI / 2 + 0.3 * sin(time * 22)); }
       game.carry = !!carry;
       line.position.set(hx, hy, Z); line.scale.y = Math.max(0.01, 3.0 - hy);
       hook.position.set(hx, hy, Z);
@@ -431,6 +447,9 @@ function fish(parts, booth, mesh) {
 // that comes less than 90 ms after the red was on its way before it: it counts as one too soon.)
 
 function scram(parts, booth, mesh) {
+  // (what is left to chance is drawn from the seed of the game when it is played for a score: the server draws the same)
+  let roll = Math.random;
+  const rnd = (a, b) => a + roll() * (b - a);
   const paint = parts.get('paint');
   const CY = 1.72, ZW = BACK + 0.05, R = 0.95, ALARMS = 5;
   // concrete, a band of hazard tape, pipes, the window and its bolts; five small lamps: one for each alarm dealt with
@@ -439,19 +458,20 @@ function scram(parts, booth, mesh) {
   for (const [x, c] of [[-2.55, [0.75, 0.3, 0.2]], [-2.2, [0.3, 0.5, 0.7]], [2.2, [0.3, 0.5, 0.7]], [2.55, [0.75, 0.3, 0.2]]]) paint.tint(c[0], c[1], c[2], 1).rod(V(x, 0.4, BACK + 0.14), V(x, 3.08, BACK + 0.14), 0.09, 7);
   round(paint, 0, CY, ZW, R + 0.2, [0.2, 0.21, 0.23], 22);
   round(paint, 0, CY, ZW + 0.004, R, [0.03, 0.07, 0.05], 22);
-  for (let j = 0; j < 10; j++) { const a = (j / 10) * Math.PI * 2; round(paint, Math.cos(a) * (R + 0.1), CY + Math.sin(a) * (R + 0.1), ZW + 0.006, 0.04, [0.62, 0.64, 0.66], 6); }
+  for (let j = 0; j < 10; j++) { const a = (j / 10) * Math.PI * 2; round(paint, cos(a) * (R + 0.1), CY + sin(a) * (R + 0.1), ZW + 0.006, 0.04, [0.62, 0.64, 0.66], 6); }
   for (let k = 0; k < ALARMS; k++) round(paint, -0.6 + k * 0.3, 0.6, ZW, 0.09, [0.1, 0.11, 0.12], 10);
   const done = Array.from({ length: ALARMS }, (_, k) => { const m = mesh(geometry((b) => round(b, 0, 0, 0, 0.075, [0.4, 1.6, 0.5], 10), 'glow'), `done${k}`, 'glow'); m.position.set(-0.6 + k * 0.3, 0.6, ZW + 0.01); m.visible = false; return m; });
   const core = [[0.3, 1.35, 0.5], [1.8, 0.14, 0.1], [0.3, 0.65, 1.8]].map((c, k) => { const m = mesh(geometry((b) => { round(b, 0, 0, 0, R * 0.97, c, 22); round(b, 0, 0, 0.003, R * 0.5, c.map((v) => v * 1.25), 16); }, 'glow'), ['calm', 'alarm', 'decoy'][k], 'glow'); m.position.set(0, CY, ZW + 0.012); m.visible = k === 0; return m; });
-  const now = () => performance.now();
+  // (how fast an alarm is answered is told by the clock of the game — the steps as they were taken and written
+  // down — never by the clock of the machine: the server measures the very same time when it plays the game again)
   let phase = 'wait', timer = 2, wait = 0, decoy = -1, blue = 0, at = 0, n = 0, penalty = 0, times = [];
-  const arm = () => { phase = 'wait'; wait = 0; timer = rnd(1.4, 4.2); decoy = n >= 1 && Math.random() < 0.55 ? rnd(0.5, timer - 0.7) : -1; blue = 0; };
+  const arm = () => { phase = 'wait'; wait = 0; timer = rnd(1.4, 4.2); decoy = n >= 1 && roll() < 0.55 ? rnd(0.5, timer - 0.7) : -1; blue = 0; };
   const game = {
     view: { pos: [0, 1.72, 2.5], look: [0, 1.7, -3.2], fov: 58 }, firstPerson: true, crosshair: false,
     line: () => `alarm ${Math.min(ALARMS, n + 1)} of ${ALARMS}${times.length ? ` · ${times[times.length - 1]} ms` : ''}`,
-    reset() { game.score = 0; game.over = false; n = 0; penalty = 0; times = []; arm(); game.phase = phase; },
+    reset(seed) { roll = dice(seed); game.score = 0; game.over = false; n = 0; penalty = 0; times = []; arm(); game.phase = phase; },
     step(dt, t, time, aim, io) {
-      const calm = 0.58 + 0.035 * Math.sin(time * 3);
+      const calm = 0.58 + 0.035 * sin(time * 3);
       if (t < 0 || !aim) { core[0].visible = true; core[0].scale.setScalar(calm); core[1].visible = core[2].visible = false; for (const m of done) m.visible = false; return; }
       const click = aim.clicks > 0;
       if (phase === 'wait') {
@@ -459,9 +479,9 @@ function scram(parts, booth, mesh) {
         if (decoy >= 0 && wait >= decoy) { decoy = -1; blue = 0.24; io.play('click', { volume: 0.5 }); }
         if (blue > 0) blue -= dt;
         if (click) { penalty += 300; io.play('fail', { volume: 0.6 }); io.note('Too soon! +300 ms'); arm(); }
-        else if (timer <= 0) { phase = 'alarm'; at = now(); io.play('press', { volume: 0.9 }); }
+        else if (timer <= 0) { phase = 'alarm'; at = time; io.play('press', { volume: 0.9 }); }
       } else if (phase === 'alarm') {
-        const el = now() - at;
+        const el = (time - at) * 1000;
         if (click && el < 90) { penalty += 300; io.play('fail', { volume: 0.6 }); io.note('Too soon! +300 ms'); arm(); }
         else if (click || el > 1500) {
           const ms = Math.min(1500, Math.round(el)) + penalty;
@@ -475,7 +495,7 @@ function scram(parts, booth, mesh) {
         }
       }
       game.phase = phase;
-      core[1].visible = phase === 'alarm'; core[1].scale.setScalar(0.96 + 0.04 * Math.sin(time * 40));
+      core[1].visible = phase === 'alarm'; core[1].scale.setScalar(0.96 + 0.04 * sin(time * 40));
       core[2].visible = phase === 'wait' && blue > 0; core[2].scale.setScalar(0.7);
       core[0].visible = !core[1].visible && !core[2].visible; core[0].scale.setScalar(calm);
       done.forEach((m, k) => { m.visible = k < n; });
@@ -493,6 +513,9 @@ function scram(parts, booth, mesh) {
 // one costs one of three lives, and the round is played again.
 
 function cups(parts, booth, mesh) {
+  // (what is left to chance is drawn from the seed of the game when it is played for a score: the server draws the same)
+  let roll = Math.random;
+  const rnd = (a, b) => a + roll() * (b - a);
   const paint = parts.get('paint');
   const TY = 1.0, Z = -1.15, GAP = 1.15, MAXN = 5, CUP_H = 0.58;
   // a table of green felt edged with hazard tape; behind, a curtain the colour of midnight, with stars
@@ -513,26 +536,26 @@ function cups(parts, booth, mesh) {
   const deal = () => {
     n = 3 + (stage >= 4 ? 1 : 0) + (stage >= 8 ? 1 : 0);
     cup.forEach((c, k) => { c.slot = k; c.x = slotX(k); c.z = Z; c.lift = 0; c.m.visible = k < n; });
-    where = Math.floor(Math.random() * n); phase = 'reveal'; timer = 1.2; left = Math.min(13, 3 + stage); moves = []; pick = -1; rest = 0;
+    where = Math.floor(roll() * n); phase = 'reveal'; timer = 1.2; left = Math.min(13, 3 + stage); moves = []; pick = -1; rest = 0;
   };
   const swap = (d) => {
     // two cups change places (one in front, the other behind); with room enough and late enough, two pairs at once
-    const free = cup.slice(0, n).sort(() => Math.random() - 0.5), pairs = n >= 4 && stage >= 6 && Math.random() < 0.6 ? 2 : 1;
-    for (let k = 0; k < pairs; k++) { const a = free[k * 2], b = free[k * 2 + 1], sign = Math.random() < 0.5 ? 1 : -1; moves.push({ c: a, from: a.x, to: b.x, sign, t: 0, d }, { c: b, from: b.x, to: a.x, sign: -sign, t: 0, d }); const s = a.slot; a.slot = b.slot; b.slot = s; }
+    const free = shuffle(cup.slice(0, n), roll), pairs = n >= 4 && stage >= 6 && roll() < 0.6 ? 2 : 1;
+    for (let k = 0; k < pairs; k++) { const a = free[k * 2], b = free[k * 2 + 1], sign = roll() < 0.5 ? 1 : -1; moves.push({ c: a, from: a.x, to: b.x, sign, t: 0, d }, { c: b, from: b.x, to: a.x, sign: -sign, t: 0, d }); const s = a.slot; a.slot = b.slot; b.slot = s; }
   };
   const game = {
     view: { pos: [0, 2.45, 2.3], look: [0, 1.0, -1.3], fov: 56 }, firstPerson: true, crosshair: true,
     line: () => `round ${stage} · ${game.score} pts · ${hearts(lives)}`,
-    reset() { game.score = 0; game.over = false; stage = 1; lives = 3; deal(); game.phase = phase; },
+    reset(seed) { roll = dice(seed); game.score = 0; game.over = false; stage = 1; lives = 3; deal(); game.phase = phase; },
     step(dt, t, time, aim, io) {
       const playing = t >= 0 && !!aim && !game.over;
       timer -= dt;
       if (phase === 'reveal') {
-        cup[where].lift = 0.6 * Math.sin(Math.PI * clamp01(1 - timer / 1.2));
+        cup[where].lift = 0.6 * sin(Math.PI * clamp01(1 - timer / 1.2));
         if (timer <= 0) { cup[where].lift = 0; phase = 'shuffle'; }
       } else if (phase === 'shuffle') {
         if (moves.length) {
-          for (const m of moves) { m.t += dt; const u = clamp01(m.t / m.d), e = u * u * (3 - 2 * u); m.c.x = lerp(m.from, m.to, e); m.c.z = Z + m.sign * Math.sin(Math.PI * u) * Math.min(0.62, Math.abs(m.to - m.from) * 0.5); }
+          for (const m of moves) { m.t += dt; const u = clamp01(m.t / m.d), e = u * u * (3 - 2 * u); m.c.x = lerp(m.from, m.to, e); m.c.z = Z + m.sign * sin(Math.PI * u) * Math.min(0.62, Math.abs(m.to - m.from) * 0.5); }
           if (moves[0].t >= moves[0].d) { for (const m of moves) { m.c.x = m.to; m.c.z = Z; } moves = []; rest = 0.03; }
         } else if ((rest -= dt) <= 0) {
           if (left-- > 0) { swap(Math.max(0.16, 0.5 - 0.035 * stage)); if (playing) io.play('click', { volume: 0.35, rate: 0.8 }); }
@@ -542,14 +565,14 @@ function cups(parts, booth, mesh) {
         if (playing && aim.clicks) {
           const h = hitY(aim, TY + 0.3);
           let bd = 0.5;
-          if (h) cup.slice(0, n).forEach((c, k) => { const d = Math.hypot(h[0] - c.x, h[1] - c.z); if (d < bd) { bd = d; pick = k; } });
+          if (h) cup.slice(0, n).forEach((c, k) => { const d = hypot(h[0] - c.x, h[1] - c.z); if (d < bd) { bd = d; pick = k; } });
           if (pick >= 0) {
             phase = 'show'; timer = 1.2;
             if (pick === where) { game.score += 10 * stage + 5 * (n - 3); io.play('coin', { volume: 0.8 }); } else { lives--; io.play('fail', { volume: 0.7 }); io.note(lives > 0 ? 'Not that one!' : 'The core is lost.'); }
           }
         }
       } else if (phase === 'show') {
-        const up = 0.6 * Math.sin(Math.PI * clamp01(1 - timer / 1.2));
+        const up = 0.6 * sin(Math.PI * clamp01(1 - timer / 1.2));
         cup[pick].lift = up; cup[where].lift = up;
         if (timer <= 0) {
           if (pick === where) { stage++; if (stage === 4 || stage === 8) io?.play('checkpoint', { volume: 0.6 }); deal(); if (playing && (stage === 4 || stage === 8)) io.note('One more cup!'); }

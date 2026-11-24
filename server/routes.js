@@ -9,7 +9,10 @@
 //   GET  /api/door, GET /api/rooms, POST /api/rooms/rules    which room a visitor goes to, the rooms, their rules (door.js)
 //   GET | POST /api/stats, POST /api/stats/set     the game in figures (stats.js)
 //   POST /api/visit  { device, tz }           → { days, best, today }             (see visit())
-//   GET | POST | DELETE /api/scores, POST /api/run                                 (see scores.js)
+//   GET | POST | DELETE /api/scores, POST /api/scores/claim, POST /api/run         (see scores.js)
+//   GET | POST /api/flagged                   the scores the referee did not believe (replay.js): an administrator
+//                                             looks — { flagged: [{ id, board, name, score, at, why, guest }] } —
+//                                             then takes one onto its board ({ id, accept: true }) or lets it go
 //   GET  /api/admin                           → { ok, owner, boards }   (with an administrator's key: Authorization: Bearer …)
 //   GET | DELETE /api/admins                  the administrators the owner and the others have named (admins.js)
 //   GET  /api/visitors                        where the visitors come from, for the administrators (visitors.js)
@@ -31,7 +34,8 @@
 //        directory(), keep(), tell(room, message), maxPlayers: the rooms and their door (door.js) }
 // An answer is { status, body, headers }, or { status, bytes, headers } for a picture.
 import { allowed } from './api.js';
-import { BOARDS, PERIODS, addScore, cleanScore, removeScore, runFits, topsOf, topsWith, wouldRank } from './scores.js';
+import { BOARDS, PERIODS, addScore, cleanScore, removeScore, runFits, topsOf, topsWith, wouldRank, wouldEnter } from './scores.js';
+import { replayable, replay, agrees } from './replay.js';
 import { randomId, sign, verify } from './token.js';
 import { cleanName } from './protocol.js';
 import { shopRoute } from './shop.js';
@@ -104,6 +108,8 @@ export async function route(req, ctx) {
   if (released) return released;
   // (a board of scores can wait for its game to be released: until then it is as if it did not exist)
   const shut = async (board) => { const sw = BOARDS[board]?.release; return !!sw && !(await readRelease(ctx)).release[sw]; };
+  // (the version of the game online, in a few characters — '' when the host cannot tell)
+  const versionNow = async () => { try { return String((await ctx.build?.()) || '').slice(0, 12); } catch { return ''; } };
 
   if (path === '/api/admins') {
     if (!req.admin) return out(403, { error: 'Forbidden.' });
@@ -145,7 +151,12 @@ export async function route(req, ctx) {
     if (method !== 'POST') return out(405, { error: 'Method not allowed.' }, { Allow: 'POST' });
     if (limited('run')) return busy;
     if (!body || !Object.hasOwn(BOARDS, body.board) || (await shut(body.board))) return out(400, { error: 'Unknown board.' });
-    return out(200, { run: await sign(await ctx.secret(), { b: body.board, t: now, n: randomId(9) }) });
+    // (with the seed of the game: what a game of the booths leaves to chance is drawn from it — the server can
+    // then play the game again from what the page wrote down: replay.js)
+    // (…and with the version online: a game that began before a delivery and ended after it was played by rules
+    // that may have changed since)
+    const seed = crypto.getRandomValues(new Uint32Array(1))[0];
+    return out(200, { run: await sign(await ctx.secret(), { b: body.board, t: now, n: randomId(9), s: seed, v: await versionNow() }), seed });
   }
 
   if (path === '/api/scores' || path === '/api/scores/claim') {
@@ -210,7 +221,26 @@ export async function route(req, ctx) {
     if (await used(ctx, note.n, note.t + BOARDS[score.board].max + 3600_000)) return out(400, { error: 'Not a score: this run was already counted.' });
     const stored = await ctx.store.get(`board:${score.board}`), periods = guest ? ['day'] : PERIODS, line = { name, score: score.score };
     let added, tops;
-    if (await hushed(device)) {
+    // A game that would enter the first five of one of its lists is played again by the server (replay.js), from
+    // the seed of its note and what the page wrote down of the game. A score that does not come out of it is
+    // refused without a word — its author sees it on the board, nobody else does — and listed for the owner
+    // (GET /api/flagged): a name, a score, the reason. Nothing of the game itself is kept, believed or not.
+    let doubt = '';
+    if (replayable(score.board) && wouldEnter(stored, score.board, score.score, periods, 5, now)) {
+      let played = null, broke = false;
+      try { played = Number.isInteger(note.s) ? replay(score.board, note.s, body.log) : null; } catch { broke = true; }
+      if (!agrees(score.board, score.score, played)) {
+        doubt = broke ? 'its game could not be played again' : !played ? 'no game came with it' : `played again, it gives ${played.score}${played.over ? '' : ' and does not end'}`;
+        if (typeof note.v === 'string' && note.v !== (await versionNow())) doubt += ' (a delivery came during this game: its rules may have changed)';
+      }
+    }
+    if (doubt) {
+      const kept = ((await ctx.store.get('flagged')) || []).slice(-39);
+      kept.push({ id: randomId(6), board: score.board, name, score: score.score, at: now, why: doubt, guest });
+      await ctx.store.put('flagged', kept);
+    }
+    // (…and a score that is not believed is kept apart like those of a visitor kept out in silence: theirs to see)
+    if (doubt || (await hushed(device))) {
       const own = (await shadowOf(device)) || {};
       added = addScore(own[score.board], score.board, line, now, periods);
       if (device) await ctx.store.put(`shadow:${device}`, { ...own, [score.board]: added.state });
@@ -227,6 +257,23 @@ export async function route(req, ctx) {
       // (a guest: where they stand today, where they would stand with an account — and a note to claim it with)
       ...(guest && { guest: true, day: added.day, would: wouldRank(stored, score.board, score.score, now), claim: await sign(await ctx.secret(), { c: 1, b: score.board, s: score.score, x: now + CLAIM_MS, n: randomId(9) }) }),
     });
+  }
+
+  if (path === '/api/flagged') {
+    // the scores the server did not believe (see above): the owner looks, then takes each onto its board — or lets it go
+    if (!req.admin) return out(403, { error: 'Forbidden.' });
+    let kept = (await ctx.store.get('flagged')) || [];
+    if (method === 'POST') {
+      const one = kept.find((f) => f.id === body?.id);
+      if (!one) return out(404, { error: 'No such score.' });
+      if (body.accept === true && Object.hasOwn(BOARDS, one.board)) {
+        const state = addScore(await ctx.store.get(`board:${one.board}`), one.board, { name: one.name, score: one.score }, now, one.guest ? ['day'] : PERIODS).state;
+        await ctx.store.put(`board:${one.board}`, state);
+      }
+      kept = kept.filter((f) => f !== one);
+      await ctx.store.put('flagged', kept);
+    } else if (method !== 'GET' && method !== 'HEAD') return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD, POST' });
+    return out(200, { flagged: kept.map((f) => ({ id: f.id, board: f.board, name: f.name, score: f.score, at: f.at, why: f.why, guest: !!f.guest })).reverse() });
   }
 
   // an account, to keep things from one browser to the next (accounts.js)

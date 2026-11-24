@@ -169,12 +169,23 @@ try {
   const hintedAfter = await hints();
   check('Tab switches to everyone: the line reaches Bob unmarked, nothing more is said about who is near, and the chat opens there from now on', !!wide && toAll.button === 'Everyone' && /whole oasis/.test(toAll.heard) && toAll.kept === 'all' && again === 'Everyone' && hintedAfter === 1, JSON.stringify({ wide, toAll, again, hintedAfter }));
   // a game finished by one is seen by the other at once: a line in the chat, the board redrawn
-  await alice.page.evaluate(() => window.__mmf.fair.boards.bell.start());
-  await new Promise((r) => setTimeout(r, 2600)); // (a game of the striker lasts a few seconds: the server knows)
-  await alice.page.evaluate(() => window.__mmf.scoreGame('bell', 'Ring the Bell', 7777, '7,777 on the scale'));
-  const live = await until(() => bob.page.evaluate(() => [...document.querySelectorAll('.chat .log p')].map((e) => e.textContent).find((l) => /Ring the Bell: Alice — 7,777 points \(#1 today\)/.test(l)) || null), 20000);
+  // (she really plays the bell — three blows: a great score at a booth is played again by the server, from what
+  // her page wrote down, before anybody else sees it)
+  await alice.page.evaluate(() => new Promise((done) => {
+    const a = window.__mmf, booth = a.world.games.booths.list.find((b) => b.id === 'bell');
+    a.playBooth(booth);
+    const tick = () => {
+      const s = a.fair.session;
+      if (!s) return done(true);
+      if (!s.over && s.gauge !== null && s.gauge > 0.85) a.input._clicks++;
+      requestAnimationFrame(tick);
+    };
+    tick();
+  }));
+  const struck = await until(() => alice.page.evaluate(() => window.__mmf.fair.tops.bell?.day?.find((e) => e.name === 'Alice') || null), 20000);
+  const live = await until(() => bob.page.evaluate(() => [...document.querySelectorAll('.chat .log p')].map((e) => e.textContent).find((l) => /Ring the Bell: Alice — [\d,]+ points \(#1 today\)/.test(l)) || null), 20000);
   const shownToBob = await bob.page.evaluate(() => window.__mmf.fair.tops.bell?.day?.[0] || null);
-  check('a score made by Alice is shown to Bob as soon as she finishes: a line in the chat, his board up to date', !!live && shownToBob?.name === 'Alice' && shownToBob.score === 7777, JSON.stringify({ live, shownToBob }));
+  check('a score made by Alice is shown to Bob as soon as she finishes — once the server has played her game again: a line in the chat, his board up to date', !!live && struck?.score > 0 && shownToBob?.name === 'Alice' && shownToBob.score === struck.score, JSON.stringify({ struck, live, shownToBob }));
   // …made without an account: it is on the board of the day, and its author is offered an account when it
   // would be among the ten of a longer list
   {
@@ -183,7 +194,7 @@ try {
     if (offered) await alice.page.click('.offer-bar .offer-no');
     const gone = await until(() => alice.page.evaluate(() => !document.querySelector('.offer-bar.on')), 10000);
     check('a score made without an account is on the board of the day only — and its author is offered an account when it would be among the ten of all time',
-      /You would be #1 of all time — create an account to keep it/.test(offered?.text || '') && offered.yes === 'Create an account' && offered.no === 'Not now' && !!gone && boards.day[0]?.name === 'Alice' && boards.day[0].score === 7777 && boards.all.length === 0 && boards.week.length === 0, JSON.stringify({ offered, boards }));
+      /You would be #1 of all time — create an account to keep it/.test(offered?.text || '') && offered.yes === 'Create an account' && offered.no === 'Not now' && !!gone && boards.day[0]?.name === 'Alice' && boards.day[0].score === struck.score && boards.all.length === 0 && boards.week.length === 0, JSON.stringify({ offered, boards }));
   }
   // who is here: everybody sees the names; the administrator also sees where from, and can put someone out
   await bob.page.click('.pill.players');
