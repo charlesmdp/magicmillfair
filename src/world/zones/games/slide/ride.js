@@ -27,7 +27,7 @@ export const RIDE = {
   friction: 0.012,
   push: 3.4, // m/s²: what the water gives to who rides in it
   slack: { push: 0.35, drag: 2.2 }, // where the water is slack (the long pool): what is left of its push, and how much more it holds back
-  plunge: { speed: 11.5, keep: 0.25 }, // plunging into the long pool: of what one has over that speed, so much is left
+  plunge: { speed: 10.5, keep: 0.2 }, // plunging into the long pool: of what one has over that speed, so much is left
   rub: 2.6, // m/s²: what a wall takes, at the rim
   edge: 0.74, // radians up a wall: where it begins to rub, and the curl of the rim to push back
   lip: 12, // rad/s² for each radian beyond `edge`

@@ -250,17 +250,17 @@ const only = (t, fn) => { const things = course.things; course.things = [].conca
   check('…on the side away from the cliff, clear of the pool, and clear of the ground', rel.every((r) => r.lat * pipe.side > 0 && (r.up > 2.5 || Math.abs(r.lat) - open > r.F + open + 0.4)) && pipe.points.every((p) => p.y - 0.5 - ground(p.x, p.z) > 3),
     `its rim ${Math.min(...rel.filter((r) => r.up < 2.5).map((r) => Math.abs(r.lat) - open - r.F - open)).toFixed(1)} m from the pool's at the nearest`);
   // jumping the rim of the pool on that side: down into the pipe, off its end, down onto the slide again
-  const ride = (at) => {
+  const ride = (at, upTo = 30) => {
     const st = riderAt(z.from - 40, 19), t0 = st.clock; let hopped = false;
     const seen = run(st, 40, (q, i) => {
       botInput(q, 'careful', i);
       const m = q.s - z.from;
-      if (at !== null && q.line < 0 && !q.fly && !hopped && m > at && m < 44) { i.steer = pipe.side; i.brake = false; i.tuck = false; i.jump = q.u * pipe.side > 3.1 && q.h <= 0; }
+      if (at !== null && q.line < 0 && !q.fly && !hopped && m > at && m < upTo) { i.steer = pipe.side; i.brake = false; i.tuck = false; i.jump = q.u * pipe.side > 3.1 && q.h <= 0; }
       if (q.fly) { hopped = true; i.steer = 0; }
     }, (q) => !q.fly && rideProgress(q) >= goal);
     return { st, seen, time: st.clock - t0, lands: seen.filter((e) => e.type === 'land' && e.hop) };
   };
-  const stay = ride(null), hop = ride(8), late = ride(34);
+  const stay = ride(null), hop = ride(17.5), late = ride(45.5, 53.5); // (past the first propeller; and between the last two, where the pipe is high)
   check('jumping the rim of the pool on its side, one comes down in the pipe and rides on', hop.lands.length >= 1 && hop.lands[0].line === pipe.id && hop.st.falls === 0 && hop.st.took.includes(pipe.id), hop.lands[0] ? `over the rim ${(hop.seen.find((e) => e.type === 'out').s - z.from).toFixed(0)} m into the pool, in the pipe ${(hop.lands[0].at - hop.seen.find((e) => e.type === 'out').at).toFixed(2)} s later` : 'never in the pipe');
   check('…off its end one flies, and comes down on the slide again', hop.lands.length === 2 && hop.lands[1].line === -1 && hop.lands[1].from === 'off' && hop.st.falls === 0, hop.lands[1] ? `${(hop.lands[1].s - z.from).toFixed(0)} m from the top of the pool` : '');
   check('…and it is the faster way, even against a pool crossed without touching anything', stay.st.bumps === 0 && hop.time < stay.time - 0.4, `${hop.time.toFixed(2)} s by the pipe, ${stay.time.toFixed(2)} s by the pool`);

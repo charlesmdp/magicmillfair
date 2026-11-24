@@ -372,11 +372,12 @@ export function slideCourse() {
       // (and what is left of the walls above its blades is padded, too tall to jump: nobody slips by along a wall)
       for (const side of [-1, 1]) things.push({ kind: 'block', line: -1, s: at(m), u: side * (MILL.floor + WALL), half: WALL - 0.6, len: 1.5, h: 1.3, pad: true });
     };
-    prop(13, 5.6, 0.5);
-    things.push({ kind: 'bumper', line: -1, s: at(23.5), u: 0, r: 1.35, h: 1.7 });
-    prop(33.5, -5.0, 2.1);
-    for (const side of [-1, 1]) things.push({ kind: 'bumper', line: -1, s: at(43.5), u: side * 2.3, r: 1.15, h: 1.7 });
-    prop(53.5, 4.4, 4.0);
+    // (the first a good way in: one comes to it slowed, having seen it turn from the gap)
+    prop(16, 5.6, 0.5);
+    things.push({ kind: 'bumper', line: -1, s: at(25.5), u: 0, r: 1.35, h: 1.7 });
+    prop(35, -5.0, 2.1);
+    for (const side of [-1, 1]) things.push({ kind: 'bumper', line: -1, s: at(44.5), u: side * 2.3, r: 1.15, h: 1.7 });
+    prop(54, 4.4, 4.0);
   }
   // ---- the pools: three whirlpools in a triangle — one in the middle of the way in, to go round on either side,
   // then two abreast, to pass between

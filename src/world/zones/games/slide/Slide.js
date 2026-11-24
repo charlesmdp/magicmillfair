@@ -796,7 +796,7 @@ export class Slide {
         if (st.over && !session.over) { session.over = true; session.time = st.warped ? 0 : st.time; session.falls = st.falls; }
         session.line = S.count > 0 ? `${SLIDE.name} · ${Math.ceil(S.count) > 3 ? 'ready' : Math.ceil(S.count)}…`
           : session.over ? `${SLIDE.name} · ${formatTime(session.time)}`
-            : pose.flying && pose.left > 0 ? `${formatTime(Math.round(st.clock * 1000))} · OUT OF THE TUBE · ${pose.left.toFixed(1)} s to land in one`
+            : pose.flying && pose.left > 0 ? `${formatTime(Math.round(st.clock * 1000))} · OUT · ${pose.left.toFixed(1)} s to find a tube`
             : `${formatTime(Math.round(st.clock * 1000))} · ${Math.round(st.v * 3.6)} km/h · ${Math.max(0, Math.round(course.finish - here))} m to go`;
       },
       /**
@@ -881,7 +881,6 @@ export class Slide {
       if (e.hard > 3) S.shake = Math.max(S.shake, 0.4);
       if (e.hop) {
         // back in a trough after having left one: which, and what was skipped
-        S.cam = null;
         if (e.gain > 25) io.play('boost', { volume: 0.7 });
         io.note(e.line >= 0 && lineOf(course, e.line).pipe ? `${lineOf(course, e.line).name}: the pipe below!` : e.gain > 25 ? `Back in the tube — ${Math.round(e.gain)} m skipped!` : e.from === 'off' ? 'Back on the slide!' : 'Back in the tube!');
       }
