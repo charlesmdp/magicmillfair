@@ -3,17 +3,22 @@
 // A rider is somewhere along a line of the course (`s` metres from its start) and somewhere across the trough
 // (`u`: metres from its middle along its surface, to the right when positive). Water runs down the middle of a
 // plain trough, and stands over the whole floor where the slide opens out: in it one is carried along, out of
-// it — up the walls — one drags, so the game is to keep to the water. A bend throws the rider up its outer wall,
-// and over the rim is out: the ring and its rider really leave the trough, fall, and are put back at the last
-// arch with the clock running. One steers, lies back (faster, steers less), brakes and jumps — over the rolls
-// that lie across the water, some of them sliding from side to side, over the arms that turn above it, and, off
-// the ramp at its lip, over a gap between two troughs. Blocks are too tall to jump: one goes round them, and
-// between the rows of them that part the lanes. A whirlpool draws in whoever comes near it, and holds and spins
-// whoever rides into it.
+// it — up the walls — one drags, so the game is to keep to the water. A bend throws the rider up its outer wall.
+// One steers, lies back (faster, steers less), brakes and jumps — over the rolls that lie across the water, some
+// of them sliding from side to side, over the arms that turn above it, and, off the ramp at its lip, over a gap
+// between two troughs. A whirlpool draws in whoever comes near it, and holds and spins whoever rides into it.
+// In the long pool the water is slack — one plunges into it and is slowed — and great propellers lie on it, as
+// wide as it is: one passes between their blades, on the side where they go one's way, or jumps one; a blade
+// that comes the other way throws back whoever it catches, and so do the buffers that stand in the pool.
+//
+// Over the rim one is out of the trough — not out of the ride: the ring and its rider really fly, steered a
+// little, and whatever trough they come down into — the same one further on, a pipe beside it, a turn of the
+// slide below — they ride on from there. Only who has found none when the count runs out (RIDE.out), or has
+// come down on the ground or in the sea, is put back at the last arch, with the clock running.
 //
 // Time advances in steps of 1/120 s whatever the frame rate: the same run takes the same time on every device.
 // What moves in the trough moves by the clock of the ride itself.
-import { SLIDE, WALL, lineAt, frameAt, rimAt, gapAt, across, sliderAt, spinnerAt } from './track.js';
+import { SLIDE, WALL, lineAt, lineOf, frameAt, rimAt, gapAt, across, sliderAt, spinnerAt, propAt } from './track.js';
 
 export const RIDE = {
   step: 1 / 120,
@@ -21,6 +26,8 @@ export const RIDE = {
   drag: 0.012, // air and water: what settles the speed (about 19 m/s in the water, half of that out of it)
   friction: 0.012,
   push: 3.4, // m/s²: what the water gives to who rides in it
+  slack: { push: 0.35, drag: 2.2 }, // where the water is slack (the long pool): what is left of its push, and how much more it holds back
+  plunge: { speed: 11.5, keep: 0.25 }, // plunging into the long pool: of what one has over that speed, so much is left
   rub: 2.6, // m/s²: what a wall takes, at the rim
   edge: 0.74, // radians up a wall: where it begins to rub, and the curl of the rim to push back
   lip: 12, // rad/s² for each radian beyond `edge`
@@ -28,7 +35,7 @@ export const RIDE = {
   brake: 7, // m/s² taken off, sitting up
   steer: 15.2, // m/s² across the trough, at full lock
   damp: 3.6, // how fast a swing across the trough dies out (1/s)
-  air: 0.8, // how much of the steering is left in the air (a jump can be aimed, and does not carry one over the edge)
+  air: 0.8, // how much of the steering is left in the air (a jump can be aimed)
   glide: 0.8, // …and how much of what stills a swing across the trough
   drift: 0.2, // …and how much of a bend throws one aside while in the air (the trough turns away underneath)
   jump: 3.8, // m/s up, off the water (three quarters of a metre high, not quite a second in the air)
@@ -38,13 +45,21 @@ export const RIDE = {
   whirl: { time: 1.3, speed: 3.5, pull: 16 }, // caught in a whirlpool: held so long, let go at that speed; how hard it draws in (m/s², at its eye)
   bar: 0.4, // what is left of the speed after running into a roll
   arm: 0.45, // …into the arm of a spinner
-  block: 0.4, // …into a block
-  nose: 0.55, // …into the end of a row of blocks
+  block: 0.4, // …into a block, into the hub of a propeller
+  blade: 0.5, // how much of the speed one runs into a blade with it gives back
+  bounce: { speed: 11, time: 0.55, fade: 3.2 }, // off a buffer: thrown back at that speed (m/s), for so long, slowing so fast (1/s)
   again: 1.2, // s before the same thing can be run into again
-  out: 1.9, // s out of the trough before one is put back
-  mercy: 3, // falls in a row from the same arch after which one is put back at the next
+  out: 1.5, // s one may be out of a trough: the time to come down into one — any — or one is put back
+  rest: 0.7, // s one is left where one came down, on the ground or in the sea, before being put back
+  wing: 4, // m/s² across, steering in the air out of the trough
+  airbrake: 5, // m/s² taken off, sitting up in the air
+  tip: 2.4, // m/s: who goes over the rim goes outwards at least this fast
+  hard: 11, // m/s into the trough one comes down in: beyond (a fall of six metres), it costs speed
+  settle: 1.2, // s one must stay in the trough one has come down into before the arches flown over count
+  mercy: 3, // times in a row put back at the same arch after which one is put back at the next
   back: 10, // m/s: the speed one is put back with
   body: 0.3, // m: half the width of a rider, for what they run into
+  seat: 0.3, // m: how far a rider's hips are over what they ride on
 };
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -52,15 +67,22 @@ const smooth = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t
 
 /**
  * A rider at the top, not yet gone: see stepRide. `under(x, z, out)`, when given, tells what a rider who has
- * left the trough falls onto there: out.y (how high it is) and out.wet (water, or the ground) — without it,
- * the sea is everywhere. (Only what is seen of a fall depends on it: never the time of a run.)
+ * left the trough comes down onto there, if no trough: out.y (how high it is) and out.wet (water, or the
+ * ground) — without it, the sea is everywhere.
  */
 export function startRide(course, { under = null } = {}) {
   return {
     line: -1, s: 0.5, u: 0, w: 0, v: 0, h: 0, vh: 0, clock: 0, acc: 0, mark: 0, stun: 0, spin: 0, turn: 0, eye: null, wantJump: 0, floor: 0,
-    // out of the trough: { x, y, z, vx, vy, vz, t, kind: 'side' | 'gap' | 'end', side, wet (in the water), down (on the ground) }
+    kb: 0, kbv: 0, // thrown back (by a buffer, a blade): for so long yet, at that speed
+    dip: null, // (the long pool one has plunged into)
+    settle: 0, // (just down from a flight: for so long yet the arches one flew over are not one's own — see alight)
+    // out of the trough: { x, y, z, vx, vy, vz, t, kind: 'side' (over the rim) | 'gap' (short of the far lip) |
+    // 'off' (off the end of a pipe) | 'end' (off the end of the slide), side, wet (in the water), down (on the
+    // ground), hit (when it came down), from (how far down the course it left) }
     fly: null,
-    falls: 0, bumps: 0, caught: 0, jumps: 0, knocks: 0, over: false, ended: false, time: 0, took: [],
+    falls: 0, // times put back at an arch
+    hops: 0, skipped: 0, // times out of a trough and down into one again; the metres of the course so skipped
+    bumps: 0, caught: 0, jumps: 0, over: false, ended: false, time: 0, took: [],
     cool: new Map(), // (what has just been run into: not again before…)
     fellAt: -1, again: 0, // (the arch one was last put back at, and how many times running)
     next: new Map(), // (which things of each line come next: the lists are sorted along their line)
@@ -68,7 +90,6 @@ export function startRide(course, { under = null } = {}) {
   };
 }
 
-const lineOf = (course, id) => (id < 0 ? course.main : course.forks[id]);
 function thingsOf(course, id) {
   if (!course._byLine) {
     course._byLine = new Map();
@@ -80,10 +101,12 @@ function thingsOf(course, id) {
 
 /**
  * Advances a ride by `dt` seconds. `input`: { steer (-1 left … 1 right), tuck, brake, jump (true on the frame it
- * is asked) }. `events`, when given, is filled with what happened: { type: 'jump' | 'kick' | 'land' | 'bar' (a
- * roll, a slider) | 'arm' (a spinner) | 'block' | 'nose' (the end of a row of blocks) | 'wall' (its side) |
- * 'whirl' | 'free' | 'out' (kind: 'side' | 'gap' | 'end') | 'splash' | 'thud' | 'back' | 'mark' | 'fork' | 'join'
- * | 'finish' | 'end', … }. Returns the ride.
+ * is asked) }. `events`, when given, is filled with what happened: { type: 'jump' | 'kick' | 'land' (hard: how
+ * hard; hop: back in a trough after having left one — then line, gain (the metres of the course skipped) and
+ * from (the kind of the flight)) | 'bar' (a roll, a slider) | 'arm' (a spinner) | 'block' | 'hub' | 'blade' (back:
+ * thrown back by it) | 'bump' (a buffer) | 'plunge' | 'whirl' | 'free' | 'out' (kind: 'side' | 'gap' | 'off' |
+ * 'end') | 'splash' | 'thud' | 'back' (late: the count ran out in the air) | 'mark' | 'fork' | 'join' | 'finish'
+ * | 'end', … }. Returns the ride.
  */
 export function stepRide(st, dt, input, events) {
   if (input?.jump) st.wantJump = 0.14; // (asked a moment too early, a jump still goes off on touching the water)
@@ -102,14 +125,26 @@ const _p = {}, _x = {};
 function sub(st, dt, input, events) {
   const course = st.course, R = SLIDE.radius;
   if (!st.over) st.clock += dt;
-  if (st.fly) { flight(st, dt, events); return; }
+  if (st.fly) { flight(st, dt, input, events); return; }
   if (st.stun > 0) st.stun -= dt;
   if (st.wantJump > 0) st.wantJump -= dt;
+  if (st.settle > 0) st.settle -= dt;
   const line = lineOf(course, st.line), p = lineAt(line, st.s, _p);
   const gp = RIDE.g * Math.sqrt(Math.max(0, 1 - p.ty * p.ty)); // what of gravity presses into the trough
   // (where the trough narrows, its walls come in and bring along whoever is on them, as high up as they were)
   if (p.F < st.floor) { const reach = p.F + Math.max(0, Math.abs(st.u) - st.floor); if (Math.abs(st.u) > reach) st.u = (st.u < 0 ? -1 : 1) * reach; }
   st.floor = p.F;
+
+  // ---- thrown back by a buffer or a blade: back up the pool, round and round, then left to the water again
+  if (st.kb > 0) {
+    st.kb -= dt; st.turn += dt * 9;
+    st.s = Math.max(0.5, st.s - st.kbv * dt); st.kbv *= Math.max(0, 1 - RIDE.bounce.fade * dt);
+    st.u += st.w * dt; st.w *= Math.max(0, 1 - 2.5 * dt);
+    const side = st.u < 0 ? -1 : 1, limit = rimAt(line, st.s, side) - 0.3;
+    if (Math.abs(st.u) > limit) { st.u = side * limit; st.w = 0; }
+    if (st.kb <= 0) { st.turn = 0; st.v = RIDE.carry; }
+    return;
+  }
 
   // ---- held in a whirlpool: drawn to its eye, spun on the spot, then let go, slow
   if (st.spin > 0) {
@@ -148,7 +183,7 @@ function sub(st, dt, input, events) {
   const hole = gapAt(course, st.line, st.s), press = gp + st.v * st.v * p.kv; // (kv < 0 over a crest: the trough falls away)
   if (hole) {
     st.vh -= press * dt; st.h += st.vh * dt;
-    if (st.h < -0.45) { fall(st, 'gap', events); return; }
+    if (st.h < -0.45) { leave(st, 'gap', events); return; }
   } else if (st.h < 0) {
     // (out of a gap a little low: onto the lip of the next trough, with a bump)
     st.h = 0; st.vh = 0; st.v *= 0.85; events?.push({ type: 'land', hard: 5 });
@@ -175,38 +210,47 @@ function sub(st, dt, input, events) {
   if (!hole) {
     const side = st.u < 0 ? -1 : 1, limit = rimAt(line, st.s, side);
     if (Math.abs(st.u) > limit) {
-      // over the rim: out. (The ridge between two troughs, where a shortcut leaves or joins, only guides.)
-      if (limit > p.F + WALL - 0.05) { fall(st, 'side', events); return; }
+      // over the rim: out of the trough. (The ridge between two troughs, where a shortcut leaves or joins, only guides.)
+      if (limit > p.F + WALL - 0.05) { leave(st, 'side', events); return; }
       st.u = side * limit;
       if (st.w * side > 0) st.w *= -0.25;
     }
   }
 
-  // ---- down the slope: carried in the water, dragging up the walls
+  // ---- down the slope: carried in the water, dragging up the walls; where the water is slack it carries less and holds back more
   let acc = -RIDE.g * p.ty; // (ty < 0 going down)
   if (!afloat && !hole) {
     const dry = Math.max(0, Math.abs(st.u) - p.F); // how far up a wall
-    acc += RIDE.push * (1 - smooth(SLIDE.stream, SLIDE.shore, dry)) + pullS;
-    acc -= RIDE.friction * gp + RIDE.drag * (tuck ? RIDE.tuck : 1) * st.v * st.v + RIDE.rub * smooth(RIDE.edge * R, WALL, dry);
+    acc += RIDE.push * (line.rush || 1) * (1 - (1 - RIDE.slack.push) * p.S) * (1 - smooth(SLIDE.stream, SLIDE.shore, dry)) + pullS; // (a pipe runs harder)
+    acc -= RIDE.friction * gp + RIDE.drag * (1 + (RIDE.slack.drag - 1) * p.S) * (tuck ? RIDE.tuck : 1) * st.v * st.v + RIDE.rub * smooth(RIDE.edge * R, WALL, dry);
     if (brake) acc -= RIDE.brake;
   }
   st.v = clamp(st.v + acc * dt, RIDE.carry, RIDE.top);
   const before = st.s;
   st.s += (st.v * dt) / Math.max(0.6, 1 + p.k * X.off); // the inside of a bend is the shorter way
+  // ---- into the long pool: the still water takes most of the speed one comes with (once: on touching it)
+  if (st.line < 0 && !afloat) {
+    for (const z of course.mills) {
+      if (st.dip === z || st.s < z.plunge || st.s > z.plunge + 14) continue;
+      st.dip = z;
+      if (st.v > RIDE.plunge.speed) { const was = st.v; st.v = RIDE.plunge.speed + (st.v - RIDE.plunge.speed) * RIDE.plunge.keep; events?.push({ type: 'plunge', lost: was - st.v }); }
+    }
+  }
 
   // ---- what lies in the water, what moves over it
-  for (let q = n; q < list.length && list[q].s < st.s + 3; q++) {
+  for (let q = n; q < list.length && list[q].s < st.s + 6; q++) {
     const t = list[q];
-    if (t.kind === 'whirl' || cooled(t)) continue;
+    if (t.kind === 'whirl') continue;
+    const cold = cooled(t);
     if (t.kind === 'bar' || t.kind === 'slider') {
-      if (!(before < t.s && st.s >= t.s && st.h < t.h)) continue;
+      if (cold || !(before < t.s && st.s >= t.s && st.h < t.h)) continue;
       const at = t.kind === 'slider' ? sliderAt(t, st.clock) : t.u;
       if (Math.abs(st.u - at) >= t.half + RIDE.body) continue;
       // into a roll: over it all the same, tumbling, most of the speed gone
       bump(st, RIDE.bar, 2.2); st.bumps++; st.cool.set(t.index, st.clock + RIDE.again);
       events?.push({ type: 'bar', index: t.index });
     } else if (t.kind === 'spinner') {
-      if (st.h >= t.h) continue;
+      if (cold || st.h >= t.h) continue;
       const th = spinnerAt(t, st.clock), es = Math.cos(th) * t.len, eu = Math.sin(th) * t.len, ps = st.s - t.s, pu = st.u - t.u;
       const k = clamp((ps * es + pu * eu) / (t.len * t.len), -1, 1);
       if (Math.hypot(ps - es * k, pu - eu * k) >= RIDE.body + 0.14) continue;
@@ -216,7 +260,7 @@ function sub(st, dt, input, events) {
       events?.push({ type: 'arm', index: t.index });
     } else if (t.kind === 'block') {
       const front = t.s - t.len / 2, reach = t.half + RIDE.body;
-      if (st.h >= t.h || Math.abs(st.u - t.u) >= reach) continue;
+      if (cold || st.h >= t.h || Math.abs(st.u - t.u) >= reach) continue;
       if (before < front && st.s >= front && Math.abs(uBefore - t.u) < reach) {
         // straight into it: stopped short, and shoved to the nearer side
         const sg = st.u < t.u ? -1 : 1;
@@ -229,27 +273,57 @@ function sub(st, dt, input, events) {
         st.u = t.u + sg * reach;
         if (st.w * sg < 0) st.w = 0;
       }
-    }
-  }
-  // ---- the rows of blocks that part the lanes
-  if (st.line < 0 && course.walls.length) {
-    for (const wl of course.walls) {
-      if (wl.to < before || wl.from > st.s) continue;
-      const reach = wl.half + RIDE.body;
-      if (st.h >= wl.h || Math.abs(st.u - wl.u) >= reach) continue;
-      if (before < wl.from && Math.abs(uBefore - wl.u) < reach) {
-        // onto the end of a row: knocked aside, a good part of the speed gone
-        const sg = st.u < wl.u ? -1 : 1;
-        st.v = Math.max(RIDE.carry, st.v * RIDE.nose); st.stun = 0.35; st.knocks++;
-        st.u = wl.u + sg * (reach + 0.02); st.w = sg * 2;
-        events?.push({ type: 'nose' });
-      } else {
-        // against its side: it guides (and takes a little speed while one leans on it)
-        const sg = uBefore < wl.u ? -1 : 1;
-        st.u = wl.u + sg * reach;
-        if (st.w * sg < 0) { if (Math.abs(st.w) > 1.5) { st.knocks++; events?.push({ type: 'wall' }); } st.w *= -0.3; }
-        st.v = Math.max(RIDE.carry, st.v * (1 - 0.5 * dt));
+    } else if (t.kind === 'bumper') {
+      // a buffer: round, too tall to jump. Run into from the front, it throws one back up the pool, and aside;
+      // on its flank one slides round it
+      const ps = st.s - t.s, pu = st.u - t.u, d = Math.hypot(ps, pu) || 1e-6, reach = t.r + RIDE.body;
+      if (d >= reach) continue;
+      let ns = ps / d, nu = pu / d;
+      st.s += ns * (reach - d + 0.01); st.u += nu * (reach - d + 0.01);
+      if (st.v * ns + st.w * nu >= 0) continue; // (going away from it)
+      if (ns < -0.5) {
+        if (Math.abs(nu) < 0.25) { nu = (pu || st.u || 1) < 0 ? -0.25 : 0.25; ns = -Math.sqrt(1 - nu * nu); } // (dead on: to one side all the same)
+        Object.assign(st, { kb: RIDE.bounce.time, kbv: RIDE.bounce.speed * -ns, w: clamp(st.w + nu * RIDE.bounce.speed * 0.8, -7, 7), v: RIDE.carry, h: 0, vh: 0, turn: 0, stun: 0.3 });
+        st.bumps++; st.cool.set(t.index, st.clock + 0.5);
+        events?.push({ type: 'bump', index: t.index });
+        return;
       }
+      const into = st.v * ns + st.w * nu; // (< 0)
+      st.w = clamp(st.w - nu * into * 1.2, -6, 6); st.v = Math.max(RIDE.carry, st.v * 0.97);
+      if (!cold && into < -3) { st.cool.set(t.index, st.clock + 0.6); events?.push({ type: 'bump', index: t.index, graze: true }); }
+    } else if (t.kind === 'prop') {
+      // a propeller: a hub, and blades as long as the pool is wide, all of it low enough to be jumped. Its hub
+      // stops one short. A blade knocks one the way it goes: on the side where it goes down the slide it only
+      // slows who runs into the back of it, or shoves on who it catches up; on the other it comes at one, and
+      // throws one back.
+      const ps = st.s - t.s, pu = st.u - t.u, r = Math.hypot(ps, pu) || 1e-6;
+      if (r > t.len + RIDE.body || st.h >= t.h) continue;
+      if (r < t.hub + RIDE.body) {
+        const ns = ps / r, nu = pu / r, push = t.hub + RIDE.body - r + 0.01;
+        st.s += ns * push; st.u += nu * push;
+        if (st.v * ns + st.w * nu < 0) {
+          st.w = clamp(st.w + (nu < 0 ? -1 : 1) * 2.2, -6, 6);
+          if (!cold) { bump(st, RIDE.block, 0); st.bumps++; st.cool.set(t.index, st.clock + 0.5); events?.push({ type: 'hub', index: t.index }); }
+        }
+        continue;
+      }
+      const turnOf = (2 * Math.PI) / t.blades, om = (2 * Math.PI) / t.period, phi = Math.atan2(pu, ps);
+      // (how far round from the nearest blade one is: radians, positive further round the way angles grow)
+      let da = (((phi - propAt(t, st.clock)) % turnOf) + turnOf) % turnOf;
+      if (da > turnOf / 2) da -= turnOf;
+      const reach = t.thick / 2 + RIDE.body, off = Math.abs(Math.sin(da)) * r;
+      if (Math.abs(da) > 1 || off >= reach) continue;
+      const th = phi - da, sg = da < 0 ? -1 : 1, ns = -Math.sin(th) * sg, nu = Math.cos(th) * sg; // (out of the blade, towards the rider)
+      const rel = (st.v + om * pu) * ns + (st.w - om * ps) * nu; // (the blade moves at (-om·pu, om·ps) there)
+      st.s += ns * (reach - off + 0.01); st.u += nu * (reach - off + 0.01);
+      if (rel >= 0) continue; // (going apart)
+      const dv = -rel * (1 + RIDE.blade), vs = st.v + ns * dv;
+      st.w = clamp(st.w + nu * dv, -6, 6);
+      const back = vs < 0;
+      if (back) Object.assign(st, { kb: RIDE.bounce.time * 0.8, kbv: clamp(-vs, 3, 12), v: RIDE.carry, h: 0, vh: 0, turn: 0, stun: 0.3 });
+      else { st.v = clamp(vs, RIDE.carry, RIDE.top); st.stun = Math.max(st.stun, 0.25); }
+      if (!cold) { st.bumps++; st.cool.set(t.index, st.clock + 0.6); events?.push({ type: 'blade', index: t.index, back, hard: -rel }); }
+      if (back) return;
     }
   }
 
@@ -266,52 +340,134 @@ function sub(st, dt, input, events) {
         return;
       }
     }
-    while (st.mark + 1 < course.marks.length && st.s >= course.marks[st.mark + 1].s) { st.mark++; events?.push({ type: 'mark', mark: st.mark }); }
+    while (st.settle <= 0 && st.mark + 1 < course.marks.length && st.s >= course.marks[st.mark + 1].s) { st.mark++; events?.push({ type: 'mark', mark: st.mark }); }
     if (st.s >= course.finish) {
       // the end of the trough: the clock stops, and one goes on into the sea
       st.over = true; st.time = Math.round(st.clock * 1000);
       events?.push({ type: 'finish', time: st.time });
-      fall(st, 'end', events);
+      leave(st, 'end', events);
     }
   } else if (st.s >= line.length) {
+    // the end of a pipe: off it, into the air; the end of a shortcut: back on the main line
+    if (line.pipe) { leave(st, 'off', events); return; }
     st.s = line.to + (st.s - line.length); st.line = -1;
-    while (st.mark + 1 < course.marks.length && st.s >= course.marks[st.mark + 1].s) st.mark++;
+    while (st.settle <= 0 && st.mark + 1 < course.marks.length && st.s >= course.marks[st.mark + 1].s) st.mark++;
     events?.push({ type: 'join', fork: line.id });
   }
 }
 
-/** Out of the trough: over its side, short of the far lip of a gap, or off its end. From here on, a free fall. */
-function fall(st, kind, events) {
-  const q = ridePose(st, {}), side = st.u < 0 ? -1 : 1;
-  // (what catches on the rim, or on the far lip of a gap, takes some of the speed)
-  const keep = kind === 'side' ? 0.8 : kind === 'gap' ? 0.5 : 1, v = st.v * keep;
-  const fly = { x: q.x + q.ux * 0.3, y: q.y + q.uy * 0.3, z: q.z + q.uz * 0.3, vx: q.fx * v, vy: q.fy * v, vz: q.fz * v, t: 0, side, kind, wet: false, down: false, yaw: q.yaw, pitch: q.pitch, roll: q.roll };
+/**
+ * Out of the trough: over its rim ('side'), short of the far lip of a gap ('gap'), off the end of a pipe ('off')
+ * or of the slide ('end'). From here on one flies (see flight), the way one was going.
+ */
+function leave(st, kind, events) {
+  const q = ridePose(st, {}), side = st.u < 0 ? -1 : 1, v = st.v * (kind === 'gap' ? 0.5 : 1); // (what catches on the far lip of a gap takes half the speed)
+  // down the line, across it (o: up the wall, away from the middle), out of the surface
+  const wall = kind === 'end' ? 0 : st.w * side, up = kind === 'end' ? 0 : st.vh;
+  let vx = q.fx * v + q.ox * wall + q.ux * up, vy = q.fy * v + q.oy * wall + q.uy * up, vz = q.fz * v + q.oz * wall + q.uz * up;
   if (kind === 'side') {
-    // tipped over the rim: thrown outwards, hardly up — and down the outside of the trough
-    const flat = Math.hypot(q.ux, q.uz) || 1, out = Math.max(3, Math.abs(st.w) * 0.8);
-    fly.vx -= (q.ux / flat) * out; fly.vz -= (q.uz / flat) * out; fly.vy = Math.max(fly.vy, 0) + 1.6;
-  } else if (kind === 'gap') { fly.vx += q.ux * st.vh; fly.vy += q.uy * st.vh; fly.vz += q.uz * st.vh; } else fly.vy += 1.2;
-  const sp = Math.hypot(fly.vx, fly.vz) || 1;
-  fly.dx = fly.vx / sp; fly.dz = fly.vz / sp; // (the way it goes over the ground: kept once it lies still)
-  Object.assign(st, { fly, h: 0, vh: 0, w: 0, spin: 0, turn: 0, wantJump: 0 });
-  if (kind !== 'end') st.falls++;
+    // tipped over the rim: outwards at least so fast, and a little up — clear of it
+    const flat = Math.hypot(q.ux, q.uz) || 1, ox = -q.ux / flat, oz = -q.uz / flat, out = vx * ox + vz * oz;
+    if (out < RIDE.tip) { vx += ox * (RIDE.tip - out); vz += oz * (RIDE.tip - out); }
+    vy = Math.max(vy, q.fy * v + 1.2);
+  } else if (kind === 'end') vy += 1.2;
+  const sp = Math.hypot(vx, vz) || 1, lift = RIDE.seat;
+  const fly = {
+    x: q.x + q.ux * lift, y: q.y + q.uy * lift, z: q.z + q.uz * lift, vx, vy, vz, t: 0, hit: 0, side, kind, wet: false, down: false,
+    yaw: q.yaw, pitch: q.pitch, roll: q.roll, dx: vx / sp, dz: vz / sp, // (the way it goes over the ground: kept once it lies still)
+    from: rideProgress(st), speed: st.v,
+    // (not straight back into the trough one has just left: over its rim one is out, and short of a lip one has run into it)
+    bar: { line: st.line, s: st.s, until: kind === 'gap' ? 0.7 : 0.15 },
+  };
+  Object.assign(st, { fly, h: 0, vh: 0, w: 0, spin: 0, turn: 0, wantJump: 0, kb: 0 });
   events?.push({ type: 'out', kind, side });
 }
 
+// ---------------------------------------------------------------------------------------------- out of the trough
+
+const CELL = 6, cellOf = (i, j) => (i + 4096) * 8192 + j + 4096;
+/** Every place of every line where there is a trough, by squares of the plan: what one may come down into. */
+function troughs(course) {
+  if (course._grid) return course._grid;
+  const grid = new Map(), reach = SLIDE.radius * Math.sin(SLIDE.rim) + 1;
+  for (const line of course.lines) {
+    for (const p of line.points) {
+      if (p.tag.gap) continue;
+      const f = frameAt(p), r = p.F + reach, spot = { line, p, side: f.side, up: f.up };
+      for (let i = Math.floor((p.x - r) / CELL); i <= Math.floor((p.x + r) / CELL); i++) {
+        for (let j = Math.floor((p.z - r) / CELL); j <= Math.floor((p.z + r) / CELL); j++) {
+          const key = cellOf(i, j);
+          if (!grid.has(key)) grid.set(key, []);
+          grid.get(key).push(spot);
+        }
+      }
+    }
+  }
+  return (course._grid = grid);
+}
+
+const _hit = { spot: null, s: 0, u: 0, tilt: 0 };
+/**
+ * The trough a rider flying at (x, y, z) has come down into, if any: their hips are within reach of its surface
+ * (RIDE.seat over it, or lower by what a step of the fall takes). `bar`: { line, s }: not that line, near there.
+ * Returns { spot: { line, p (the sample), side, up }, s, u, tilt } — the same object every time — or null.
+ */
+function troughAt(course, x, y, z, bar) {
+  const cell = troughs(course).get(cellOf(Math.floor(x / CELL), Math.floor(z / CELL)));
+  if (!cell) return null;
+  const R = SLIDE.radius, open = R * Math.sin(SLIDE.rim);
+  let least = Infinity;
+  for (const c of cell) {
+    const p = c.p, dx = x - p.x, dy = y - p.y, dz = z - p.z, along = dx * p.tx + dy * p.ty + dz * p.tz;
+    if (Math.abs(along) > 0.6 * c.line.step) continue;
+    const lat = dx * c.side[0] + dy * c.side[1] + dz * c.side[2], e = Math.abs(lat) - p.F;
+    if (e > open || Math.abs(lat) >= least) continue;
+    const a = e <= 0 ? 0 : Math.asin(e / R), over = dx * c.up[0] + dy * c.up[1] + dz * c.up[2] - R * (1 - Math.cos(a)) - RIDE.seat;
+    if (over > 0.02 || over < -0.5) continue;
+    const s = p.s + along;
+    if (bar && c.line.id === bar.line && Math.abs(s - bar.s) < 12) continue;
+    least = Math.abs(lat);
+    _hit.spot = c; _hit.s = clamp(s, 0.05, c.line.length - 0.05); _hit.tilt = (lat < 0 ? -1 : 1) * a; _hit.u = e <= 0 ? lat : (lat < 0 ? -1 : 1) * (p.F + R * a);
+  }
+  return least < Infinity ? _hit : null;
+}
+
+/** Put back at the last arch — or, the third time running at the same one, at the next: nobody is left stuck. */
+function putBack(st, events, late) {
+  const marks = st.course.marks;
+  if (st.mark === st.fellAt) st.again++; else { st.fellAt = st.mark; st.again = 1; }
+  const on = st.again >= RIDE.mercy && st.mark + 1 < marks.length;
+  if (on) { st.mark++; st.again = 0; }
+  Object.assign(st, { fly: null, line: -1, s: marks[st.mark].s + 0.5, u: 0, w: 0, v: RIDE.back, h: 0, vh: 0, stun: 0.3, kb: 0, dip: null, settle: 0 });
+  st.falls++;
+  st.next.clear();
+  events?.push({ type: 'back', mark: st.mark, on, late: !!late });
+}
+
 const SEA = { y: 0, wet: true }, _u = { y: 0, wet: true };
-function flight(st, dt, events) {
-  const f = st.fly;
+/** A step of a flight out of the trough: steered a little, until a trough is found, or the ground, or the count runs out. */
+function flight(st, dt, input, events) {
+  const f = st.fly, course = st.course;
   f.t += dt;
   if (f.wet) {
     // afloat: carried on a little, slower and slower
     const k = Math.max(0, 1 - 4 * dt);
     f.x += f.vx * dt * 0.25; f.z += f.vz * dt * 0.25; f.vx *= k; f.vz *= k;
   } else if (!f.down) {
+    const sp = Math.hypot(f.vx, f.vz);
+    if (f.kind !== 'end' && input && sp > 0.5) {
+      // in the air one still steers (across the way one goes: to the right is (-dz, dx)), and brakes, sitting up
+      const dx = f.vx / sp, dz = f.vz / sp, steer = clamp(input.steer || 0, -1, 1);
+      f.vx += (-dz * steer * RIDE.wing - (input.brake && sp > 2 ? dx * RIDE.airbrake : 0)) * dt;
+      f.vz += (dx * steer * RIDE.wing - (input.brake && sp > 2 ? dz * RIDE.airbrake : 0)) * dt;
+    }
     f.vy -= RIDE.g * dt;
     f.x += f.vx * dt; f.y += f.vy * dt; f.z += f.vz * dt;
+    if (sp > 1) { f.dx = f.vx / sp; f.dz = f.vz / sp; }
+    if (f.kind !== 'end' && alight(st, events)) return;
     const u = st.under ? st.under(f.x, f.z, _u) : SEA, floor = u.y + (u.wet ? 0.1 : 0.3);
     if (f.y <= floor) {
-      f.y = floor;
+      f.y = floor; f.hit = f.t;
       if (u.wet) { f.wet = true; events?.push({ type: 'splash', x: f.x, y: u.y, z: f.z, kind: f.kind }); }
       else { f.down = true; f.vx = f.vy = f.vz = 0; events?.push({ type: 'thud', x: f.x, y: u.y, z: f.z, kind: f.kind }); }
     }
@@ -320,17 +476,69 @@ function flight(st, dt, events) {
     if ((f.wet || f.down || f.t > 4) && !st.ended) { st.ended = true; events?.push({ type: 'end', x: f.x, z: f.z }); }
     return;
   }
-  if (f.t >= RIDE.out) {
-    // back at the last arch — or, the third time running from the same one, at the next: nobody is left stuck
-    // before a gap or a bend they cannot manage (three falls cost more time than the way between two arches)
-    const marks = st.course.marks;
-    if (st.mark === st.fellAt) st.again++; else { st.fellAt = st.mark; st.again = 1; }
-    const on = st.again >= RIDE.mercy && st.mark + 1 < marks.length;
-    if (on) { st.mark++; st.again = 0; }
-    Object.assign(st, { fly: null, line: -1, s: marks[st.mark].s + 0.5, u: 0, w: 0, v: RIDE.back, h: 0, vh: 0, stun: 0.3 });
-    st.next.clear();
-    events?.push({ type: 'back', mark: st.mark, on });
+  const still = f.wet || f.down;
+  if (still ? f.t >= f.hit + RIDE.rest : f.t >= RIDE.out) putBack(st, events, !still);
+}
+
+/** Has the flight come down into a trough? Then the ride goes on from there (true). */
+function alight(st, events) {
+  const f = st.fly, course = st.course, hit = troughAt(course, f.x, f.y, f.z, f.t < f.bar.until ? f.bar : null);
+  if (!hit) return false;
+  const { line, p, side, up } = hit.spot, sn = Math.sin(hit.tilt), cs = Math.cos(hit.tilt);
+  // out of its surface there, and across it to the right
+  const nx = up[0] * cs - side[0] * sn, ny = up[1] * cs - side[1] * sn, nz = up[2] * cs - side[2] * sn;
+  const into = -(f.vx * nx + f.vy * ny + f.vz * nz);
+  if (into < -0.5) return false; // (on the way up through it: not caught)
+  const along = f.vx * p.tx + f.vy * p.ty + f.vz * p.tz, cross = f.vx * (side[0] * cs + up[0] * sn) + f.vy * (side[1] * cs + up[1] * sn) + f.vz * (side[2] * cs + up[2] * sn);
+  const sg = hit.u < 0 ? -1 : 1, limit = rimAt(line, hit.s, sg) - 0.03;
+  Object.assign(st, {
+    fly: null, line: line.id, s: hit.s, u: Math.abs(hit.u) > limit ? sg * limit : hit.u, w: clamp(cross, -7, 7), v: clamp(along, RIDE.carry, RIDE.top),
+    h: 0, vh: 0, floor: p.F, spin: 0, turn: 0, kb: 0,
+  });
+  // (a hard landing, or one against the way the water runs, costs speed)
+  if (into > RIDE.hard) { st.v = Math.max(RIDE.carry, st.v * 0.85); st.stun = 0.35; }
+  if (along < 0) st.stun = 0.5;
+  st.next.clear();
+  // (the arches flown over are one's own only once one has stayed in the trough a moment: who bounces out of
+  // it again, or is thrown off it, goes back to the arch they had)
+  st.settle = RIDE.settle;
+  const gain = Math.max(0, rideProgress(st) - f.from - f.speed * f.t);
+  if (line.id >= 0 && st.took[st.took.length - 1] !== line.id) st.took.push(line.id);
+  st.hops++;
+  st.skipped += gain;
+  events?.push({ type: 'land', hard: into, hop: true, line: line.id, gain, from: f.kind });
+  return true;
+}
+
+const _fall = {};
+/**
+ * Where a rider who is out of the trough comes down if they steer no more: { ok (in a trough), x, y, z, nx, ny,
+ * nz (out of what they come down on), line (when ok), t (seconds from now), air (nowhere: the count runs out
+ * first) } — or null when they are not flying (or have come down). What the game marks, for who aims.
+ */
+export function rideFall(st, out = _fall) {
+  const f = st.fly;
+  if (!f || f.kind === 'end' || f.wet || f.down) return null;
+  const course = st.course, dt = 1 / 90;
+  let x = f.x, y = f.y, z = f.z, vy = f.vy;
+  out.ok = false; out.air = false; out.nx = 0; out.ny = 1; out.nz = 0; out.line = -2;
+  for (let t = f.t; t < RIDE.out; t += dt) {
+    vy -= RIDE.g * dt; x += f.vx * dt; y += vy * dt; z += f.vz * dt;
+    const hit = troughAt(course, x, y, z, t < f.bar.until ? f.bar : null);
+    if (hit) {
+      const { line, side, up } = hit.spot, sn = Math.sin(hit.tilt), cs = Math.cos(hit.tilt);
+      out.nx = up[0] * cs - side[0] * sn; out.ny = up[1] * cs - side[1] * sn; out.nz = up[2] * cs - side[2] * sn;
+      if (-(f.vx * out.nx + vy * out.ny + f.vz * out.nz) >= -0.5) {
+        out.ok = true; out.line = line.id; out.t = t - f.t;
+        out.x = x - out.nx * RIDE.seat; out.y = y - out.ny * RIDE.seat; out.z = z - out.nz * RIDE.seat;
+        return out;
+      }
+    }
+    const u = st.under ? st.under(x, z, _u) : SEA;
+    if (y <= u.y + 0.2) { out.x = x; out.y = u.y; out.z = z; out.nx = 0; out.ny = 1; out.nz = 0; out.t = t - f.t; return out; }
   }
+  out.x = x; out.y = y; out.z = z; out.t = RIDE.out - f.t; out.air = true;
+  return out;
 }
 
 const _f = { side: [0, 0, 0], up: [0, 0, 0] }, _q = {}, _y = {}, _y2 = {};
@@ -339,26 +547,25 @@ const _f = { side: [0, 0, 0], up: [0, 0, 0] }, _q = {}, _y = {}, _y2 = {};
  * down when negative), roll (leaning to the right when positive), fx, fy, fz (the way the line goes), ux, uy, uz
  * (out of the trough, where the rider is on it), ox, oy, oz (up the wall of the trough, away from its middle),
  * wide (half the width of the floor there, m),
- * flying (out of the trough: then x, y, z are where the fall has taken the rider's hips, `tumble` is how long it
- * has lasted, and yaw, pitch and roll say how they turn over as they go), wet, down (the fall is over: in the
- * water, on the ground) }.
+ * flying (out of the trough: then x, y, z are where the flight has taken the rider's hips, `tumble` is how long
+ * it has lasted, `left` how long it may still last, fx, fz the way it goes over the ground, and yaw, pitch and
+ * roll say how they hold themselves as they go), wet, down (the flight is over: in the water, on the ground) }.
  */
 export function ridePose(st, out = {}) {
   if (st.fly) {
-    const f = st.fly, sp = Math.hypot(f.vx, f.vz), still = f.wet || f.down;
-    out.x = f.x; out.y = f.y; out.z = f.z; out.yaw = f.yaw;
+    const f = st.fly, sp = Math.hypot(f.vx, f.vz), still = f.wet || f.down, k = Math.min(1, f.t * 4);
+    out.x = f.x; out.y = f.y; out.z = f.z;
+    // (they face the way they fly, nose down as they fall, and come level again: ready to ride on)
+    const heading = Math.atan2(f.dx, f.dz);
+    out.yaw = f.kind === 'end' ? f.yaw : f.yaw + Math.atan2(Math.sin(heading - f.yaw), Math.cos(heading - f.yaw)) * k;
     if (still) { out.pitch = 0; out.roll = 0; }
-    else if (f.kind === 'side') {
-      // over the rim: the ring goes on turning the way it rode up the wall, right over
-      out.pitch = f.pitch * Math.max(0, 1 - f.t * 2);
-      out.roll = f.roll + f.side * Math.min(f.t * 4.5, 3.6);
-    } else {
-      const k = Math.min(1, f.t * 4);
-      out.pitch = f.pitch + (Math.max(-1.1, Math.atan2(f.vy, sp) * 0.7) - f.pitch) * k;
+    else {
+      out.pitch = f.pitch + (Math.max(-0.9, Math.atan2(f.vy, sp) * 0.6) - f.pitch) * k;
       out.roll = f.roll * (1 - k);
     }
     out.fx = f.dx; out.fy = 0; out.fz = f.dz; out.ux = 0; out.uy = 1; out.uz = 0; out.ox = 0; out.oy = 0; out.oz = 0;
     out.k = 0; out.slope = 0; out.bank = 0; out.wide = 0; out.flying = true; out.tumble = still ? 0 : f.t; out.wet = f.wet; out.down = f.down;
+    out.left = f.kind === 'end' || still ? 0 : Math.max(0, RIDE.out - f.t);
     return out;
   }
   const course = st.course, line = lineOf(course, st.line), p = lineAt(line, st.s, _q), f = frameAt(p, _f), X = across(p.F, st.u, _y);
@@ -372,29 +579,74 @@ export function ridePose(st, out = {}) {
   out.ux = f.up[0] * cs - f.side[0] * sn; out.uy = f.up[1] * cs - f.side[1] * sn; out.uz = f.up[2] * cs - f.side[2] * sn;
   const sg = st.u < 0 ? -1 : 1;
   out.ox = (f.side[0] * cs + f.up[0] * sn) * sg; out.oy = (f.side[1] * cs + f.up[1] * sn) * sg; out.oz = (f.side[2] * cs + f.up[2] * sn) * sg;
-  out.k = p.k; out.slope = p.slope; out.bank = p.bank; out.wide = p.F; out.flying = false; out.tumble = 0; out.wet = false; out.down = false;
+  out.k = p.k; out.slope = p.slope; out.bank = p.bank; out.wide = p.F; out.flying = false; out.tumble = 0; out.wet = false; out.down = false; out.left = 0;
   return out;
 }
 
-/** How far down the course a rider is, in metres of the main line (a fork counts as the stretch it replaces). */
+/**
+ * How far down the course a rider is, in metres of the main line (a shortcut counts as the stretch it replaces,
+ * a pipe as the one it runs beside; out of the trough, as where they left it).
+ */
 export function rideProgress(st) {
+  if (st.fly) return st.fly.from;
   if (st.line < 0) return st.s;
-  const f = st.course.forks[st.line];
+  const f = lineOf(st.course, st.line);
   return f.from + (st.s / f.length) * (f.to - f.from);
+}
+
+// ---------------------------------------------------------------------------------------------- a rider that steers by itself
+
+const _sw = { hub: false };
+/**
+ * Making for `c` metres across, at `v` m/s, from where the rider is now: how long (s) before a blade of that
+ * propeller, or its hub (then _sw.hub), is run into — or Infinity when one gets by. `room`: how much to spare
+ * (m). `jump`: a jump taken that many seconds from now (what is met while it is high enough does not count).
+ */
+function sweep(t, st, c, v, room = 0.22, jump = -9) {
+  const reach = t.len + RIDE.body, far = t.s + reach - st.s;
+  _sw.hub = false;
+  if (far <= 0) return Infinity;
+  const turnOf = (2 * Math.PI) / t.blades, way = c - st.u, sg = way < 0 ? -1 : 1, dist = Math.abs(way);
+  for (let tau = 0, end = far / v; tau <= end; tau += 0.025) {
+    // (across at four metres a second or so, once the turn has bitten — and no further out than the padding
+    // of the walls beside it lets one be)
+    const ps = st.s + v * tau - t.s, pu = clamp(st.u + sg * Math.min(dist, Math.max(0, 4.2 * (tau - 0.12))) - t.u, 0.4 - t.len, t.len - 0.4), r = Math.hypot(ps, pu);
+    if (r > reach) continue;
+    if (tau > jump + 0.2 && tau < jump + 0.58) continue;
+    if (r < t.hub + RIDE.body + room) { _sw.hub = true; return tau; }
+    let da = (((Math.atan2(pu, ps) - propAt(t, st.clock + tau)) % turnOf) + turnOf) % turnOf;
+    if (da > turnOf / 2) da -= turnOf;
+    if (Math.abs(da) < 1 && Math.abs(Math.sin(da)) * r < t.thick / 2 + RIDE.body + room) return tau;
+  }
+  return Infinity;
+}
+/**
+ * What making for `c` across costs at that propeller: nothing when one gets by; a little when a jump over one
+ * blade does it (then _sw.jump: in how long to take it); a great deal when something is run into all the same.
+ */
+function propCost(t, st, c, v) {
+  _sw.jump = -9;
+  const tau = sweep(t, st, c, v);
+  if (tau === Infinity) return 0;
+  if (tau < 0.2 || st.h > 0.05) return _sw.hub ? 400 : 300; // (the hub stops one short: worse than a blade)
+  const at = Math.max(0, tau - 0.37);
+  if (sweep(t, st, c, v, 0.22, at) < Infinity) return 300;
+  _sw.jump = at;
+  return 25;
 }
 
 /**
  * A rider that steers by itself — the proof that the course can be ridden, and the times to beat. `how`:
- *   careful  keeps to the water, goes round the whirlpools and the blocks, jumps what can be jumped, never takes
- *            a shortcut
+ *   careful  keeps to the water, goes round the whirlpools and the buffers, between the blades of the
+ *            propellers, jumps what can be jumped, never takes a shortcut
  *   bold     the same lying back, through every shortcut
  *   { bold, cuts }  the two choices apart (lying back or not; the shortcuts or not)
  * It looks a second or so ahead, weighs where across the trough it would be best to be when it gets to what
- * lies there, and steers for that. Returns the input for stepRide.
+ * lies there, and steers for that. It never leaves the trough of its own will. Returns the input for stepRide.
  */
 export function botInput(st, how = 'careful', out = { steer: 0, tuck: false, brake: false, jump: false }) {
   out.steer = 0; out.tuck = false; out.brake = false; out.jump = false;
-  if (st.fly || st.spin > 0) return out;
+  if (st.fly || st.spin > 0 || st.kb > 0) return out;
   const course = st.course, cfg = typeof how === 'string' ? { bold: how !== 'careful', cuts: how === 'bold' } : how;
   const line = lineOf(course, st.line), p = lineAt(line, st.s, _q);
   const gp = RIDE.g * Math.sqrt(Math.max(0, 1 - p.ty * p.ty)), apex = (st.v * RIDE.jump) / gp; // how far one travels before the top of a jump
@@ -402,25 +654,24 @@ export function botInput(st, how = 'careful', out = { steer: 0, tuck: false, bra
   let tuck = cfg.bold, brake = false;
 
   // ---- what is ahead: what is jumped, and what one must be clear of (where across, how wide, how far)
-  const clear = []; // { d, u, half, soft (how far its pull is felt), wall }
+  const clear = [], props = []; // clear: { d, u, half, soft (how far its pull is felt) }
+  let pads = Infinity; // (how far from the middle the padding of the walls leaves room, where one is about to pass some)
   for (const t of thingsOf(course, st.line)) {
     const d = t.s - st.s;
-    if (d < -2.5) continue;
-    if (d > horizon) break;
+    if (d < (t.kind === 'prop' ? -(t.len + 1) : -2.5)) continue;
+    if (d > horizon + (t.kind === 'prop' ? t.len : 0)) break;
     if (t.kind === 'bar' || t.kind === 'slider' || t.kind === 'spinner') {
       const span = t.kind === 'bar' ? t.half : t.kind === 'slider' ? t.amp + t.half : t.len;
       if (d > 0.2 && d <= apex + 0.3 && st.h <= 0 && Math.abs(st.u - t.u) < span + body + 0.35) out.jump = true;
-    } else if (t.kind === 'block') { if (d > -t.len) clear.push({ d: Math.max(0, d - t.len / 2), u: t.u, half: t.half + body + 0.16, soft: 0 }); }
+    } else if (t.kind === 'block' && t.pad) { if (d > -t.len && d < Math.max(5, st.v * 0.5)) pads = Math.min(pads, Math.abs(t.u) - t.half - body - 0.2); }
+    else if (t.kind === 'block') { if (d > -t.len) clear.push({ d: Math.max(0, d - t.len / 2), u: t.u, half: t.half + body + 0.16, soft: 0 }); }
+    else if (t.kind === 'bumper') { if (d > -t.r) clear.push({ d: Math.max(0, d - t.r), u: t.u, half: t.r + body + 0.3, soft: 0 }); }
+    else if (t.kind === 'prop') props.push(t);
     else if (!((st.cool.get(t.index) || 0) > st.clock)) {
       clear.push({ d: Math.max(0, d - t.core), u: t.u, half: t.core + 0.5, soft: t.reach });
       // (a whirlpool there was no getting round in time: over it)
       if (d > 0.2 && d <= apex + 0.3 && st.h <= 0 && Math.abs(st.u - t.u) < t.core + 0.45) out.jump = true;
     }
-  }
-  let lane = null;
-  if (st.line < 0) {
-    for (const wl of course.walls) if (wl.to > st.s - 0.5 && wl.from < st.s + horizon) clear.push({ d: Math.max(0, wl.from - st.s), u: wl.u, half: wl.half + body + 0.14, soft: 0, wall: wl });
-    lane = course.lanes.find((z) => st.s > z.from - horizon && st.s < z.to) || null;
   }
 
   // ---- where across to be: every place from rim to rim is weighed
@@ -432,27 +683,19 @@ export function botInput(st, how = 'careful', out = { steer: 0, tuck: false, bra
     // a gap ahead: down the middle
     for (const g of course.gaps) { const d = g.from - st.s; if (d > 0 && d < st.v * 1.2) side = 9; }
   }
-  let best = 0, least = Infinity;
-  const force = RIDE.steer * (cfg.bold ? 0.75 : 1);
+  let best = 0, least = Infinity, slowly = false;
+  const force = RIDE.steer * (cfg.bold ? 0.75 : 1), slower = Math.max(5, st.v - 2.5);
   for (let c = -room; c <= room + 1e-6; c += 0.1) {
     let cost = 0.3 * Math.abs(c - st.u) + 0.45 * Math.abs(c - (st.aim ?? 0));
     // (where the bend would not let one stay, whatever the steering)
     const Xc = across(p.F, c, _y), Ac = Xc.tilt + p.bank, effort = Math.abs(gp * Math.sin(Ac) - st.v * st.v * p.k * Math.cos(Ac)) / force;
     if (effort > 0.8) cost += 40 * (effort - 0.8);
-    // (the water: down the middle of a plain trough, down the middle of a lane, anywhere on the floor of a pool)
-    if (lane && st.s > lane.from - 6) cost += 1.2 * Math.min(...lane.centres.map((m) => Math.abs(c - m)));
-    else cost += (fAhead > 1 ? 0.25 : 1.4) * Math.abs(c);
+    // (the water: down the middle of a plain trough, anywhere on the floor of a pool)
+    cost += (fAhead > 1 ? 0.25 : 1.4) * Math.abs(c);
     if (side === 9) cost += 3 * Math.abs(c);
     else if (side) cost += c * side > (cfg.cuts ? 0.64 : 0.5) ? 0 : 60 + 8 * Math.abs(c - side);
     for (const o of clear) {
       const near = 1 / (1 + (o.d / Math.max(4, st.v * 0.45)) ** 2), gapTo = Math.abs(c - o.u);
-      if (o.wall) {
-        // (a row of blocks: not on it — and not across it, unless there is time to be across before it begins)
-        const cross = (st.u - o.u) * (c - o.u) < 0, time = Math.abs(c - st.u) / 4.5 + 0.15;
-        if (gapTo < o.half) cost += 400;
-        else if (cross && o.d < st.v * time) cost += 400;
-        continue;
-      }
       if (gapTo < o.half) cost += 300 * near;
       else {
         if (gapTo < o.half + 0.25) cost += 2.5 * near * (1 - (gapTo - o.half) / 0.25);
@@ -461,14 +704,32 @@ export function botInput(st, how = 'careful', out = { steer: 0, tuck: false, bra
       }
       if (o.soft && gapTo < o.soft) cost += 5 * near * (1 - gapTo / o.soft);
     }
-    if (cost < least) { least = cost; best = c; }
+    // (a propeller: getting by its blades there — as one goes, or else a little slower; and, all else being
+    // equal, on the side where the blades go one's way)
+    let now = 0, late = 4;
+    for (const t of props) {
+      const side = (c - t.u) * t.period > 0 ? 1.2 : 0;
+      now += propCost(t, st, c, st.v) || side;
+      if (now >= 300 && slower < st.v - 0.5) late += propCost(t, st, c, slower) || side;
+      else late += 300;
+    }
+    if (cost + now < least) { least = cost + now; best = c; slowly = false; }
+    if (props.length && cost + late < least) { least = cost + late; best = c; slowly = true; }
   }
   st.aim = best;
   // (not yet where it must be, and little time left: the careful rider sits up and brakes)
   for (const o of clear) {
-    if (o.wall || Math.abs(st.u - o.u) >= o.half) continue;
+    if (Math.abs(st.u - o.u) >= o.half) continue;
     if (o.d < st.v * 0.7 && !cfg.bold) brake = true;
     tuck = false;
+  }
+  for (const t of props) {
+    // a propeller ahead: no lying back (what comes is timed). A blade in the way of where one is going: over it
+    // when the time comes, if that does it; else sitting up, to come to it a little later
+    tuck = false;
+    const price = propCost(t, st, best, st.v);
+    if (price === 25 && _sw.jump < 0.03 && st.h <= 0 && !slowly) out.jump = true;
+    else if ((slowly || price >= 300) && st.v > 5.5) brake = true;
   }
   if (st.line < 0) {
     // a gap: fast enough, the ramp does it; else (and always, for the careful) a jump right at the lip
@@ -482,14 +743,15 @@ export function botInput(st, how = 'careful', out = { steer: 0, tuck: false, bra
       if (needed > 0.8 || (st.u * fork.side < 0.25 && fork.from - st.s < st.v * 0.9)) { brake = true; tuck = false; }
     } else if (fork) tuck = false;
   }
-  // steer: what holds the rider at `best` against the bend, plus what closes the gap
-  const X = across(p.F, best, _y), A = X.tilt + p.bank, hold = (gp * Math.sin(A) - st.v * st.v * p.k * Math.cos(A)) / RIDE.steer;
-  out.steer = clamp((st.h > 0.05 ? 0 : hold) + (best - st.u) * 2.35 - st.w * 0.52, -1, 1);
+  // steer: what holds the rider at `best` against the bend, plus what closes the gap (inside the padding of the
+  // walls while it is passed, wherever one is making for after it)
+  const goal = clamp(best, -pads, pads), X = across(p.F, goal, _y), A = X.tilt + p.bank, hold = (gp * Math.sin(A) - st.v * st.v * p.k * Math.cos(A)) / RIDE.steer;
+  out.steer = clamp((st.h > 0.05 ? 0 : hold) + (goal - st.u) * 2.35 - st.w * 0.52, -1, 1);
   out.tuck = tuck && !brake; out.brake = brake;
   return out;
 }
 
-/** Rides the whole course with the bot: { time (ms), falls, bumps, caught, jumps, knocks, took (the shortcuts), top (m/s), over }. */
+/** Rides the whole course with the bot: { time (ms), falls, hops, bumps, caught, jumps, took (the shortcuts), top (m/s), over }. */
 export function botRun(course, how = 'careful', limit = 900) {
   const st = startRide(course), input = { steer: 0, tuck: false, brake: false, jump: false };
   let top = 0;
@@ -499,5 +761,5 @@ export function botRun(course, how = 'careful', limit = 900) {
     sub(st, RIDE.step, input, null);
     if (st.v > top) top = st.v;
   }
-  return { time: st.time, falls: st.falls, bumps: st.bumps, caught: st.caught, jumps: st.jumps, knocks: st.knocks, took: st.took, top, over: st.over };
+  return { time: st.time, falls: st.falls, hops: st.hops, bumps: st.bumps, caught: st.caught, jumps: st.jumps, took: st.took, top, over: st.over };
 }

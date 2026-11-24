@@ -41,10 +41,22 @@ administrator of their own browser (the camera with F, the whole shop, every ges
 ## Mostly Down — the water slide
 
 1,160 m from the rim of the cliffs above the golden dog down to the sea: the stream that carries, the walls that
-slow, a jump, whirlpools that are holes in the water, gaps to fly over, two shortcuts, a pool of three
-whirlpools, things that slide and turn on the clock of the ride — and an end in the sea, a swim from the beach.
-**It is still being changed in the lab** (the wide stretch after the second gap is being redone): leave its
-switch off until the owner says so. Its checks say what it does at any time: `node tools/slide-test.mjs`.
+slow, a jump, whirlpools that are holes in the water, gaps to fly over, two shortcuts, things that slide and turn
+on the clock of the ride, a long pool of slack water — one plunges into it and is slowed — where three propellers
+turn, each as wide as the pool (one gets by when a blade has just passed, or jumps it; a blade that comes at one
+throws one back), with buffers between them that throw one back too, then a pool of three whirlpools — and an
+end in the sea, a swim from the beach.
+
+**Over the rim one is out of the trough, not out of the ride.** One flies — steering a little, a ring of light
+showing where one is going to come down — and whatever trough one comes down into within a second and a half,
+one rides on from there; only who has found none is put back at the last arch. Two places are made for it: a
+pipe runs beside the long pool, lower ("The Overflow": one jumps the rim of the pool to drop into it, skips the
+propellers, and flies off its end back onto the slide); and in the Whirlpool, who goes over the inner rim at the
+right speed comes down on the turn below, a hundred metres on. The count (`RIDE.out` in `ride.js`) is what
+decides how much of the slide can be skipped: at 1.5 s nothing above the Whirlpool, and its checks say so.
+
+**It is still being changed in the lab**: leave its switch off until the owner says so. Its checks say what it
+does at any time: `node tools/slide-test.mjs` (87).
 
 To build it into the game rather than switch it on, the session follows the pattern of the race:
 `open(player, io)` returns a session that is also the driver of the player —
@@ -104,7 +116,7 @@ Three lines make it part of the game's server:
 
 The slide keeps one's best time in the browser and shows it on a board of its own. For the game's boards:
 
-- `server/scores.js`, in `BOARDS`: `slide: { order: 'asc', min: 39_000, max: 3600_000 }` (`tools/slide-test.mjs`
+- `server/scores.js`, in `BOARDS`: `slide: { order: 'asc', min: 30_000, max: 3600_000 }` (`tools/slide-test.mjs`
   prints the rule from the course as it stands). `server/catalog.js`: its name. `lab/worker.js` does this for
   the lab's server.
 - `src/main.js`: `app.slideDone = (ms) => scoreGame('slide', SLIDE.name, ms, formatTime(ms))` — the extra calls

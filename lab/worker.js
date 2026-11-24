@@ -12,7 +12,7 @@ import { bearerKey, sameSecret } from '../server/token.js';
 import { unpackGeo } from '../server/visitors.js';
 
 // (the boards the new games would write to, once the game asks for them: see lab/INTEGRATION.md)
-BOARDS.slide ||= { order: 'asc', min: 39_000, max: 3600_000 };
+BOARDS.slide ||= { order: 'asc', min: 30_000, max: 3600_000 };
 
 export class Room extends GameRoom {
   async api(request, url) {

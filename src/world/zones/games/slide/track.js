@@ -1,6 +1,7 @@
 // The course of the water slide ("Mostly Down"): a trough with a stream running down its middle, that leaves
 // the rim of the cliffs above the golden dog, a hundred and fifty metres up, winds round the statue,
-// corkscrews over the sea, opens into three lanes along the cliffs, into a pool of whirlpools by the fall that
+// corkscrews over the sea, opens along the cliffs into a long pool of slack water where great propellers turn
+// — a pipe runs beside it, lower, for who jumps the rim —, then into a pool of whirlpools by the fall that
 // drops from them, whirls in the bay and throws its riders into the sea, a few strokes from the beach where
 // they asked to ride.
 //
@@ -103,8 +104,9 @@ function lay(from, segments, lead = null, tail = null) {
  * { x, y, z, s (metres from the start of the line), yaw, tx, ty, tz (the way it goes), k (how it bends, 1/m, left
  * when positive), kv (how its slope changes, 1/m: negative over a crest), slope (metres down per metre), bank
  * (how the trough leans into the bend, radians), F (half the width of its flat floor, m: none in a plain
- * trough), D (how deep the water stands over the floor, m), lim ([left, right]: how far from the middle one may
- * ride on each side, m — see rimAt), tag (the segment it came from) }.
+ * trough), D (how deep the water stands over the floor, m), S (how slack the water is: 0 where it runs, 1 in
+ * the long pool), lim ([left, right]: how far from the middle one may ride on each side, m — see rimAt), tag
+ * (the segment it came from) }.
  */
 function sample(raw, step) {
   const acc = [0];
@@ -115,7 +117,7 @@ function sample(raw, step) {
     const s = (total * i) / n;
     while (j < raw.length - 2 && acc[j + 1] < s) j++;
     const t = acc[j + 1] > acc[j] ? (s - acc[j]) / (acc[j + 1] - acc[j]) : 0, a = raw[j], b = raw[j + 1];
-    out.push({ x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t), z: lerp(a.z, b.z, t), s, tag: t < 0.5 ? a.tag : b.tag, F: 0, D: 0, lim: [WALL, WALL] });
+    out.push({ x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t), z: lerp(a.z, b.z, t), s, tag: t < 0.5 ? a.tag : b.tag, F: 0, D: 0, S: 0, lim: [WALL, WALL] });
   }
   const h = total / n;
   for (let i = 0; i <= n; i++) {
@@ -140,7 +142,7 @@ function sample(raw, step) {
 
 /**
  * Where a line is `s` metres from its start, and how it stands there: { x, y, z, yaw, k, kv, slope, bank, F, D,
- * tx, ty, tz, i (the sample before), s }. `out` is filled and returned.
+ * S, tx, ty, tz, i (the sample before), s }. `out` is filled and returned.
  */
 export function lineAt(line, s, out = {}) {
   const pts = line.points, f = clamp(s / line.step, 0, pts.length - 1), i = Math.min(pts.length - 2, Math.floor(f)), t = f - i, a = pts[i], b = pts[i + 1];
@@ -148,7 +150,7 @@ export function lineAt(line, s, out = {}) {
   out.tx = lerp(a.tx, b.tx, t); out.ty = lerp(a.ty, b.ty, t); out.tz = lerp(a.tz, b.tz, t);
   out.yaw = a.yaw + Math.atan2(Math.sin(b.yaw - a.yaw), Math.cos(b.yaw - a.yaw)) * t;
   out.k = lerp(a.k, b.k, t); out.kv = lerp(a.kv, b.kv, t); out.slope = lerp(a.slope, b.slope, t); out.bank = lerp(a.bank, b.bank, t);
-  out.F = lerp(a.F, b.F, t); out.D = lerp(a.D, b.D, t);
+  out.F = lerp(a.F, b.F, t); out.D = lerp(a.D, b.D, t); out.S = lerp(a.S, b.S, t);
   out.i = i; out.s = clamp(s, 0, line.length);
   return out;
 }
@@ -186,23 +188,31 @@ export function across(F, u, out = {}) {
 /**
  * The slide, from the top to the sea: stretches, each a few segments. A stretch may hold a `shortcut` (a
  * tighter turn inside a helix, that leaves it `at` turns in and comes back to it a whole turn further down),
- * `lanes` (the trough opens out, flat, and is parted into three lanes, from so many metres into the stretch to
- * so many) or a `basin` (it opens into a pool where whirlpools turn). `aside` moves the line over, `by` metres
- * to the right (to the left when negative), from so many metres into the stretch to so many, easing over `ramp`
- * metres at both ends: room for what is wide, where a cliff stands close.
+ * a `mill` (the trough opens out into a long pool of slack water, from so many metres into the stretch to so
+ * many: propellers turn in it), a `pipe` (another trough beside it, on that `side`, joined to nothing: one gets
+ * into it by leaving the slide over its rim, and out of it off its end — see PIPE) or a `basin` (it opens into
+ * a pool where whirlpools turn). `aside` moves the line over, `by` metres to the right (to the left when
+ * negative), from so many metres into the stretch to so many, easing over `ramp` metres at both ends: room for
+ * what is wide, where a cliff stands close.
  */
 const COURSE = [
   { name: 'The Launch', line: [line(12, 0.4), line(33.66, 10.7)] },
   { name: 'Round the Dog', line: [helix(1.788, 26, 41.3), line(30.99, 6.5), gap(9, 1.6), line(6, 1.9)] },
   { name: 'The Corkscrew', line: [helix(1.926, 24, 40)], shortcut: { at: 0.3, name: 'The Needle' } },
-  { name: 'Three Lanes', line: [line(12, 2.4), gap(10, 2.0), line(77.6, 13.6)], lanes: { from: 37, to: 93 }, aside: { from: 0, to: 140, by: -5, ramp: 44 } },
+  { name: 'The Spin Cycle', line: [line(12, 2.4), gap(10, 2.0), line(77.6, 13.6)], mill: { from: 34, to: 93 }, pipe: { name: 'The Overflow', from: 28, to: 92, side: -1 }, aside: { from: 0, to: 140, by: -5, ramp: 44 } },
   { name: 'The Drain', line: [line(25.04, 0.8), bend(-34.9, 38, 3.0), line(6, 1.0), gap(9, 1.0), line(20.9, 1.7)], basin: { from: 3, to: 30 } },
   { name: 'The Whirlpool', line: [helix(1.961, 20, 19.7)], shortcut: { at: 0.42, name: 'The Plughole' } },
   { name: 'Into the Sea', line: [line(10, 1.5), bend(63, 25, 2.6), line(8, 1.4)] },
 ];
 
-export const LANES = { floor: 3.6, width: 2.4, centres: [-2.4, 0, 2.4], wall: 0.25, wallHeight: 0.9 };
+// the long pool: half the width of its floor, how deep its water stands, how far in one plunges into it
+export const MILL = { floor: 3.6, depth: 0.32, plunge: 2 };
 export const BASIN = { floor: 3.2, depth: 0.9 };
+// a pipe beside the slide: how far from the middle of it (m), how far under its water it runs at first — one
+// drops into it — and how far over it it ends, having climbed over its last `rise` metres — one drops out of
+// it; over its last `turn` metres it comes round towards the slide, so much (metres aside per metre) at its end
+// — and its water runs `rush` times as hard as the slide's, which is what makes it worth the jump
+export const PIPE = { off: 8.3, under: 1.6, over: 3.9, rise: 30, turn: 15.4, aim: 0.26, rush: 1.5 };
 export const POT = { floor: 1.9, depth: 0.8, length: 6 }; // a small pool round one whirlpool, in a plain stretch
 
 let built = null;
@@ -213,20 +223,28 @@ let built = null;
  *   forks      [{ name, from, to (where it leaves the main line, and where it comes back to it), side (-1: it
  *              leaves on the left), points, length, step }]: the other way round a helix — shorter, steeper,
  *              tighter
+ *   pipes      [{ name, from, to (the metres of the main line it runs beside), side, points, length, step,
+ *              pipe: true, rush }]: troughs joined to nothing — one falls into them, and flies off their end
+ *   lines      every line: the main one, the forks, the pipes (see lineOf)
  *   gaps       [{ from, to }] (metres along the main line) where there is no trough: one flies, or falls short
  *   marks      [{ s }] where one is put back after going over the edge or falling short (the first is the start)
- *   lanes      [{ from, to, centres, width }]: where the trough is parted into lanes (metres along the main line)
- *   basins     [{ from, to }]: the pools
- *   walls      [{ from, to, u, half, h }]: what parts the lanes — blocks standing in the water, with ways through
- *              between them for who aims well
+ *   mills      [{ from, to, plunge }]: the long pools of slack water (metres along the main line): one comes into
+ *              them fast, and `plunge` is where the still water takes most of that speed
+ *   basins     [{ from, to }]: the pools of the whirlpools
  *   things     what lies in the water: [{ kind, line (-1: the main line, else the fork), s, u (where across,
  *              metres from the middle, right when positive), … }]:
  *                'bar'      a roll lying across, `half` m to each side, `h` m high: jumped, or run into
  *                'slider'   a roll that slides from side to side: `amp` m each way, once every `period` s
  *                'spinner'  a post with two arms `len` m long, `h` m above the water, turning once every `period` s
  *                'block'    a block too tall to jump, `half` m to each side and `len` m long: one goes round it
+ *                           (`pad`: padding up a wall, from there to the rim)
  *                'whirl'    a whirlpool: it draws in whoever comes within `reach` m of its eye, and holds and
  *                           spins whoever comes within `core` m; `r` is how wide it looks
+ *                'prop'     a propeller lying on the water: `blades` of them, `len` m long (the whole width of
+ *                           the pool), `thick` m thick and `h` m high, turning once every `period` s about a hub
+ *                           `hub` m wide (see propAt: with period > 0 its left side goes down the slide, and
+ *                           that is the kinder side; all of it can be jumped)
+ *                'bumper'   a great round buffer `r` m wide, too tall to jump: it throws back whoever runs into it
  *   helices    [{ name, x, z, r, from, to, top, bottom, turn }]: what the line winds round
  *   finish     where the clock stops (metres along the main line): the end of the trough
  *   end        { x, y, z, yaw }: where the trough ends, over the sea; `splash`: { x, z } about where one lands
@@ -269,10 +287,10 @@ export function slideCourse() {
     for (const p of P) { if (p.tag.gap) { if (!run) gaps.push((run = { from: p.s - 0.5, to: p.s })); run.to = p.s + 0.5; } else run = null; }
   }
 
-  // where the trough opens out: into lanes, into a pool
-  const lanes = [], basins = [];
+  // where the trough opens out: into the long pool, into the pool of the whirlpools
+  const mills = [], basins = [];
   COURSE.forEach((stretch, i) => {
-    if (stretch.lanes) lanes.push({ from: stretches[i].from + stretch.lanes.from, to: stretches[i].from + stretch.lanes.to, centres: LANES.centres, width: LANES.width });
+    if (stretch.mill) mills.push({ from: stretches[i].from + stretch.mill.from, to: stretches[i].from + stretch.mill.to, plunge: stretches[i].from + stretch.mill.from + MILL.plunge });
     if (stretch.basin) basins.push({ from: stretches[i].from + stretch.basin.from, to: stretches[i].from + stretch.basin.to });
   });
   const widen = (from, to, floor, depth, ramp) => {
@@ -282,9 +300,16 @@ export function slideCourse() {
       p.F = Math.max(p.F, floor * t); p.D = Math.max(p.D, depth * t);
     }
   };
-  for (const z of lanes) widen(z.from, z.to, LANES.floor, 0, 9);
+  for (const z of mills) {
+    widen(z.from, z.to, MILL.floor, MILL.depth, 9);
+    // (its water is slack from the plunge on, and runs again as the trough closes in)
+    for (const p of P) p.S = Math.max(p.S, Math.min(smooth(z.plunge - 1, z.plunge + 3, p.s), 1 - smooth(z.to - 2, z.to + 9, p.s)));
+  }
   for (const z of basins) widen(z.from, z.to, BASIN.floor, BASIN.depth, 7);
-  const opened = (s, room = 0) => [...lanes, ...basins].some((z) => s > z.from - 12 - room && s < z.to + 12 + room);
+  // (a long pool that a pool of whirlpools follows closely runs on into it, as wide: who flies off the end of the
+  // pipe beside it comes down there)
+  for (const z of mills) for (const b of basins) if (b.from > z.to && b.from < z.to + 20) widen(z.to, b.from, BASIN.floor, MILL.depth, 1);
+  const opened = (s, room = 0) => [...mills, ...basins].some((z) => s > z.from - 12 - room && s < z.to + 12 + room);
 
   // the shortcuts: a tighter turn inside the helix, from one of its turns to the next one down
   const forks = [];
@@ -309,6 +334,21 @@ export function slideCourse() {
     forks.push(fork);
   });
 
+  // the pipes: beside the main line, on one side of it, lower at first and higher at the end (see PIPE)
+  const pipes = [];
+  COURSE.forEach((stretch, i) => {
+    if (!stretch.pipe) return;
+    const o = stretch.pipe, s0 = stretches[i].from + o.from, s1 = stretches[i].from + o.to, L = s1 - s0, raw = [], tag = { stretch: i, pipe: true };
+    for (let m = 0; m <= L + 1e-6; m += 0.5) {
+      const p = lineAt(main, s0 + m), q = Math.max(0, m - (L - PIPE.turn));
+      const d = o.side * (PIPE.off - (PIPE.aim / (2 * PIPE.turn)) * q * q), e = -PIPE.under + (PIPE.under + PIPE.over) * smooth(L - PIPE.rise, L, m);
+      raw.push({ x: p.x - Math.cos(p.yaw) * d, y: p.y + e, z: p.z + Math.sin(p.yaw) * d, tag }); // (to the right of the way it goes: (-cos, sin))
+    }
+    const pipe = sample(raw, SLIDE.step);
+    Object.assign(pipe, { id: forks.length + pipes.length, name: o.name, from: s0, to: s1, side: o.side, stretch: i, pipe: true, rush: PIPE.rush });
+    pipes.push(pipe);
+  });
+
   // where one is put back: the start, a good run-up before every gap (far enough to gather the speed it
   // takes), and every so often in between — never in a shortcut, never where the trough is opened out
   const RUNUP = 24, inFork = (v) => forks.some((f) => (v > f.from - 14 && v < f.from + 20) || (v > f.to - 20 && v < f.to + 14));
@@ -320,21 +360,23 @@ export function slideCourse() {
   }
   const marks = spots.sort((x, y) => x - y).map((s) => ({ s }));
 
-  const things = [], walls = [], rnd = mulberry32(90210);
-  // ---- the lanes: two rows of blocks part them, with ways through for who aims well; each lane has its own
-  // trouble — rolls to jump on the left, arms that turn in the middle, blocks to go round on the right
-  for (const z of lanes) {
-    const [L, M, R] = z.centres, len = z.to - z.from, at = (m) => z.from + m, cut = (list) => list.filter(([a, b]) => b <= len - 1 && b > a);
-    for (const [a, b] of cut([[3, 16], [25, 38], [47, len - 1]])) walls.push({ from: at(a), to: at(b), u: -LANES.width / 2, half: LANES.wall, h: LANES.wallHeight });
-    for (const [a, b] of cut([[3, 11], [20, 31], [40, len - 1]])) walls.push({ from: at(a), to: at(b), u: LANES.width / 2, half: LANES.wall, h: LANES.wallHeight });
-    const put = (kind, m, u, o = {}) => { if (m < len - 3) things.push({ kind, line: -1, s: at(m), u, ...o }); };
-    // (what is jumped stands a good jump apart: fifteen metres and more)
-    put('bar', 8, L, { half: 0.9, h: 0.46 }); put('slider', 23, L, { amp: 0.42, period: 1.9, phase: 0.6, half: 0.5, h: 0.46 });
-    put('bar', 38, L, { half: 0.9, h: 0.46 }); put('slider', 52, L, { amp: 0.42, period: 1.5, phase: 2.2, half: 0.5, h: 0.46 });
-    put('spinner', 10, M, { len: 0.86, period: 2.6, phase: 0.4, h: 0.42 }); put('block', 23, M + 0.6, { half: 0.35, len: 1.2, h: 1.3 });
-    put('spinner', 36, M, { len: 0.86, period: -2.1, phase: 1.3, h: 0.42 }); put('bar', 52, M, { half: 0.9, h: 0.46 });
-    put('block', 9, R + 0.8, { half: 0.4, len: 1.2, h: 1.3 }); put('block', 22, R - 0.6, { half: 0.4, len: 1.2, h: 1.3 });
-    put('block', 35, R + 0.8, { half: 0.4, len: 1.2, h: 1.3 }); put('bar', 50, R, { half: 0.9, h: 0.46 });
+  const things = [], rnd = mulberry32(90210);
+  // ---- the long pool: nothing parts it. Three great propellers lie on it, as wide as it is, turning one way
+  // then the other, a little faster each: one passes when a blade has just gone by, or jumps it. Between them
+  // stand buffers, too tall to jump: one in the middle (left or right?), then two abreast (between them, or
+  // round them?).
+  for (const z of mills) {
+    const at = (m) => z.from + m, reach = MILL.floor + 0.5; // (a blade sweeps the floor and the foot of both walls)
+    const prop = (m, period, phase) => {
+      things.push({ kind: 'prop', line: -1, s: at(m), u: 0, len: reach, blades: 2, period, phase, h: 0.56, thick: 0.24, hub: 0.55 });
+      // (and what is left of the walls above its blades is padded, too tall to jump: nobody slips by along a wall)
+      for (const side of [-1, 1]) things.push({ kind: 'block', line: -1, s: at(m), u: side * (MILL.floor + WALL), half: WALL - 0.6, len: 1.5, h: 1.3, pad: true });
+    };
+    prop(13, 5.6, 0.5);
+    things.push({ kind: 'bumper', line: -1, s: at(23.5), u: 0, r: 1.35, h: 1.7 });
+    prop(33.5, -5.0, 2.1);
+    for (const side of [-1, 1]) things.push({ kind: 'bumper', line: -1, s: at(43.5), u: side * 2.3, r: 1.15, h: 1.7 });
+    prop(53.5, 4.4, 4.0);
   }
   // ---- the pools: three whirlpools in a triangle — one in the middle of the way in, to go round on either side,
   // then two abreast, to pass between
@@ -385,7 +427,7 @@ export function slideCourse() {
   // both positive). The rim, as a rule; and where a shortcut leaves or joins, the ridge between the two troughs
   // — they are two pipes that cross, and what parts them stands where they are equally far.
   const R = SLIDE.radius, ridge = (d) => R * (d >= 2 * R * Math.sin(SLIDE.rim) ? SLIDE.rim : Math.asin(clamp(d / (2 * R), 0, 1)));
-  for (const ln of [main, ...forks]) for (const p of ln.points) p.lim = [p.F + WALL, p.F + WALL];
+  for (const ln of [main, ...forks, ...pipes]) for (const p of ln.points) p.lim = [p.F + WALL, p.F + WALL];
   for (const f of forks) {
     const mine = f.side < 0 ? 0 : 1, theirs = 1 - mine; // the side of the main line the fork is on; and of the fork, the side the main line is on
     const near = (pts, q) => { let best = 1e9; for (const p of pts) { const d = Math.hypot(p.x - q.x, p.z - q.z, p.y - q.y); if (d < best) best = d; } return best; };
@@ -409,9 +451,12 @@ export function slideCourse() {
 
   things.sort((a, b) => a.line - b.line || a.s - b.s);
   const last = P[P.length - 1], end = { x: last.x, y: last.y, z: last.z, yaw: last.yaw };
-  built = { main, length: main.length, finish: main.length - 0.4, stretches, forks, gaps, marks, lanes, basins, walls, things, helices, end, splash: { x: end.x + Math.sin(end.yaw) * REACH, z: end.z + Math.cos(end.yaw) * REACH } };
+  built = { main, length: main.length, finish: main.length - 0.4, stretches, forks, pipes, lines: [main, ...forks, ...pipes], gaps, marks, mills, basins, things, helices, end, splash: { x: end.x + Math.sin(end.yaw) * REACH, z: end.z + Math.cos(end.yaw) * REACH } };
   return built;
 }
+
+/** A line of the course by its number: -1 is the main line, then the forks, then the pipes. */
+export const lineOf = (course, id) => course.lines[id + 1];
 
 /** The gap a place of a line is in, or null (only the main line has gaps). */
 export function gapAt(course, line, s) {
@@ -433,3 +478,5 @@ export function rimAt(line, s, side) {
 export const sliderAt = (t, clock) => t.u + t.amp * Math.sin((clock / t.period) * 2 * Math.PI + t.phase);
 /** How the arms of a spinner stand at `clock` seconds (radians: 0 along the trough, growing towards the right). */
 export const spinnerAt = (t, clock) => (clock / t.period) * 2 * Math.PI + t.phase;
+/** How the first blade of a propeller stands at `clock` seconds (the same way; the others follow, evenly). */
+export const propAt = spinnerAt;

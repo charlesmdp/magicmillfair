@@ -86,7 +86,7 @@ dans ses fichiers.
    `favicon-32.png`, `icon-192.png`, `apple-touch-icon.png`). Vérifie que `tools/make-icons.mjs` ne ramène pas
    l'ancienne à la prochaine régénération.
 6. **Le tableau des scores du toboggan** : dans `BOARDS` (`server/scores.js`)
-   `slide: { order: 'asc', min: 39_000, max: 3600_000 }`, son nom dans `server/catalog.js`, et dans `main.js`
+   `slide: { order: 'asc', min: 30_000, max: 3600_000 }`, son nom dans `server/catalog.js`, et dans `main.js`
    `app.slideDone = (ms) => scoreGame('slide', …)` (l'extra l'appelle à la fin d'une descente). Son panneau :
    voir `lab/INTEGRATION.md`.
 7. **Le toboggan reste éteint** tant que je ne dis rien : il est encore en retouche au labo (ses changements
