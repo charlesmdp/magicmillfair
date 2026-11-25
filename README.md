@@ -474,12 +474,19 @@ the browser otherwise, and follows a browser that signs in. What it lends is dec
 the account), and for twenty-four hours `/api/shop` lends the light jetpack (`TRIAL` in `server/items.js`:
 what, for how long).
 
-**Two cards make an offer in full**, each once a day at the most and never in the middle of anything (a
-game, a race, a payment, a sentence being typed): after **ten minutes** of play without an account, a card
-proposes to make one — what it keeps, in four lines —; after **fifteen minutes** without the Game Pass, a
-card says what the pass gives and opens the payment (`pitch` in `src/main.js`; `Hud.pitch` draws them).
-Escape or "Not now" closes them. The administrator sees both whenever they like: two links at the bottom of
-their settings. On a development page they only come by themselves when the address asks (`?pitch`).
+**Two cards make an offer in full**, never in the middle of anything (a game, a race, a payment, a sentence
+being typed): after **ten minutes** of play without an account, a card proposes to make one — what it keeps,
+in four lines — once a day at the most; and the card of the **Game Pass** comes to who plays without it **six
+times at the most: fifteen minutes, one hour, two hours, a day, two days and three days after their first
+visit**, each time with words of its own — a line over its title, a title, a sentence, a way to say no
+(`src/app/pitches.js`: `PASS_TIMES`, `PASS_LINES`, `passDue`). What the pass gives is on it in five tiles
+(`PASS.summary` in `server/items.js`), its price over the button that opens the payment. The browser keeps
+when it first came (`mmf.first`) and how many of the six were passed (`mmf.passcards`): who comes back after a
+while gets the last one that is due, not the others; one comes a minute and a half into a visit at the
+earliest, never within four minutes of another card, never twice in a visit. (`pitch` in `src/main.js`;
+`Hud.pitch` draws them.) Escape or the button that says no closes them. The administrator sees them whenever
+they like: links at the bottom of their settings — the one of the Game Pass shows its six cards in turn. On a
+development page they only come by themselves when the address asks (`?pitch`).
 
 What a visitor owns is one list, `server/items.js` (id, name, price, shelf, rarity, the words on the card):
 add a line there and it is sold. Prices of the places are in `server/catalog.js` (and `VILLAGE_PRICES` in
@@ -1444,6 +1451,7 @@ notebook, with the rest. No new Durable Object class: such a room is a room like
 | `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (198 in all) |
 | `npm run test:update` | a delivery from end to end, in the real game: two builds, a visitor in the world, the owner at the back office (`/admin`: the switches, a word to every room, a line refused, somebody kept out, the figures, two games of the lab thrown on — fetched and built as the game runs, each played by its own bot, its time on its board; each with its stand, its panel for a sponsor, its star on the map and its planks at the forks —, the sky villages stage by stage), every page asked to refresh but never in the middle of a sentence, then the server replaced by the next version — the page says so, refreshes, comes back at the same spot, and puts no card of what is new in the way (the boards by the poppy field say it); and a plain build leaves nothing of the game on the page (14 checks) |
 | `node tools/extras-test.mjs`, `node tools/slide-test.mjs`, `node tools/pond-test.mjs`, `node tools/boats-test.mjs`, `node tools/hill-test.mjs`, `node tools/crack-test.mjs`, `node tools/hollow-test.mjs`, `node tools/games-test.mjs` | the lab's own checks of its extras and of each of its games — the last one plays them in the running game, in a browser (see `lab/INTEGRATION.md`) |
+| `node tools/offers-test.mjs` | the six cards of the Game Pass, without a browser: when each is due, that who comes back after a while gets the last one that is due and not the others, that each says something of its own and fits its card (the card in the running game: `npm run test:shop`) |
 | `node tools/waves-test.mjs`, `node tools/lava-test.mjs`, `node tools/hive-test.mjs`, `node tools/flip-test.mjs`, `node tools/spiral-test.mjs`, `node tools/cars-test.mjs`, `node tools/golf-test.mjs`, `node tools/tunes-test.mjs`, `node tools/play-test.mjs` | the checks of the seven games with a gate — the rules of each (its bot plays it; the line of its board is held against `server/scores.js`), their music, and the seven played in the running game, in a browser, each switched on the way the game does it (see `lab/GAMES.md`) |
 | `npm run test:load` | a crowd at the door, with the real rules: 600 connections arrive in twenty seconds and walk (everybody gets in, rooms of about fifty, the lists say what is true, a state reaches the neighbours in time), 230 more follow one link (that room holds 200, never one more; the relay refuses whoever comes without asking; the owner still gets in), then most leave (the rooms that have emptied are offered a livelier one, nobody is moved or cut off) — 11 checks; `-- --cloudflare` plays it against the real Worker in the local Workers runtime, `-- --visitors=400` changes the crowd |
 | `npm run sim:rooms` | a whole day at the door, simulated with the real rules: the size of every room through the day as a picture (`tools/preview/rooms-<scenario>.png`), next to what the old door did; `-- --peak=800`, `-- --rules=open:40,start:15,low:6` try other days and other numbers |

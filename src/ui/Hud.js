@@ -1031,13 +1031,14 @@ export class Hud {
 
   /**
    * A card that makes an offer in full — what it is, what it gives, a picture, a button to take it and another to
-   * leave it: { kind, eyebrow, title, lead, perks: [a line], fine, yes, no, picture (a canvas, or nothing) }.
+   * leave it: { kind, eyebrow, title, lead, perks: [a line, or [what, a word more]], tag (what it costs, over the
+   * buttons), fine, yes, no, picture (a canvas, or nothing) }.
    * Resolves to true when it is taken. (Nothing is in focus and the buttons wake up after a moment: whoever was
    * jumping or clicking when it came does not take it by accident.)
    */
   pitch(o) {
     if (!this.pitchEl) {
-      this.pitchEl = el('div', 'pitch', '<div class="sheet"><div class="art"></div><div class="words"><p class="eyebrow"></p><h2></h2><p class="lead"></p><div class="cases"></div><ul class="perks"></ul><p class="fine"></p><div class="acts"><button type="button" class="yes"></button><button type="button" class="no"></button></div></div></div>');
+      this.pitchEl = el('div', 'pitch', '<div class="sheet"><div class="art"></div><div class="words"><p class="eyebrow"></p><h2></h2><p class="lead"></p><div class="cases"></div><ul class="perks"></ul><p class="cost"></p><div class="acts"><button type="button" class="yes"></button><button type="button" class="no"></button></div><p class="fine"></p></div></div>');
       this.pitchEl.setAttribute('role', 'dialog');
       this.pitchEl.setAttribute('aria-modal', 'true');
       for (const ev of ['mousedown', 'touchstart', 'wheel']) this.pitchEl.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
@@ -1054,7 +1055,13 @@ export class Hud {
     for (const [title, text] of o.cases || []) { const c = el('div', 'case'), b = el('b'), s = el('span'); b.textContent = title; s.textContent = text; c.append(b, s); q('.cases').append(c); }
     q('.cases').hidden = !(o.cases || []).length;
     q('.perks').textContent = '';
-    for (const line of o.perks || []) { const li = el('li'); li.textContent = line; q('.perks').append(li); }
+    for (const line of o.perks || []) {
+      const li = el('li');
+      if (Array.isArray(line)) { const b = el('b'), s = el('span'); b.textContent = line[0]; s.textContent = line[1] || ''; li.append(b, s); } else li.textContent = line;
+      q('.perks').append(li);
+    }
+    q('.cost').textContent = o.tag || '';
+    q('.cost').hidden = !o.tag;
     q('.fine').textContent = o.fine || '';
     q('.art').textContent = '';
     if (o.picture) q('.art').append(o.picture);

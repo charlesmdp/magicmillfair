@@ -504,9 +504,9 @@ try {
     await p3.click('.go');
     await p3.waitForFunction(() => window.__mmf && window.__mmf.ready && window.__mmf.player && window.__mmf.shop.open, null, { timeout: 60000 });
     const dev3 = await p3.evaluate(() => localStorage.getItem('mmf.device'));
-    const day1 = await p3.evaluate(() => { const a = window.__mmf; return { color: a.me.colorIndex, size: a.me.size, lent: a.shop.lent('jetlite'), has: a.shop.has('jetlite'), canFly: a.player.canFly(a.player.pos), tank: a.player.tank, hours: a.shop.trialLeft('jetlite') / 3600_000, pass: a.shop.hasPass }; });
+    const day1 = await p3.evaluate(() => { const a = window.__mmf; return { color: a.me.colorIndex, size: a.me.size, lent: a.shop.lent('jetlite'), has: a.shop.has('jetlite'), canFly: a.player.canFly(a.player.pos), tank: a.player.tank, hours: a.shop.trialLeft('jetlite') / 3600_000, pass: a.shop.hasPass, first: Date.now() - Number(localStorage.getItem('mmf.first')) }; });
     check('a newcomer: the welcome card shows only what is everybody\'s — sixteen colours, no size to choose, not a word of the Game Pass; the light jetpack is theirs for a day',
-      card0.colours === 16 && !card0.extra && !card0.row && !card0.sizes && card0.labels === 'Your name,Colour' && card0.picked < 16 && !/Game Pass|Pocket|Jumbo|Titan/.test(card0.words) && day1.color < 16 && day1.size === 1 && !day1.pass && day1.lent === 'trial' && !day1.has && day1.canFly && Math.abs(day1.tank - 0.3) < 0.01 && day1.hours > 23 && day1.hours <= 24,
+      card0.colours === 16 && !card0.extra && !card0.row && !card0.sizes && card0.labels === 'Your name,Colour' && card0.picked < 16 && !/Game Pass|Pocket|Jumbo|Titan/.test(card0.words) && day1.first >= 0 && day1.first < 600_000 && day1.color < 16 && day1.size === 1 && !day1.pass && day1.lent === 'trial' && !day1.has && day1.canFly && Math.abs(day1.tank - 0.3) < 0.01 && day1.hours > 23 && day1.hours <= 24,
       JSON.stringify({ card0, day1 }));
     // the pass in the shop: what it gives, what it costs; the button leads to Stripe, by the month
     await p3.click('.shop-icon');
@@ -575,6 +575,9 @@ try {
     const until = async (fn, ms = 20000) => { for (const end = Date.now() + ms; Date.now() < end; await new Promise((r) => setTimeout(r, 150))) { const v = await fn(); if (v) return v; } return fn(); };
     const visitor = async () => {
       const context = await browser.newContext({ viewport: { width: 960, height: 560 }, deviceScaleFactor: 1 });
+      // (a robot of a colour of its own — green —: its picture on the card of the room is read against the evening
+      // sky, and a robot drawn at random in pink stood out from it too little to be told apart)
+      await context.addInitScript(() => { try { if (!localStorage.getItem('mmf.color')) localStorage.setItem('mmf.color', '3'); } catch { /* no storage */ } });
       await context.route('https://checkout.stripe.test/**', (route) => route.fulfill({ contentType: 'text/html', body: '<title>pay</title>the payment page' }));
       const p = await context.newPage();
       p.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) logs.push(m.text().slice(0, 300)); });
@@ -730,6 +733,46 @@ try {
     await flip({ userRooms: false });
     await friend.context.close();
     await owner.context.close();
+  }
+  // ---- the card of the Game Pass comes by itself — six times at the most: 15 min, 1 h, 2 h, a day, two days and
+  // three days after the first visit, each time with words of its own (src/app/pitches.js). Who comes back the
+  // next day with only the first seen gets the card of the next day (the two of the first day are passed), and
+  // not again in that visit; the administrator's link shows the six in turn
+  {
+    const ctx5 = await browser.newContext({ viewport: { width: 960, height: 560 }, deviceScaleFactor: 1 });
+    await ctx5.addInitScript(() => { if (!sessionStorage.getItem('mmf.test.set')) { sessionStorage.setItem('mmf.test.set', '1'); localStorage.setItem('mmf.name', 'Wanderer'); localStorage.setItem('mmf.first', String(Date.now() - 25 * 3600_000)); localStorage.setItem('mmf.passcards', '1'); } });
+    const p5 = await ctx5.newPage();
+    p5.on('pageerror', (e) => logs.push(e.message));
+    await p5.goto(`${BASE}/?q=${opt.q || 'low'}&pitch=1&back=1`); // (?pitch: the cards come by themselves on this page; ?back: a visitor who has been here)
+    await p5.waitForFunction(() => window.__mmf && window.__mmf.ready && window.__mmf.player && window.__mmf.shop.open && window.__mmf.input.enabled, null, { timeout: 240000 });
+    await p5.evaluate(() => window.__mmf.playedFor(100)); // (a minute and a half played in this visit)
+    await p5.waitForFunction(() => document.querySelector('.pitch.on')?.dataset.kind === 'pass', null, { timeout: 60000 });
+    const card5 = await p5.evaluate(() => { const b = document.querySelector('.pitch'); return { eyebrow: b.querySelector('.eyebrow').textContent, title: b.querySelector('h2').textContent, perks: [...b.querySelectorAll('.perks li')].map((li) => [li.querySelector('b')?.textContent || '', li.querySelector('span')?.textContent || '']), tag: b.querySelector('.cost').textContent, costSeen: b.querySelector('.cost').getClientRects().length > 0, oneRow: Math.abs(b.querySelector('.yes').getBoundingClientRect().top - b.querySelector('.no').getBoundingClientRect().top) < 12, fits: b.querySelector('.sheet').scrollHeight <= b.querySelector('.sheet').clientHeight + 1, yes: b.querySelector('.yes').textContent, no: b.querySelector('.no').textContent, seen: localStorage.getItem('mmf.passcards') }; });
+    await p5.waitForTimeout(1200); // (its buttons wake up after a moment)
+    await p5.screenshot({ path: path.join(ROOT, 'tools/preview/shop-pass-card.png') });
+    await p5.keyboard.press('Escape');
+    await p5.waitForFunction(() => !document.querySelector('.pitch.on'), null, { timeout: 10000 });
+    // (played on, in the same visit: it does not come again)
+    await p5.evaluate(() => window.__mmf.playedFor(400));
+    await p5.waitForTimeout(4000);
+    const again5 = await p5.evaluate(() => ({ kind: document.querySelector('.pitch.on')?.dataset.kind || '', seen: localStorage.getItem('mmf.passcards') }));
+    if (again5.kind) await p5.keyboard.press('Escape');
+    // (the administrator's link: the six cards, in turn, then the first again)
+    const shown5 = [];
+    for (let k = 0; k < 7; k++) {
+      await p5.evaluate(() => window.__mmf.hud.emit('show', 'pass'));
+      await p5.waitForFunction(() => document.querySelector('.pitch.on'), null, { timeout: 10000 });
+      shown5.push(await p5.evaluate(() => document.querySelector('.pitch h2').textContent));
+      await p5.keyboard.press('Escape');
+      await p5.waitForFunction(() => !document.querySelector('.pitch.on'), null, { timeout: 10000 });
+    }
+    const after5 = await p5.evaluate(() => localStorage.getItem('mmf.passcards'));
+    await ctx5.close();
+    check('the card of the Game Pass comes by itself at its times — back the next day with only the first seen, one gets the card of the next day, the two of the first day passed —: what the pass gives in five tiles, its price, words of its own and a way to say no of its own; not again in that visit; the administrator\'s link shows the six in turn, counting nothing',
+      card5.eyebrow === 'You came back' && card5.title === 'Back the next day. The oasis noticed.' && card5.perks.length === 5 && card5.perks.every(([w, m]) => w && m) && card5.perks[0][0] === 'Every hat'
+      && card5.tag === '$19 a month · stop whenever you like' && card5.costSeen && card5.oneRow && card5.fits && card5.yes === 'Get the Game Pass · $19 a month' && card5.no === 'Maybe tomorrow' && card5.seen === '4'
+      && again5.kind !== 'pass' && again5.seen === '4' && new Set(shown5.slice(0, 6)).size === 6 && shown5[6] === shown5[0] && shown5[0] === 'You clearly like it here.' && after5 === '4',
+      JSON.stringify({ card5, again5, shown5, after5 }));
   }
   // ---- paying without leaving the game: a server that was given Stripe's publishable key (Stripe's script is a stand-in here)
   {

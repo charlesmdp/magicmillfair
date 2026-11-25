@@ -59,6 +59,8 @@ export const PASS = {
     'Coming: the weather of where you live, with its day and its night',
   ],
   why: 'It keeps the servers on and pays one entrepreneur: Atomic Oasis is not made by a multinational, but by a guy on a couch. Thank you for real.',
+  // (the same five, in a few words each — [what, a word more]: the card that offers it, its banner in the shop)
+  summary: [['Every hat', 'and every hat to come'], ['The Jetpack Lite', 'while you hold the pass'], ['Four sizes', 'from Pocket to Titan'], ['16 more colours', 'black included'], ['Your own weather', 'coming soon']],
 };
 /** What a holder of the pass has without owning it. */
 export const passGives = (id) => id === 'jetlite' || (typeof id === 'string' && id.startsWith('hat:'));
