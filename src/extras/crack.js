@@ -33,8 +33,8 @@ export function attach(app) {
     climb = rock.open(player, io);
     player.driver = climb;
     app.audio?.play('teleport');
-    keysHelp(app).set(app.input.isTouch ? 'The stick, left and right: walk, steer in the air, hold on to a wall · the arrow: jump — off a wall it is a kick to the other wall · held towards a wall, you slide slowly · stick down: let go · a ledge is a roof against the stones'
-      : 'A / D: walk, steer in the air, hold on to a wall · Space: jump — off a wall it is a kick to the other wall · held towards a wall, you slide slowly · S: let go · a ledge is a roof against the stones · E: leave · H: these keys again');
+    keysHelp(app).set(app.input.isTouch ? 'Walk to a wall and jump: you hold it by yourself · the arrow again: a kick across to the other wall, and up · kick the moment you touch — a sharp kick goes higher, and they add up · the stick steers in the air; down lets go · near the top, stones come down the wall with the red mark: be on the other one'
+      : 'Walk to a wall (A / D) and jump (Space): you hold it by yourself · Space again: a kick across to the other wall, and up · kick the moment you touch — a sharp kick goes higher, and they add up · A / D steer in the air; S lets go · near the top, stones come down the wall with the red mark: be on the other one · E: leave · H: these keys again');
   };
   world.actionSources.push((p) => {
     if (climb) return climb.over ? null : { label: 'Leave the climb', run: () => leave(false) };

@@ -323,10 +323,16 @@ export class Cleft {
         }
         this.at(st.x, st.y, 0, pos);
         for (const e of events) {
-          if (e.type === 'kick') { io.play('jump', { volume: 0.5 }); burst(8); S.trail = 0.5; }
+          if (e.type === 'kick') {
+            io.play('jump', { volume: 0.5 }); burst(8); S.trail = 0.5;
+            // (a sharp kick rings — higher with each one of a streak — and the first late kick after a streak says what was lost)
+            if (e.sharp) { io.play('bell', { volume: 0.32, rate: Math.min(2.2, 1.1 + 0.12 * e.streak) }); burst(6); if (e.streak === 3 && !S.praised) { S.praised = true; io.note('Sharp! Kick the moment you touch the wall: each one carries higher.'); } }
+            else if (!S.taught && st.kicks >= 3) { S.taught = true; io.note('Kick sooner: the moment you touch a wall, it is a sharp kick — higher.'); }
+          }
           else if (e.type === 'jump') { io.play('jump', { volume: 0.4 }); S.trail = 0.35; }
           else if (e.type === 'cling' && e.wet) io.play('splash', { volume: 0.25 });
-          else if (e.type === 'hit') { io.play('whack'); io.note('A stone!'); S.shake = 0.4; }
+          else if (e.type === 'hit') { io.play('whack'); io.note('A stone! They come down the wall with the red mark: be on the other one.'); S.shake = 0.4; }
+          else if (e.type === 'cling' && !S.clung) { S.clung = true; io.note('You hold the wall by yourself. Jump: a kick across to the other wall, and up.'); }
           else if (e.type === 'land') { if (e.fell > 4) { io.play('land'); io.note(`${Math.round(e.fell)} m down${e.ledge < 0 ? ' — back on the planks' : ', onto a ledge'}.`); } }
           else if (e.type === 'top') { io.play('bell'); io.play('victory', { volume: 0.7 }); io.note(`The top! ${formatTime(e.time)}`); sparks?.glitter(pos.x, pos.y + 1, pos.z, 1.4, 60); }
         }
@@ -354,7 +360,7 @@ export class Cleft {
         pl.speed = st.ground ? Math.abs(st.vx) : 0; pl.grounded = st.ground || st.over;
         this._arc(st, arc);
         S.high = Math.max(S.high, st.y);
-        session.line = st.over ? `${C.name} · ${formatTime(st.time)}` : !st.started ? `${C.name} · to a wall, and from wall to wall` : `${formatTime(Math.round((st.clock - st.go) * 1000))} · ${Math.max(0, Math.floor(st.y))} m of ${C.height}${st.hits ? ` · ${st.hits} stone${st.hits === 1 ? '' : 's'}` : ''}`;
+        session.line = st.over ? `${C.name} · ${formatTime(st.time)}` : !st.started ? `${C.name} · walk to a wall and jump — then kick from wall to wall, the moment you touch` : `${formatTime(Math.round((st.clock - st.go) * 1000))} · ${Math.max(0, Math.floor(st.y))} m of ${C.height}${st.streak >= 2 ? ` · sharp ×${st.streak}` : ''}${st.hits ? ` · ${st.hits} stone${st.hits === 1 ? '' : 's'}` : ''}`;
       },
       /** The camera: out over the water before the cleft, lower than the climber, looking up into it. */
       camera: (cam, dt) => {

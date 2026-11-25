@@ -1193,7 +1193,12 @@ the first pond on plain jumps, with room to spare on the tightest: a table in th
 `pond/ring.js`, which `npm run test:pond` works out again and compares — before, one start in three could
 not be run without the second jump. A low beam is lower, what an arm catches of a runner is narrower than
 the runner, and a foot may be further over the edge of a stone. The music of the climb plays on the ponds
-too, rising from pond to pond.) The files of the lab are the lab's: `src/extras/**`,
+too, rising from pond to pond. *Between a Rock* again: **what there is to get good at is the kick**. A wall
+one touches is held by itself — nothing to hold down —; a kick given within a fifth of a second of catching
+a wall is a *sharp* kick, which carries higher, rings, and counts in a streak shown on the screen; the game
+says so at the first walls. And nothing is left to luck: stones come down the walls only, never the middle,
+on the top quarter of the climb, each announced by a mark on its wall — one is on the other wall. The music
+of the climb rises with the climber.) The files of the lab are the lab's: `src/extras/**`,
 `src/world/zones/games/{slide,pond,boats,hill,crack,hollow}/**`, `server/stats.js`, `public/opendata/**`,
 `public/opendate/**`, `lab/**` and its tests are not edited here.
 
