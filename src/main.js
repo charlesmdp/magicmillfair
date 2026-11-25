@@ -1078,14 +1078,18 @@ async function boot() {
   };
   /** What was kept for the place `id` (a day at the most), or null. */
   const keptSponsor = (id) => { try { const d = JSON.parse(store.get(SPONSOR_DRAFT)); return d && d.id === id && Date.now() - d.at < 86_400_000 ? d : null; } catch { return null; } };
-  /** A place held by the month (a gondola, a backdrop): what it will show, then off to the payment page. */
-  const sponsorOffer = async (id, what, cents) => {
+  /**
+   * A place held by the month (a gondola, a backdrop) — or, `life`, bought for good and paid once (a gondola):
+   * what it will show, then off to the payment page.
+   */
+  const sponsorOffer = async (id, what, cents, life = false) => {
     if (!shop.open) { hud.note('The shop is not open yet. Come back soon!', 5200); return; }
-    const got = await hud.form(`Sponsor ${what}`, `${price(cents)} a month, for as long as you like: your name, a line under it, your logo and a link, shown to every visitor. Say what it should show, then pay: it goes up the moment you are back. ${shop.mode === 'test' ? 'Test mode: no real money.' : 'Paid on Stripe.'}`,
-      sponsorFields(), `Go to payment · ${price(cents)} a month`);
+    const terms = life ? `${price(cents)}, once, and it is yours for good — nothing to renew, nothing to stop` : `${price(cents)} a month, for as long as you like`;
+    const got = await hud.form(life ? `Buy ${what}` : `Sponsor ${what}`, `${terms}: your name, a line under it, your logo and a link, shown to every visitor. Say what it should show, then pay: it goes up the moment you are back. ${shop.mode === 'test' ? 'Test mode: no real money.' : 'Paid on Stripe.'}`,
+      sponsorFields(), life ? `Go to payment · ${price(cents)}, once` : `Go to payment · ${price(cents)} a month`);
     if (!got || !(await keepSponsor(id, got))) return;
     hud.note('Opening the payment page…', 8000);
-    const wrong = await shop.buy(id);
+    const wrong = await shop.buy(id, 0, life);
     if (wrong) hud.note(wrong, 7000);
   };
   /** What can be done about the place `id`, for who stands by it: [{ label, run }] */
@@ -1143,7 +1147,14 @@ async function boot() {
     if (id.startsWith('board:')) {
       // the panel of a game goes to the highest bidder: from one dollar; whoever is outbid is refunded
       if (shop.open && !view?.mine && out.length < 2) out.push({ label: view ? `Outbid the sponsor · from ${price(shop.least(id))}` : `Sponsor ${place.what} · from ${price(shop.least(id))}`, run: () => bidFor(id) });
-    } else if (!view && shop.open && !out.length) out.push({ label: `Sponsor ${place.what} · ${price(cents)} a month`, run: () => sponsorOffer(id, place.what, cents) });
+    } else if (!view && shop.open) {
+      // a place nobody holds: taken by the month — and a gondola may be bought for good instead, paid once: the
+      // buyer chooses. (The administrator may pay for one like anybody: only "fill it in" was offered to them
+      // once, and the owner of the fair could not buy a gondola of their own wheel.)
+      out.push({ label: `Sponsor ${place.what} · ${price(cents)} a month`, run: () => sponsorOffer(id, place.what, cents) });
+      const life = shop.lifeCost(id);
+      if (life) out.push({ label: `Buy ${place.what} for good · ${price(life)}, once`, run: () => sponsorOffer(id, place.what, life, true) });
+    }
     return out;
   };
   world.actionSources.push((p) => {
@@ -1212,11 +1223,22 @@ async function boot() {
   const adRows = () => boardIds().map((id) => { const v = shop.slots[id]; return { game: GAME_NAMES[id.split(':')[1]], sponsor: v?.state === 'live' ? v.title : '', offer: shop.open ? `from ${price(shop.least(id))}` : 'free' }; });
   // the stand of the wheel: its gondolas, who sponsors them, which are free
   const gondolaIds = () => Array.from({ length: world.pier.gondolas || 0 }, (_, k) => `gondola:${k + 1}`);
+  /** What a gondola costs, in words: by the month — or for good. */
+  const gondolaTerms = () => `${price(shop.prices.gondola)} a month${shop.prices.gondolaLife ? `, or ${price(shop.prices.gondolaLife)} for good` : ''}`;
   const chooseGondola = () => {
     const ids = gondolaIds();
-    const say = (id) => { const v = shop.slots[id], d = who.admin && pending[id]?.draft; return d ? `Awaiting approval: ${d.title}` : v?.mine ? 'Yours: set it up' : v?.state === 'live' ? v.title : v ? 'Taken' : shop.open ? `Free · ${price(shop.prices.gondola)} a month` : 'Free'; };
+    const say = (id) => { const v = shop.slots[id], d = who.admin && pending[id]?.draft; return d ? `Awaiting approval: ${d.title}` : v?.mine ? (v.life ? 'Yours for good: set it up' : 'Yours: set it up') : v?.state === 'live' ? v.title : v ? 'Taken' : shop.open ? `Free · ${gondolaTerms()}` : 'Free'; };
     hud.choose('The gondolas of the big wheel', 'Twenty-four gondolas, a banner on each: its sponsor goes round with the wheel, in sight of the whole bay.', ids.map((id, k) => ({ label: `Gondola ${k + 1}`, note: say(id), color: shop.slots[id]?.state === 'live' ? [0.9, 0.7, 0.2] : [0.5, 0.55, 0.6] })))
-      .then((i) => { if (i === null) return; const acts = placeActions(ids[i]); if (acts.length) acts[0].run(); else hud.note(shop.open ? 'That one is taken.' : 'The shop is not open yet. Come back soon!', 4000); });
+      .then((i) => {
+        if (i === null) return;
+        const acts = placeActions(ids[i]);
+        if (!acts.length) { hud.note(shop.open ? 'That one is taken.' : 'The shop is not open yet. Come back soon!', 4000); return; }
+        if (acts.length === 1) { acts[0].run(); return; }
+        // (several things can be done about it — by the month or for good; the administrator may also fill it in —: one chooses)
+        hud.choose(`Gondola ${i + 1}`, shop.slots[ids[i]] ? 'What would you like to do with it?' : 'It is free. By the month, you stop whenever you like; for good, you pay once and it goes round with your banner for as long as the fair stands.',
+          acts.map((a) => ({ label: a.label.replace(/^(Sponsor|Buy) gondola \d+ of the big wheel( for good)? · /, (m, verb, good) => (good ? 'For good · ' : 'By the month · ')), note: /for good/.test(a.label) ? 'Paid once — yours for as long as the fair stands' : /a month/.test(a.label) ? 'Stop whenever you like' : '', color: /for good/.test(a.label) ? [0.9, 0.7, 0.2] : undefined })))
+          .then((k) => { if (k !== null && acts[k]) acts[k].run(); });
+      });
   };
   world.actionSources.push((p) => (world.pier.sponsorBooth && near(p, world.pier.sponsorBooth, 2.6) ? { label: 'The gondolas and their sponsors', run: chooseGondola } : null));
   {
@@ -1316,9 +1338,9 @@ async function boot() {
       const sponsor = d ? { title: d.title, subtitle: d.subtitle } : v?.state === 'live' ? { title: v.title, subtitle: v.subtitle, logo: v.logo, url: v.url, site: siteWords(v.url), clicks: v.clicks || 0 } : null;
       const photo = () => { const g = world.pier.gondolaView(n); return photographer.shoot(g.from, g.at, 480, 300, 46); };
       // (the wheel turns: its photograph is taken again when the window is opened a while later)
-      return { id, name: `Gondola ${n}`, state, sponsor, price: shop.open ? `${price(shop.prices.gondola)} a month` : '', acts: placeActions(id).sort((a, b) => first(a) - first(b)), photo, stamp: `${state}|${sponsor?.title || ''}|${sponsor?.logo || ''}|${v?.bg || ''}|${Math.floor(Date.now() / 30_000)}` };
+      return { id, name: `Gondola ${n}`, state, sponsor, price: shop.open ? gondolaTerms() : '', acts: placeActions(id).sort((a, b) => first(a) - first(b)), photo, stamp: `${state}|${sponsor?.title || ''}|${sponsor?.logo || ''}|${v?.bg || ''}|${Math.floor(Date.now() / 30_000)}` };
     });
-    if (gondolas.length) extras.push({ title: 'The big wheel', text: `${gondolas.length} gondolas, a banner on each, in sight of the whole bay · ${freeG} free${shop.open ? ` · ${price(shop.prices.gondola)} a month` : ''}`, act: { label: 'Choose a gondola', run: chooseGondola } });
+    if (gondolas.length) extras.push({ title: 'The big wheel', text: `${gondolas.length} gondolas, a banner on each, in sight of the whole bay · ${freeG} free${shop.open ? ` · ${gondolaTerms()}` : ''}`, act: { label: 'Choose a gondola', run: chooseGondola } });
     if (places.has('tarp:shoot')) { const v = shop.slots['tarp:shoot'], act = placeActions('tarp:shoot')[0]; extras.push({ title: 'The backdrop of Bullseye Alley', text: v?.state === 'live' ? `Held by ${v.title}.` : `The whole wall behind the targets${shop.open && !v ? ` · ${price(shop.prices.tarp)} a month` : v ? ' · taken' : ''}`, act: act ? { label: act.label.length > 34 ? 'Take the backdrop' : act.label, run: act.run } : null }); }
     if (plaques?.count) { const taken = Array.from({ length: plaques.count }, (_, k) => `plaque:${k + 1}`).filter((id) => shop.slots[id]).length; extras.push({ title: 'A plaque for a companion', text: `${plaques.count} brass plates round the golden dog, ${taken} of them taken${shop.open ? ` · ${price(shop.prices.plaque)}, once` : ''}. They are chosen on the spot: swim north along the cliffs to the Golden Cove, then climb.`, act: null }); }
     sponsorsView.open({ cards, wheel: { cards: cars, of: gondolas.length }, extras, note: shop.open ? '' : 'The shop is not open yet: sponsoring starts soon. Meanwhile, here is every game and who sponsors it.' });

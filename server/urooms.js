@@ -90,9 +90,10 @@ export async function roomOfAccount(ctx, account) {
 
 /**
  * A room was paid for (shop.js, on Stripe's word): made for that account — or woken as it was, when the account
- * had one asleep. `sub`, `customer`: the subscription and who pays, at Stripe. Returns its record (null: no account).
+ * had one asleep. `sub`, `customer`: the subscription and who pays, at Stripe; `life`: it was bought for good —
+ * there is no subscription, and nothing puts it to sleep. Returns its record (null: no account).
  */
-export async function openRoom(ctx, account, sub = '', customer = '') {
+export async function openRoom(ctx, account, sub = '', customer = '', life = false) {
   if (typeof account !== 'string' || !account) return null;
   const now = ctx.now(), idx = await indexOf(ctx), key = account.toLowerCase();
   let id = Object.keys(idx).find((k) => idx[k].o === key), rec = id ? await ctx.store.get(`uroom:${id}`) : null;
@@ -101,7 +102,7 @@ export async function openRoom(ctx, account, sub = '', customer = '') {
     do { id = newId(); } while (idx[id]);
     rec = { id, name: cleanRoomName(`${account}'s room`), owner: account, since: now, pw: null, fails: 0, lock: 0 };
   }
-  rec = { ...rec, sub: typeof sub === 'string' ? sub : '', customer: typeof customer === 'string' ? customer : '', state: 'live', asleep: 0 };
+  rec = { ...rec, sub: typeof sub === 'string' ? sub : '', customer: typeof customer === 'string' ? customer : '', state: 'live', asleep: 0, ...(life && { life: true }) };
   await ctx.store.put(`uroom:${id}`, rec);
   idx[id] = { o: key, s: 'live', z: 0 };
   await ctx.store.put(KEY, idx);

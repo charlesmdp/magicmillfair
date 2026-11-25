@@ -49,7 +49,7 @@
 // `logo:<slot>` and `logo:<slot>:draft` → { type, data (base64) }; `refunds` → the last hundred, [{ pay, amount,
 // at, why, ok, error }].
 import { allowed } from './api.js';
-import { describe, publicPrices, nextBid, AUCTION, CURRENCY } from './catalog.js';
+import { describe, forLife, publicPrices, nextBid, AUCTION, CURRENCY } from './catalog.js';
 import { createCheckout, createPortal, verifyWebhook, refundPayment, endSubscription, fetchCheckout } from './stripe.js';
 import { noteSale, noteRefund } from './stats.js';
 import { readRelease } from './release.js';
@@ -154,17 +154,21 @@ export function paysOf(id, s, now) {
   return s.paid > 0 ? { amount: s.paid, monthly: false, total: s.paid } : null;
 }
 
-/** What was paid for becomes theirs (called from the webhook; safe to call twice). `customer`: who pays, at Stripe. */
-export async function grant(ctx, item, device, sub = null, customer = null, account = '') {
+/**
+ * What was paid for becomes theirs (called from the webhook; safe to call twice). `customer`: who pays, at Stripe.
+ * `once` (cents): it was bought for good — a gondola, a room — and this is what was paid: no subscription holds
+ * it, and nothing ends it.
+ */
+export async function grant(ctx, item, device, sub = null, customer = null, account = '', once = 0) {
   const what = describe(item);
   if (!what || !DEVICE.test(device || '')) return false;
   if (what.kind === 'room') {
     // a room of one's own (urooms.js): made for the account that paid — or woken, if that account had one asleep
     const acct = (typeof account === 'string' && account) || (await accountOf(ctx.store, device))?.name || '';
-    const room = await openRoom(ctx, acct, typeof sub === 'string' ? sub : '', typeof customer === 'string' ? customer : '');
+    const room = await openRoom(ctx, acct, typeof sub === 'string' ? sub : '', typeof customer === 'string' ? customer : '', once > 0);
     if (!room) return false;
     if (room.sub) await ctx.store.put(`sub:${room.sub}`, { room: room.id, device, at: ctx.now() });
-    await leaveNote(ctx, device, `Your room is ready: "${room.name}". Its link is in "Who is here" — only those you give it to can come.`);
+    await leaveNote(ctx, device, `Your room is ready: "${room.name}"${once > 0 ? ' — yours for good' : ''}. Its link is in "Who is here" — only those you give it to can come.`);
     return true;
   }
   if (what.kind === 'own') {
@@ -182,7 +186,7 @@ export async function grant(ctx, item, device, sub = null, customer = null, acco
   if (what.auction) return false; // (an auctioned place is taken by a bid: takeBid)
   const slots = await slotsOf(ctx);
   if (slots[item] && !(await sameOwner(ctx.store, slots[item].by, device))) return false; // (somebody else got there first: for the administrator to sort out)
-  slots[item] = { ...(slots[item] || { state: 'paid', logo: 0 }), by: device, sub: typeof sub === 'string' ? sub : null, ...(typeof customer === 'string' && customer && { customer }), at: ctx.now() };
+  slots[item] = { ...(slots[item] || { state: 'paid', logo: 0 }), by: device, sub: typeof sub === 'string' ? sub : null, ...(typeof customer === 'string' && customer && { customer }), ...(once > 0 && { paid: once, life: true }), at: ctx.now() };
   await ctx.store.put('slots', slots);
   return true;
 }
@@ -248,7 +252,7 @@ async function thankSponsor(ctx, o, site, sold) {
   if (!ctx.mail) return;
   const acct = await accountOf(ctx.store, o.metadata?.device);
   const to = acct?.email || cleanEmail(o.customer_details?.email || o.customer_email || '');
-  if (to) mailLater(ctx, { to, ...sponsorMail(site || '', acct?.name || '', { place: placeOf(sold), cents: Number.isInteger(o.amount_total) ? o.amount_total : 0, monthly: !!sold.monthly, auction: !!sold.auction, plaque: !!sold.plaque }) });
+  if (to) mailLater(ctx, { to, ...sponsorMail(site || '', acct?.name || '', { place: placeOf(sold), cents: Number.isInteger(o.amount_total) ? o.amount_total : 0, monthly: !!sold.monthly, auction: !!sold.auction, plaque: !!sold.plaque, life: !!sold.life }) });
 }
 
 /**
@@ -260,11 +264,12 @@ async function thankSponsor(ctx, o, site, sold) {
 async function completed(ctx, cfg, o, site) {
   const now = ctx.now();
   // (the figures: what came in, once — a bid that comes too late is given back at once, and counted as given back)
-  const sold = describe(o.metadata?.item), fresh = sold ? await firstTime(ctx, o.id) : false; // (fresh: it is said for the first time)
+  // (bought for good — a gondola, a room —: the payment page was asked for with `life`, and carries it)
+  const named = describe(o.metadata?.item), sold = named && o.metadata?.life ? forLife(named) : named, fresh = sold ? await firstTime(ctx, o.id) : false; // (fresh: it is said for the first time)
   if (!sold) return false;
   if (fresh) await noteSale(ctx.store, { cents: Number.isInteger(o.amount_total) ? o.amount_total : 0, pass: sold.kind === 'pass' }, now).catch(() => {});
   const got = sold.auction ? await takeBid(ctx, cfg, o.metadata.item, o.metadata?.device, o.amount_total, o.payment_intent)
-    : await grant(ctx, o.metadata?.item, o.metadata?.device, o.subscription, o.customer, o.metadata?.account);
+    : await grant(ctx, o.metadata?.item, o.metadata?.device, o.subscription, o.customer, o.metadata?.account, sold.life ? (Number.isInteger(o.amount_total) && o.amount_total > 0 ? o.amount_total : sold.amount) : 0);
   if (got && fresh && sold.kind === 'pass') await thankForPass(ctx, o, site);
   if (got && fresh && sold.kind === 'slot') await thankSponsor(ctx, o, site, sold).catch(() => {});
   return got;
@@ -341,7 +346,7 @@ export async function shopRoute(req, ctx) {
       view[id] = s.state === 'live' && (me.has(s.by) || !(await hidden(s))) ? { state: 'live', ...shown(id, s) } : { state: 'taken' };
       if (describe(id)?.auction) Object.assign(view[id], { bid: s.bid || 0, next: nextBid(s.bid || 0) }); // (what it went for, what beats it)
       if (view[id].state === 'live') { const pays = paysOf(id, s, now); if (pays) view[id].pays = pays; } // (what its sponsor pays: with what they show, never without)
-      if (mine && me.has(s.by)) Object.assign(view[id], { mine: true, paid: true, draft: draftOf(id, s), ...(s.sub && s.customer && { manage: true }) }); // (manage: held by the month — its subscription can be looked after)
+      if (mine && me.has(s.by)) Object.assign(view[id], { mine: true, paid: true, draft: draftOf(id, s), ...(s.sub && s.customer && { manage: true }), ...(s.life && { life: true }) }); // (manage: held by the month — its subscription can be looked after)
     }
     // (what happened while they were away — outbid, refunded — is said once)
     let notes = [];
@@ -408,7 +413,8 @@ export async function shopRoute(req, ctx) {
     if (method !== 'POST') return out(405, { error: 'Method not allowed.' }, { Allow: 'POST' });
     if (!cfg.mode) return out(501, { error: 'The shop is not open.' });
     if (limited('checkout')) return busy;
-    const what = describe(body?.item), device = body?.device;
+    // (`life`: a gondola or a room bought for good, paid once, instead of held by the month — the buyer's choice)
+    const what = body?.life === true ? forLife(describe(body?.item)) : describe(body?.item), device = body?.device;
     if (!what || !DEVICE.test(device || '') || itemOf(what.item)?.retired) return out(400, { error: 'Nothing of that name is sold.' }); // (what is retired is no longer sold)
     // (a sky village is only for hire once the sky is open: the owner's switch)
     if (what.item.startsWith('village:') && (await readRelease(ctx)).release.sky !== 'open') return out(400, { error: 'Nothing of that name is sold.' });
@@ -433,6 +439,7 @@ export async function shopRoute(req, ctx) {
       what.amount = bid;
       extra = { bid };
     } else if (what.kind === 'slot' && (await slotsOf(ctx))[what.item]) return out(409, { error: 'Somebody already has it.' });
+    if (what.life) extra = { ...extra, life: 1 };
     try {
       const embed = body.embed === true && !!cfg.publishable; // (the form inside the game: only where its key was given)
       const session = await createCheckout(cfg, { ...what, currency: CURRENCY }, device, req.site || '', ctx.fetch || fetch, extra, embed);

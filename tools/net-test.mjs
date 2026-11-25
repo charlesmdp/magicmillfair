@@ -20,7 +20,7 @@ import { sign, verify, randomId } from '../server/token.js';
 import { addScore, topsOf, periodKeys, runFits, cleanScore } from '../server/scores.js';
 import { signWebhook, stripeConfig } from '../server/stripe.js';
 import { cleanLogo, cleanText, cleanUrl, paysOf } from '../server/shop.js';
-import { restMailer } from '../server/mail.js';
+import { restMailer, sponsorMail } from '../server/mail.js';
 import { rankSponsors } from '../src/app/thanks.js';
 import { visit, localDay } from '../server/routes.js';
 import { cleanTalk, oneSentence, PERSONAS, REPLY_MAX, REPLY_WORDS } from '../server/npc.js';
@@ -1456,6 +1456,32 @@ async function testShop({ port }) {
     // (the places are given back)
     await hook({ type: 'customer.subscription.deleted', data: { object: { id: 'sub_thanks_20' } } });
     for (const id of ['board:geiger', 'gondola:21', 'gondola:22', 'plaque:70']) await request(port, `/api/sponsors?slot=${id}`, { method: 'DELETE', headers: admin });
+  }
+  // ---- a gondola for good: the same place, paid once instead of by the month — the buyer's choice (catalog.js: forLife)
+  {
+    const eve = randomId(16), far = { 'x-forwarded-for': '10.7.13.1' }, same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+    stripe.asked.length = 0;
+    const page = CF ? null : await post('/api/checkout', { item: 'gondola:15', device: eve, life: true }, far), form = stripe.asked[0]?.form;
+    // (what is only held by the month is not sold for good. Asking for a payment page is counted by address, and
+    // the local runtime of Cloudflare sees one address for the whole test: there, as above, it is not asked)
+    const noLife = CF ? null : await post('/api/checkout', { item: 'tarp:shoot', device: eve, life: true }, far), noPass = CF ? null : await post('/api/checkout', { item: 'pass', device: eve, life: true }, far);
+    await hook({ type: 'checkout.session.completed', data: { object: { id: 'cs_life_g15', payment_status: 'paid', subscription: null, customer: 'cus_life_15', amount_total: 19900, metadata: { item: 'gondola:15', device: eve, life: '1' } } } });
+    const mine = json(await request(port, `/api/shop?device=${eve}`)).slots['gondola:15'];
+    // (its banner is put up by the administrator here: what a holder may send is counted by address too — the holder's own way is played in the browser, tools/shop-test.mjs)
+    const filled = await post('/api/sponsors', { slot: 'gondola:15', set: { title: 'For Good Inc', subtitle: 'Paid once' } }, admin);
+    const shown = json(await request(port, '/api/shop')).slots['gondola:15'];
+    // (nobody else can take it, by the month or for good; and a subscription that ends somewhere takes nothing back)
+    const taken = CF ? null : await post('/api/checkout', { item: 'gondola:15', device: randomId(16), life: true }, { 'x-forwarded-for': '10.7.13.2' }), rented = CF ? null : await post('/api/checkout', { item: 'gondola:15', device: randomId(16) }, { 'x-forwarded-for': '10.7.13.3' });
+    await hook({ type: 'customer.subscription.deleted', data: { object: { id: 'sub_of_nobody' } } });
+    const still = json(await request(port, '/api/shop')).slots, wall = rankSponsors(still, {}).find((r) => r.name === 'For Good Inc'), prices = json(await request(port, '/api/shop')).prices;
+    const mail = sponsorMail('https://fair.example', 'Eve', { place: 'gondola 15 of the big wheel', cents: 19900, life: true }).text;
+    check('shop: a gondola may be bought for good — one payment of $199, no subscription — where a backdrop or the Game Pass may not; it is its buyer\'s with nothing to look after, nobody else can take it, no subscription that ends takes it back, the wall of thanks says what was paid, the word of thanks says it is for good',
+      (CF || (page.status === 200 && form?.get('mode') === 'payment' && form.get('line_items[0][price_data][unit_amount]') === '19900' && form.get('line_items[0][price_data][recurring][interval]') === null && form.get('metadata[item]') === 'gondola:15' && form.get('metadata[life]') === '1' && /gondola 15 of the big wheel, for good$/.test(form.get('line_items[0][price_data][product_data][name]'))))
+      && (CF || (noLife.status === 400 && noPass.status === 400 && taken.status === 409 && rented.status === 409)) && mine?.mine === true && mine.life === true && !mine.manage && filled.status === 200
+      && shown?.state === 'live' && same(shown.pays, { amount: 19900, monthly: false, total: 19900 }) && !('life' in shown) && still['gondola:15']?.state === 'live'
+      && wall?.figure === '$199' && wall.unit === '' && prices.gondola === 2900 && prices.gondolaLife === 19900 && /yours for good/.test(mail) && /\$199\)/.test(mail) && !/a month/.test(mail.split('\n')[2]),
+      [page?.status, form && Object.fromEntries(form), noLife?.status, noPass?.status, mine, shown?.pays, taken?.status, rented?.status, wall?.figure, prices.gondolaLife]);
+    await request(port, '/api/sponsors?slot=gondola:15', { method: 'DELETE', headers: admin });
   }
 }
 // Accounts: nobody needs one; whoever signs in keeps what they bought, their days in a row and their look,

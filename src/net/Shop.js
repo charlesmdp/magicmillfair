@@ -72,22 +72,26 @@ export class Shop {
   /** What an item costs, in cents (a village: give its tier). */
   cost(item, tier = 0) { const type = item.split(':')[0]; return type === 'village' ? this.prices.village[tier] || 0 : this.prices.items?.[item] ?? this.prices[type] ?? 0; }
 
+  /** What the same thing costs bought for good, paid once, in cents — a gondola of the big wheel —; 0: it is only held by the month. */
+  lifeCost(item) { return item.split(':')[0] === 'gondola' ? this.prices.gondolaLife || 0 : 0; }
+
   /** The least that can be bid for an auctioned place, in cents: what beats its sponsor, or the first bid. */
   least(slot) { return this.slots[slot]?.next || this.prices.auction?.start || 100; }
 
   /**
-   * Off to the payment (`bid`, in cents: for a place that is auctioned): Stripe's form inside the game where
-   * that can be, Stripe's own page otherwise. Resolves to an error to show when it could not be opened, to
-   * null otherwise (the form is up, or the page leaves).
+   * Off to the payment (`bid`, in cents: for a place that is auctioned; `life`: bought for good, paid once,
+   * instead of by the month — a gondola, a room of one's own): Stripe's form inside the game where that can be,
+   * Stripe's own page otherwise. Resolves to an error to show when it could not be opened, to null otherwise
+   * (the form is up, or the page leaves).
    */
-  async buy(item, bid) {
+  async buy(item, bid, life = false) {
     if (this.pk && this.onEmbed) {
-      const here = await ask('api/checkout', { method: 'POST', body: { item, device: deviceId(), ...(bid && { bid }), embed: true } });
+      const here = await ask('api/checkout', { method: 'POST', body: { item, device: deviceId(), ...(bid && { bid }), ...(life && { life: true }), embed: true } });
       if (here.ok && typeof here.body?.secret === 'string') { if (await this.onEmbed(item, here.body.secret, here.body.id || '')) return null; }
       else if (here.status >= 400 && here.status < 500 && here.body?.error) return here.body.error; // (refused: Stripe's page would be refused too)
       // (the form could not be shown here: Stripe's own page, as before)
     }
-    const res = await ask('api/checkout', { method: 'POST', body: { item, device: deviceId(), ...(bid && { bid }) } });
+    const res = await ask('api/checkout', { method: 'POST', body: { item, device: deviceId(), ...(bid && { bid }), ...(life && { life: true }) } });
     // (the page leaves for Stripe's: the game is told first — it notes where one stands, to come back there)
     if (res.ok && res.body && /^https:\/\//.test(res.body.url || '')) { this.onLeave?.(item); window.location.assign(res.body.url); return null; }
     return res.body?.error || (res.status === 0 ? 'The shop cannot be reached.' : 'The payment page could not be opened.');

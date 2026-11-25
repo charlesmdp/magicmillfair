@@ -290,6 +290,51 @@ try {
       JSON.stringify({ filled, bare7, car, post7, row }));
   }
   await page.evaluate(() => window.__mmf.adminKey(''));
+  // ---- a gondola for good. At the stand of the wheel a free gondola is taken by the month, or bought once: the
+  // buyer chooses. Bought, it is theirs with no subscription behind it. And the administrator — who was only ever
+  // offered to fill a gondola in by hand — is offered the same two ways to pay, with that third one.
+  {
+    const toStand = async () => { await page.evaluate(() => { const m = window.__mmf, b = m.world.pier.sponsorBooth; m.setMode?.('walk', true); m.player.teleport(b[0], b[1], 0); }); await frames(8); await page.keyboard.press('KeyE'); await page.waitForFunction(() => document.querySelectorAll('.chooser.on .list button').length === 24, null, { timeout: 20000 }); };
+    const pick = async (n) => { await page.evaluate((n) => document.querySelectorAll('.chooser .list button')[n - 1].click(), n); await page.waitForFunction((n) => document.querySelector('.chooser.on h2')?.textContent === `Gondola ${n}`, n, { timeout: 20000 }); return page.evaluate(() => ({ lead: document.querySelector('.chooser .lead').textContent, list: [...document.querySelectorAll('.chooser .list button')].map((b) => b.textContent) })); };
+    await toStand();
+    const free9 = await page.evaluate(() => document.querySelectorAll('.chooser .list button')[8].textContent);
+    const ways = await pick(9);
+    await page.screenshot({ path: path.join(ROOT, 'tools/preview/shop-gondola-ways.png') });
+    await page.evaluate(() => [...document.querySelectorAll('.chooser .list button')].find((b) => /For good/.test(b.textContent)).click());
+    await page.waitForSelector('.chooser.on .fields', { timeout: 20000 });
+    const form9 = await page.evaluate(() => ({ title: document.querySelector('.chooser h2').textContent, lead: document.querySelector('.chooser .lead').textContent, save: document.querySelector('.chooser .fields .save').textContent }));
+    { const f = page.locator('.chooser .fields input'); await f.nth(0).fill('Nine Lives Cat Cafe'); await f.nth(1).fill('purring since the end of the world'); await f.nth(2).fill('https://cats.example/'); }
+    asked.length = 0;
+    await Promise.all([page.waitForURL('https://checkout.stripe.test/**', { timeout: 20000 }), page.click('.chooser .fields .save')]);
+    const asked9 = asked[0];
+    // (Stripe says it was paid — once: there is no subscription —, and the visitor comes back)
+    await tell({ type: 'checkout.session.completed', data: { object: { id: 'cs_shoptest_g9', payment_status: 'paid', subscription: null, customer: 'cus_shoptest_9', amount_total: 19900, metadata: { item: 'gondola:9', device, life: '1' } } } });
+    await enter('&paid=gondola%3A9');
+    await page.waitForFunction(() => window.__mmf.shop.slots['gondola:9']?.state === 'live', null, { timeout: 30000 });
+    await page.waitForFunction(() => window.__mmf.world.pier.gondolaShown(9), null, { timeout: 30000 });
+    const mine9 = await page.evaluate(() => { const m = window.__mmf, v = m.shop.slots['gondola:9']; return { mine: !!v.mine, life: !!v.life, manage: !!v.manage, title: v.title, pays: v.pays }; });
+    await toStand();
+    const held9 = await page.evaluate(() => [8, 9].map((k) => document.querySelectorAll('.chooser .list button')[k].textContent));
+    await page.keyboard.press('Escape');
+    await frames(3);
+    // (the administrator, at a gondola nobody holds)
+    await page.evaluate((key) => window.__mmf.adminKey(key), ADMIN_KEY);
+    await page.waitForFunction(() => window.__mmf.who?.admin, null, { timeout: 20000 });
+    await toStand();
+    const owner = await pick(10);
+    await page.keyboard.press('Escape');
+    await frames(3);
+    await page.evaluate(() => window.__mmf.adminKey(''));
+    await page.waitForFunction(() => !window.__mmf.who?.admin, null, { timeout: 20000 });
+    check('a gondola is taken by the month or bought for good, as one chooses: the stand says both prices; "for good" asks what the banner should show, then for one payment of $199 — no subscription —; back from it the gondola is theirs for good, its banner up, with nothing to look after; and the administrator is offered both ways to pay as well as filling it in',
+      /Free · \$29 a month, or \$199 for good/.test(free9) && ways.list.length === 2 && /^By the month · \$29 a month/.test(ways.list[0]) && /^For good · \$199, once/.test(ways.list[1]) && /pay once/.test(ways.lead)
+      && form9.title === 'Buy gondola 9 of the big wheel' && /\$199, once, and it is yours for good/.test(form9.lead) && form9.save === 'Go to payment · $199, once'
+      && asked9?.get('mode') === 'payment' && asked9.get('line_items[0][price_data][unit_amount]') === '19900' && asked9.get('line_items[0][price_data][recurring][interval]') === null && asked9.get('metadata[item]') === 'gondola:9' && asked9.get('metadata[life]') === '1'
+      && mine9.mine && mine9.life && !mine9.manage && mine9.title === 'Nine Lives Cat Cafe' && mine9.pays?.amount === 19900 && mine9.pays.monthly === false
+      && /Yours for good: set it up/.test(held9[0]) && /Free · \$29 a month, or \$199 for good/.test(held9[1])
+      && owner.list.length === 3 && owner.list.some((t) => /^Fill this place in \(administrator\)/.test(t)) && owner.list.some((t) => /^By the month · \$29 a month/.test(t)) && owner.list.some((t) => /^For good · \$199, once/.test(t)),
+      JSON.stringify({ free9, ways, form9, asked9: asked9 && Object.fromEntries(asked9), mine9, held9, owner }));
+  }
   const atPlate = (n) => page.evaluate((n) => { const m = window.__mmf, q = m.world.places.plaques, w = q.where(n), yaw = Math.atan2(w.x - w.sx, w.z - w.sz); m.player.teleport(w.sx, w.sz, yaw); m.player.pos.y = q.y; m.rig.snap(m.player.pos, yaw + Math.PI); m.rig.yaw = yaw + Math.PI; m.rig.pitch = -0.04; m.rig.distance = 2.4; return { count: q.count, column: q.columnAt(w.sx, w.sz), row: w.row }; }, n);
   const plates = await atPlate(3);
   await frames(10);

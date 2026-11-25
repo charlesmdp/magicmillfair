@@ -7,11 +7,12 @@
 //                   bids more takes the panel, and the one who held it is refunded in full (see shop.js).
 //                   A big attraction has five such places ('board:<id>-2' … '-5'): see MAJOR_BOARDS
 //   tarp:shoot      the backdrop of the shooting gallery, by the month
-//   gondola:<n>     a gondola of the big wheel (1 to 24), by the month
+//   gondola:<n>     a gondola of the big wheel (1 to 24): by the month — or for good, paid once (see forLife)
 //   village:<id>    a sky village, by the month: ten prices, the higher the village the dearer
 //   plaque:<n>      a plaque for a companion, round the plinth of the golden dog (1 to 72): paid once, for good
 //   pass            the Game Pass, by the month (items.js: what it gives)
-//   room            a room of one's own, by the month (urooms.js) — sold only while the switch `userRooms` is on
+//   room            a room of one's own, by the month — or for good, paid once (urooms.js) — sold only while the
+//                   switch `userRooms` is on
 //
 // The first are things a visitor owns; the others are places ("slots") that one sponsor holds at a time.
 import { SPONSORS, sponsorId, VILLAGE_PRICES, PLAQUE_COUNT } from '../src/world/layout/sponsors.js';
@@ -19,8 +20,8 @@ import { ITEMS, itemOf, PASS } from './items.js';
 import { SKY_TIERS } from './sky-tiers.js';
 
 export const CURRENCY = 'usd';
-/** Prices of the places, in cents (what one owns: see items.js). */
-export const PRICES = { tarp: 9900, gondola: 2900, plaque: 2000, room: 5900 };
+/** Prices of the places, in cents (what one owns: see items.js). `…Life`: the same thing bought for good, once. */
+export const PRICES = { tarp: 9900, gondola: 2900, plaque: 2000, room: 5900, gondolaLife: 19900, roomLife: 19900 };
 /** The auction of the panels of the games: the first bid, the most that can be bid, and what the next bid must be. */
 export const AUCTION = { start: 100, max: 1_000_000 };
 /** The least that beats `bid` (cents): one dollar more, or a tenth more when that is larger (in whole dollars). */
@@ -71,5 +72,17 @@ export function describe(item) {
   return null;
 }
 
+/**
+ * The same thing, bought for good instead of by the month: a gondola of the big wheel, a room of one's own — the
+ * buyer chooses (a checkout says `life: true`). Paid once: nothing ends it, as nothing ends a plaque. Null for
+ * what is only held by the month. (`item` stays what it was: the place is the same place, however it is paid for.)
+ */
+export function forLife(what) {
+  if (!what) return null;
+  if (what.kind === 'slot' && what.item.startsWith('gondola:')) return { ...what, amount: PRICES.gondolaLife, monthly: false, life: true, name: `${what.name}, for good` };
+  if (what.kind === 'room') return { ...what, amount: PRICES.roomLife, monthly: false, life: true, name: `${what.name}, for good` };
+  return null;
+}
+
 /** The prices, as the game shows them (in cents). */
-export const publicPrices = () => ({ currency: CURRENCY, tarp: PRICES.tarp, gondola: PRICES.gondola, plaque: PRICES.plaque, pass: PASS.price, auction: AUCTION, village: VILLAGE_PRICES.map((p) => p * 100), items: Object.fromEntries(ITEMS.map((it) => [it.id, it.price])) });
+export const publicPrices = () => ({ currency: CURRENCY, tarp: PRICES.tarp, gondola: PRICES.gondola, gondolaLife: PRICES.gondolaLife, plaque: PRICES.plaque, pass: PASS.price, auction: AUCTION, village: VILLAGE_PRICES.map((p) => p * 100), items: Object.fromEntries(ITEMS.map((it) => [it.id, it.price])) });
