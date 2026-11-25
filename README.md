@@ -202,8 +202,11 @@ put down at the bottom.
 box: the chat opens on *Nearby* — only the visitors within twenty metres read the line — and the button
 left of the line (or Tab) switches to *Everyone*, the whole room; that choice is the browser's from then
 on. The first three lines somebody says nearby are followed by a word, for them alone, on who reads them
-and how to talk to the whole oasis. Nothing of it is stored anywhere: no history — a line is relayed and forgotten (200 characters
-at most, five in a row then one every two seconds). A page left in the background still receives what
+and how to talk to the whole oasis. The relay keeps nothing — a line is relayed and forgotten (200 characters
+at most, five in a row then one every two seconds), and nobody is shown what was said before they came —, but
+**the host notes each line for the administrators**: who said it, in which room, to whom, when; the last
+5,000 lines, fourteen days at the most (`server/chatlog.js`, read on the page `/admin`, *Chat*; the privacy
+page says so, and what is said to Billy is not chat: it is not there). A page left in the background still receives what
 is said while it stays connected: the title of the tab counts the lines, and a mark in the log — *while you
 were away* — shows where the reading had stopped (the log holds the last 200 lines; a phone that went to
 sleep was disconnected, and what was said meanwhile is gone). What the game keeps is on your own device: your name,
@@ -934,7 +937,7 @@ town it last came from, the visits counted by day and by country with the last t
 *Where the visitors come from*), the administrators' list of who is kept out, and the administrators who
 were named (the hash of their key, never the key), and the accounts (a name, the hash of a password and of a recovery
 code, what was bought, the look of the robot — and an e-mail address, for an account that was given one where
-e-mails can be sent: see *E-mails*). No positions, no chat. Under Node these are a JSON
+e-mails can be sent: see *E-mails*). No positions; of the chat, the last lines only, for the administrators (see above). Under Node these are a JSON
 file; on Cloudflare, the storage of one Durable Object.
 
 **Accounts.** Nobody needs one: a visitor plays at once, as the random name their browser gave itself, and
@@ -1147,7 +1150,11 @@ holds no secret and asks everything of the API). It opens with the owner's key (
 typed there and sent as a header, never in an address; it is kept for the tab only. Sections: **Releases**
 (every switch, the version online, how many of those connected are still on an older one, *Everybody
 refreshes*, a word to every room — the owner only); **Rooms** (those that hold somebody, and how many);
-**High scores** (every board by period; refuse a line); **Sponsors & plaques** (take a sponsor down, with
+**High scores** (every board at once — a card for each game with its first five for the period chosen,
+the rest behind *Show all*; refuse a line); **Chat** (what was said in the rooms lately, the newest first,
+followed as it comes: every line with its room, its author and to whom it was said — nearby lines and the
+lines of those kept out in silence too; a box to find a name or a word; the owner can forget it all);
+**Sponsors & plaques** (take a sponsor down, with
 the money back or without; accept or refuse a plaque, its picture in sight; the refunds); **Kept out** (the
 list, add, let back in); **Figures** (the page everybody can read, and what was before the counting began);
 **Administrators**. An administrator the owner has named opens it with their own key and sees all but the
@@ -1178,7 +1185,8 @@ has**: a stand by its gate with the four lists (today, the week, the month, all 
 sponsor — for sale like the others from that moment, and not before (`LAB_BOARD` says where each stand goes
 from its gate; the one of the cleft stands on piles at the end of its planks) —, a star on the map, planks
 at the forks. These are courses: their scores are bounded in
-time, not played again by the referee. The files of the lab are the lab's: `src/extras/**`,
+time, not played again by the referee. (*Between a Rock*: its walkway has a rope on both sides and its
+landing is closed all round — walls as thin as a rope, at the height of the planks: nobody falls off.) The files of the lab are the lab's: `src/extras/**`,
 `src/world/zones/games/{slide,pond,boats,hill,crack,hollow}/**`, `server/stats.js`, `public/opendata/**`,
 `public/opendate/**`, `lab/**` and its tests are not edited here.
 
@@ -1212,7 +1220,12 @@ before it dials the relay (`GET /api/door`), and no longer decides anything itse
   room — otherwise the visitor is told, and gets another room;
 - **one changes room without loading the page again**: "Who is here" lists the rooms and how many each holds;
   a click, and the same page — the avatar where it stands — is in the other room. **The settings name the
-  room one is in**, with a list to go to another (and, where rooms of one's own are sold, to make one).
+  room one is in**: a line for each room — the one the visitor is in first, the others with how many they
+  hold and a button that goes there — and, where rooms of one's own are sold to who has none, the card that
+  offers one. That card opens **the offer in full** (`roomPitch` in `src/main.js`): who a room is for — a
+  team, friends, the viewers of a stream —, what it gives, what it costs, and the payment (an account
+  first, for who has none). The administrator sees it from the bottom of their settings, like the two other
+  cards.
 
 The four numbers are **settings, not constants**: the owner changes them from the back office ("Rooms"), and
 "at most" can be lowered there, never raised above the `MAX_PLAYERS` the server was started with. The door
@@ -1307,8 +1320,8 @@ notebook, with the rest. No new Durable Object class: such a room is a room like
 |---|---|
 | `npm run bake` | bakes the world, the statue and the textures again |
 | `npm run bake:statue` | sculpts the golden dog again (`-- --preview=dog.png` also draws it from five sides, `-- --cell=0.012` makes a finer mesh) |
-| `npm test` | 248 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password), the rooms that players make (bought, entered with a ticket, their own boards, asleep when unpaid, freed) |
-| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (186 in all) |
+| `npm test` | 249 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password), the rooms that players make (bought, entered with a ticket, their own boards, asleep when unpaid, freed) |
+| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (187 in all) |
 | `npm run test:update` | a delivery from end to end, in the real game: two builds, a visitor in the world, the owner at the back office (`/admin`: the switches, a word to every room, a line refused, somebody kept out, the figures, two games of the lab thrown on — fetched and built as the game runs, each played by its own bot, its time on its board; each with its stand, its panel for a sponsor, its star on the map and its planks at the forks —, the sky villages stage by stage), every page asked to refresh but never in the middle of a sentence, then the server replaced by the next version — the page says so, refreshes, comes back at the same spot and says what is new; and a plain build leaves nothing of the game on the page (14 checks) |
 | `node tools/extras-test.mjs`, `node tools/slide-test.mjs`, `node tools/pond-test.mjs`, `node tools/boats-test.mjs`, `node tools/hill-test.mjs`, `node tools/crack-test.mjs`, `node tools/hollow-test.mjs`, `node tools/games-test.mjs` | the lab's own checks of its extras and of each of its games — the last one plays them in the running game, in a browser (see `lab/INTEGRATION.md`) |
 | `npm run test:load` | a crowd at the door, with the real rules: 600 connections arrive in twenty seconds and walk (everybody gets in, rooms of about fifty, the lists say what is true, a state reaches the neighbours in time), 230 more follow one link (that room holds 200, never one more; the relay refuses whoever comes without asking; the owner still gets in), then most leave (the rooms that have emptied are offered a livelier one, nobody is moved or cut off) — 11 checks; `-- --cloudflare` plays it against the real Worker in the local Workers runtime, `-- --visitors=400` changes the crowd |
@@ -1418,9 +1431,9 @@ Game and multiplayer
 - The temple's buildings cannot be entered. On the big wheel one cannot stand up or walk in the car.
 - Seats are taken on a first-come basis decided by each client: two people pressing at the same instant can
   end up on the same seat.
-- Multiplayer: presence, emotes and chat. The chat is not moderated (no filter, no mute, no report — an
-  administrator can put somebody out, or keep them out) and not stored: what was said while one was away
-  is not shown on coming back. 250 visitors per room, more rooms as needed. Not tested with real latency,
+- Multiplayer: presence, emotes and chat. The chat is not moderated as it goes (no filter, no report — an
+  administrator can put somebody out, keep them out, or mute them in silence, and reads the last fourteen
+  days of it in the back office); what was said while one was away is not shown on coming back. 250 visitors per room, more rooms as needed. Not tested with real latency,
   nor with a real crowd.
 - Cloudflare: the Cloudflare version is tested in the official runtime locally (protocol, rooms going to
   sleep, leaderboards, two browsers) and deployed by the workflow on every push — but **multiplayer and the

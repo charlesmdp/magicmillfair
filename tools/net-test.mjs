@@ -1411,6 +1411,29 @@ async function testShop({ port }) {
 }
 // Accounts: nobody needs one; whoever signs in keeps what they bought, their days in a row and their look,
 // from one browser to the next.
+// ------------------------------------------------------------------------- what was said, kept a while (chatlog.js)
+async function testChatLog({ port }) {
+  const json = (res) => { try { return JSON.parse(res.body.toString()); } catch { return null; } };
+  const read = (query = '', key = ADMIN_KEY, method = 'GET') => request(port, `/api/chatlog${query}`, { method, headers: key ? { authorization: `Bearer ${key}` } : {} });
+  const a = new Client(port, 'talk'), b = new Client(port, 'talk');
+  await a.hello('Ada Talks', 1);
+  await b.hello('Bob Talks', 2);
+  a.send({ t: 'c', m: 'Hello <b>everybody</b>' });
+  await b.wait((m) => m.t === 'c' && /Hello/.test(m.m));
+  b.send({ t: 'c', m: 'psst, over here', n: 1 });
+  // (on the Cloudflare server a room hands its lines to the notebook a moment later)
+  let got = null;
+  for (let i = 0; i < 40 && !got; i++) { const r = json(await read()); if (r?.lines?.[0]?.text === 'psst, over here') got = r; else await sleep(250); }
+  const nobody = await read('', ''), page = json(await read('?limit=1')), older = page?.lines?.[0] ? json(await read(`?limit=5&before=${page.lines[0].n}`)) : null;
+  const wiped = await read('', ADMIN_KEY, 'DELETE'), after = json(await read());
+  a.ws.close(); b.ws.close();
+  check('chat log: what is said in a room — to everybody, to who stands nearby — is kept for the administrators, the newest first, with who said it, where, to whom and when; nobody else reads it; it is read page by page; the owner empties it',
+    !!got && got.lines[0].to === 'nearby' && got.lines[0].name === 'Bob Talks' && got.lines[0].room === 'talk' && got.lines[1].to === 'everyone' && got.lines[1].name === 'Ada Talks' && got.lines[1].text === 'Hello <b>everybody</b>'
+    && Math.abs(got.lines[1].t - Date.now()) < 120000 && got.keeps?.days === 14 && got.keeps.lines === 5000 && nobody.status === 403 && page?.lines?.length === 1 && page.more === true && older?.lines?.[0]?.name === 'Ada Talks'
+    && wiped.status === 200 && after?.lines?.length === 0,
+    [got?.lines?.slice(0, 2), nobody.status, page, older?.lines?.[0], wiped.status, after]);
+}
+
 async function testAccounts({ port }) {
   const json = (res) => { try { return JSON.parse(res.body.toString()); } catch { return null; } };
   const post = (target, body, headers = {}) => request(port, target, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
@@ -2511,6 +2534,7 @@ try {
     await section('api', () => testApi(server));
     await section('shop', () => testShop(server));
     await section('accounts', () => testAccounts(server));
+    await section('chatlog', () => testChatLog(server));
     await section('cloudflare', () => testCloudflare(server, fx));
     await section('crowd', () => testCrowd(startWorker, fx.dist));
     await section('moderation', () => testModeration(startWorker, fx.dist));
@@ -2534,6 +2558,7 @@ try {
     await section('api', () => testApi(server));
     await section('shop', () => testShop(server));
     await section('accounts', () => testAccounts(server));
+    await section('chatlog', () => testChatLog(server));
     await section('crowd', () => testCrowd(startServer, fx.dist));
     await section('moderation', () => testModeration(startServer, fx.dist));
     await section('visitors', () => testVisitors(startServer, fx.dist));

@@ -409,6 +409,7 @@ async function boot() {
   const myRoom = async (what) => {
     const room = mine.room;
     if (what === 'buy') { hud.closeRoster(); openShop('room'); return; }
+    if (what === 'offer') { hud.closeRoster(); roomPitch(); return; }
     if (what === 'leave') { location.assign(ownLink('')); return; }
     if (!room) return;
     if (what === 'go') location.assign(ownLink(room.id));
@@ -1365,6 +1366,20 @@ async function boot() {
   };
   // (a room of one's own: an oasis, with the visitor's own robot on its bank)
   const roomPicture = (w, h) => { let robot = null; try { robot = previewer.shot('', color, Math.round(w * OASIS_ROBOT), Math.round(h * OASIS_ROBOT)); } catch { robot = null; } return oasisPicture(w, h, robot); };
+  // (what a room of one's own is for, and what it gives: said on its card in the shop and on the card that offers it)
+  const ROOM_CASES = [
+    ['Teams & companies', 'A team day without the trust falls: race the quads, climb Mostly Up, settle the rest on the big wheel.'],
+    ['Friends', 'Game night on boards that only know your names. Bragging rights, at last, among people who will hear about it for weeks.'],
+    ['Streamers & communities', 'One link in the chat and your viewers are in: leaderboards of your own — and the door for whoever spoils it.'],
+  ];
+  const ROOM_PERKS = [
+    'Reached by its link only: it is in no list, and no stranger walks in',
+    'Up to 50 visitors at once — a team day, a game night, a stream',
+    'Boards of scores of its own, next to the world\'s',
+    'A password if you want one — and you can put a visitor out',
+    'Its name is yours to choose, and to change',
+    'What you score there counts for the world too',
+  ];
   const shopView = new ShopView(hud.root, (id, w, h) => (id === PASS.id ? passPicture(w, h) : id === 'room' ? roomPicture(w, h) : id.startsWith('board:') ? panelPicture(id, w, h) : previewer.shot(id, color, w, h)));
   const wornNow = (type, sub) => (type === 'hat' ? HATS[look.hat]?.id === sub : type === 'paint' ? PAINTS[kit.paint] === sub : type === 'trail' ? TRAILS[kit.trail] === sub : type === 'jetpack' || type === 'jetlite' ? jetOn() === type : false);
   const shopItems = () => {
@@ -1410,8 +1425,8 @@ async function boot() {
         id: 'room', name: room ? room.name : 'A room of your own', group: 'room', rarity: 'legendary', owned: live, wearable: false, cost,
         act: live ? null : room ? `Wake it · ${cost}` : `Get a room · ${cost}`,
         manage: live && room.managed ? 'Look after it, or stop it' : null,
-        blurb: live ? 'It is yours. Its link, its name and its password are in "Who is here".' : room ? 'Your room is asleep: nobody can enter it. Pay for it again and it wakes as it was — its name, its password, its boards.' : 'A room that is yours alone: no stranger walks in. You give its link to whoever you like.',
-        perks: ['Reached by its link only: it is in no list', 'Up to 50 visitors at once', 'A password, if you want one', 'Its own boards of scores, next to the world\'s', 'You can put a visitor out', 'Your scores there count for the world too'],
+        blurb: live ? 'It is yours. Its link, its name and its password are in "Who is here".' : room ? 'Your room is asleep: nobody can enter it. Pay for it again and it wakes as it was — its name, its password, its boards.' : 'The whole oasis, for your people only — a team, a band of friends, the viewers of a stream. One link to hand out, no stranger walks in, and boards of scores that only know your names.',
+        perks: ROOM_PERKS,
         fine: `Paid by the month on Stripe; stop whenever you like. It takes an account (free). No sky village hangs over a room of one's own. When it is no longer paid for it falls asleep: it is kept for thirty days, then freed.${account.name ? '' : ' Create an account first, in the settings.'}`,
       });
     }
@@ -1560,6 +1575,26 @@ async function boot() {
     if (taken) buyPass();
     return taken;
   };
+  // ---------- a room of one's own, offered in full: who it is for, what it gives, what it costs — and the payment
+  const roomPitch = async () => {
+    if (hud.pitching) return false;
+    const cost = `${price(mine.price || 5900)} a month`;
+    audio.play('pick');
+    const taken = await hud.pitch({
+      kind: 'room', eyebrow: `A room of your own · ${cost}`, title: 'The whole oasis, for your people only',
+      lead: 'The same valley, the same pier, the same big wheel — and nobody you did not invite. One link to hand out, and boards of scores that only know your names.',
+      cases: ROOM_CASES, perks: ROOM_PERKS,
+      fine: 'It takes an account (free). Paid by the month on Stripe: the game never sees your card, and you stop whenever you like. A room that is no longer paid for falls asleep, and is kept for thirty days.',
+      yes: `Get my room · ${cost}`, no: 'Maybe later', picture: roomPicture(360, 420),
+    });
+    if (!taken) return false;
+    if (!account.name) { hud.note('A room belongs to an account: make yours first — it is free — and come back for the room.', 9000); accountAction('create'); return true; }
+    hud.note('Opening the payment page…', 8000);
+    const wrong = await shop.buy('room');
+    if (wrong) hud.note(wrong, 7000);
+    return true;
+  };
+  hud.roomArt = (w, h) => roomPicture(w, h);
   const pitchQueue = Object.keys(PITCH_AFTER).map((kind) => ({ kind, at: PITCH_AFTER[kind] }));
   // (the tools play for a long time and must not find a card over what they are doing: on their pages the cards
   // only come by themselves when the address asks for them — ?pitch)
@@ -1739,7 +1774,7 @@ async function boot() {
     .on('say', say)
     .on('roster', () => { showRoster(); refreshRoster(); refreshRooms(); if (mine.on) refreshMine(); })
     .on('myroom', myRoom)
-    .on('show', (kind) => pitch(kind, true))
+    .on('show', (kind) => (kind === 'room' ? roomPitch() : pitch(kind, true)))
     .on('putout', (id) => { if (presence?.host) { presence.kick(id); hud.note('Put out: they cannot come back for an hour.', 4500); } })
     .on('room', (to) => changeRoom(to))
     .on('badge', () => {

@@ -263,8 +263,9 @@ export class Hud {
         <h2>Settings</h2>
         <div class="room-box" hidden>
           <h3>Your room</h3>
-          <select class="room-pick" aria-label="The room you are in — choose another to go there"></select>
+          <div class="room-list" role="list" aria-label="The rooms of the fair: the one you are in, and the others"></div>
           <p class="room-say"></p>
+          <button type="button" class="room-ad" hidden><span class="art" aria-hidden="true"></span><span class="txt"><b>A room of your own</b><small>Your team, your friends, your community: the whole oasis to yourselves, with boards of scores of your own.</small></span><span class="tag"></span></button>
         </div>
         <h3>Graphics quality</h3>
         <div class="seg quality"><button data-q="auto">Auto</button>${TIER_ORDER.map((q) => `<button data-q="${q}">${TIERS[q].label}</button>`).join('')}</div>
@@ -290,7 +291,7 @@ export class Hud {
         <div class="acct" hidden><h3>Account</h3><p class="acct-info"></p><div class="acct-acts"></div></div>
         <p class="net-info"></p>
         <p class="legal-links"><button type="button" data-legal="terms">Terms of use</button><span aria-hidden="true">·</span><button type="button" data-legal="privacy">Privacy</button></p>
-        <p class="admin-shows" hidden>Administrator — see a card as visitors do: <button type="button" data-show="account">the account</button><span aria-hidden="true">·</span><button type="button" data-show="pass">the Game Pass</button></p>
+        <p class="admin-shows" hidden>Administrator — see a card as visitors do: <button type="button" data-show="account">the account</button><span aria-hidden="true">·</span><button type="button" data-show="pass">the Game Pass</button><span aria-hidden="true">·</span><button type="button" data-show="room">a room of one's own</button></p>
         <p class="version">${VERSION}</p>
       </div>`;
     this.root.append(h);
@@ -948,7 +949,7 @@ export class Hud {
    */
   pitch(o) {
     if (!this.pitchEl) {
-      this.pitchEl = el('div', 'pitch', '<div class="sheet"><div class="art"></div><div class="words"><p class="eyebrow"></p><h2></h2><p class="lead"></p><ul class="perks"></ul><p class="fine"></p><div class="acts"><button type="button" class="yes"></button><button type="button" class="no"></button></div></div></div>');
+      this.pitchEl = el('div', 'pitch', '<div class="sheet"><div class="art"></div><div class="words"><p class="eyebrow"></p><h2></h2><p class="lead"></p><div class="cases"></div><ul class="perks"></ul><p class="fine"></p><div class="acts"><button type="button" class="yes"></button><button type="button" class="no"></button></div></div></div>');
       this.pitchEl.setAttribute('role', 'dialog');
       this.pitchEl.setAttribute('aria-modal', 'true');
       for (const ev of ['mousedown', 'touchstart', 'wheel']) this.pitchEl.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
@@ -960,6 +961,10 @@ export class Hud {
     q('.eyebrow').textContent = o.eyebrow || '';
     q('h2').textContent = o.title;
     q('.lead').textContent = o.lead || '';
+    // (`cases`: what it is for, a small card each — [[title, a sentence], …])
+    q('.cases').textContent = '';
+    for (const [title, text] of o.cases || []) { const c = el('div', 'case'), b = el('b'), s = el('span'); b.textContent = title; s.textContent = text; c.append(b, s); q('.cases').append(c); }
+    q('.cases').hidden = !(o.cases || []).length;
     q('.perks').textContent = '';
     for (const line of o.perks || []) { const li = el('li'); li.textContent = line; q('.perks').append(li); }
     q('.fine').textContent = o.fine || '';
@@ -1139,28 +1144,40 @@ export class Hud {
    * label, rooms: [{ name, label, players, quiet }], own: { on, room, price, here, host } | null }) — the common
    * rooms, and, where rooms are sold, one's own (or the way to buy one). Choosing a line goes there.
    */
+  /**
+   * The rooms, in the settings: the one the visitor is in, a line for each other with a button that goes there —
+   * and, where rooms of one's own are sold to who has none yet, the card that offers one.
+   */
   _roomBox(mode, count, room) {
-    const box = this.panel.querySelector('.room-box'), pick = box.querySelector('.room-pick'), say = box.querySelector('.room-say');
+    const box = this.panel.querySelector('.room-box'), list = box.querySelector('.room-list'), say = box.querySelector('.room-say'), ad = box.querySelector('.room-ad');
     box.hidden = !(mode === 'online' && room);
-    if (box.hidden || document.activeElement === pick) return; // (not while the list is open)
-    pick.textContent = '';
-    const add = (value, text) => { const o = el('option'); o.value = value; o.textContent = text; pick.append(o); };
-    add('', `${room.label} — you are here${count > 1 ? `, with ${count - 1} other${count > 2 ? 's' : ''}` : ', on your own'}`);
-    for (const r of room.rooms || []) if (r.name !== room.name) add(`go:${r.name}`, `${r.label} — ${r.players} there${r.quiet ? ', quiet' : ''}`);
-    const own = room.own;
-    if (own?.here) add('my:leave', 'Back to the rooms of the fair');
-    if (own?.room && !own.here?.host) add('my:go', `★ ${own.room.name} — your own room`);
-    if (own && !own.room) add('my:buy', `＋ A room of your own — ${own.price} a month`);
-    pick.selectedIndex = 0;
-    pick.disabled = pick.options.length < 2;
-    say.textContent = pick.disabled ? 'The only room open just now: everybody is here.' : own?.here ? 'A room of its own: only those who were given its link are here.' : 'Choose another line to go there: you stay where you stand.';
-    pick.onchange = () => {
-      const v = pick.value;
-      pick.selectedIndex = 0; pick.blur();
-      if (!v) return;
-      this.panel.classList.remove('on');
-      if (v.startsWith('go:')) this.emit('room', v.slice(3)); else this.emit('myroom', v.slice(3));
+    if (box.hidden) { this._roomKey = ''; return; }
+    const key = JSON.stringify([count, room]);
+    if (key === this._roomKey) return; // (nothing changed: the lines stay as they are under the pointer)
+    this._roomKey = key;
+    list.textContent = '';
+    const line = (cls, title, sub, label, run) => {
+      const r = el('div', `room-row${cls ? ` ${cls}` : ''}`), text = el('span', 'id'), b = el('b'), s = el('small');
+      r.setAttribute('role', 'listitem');
+      b.textContent = title; s.textContent = sub; text.append(b, s); r.append(text);
+      if (label) { const go = el('button', 'go'); go.type = 'button'; go.textContent = label; go.onclick = () => { this.panel.classList.remove('on'); run(); }; r.append(go); }
+      else { const here = el('span', 'here'); here.textContent = 'You are here'; r.append(here); }
+      list.append(r);
     };
+    line('here', room.label, count > 1 ? `${count} visitors, you included` : 'Nobody else just now', '', null);
+    for (const r of room.rooms || []) if (r.name !== room.name) line('', r.label, `${r.players} visitor${r.players === 1 ? '' : 's'}${r.quiet ? ' · quiet' : ''}`, 'Go there', () => this.emit('room', r.name));
+    const own = room.own;
+    if (own?.here) line('', 'The rooms of the fair', 'Back among everybody (the page loads again)', 'Go back', () => this.emit('myroom', 'leave'));
+    if (own?.room && !own.here?.host) line('mine', `★ ${own.room.name}`, 'Your own room', 'Go there', () => this.emit('myroom', 'go'));
+    say.textContent = own?.here ? 'A room of its own: only those who were given its link are here.' : list.children.length > 1 ? 'Changing room leaves you where you stand: only the company changes.' : 'The only room open just now: everybody is here.';
+    // (a room of one's own, where they are sold and this visitor has none: the card that offers it)
+    ad.hidden = !(own && !own.room);
+    if (!ad.hidden) {
+      ad.querySelector('.tag').textContent = `${own.price} a month`;
+      const art = ad.querySelector('.art');
+      if (!art.firstChild && this.roomArt) { try { art.append(this.roomArt(144, 168)); } catch { /* no picture: the words do */ } }
+      ad.onclick = () => { this.panel.classList.remove('on'); this.emit('myroom', 'offer'); };
+    }
   }
 
   // ---------- name tags

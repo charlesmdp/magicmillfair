@@ -198,14 +198,16 @@ export class Cleft {
     wood.beam(V(ax, F - 0.045, az), V(bx + dx * 0.3, F - 0.045, bz + dz * 0.3), WAY.half * 2, 0.09);
     const pile = (x, z, top = F - 0.05) => { const g = Math.min(-0.6, this.data.heightAt(x, z)) - 0.5; wet.tint(0.9, 0.88, 0.85, 1).cylinder(x, g, z, 0.09, 0.09, top - g, 6); };
     const post = (x, z) => { pile(x, z, F + 0.95); return V(x, F + 0.88, z); };
-    let prev = null;
+    let prev = null, prevIn = null;
     for (let t = 1.2; t < len - 0.4; t += 2.25) {
-      // (a pile under the planks on the side of the cliff; on the side of the sea a post, and a rope from post to post)
-      const x = ax + dx * t, z = az + dz * t, p = post(x + dz * 0.7, z - dx * 0.7);
-      pile(x - dz * 0.68, z + dx * 0.68);
+      // (a post on each side, and a rope from post to post: nobody walks off the planks — see the rails below)
+      const x = ax + dx * t, z = az + dz * t, p = post(x + dz * 0.7, z - dx * 0.7), q = post(x - dz * 0.7, z + dx * 0.7);
       if (prev) matte.tint(...ROPE, 1).rod(prev, p, 0.022, 4, { caps: false });
-      prev = p;
+      if (prevIn) matte.tint(...ROPE, 1).rod(prevIn, q, 0.022, 4, { caps: false });
+      prev = p; prevIn = q;
     }
+    // (the rope of the side of the cliff ends at a post where the landing begins; one more closes the landing behind it)
+    { const p = post(LANDING[0] + 0.15, LANDING[3] - 0.3); if (prevIn) matte.tint(...ROPE, 1).rod(prevIn, p, 0.022, 4, { caps: false }); }
     for (const x of [LANDING[0] + 0.15, cx, LANDING[2] - 0.15]) { const p = post(x, LANDING[1] + 0.12); if (prev) matte.tint(...ROPE, 1).rod(prev, p, 0.022, 4, { caps: false }); prev = p; }
     { const p = post(LANDING[2] - 0.15, LANDING[3] - 0.3); matte.tint(...ROPE, 1).rod(prev, p, 0.022, 4, { caps: false }); }
     pile(LANDING[0] + 0.2, LANDING[3] - 0.2); for (const z of [C.at.z - 1.5, C.at.z + 2]) for (const sx of [-1.2, 1.2]) pile(cx + sx, z);
@@ -259,6 +261,25 @@ export class Cleft {
     col.addPlatform(this.deck);
     col.addArea(new Polygon([[ax + dz * 2, az - dx * 2], [LANDING[0] - 0.3, LANDING[1] - 1.5], [LANDING[2] + 1.2, LANDING[1] - 1.5], [LANDING[2] + 1.2, LANDING[3] + 0.1], [cx + 1.4, LANDING[3] + 0.1], [cx + 1.4, inZ - 0.05], [cx - 1.4, inZ - 0.05], [cx - 1.4, LANDING[3] + 0.1], [LANDING[0] - 0.3, LANDING[3] + 0.1], [ax - dz * 2, az + dx * 2]], { name: 'cleft' }));
     for (const side of [-1, 1]) col.addBox(cx + side * (1.5 + 2.7), C.at.z + 1.1, 2.7, 4.3);
+    // ---- the ropes hold: nobody falls off the walkway, off the landing, or off the end of the planks (walls as
+    // thin as a rope, at the height of the planks only: who swims underneath passes)
+    {
+      const y0 = F + 0.2, y1 = F + 2.0, thin = 0.05, yaw = Math.atan2(-dz, dx);
+      const rail = (x0, z0, x1, z1) => col.addBox((x0 + x1) / 2, (z0 + z1) / 2, Math.hypot(x1 - x0, z1 - z0) / 2, thin, Math.atan2(-(z1 - z0), x1 - x0), y0, y1);
+      // the walkway: both sides, from the sand to the landing
+      for (const side of [-1, 1]) { const ox = -dz * side * (WAY.half + 0.06), oz = dx * side * (WAY.half + 0.06); col.addBox((ax + bx) / 2 + ox, (az + bz) / 2 + oz, len / 2 + 0.2, thin, yaw, y0, y1); }
+      // the landing: its side to the sea, its far end, its side to the rock (the needles close the rest), and its near
+      // end on both sides of where the walkway comes in
+      const [lx0, lz0, lx1, lz1] = LANDING, at = (x) => bz + ((x - bx) * dz) / dx, wide = (WAY.half + 0.06) / Math.abs(dx);
+      rail(lx0, lz0 - 0.06, lx1, lz0 - 0.06);
+      rail(lx1 + 0.06, lz0, lx1 + 0.06, lz1);
+      rail(lx0, lz1 + 0.06, cx - 1.42, lz1 + 0.06);
+      rail(cx + 1.42, lz1 + 0.06, lx1, lz1 + 0.06);
+      rail(lx0 - 0.06, lz0, lx0 - 0.06, Math.max(lz0, at(lx0) - wide));
+      rail(lx0 - 0.06, Math.min(lz1, at(lx0) + wide), lx0 - 0.06, lz1);
+      // the end of the planks, before the fall
+      rail(cx - 1.42, inZ + 0.06, cx + 1.42, inZ + 0.06);
+    }
     this.gate = { x: cx, z: (LANDING[1] + LANDING[3]) / 2 + 0.3, y: F, yaw: 0 };
     this.group.updateMatrixWorld(true);
     world.scene.add(this.group);

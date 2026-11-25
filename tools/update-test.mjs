@@ -135,17 +135,19 @@ try {
     usual === '200,50,20,8' && ruled?.open === 40 && ruled.max === 200 && unruled?.open === 50, JSON.stringify({ usual, ruled, unruled }));
   const posted = await fetch(`${BASE}/api/scores`, { method: 'POST', headers: { 'content-type': 'application/json', origin: BASE }, body: JSON.stringify({ board: 'bell', name: 'Cheater', score: 9999, run: await sign(SCORE_SECRET, { b: 'bell', t: Date.now() - 6000, n: randomId(9) }) }) });
   await office.click('#tabs [data-tab="scores"]');
-  await office.waitForFunction(() => document.getElementById('board').options.length > 5, null, { timeout: 20000 });
-  await office.selectOption('#board', 'bell');
-  await office.selectOption('#period', 'day'); // (posted without an account: it is on the list of the day, and on no other)
+  await office.waitForFunction(() => document.querySelectorAll('#period button').length === 4 && !!document.querySelector('#scores').children.length, null, { timeout: 20000 });
+  await office.click('#period [data-period="day"]'); // (posted without an account: it is on the list of the day, and on no other)
   // (a great score that came with no game: the server did not believe it — it waits here, with the reason; the owner takes it)
   await office.waitForFunction(() => /Cheater/.test(document.getElementById('flagged').textContent), null, { timeout: 20000 });
-  const doubted = await office.evaluate(() => ({ board: /Nobody on this list/.test(document.getElementById('scores').textContent), row: document.querySelector('#flagged .item').textContent }));
+  const doubted = await office.evaluate(() => ({ board: /Nobody on any board/.test(document.getElementById('scores').textContent), row: document.querySelector('#flagged .item').textContent }));
   await office.click('#flagged .item button');
   await office.waitForFunction(() => /Cheater/.test(document.getElementById('scores').textContent), null, { timeout: 20000 });
-  const line = await office.evaluate(() => ({ boards: document.getElementById('board').options.length, row: document.querySelector('#scores .item').textContent }));
-  await office.click('#scores .item button');
-  await office.waitForFunction(() => /Nobody on this list/.test(document.getElementById('scores').textContent), null, { timeout: 20000 });
+  // (every board is on the page at once, a card each — those nobody is on when asked for; the line is on the card of its game)
+  await office.check('#scores-empty');
+  const line = await office.evaluate(() => ({ boards: document.querySelectorAll('#scores .board').length, row: document.querySelector('#scores .board[data-board="bell"] .line').textContent, others: document.querySelectorAll('#scores .board .line').length }));
+  await office.uncheck('#scores-empty');
+  await office.click('#scores .board[data-board="bell"] .line button');
+  await office.waitForFunction(() => /Nobody on any board/.test(document.getElementById('scores').textContent), null, { timeout: 20000 });
   const struck = (await (await fetch(`${BASE}/api/scores?board=bell`)).json()).tops.all.length;
   await office.click('#tabs [data-tab="bans"]');
   await office.fill('#ban-ip', '203.0.113.9');
@@ -167,7 +169,7 @@ try {
   await office.waitForFunction(() => /No sponsor yet/.test(document.getElementById('sponsors').textContent), null, { timeout: 20000 });
   check('the back office: a word said to every room is read in the game; the rooms are listed with who is in them; a great score that came with no game waits for the owner, who takes it — then refuses the line; somebody is kept out and let back in; the figures are set',
     /The fair/.test(word.chat || '') && /Fireworks at nine, on the pier!/.test(word.chat) && /heard in 1 room/.test(word.note) && roomsSeen.length === 1 && /fair/.test(roomsSeen[0]) && /1 visitor/.test(roomsSeen[0])
-    && posted.status === 200 && doubted.board && /Cheater/.test(doubted.row) && /no game came with it/.test(doubted.row) && line.boards >= 14 && /Cheater/.test(line.row) && /9,999/.test(line.row) && struck === 0 && /Mallory/.test(keptOut) && /address 203\.0\.113\.9/.test(keptOut),
+    && posted.status === 200 && doubted.board && /Cheater/.test(doubted.row) && /no game came with it/.test(doubted.row) && line.boards >= 14 && line.others === 1 && /Cheater/.test(line.row) && /9,999/.test(line.row) && struck === 0 && /Mallory/.test(keptOut) && /address 203\.0\.113\.9/.test(keptOut),
     JSON.stringify({ word, roomsSeen, posted: posted.status, doubted, line, struck, keptOut: keptOut.slice(0, 80) }));
   await office.click('#tabs [data-tab="releases"]');
   await office.screenshot({ path: path.join(ROOT, 'tools/preview/admin-releases.png'), fullPage: true });

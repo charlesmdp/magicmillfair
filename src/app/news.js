@@ -11,7 +11,9 @@ export const NEWS = [
       ['Your name, yours alone', 'Make an account and its name is reserved: nobody else can play, chat or score under it.'],
       ['Straight in', 'You chose a name and a colour once: the fair remembers, and lets you in without asking again. The settings change them.'],
       ['A word in your inbox', 'Give your account an e-mail and the fair writes to say welcome. It says thank you for the Game Pass, too — and nothing else, ever.'],
+      ['The chat is kept fourteen days', 'What is said in the chat is now kept two weeks for the administrators, to act on abuse — then deleted. The privacy page says exactly what.'],
       ['Red stars', 'On the map (M) the big attractions now wear a red star edged with gold; the slide is drawn red and white.'],
+      ['Which room, at a glance', 'The settings list the rooms: yours first, the others with a button that takes you there.'],
     ],
   },
   {

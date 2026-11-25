@@ -166,26 +166,34 @@
     if (unit === 'time') { const s = score / 1000, m = Math.floor(s / 60); return `${m}:${(s - m * 60).toFixed(2).padStart(5, '0')}`; }
     return unit === 'ms' ? `${score} ms` : score.toLocaleString('en-US');
   };
+  // (every board at once, a card each: the first five of the period chosen — the rest behind "Show all")
+  let period = 'all';
+  const shownInFull = new Set(), FIRST = 5;
   async function showScores(reload = true) {
     if (reload || !boards) { const res = await api('/api/scores?board=all'); if (!res.ok) return; boards = res.body.boards; }
-    const pick = $('board'), was = pick.value;
-    if (!pick.options.length || reload) {
-      pick.textContent = '';
-      for (const id of Object.keys(boards)) { const info = me.boards.find((b) => b.id === id); pick.append(Object.assign(el('option', '', info?.name || id), { value: id })); }
-      if (was && boards[was]) pick.value = was;
-    }
-    const id = pick.value, list = boards[id]?.tops?.[$('period').value] || [], unit = me.boards.find((b) => b.id === id)?.unit || 'points', box = $('scores');
-    if (!list.length) return empty(box, 'Nobody on this list.');
+    for (const b of $('period').querySelectorAll('button')) b.classList.toggle('on', b.dataset.period === period);
+    const box = $('scores'), all = $('scores-empty').checked;
     box.textContent = '';
-    list.forEach((e, i) => {
-      const row = item(e.name, '', button('Refuse this line', 'danger small', async () => {
-        if (!confirm(`Take "${e.name}" off the board of ${pick.selectedOptions[0].textContent} (its four lists)?`)) return;
-        if (said(await api(`/api/scores?board=${encodeURIComponent(id)}&name=${encodeURIComponent(e.name)}`, { method: 'DELETE' }), 'Taken off.')) showScores();
-      }));
-      row.prepend(el('span', 'rank', `${i + 1}`));
-      row.querySelector('.grow').after(el('span', 'num', scoreText(unit, e.score)));
-      box.append(row);
-    });
+    for (const id of Object.keys(boards)) {
+      const info = me.boards.find((b) => b.id === id), name = info?.name || id, unit = info?.unit || 'points', list = boards[id]?.tops?.[period] || [];
+      if (!list.length && !all) continue;
+      const card = el('div', 'board'), head = el('div', 'board-head');
+      card.dataset.board = id;
+      head.append(el('b', '', name), el('span', 'count', list.length ? `${list.length} line${list.length > 1 ? 's' : ''}` : 'nobody'));
+      card.append(head);
+      (shownInFull.has(id) ? list : list.slice(0, FIRST)).forEach((e, i) => {
+        const row = el('div', 'line'), refuse = button('Refuse', 'danger small', async () => {
+          if (!confirm(`Take "${e.name}" off the board of ${name} (its four lists)?`)) return;
+          if (said(await api(`/api/scores?board=${encodeURIComponent(id)}&name=${encodeURIComponent(e.name)}`, { method: 'DELETE' }), 'Taken off.')) showScores();
+        });
+        refuse.title = 'Refuse this line: the name comes off the four lists of this board';
+        row.append(el('span', 'rank', `${i + 1}`), el('span', 'who', e.name), el('span', 'num', scoreText(unit, e.score)), refuse);
+        card.append(row);
+      });
+      if (list.length > FIRST) card.append(button(shownInFull.has(id) ? 'Show the first five' : `Show all ${list.length}`, 'ghost small', () => { if (shownInFull.has(id)) shownInFull.delete(id); else shownInFull.add(id); showScores(false); }));
+      box.append(card);
+    }
+    if (!box.children.length) empty(box, 'Nobody on any board for this period.');
   }
   // (the scores the server played again and did not believe: the owner's to take, or to let go)
   async function showFlagged() {
@@ -201,8 +209,8 @@
       box.append(item(`${f.name} — ${info?.name || f.board}: ${scoreText(info?.unit || 'points', f.score)}`, `${f.why}${f.guest ? ' · no account' : ''} · ${when(f.at)}`, acts));
     }
   }
-  $('board').onchange = () => showScores(false);
-  $('period').onchange = () => showScores(false);
+  for (const b of $('period').querySelectorAll('button')) b.onclick = () => { period = b.dataset.period; showScores(false); };
+  $('scores-empty').onchange = () => showScores(false);
 
   // ---------------------------------------------------------------------------------- the sponsors, the plaques
   const placeName = (id) => {
@@ -322,9 +330,53 @@
   }
 
   // ----------------------------------------------------------------------------------------- the office itself
-  const SHOW = { releases: showReleases, rooms: () => { showRooms(); showLimits(); showUserRooms(); }, scores: () => { showScores(); showFlagged(); }, sponsors: showSponsors, bans: showBans, figures: showFigures, admins: showAdmins };
-  const NAMES = { releases: 'Releases', rooms: 'Rooms', scores: 'High scores', sponsors: 'Sponsors & plaques', bans: 'Kept out', figures: 'Figures', admins: 'Administrators' };
+  // ------------------------------------------------------------------------------------------------- the chat
+  // (what was said lately, the newest first: read again every few seconds while the tab is looked at)
+  let chatLines = [], chatMore = false, tabNow = '';
+  const clock = (ms) => new Date(ms).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const roomName = (r) => (r === 'main' ? 'Room 1' : /^main-\d+$/.test(r) ? `Room ${r.slice(5)}` : r || '—');
+  function drawChat() {
+    const box = $('chatlog'), find = $('chat-find').value.trim().toLowerCase();
+    const list = find ? chatLines.filter((l) => `${l.name} ${l.text} ${roomName(l.room)} ${l.room}`.toLowerCase().includes(find)) : chatLines;
+    $('chat-more').hidden = !chatMore;
+    if (!list.length) return empty(box, chatLines.length ? 'Nothing matches among the lines read so far.' : 'Nothing was said lately.');
+    box.textContent = '';
+    for (const l of list) {
+      const row = el('div', `said${l.muted ? ' muted' : ''}`);
+      row.dataset.n = l.n;
+      row.append(el('span', 'at', clock(l.t)), el('span', 'room', roomName(l.room)), el('b', 'who', l.name), el('span', 'what', l.text));
+      if (l.to !== 'everyone') row.append(el('span', `tag ${l.to}`, l.to));
+      if (l.muted) row.append(el('span', 'tag', 'kept out in silence'));
+      box.append(row);
+    }
+  }
+  async function showChat(older = false) {
+    const res = await api(`/api/chatlog?limit=200${older && chatLines.length ? `&before=${chatLines[chatLines.length - 1].n}` : ''}`);
+    if (!res.ok) return;
+    const got = res.body.lines || [];
+    if (older) { chatLines = chatLines.concat(got); chatMore = !!res.body.more; }
+    else {
+      // (the newest lines come first; what was read before, further down, stays on the page)
+      const last = got.length ? got[got.length - 1].n : Infinity, kept = chatLines.filter((l) => l.n < last);
+      if (!kept.length) chatMore = !!res.body.more;
+      chatLines = got.concat(kept);
+    }
+    if (res.body.keeps) $('chat-keeps').textContent = `Kept: the last ${res.body.keeps.lines.toLocaleString('en-US')} lines, ${res.body.keeps.days} days at the most — the privacy page of the game says so.`;
+    $('chat-forget').hidden = !me.owner;
+    drawChat();
+  }
+  $('chat-find').oninput = drawChat;
+  $('chat-more').onclick = () => showChat(true);
+  $('chat-forget').onclick = async () => {
+    if (!confirm('Forget every line of chat kept so far? This cannot be undone.')) return;
+    if (said(await api('/api/chatlog', { method: 'DELETE' }), 'Forgotten.')) { chatLines = []; chatMore = false; showChat(); }
+  };
+  setInterval(() => { if (key && !document.hidden && tabNow === 'chat' && $('chat-live').checked) showChat(); }, 8000);
+
+  const SHOW = { releases: showReleases, rooms: () => { showRooms(); showLimits(); showUserRooms(); }, scores: () => { showScores(); showFlagged(); }, chat: () => showChat(), sponsors: showSponsors, bans: showBans, figures: showFigures, admins: showAdmins };
+  const NAMES = { releases: 'Releases', rooms: 'Rooms', scores: 'High scores', chat: 'Chat', sponsors: 'Sponsors & plaques', bans: 'Kept out', figures: 'Figures', admins: 'Administrators' };
   function open(tab) {
+    tabNow = tab;
     for (const s of document.querySelectorAll('section[data-tab]')) s.hidden = s.dataset.tab !== tab || (s.hasAttribute('data-owner') && !me.owner);
     for (const b of $('tabs').children) b.classList.toggle('on', b.dataset.tab === tab);
     SHOW[tab]?.();
@@ -344,7 +396,7 @@
     mem.set(KEEP, key);
     me = { owner: res.body.owner === true, boards: Array.isArray(res.body.boards) ? res.body.boards : [] };
     $('login').hidden = true; $('office').hidden = false; $('facts').hidden = false;
-    $('who').textContent = me.owner ? 'You are the owner: everything is yours to decide.' : 'You are an administrator: the scores, the sponsors, the plaques and who is kept out. What is released is the owner\'s.';
+    $('who').textContent = me.owner ? 'You are the owner: everything is yours to decide.' : 'You are an administrator: the scores, the chat, the sponsors, the plaques and who is kept out. What is released is the owner\'s.';
     const tabs = $('tabs');
     tabs.textContent = '';
     for (const s of document.querySelectorAll('section[data-tab]')) {
