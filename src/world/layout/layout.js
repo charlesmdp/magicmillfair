@@ -811,7 +811,7 @@ export const RELICS = [
   { id: 'meter', by: ['stairs', 0.55, 2.4] },
   { id: 'mailbox', by: ['falls', 0.6, 2.4] },
   { id: 'car', by: ['pondloop', 0.1, 4.4] },
-  { id: 'phone', by: ['lane', 0.1, -4.6] },
+  { id: 'phone', by: ['lane', 0.3, 4.6] }, // (a few steps down the road from the bus stop, on the same side — it stood behind a wall of the gate, where nobody could see it)
   { id: 'forecast', by: ['shore', 0.3, 3] },
   { id: 'bunker', x: 52, z: 112, face: [40, 104] }, // (in the woods of the south-east shore, sixty metres from any path)
 ];

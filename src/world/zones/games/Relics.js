@@ -34,7 +34,7 @@ export const RELIC_WORDS = {
   meter: { r: 0.35, label: 'the parking meter', text: 'EXPIRED. Somebody owes it a few decades of parking. There is no car, no road, no street — it stands its ground, and waits to be paid.' },
   mailbox: { r: 0.4, label: 'the mailbox', text: 'The flag is up: there is mail. There is always mail — nobody knows who brings it. All bills, addressed to "The Occupant, What Is Left Of The World".' },
   car: { r: 1.9, label: 'the car', text: 'A car, with a tree through its roof. The tree is forty years old. It had right of way.' },
-  phone: { r: 0.4, label: 'the telephone', text: 'A public telephone. Now and then it rings. Nobody dares to pick up: whoever is calling has been very patient, and may want something.' },
+  phone: { r: 0.55, label: 'the telephone', text: 'A public telephone. Now and then it rings. Nobody dares to pick up: whoever is calling has been very patient, and may want something.' },
   forecast: { r: 0.8, label: 'the weather board', text: '"TODAY: radiation mild, with sunny spells. TOMORROW: same." Somebody chalks it up again every morning. It has never once been wrong.' },
   bunker: { r: 1.7, label: 'the mound', text: 'A fallout shelter, sealed from the inside — and so well hidden that you may be the first to find it. The periscope turns to look at you. Somebody is still down there, waiting for it all to be over. Nobody has had the heart to tell them.' },
 };
@@ -344,7 +344,10 @@ export function buildRelics(zone) {
       wood.tint(0.6, 0.46, 0.33, 1).cylinder(0.1, 0.3, -0.2, 0.2, 0.13, 3.7, 7);
       for (const [lx, ly, lz, lr] of [[0.1, 4.4, -0.2, 1.4], [-0.9, 3.9, 0.4, 0.95], [1.0, 3.8, -0.7, 0.9]]) { metal.place(lx, 0, lz); metal.tint(0.18 + lr * 0.03, 0.46, 0.15, 1).lathe([[0, ly - lr], [lr * 0.62, ly - lr * 0.78], [lr, ly], [lr * 0.62, ly + lr * 0.78], [0, ly + lr]], 8); metal.pop(); }
     } else if (wish.id === 'phone') {
-      metal.tint(0.3, 0.32, 0.35, 1).cylinder(0, -0.3, 0, 0.05, 0.05, 1.95, 6);
+      // a telephone under its hood, on a post: the hood and its yellow band are what one sees from afar
+      metal.tint(0.3, 0.32, 0.35, 1).cylinder(0, -0.3, 0, 0.07, 0.07, 1.3, 8);
+      metal.tint(0.1, 0.3, 0.62, 1).box(-0.45, 0.95, -0.1, 0.45, 2.0, -0.05).box(-0.45, 0.95, -0.05, -0.4, 2.0, 0.42).box(0.4, 0.95, -0.05, 0.45, 2.0, 0.42).box(-0.5, 2.0, -0.14, 0.5, 2.07, 0.5).box(-0.45, 0.9, -0.1, 0.45, 0.95, 0.42);
+      metal.tint(0.95, 0.78, 0.12, 1).box(-0.5, 2.07, -0.14, 0.5, 2.3, -0.08).box(-0.5, 2.07, 0.44, 0.5, 2.3, 0.5);
       metal.tint(0.15, 0.35, 0.6, 1).box(-0.2, 1.05, 0.03, 0.2, 1.62, 0.2).box(-0.24, 1.62, -0.02, 0.24, 1.68, 0.26);
       metal.tint(0.75, 0.76, 0.78, 1).box(-0.06, 1.12, 0.2, 0.15, 1.38, 0.215);
       metal.tint(0.06, 0.06, 0.07, 1).box(-0.17, 1.2, 0.2, -0.1, 1.55, 0.265).box(-0.14, 0.86, 0.2, -0.13, 1.2, 0.21);

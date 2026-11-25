@@ -887,6 +887,21 @@ try {
         for (const p of d.meta.paths) if (p.kind === 'asphalt' || p.id === 'race') for (const s of p.samples) if (Math.hypot(s[0] - q.x, s[1] - q.z) < p.width / 2) road = true;
         if (!q.settled || wet || tree || road || close) out.bad.push([q.id, q.settled, wet, tree, road, close]);
       }
+      // …and each can be seen: nothing built stands over it, nor between it and who stands before it (one of them
+      // stood behind a wall once). A relic is made of the same meshes as the rest of the fair: what is hit of the
+      // fair within its own reach is itself.
+      {
+        const T = m.THREE, rc = new T.Raycaster(), groups = ['mill', 'pier', 'places', 'games'].map((k) => m.world[k]?.group).filter(Boolean);
+        const ofFair = (o) => { for (let p = o; p; p = p.parent) if (p === m.world.games.group) return true; return false; };
+        rc.camera = m.engine.camera;
+        out.hidden = [];
+        for (const q of R.list) {
+          const first = (from, to) => { const dir = to.clone().sub(from), far = dir.length(); rc.set(from, dir.normalize()); rc.near = 0; rc.far = far; const h = rc.intersectObjects(groups, true).find((k) => k.object.visible && k.object.isMesh && !(ofFair(k.object) && Math.hypot(k.point.x - q.x, k.point.z - q.z) < q.r + 1.6 && k.point.y < q.y + 7)); return h ? [h.distance, far] : null; };
+          const ex = q.x + Math.sin(q.yaw) * (q.r + 1), ez = q.z + Math.cos(q.yaw) * (q.r + 1);
+          const over = first(new T.Vector3(q.x, q.y + 0.6, q.z), new T.Vector3(q.x, q.y + 40, q.z)), sight = first(new T.Vector3(ex, d.heightAt(ex, ez) + 1.5, ez), new T.Vector3(q.x, q.y + 0.9, q.z));
+          if (over || (sight && sight[0] < sight[1] - q.r - 0.3)) out.hidden.push(q.id);
+        }
+      }
       const mesh = m.world.games.group.getObjectByName('relics-faces');
       out.quads = mesh ? mesh.geometry.index.count / 6 : 0;
       localStorage.removeItem('mmf.relics');
@@ -907,8 +922,8 @@ try {
       out.kept = (localStorage.getItem('mmf.relics') || '').split(',').sort().join(',');
       return out;
     });
-    check('twenty relics of the world before stand all over the valley — on dry ground, off the road, out of the trees, far from one another; walked up to, each is offered to be looked at and says its line, counting; the last says they were all found — a mushroom cloud goes up, and the emote that was locked is theirs —, the browser remembers which, one looked at again says its line and no more; the periscope of the hidden shelter looks at who comes',
-      relics.ids === 'barrel,billboard,bunker,busstop,car,clock,dish,forecast,geiger,hatch,mailbox,meter,news,phone,scarecrow,sign,sunflower,tally,trolley,vendor' && relics.bad.length === 0 && relics.quads === 16
+    check('twenty relics of the world before stand all over the valley — on dry ground, off the road, out of the trees, far from one another, none behind a wall; walked up to, each is offered to be looked at and says its line, counting; the last says they were all found — a mushroom cloud goes up, and the emote that was locked is theirs —, the browser remembers which, one looked at again says its line and no more; the periscope of the hidden shelter looks at who comes',
+      relics.ids === 'barrel,billboard,bunker,busstop,car,clock,dish,forecast,geiger,hatch,mailbox,meter,news,phone,scarecrow,sign,sunflower,tally,trolley,vendor' && relics.bad.length === 0 && relics.hidden.length === 0 && relics.quads === 16
       && relics.looks.length === 20 && relics.looks.every((l, i) => l.asked && l.said && (i < 19 ? l.tail === ` — Relic ${i + 1} of 20.` : /the last of the 20 relics/.test(l.tail) && /mushroom cloud is yours/.test(l.tail)))
       && /find the 20 relics \(0 found\)/.test(relics.locked) && relics.refused === 0 && relics.clouds === 1 && relics.unlocked === '☢ Mushroom cloud' && relics.scope < 0.05
       && relics.again.asked && relics.again.said && relics.again.tail === '' && relics.kept === relics.ids, JSON.stringify(relics));

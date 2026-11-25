@@ -6,6 +6,7 @@ export const NEWS = [
   {
     date: '25 November 2026',
     items: [
+      ['The telephone, where it can be found', 'One of the twenty relics stood behind a wall by the gate, where nobody could see it. The public telephone is now by the road, a few steps down from the bus stop, under a blue hood.'],
       ['The Nuclear Cave', 'The Hollow Hill has a new name, and a reason for it: drums, glowing pools, and green atoms that lead you into the rings. You are thinner in there, a knock costs less, and shaving past the rock fills your burst.'],
       ['Ten more relics', 'Twenty things are now left over from the world before, all over the valley. The vending machine went to the Lost Temple, the scratched stone to Lookout Hill — and one of them is very well hidden.'],
       ['A mushroom cloud of your own', 'Find the twenty relics and it is yours: a small mushroom cloud over your head, with confetti. In the emotes (T).'],
