@@ -21,16 +21,17 @@ export const HILL = {
   length: 66, half: 4.6, // m up the slope; m to each side
   every: 10, starts: ['Red', 'Blue', 'Green', 'Yellow', 'Purple', 'Orange'], // a start every so many seconds, each with its name
   step: 1 / 120,
-  run: 6.2, side: 5.2, back: 3, accel: 34, // m/s up, across, back down; how fast one gets there (m/s²)
+  // (it is a slog: one climbs slower than one steps aside — the slope is not rushed, it is read: where to be, when)
+  run: 3.6, side: 5.8, back: 3, accel: 34, // m/s up, across, back down; how fast one gets there (m/s²)
   g: 18, jump: 6.3, // m/s², m/s up: a little over a metre high
   body: 0.35, // half the width of a climber
-  period: 1.15, // s between two things let go at the top
+  period: 0.4, // s between two things let go at the top: there is always something coming
   kinds: {
     log: { share: 0.5, r: 0.42, speed: [7, 9.5], wide: [3, 5.2], end: -3, clear: 0.72 }, // lying across: so wide; cleared by feet that high
-    barrel: { share: 0.3, r: 0.55, speed: [9, 11.5], sway: 1.7, end: 22 }, // it wanders so far to each side
-    boulder: { share: 0.2, r: 1.1, speed: [5.5, 7], end: 44 },
+    barrel: { share: 0.3, r: 0.55, speed: [9, 11.5], sway: 1.7, end: 4 }, // it wanders so far to each side
+    boulder: { share: 0.2, r: 1.1, speed: [5.5, 7], end: 12 },
   },
-  knock: { time: 0.9, keep: 0.75, safe: 0.5 }, // hit: carried down so long, at so much of the thing's speed; then left alone so long
+  knock: { time: 1.0, keep: 0.8, safe: 0.5 }, // hit: carried down so long, at so much of the thing's speed; then left alone so long
 };
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));

@@ -2018,6 +2018,9 @@ async function boot() {
       // (…and of the cleft: it rises with the climber)
       const clefting = ear.climb === null ? app.cleftClimb?.() : null;
       if (clefting && !clefting.over && clefting.state?.started) ear.climb = Math.min(1, Math.max(0.12, clefting.state.y / 40));
+      // (…and of the slope: it rises with the climber)
+      const sloping = ear.climb === null ? app.hillClimb?.() : null;
+      if (sloping && !sloping.over && sloping.state?.clock > 0) ear.climb = Math.min(1, Math.max(0.12, sloping.state.s / 66));
       ear.game = fair.session ? fair.kind : null;
       // leaving the ground, coming back to it, lighting the jetpack
       if (mode === 'walk' && !player.dead && !player.seat) {

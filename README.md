@@ -1207,7 +1207,13 @@ better or worse from one start to the next). Each visitor's game says where its 
 `server/protocol.js`: its shape is checked, eight a second at the most from one visitor, handed on within
 160 m, nothing kept, nothing from who is kept out in silence) — and the others' boats are drawn where they
 were said to be, a little further for the time gone by, in colours of their own; from the bank one sees
-whoever is racing. Boats of visitors do not push each other: each is where its owner's screen says.) The files of the lab are the lab's: `src/extras/**`,
+whoever is racing. Boats of visitors do not push each other: each is where its owner's screen says.
+*Uphill Battle* is **a slog now, three times as long**: one climbs slower than one steps aside, something is
+let go at the top every four tenths of a second, the barrels come down almost to the line and the boulders
+to a fifth of the slope, and what hits one carries one further back. The slope is not rushed any more — its
+bot took eleven seconds, it takes about thirty-three, hit half a dozen times on the way —: it is read. Its
+board takes no time under eighteen seconds (run flat out with nothing in the way: 18.3 s), and the music of
+the climb rises with the climber.) The files of the lab are the lab's: `src/extras/**`,
 `src/world/zones/games/{slide,pond,boats,hill,crack,hollow}/**`, `server/stats.js`, `public/opendata/**`,
 `public/opendate/**`, `lab/**` and its tests are not edited here.
 

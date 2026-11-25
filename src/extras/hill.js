@@ -33,8 +33,8 @@ export function attach(app) {
     climb = hill.open(player, io);
     player.driver = climb;
     app.audio?.play('teleport');
-    keysHelp(app).set(app.input.isTouch ? `You leave with the ${climb.start.name} start · stick: up the slope, and aside · the arrow jumps (the logs: not the barrels, not the boulders)`
-      : `You leave with the ${climb.start.name} start · W: up the slope · A / D: aside · Space jumps (the logs: not the barrels, not the boulders) · E: leave · H: these keys again`);
+    keysHelp(app).set(app.input.isTouch ? `You leave with the ${climb.start.name} start · stick: up the slope, and aside — you step aside faster than you climb: read what comes, and be elsewhere · the arrow jumps (the logs: not the barrels, not the boulders) · what hits you carries you back down`
+      : `You leave with the ${climb.start.name} start · W: up the slope · A / D: aside — you step aside faster than you climb: read what comes, and be elsewhere · Space jumps (the logs: not the barrels, not the boulders) · what hits you carries you back down · E: leave · H: these keys again`);
   };
   world.actionSources.push((p) => {
     if (climb) return climb.over ? null : { label: 'Leave the climb', run: () => leave(false) };
