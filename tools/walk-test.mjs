@@ -345,6 +345,27 @@ try {
       gold.swam && gold.offshore.swimming && gold.minFar > 30 && gold.modes.join() === 'patrol' && !gold.dead && !!gold.landed && gold.beach > 1.3 && gold.landed.y < 1.0
       && !gold.sand.swimming && gold.sand.d < 1.5 && Math.abs(gold.sand.y - 1.15) < 0.2 && Math.abs(gold.top.y - gold.top.want) < 0.5 && gold.dog < gold.reach && seen.zone === 'The Golden Cove' && seen.prompts.some((t) => /CROKMOU|Crokmou/.test(t)),
       JSON.stringify({ ...gold, ...seen }));
+    // the dog is not alone up there: a cat at its right, a snake at its left, a bird on its head — sculpted with
+    // it (one mesh), in tones of its gold; and the tablet of the plinth is for every pet, the dog named on it
+    {
+      const pets = await page.evaluate(async () => {
+        const m = window.__mmf, L = await import('/src/world/layout/layout.js'), h = L.NORTH.statue.height, d = m.world.places.group.getObjectByName('golden-dog'), p = d.geometry.attributes.position, c = d.geometry.attributes.color;
+        const out = { one: d.isMesh && !Array.isArray(d.material), v: p.count, cat: 0, catTop: 0, snake: 0, bird: 0, top: 0, tones: new Set(), tablet: m.world.places.crokmou.tablet.join(' | ') };
+        for (let i = 0; i < p.count; i++) {
+          const x = p.getX(i) / h, y = p.getY(i) / h; // (x is the dog's left; the heights are in heights of the statue)
+          if (x < -0.33 && y < 0.4) { out.cat++; out.catTop = Math.max(out.catTop, y); }
+          if (x > 0.32 && y < 0.3) out.snake++;
+          if (y > 0.985) out.bird++;
+          out.top = Math.max(out.top, y);
+          out.tones.add(Math.round(c.getY(i) * 5));
+        }
+        out.tones = out.tones.size; out.catTop = +out.catTop.toFixed(2); out.top = +out.top.toFixed(2);
+        return out;
+      });
+      check('the golden dog is not alone: a cat sits at its right, a snake is coiled at its left, a bird is perched on its head — one mesh with it, in several tones of its gold; the tablet of the plinth is for every pet, and names the dog',
+        pets.one && pets.v > 9000 && pets.v < 20000 && pets.cat > 150 && pets.catTop > 0.24 && pets.snake > 150 && pets.bird > 40 && pets.top > 1.02 && pets.top < 1.1 && pets.tones >= 4
+        && /EVERY PET/.test(pets.tablet) && /LOVED/.test(pets.tablet) && /CROKMOU, BEST DOG EVER/.test(pets.tablet), JSON.stringify(pets));
+    }
     // round the drum of the plinth: the plaques of the companions. Their picture exists because somebody is up
     // here; in front of whoever stands by the drum is a column of two plates (none in front of the tablet)
     const plates = await page.evaluate(() => {
@@ -495,7 +516,7 @@ try {
 
   // --- sitting down to work on a beanbag, lying in a hammock
   {
-    const spot = await page.evaluate(() => { const w = window.__mmf.world, s = w.seats.find((q) => q.work), h = w.seats.find((q) => q.pose === 6); return { s: [s.x, s.z], h: [h.x, h.z] }; });
+    const spot = await page.evaluate(() => { const w = window.__mmf.world, s = w.seats.find((q) => q.work), h = w.seats.find((q) => q.pose === 6 && !/towel/.test(q.label || '')), t = w.seats.find((q) => /towel/.test(q.label || '')); return { s: [s.x, s.z], h: [h.x, h.z], t: t ? [t.x, t.z] : null }; });
     await place(spot.s[0] + 0.5, spot.s[1] + 0.9, 0);
     await frames(3);
     const offered = await prompt();
@@ -518,6 +539,15 @@ try {
     await page.keyboard.press('Space');
     await frames(6);
     check('lies down in a hammock, jumps out of it', offer2.includes('Lie down') && lying === 6 && !(await page.evaluate(() => !!window.__mmf.player.seat)), `${JSON.stringify(offer2)}, pose ${lying}`);
+    await place(spot.t[0] + 1.1, spot.t[1] + 0.3, 0);
+    await frames(3);
+    const offer3 = await prompt();
+    await page.keyboard.press('KeyE');
+    await frames(10);
+    const towel = await page.evaluate(() => window.__mmf.player.anim);
+    await page.keyboard.press('Space');
+    await frames(6);
+    check('lies down on a towel of the beach, and is up again with a jump', offer3.includes('Lie down on the towel') && towel === 6 && !(await page.evaluate(() => !!window.__mmf.player.seat)), `${JSON.stringify(offer3)}, pose ${towel}`);
   }
 
   // --- the big wheel: boarded from the platform when a car comes by
@@ -736,6 +766,7 @@ try {
       m.player.teleport(s.x, s.z, s.yaw + Math.PI);
       // (which way a newcomer looks, and how far to the side of that a thing stands: 0 straight ahead, 180 behind)
       const fx = -Math.sin(s.yaw), fz = -Math.cos(s.yaw), off = (x, z) => Math.round((Math.acos(((x - s.x) * fx + (z - s.z) * fz) / Math.hypot(x - s.x, z - s.z)) * 180) / Math.PI);
+      const inside = (poly, x, z) => { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, zi] = poly[i], [xj, zj] = poly[j]; if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) c = !c; } return c; };
       const puff = g.getObjectByName('notice-puff0'), before = puff.material.map.offset.x;
       await new Promise((r) => { let k = 0; const tick = () => (++k > 40 ? r() : requestAnimationFrame(tick)); tick(); });
       const flowers = n.news.map((b) => [0, 1, 2, 3, 4, 5, 6, 7].some((k) => /poppy|cornflower/.test(m.world.scatter.flowerNear(b.x - 9 + (k % 4) * 3, b.z - 14 + Math.floor(k / 4) * 5, 6) || '')));
@@ -743,7 +774,9 @@ try {
         banner: { there: !!g.getObjectByName('notice-welcome'), ahead: off(n.welcome.x, n.welcome.z), far: +Math.hypot(n.welcome.x - s.x, n.welcome.z - s.z).toFixed(1) },
         rules: { there: !!g.getObjectByName('notice-rules'), ahead: off(L.NOTICES.rules.x, L.NOTICES.rules.z), left: (L.NOTICES.rules.x - s.x) * fz - (L.NOTICES.rules.z - s.z) * fx > 0 },
         story: { there: !!g.getObjectByName('notice-story'), ahead: off(L.NOTICES.story.x, L.NOTICES.story.z), left: (L.NOTICES.story.x - s.x) * fz - (L.NOTICES.story.z - s.z) * fx > 0, far: +Math.hypot(L.NOTICES.story.x - s.x, L.NOTICES.story.z - s.z).toFixed(1) },
-        advice: { there: !!g.getObjectByName('notice-advice'), words: g.getObjectByName('notice-advice')?.userData.words || '', left: (L.NOTICES.advice.x - s.x) * fz - (L.NOTICES.advice.z - s.z) * fx > 0, far: +Math.hypot(L.NOTICES.advice.x - s.x, L.NOTICES.advice.z - s.z).toFixed(1), billy: Math.round(Math.hypot(L.WAYS.billy.at[0] - L.POND_DECK.x, L.WAYS.billy.at[1] - L.POND_DECK.z)) },
+        // (the easel beside whoever arrives sends them to the beach; the one of the life coach stands in a flower bed of the rock garden)
+        beach: { there: !!g.getObjectByName('notice-beach'), words: g.getObjectByName('notice-beach')?.userData.words || '', turns: g.getObjectByName('notice-beach')?.userData.turns || [], left: (L.NOTICES.beach.x - s.x) * fz - (L.NOTICES.beach.z - s.z) * fx > 0, far: +Math.hypot(L.NOTICES.beach.x - s.x, L.NOTICES.beach.z - s.z).toFixed(1) },
+        advice: { there: !!g.getObjectByName('notice-advice'), words: g.getObjectByName('notice-advice')?.userData.words || '', turns: g.getObjectByName('notice-advice')?.userData.turns || [], garden: inside(L.ROCK_GARDEN.outline, L.NOTICES.advice.x, L.NOTICES.advice.z), path: +Math.min(...L.PATHS.find((q) => q.id === 'garden').points.map(([qx, qz]) => Math.hypot(qx - L.NOTICES.advice.x, qz - L.NOTICES.advice.z))).toFixed(1), billy: Math.round(Math.hypot(L.WAYS.billy.at[0] - L.POND_DECK.x, L.WAYS.billy.at[1] - L.POND_DECK.z)) },
         planks: n.signposts.filter((p) => p.arms.some((a) => a.to === 'billy')).map((p) => `${p.id}: ${p.arms.find((a) => a.to === 'billy').text}`),
         puffs: { moved: puff.material.map.offset.x !== before, frames: Math.round(1 / puff.material.map.repeat.x) },
         news: n.news.map((b) => ({ date: b.date, behind: off(b.x, b.z), far: Math.round(Math.hypot(b.x - s.x, b.z - s.z)) })), boards: [0, 1, 2].map((k) => !!g.getObjectByName(`notice-news${k}`)), days: N.NEWS.slice(0, 3).map((d) => d.date), old: !!g.getObjectByName('notice-news'), flowers,
@@ -752,9 +785,11 @@ try {
     check('where one arrives: a banner of welcome across the lane (little mushroom clouds puffing over its posts) and the rules to the left are what is seen first; the boards of what is new stand by the poppies, out of that first look — one for each of the three latest days',
       arrive.banner.there && arrive.banner.ahead < 12 && arrive.banner.far > 7 && arrive.banner.far < 16 && arrive.rules.there && arrive.rules.ahead < 48 && arrive.rules.left && arrive.puffs.moved && arrive.puffs.frames === 12
       && arrive.news.length === 3 && arrive.boards.every(Boolean) && !arrive.old && arrive.news.every((b, k) => b.date === arrive.days[k] && b.behind > 75 && b.far > 18 && b.far < 45) && arrive.flowers.some(Boolean), JSON.stringify(arrive));
-    check('…and, on arriving: to the right, a board tells how it all came to this (the story of the opening, another way); beside one, an easel says where life advice is to be had — and planks at the mill and by the pond point the rest of the way to Billy',
-      arrive.story.there && !arrive.story.left && arrive.story.ahead < 48 && arrive.story.far > 5 && arrive.story.far < 14 && arrive.advice.there && arrive.advice.left && arrive.advice.far < 3.5 && /^GET LIFE ADVICE · ASK BILLY · \d+0 M$/.test(arrive.advice.words) && arrive.advice.billy < 20
-      && arrive.planks.join() === 'mill: GET LIFE ADVICE,pondside: GET LIFE ADVICE', JSON.stringify({ story: arrive.story, advice: arrive.advice, planks: arrive.planks }));
+    check('…and, on arriving: to the right, a board tells how it all came to this (the story of the opening, another way); beside one, an easel sends everybody to the beach — PLAY ON THE BEACH!, an arrow up the lane on its front —; the easel of the life coach stands in a flower bed of the rock garden, by its path, an arrow on each face — and planks at the mill and by the pond point the rest of the way to Billy',
+      arrive.story.there && !arrive.story.left && arrive.story.ahead < 48 && arrive.story.far > 5 && arrive.story.far < 14
+      && arrive.beach.there && arrive.beach.left && arrive.beach.far < 3.5 && /^PLAY ON THE BEACH! · GAMES · THE PIER · \d+0 M$/.test(arrive.beach.words) && typeof arrive.beach.turns[0] === 'number' && Math.abs(arrive.beach.turns[0]) < 0.9
+      && arrive.advice.there && arrive.advice.garden && arrive.advice.path < 6 && /^GET LIFE ADVICE · ASK BILLY · \d+0 M$/.test(arrive.advice.words) && arrive.advice.turns.some((t) => typeof t === 'number') && arrive.advice.billy < 20
+      && arrive.planks.join() === 'mill: GET LIFE ADVICE,pondside: GET LIFE ADVICE', JSON.stringify({ story: arrive.story, beach: arrive.beach, advice: arrive.advice, planks: arrive.planks }));
   }
   // --- the wooden signposts at the forks of the paths, and the Trading Post: the booth of the sponsors, on the
   // plaza at the foot of the pier, a long way from the arrival; its window shows every game with a photograph
@@ -818,6 +853,81 @@ try {
       && win.cards.length === 14 && win.cards.includes('Mostly Up') && win.cards.includes('Meltdown Run') && win.photos === 14 && win.tags.join() === 'Free' && win.extras.includes('The big wheel') && /of 14 games sponsored/.test(win.count) && !win.sky && shut,
       JSON.stringify({ booth: signs.booth, atBooth, win, shut }));
   }
+  // --- the wall of thanks: a tablet cut into the cliff west of the meadow of the acid pond, facing the meadow. Nobody
+  // sponsors anything in this world: it says its title, and invites
+  {
+    const wall = await page.evaluate(async () => {
+      const m = window.__mmf, L = await import('/src/world/layout/layout.js'), w = m.world.games.thanks, f = w.face, g = (x, z) => m.world.groundAt(x, z);
+      const mesh = m.world.games.group.getObjectByName('notice-thanks');
+      const nx = Math.sin(f.yaw), nz = Math.cos(f.yaw);
+      // (its corners, the middles of its sides and its middle: how far above the rock each is)
+      const above = w.points.map(([x, y, z]) => +(y - g(x, z)).toFixed(2));
+      const far = Math.hypot(L.ACID.x - f.x, L.ACID.z - f.z);
+      return {
+        shown: w.shown, above, lean: +((f.tilt * 180) / Math.PI).toFixed(1), foot: +(Math.min(...w.points.map((q) => q[1])) - g(w.x, w.z)).toFixed(2), size: [f.width, f.height],
+        faces: +(((L.ACID.x - f.x) * nx + (L.ACID.z - f.z) * nz) / far).toFixed(2), pond: Math.round(far), sheet: mesh ? [mesh.material.map.image.width, mesh.material.map.image.height] : null,
+      };
+    });
+    check('the wall of thanks is cut into the cliff by the acid pond: it lies on the rock — no corner under it, none far off it — and leans back with it, its foot above the grass, facing the meadow; nobody sponsoring yet, it says its title and invites',
+      !!wall.sheet && wall.sheet[0] <= 2048 && wall.above.length === 9 && wall.above.every((d) => d > 0.2 && d < 3) && wall.lean > 15 && wall.lean < 40 && wall.foot > 0.8 && wall.foot < 3 && wall.faces > 0.85 && wall.pond > 15 && wall.pond < 45
+      && wall.shown?.title === 'THANKS TO THOSE COMPANIES, THE GAME IS FREE FOR YOU!' && wall.shown.rows.length === 0 && wall.shown.ghosts === 3 && wall.shown.cols === 1, JSON.stringify(wall));
+  }
+  // --- the relics of the world before: twenty things all over the valley. Each is walked up to: the game offers to
+  // look at it, looking says its line — and the last, that they were all found: a mushroom cloud goes up, and is
+  // theirs to raise from then on; the browser remembers which were found
+  {
+    const relics = await page.evaluate(async () => {
+      const m = window.__mmf, R = m.world.games.relics, d = m.world.data, trees = m.world.forest.colliders();
+      const out = { ids: R.list.map((q) => q.id).sort().join(','), bad: [], looks: [], quads: 0 };
+      const cloud = () => document.querySelector('.emotes [data-mushroom]').textContent;
+      const frames = (n) => new Promise((res) => { const target = m.frames + n, tick = () => (m.frames >= target ? res() : requestAnimationFrame(tick)); tick(); });
+      for (const q of R.list) {
+        const wet = d.waterAt(q.x, q.z) > q.y - 0.2, tree = trees.some(([x, z, r]) => Math.hypot(x - q.x, z - q.z) < r + 0.3), close = R.list.some((o) => o !== q && Math.hypot(o.x - q.x, o.z - q.z) < 15);
+        let road = false;
+        for (const p of d.meta.paths) if (p.kind === 'asphalt' || p.id === 'race') for (const s of p.samples) if (Math.hypot(s[0] - q.x, s[1] - q.z) < p.width / 2) road = true;
+        if (!q.settled || wet || tree || road || close) out.bad.push([q.id, q.settled, wet, tree, road, close]);
+      }
+      // …and each can be seen: nothing built stands over it, nor between it and who stands before it (one of them
+      // stood behind a wall once). A relic is made of the same meshes as the rest of the fair: what is hit of the
+      // fair within its own reach is itself.
+      {
+        const T = m.THREE, rc = new T.Raycaster(), groups = ['mill', 'pier', 'places', 'games'].map((k) => m.world[k]?.group).filter(Boolean);
+        const ofFair = (o) => { for (let p = o; p; p = p.parent) if (p === m.world.games.group) return true; return false; };
+        rc.camera = m.engine.camera;
+        out.hidden = [];
+        for (const q of R.list) {
+          const first = (from, to) => { const dir = to.clone().sub(from), far = dir.length(); rc.set(from, dir.normalize()); rc.near = 0; rc.far = far; const h = rc.intersectObjects(groups, true).find((k) => k.object.visible && k.object.isMesh && !(ofFair(k.object) && Math.hypot(k.point.x - q.x, k.point.z - q.z) < q.r + 1.6 && k.point.y < q.y + 7)); return h ? [h.distance, far] : null; };
+          const ex = q.x + Math.sin(q.yaw) * (q.r + 1), ez = q.z + Math.cos(q.yaw) * (q.r + 1);
+          const over = first(new T.Vector3(q.x, q.y + 0.6, q.z), new T.Vector3(q.x, q.y + 40, q.z)), sight = first(new T.Vector3(ex, d.heightAt(ex, ez) + 1.5, ez), new T.Vector3(q.x, q.y + 0.9, q.z));
+          if (over || (sight && sight[0] < sight[1] - q.r - 0.3)) out.hidden.push(q.id);
+        }
+      }
+      const mesh = m.world.games.group.getObjectByName('relics-faces');
+      out.quads = mesh ? mesh.geometry.index.count / 6 : 0;
+      localStorage.removeItem('mmf.relics');
+      const note = document.querySelector('.note'), look = async (q) => {
+        m.player.teleport(q.x + Math.sin(q.yaw) * (q.r + 1), q.z + Math.cos(q.yaw) * (q.r + 1), q.yaw + Math.PI);
+        m.player.vel.set(0, 0, 0);
+        await frames(4);
+        const asked = [...document.querySelectorAll('.prompt.on span')].map((e) => e.textContent)[0] || '';
+        m.interact.press(0);
+        return { id: q.id, asked: asked === `Look at ${q.label}`, said: note.textContent.startsWith(q.text) && note.classList.contains('show') && note.classList.contains('long'), tail: note.textContent.slice(q.text.length) };
+      };
+      out.locked = cloud(); m.mushroom(); out.refused = m.world.sparks.clouds.length;
+      for (const q of R.list) out.looks.push(await look(q));
+      out.clouds = m.world.sparks.clouds.length; out.unlocked = cloud();
+      // (the periscope of the hidden shelter looks at who stands by it)
+      { const b = R.list.find((q) => q.id === 'bunker'); m.player.teleport(b.x + 3, b.z + 3, 0); await frames(3); const h = R.head, want = Math.atan2(m.player.pos.x - h.position.x, m.player.pos.z - h.position.z); out.scope = Math.abs(Math.atan2(Math.sin(h.rotation.y - want), Math.cos(h.rotation.y - want))); }
+      out.again = await look(R.list[0]);
+      out.kept = (localStorage.getItem('mmf.relics') || '').split(',').sort().join(',');
+      return out;
+    });
+    check('twenty relics of the world before stand all over the valley — on dry ground, off the road, out of the trees, far from one another, none behind a wall; walked up to, each is offered to be looked at and says its line, counting; the last says they were all found — a mushroom cloud goes up, and the emote that was locked is theirs —, the browser remembers which, one looked at again says its line and no more; the periscope of the hidden shelter looks at who comes',
+      relics.ids === 'barrel,billboard,bunker,busstop,car,clock,dish,forecast,geiger,hatch,mailbox,meter,news,phone,scarecrow,sign,sunflower,tally,trolley,vendor' && relics.bad.length === 0 && relics.hidden.length === 0 && relics.quads === 16
+      && relics.looks.length === 20 && relics.looks.every((l, i) => l.asked && l.said && (i < 19 ? l.tail === ` — Relic ${i + 1} of 20.` : /the last of the 20 relics/.test(l.tail) && /mushroom cloud is yours/.test(l.tail)))
+      && /find the 20 relics \(0 found\)/.test(relics.locked) && relics.refused === 0 && relics.clouds === 1 && relics.unlocked === '☢ Mushroom cloud' && relics.scope < 0.05
+      && relics.again.asked && relics.again.said && relics.again.tail === '' && relics.kept === relics.ids, JSON.stringify(relics));
+  }
   // --- the fair: the four booths of the pier, played by a bot through the pointer; the race, driven by a bot
   {
     await place(98, 0, 0);
@@ -852,7 +962,9 @@ try {
           // twelve floors dropped just right, then one beside the tower
           const v = bot.at === undefined ? 0 : G.at - bot.at, floors = +(s.line.match(/(\d+) floor/) || [0, 0])[1];
           bot.at = G.at;
-          if (floors < 12 ? Math.abs(G.at + v - G.goal) < 0.04 : Math.abs(G.at - G.goal) > 2.05) input._clicks++;
+          // (not on the first two steps: until the game has moved, what it says of the floor is where the one that slides
+          // while nobody plays happened to be — a drop then would be a drop beside the tower)
+          if (n > 1 && (floors < 12 ? Math.abs(G.at + v - G.goal) < 0.04 : Math.abs(G.at - G.goal) > 2.05)) input._clicks++;
         } else if (booth.id === 'geiger') {
           // the lamps that light while the sequence is shown are written down, then clicked in that order; after six rounds, the wrong ones
           const lit = [0, 1, 2, 3].map((k) => named(new RegExp(`:lit${k}$`))[0]), stage = +(s.line.match(/round (\d+)/) || [0, 1])[1];
@@ -889,6 +1001,7 @@ try {
       for (const booth of g.booths.list) {
         // (a rehearsal: the game is played with a seed, as when a server draws one — what is written down of it can then be played again)
         const seed = (Math.random() * 4294967296) >>> 0;
+        input._clicks = 0; input.pointer.down = false; // (a click of the bot of the booth before, made as its game ended, is not the first of this one)
         app.fair.seed = seed; app.playBooth(booth); app.fair.seed = undefined;
         const s = app.fair.session, dyn = booth.dyn, keys = keysOn();
         let n = 0, sight = false, hidden = false;
@@ -1030,7 +1143,7 @@ try {
           if (s.laps !== laps.length) laps.push(+S.clock.toFixed(2));
         }
         input.move.x = 0; input.move.y = 0;
-        const out = { ask, start: /^(Red|Blue|Green|Yellow|Purple|Orange)$/.test(s.start.name) && s.start.wait >= 3.2 && s.start.wait <= 8.3, over: s.over, time: s.time, laps, air, boost, top, still, flight, lamps, slowest: +slowest.toFixed(1), widest: +widest.toFixed(2), off, riding: player.riding, quad: !!player.driver };
+        const out = { ask, start: /^(Red|Blue|Green|Yellow|Purple|Orange)$/.test(s.start.name) && s.start.wait >= 0.55 && s.start.wait <= 5.7, over: s.over, time: s.time, wait: +s.start.wait.toFixed(2), laps, air, boost, top, still, flight, lamps, slowest: +slowest.toFixed(1), widest: +widest.toFixed(2), off, riding: player.riding, quad: !!player.driver };
         for (let k = 0; k < 60 * 4 && app.fair.session; k++) app.fairStep(dt);
         out.after = { closed: !app.fair.session, riding: player.riding, driver: !!player.driver, d: Math.hypot(player.pos.x - r.start.x, player.pos.z - r.start.z) };
         out.keys = keys; out.keysGone = !keysOn();
@@ -1076,7 +1189,7 @@ try {
     keysSeen.race = [race.keys, race.keysGone]; keysSeen.wing = [wing.keys, wing.keysGone];
     check('every game says its keys and keeps them for the asking: while a booth, the race, the flying theatre or the climb is on, the small button that shows them again is under the line of the game (the H key does the same); it is gone when the game closes',
       Object.keys(keysSeen).length === 13 && Object.values(keysSeen).every(([on, gone]) => on === true && gone === true), JSON.stringify(keysSeen));
-    check('the quad race: asked for in the paddock, it leaves with the next start (they have names, one every five seconds), the lights, three laps flat out — the bot never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, the pads, a real flight off the ramp, the time on the board', race.ask.some((t) => /^Race: 3 laps on a quad · (Red|Blue|Green|Yellow|Purple|Orange) start in \d s$/.test(t)) && race.start && race.over && race.laps.length === 3 && race.time > 46000 && race.time < 62000 && race.slowest >= 18 && race.off === 0 && race.widest < 3.75 && race.still > 150 && race.lamps > 20 && race.air > 120 && race.flight > 45 && race.boost > 100 && race.top > 24 && race.riding && race.quad && race.after.closed && !race.after.riding && !race.after.driver && best === race.time, JSON.stringify(race));
+    check('the quad race: asked for in the paddock, it leaves with the next start (they have names, one every five seconds), the lights, three laps flat out — the bot never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, the pads, a real flight off the ramp, the time on the board', race.ask.some((t) => /^Race: 3 laps on a quad · (Red|Blue|Green|Yellow|Purple|Orange) start in \d s$/.test(t)) && race.start && race.over && race.laps.length === 3 && race.time > 46000 && race.time < 62000 && race.slowest >= 18 && race.off === 0 && race.widest < 3.75 && race.still > 30 && race.still >= race.wait * 60 - 4 && race.lamps > 20 && race.air > 120 && race.flight > 45 && race.boost > 100 && race.top > 24 && race.riding && race.quad && race.after.closed && !race.after.riding && !race.after.driver && best === race.time, JSON.stringify(race));
   }
 
   // --- sitting down on the ground, anywhere: X; the first step gets up again

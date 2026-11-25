@@ -19,12 +19,13 @@ import { sleep, until, freePort, request, Client } from './lib/net.mjs';
 import { sign, verify, randomId } from '../server/token.js';
 import { addScore, topsOf, periodKeys, runFits, cleanScore } from '../server/scores.js';
 import { signWebhook, stripeConfig } from '../server/stripe.js';
-import { cleanLogo, cleanText, cleanUrl } from '../server/shop.js';
+import { cleanLogo, cleanText, cleanUrl, paysOf } from '../server/shop.js';
 import { restMailer } from '../server/mail.js';
+import { rankSponsors } from '../src/app/thanks.js';
 import { visit, localDay } from '../server/routes.js';
 import { cleanTalk, oneSentence } from '../server/npc.js';
 import { wardrobeFrom, fitLook, fitKit, fitColor, mayLight, HAT_IDS, FIREWORK } from '../server/wardrobe.js';
-import { ITEMS, packKit } from '../server/items.js';
+import { ITEMS, PASS as GAME_PASS, packKit } from '../server/items.js';
 import { __make as gameOf, replay, agrees } from '../server/replay.js';
 import { sessionOf, packLog, rngOf } from '../src/world/zones/games/core.js';
 import { flightOf, flightLog } from '../src/world/zones/games/WingRules.js';
@@ -39,7 +40,7 @@ const STRIPE_KEY = 'sk_test_magicmillfairtests', STRIPE_HOOK = 'whsec_magicmillf
 const MAIL_FILE = path.join(os.tmpdir(), `mmf-net-test-mail-${process.pid}.jsonl`);
 process.on('exit', () => { try { fs.rmSync(MAIL_FILE, { force: true }); } catch { /* nothing to remove */ } });
 // A stand-in for Stripe: it hands out payment pages and remembers what it was asked.
-const stripe = { asked: [], refunds: [], portals: [], cancelled: [], port: 0, server: null };
+const stripe = { sessions: {}, asked: [], refunds: [], portals: [], cancelled: [], port: 0, server: null };
 async function startStripe() {
   stripe.port = await freePort();
   stripe.server = http.createServer((req, res) => {
@@ -66,7 +67,19 @@ async function startStripe() {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ id: `bps_test_${stripe.portals.length}`, url: `https://billing.stripe.test/p/session/${stripe.portals.length}` }));
       }
+      const one = /^\/v1\/checkout\/sessions\/(cs_\w+)$/.exec(req.url);
+      if (one && req.method === 'GET') {
+        // a payment page, asked about: as it stands (the test says when it is paid: stripe.sessions[id])
+        const s = req.headers.authorization === `Bearer ${STRIPE_KEY}` ? stripe.sessions[one[1]] : null;
+        res.writeHead(s ? 200 : 404, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify(s || { error: { message: 'No such checkout.session' } }));
+      }
       stripe.asked.push({ url: req.url, auth: req.headers.authorization, version: req.headers['stripe-version'] || '', form });
+      if (ok) {
+        const id = `cs_test_${stripe.asked.length}`, month = form.get('mode') === 'subscription';
+        stripe.sessions[id] = { id, status: 'open', payment_status: 'unpaid', amount_total: Number(form.get('line_items[0][price_data][unit_amount]')), payment_intent: month ? null : `pi_${id}`, subscription: month ? `sub_${id}` : null, customer: `cus_${id}`,
+          customer_details: { email: 'buyer@example.org' }, metadata: Object.fromEntries([...form].filter(([k]) => /^metadata\[\w+\]$/.test(k)).map(([k, v]) => [k.slice(9, -1), v])) };
+      }
       res.writeHead(ok ? 200 : 401, { 'Content-Type': 'application/json' });
       // (a form to show inside the game has no page: Stripe gives a secret for its script instead)
       const session = form.get('ui_mode') === 'embedded' ? { id: `cs_test_${stripe.asked.length}`, client_secret: `cs_test_secret_${stripe.asked.length}`, url: null } : { id: `cs_test_${stripe.asked.length}`, url: `https://checkout.stripe.test/pay/cs_test_${stripe.asked.length}` };
@@ -882,7 +895,7 @@ async function testRelease(start, dist) {
     // the lab's five other games: a switch each, and a board that waits for it — a time for four of them (the
     // less the better), how long one held for the three ponds (the more the better: never longer than the run lasted)
     {
-      const LAB = { pond: 20_000, boats: 40_000, hill: 12_000, crack: 9_000, hollow: 20_000 }, ids = Object.keys(LAB);
+      const LAB = { pond: 20_000, boats: 40_000, hill: 34_000, crack: 9_000, hollow: 20_000 }, ids = Object.keys(LAB);
       const note = (b, ago) => sign(SCORE_SECRET, { b, t: Date.now() - ago, n: randomId(9) });
       // (what an address may post is counted: each of these scores comes from an address of its own)
       let who = 150;
@@ -893,7 +906,7 @@ async function testRelease(start, dist) {
       const posted = {};
       for (const b of ids) posted[b] = json(await post({ board: b, name: `Lab ${b}`, score: LAB[b], run: await note(b, LAB[b] + 2500) }));
       // (too good to be true: under what each board believes — and a pond held for a minute, ten seconds after its run began)
-      const low = { boats: await post({ board: 'boats', name: 'Quick', score: 30_000, run: await note('boats', 60_000) }), hollow: await post({ board: 'hollow', name: 'Quick', score: 15_000, run: await note('hollow', 60_000) }) };
+      const low = { boats: await post({ board: 'boats', name: 'Quick', score: 30_000, run: await note('boats', 60_000) }), hollow: await post({ board: 'hollow', name: 'Quick', score: 14_000, run: await note('hollow', 60_000) }) };
       const soon = await post({ board: 'pond', name: 'Quick', score: 60_000, run: await note('pond', 10_000) });
       const longer = json(await post({ board: 'pond', name: 'Longer', score: 45_000, run: await note('pond', 48_000) }));
       const after = json(await call('/api/scores?board=all')), desk = json(await call('/api/admin', null, ADMIN_KEY));
@@ -1111,7 +1124,7 @@ async function testShop({ port }) {
   stripe.asked.length = 0;
   res = await post('/api/checkout', { item: 'hat:crown', device: ann, amount: 1, price: 1 });
   const asked = stripe.asked[0]?.form;
-  check('shop: a payment page is asked of Stripe at the price of the catalogue, for this visitor', res.status === 200 && /^https:\/\/checkout\.stripe\.test\//.test(json(res)?.url || '') && asked?.get('mode') === 'payment' && asked.get('line_items[0][price_data][unit_amount]') === '999' && asked.get('line_items[0][price_data][currency]') === 'usd' && asked.get('metadata[item]') === 'hat:crown' && asked.get('metadata[device]') === ann && asked.get('client_reference_id') === ann && asked.get('success_url').endsWith('/?paid=hat%3Acrown'), [res.status, res.body.toString().slice(0, 160), asked?.toString().slice(0, 300)]);
+  check('shop: a payment page is asked of Stripe at the price of the catalogue, for this visitor', res.status === 200 && /^https:\/\/checkout\.stripe\.test\//.test(json(res)?.url || '') && asked?.get('mode') === 'payment' && asked.get('line_items[0][price_data][unit_amount]') === '999' && asked.get('line_items[0][price_data][currency]') === 'usd' && asked.get('metadata[item]') === 'hat:crown' && asked.get('metadata[device]') === ann && asked.get('client_reference_id') === ann && asked.get('success_url').endsWith('/?paid=hat%3Acrown&cs={CHECKOUT_SESSION_ID}'), [res.status, res.body.toString().slice(0, 160), asked?.toString().slice(0, 300)]);
   // (a sky village is for hire only once the sky is open: the owner's switch)
   const shutSky = await post('/api/checkout', { item: 'village:eagle-rest', device: bob });
   await post('/api/release', { set: { sky: 'open' } }, { authorization: `Bearer ${ADMIN_KEY}` });
@@ -1119,6 +1132,14 @@ async function testShop({ port }) {
   const sub = stripe.asked[1]?.form;
   const nothing = await post('/api/checkout', { item: 'hat:invisible', device: ann }), nobody = await post('/api/checkout', { item: 'jetpack', device: 'x' });
   check('shop: a village is a subscription by the month, at the price of its height — once the sky is open, not before; what is not sold is refused', shutSky.status === 400 && res.status === 200 && sub?.get('mode') === 'subscription' && sub.get('line_items[0][price_data][recurring][interval]') === 'month' && Number(sub.get('line_items[0][price_data][unit_amount]')) >= 1900 && sub.get('subscription_data[metadata][item]') === 'village:eagle-rest' && nothing.status === 400 && nobody.status === 400, [res.status, sub?.toString().slice(0, 200), nothing.status, nobody.status]);
+  // (the panel over the board of a game of the lab is for sale once its game is switched on — its board waits for it too)
+  // (asked from an address of its own — on either server: these two do not count against what the other checks may ask)
+  const aside = (body) => request(port, '/api/checkout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), from: '127.0.0.77' });
+  const shutPanel = await aside({ item: 'board:hill', device: bob, bid: 300 });
+  await post('/api/release', { set: { hill: true } }, { authorization: `Bearer ${ADMIN_KEY}` });
+  const openPanel = await aside({ item: 'board:hill', device: bob, bid: 300 });
+  await post('/api/release', { set: { hill: false } }, { authorization: `Bearer ${ADMIN_KEY}` });
+  check('shop: the panel of a game that waits for its switch is sold once that game is on, not before', shutPanel.status === 400 && openPanel.status === 200 && /^https:\/\/checkout\.stripe\.test\//.test(json(openPanel)?.url || ''), [shutPanel.status, openPanel.status, openPanel.body?.toString().slice(0, 120)]);
   // the payment form inside the game: where the publishable key was given, Stripe is asked for a form to embed
   stripe.asked.length = 0;
   const inGame = await post('/api/checkout', { item: 'hat:cowboy', device: ann, embed: true });
@@ -1127,7 +1148,7 @@ async function testShop({ port }) {
     stripeConfig({ STRIPE_SECRET_KEY: 'sk_test_abc', STRIPE_PUBLISHABLE_KEY: 'pk_test_abcdefghijklmnop' }), stripeConfig({ STRIPE_LIVE_SECRET_KEY: 'sk_live_abc', STRIPE_TEST_SECRET_KEY: 'sk_test_abc', STRIPE_LIVE_PUBLISHABLE_KEY: 'pk_live_abcdefghijklmnop', STRIPE_TEST_PUBLISHABLE_KEY: 'pk_test_abcdefghijklmnop' })];
   check('shop: with Stripe\'s publishable key the payment form can be shown inside the game — the game is told the key, and Stripe is asked for a form to embed (a secret for its script, no page), at the price of the catalogue; a key of the wrong kind or mode does not count',
     shop.pk === STRIPE_PK && inGame.status === 200 && /^cs_test_secret_/.test(json(inGame)?.secret || '') && !json(inGame).url
-    && emb?.form.get('ui_mode') === 'embedded' && emb.form.get('redirect_on_completion') === 'if_required' && emb.form.get('return_url').endsWith('/?paid=hat%3Acowboy') && !emb.form.get('success_url') && !emb.form.get('cancel_url')
+    && emb?.form.get('ui_mode') === 'embedded' && emb.form.get('redirect_on_completion') === 'if_required' && emb.form.get('return_url').endsWith('/?paid=hat%3Acowboy&cs={CHECKOUT_SESSION_ID}') && /^cs_test_/.test(json(inGame).id || '') && !emb.form.get('success_url') && !emb.form.get('cancel_url')
     && emb.form.get('line_items[0][price_data][unit_amount]') === '999' && emb.form.get('metadata[item]') === 'hat:cowboy' && emb.form.get('metadata[device]') === ann && emb.version === '2025-03-31.basil' && stripe.asked.length === 1
     && keys[0].publishable === '' && keys[1].publishable === '' && keys[2].publishable === '' && keys[3].publishable === 'pk_test_abcdefghijklmnop' && keys[4].mode === 'live' && keys[4].publishable === 'pk_live_abcdefghijklmnop',
     [shop.pk, inGame.status, inGame.body.toString().slice(0, 120), emb?.form.toString().slice(0, 300), emb?.version, keys.map((k) => k.publishable)]);
@@ -1370,9 +1391,168 @@ async function testShop({ port }) {
     && json(noBack).stopped === true && json(noBack).refunded === false && stripe.cancelled.includes('sub_gone_2') && !stripe.refunds.some((r) => r.pay === 'pi_month_sub_gone_2')
     && !bobKept.slots['gondola:3'] && !bobKept.slots['gondola:4'] && /nothing more will be charged/.test((bobKept.notes || []).join(' ')),
     [keptBid.status, keptBid.body.toString().slice(0, 80), annKept.notes, back.body.toString().slice(0, 80), noBack.body.toString().slice(0, 80), stripe.cancelled, bobKept.notes]);
+  // ---- the wall of thanks: the shop says what each sponsor pays — amounts only — and the wall ranks them (src/app/thanks.js)
+  {
+    const cara = randomId(16), far = { 'x-forwarded-for': '10.7.12.1' }, same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+    await hook(bidPaid('board:geiger', cara, 700, 'pi_thanks_1'));
+    await hook({ type: 'checkout.session.completed', data: { object: { id: 'cs_thanks_g20', payment_status: 'paid', subscription: 'sub_thanks_20', metadata: { item: 'gondola:20', device: cara } } } });
+    const unshown = json(await request(port, '/api/shop')).slots; // (paid for, nothing shown yet: no amount either)
+    const f1 = await post('/api/sponsor', { slot: 'board:geiger', device: cara, title: 'Acme Rockets', subtitle: 'To the moon, mostly', url: 'https://acme.example' }, far);
+    const f2 = await post('/api/sponsor', { slot: 'gondola:20', device: cara, title: 'Otter Boats', subtitle: 'They float' }, far);
+    const h1 = await post('/api/sponsors', { slot: 'gondola:21', set: { title: 'Big Spender', paid: 123400 } }, admin);
+    const h2 = await post('/api/sponsors', { slot: 'gondola:22', set: { title: 'Quiet Partner' } }, admin);
+    const h3 = await post('/api/sponsors', { slot: 'plaque:70', set: { title: 'Rex', subtitle: 'good boy', paid: 99900 } }, admin);
+    const seen = json(await request(port, '/api/shop')).slots, kept = json(await request(port, '/api/sponsors', { headers: admin })).slots;
+    check('thanks: the shop says what each sponsor pays, with what they show and not before — a bid, a month, what the administrator said was paid; nothing for a plaque, and never who pays',
+      [f1, f2, h1, h2, h3].every((r) => r.status === 200) && !unshown['board:geiger']?.pays && !unshown['gondola:20']?.pays
+      && same(seen['board:geiger']?.pays, { amount: 700, monthly: false, total: 700 }) && same(seen['gondola:20']?.pays, { amount: 2900, monthly: true, total: 2900 })
+      && same(seen['gondola:21']?.pays, { amount: 123400, monthly: false, total: 123400 }) && seen['gondola:22']?.state === 'live' && seen['gondola:22'].pays === undefined
+      && seen['plaque:70']?.state === 'live' && seen['plaque:70'].pays === undefined && kept['gondola:21']?.paid === 123400
+      && ['board:geiger', 'gondola:20', 'gondola:21'].every((id) => ['by', 'sub', 'pay', 'at', 'paid'].every((k) => !(k in seen[id]))),
+      [[f1, f2, h1, h2, h3].map((r) => r.status), unshown['board:geiger'], seen['board:geiger'], seen['gondola:20'], seen['gondola:21'], seen['gondola:22'], seen['plaque:70'], kept['gondola:21']]);
+    const wall = rankSponsors(seen, { geiger: 'Geiger Says' }).filter((r) => ['Acme Rockets', 'Otter Boats', 'Big Spender', 'Quiet Partner', 'Rex'].includes(r.name));
+    check('thanks: the wall ranks them by what each has put in, the most first — a month is said as a month, who is not known to pay comes last, and the plaques are not on it',
+      wall.map((r) => r.name).join() === 'Big Spender,Otter Boats,Acme Rockets,Quiet Partner' && wall[0].figure === '$1,234' && wall[0].where === 'Gondola 21'
+      && wall[1].figure === '$29' && wall[1].unit === 'a month' && wall[1].where === 'Gondola 20' && wall[1].tagline === 'They float'
+      && wall[2].figure === '$7' && wall[2].unit === '' && wall[2].where === 'Geiger Says' && wall[3].figure === '' && wall[3].note === 'partner of the fair',
+      wall);
+    // (the places are given back)
+    await hook({ type: 'customer.subscription.deleted', data: { object: { id: 'sub_thanks_20' } } });
+    for (const id of ['board:geiger', 'gondola:21', 'gondola:22', 'plaque:70']) await request(port, `/api/sponsors?slot=${id}`, { method: 'DELETE', headers: admin });
+  }
 }
 // Accounts: nobody needs one; whoever signs in keeps what they bought, their days in a row and their look,
 // from one browser to the next.
+// ------------------------------------------------------------------------- what was said, kept a while (chatlog.js)
+async function testChatLog({ port }) {
+  const json = (res) => { try { return JSON.parse(res.body.toString()); } catch { return null; } };
+  const read = (query = '', key = ADMIN_KEY, method = 'GET') => request(port, `/api/chatlog${query}`, { method, headers: key ? { authorization: `Bearer ${key}` } : {} });
+  const a = new Client(port, 'talk'), b = new Client(port, 'talk');
+  await a.hello('Ada Talks', 1);
+  await b.hello('Bob Talks', 2);
+  a.send({ t: 'c', m: 'Hello <b>everybody</b>' });
+  await b.wait((m) => m.t === 'c' && /Hello/.test(m.m));
+  b.send({ t: 'c', m: 'psst, over here', n: 1 });
+  // (on the Cloudflare server a room hands its lines to the notebook a moment later)
+  let got = null;
+  for (let i = 0; i < 40 && !got; i++) { const r = json(await read()); if (r?.lines?.[0]?.text === 'psst, over here') got = r; else await sleep(250); }
+  const nobody = await read('', ''), page = json(await read('?limit=1')), older = page?.lines?.[0] ? json(await read(`?limit=5&before=${page.lines[0].n}`)) : null;
+  const wiped = await read('', ADMIN_KEY, 'DELETE'), after = json(await read());
+  a.ws.close(); b.ws.close();
+  check('chat log: what is said in a room — to everybody, to who stands nearby — is kept for the administrators, the newest first, with who said it, where, to whom and when; nobody else reads it; it is read page by page; the owner empties it',
+    !!got && got.lines[0].to === 'nearby' && got.lines[0].name === 'Bob Talks' && got.lines[0].room === 'talk' && got.lines[1].to === 'everyone' && got.lines[1].name === 'Ada Talks' && got.lines[1].text === 'Hello <b>everybody</b>'
+    && Math.abs(got.lines[1].t - Date.now()) < 120000 && got.keeps?.days === 14 && got.keeps.lines === 5000 && nobody.status === 403 && page?.lines?.length === 1 && page.more === true && older?.lines?.[0]?.name === 'Ada Talks'
+    && wiped.status === 200 && after?.lines?.length === 0,
+    [got?.lines?.slice(0, 2), nobody.status, page, older?.lines?.[0], wiped.status, after]);
+}
+
+// ------------------------------------------------------------- back from the payment page (no webhook needed); a new sponsor
+async function testPaid({ port }) {
+  const json = (res) => { try { return JSON.parse(res.body.toString()); } catch { return null; } };
+  // (from an address of its own: these calls do not count against what the other checks may ask)
+  const post = (target, body) => request(port, target, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), from: '127.0.0.80' });
+  const owned = async (device) => json(await request(port, `/api/shop?device=${device}`));
+  const pay = (id) => Object.assign(stripe.sessions[id], { status: 'complete', payment_status: 'paid' });
+  const cat = randomId(16);
+  stripe.asked.length = 0;
+  const page = await post('/api/checkout', { item: 'hat:beanie', device: cat }), id = `cs_test_${stripe.asked.length}`, back = stripe.asked[stripe.asked.length - 1]?.form.get('success_url') || '';
+  const early = await post('/api/checkout/confirm', { session: id });
+  pay(id);
+  const done = await post('/api/checkout/confirm', { session: id }), has = (await owned(cat)).owned, again = await post('/api/checkout/confirm', { session: id });
+  const none = await post('/api/checkout/confirm', { session: 'cs_test_9999' }), junk = await post('/api/checkout/confirm', { session: '../../etc' });
+  check('paid, without Stripe having to say so: the payment page comes back with its name in the address; asked, the server asks Stripe — not paid yet: nothing; paid: what was bought is given, once; a page that does not exist gives nothing',
+    page.status === 200 && /[?&]cs=\{CHECKOUT_SESSION_ID\}/.test(back) && /[?&]paid=hat%3Abeanie/.test(back) && json(early)?.ok === false && json(done)?.ok === true && json(done).given === true && json(done).item === 'hat:beanie'
+    && has.join() === 'hat:beanie' && json(again)?.ok === true && none.status === 404 && junk.status === 404, [page.status, back, json(early), json(done), has, json(again), none.status, junk.status]);
+  // a sponsor: what the panel shows goes up right after the payment, the whole fair is told — by name —, and the sponsor is thanked by e-mail
+  const ear = new Client(port, 'main');
+  await ear.hello('Ear', 1);
+  const dog = randomId(16);
+  stripe.asked.length = 0;
+  const bidPage = await post('/api/checkout', { item: 'board:cups', device: dog, bid: 700 }), bid = `cs_test_${stripe.asked.length}`;
+  pay(bid);
+  const took = await post('/api/checkout/confirm', { session: bid }), mine = (await owned(dog)).slots['board:cups'];
+  const filled = await post('/api/sponsor', { slot: 'board:cups', device: dog, title: 'Acme Robots', subtitle: 'quel connard, ce robot', url: 'https://example.org/acme' });
+  const heard = await ear.wait((m) => m.t === 'say' && /Acme Robots/.test(m.m), 4000), shown = (await owned(randomId(16))).slots['board:cups'];
+  const changed = await post('/api/sponsor', { slot: 'board:cups', device: dog, title: 'Acme Robots Inc', subtitle: 'robots, mostly', url: 'https://example.org/acme' });
+  await sleep(400);
+  const cheers = ear.msgs.filter((m) => m.t === 'say' && /Acme/.test(m.m)).length;
+  ear.ws.close();
+  const mails = CF || !fs.existsSync(MAIL_FILE) ? null : fs.readFileSync(MAIL_FILE, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((m) => m.to === 'buyer@example.org' && /^You sponsor the board of Shell Shock/.test(m.subject));
+  check('a new sponsor: the bid is taken as they come back; what their panel says goes up at once — without the words the chat hides —; the whole fair is told once, by name, with due praise; changing the panel later says nothing; the sponsor is thanked by e-mail',
+    bidPage.status === 200 && json(took)?.given === true && mine?.mine === true && filled.status === 200 && json(filled).state === 'live' && shown?.title === 'Acme Robots' && shown.subtitle === 'quel ********, ce robot' && shown.url === 'https://example.org/acme'
+    && /Acme Robots/.test(heard?.m || '') && /the board of Shell Shock/.test(heard.m) && /gods of the (Atomic|nuclear) [Oo]asis/.test(heard.m) && changed.status === 200 && cheers === 1 && (mails === null || (mails.length === 1 && /\$7/.test(mails[0].text) && /refunded in full/.test(mails[0].text))),
+    [bidPage.status, json(took), mine, filled.status, shown, heard, cheers, mails?.map((m) => m.subject)]);
+  // a big attraction has five places on its panel, each an auction of its own; a stall of the pier has one
+  const second = await post('/api/checkout', { item: 'board:sky-2', device: dog, bid: 500 }), secondId = `cs_test_${stripe.asked.length}`, sixth = await post('/api/checkout', { item: 'board:sky-6', device: dog, bid: 500 }), stall = await post('/api/checkout', { item: 'board:cups-2', device: dog, bid: 500 });
+  pay(secondId);
+  const tookSecond = await post('/api/checkout/confirm', { session: secondId }), places = (await owned(dog)).slots;
+  check('five places on the panel of a big attraction: "board:sky-2" is bid for and taken like any panel — beside the first, which stays free —, there is no sixth, and a stall of the pier has only one',
+    second.status === 200 && sixth.status === 400 && stall.status === 400 && json(tookSecond)?.given === true && places['board:sky-2']?.mine === true && places['board:sky-2'].bid === 500 && !places['board:sky'],
+    [second.status, sixth.status, stall.status, json(tookSecond), places['board:sky-2'], places['board:sky']]);
+  // the site of a sponsor, opened from the game, is counted on its place — the same address once in a while — and added up for the sponsor
+  const click = (slot, from) => request(port, '/api/click', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ slot }), from });
+  const c1 = json(await click('board:cups', '127.0.0.80')), c2 = json(await click('board:cups', '127.0.0.80')), c3 = json(await click('board:cups', '127.0.0.81')), nope = await click('board:nope', '127.0.0.81');
+  const { rankSponsors } = await import('../src/app/thanks.js');
+  const row = rankSponsors((await owned(randomId(16))).slots, { cups: 'Shell Shock' }).find((r) => r.name === 'Acme Robots Inc');
+  check('clicks: the site of a sponsor opened from the game is counted on its place — the same address only once in ten minutes —, nothing is counted for a place that has no site; the wall of thanks adds them up for the sponsor, with its site in a few letters',
+    c1?.clicks === 1 && c2?.clicks === 1 && c3?.clicks === 2 && nope.status === 404 && row?.clicks === 2 && row.site === 'example.org' && row.first === 'board:cups' && row.figure === '$7', [c1, c2, c3, nope.status, row]);
+}
+
+// ------------------------------------------------------------- what may not be said, nor worn as a name (decency.js)
+async function testDecency({ port }) {
+  const { maskChat, nameOk } = await import('../server/decency.js');
+  const json = (res) => { try { return JSON.parse(res.body.toString()); } catch { return null; } };
+  // (the rules themselves, on examples mild enough to be written here — the list is fingerprints only)
+  const says = [['fuck, that was close', 0], ['putain de merde', 0], ['wtf damn shit bordel', 0], ['fuck you', 1], ['Go FUCK yourself!', 1], ['shut the fuck up', 1], ['quel connard', 1], ['bande de c0nnards', 1], ['coooonnard', 1], ['kys', 1], ['ferme ta gueule', 1],
+    ['see www.example.com now', 1], ['http://example.org/x', 1], ['cheap gold at example.com/buy', 1], ['join discord.gg/abcd', 1], ['so.fun, this game', 0], ['I was late. Top score though', 0], ['dispute, computer, salopette, en retard', 0], ['3.5 km/h', 0]];
+  const wrong = says.filter(([line, hides]) => (maskChat(line) !== line) !== !!hides).map(([line]) => line);
+  const names = [['Ada', 1], ['Visitor 42', 1], ['Computer', 1], ['Dr. No', 1], ['R2-D2', 1], ['L\u00e9a', 1], ['bob@home', 0], ['www.example', 0], ['example.com', 0], ['Https', 0], ['Fuck', 0], ['M e r d e', 0], ['xXconnardXx', 0], ['Sh1t', 0]];
+  const wrongNames = names.filter(([n, ok]) => nameOk(n) !== !!ok).map(([n]) => n);
+  check('decency: plain swearing passes in the chat; a strong insult, a threat, a slur — in the plural, spelt with digits, its letters stretched — and the address of a site are hidden; a name holds no @, no address, no insult, no swear word; ordinary words and names are left alone',
+    wrong.length === 0 && wrongNames.length === 0 && maskChat('quel connard, va voir example.com') === 'quel ********, va voir ********', [wrong, wrongNames]);
+  // through the relay: the others read the line with its words hidden — the administrators' log keeps it as it was typed;
+  // a name that may not be worn is not: its bearer is told, and is a visitor; an account cannot be called that either
+  const a = new Client(port, 'polite'), b = new Client(port, 'polite');
+  await a.hello('Ada Polite', 1);
+  await b.hello('Bob Polite', 2);
+  a.send({ t: 'c', m: 'gg — fuck you, see example.com' });
+  const heard = await b.wait((m) => m.t === 'c');
+  const c = new Client(port, 'polite');
+  await c.hello('xXconnardXx', 3);
+  const told = await c.wait((m) => m.t === 'name');
+  const joined = await b.wait((m) => m.t === 'join' && m.id === c.id);
+  let line = null;
+  for (let i = 0; i < 40 && !line; i++) { const r = json(await request(port, '/api/chatlog', { headers: { authorization: `Bearer ${ADMIN_KEY}` } })); line = r?.lines?.find((l) => /see example/.test(l.text)) || null; if (!line) await sleep(250); }
+  const made = await request(port, '/api/account', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'create', device: randomId(16), name: 'Connard 12', password: 'a good password' }), from: '127.0.0.79' });
+  for (const x of [a, b, c]) x.ws.close();
+  check('decency, through the relay: the others read a line with its insult and its address hidden, the log of the administrators keeps it as typed and says so; a name that may not be worn is refused — its bearer is told and is a visitor; no account is called that',
+    heard?.m === 'gg — ********, see ********' && told?.rude === 1 && /^Visitor \d+$/.test(told.name) && joined?.name === told.name && line?.text === 'gg — fuck you, see example.com' && line.filtered === true
+    && made.status === 400 && /cannot be worn/.test(json(made)?.error || ''), [heard, told, joined?.name, line, made.status, json(made)]);
+}
+
+// ------------------------------------------------------------- a thing one steers in a game (a boat): {t:'v'}
+async function testThings({ port }) {
+  const a = new Client(port, 'pondside'), b = new Client(port, 'pondside'), far = new Client(port, 'pondside');
+  await a.hello('Skipper A', 1);
+  await b.hello('Skipper B', 2);
+  await far.hello('Far Away', 3);
+  a.send({ t: 's', p: [0, 10, 0, 0], a: 0 });
+  b.send({ t: 's', p: [30, 10, 0, 0], a: 0 });
+  far.send({ t: 's', p: [400, 10, 0, 0], a: 0 });
+  await sleep(400);
+  a.send({ t: 'v', k: 1, n: 17955, d: [12.3456, -7.891, 0.5, 6, 120.4, 2, 31000, 0] });
+  const got = await b.wait((m) => m.t === 'v');
+  // (what has not the shape of one is not handed on)
+  for (const bad of [{ t: 'v', k: 99, n: 1, d: [1] }, { t: 'v', k: 1, n: -1, d: [1] }, { t: 'v', k: 1, n: 1, d: [] }, { t: 'v', k: 1, n: 1, d: [1, 2, 3, 4, 5, 6, 7, 8, 9] }, { t: 'v', k: 1, n: 1, d: [1e9] }, { t: 'v', k: 1, n: 1, d: ['x'] }]) a.send(bad);
+  // (a flood: a few get through, the rest are dropped)
+  for (let i = 0; i < 40; i++) a.send({ t: 'v', k: 1, n: 2, d: [i] });
+  await sleep(600);
+  const all = b.msgs.filter((m) => m.t === 'v'), flood = all.filter((m) => m.n === 2).length, bads = all.filter((m) => m.n === 1 || m.n === -1 || m.k === 99).length, farGot = far.msgs.filter((m) => m.t === 'v').length;
+  a.ws.close(); b.ws.close(); far.ws.close();
+  check('a thing one steers in a game — a boat of the regatta — is handed on to those near enough, carried to the hundredth, with whose it is; what has not its shape is not; a flood is cut to a few a second; who is far away is told nothing',
+    got?.id === a.id && got.k === 1 && got.n === 17955 && JSON.stringify(got.d) === '[12.35,-7.89,0.5,6,120.4,2,31000,0]' && bads === 0 && flood >= 1 && flood <= 14 && farGot === 0, [got, bads, flood, farGot]);
+}
+
 async function testAccounts({ port }) {
   const json = (res) => { try { return JSON.parse(res.body.toString()); } catch { return null; } };
   const post = (target, body, headers = {}) => request(port, target, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
@@ -1390,6 +1570,23 @@ async function testAccounts({ port }) {
     guest?.account === null && badName.status === 400 && shortPw.status === 400 && made.status === 200 && /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/.test(json(made).recovery) && json(made).account.name === who
     && dup.status === 409 && me.account?.name === who && me.account.profile.name === 'bAda/b' && me.account.profile.hat === 'crown' && me.account.profile.trail === 'none' && me.account.profile.evil === undefined && !JSON.stringify(me).includes('correct horse'),
     [guest, badName.status, shortPw.status, made.status, dup.status, me]);
+  // the name of an account is its owner's alone, in the world too: somebody else who takes it is given a visitor's
+  // name and told; who is signed in to the account wears it; a name kept for visitors makes no account
+  {
+    const thief = new Client(port, 'names', { dev: b }), owner = new Client(port, 'names', { dev: a });
+    await thief.hello(who.toUpperCase(), 1, b);
+    const told = await thief.wait((m) => m.t === 'name'), seenAs = thief.msgs.find((m) => m.t === 'welcome');
+    await owner.hello(who, 2, a);
+    const ownerTold = owner.msgs.find((m) => m.t === 'name'), card = seenAs && (owner.msgs.find((m) => m.t === 'welcome')?.peers || []).find((q) => q.id === thief.id);
+    thief.send({ t: 'hello', name: who, color: 1, v: 2, dev: b });
+    const again = await thief.wait((m) => m.t === 'name' && m !== told, 1500);
+    thief.ws.close(); owner.ws.close();
+    // (asked from an address of its own, on either server: it does not count against what the checks below may try)
+    const kept = await request(port, '/api/account', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'create', device: randomId(16), name: 'Visitor 42', password: 'correct horse' }), from: '127.0.0.78' });
+    check('accounts: the name of an account is reserved — somebody else who takes it in the world is given a visitor\'s name and told, at the door and on changing name; its owner wears it; "Visitor 42" makes no account',
+      told?.taken === cleanName(who.toUpperCase()) && /^Visitor \d+$/.test(told.name) && card?.name === told.name && !ownerTold && again?.taken === who && again.name === told.name && kept.status === 400,
+      [told, card, ownerTold, again, kept.status]);
+  }
   // another browser: what it bought as a guest joins the account when it signs in; what is bought from then on is the account's
   await hook(paid('hat:cap', b));
   const wrong = await acct({ action: 'login', device: b, name: who, password: 'wrong horse' });
@@ -1437,6 +1634,8 @@ async function testAccounts({ port }) {
     const outbox = () => (fs.existsSync(MAIL_FILE) ? fs.readFileSync(MAIL_FILE, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
     const badMail = await acct({ action: 'create', device: c, name: bob, password: 'correct horse', email: 'not an address' }, from(1));
     const madeB = await acct({ action: 'create', device: c, name: bob, password: 'correct horse', email: '  Bob@Example.ORG ' }, from(1));
+    // (the welcome leaves while the answer is given: it is waited for, so that what follows counts from there)
+    await until(() => outbox().some((m) => m.to === 'bob@example.org' && /^Welcome/.test(m.subject)));
     const start = outbox().length;
     const unknown = await acct({ action: 'mailcode', device: d, name: 'Nobody Here' }, from(2)), noAddress = await acct({ action: 'mailcode', device: d, name: who }, from(2));
     const asked1 = await acct({ action: 'mailcode', device: d, name: bob.toUpperCase() }, from(2)), asked2 = await acct({ action: 'mailcode', device: d, name: bob }, from(2));
@@ -1461,6 +1660,39 @@ async function testAccounts({ port }) {
     check('e-mail: the address of an account is changed, or taken away, from a browser that is signed in and with the password; once it is gone no code is mailed',
       noPw.status === 403 && changed.status === 200 && json(changed).account.email === 'n•••@e•••.org' && stranger.status === 403 && removed.status === 200 && json(removed).account.email === undefined && afterGone.status === 200 && outbox().length === before2,
       [noPw.status, changed.status, json(changed)?.account, stranger.status, removed.status, json(removed)?.account, afterGone.status, outbox().length - before2]);
+    // ---- the two messages in the colours of the fair: a welcome to whoever makes an account with an address, a word
+    // of thanks to whoever takes the Game Pass — once each, and only where there is an address
+    {
+      const to = (addr, re) => outbox().filter((m) => m.to === addr && re.test(m.subject)), WELCOME = /^Welcome to Atomic Oasis/, THANKS = /^Your Game Pass is on/;
+      // (a twin in plain text; tables and inline styles; nothing fetched from anywhere, and no link but to the game)
+      const sober = (m) => !!m && m.text.length > 200 && /<table/.test(m.html) && !/<img|<script|<link|<iframe|url\(|@import|src=/i.test(m.html) && [...m.html.matchAll(/href="([^"]*)"/g)].every((h) => h[1] === `http://127.0.0.1:${port}`);
+      const eve = `Eve ${randomId(3).replace(/[^A-Za-z0-9]/g, 'x')}`, [e1, e2, e3, e4] = [randomId(16), randomId(16), randomId(16), randomId(16)], before = outbox().length;
+      const bare = await acct({ action: 'create', device: e2, name: `${eve} b`, password: 'correct horse' }, from(21));
+      const madeE = await acct({ action: 'create', device: e1, name: eve, password: 'correct horse', email: 'Eve@Example.org' }, from(22));
+      await until(() => to('eve@example.org', WELCOME).length > 0);
+      await sleep(120);
+      const hello = to('eve@example.org', WELCOME), sent = outbox().length - before;
+      check('e-mail: whoever makes an account with an address is welcomed, once, in the colours of the fair — with a twin in plain text and nothing fetched from anywhere; an account without an address gets nothing',
+        bare.status === 200 && madeE.status === 200 && hello.length === 1 && sent === 1 && to('bob@example.org', WELCOME).length === 1
+        && hello[0].subject === `Welcome to Atomic Oasis, ${eve}` && hello[0].text.includes(`Welcome to Atomic Oasis, ${eve}!`) && /Forgot the password/.test(hello[0].text) && /No newsletter, no tracking/.test(hello[0].text)
+        && hello[0].html.includes(`Welcome, ${eve}!`) && sober(hello[0]),
+        [bare.status, madeE.status, hello.length, sent, hello[0]?.subject, sober(hello[0]), hello[0]?.html.length]);
+      const pass = (id, device, more = {}) => ({ type: 'checkout.session.completed', data: { object: { id, payment_status: 'paid', amount_total: 1900, subscription: `sub_${id}`, customer: `cus_${id}`, metadata: { item: 'pass', device }, ...more } } });
+      await hook(pass('cs_mail_1', e1));
+      await until(() => to('eve@example.org', THANKS).length > 0);
+      await hook(pass('cs_mail_1', e1)); // (Stripe says it twice)
+      await hook(pass('cs_mail_2', e3, { customer_details: { email: ' Guest@Example.org ' } })); // (no account: the address given at the payment)
+      await hook(pass('cs_mail_3', e4)); // (no account, no address)
+      await until(() => to('guest@example.org', THANKS).length > 0);
+      await sleep(150);
+      const thanks = to('eve@example.org', THANKS), guest = to('guest@example.org', THANKS), all = outbox().filter((m) => THANKS.test(m.subject));
+      const held = [e1, e3, e4].map((dev) => request(port, `/api/shop?device=${dev}`)), passes = (await Promise.all(held)).map((r) => !!json(r).pass);
+      check('e-mail: whoever takes the Game Pass is thanked once — at the address of their account or, failing that, the one given at the payment — and told what it gives and how to stop it; twice from Stripe is once here, and without an address nothing leaves',
+        passes.every(Boolean) && thanks.length === 1 && guest.length === 1 && all.length === 2
+        && thanks[0].text.startsWith(`Thank you, ${eve}!`) && GAME_PASS.perks.every((p) => thanks[0].text.includes(p)) && /Look after it, or stop it/.test(thanks[0].text) && /\$19 a month/.test(thanks[0].text) && sober(thanks[0])
+        && guest[0].text.startsWith('Thank you!') && /make an account/.test(guest[0].text) && sober(guest[0]),
+        [passes, thanks.length, guest.length, all.map((m) => m.to), thanks[0]?.subject, sober(thanks[0]), sober(guest[0])]);
+    }
   } else {
     check('e-mail: a host that cannot send any says so (the game then asks nobody for an address)', says.mail === false, says);
   }
@@ -1486,6 +1718,15 @@ function testScoreLogic() {
 
 function testShopLogic() {
   const b64 = (text) => Buffer.from(text.padEnd(64)).toString('base64');
+  {
+    // (what a sponsor pays, for the wall of thanks: server/shop.js paysOf)
+    const day = 86_400_000, t0 = 1_700_000_000_000, same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+    check('shop logic: what a sponsor has put in — a place held by the month counts every month begun, a bid what was bid, a place filled by hand what the administrator said; a plaque is no sponsor\'s',
+      same(paysOf('gondola:3', { sub: 'sub_x', at: t0 }, t0 + 65 * day), { amount: 2900, monthly: true, total: 8700 }) && paysOf('gondola:3', { sub: 'sub_x', at: t0 }, t0 + day).total === 2900
+      && same(paysOf('board:sky', { bid: 500, pay: 'pi_x' }, t0), { amount: 500, monthly: false, total: 500 }) && paysOf('board:sky', { by: 'admin' }, t0) === null
+      && paysOf('tarp:shoot', { paid: 5000 }, t0)?.total === 5000 && paysOf('plaque:3', { paid: 2000, sub: 'sub_y' }, t0) === null && paysOf('nothing:1', { paid: 1 }, t0) === null,
+      [paysOf('gondola:3', { sub: 'sub_x', at: t0 }, t0 + 65 * day), paysOf('board:sky', { bid: 500, pay: 'pi_x' }, t0), paysOf('tarp:shoot', { paid: 5000 }, t0)]);
+  }
   check('shop logic: text is one short line without markup; links are https and carry no name or password',
     cleanText('  <b>Hello</b>\n\tworld\u0000 ', 20) === 'b Hello /b world' && cleanText('x'.repeat(99), 28).length === 28 && cleanUrl('https://example.com/a?b=1') === 'https://example.com/a?b=1' && ['http://example.com', 'javascript:alert(1)', 'data:text/html,x', 'https://user:pw@example.com', 'https://localhost', 'ftp://example.com', ''].every((u) => cleanUrl(u) === ''), [cleanText('  <b>Hello</b>\n\tworld\u0000 ', 20)]);
   check('shop logic: a picture is told by its bytes — PNG, JPEG, WebP; never SVG, HTML, GIF, or something too large',
@@ -2317,6 +2558,15 @@ async function testUserRooms(start, dist) {
     made.push(shut.knock);
     await release({ userRooms: true });
     const kept = json(await get(`/api/myroom?device=${ada}`));
+    // an administrator tries a room out: one for the account their browser is signed in to, for nothing; and reads the boards of any room
+    const boss = randomId(16), bossName = `Boss ${randomId(3).replace(/[^A-Za-z0-9]/g, 'x')}`;
+    await post('/api/account', { action: 'create', device: boss, name: bossName, password: 'a good password' });
+    const bossNoKey = await post('/api/urooms', { open: true, device: boss }), bossNoAcct = await post('/api/urooms', { open: true, device: randomId(16) }, key);
+    const bossRoom = json(await post('/api/urooms', { open: true, device: boss }, key)), bossTwice = json(await post('/api/urooms', { open: true, device: boss }, key));
+    const bossMine = json(await get(`/api/myroom?device=${boss}`)), bossSeen = json(await get(`/api/scores?board=all&room=${id}`, key)), bossUnseen = json(await get(`/api/scores?board=all&room=${id}`));
+    check('an administrator tries a room of one\'s own out for nothing — one for their account, once, with no subscription — and reads the boards of any room a player made; nobody else does either',
+      bossNoKey.status === 403 && bossNoAcct.status === 403 && /^own-[a-z0-9]{8}$/.test(bossRoom?.room?.id || '') && bossRoom.fresh === true && bossTwice?.room?.id === bossRoom.room.id && bossTwice.fresh === false && bossMine?.room?.id === bossRoom.room.id && bossMine.room.state === 'live'
+      && !!bossSeen?.room?.boards && bossSeen.room.id === id && !bossUnseen?.room, [bossNoKey.status, bossNoAcct.status, bossRoom, bossTwice?.fresh, bossMine?.room, Object.keys(bossSeen?.room?.boards || {}).length, bossUnseen?.room]);
     check('rooms of players: switched off again nothing answers any more, and nothing is lost — switched on, the room is there as it was', shut.enter.status === 404 && shut.knock.no === 'closed' && kept?.room?.id === id && kept.room.name === 'The Clubhouse 3', [shut.enter.status, shut.knock.no, kept]);
   } finally {
     for (const m of made) { try { m.c.ws.close(); } catch { /* closed */ } }
@@ -2411,7 +2661,11 @@ try {
     await section('presence', () => testPresence(server));
     await section('api', () => testApi(server));
     await section('shop', () => testShop(server));
+    await section('paid', () => testPaid(server));
     await section('accounts', () => testAccounts(server));
+    await section('chatlog', () => testChatLog(server));
+    await section('decency', () => testDecency(server));
+    await section('things', () => testThings(server));
     await section('cloudflare', () => testCloudflare(server, fx));
     await section('crowd', () => testCrowd(startWorker, fx.dist));
     await section('moderation', () => testModeration(startWorker, fx.dist));
@@ -2434,7 +2688,11 @@ try {
     await section('presence', () => testPresence(server));
     await section('api', () => testApi(server));
     await section('shop', () => testShop(server));
+    await section('paid', () => testPaid(server));
     await section('accounts', () => testAccounts(server));
+    await section('chatlog', () => testChatLog(server));
+    await section('decency', () => testDecency(server));
+    await section('things', () => testThings(server));
     await section('crowd', () => testCrowd(startServer, fx.dist));
     await section('moderation', () => testModeration(startServer, fx.dist));
     await section('visitors', () => testVisitors(startServer, fx.dist));

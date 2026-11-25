@@ -5,7 +5,7 @@
 // the relay is given the wardrobe when a connection arrives, and asks again when the browser says something
 // was bought ({t:'own'}). Nothing here stops a tampered browser from showing itself what it likes: it is what
 // the others see that is checked.
-import { PAINTS, TRAILS, PETS, FREE_COLORS, TRIAL, passGives } from './items.js';
+import { PAINTS, TRAILS, PETS, FREE_COLORS, TRIAL, passGives, packKit, unpackKit } from './items.js';
 
 /** The hats, in the order their number travels in (src/player/Cosmetics.js: HATS — a test checks the two agree). */
 export const HAT_IDS = ['none', 'cap', 'straw', 'beanie', 'tophat', 'cowboy', 'crown', 'wizard', 'pirate', 'viking', 'chef', 'propeller', 'party'];
@@ -38,11 +38,11 @@ export const fitColor = (color, w) => (free(w) || color < FREE_COLORS || (w.m & 
 /** A kit (see items.js: packKit): a paint, a trail, a pet that are not owned are none. */
 export function fitKit(kit, w) {
   if (free(w)) return kit;
-  let paint = kit & 7, trail = (kit >> 3) & 7, pet = (kit >> 6) & 3;
+  let { paint, trail, pet } = unpackKit(kit);
   if (paint && !(PAINTS[paint] && holds(w, `paint:${PAINTS[paint]}`))) paint = 0;
   if (trail && !(TRAILS[trail] && holds(w, `trail:${TRAILS[trail]}`))) trail = 0;
   if (pet && !(PETS[pet] && holds(w, `pet:${PETS[pet]}`))) pet = 0;
-  return paint | (trail << 3) | (pet << 6);
+  return packKit({ paint, trail, pet });
 }
 /**
  * A look (the 16 bits of src/player/Character.js: packLook): a hat that is not owned comes off, the flame of a

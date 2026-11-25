@@ -19,6 +19,10 @@
 //                                 off (wait: ms before the next one), {t:'n',wait} to the sender when it is too soon
 //                     {t:'own'}   something was bought, or given: the relay asks again what this visitor has
 //                     (what an avatar shows — colour, kit, look — is brought back to that: see wardrobe.js)
+//                     {t:'v',k,n,d}   a thing I steer in a game, which is not my avatar — a boat of the regatta:
+//                     its kind (k: 0 to 15, which game), the run it belongs to (n: a whole number — the start
+//                     one left with), and up to eight numbers (d: where it is, how it goes — the game knows).
+//                     Handed on as {t:'v',id,k,n,d} to those within THING_REACH metres of who steers it
 //                     {t:'ping',c}   {t:'admin',key}   and, from an administrator: {t:'who'}   {t:'kick',id}
 //                     {t:'ban',id,h,q?} (q: in silence — the visitor stays, and is no longer heard: see below)
 //                     {t:'promote',id} (names that visitor an administrator)   {t:'demote',key}
@@ -27,7 +31,7 @@
 //                     line on the "important" channel: relayed to the whole room, marked as such)
 //   server → client   {t:'welcome',id,now,tick,idle?,near,blast?:[ms before the button is ready, ms since it went off],
 //                     peers:[{id,name,color,p,a,f}]}   {t:'join',id,name,color}
-//                     {t:'leave',id}   {t:'u',now,s:[[id,x,y,z,yaw,a,f,age]],g?:[id]}   {t:'e',id,e}
+//                     {t:'leave',id}   {t:'u',now,s:[[id,x,y,z,yaw,a,f,age]],g?:[id]}   {t:'e',id,e}   {t:'v',id,k,n,d}
 //                     {t:'c',id,m,n?}   {t:'m',p:[id,x,z,…]}   {t:'w',n}   {t:'pong',c,now}   {t:'full'}
 //                     {t:'admin',ok,owner?,out?} (out: the title was taken away)   {t:'who',list:[{id,name,ip,ua,dev,since,cc,city,admin}]}
 //                     {t:'r',r,v,f}   what is released (r: the switches), the version online (v) and when
@@ -47,6 +51,9 @@
 //   them, the relay only carries the number); `f`, the look of the avatar, is 16 bits (see packLook).
 //   `c` is a chat line: relayed as it comes, never stored, never sent back to its author; with `n` it only goes
 //   to those within CHAT_NEAR metres of who says it.
+//   `v` is a thing one steers: the relay looks at its shape and at nothing else (whole numbers in their bounds,
+//   finite numbers that are not huge — carried to the hundredth), hands on THING_RATE of them a second from
+//   one visitor at the most, keeps nothing of it, and tells nobody what a visitor kept out in silence steers.
 //   `now` is the relay clock (ms). `age` (ms) tells how long before `now` a state was received: clients rebuild
 //   smooth motion from `now - age`. A `join` for an id already known is a rename. `tick` is the batching period
 //   (clients need not send faster); `idle`, when present, is how often an unchanged state should be repeated
@@ -66,10 +73,11 @@
 //
 // Kept out in silence (`mute`: the host says so when the connection arrives, or an administrator does it from the
 // room). The visitor notices nothing: they play, move and wave as before, and everybody sees them — but what
-// they write is relayed to nobody, a score of theirs is announced to nobody, and the big red button only goes
-// off on their own screen.
+// they write is relayed to nobody, a score of theirs is announced to nobody, the big red button only goes
+// off on their own screen, and what they steer in a game (a boat) is shown to nobody.
 
 import { fitColor, fitKit, fitLook, mayLight, cleanWardrobe, FIREWORK } from './wardrobe.js';
+import { maskChat, nameOk } from './decency.js';
 
 export const MAX_FRAME = 2048; // bytes
 export const RATE = 40, BURST = RATE * 2; // messages per second, averaged over 2 s (token bucket)
@@ -78,6 +86,9 @@ export const CHAT_BURST = 5, CHAT_EVERY = 2000; // chat lines: five in a row, th
 export const CHAT_NEAR = 20; // m: how far a line said "to those nearby" carries
 export const NEAR = 40, RANGE = 220; // how many others one is told about in detail, and from how far (m)
 export const BLAST_EVERY = 15 * 60_000; // ms between two presses of the big red button, for a whole room
+export const THING_MAX = 8, THING_LIMIT = 1e7; // a thing one steers ({t:'v'}): how many numbers it is told with, and how large one may be
+export const THING_RATE = 8, THING_BURST = 8; // …how many of them a second are handed on from one visitor (eight in a row at the most)
+export const THING_REACH = 160; // …and how far from who steers it (m)
 const AREA_MS = 400, MAP_MS = 2000; // how often the circles and the map are worked out
 const KEY_TRIES = 5; // wrong administrator keys a connection may send
 const OUT_MS = 3600_000; // put out of a room by its owner: for this long
@@ -89,10 +100,18 @@ export const int = (v, max) => (Number.isInteger(v) && v >= 0 && v <= max ? v : 
 /** Room id: [a-z0-9_-]{1,48}, 'main' when nothing usable is left. */
 export const cleanRoom = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 48) || 'main';
 
-/** Display name: no control characters or angle brackets, single spaces, at most 16 characters. */
-export function cleanName(name) {
+/** A name brought to its shape: no control characters or angle brackets, single spaces, at most 16 characters. */
+export function shapeName(name) {
   const s = typeof name === 'string' ? name.replace(/\s+/g, ' ').replace(/[\p{C}<>]/gu, '').replace(/ {2,}/g, ' ').trim() : '';
   return [...s].slice(0, 16).join('').trim() || 'Visitor';
+}
+/**
+ * Display name: in shape (see above) — and one that may be worn: no insult, no address of a site, no @
+ * (decency.js). What may not be is 'Visitor'.
+ */
+export function cleanName(name) {
+  const s = shapeName(name);
+  return nameOk(s) ? s : 'Visitor';
 }
 
 /** Chat line: one line, no control characters, single spaces, at most CHAT_MAX characters ('' when nothing is left). */
@@ -156,7 +175,11 @@ export class Room {
    *   ban({ ip, dev, name, hours, quiet })   optional: keep someone out from now on (0 hours: for good; quiet: in silence)
    *   wardrobe(dev)                    optional: what that browser has ({ m, left }, see wardrobe.js; null: nothing
    *                                    is sold, everything is everybody's), or a promise of it
-   *   wake()                           optional: something is waiting to be flushed that no message brought
+   *   said({ name, text, near, important, muted })   optional: a line of chat was said here (for the host's log)
+   *   named(dev, name)                 optional: may that browser be seen under that name? false when it is the
+   *                                    name of an account it is not signed in to (accounts.js) — or a promise of it
+   *   wake()                           optional: something happened that no message brought (somebody came in
+   *                                    once their name was looked up, a state waits to be flushed)
    *   fired(at)                        optional: the big red button went off at `at` (relay clock): a host that
    *                                    forgets its rooms keeps it, and gives it back by setting room.blastAt
    */
@@ -193,7 +216,7 @@ export class Room {
     const t = this.io.now();
     const p = {
       conn: connection, id: known ? known.id : this.io.id ? this.io.id() : this.nextId, name: 'Visitor', color: 0, kit: 0, joined: false,
-      alive: true, tokens: BURST, stamp: t, chat: CHAT_BURST, chatAt: t,
+      alive: true, tokens: BURST, stamp: t, chat: CHAT_BURST, chatAt: t, things: THING_BURST, thingAt: t,
       state: null, row: '', at: 0, dirty: false, rested: true, // last state, its serialised row, when it came, relay flags
       ver: 0, area: null, sent: null, gone: null, watched: undefined, // (a crowd) version of the state, who they are told about, what was sent
       ip: String((known || from)?.ip || '').slice(0, 64), ua: String((known || from)?.ua || '').slice(0, 220), dev: '', sid: '', build: '', admin: false, tries: 0, since: known?.since || t,
@@ -287,6 +310,7 @@ export class Room {
       p.scored = t;
       if (!p.mute) this.broadcast(`{"t":"g","id":${p.id},"b":"${m.b}"}`, p);
     } else if (m.t === 'own') this._own(p, t);
+    else if (m.t === 'v') this._thing(p, m, t);
     else if (m.t === 'n') this._blast(p, t);
     else if (m.t === 'c') this._chat(p, m, t);
     else if (m.t === 'admin') this._admin(p, m);
@@ -303,6 +327,25 @@ export class Room {
     if (dev) { this.outs ||= new Map(); for (const [k, until] of this.outs) if (until <= t) this.outs.delete(k); this.outs.set(dev, t + OUT_MS); }
     this.io.send(target.conn, '{"t":"kicked","ban":false,"host":true}');
     (this.io.kick || this.io.drop)(target.conn, 4001, 'kicked');
+  }
+
+  // A thing one steers in a game that is not one's avatar — a boat on the pond: where it is, a few times a
+  // second, for those near enough to see it. The relay looks at its shape and at nothing else: a kind (0 to 15),
+  // the number of the run it belongs to, one to THING_MAX numbers — finite, not huge, carried to the hundredth.
+  // More than THING_RATE a second from one visitor are simply not handed on. Nothing of it is kept; from a
+  // visitor kept out in silence it goes to nobody (and the visitor cannot tell).
+  _thing(p, m, t) {
+    p.things = Math.min(THING_BURST, p.things + ((t - p.thingAt) * THING_RATE) / 1000);
+    p.thingAt = t;
+    if (p.things < 1 || !Number.isInteger(m.k) || m.k < 0 || m.k > 15 || !Number.isInteger(m.n) || m.n < 0 || m.n > 0xffffffff) return;
+    if (!Array.isArray(m.d) || m.d.length < 1 || m.d.length > THING_MAX) return;
+    let row = '';
+    for (const v of m.d) {
+      if (typeof v !== 'number' || !Number.isFinite(v) || Math.abs(v) > THING_LIMIT) return;
+      row += `${row ? ',' : ''}${round(v, 100)}`;
+    }
+    p.things -= 1;
+    if (!p.mute) this.around(p, THING_REACH, `{"t":"v","id":${p.id},"k":${m.k},"n":${m.n},"d":[${row}]}`);
   }
 
   // The big red button: one explosion for the whole room, and no other before BLAST_EVERY has gone by.
@@ -322,9 +365,13 @@ export class Room {
     p.chat = Math.min(CHAT_BURST, p.chat + (t - p.chatAt) / CHAT_EVERY);
     p.chatAt = t;
     if (p.chat < 1) return;
-    const text = cleanChat(m.m);
-    if (!text) return;
+    const said = cleanChat(m.m);
+    if (!said) return;
+    // (addresses of sites, slurs, strong insults, threats: ******** for everybody who reads it — decency.js)
+    const text = maskChat(said);
     p.chat -= 1;
+    // (the host is told what was said — as it was typed —, for the administrators to read: chatlog.js; the relay itself keeps nothing)
+    this.io.said?.({ name: p.name, text: said, ...(text !== said && { hid: true }), near: !!m.n && !(m.i && p.admin), important: !!(m.i && p.admin), muted: !!p.mute });
     if (p.mute) return; // (kept out in silence: nobody hears)
     if (m.i && p.admin) this.broadcast(JSON.stringify({ t: 'c', id: p.id, m: text, i: 1 }), p); // (the "important" channel: an administrator's)
     else if (m.n) this.around(p, CHAT_NEAR, JSON.stringify({ t: 'c', id: p.id, m: text, n: 1 }));
@@ -426,9 +473,36 @@ export class Room {
     }).catch(() => {});
   }
 
-  _hello(p, m) {
-    const name = cleanName(m.name), badge = m.ad === 1;
+  _hello(p, m, asked = false) {
+    let name = cleanName(m.name);
+    const badge = m.ad === 1;
+    // (a name that may not be worn — an insult, the address of a site, an @: they keep the one they had, or
+    // are given a visitor's, and are told so)
+    if (name === 'Visitor' && shapeName(m.name) !== 'Visitor') {
+      name = p.joined ? p.name : `Visitor ${10 + (p.id % 90)}`;
+      this.io.send(p.conn, JSON.stringify({ t: 'name', rude: 1, name }));
+      m = { ...m, name };
+    }
     if (!p.dev) p.dev = cleanDevice(m.dev);
+    // (the name of an account is its owner's alone: the host is asked, once for each name a visitor takes.
+    // Meanwhile they are who they were; one who may not have that name is told, and keeps the one they had —
+    // or, arriving, is given a visitor's)
+    if (!asked && this.io.named && name !== p.named) {
+      const n = (p.naming = (p.naming || 0) + 1);
+      Promise.resolve().then(() => this.io.named(p.dev, name)).catch(() => true).then((mine) => {
+        if (this.players.get(p.conn) !== p || p.naming !== n) return; // (gone — or another name was asked for meanwhile)
+        if (mine !== false) p.named = name;
+        else {
+          const kept = p.joined ? p.name : `Visitor ${10 + (p.id % 90)}`;
+          p.named = kept;
+          this.io.send(p.conn, JSON.stringify({ t: 'name', taken: name, name: kept }));
+          m = { ...m, name: kept };
+        }
+        this._hello(p, m, true);
+        this.io.wake?.(); // (no message brought this: the host is told that something happened here)
+      });
+      return;
+    }
     // (put out of this room by its owner less than an hour ago: not back yet)
     if (!p.joined && this.outs && !p.admin && (this.outs.get(p.tdev || p.dev) || 0) > this.io.now()) {
       this.io.send(p.conn, '{"t":"kicked","ban":false,"host":true}');

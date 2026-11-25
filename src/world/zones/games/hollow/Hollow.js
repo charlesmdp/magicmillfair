@@ -1,4 +1,4 @@
-// The Hollow Hill: what is seen of it and how it is flown. Its rules are in tunnel.js; here the cave is built —
+// The Nuclear Cave (it was The Hollow Hill): what is seen of it and how it is flown. Its rules are in tunnel.js; here the cave is built —
 // a ring of rock round its line, rough everywhere, with a flat floor; the columns, the teeth, the arches, the
 // curtains and the beams of crystal; the rings; the lake; the lanterns and the crystals that light it — and
 // a flight is run: a session that drives the player (see PlayerController.driver).
@@ -22,12 +22,14 @@ const RING = 1.5, SEG = 24; // the rock: a ring of facets every so many metres, 
 const DARK = [0.085, 0.095, 0.125]; // what is seen where no light reaches
 const GOLD = [1.0, 0.78, 0.26];
 // what lights each stretch: its colour, and whether it comes from lanterns or from crystals
+// (a store of nuclear waste: warning amber where people worked, the green of what leaks, the blue of what cools)
 const THEME = {
-  'The Start Hall': { col: [1.0, 0.74, 0.4], lantern: true }, 'The Lantern Gallery': { col: [1.0, 0.72, 0.38], lantern: true },
-  'The Forest of Columns': { col: [0.3, 0.85, 1.0] }, 'The Teeth': { col: [0.7, 0.45, 1.0] }, 'The Screw': { col: [0.5, 1.0, 0.45] },
-  'The Lake': { col: [0.3, 0.6, 1.0] }, 'The Curtains': { col: [1.0, 0.6, 0.22], lantern: true }, 'The Narrows': { col: [1.0, 0.4, 0.25], lantern: true },
-  'The Crystal Hall': { col: [1.0, 0.45, 0.9] }, 'The Way Home': { col: [1.0, 0.8, 0.5], lantern: true },
+  'The Start Hall': { col: [1.0, 0.7, 0.25], lantern: true }, 'The Lantern Gallery': { col: [0.8, 1.0, 0.3], lantern: true },
+  'The Forest of Columns': { col: [0.25, 0.9, 1.0] }, 'The Teeth': { col: [0.45, 1.0, 0.3] }, 'The Screw': { col: [0.75, 1.0, 0.25] },
+  'The Lake': { col: [0.2, 0.75, 1.0] }, 'The Curtains': { col: [1.0, 0.55, 0.15], lantern: true }, 'The Narrows': { col: [1.0, 0.25, 0.15], lantern: true },
+  'The Crystal Hall': { col: [0.35, 1.0, 0.35] }, 'The Way Home': { col: [1.0, 0.75, 0.4], lantern: true },
 };
+const TOXIC = [0.3, 1.0, 0.2]; // (what glows by itself down there)
 
 export class Hollow {
   constructor(world) {
@@ -62,6 +64,15 @@ export class Hollow {
       if (len > 11) { light(t.s - 2, t.u1 * 0.9, t.v1 * 0.7, pale, 4, 0.8); light(t.s - 2, t.u2 * 0.9, t.v2 * 0.7, pale, 4, 0.8); }
     }
     for (const r of C.rings) light(r.s, r.u, r.v, GOLD, 3.6, 1.2);
+    // (pools of what leaked, on the floor, glowing: one every thirty metres or so, to one side or the other — not on the water)
+    const pools = [];
+    for (let s = 14, k = 0; s < L - 8; s += 27 + 9 * h2(k, 5), k++) {
+      tunnelAt(s, f);
+      if (f.water > -f.b * H.floor - 0.1) continue;
+      const u = (k % 2 ? 1 : -1) * f.a * (0.3 + 0.35 * h2(k, 6)), r = 1.0 + 0.9 * h2(k, 7);
+      pools.push({ s, u, r });
+      light(s, u, -f.b * H.floor + 0.5, TOXIC, 3.4 + r, 1.15);
+    }
     for (const u of [-6, 0, 6]) light(0, u, -tunnelAt(0, f).b * H.floor + 1.2, [1, 0.85, 0.55], 5, 0.9); // (the line)
     const buckets = [];
     for (let b = 0; b * 10 < L; b++) buckets.push(lights.filter((l) => { let d = Math.abs(l.s - (b * 10 + 5)); if (d > L / 2) d = L - d; return d < 48; }));
@@ -106,7 +117,7 @@ export class Hollow {
       const w0 = wide(s0), w1 = wide(s1);
       if (!w0 || !w1) continue;
       const a = P(s0, -w0[1], w0[0]), b = P(s0, w0[1], w0[0]), c = P(s1, w1[1], w1[0]), d = P(s1, -w1[1], w1[0]);
-      const tone = (p) => { const q = lit(s0, p, 0.14); return [0.004 + q[0], 0.012 + q[1], 0.02 + q[2], 1]; };
+      const tone = (p) => { const q = lit(s0, p, 0.3); return [0.0 + q[0], 0.05 + q[1], 0.075 + q[2], 1]; }; // (the cooling pond: it glows blue from below)
       paint.quad(a, b, c, d, { colors: [tone(a), tone(b), tone(c), tone(d)] });
     }
 
@@ -155,10 +166,10 @@ export class Hollow {
         for (let i = 0; i < n; i++) tone(pts[i].clone().lerp(pts[i + 1], 0.5)).rod(pts[i], pts[i + 1], t.r1 * (0.88 + 0.1 * h2(i, t.id)), 8, { r1: t.r1 * (0.88 + 0.1 * h2(i + 1, t.id)), caps: false });
         studs(t.s, [1, 2.5, 3.5, 4.5, 6].map((q) => toward(t.s, pts[Math.floor(q)].clone().lerp(pts[Math.ceil(q)], q % 1), t.r1 * 0.85)), col);
       } else if (t.kind === 'beam') {
-        // a great crystal from wall to wall
-        const d = p2.clone().sub(p1).normalize(), a = p1.clone().addScaledVector(d, -1.5), b = p2.clone().addScaledVector(d, 1.5);
-        glow.tint(col[0] * 0.24, col[1] * 0.24, col[2] * 0.24, 1).rod(a, b, t.r1 * 0.96, 6, { caps: false });
-        glow.tint(0.5, 0.5, 0.55, 1).rod(a, b, t.r1 * 0.3, 4, { caps: false });
+        // a rod from wall to wall: dark, with bands that glow (it was a great crystal)
+        const d = p2.clone().sub(p1).normalize(), a = p1.clone().addScaledVector(d, -1.5), b = p2.clone().addScaledVector(d, 1.5), len = a.distanceTo(b);
+        tone(p1.clone().lerp(p2, 0.5)).rod(a, b, t.r1 * 0.9, 7, { caps: false });
+        for (let x = 0.8; x < len - 0.6; x += 1.5) glow.tint(col[0] * 0.5, col[1] * 0.5, col[2] * 0.5, 1).rod(a.clone().addScaledVector(d, x), a.clone().addScaledVector(d, x + 0.32), t.r1 * 0.97, 7, { caps: false });
       }
     }
 
@@ -169,7 +180,7 @@ export class Hollow {
       if (l.lantern) {
         const p = l.p.clone().add(V(0, -0.25, 0));
         wood.tint(0.5, 0.5, 0.55, 1).rod(wall.clone().add(V(0, 0.3, 0)), l.p.clone().add(V(0, 0.3, 0)), 0.03, 4, { caps: false }).rod(l.p.clone().add(V(0, 0.3, 0)), p.clone().add(V(0, 0.16, 0)), 0.015, 4, { caps: false });
-        glow.tint(1, 0.8, 0.45, 1).box(p.x - 0.1, p.y - 0.14, p.z - 0.1, p.x + 0.1, p.y + 0.14, p.z + 0.1);
+        glow.tint(l.col[0], l.col[1] * 0.9, l.col[2] * 0.8 + 0.1, 1).box(p.x - 0.1, p.y - 0.14, p.z - 0.1, p.x + 0.1, p.y + 0.14, p.z + 0.1);
         wood.tint(0.4, 0.4, 0.45, 1).box(p.x - 0.13, p.y + 0.14, p.z - 0.13, p.x + 0.13, p.y + 0.18, p.z + 0.13);
       } else {
         for (let k = 0; k < 5; k++) {
@@ -185,6 +196,87 @@ export class Hollow {
       tunnelAt(s, f);
       const p = P(s, (f.a - 0.1) * Math.cos(a), (f.b - 0.1) * Math.sin(a)), q = 0.03 + 0.03 * h2(k, 3);
       glow.tint(0.25, 0.8, 0.3, 1).box(p.x - q, p.y - q, p.z - q, p.x + q, p.y + q, p.z + q);
+    }
+
+    // ---- what was left down here: drums of waste in heaps by the walls and at the feet of the columns, what leaked
+    // from them (low mounds that glow and light the rock round them), pipes along two galleries, a warning plate
+    // on every other column, and yellow marks round the hole of each blast door. None of it is one more thing to
+    // dodge: it stands by the walls, lies on the floor, runs along the rock or is fixed on what was in the way
+    // already. (The floor is rough: a drum is planted a hand deep and a mound goes under the floor at its rim,
+    // so that none floats over a dip.)
+    {
+      const ground = (s) => -tunnelAt(s, f).b * H.floor;
+      const put = (s, u, lean, fallen) => {
+        const p = P(s, u, ground(s) - 0.16), q = lit(s, p.clone().add(V(0, 0.8, 0)), 1.05), turn = h2(s, u + 1) * TAU, pitch = fallen ? Math.PI / 2 : lean, y = p.y + (fallen ? 0.36 : 0);
+        rock.tint(0.2 + 1.0 * q[0], 0.15 + 0.8 * q[1], 0.02 + 0.12 * q[2], 1).place(p.x, y, p.z, turn, pitch, 0).cylinder(0, 0, 0, 0.3, 0.3, 0.95, 9).pop();
+        matte.tint(0.03, 0.03, 0.03, 1).place(p.x, y, p.z, turn, pitch, 0).cylinder(0, 0.3, 0, 0.312, 0.312, 0.06, 9).cylinder(0, 0.64, 0, 0.312, 0.312, 0.06, 9).pop();
+      };
+      // by the walls, in little heaps, every dozen metres (never on the water) — and along both walls of the hall
+      // one starts in: it is what one looks at during the count
+      for (let s = 5, k = 0; s < L - 12; s += s < 24 ? 4.6 : 9 + 8 * h2(k, 11), k++) {
+        tunnelAt(s, f);
+        if (f.water > -f.b * H.floor - 0.1) continue;
+        const edge = f.a * Math.sqrt(1 - H.floor * H.floor) - 0.4;
+        for (const side of s < 24 ? [-1, 1] : [h2(k, 12) < 0.5 ? -1 : 1]) {
+          const n = 1 + Math.floor(h2(k, 13 + side) * 3);
+          put(s, side * edge, (h2(k, 20 + side) - 0.5) * 0.16, false);
+          if (n > 1) put(s + 0.35, side * (edge - 0.68), (h2(k, 21 + side) - 0.5) * 0.16, false);
+          if (n > 2) put(s - 1.05 - 0.3 * h2(k, 22), side * (edge - 0.15), 0, true);
+        }
+      }
+      // at the feet of every other column of the first gallery and of the great hall, on the side of the open cave
+      for (const t of C.things) {
+        if (t.kind !== 'column' || t.id % 2) continue;
+        const name = C.stretches[stretchAt(t.s)].name;
+        if (name !== 'The Lantern Gallery' && name !== 'The Forest of Columns') continue;
+        const side = t.u1 > 0 ? -1 : 1, off = t.r1 * 1.3 + 0.34;
+        put(t.s - 0.15, t.u1 + side * off, 0.05, false);
+        if (h2(t.id, 4) < 0.6) put(t.s + 0.55, t.u1 + side * (off - 0.05), 0, h2(t.id, 5) < 0.5);
+      }
+      // what leaked: a low mound of light on the floor, ragged at the edge, hot in the middle
+      for (const q of pools) {
+        const at = (ang, rad, h) => { const s = q.s + Math.cos(ang) * rad; return P(s, q.u - Math.sin(ang) * rad, ground(s) + h); };
+        const N = 10, hot = [0.08, 0.8, 0.03, 1], dim = [0.015, 0.16, 0.008, 1], inner = [], outer = [];
+        for (let i = 0; i < N; i++) { const a = (i / N) * TAU, w = 0.8 + 0.4 * h2(i, q.s); inner.push(at(a, q.r * 0.42 * w, 0.2)); outer.push(at(a, q.r * w, -0.2)); }
+        glow.tint(hot[0], hot[1], hot[2], 1).poly(inner);
+        for (let i = 0; i < N; i++) { const k = (i + 1) % N; glow.quad(outer[i], outer[k], inner[k], inner[i], { colors: [dim, dim, hot, hot] }); }
+      }
+      // pipes along the first gallery and the narrow one: two of them, shoulder high, on one wall
+      for (const name of ['The Lantern Gallery', 'The Narrows']) {
+        const st = C.stretches.find((q) => q.name === name);
+        for (const [ang, r] of [[0.3, 0.11], [0.44, 0.075]]) {
+          let prev = null;
+          for (let s = st.from + 1; s <= st.to - 1; s += 2.5) {
+            tunnelAt(s, f);
+            const p = P(s, -(f.a - 0.13) * Math.cos(ang), (f.b - 0.13) * Math.sin(ang));
+            if (prev) { const q = lit(s, p, 0.95); rock.tint(0.34 * q[0] + 0.02, 0.36 * q[1] + 0.02, 0.4 * q[2] + 0.02, 1).rod(prev, p, r, 6, { caps: false }); }
+            prev = p;
+          }
+        }
+      }
+      // the warning: three blades and a dot (drawn in the plane of the builder, towards who looks at it)
+      const blades = (b, R, z) => {
+        const dot = []; for (let i = 0; i < 8; i++) { const a = (i / 8) * TAU; dot.push(V(Math.cos(a) * R * 0.17, Math.sin(a) * R * 0.17, z)); }
+        b.poly(dot);
+        for (let k = 0; k < 3; k++) {
+          const mid = -Math.PI / 2 + (k * TAU) / 3, o = [], n = [];
+          for (let i = 0; i <= 4; i++) { const a = mid - 0.5 + i * 0.25; o.push(V(Math.cos(a) * R, Math.sin(a) * R, z)); n.push(V(Math.cos(a) * R * 0.3, Math.sin(a) * R * 0.3, z)); }
+          for (let i = 0; i < 4; i++) b.quad(o[i], o[i + 1], n[i + 1], n[i]);
+        }
+      };
+      for (const t of C.things) {
+        if (t.kind === 'column' && t.id % 2 === 0) {
+          // a yellow plate on the side one comes at: it shows the column from afar
+          tunnelAt(t.s, f);
+          const c = P(t.s, t.u1, t.v1).lerp(P(t.s, t.u2, t.v2), 0.42), w = Math.min(0.55, t.r1 * 0.6), yaw = Math.atan2(-f.tx, -f.tz), d = t.r1 * 0.9 + 0.05;
+          glow.tint(0.8, 0.62, 0.05, 1).place(c.x - f.tx * d, c.y, c.z - f.tz * d, yaw).poly([V(-w, -w, 0), V(w, -w, 0), V(w, w, 0), V(-w, w, 0)]).pop();
+          matte.tint(0.02, 0.02, 0.02, 1).place(c.x - f.tx * d, c.y, c.z - f.tz * d, yaw); blades(matte, w * 0.82, 0.015); matte.pop();
+        } else if (t.kind === 'curtain') {
+          // yellow marks round the hole, on the face one comes at: where the way through is
+          const N = 24, at = (a, r) => P(t.s - 0.4, t.u + r * Math.cos(a), t.v + r * Math.sin(a));
+          for (let i = 0; i < N; i += 2) { const a0 = (i / N) * TAU, a1 = ((i + 1) / N) * TAU; glow.tint(0.85, 0.62, 0.04, 1).quad(at(a0, t.r + 0.45), at(a0, t.r + 1.25), at(a1, t.r + 1.25), at(a1, t.r + 0.45)); }
+        }
+      }
     }
 
     // ---- the line: a hoop of lights round the Start Hall, a chequered strip on its floor (nothing across the way)
@@ -212,6 +304,22 @@ export class Hollow {
       return m;
     });
 
+    // ---- the atoms: little green lights that lead into every ring — one mesh for all of them; one that is taken is
+    // put out until the next flight
+    {
+      // (a nucleus and three orbits round it, in one geometry: some two hundred triangles, drawn in one call for all)
+      const bits = [new THREE.IcosahedronGeometry(0.12, 0)], pos = [];
+      for (const [rx, ry] of [[Math.PI / 2, 0], [0.45, 0.9], [-0.45, -0.9]]) bits.push(new THREE.TorusGeometry(0.3, 0.022, 3, 10).rotateX(rx).rotateY(ry));
+      for (const g of bits) { const q = (g.index ? g.toNonIndexed() : g).attributes.position.array; for (let i = 0; i < q.length; i++) pos.push(q[i]); g.dispose(); }
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.1, 1.0, 0.04), toneMapped: false });
+      this.atoms = new THREE.InstancedMesh(geo, mat, C.atoms.length);
+      this.atoms.name = 'hollow-atoms';
+      this.atomAt = C.atoms.map((a) => P(a.s, a.u, a.v));
+      this.inside.add(this.atoms);
+      this.lightAtoms();
+    }
+
     // ---- outside: the mouth of a mine at the foot of the cliff, its name, the board of one's best time
     const out = new Parts(), M = H.mouth, timber = out.get('woodDark'), black = out.get('matte'), lamp = out.get('glow'), iron = out.get('paint');
     const mz = M.z + 1.8, my = this.data.heightAt(M.x, mz) - 0.15, top = my + 2.75;
@@ -221,18 +329,32 @@ export class Hollow {
     lamp.tint(1, 0.8, 0.45, 1).box(M.x - 0.1, top - 0.5, mz - 0.4, M.x + 0.1, top - 0.24, mz - 0.2);
     for (const side of [-0.45, 0.45]) { let prev = null; for (let z = mz + 0.2; z > M.z - 2.6; z -= 0.8) { const p = V(M.x + side, this.data.heightAt(M.x + side, z) + 0.09, z); if (prev) iron.tint(0.32, 0.3, 0.3, 1).rod(prev, p, 0.035, 4, { caps: false }); prev = p; } }
     for (let z = mz - 0.2; z > M.z - 2.4; z -= 0.7) { const y = this.data.heightAt(M.x, z); timber.tint(0.8, 0.75, 0.7, 1).beam(V(M.x - 0.75, y + 0.04, z), V(M.x + 0.75, y + 0.04, z), 0.16, 0.08); }
+    // (drums left by the mouth: what the cave is for)
+    for (const [dx, dz, lie] of [[-2.35, -0.5, false], [-2.98, -0.2, false], [-2.8, -1.15, false]]) {
+      const x = M.x + dx, z = mz + dz, y = this.data.heightAt(x, z) - 0.06 + (lie ? 0.3 : 0), pitch = lie ? Math.PI / 2 : 0;
+      iron.tint(0.95, 0.74, 0.08, 1).place(x, y, z, dx * 7, pitch, 0).cylinder(0, 0, 0, 0.3, 0.3, 0.95, 10).pop();
+      black.tint(0.03, 0.03, 0.03, 1).place(x, y, z, dx * 7, pitch, 0).cylinder(0, 0.3, 0, 0.312, 0.312, 0.06, 10).cylinder(0, 0.64, 0, 0.312, 0.312, 0.06, 10).pop();
+      if (!lie) world.collision?.addCircle(x, z, 0.32); // (one walks round them)
+    }
     this.group.add(out.toMeshes(mats, { name: 'hollow-mouth', layers: [] }));
     const name = canvasBoard(1024, 200, (ctx, w, h) => {
       ctx.fillStyle = '#16121f'; ctx.fillRect(0, 0, w, h); ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 8; ctx.strokeRect(8, 8, w - 16, h - 16);
-      ctx.fillStyle = '#f6e7b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = "700 92px Georgia, 'Times New Roman', serif"; ctx.fillText(H.name.toUpperCase(), w / 2, 84, w * 0.9);
-      ctx.fillStyle = '#f2c14e'; ctx.font = '600 34px system-ui, sans-serif'; ctx.fillText('A RACE FLOWN UNDER THE GROUND · ONE LAP AGAINST THE CLOCK', w / 2, 158, w * 0.9);
+      ctx.fillStyle = '#f6e7b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = "700 78px Georgia, 'Times New Roman', serif"; ctx.fillText(H.name.toUpperCase(), w / 2, 84, w * 0.66);
+      ctx.fillStyle = '#f2c14e'; ctx.font = '600 30px system-ui, sans-serif'; ctx.fillText('ONE LAP UNDER THE GROUND · AGAINST THE CLOCK', w / 2, 158, w * 0.66);
+      // (the warning, at both ends: a yellow disc, three blades and a dot)
+      for (const cx of [98, w - 98]) {
+        const cy = h / 2, R = 64;
+        ctx.fillStyle = '#f2c14e'; ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#16121f'; ctx.beginPath(); ctx.arc(cx, cy, R * 0.16, 0, TAU); ctx.fill();
+        for (let k = 0; k < 3; k++) { const mid = Math.PI / 2 + (k * TAU) / 3; ctx.beginPath(); ctx.arc(cx, cy, R * 0.86, mid - 0.52, mid + 0.52); ctx.arc(cx, cy, R * 0.27, mid + 0.52, mid - 0.52, true); ctx.closePath(); ctx.fill(); }
+      }
     }, 3.6, 0.7, { both: false });
     name.mesh.position.set(M.x, top + 0.75, mz - 0.22); name.mesh.rotation.y = Math.PI; name.mesh.name = 'hollow-name';
     this.group.add(name.mesh);
     this.board = canvasBoard(512, 256, (ctx, w, h) => {
       ctx.fillStyle = '#16121f'; ctx.fillRect(0, 0, w, h); ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 6; ctx.strokeRect(6, 6, w - 12, h - 12);
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#f6e7b8'; ctx.font = '600 27px system-ui, sans-serif';
-      ['You fly by yourself: steer,', 'burst, and miss the rock.'].forEach((t, k) => ctx.fillText(t, w / 2, 52 + k * 38, w * 0.9));
+      ['You fly by yourself: steer, burst,', 'take the atoms, shave the rock.'].forEach((t, k) => ctx.fillText(t, w / 2, 52 + k * 38, w * 0.9));
       ctx.fillStyle = '#f2c14e'; ctx.font = '700 40px system-ui, sans-serif'; ctx.fillText(this.best ? `Your best  ${formatTime(this.best)}` : 'Not flown yet', w / 2, 190, w * 0.9);
     }, 1.5, 0.75, { both: false });
     const bx = M.x + 2.6, bz = mz - 0.6, by = this.data.heightAt(bx, bz);
@@ -255,8 +377,9 @@ export class Hollow {
    */
   open(player, io) {
     const H = HOLLOW, C = course(), events = [], input = { x: 0, y: 0, burst: false }, st = startFlight();
-    const S = { cam: null, look: V(0, 0, 0), after: 0, acc: 0, last: 9, shake: 0, fov: 70, was: false, hold: false }, _t = V(0, 0, 0), pose = {}, p = {};
+    const S = { cam: null, look: V(0, 0, 0), after: 0, acc: 0, last: 9, shake: 0, fov: 70, was: false, hold: false, said: 0 }, _t = V(0, 0, 0), pose = {}, p = {};
     for (const m of this.rings) m.visible = true;
+    this.lightAtoms();
     this.inside.visible = true;
     const session = {
       hollow: this, over: false, ended: false, time: 0, line: '', riding: false, anim: ANIM.swim, state: st, auto: false,
@@ -278,7 +401,9 @@ export class Hollow {
           else if (e.type === 'crash') { io.play('whack'); S.shake = 0.35; }
           else if (e.type === 'knock') { io.play('hit', { volume: 0.5 }); S.shake = Math.max(S.shake, 0.15); }
           else if (e.type === 'ring') { io.play('pick'); this.rings[e.id].visible = false; }
-          else if (e.type === 'over') { io.play('bell'); io.play('victory', { volume: 0.7 }); io.note(`${H.name}: ${formatTime(e.time)}${st.hits ? '' : ' — and not a scratch'}`); }
+          else if (e.type === 'atom') { io.play('tick', { volume: 0.45 }); this.takeAtom(e.id); }
+          else if (e.type === 'close') { io.play('boost', { volume: 0.3 }); S.said = 1.1; }
+          else if (e.type === 'over') { io.play('bell'); io.play('victory', { volume: 0.7 }); io.note(`${H.name}: ${formatTime(e.time)}${st.hits ? ` · ${st.hits} knock${st.hits === 1 ? '' : 's'}` : ' — and not a scratch'} · ${st.atoms} atom${st.atoms === 1 ? '' : 's'} of ${C.atoms.length}${st.close ? ` · ${st.close} close shave${st.close === 1 ? '' : 's'}` : ''}`, 7000); }
         }
         events.length = 0;
         if (st.bursting && !S.was) io.play('boost', { volume: 0.5 });
@@ -292,10 +417,11 @@ export class Hollow {
         flightPose(st, pose);
         pl.pos.set(pose.x, pose.y - 0.5, pose.z); pl.yaw = pose.yaw; pl.pitch = st.stun > 0 ? pose.pitch + Math.sin(st.stun * 25) * 0.6 : pose.pitch; pl.roll = pose.roll;
         pl.speed = st.speed; pl.grounded = false;
-        const name = C.stretches[st.stretch].name, n = Math.round(clamp(st.gauge, 0, 1) * 8);
+        if (S.said > 0) S.said -= dt;
+        const name = (H.titles[C.stretches[st.stretch].name] || C.stretches[st.stretch].name).replace(/^The /, ''), n = Math.round(clamp(st.gauge, 0, 1) * 8);
         session.line = !st.gone ? `${H.name} · ${Math.max(1, Math.ceil(st.wait))}…`
           : st.over ? `${H.name} · ${formatTime(st.time)}${st.hits ? ` · ${st.hits} knock${st.hits === 1 ? '' : 's'}` : ' · clean'}`
-            : `${formatTime(Math.round(st.clock * 1000))} · ${name} · ${st.bursting ? 'BURST' : 'burst'} ${'█'.repeat(n)}${'░'.repeat(8 - n)}${st.hits ? ` · ${st.hits} knock${st.hits === 1 ? '' : 's'}` : ''}`;
+            : `${formatTime(Math.round(st.clock * 1000))} · ${name} · ${st.bursting ? 'BURST' : 'burst'} ${'█'.repeat(n)}${'░'.repeat(8 - n)}${S.said > 0 ? ' · CLOSE! +burst' : ` · ${st.atoms} atom${st.atoms === 1 ? '' : 's'}`}`;
       },
       /** The camera: in the cave behind the flyer, a little nearer the middle than it is, looking where it goes. */
       camera: (cam, dt) => {
@@ -315,11 +441,26 @@ export class Hollow {
       },
       /** The flight is over (or left): the player is put back outside, before the mouth of the mine. */
       drop: (pl) => { pl.driver = null; pl.riding = false; pl.pitch = 0; pl.roll = 0; pl.teleport(this.gate.x, this.gate.z, this.gate.yaw); session.close(); },
-      close: () => { if (this.session === session) this.session = null; player.pitch = 0; player.roll = 0; for (const m of this.rings) m.visible = true; this.inside.visible = false; },
+      close: () => { if (this.session === session) this.session = null; player.pitch = 0; player.roll = 0; for (const m of this.rings) m.visible = true; this.lightAtoms(); this.inside.visible = false; },
     };
     this.session = session;
     session.step(0, player, false);
     return session;
+  }
+
+  /** Every atom is lit again (a flight begins, or ends). */
+  lightAtoms() {
+    const m = new THREE.Matrix4();
+    this.atomAt.forEach((p, i) => { m.makeTranslation(p.x, p.y, p.z); this.atoms.setMatrixAt(i, m); });
+    this.atoms.instanceMatrix.needsUpdate = true;
+  }
+
+  /** The atom `i` has been taken: it goes out. */
+  takeAtom(i) {
+    const p = this.atomAt[i];
+    if (!p) return;
+    this.atoms.setMatrixAt(i, new THREE.Matrix4().makeScale(0, 0, 0).setPosition(p.x, p.y, p.z));
+    this.atoms.instanceMatrix.needsUpdate = true;
   }
 
   update() { /* nothing moves in the cave but who flies in it */ }

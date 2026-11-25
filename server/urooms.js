@@ -15,6 +15,8 @@
 //        401 { locked: true, wrong? }   it has a password: none was given, or not the right one
 //        404                            there is no such room · 423 { asleep: true, until }   it is asleep
 //   GET  /api/urooms            an administrator: every room, [{ id, name, owner, state, since, until?, locked }]
+//   POST /api/urooms { open: true, device }   an administrator: a room for the account that browser is signed in
+//                                 to, without paying (to try the thing out: it has no subscription, and never falls asleep)
 //
 // Getting in. The password of a room is kept as those of the accounts are (never as it was typed), and never
 // travels in an address: it is exchanged here for a `ticket` — a note signed for that browser and that room,
@@ -177,7 +179,16 @@ export async function uroomsRoute(req, ctx, price = 0) {
 
   if (path === '/api/urooms') {
     if (!req.admin) return out(403, { error: 'Forbidden.' });
-    if (!reading) return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD' });
+    if (method === 'POST') {
+      // (an administrator tries a room out: one for their own account, for nothing)
+      if (!body?.open || !DEVICE.test(body.device || '')) return out(400, { error: 'Not a browser of the game.' });
+      const acct = await accountOf(ctx.store, body.device);
+      if (!acct) return out(403, { error: 'A room belongs to an account: sign in to yours in the game (Settings) first.', account: true });
+      const had = await roomOfAccount(ctx, acct.name);
+      const rec = had?.state === 'live' ? had : await openRoom(ctx, acct.name);
+      return rec ? out(200, { room: shown(rec), fresh: had?.state !== 'live' }) : out(500, { error: 'The room could not be opened.' });
+    }
+    if (!reading) return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD, POST' });
     const rooms = [];
     for (const id of Object.keys(await indexOf(ctx))) { const rec = await ctx.store.get(`uroom:${id}`); if (rec) rooms.push({ ...shown(rec), owner: rec.owner }); }
     return out(200, { rooms: rooms.sort((a, b) => b.since - a.since), max: USER_ROOM.max });

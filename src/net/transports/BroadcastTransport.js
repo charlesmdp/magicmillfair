@@ -1,7 +1,7 @@
 // Same-browser fallback: tabs of one origin find each other through a BroadcastChannel, without any server.
 // It turns what the tabs say into the server's messages (welcome / join / leave / u / e), so the façade cannot
 // tell the difference. Every message on the channel carries its sender's identity and last state:
-// { t: 'hello' | 'u' | 'e' | 'c' | 'leave', id, name, color, now, s: [[id, x, y, z, yaw, anim, flags]] | [], e?, m? }
+// { t: 'hello' | 'u' | 'e' | 'c' | 'v' | 'leave', id, name, color, now, s: [[id, x, y, z, yaw, anim, flags]] | [], e?, m?, k?, n?, d? }
 // where `now` is the sender's own clock (each peer track measures its offset).
 
 const TIMEOUT = 5000; // ms of silence after which a peer is gone
@@ -44,6 +44,7 @@ export class BroadcastTransport {
     else if (msg.t === 's') { this.me.s = [[this.id, ...msg.p, msg.a, msg.f]]; this._post('u'); }
     else if (msg.t === 'e') this._post('e', msg.e);
     else if (msg.t === 'c') this._post('c', undefined, msg.m, msg.n ? { n: 1, at: this.me.s[0]?.slice(1, 4) } : undefined);
+    else if (msg.t === 'v') this._post('v', undefined, undefined, { k: msg.k, n: msg.n, d: msg.d }); // (a thing one steers: a boat of the regatta)
     return true;
   }
 
@@ -65,7 +66,7 @@ export class BroadcastTransport {
   }
 
   _receive(m) {
-    if (!m || !['hello', 'u', 'e', 'c', 'leave'].includes(m.t) || !Number.isInteger(m.id) || m.id === this.id) return;
+    if (!m || !['hello', 'u', 'e', 'c', 'v', 'leave'].includes(m.t) || !Number.isInteger(m.id) || m.id === this.id) return;
     const peer = this.seen.get(m.id);
     if (m.t === 'leave') {
       if (this.seen.delete(m.id)) this._up({ t: 'leave', id: m.id });
@@ -78,6 +79,7 @@ export class BroadcastTransport {
     // A state repeated by a hello or an emote is not fresh: only a newcomer takes it, as a starting point.
     if (Array.isArray(row) && row[0] === m.id && (m.t === 'u' || !peer)) this._up({ t: 'u', now: m.now, s: [row] });
     if (m.t === 'e') this._up({ t: 'e', id: m.id, e: m.e });
+    if (m.t === 'v') this._up({ t: 'v', id: m.id, k: m.k, n: m.n, d: m.d });
     if (m.t === 'c') {
       // (a line said to those nearby: within 20 m of where we are, as the relay would have it)
       const mine = this.me.s[0], far = m.n && (!mine || !Array.isArray(m.at) || Math.hypot(mine[1] - m.at[0], mine[2] - m.at[1], mine[3] - m.at[2]) > 20);

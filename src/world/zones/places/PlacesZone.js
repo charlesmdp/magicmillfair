@@ -425,6 +425,8 @@ export class PlacesZone {
     stone.pop();
     const fx = Math.sin(S.yaw), fz = Math.cos(S.yaw); // the way it looks
     this.colliders.push({ type: 'circle', x: S.x, z: S.z, r: PR + 0.42 }, { type: 'box', x: S.x + fx * (PR + 0.1), z: S.z + fz * (PR + 0.1), hw: 2.75, hl: 0.55, yaw: S.yaw });
+    // (what the tablet says, line by line)
+    const tablet = [S.memorial[0], S.memorial[1], S.kin, `${S.name}, ${S.plaque}, keeps watch for them all`.toUpperCase()];
     const plaque = canvasBoard(1024, 400, (ctx, w, h) => {
       const serif = "Georgia, 'Times New Roman', serif";
       // bronze, darker at the edges; a raised border; letters of polished gold
@@ -436,14 +438,19 @@ export class PlacesZone {
       const gold = (y0g, y1g) => { const g = ctx.createLinearGradient(0, y0g, 0, y1g); g.addColorStop(0, '#fff3b0'); g.addColorStop(0.45, '#f6c64e'); g.addColorStop(0.55, '#d99a1c'); g.addColorStop(1, '#f9dd7c'); return g; };
       const paw = (cx, cy, r) => { ctx.beginPath(); ctx.ellipse(cx, cy + r * 0.35, r * 0.62, r * 0.5, 0, 0, 7); ctx.fill(); for (const [ox, oy] of [[-0.66, -0.18], [-0.24, -0.62], [0.24, -0.62], [0.66, -0.18]]) { ctx.beginPath(); ctx.ellipse(cx + ox * r, cy + oy * r, r * 0.21, r * 0.27, ox * 0.5, 0, 7); ctx.fill(); } };
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = `900 190px ${serif}`;
-      ctx.fillStyle = '#231505'; ctx.fillText(S.name, w / 2 + 5, 158 + 6, w - 300);
-      ctx.fillStyle = gold(70, 240); ctx.fillText(S.name, w / 2, 158, w - 300);
-      ctx.fillStyle = '#e2b24a'; ctx.fillRect(w / 2 - 250, 262, 500, 4);
-      ctx.font = `700 74px ${serif}`;
-      ctx.fillStyle = '#231505'; ctx.fillText(S.plaque.split('').join(' '), w / 2 + 3, 322 + 4, w - 200);
-      ctx.fillStyle = gold(288, 356); ctx.fillText(S.plaque.split('').join(' '), w / 2, 322, w - 200);
-      ctx.fillStyle = '#e9bd55'; paw(96, 150, 44); paw(w - 96, 150, 44);
+      // a memorial to every companion: two lines of polished gold, a rule, who they were — and, by its name, the
+      // dog who keeps watch for them all
+      const cut = (text, y, size, max, weight = 900, style = '') => {
+        ctx.font = `${style}${weight} ${size}px ${serif}`;
+        ctx.fillStyle = '#231505'; ctx.fillText(text, w / 2 + size * 0.03, y + size * 0.035, max);
+        ctx.fillStyle = gold(y - size * 0.5, y + size * 0.5); ctx.fillText(text, w / 2, y, max);
+      };
+      cut(tablet[0], 94, 96, w - 300);
+      cut(tablet[1], 190, 96, w - 300);
+      ctx.fillStyle = '#e2b24a'; ctx.fillRect(w / 2 - 250, 250, 500, 4);
+      cut(tablet[2], 290, 38, w - 170, 400, 'italic ');
+      cut(tablet[3], 342, 29, w - 170, 700);
+      ctx.fillStyle = '#e9bd55'; paw(96, 142, 44); paw(w - 96, 142, 44);
     }, 4.6, 1.8);
     plaque.mesh.position.set(S.x + fx * (PR + 0.435), y0 + 0.86, S.z + fz * (PR + 0.435));
     plaque.mesh.rotation.y = S.yaw;
@@ -510,7 +517,7 @@ export class PlacesZone {
       }
     }
     /** Where one says hello to it (at the tablet), and where its head is. */
-    this.crokmou = { name: S.name, x: S.x + fx * (PR + 2.2), y: y0, z: S.z + fz * (PR + 2.2), reach: 4.2, head: { x: S.x + fx * S.height * 0.2, y: y0 + PH + S.height * 0.82, z: S.z + fz * S.height * 0.2 } };
+    this.crokmou = { name: S.name, tablet, x: S.x + fx * (PR + 2.2), y: y0, z: S.z + fz * (PR + 2.2), reach: 4.2, head: { x: S.x + fx * S.height * 0.2, y: y0 + PH + S.height * 0.82, z: S.z + fz * S.height * 0.2 } };
     this._add('golden', parts);
   }
 

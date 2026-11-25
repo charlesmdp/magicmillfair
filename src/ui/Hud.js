@@ -237,10 +237,8 @@ export class Hud {
         <div class="sheet"><canvas></canvas><div class="legend"><b>Map</b><button class="mega" type="button" aria-pressed="false" title="The whole country, with the fifty sky villages">Mega map</button><span>Click anywhere to close</span></div></div>
       </div>
       <div class="stats"></div>
-      <div class="emotes">
-        <div class="sit"><button data-sit>Sit on the ground (X)</button></div>
-        <div class="held"><button data-drop>Put the bouquet down (B)</button></div>
-        <div class="boom"><button data-firework>Light a firework (V)</button></div>
+      <div class="emotes" role="dialog" aria-label="Emotes">
+        <div class="acts"><b class="title">Emotes</b><span class="sit"><button data-sit>Sit on the ground (X)</button><button data-lie>Lie down (hold X)</button></span><span class="held"><button data-drop>Put the bouquet down (B)</button></span><span class="boom"><button data-firework>Light a firework (V)</button></span><span class="cloud"><button data-mushroom>☢ Mushroom cloud</button></span></div>
       </div>
       <div class="wasted" aria-live="assertive"><div class="band"><b>WASTED</b><span></span></div></div>
       <div class="sight" aria-hidden="true"></div>
@@ -263,6 +261,12 @@ export class Hud {
       <div class="banner" role="alert"></div>
       <div class="panel" role="dialog" aria-label="Settings">
         <h2>Settings</h2>
+        <div class="room-box" hidden>
+          <h3>Your room</h3>
+          <div class="room-list" role="list" aria-label="The rooms of the fair: the one you are in, and the others"></div>
+          <p class="room-say"></p>
+          <button type="button" class="room-ad" hidden><span class="art" aria-hidden="true"></span><span class="txt"><b>A room of your own</b><small>Your team, your friends, your community: the whole oasis to yourselves, with boards of scores of your own.</small></span><span class="room-price"></span></button>
+        </div>
         <h3>Graphics quality</h3>
         <div class="seg quality"><button data-q="auto">Auto</button>${TIER_ORDER.map((q) => `<button data-q="${q}">${TIERS[q].label}</button>`).join('')}</div>
         <p class="q-info"></p>
@@ -275,7 +279,7 @@ export class Hud {
         <div class="row"><span>Music</span><input type="range" class="vol" data-vol="music" min="0" max="100" step="5" aria-label="Volume of the music" /></div>
         <h3>Controls</h3>
         <div class="row"><span>Run by default <small>(Shift walks)</small></span><button class="switch" data-set="run" aria-pressed="false" aria-label="Run by default"></button></div>
-        <div class="row"><span>The camera turns with the character</span><button class="switch" data-set="follow" aria-pressed="false" aria-label="The camera turns with the character"></button></div>
+        <div class="row"><span>The camera always stays behind the character <small>(it turns as fast as they do)</small></span><button class="switch" data-set="behind" aria-pressed="false" aria-label="The camera always stays behind the character"></button></div>
         <h3>Hats, jetpacks, paint</h3>
         <button class="open-shop" type="button">Open the item shop</button>
         <h3>Your robot</h3>
@@ -287,6 +291,7 @@ export class Hud {
         <div class="acct" hidden><h3>Account</h3><p class="acct-info"></p><div class="acct-acts"></div></div>
         <p class="net-info"></p>
         <p class="legal-links"><button type="button" data-legal="terms">Terms of use</button><span aria-hidden="true">·</span><button type="button" data-legal="privacy">Privacy</button></p>
+        <p class="admin-shows" hidden>Administrator — see a card as visitors do: <button type="button" data-show="account">the account</button><span aria-hidden="true">·</span><button type="button" data-show="pass">the Game Pass</button><span aria-hidden="true">·</span><button type="button" data-show="room">a room of one's own</button></p>
         <p class="version">${VERSION}</p>
       </div>`;
     this.root.append(h);
@@ -322,7 +327,7 @@ export class Hud {
       const act = b.dataset.act;
       if (act === 'settings') this.panel.classList.toggle('on');
       else if (act === 'fullscreen') this.toggleFullscreen();
-      else if (act === 'emote') this.emotes.classList.toggle('on');
+      else if (act === 'emote') this.toggleEmotes(); // (which draws the pictures of the animals of light the first time)
       else if (act === 'chat') this.toggleChat();
       else this.emit(act);
       b.blur();
@@ -396,7 +401,9 @@ export class Hud {
     this.cameraBtn = h.querySelector('[data-act="camera"]');
     this.emotes.querySelector('[data-drop]').onclick = () => { this.emit('drop'); this.emotes.classList.remove('on'); };
     this.emotes.querySelector('[data-sit]').onclick = () => { this.emit('sit'); this.emotes.classList.remove('on'); };
+    this.emotes.querySelector('[data-lie]').onclick = () => { this.emit('lie'); this.emotes.classList.remove('on'); };
     this.emotes.querySelector('[data-firework]').onclick = () => { this.emit('firework'); this.emotes.classList.remove('on'); };
+    this.emotes.querySelector('[data-mushroom]').onclick = () => { this.emit('mushroom'); this.emotes.classList.remove('on'); };
     h.querySelector('.open-shop').onclick = () => { this.panel.classList.remove('on'); this.emit('shop'); };
     this._robotUI(h.querySelector('.swatches.robot'), h.querySelector('.sizes.robot'), h.querySelector('.panel .passhint'));
     this.wastedEl = h.querySelector('.wasted');
@@ -426,6 +433,7 @@ export class Hud {
     }
     // the small print (ui/LegalView.js)
     h.querySelectorAll('[data-legal]').forEach((b) => (b.onclick = () => { this.panel.classList.remove('on'); this.emit('legal', b.dataset.legal); }));
+    h.querySelectorAll('[data-show]').forEach((b) => (b.onclick = () => { this.panel.classList.remove('on'); this.emit('show', b.dataset.show); }));
     h.querySelectorAll('[data-sw]').forEach((b) => (b.onclick = () => {
       const on = b.getAttribute('aria-pressed') !== 'true';
       b.setAttribute('aria-pressed', String(on));
@@ -492,6 +500,8 @@ export class Hud {
   closeAll() { this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this.toggleBigMap(false); this.closeRoster(); this.toggleChat(false); }
   /** Whoever has the box of fireworks gets a button for it in the emotes. */
   setFireworks(on) { this.emotes.classList.toggle('fireworks', !!on); }
+  /** The mushroom cloud of those who found every relic: how many they found, of how many (it says so until they have them all). */
+  setMushroom(found, total) { const b = this.emotes.querySelector('[data-mushroom]'); b.textContent = found >= total ? '☢ Mushroom cloud' : `☢ Mushroom cloud — find the ${total} relics (${found} found)`; b.classList.toggle('locked', found < total); }
   /** A dot on the icon of the shop while something is sold there. */
   setShop(open) { this.hud.querySelector('.shop-icon').classList.toggle('selling', !!open); }
 
@@ -582,14 +592,14 @@ export class Hud {
    */
   setEmotes(list, days = 1) {
     this._emoteIds = Object.fromEntries(list.map((e) => [e.id, e.index]));
-    const box = this.emotes, held = box.querySelector('.held');
+    const box = this.emotes;
     box.querySelectorAll('.group').forEach((n) => n.remove());
     const ranks = list.filter((e) => e.rank).sort((a, b) => a.days - b.days);
+    // (what one reaches for most comes first: a wave, a dance; then the cheers; the animals of light under them)
     const groups = [
-      ['', list.filter((e) => e.clip)],
+      ['Say it with a gesture', list.filter((e) => e.clip)],
       ['Cheer on', list.filter((e) => e.move)],
     ];
-    if (ranks.length) box.insertBefore(this._zoo(ranks, days), held);
     for (const [title, items] of groups) {
       if (!items.length) continue;
       const g = el('div', `group${items[0].rank ? ' rank' : ''}`);
@@ -606,8 +616,9 @@ export class Hud {
         row.append(b);
       }
       g.append(row);
-      box.insertBefore(g, held);
+      box.append(g);
     }
+    if (ranks.length) box.append(this._zoo(ranks, days));
   }
   /**
    * The animals of light: what they are, where the visitor stands, and a tile for each — a picture of those
@@ -688,6 +699,7 @@ export class Hud {
     if (!on && this.chatChannel === 'important') this._channel('all');
     this.bigEl.querySelector('.legend span').textContent = on ? 'Administrator: click a spot to go there · outside the map to close' : 'Click anywhere to close';
     this.bigEl.classList.toggle('goto', !!on);
+    this.panel.querySelector('.admin-shows').hidden = !on;
   }
   /** The administrator is looking at the game as a visitor sees it: a pill says so, and brings them back. */
   setVisitorView(on) { this.hud.querySelector('.as-visitor').hidden = !on; }
@@ -923,6 +935,7 @@ export class Hud {
     clearTimeout(this._offer);
     if (!text) { bar.classList.remove('on'); return; }
     bar.querySelector('.offer-text').textContent = text;
+    bar.classList.toggle('long', text.length > 120); // (a long one: its words on a line of their own, over the buttons)
     const y = bar.querySelector('.offer-yes');
     y.textContent = yes;
     y.onclick = () => { bar.classList.remove('on'); fn(); };
@@ -931,6 +944,55 @@ export class Hud {
     requestAnimationFrame(() => bar.classList.add('on'));
     this._offer = setTimeout(() => bar.classList.remove('on'), ms);
   }
+
+  /**
+   * A card that makes an offer in full — what it is, what it gives, a picture, a button to take it and another to
+   * leave it: { kind, eyebrow, title, lead, perks: [a line], fine, yes, no, picture (a canvas, or nothing) }.
+   * Resolves to true when it is taken. (Nothing is in focus and the buttons wake up after a moment: whoever was
+   * jumping or clicking when it came does not take it by accident.)
+   */
+  pitch(o) {
+    if (!this.pitchEl) {
+      this.pitchEl = el('div', 'pitch', '<div class="sheet"><div class="art"></div><div class="words"><p class="eyebrow"></p><h2></h2><p class="lead"></p><div class="cases"></div><ul class="perks"></ul><p class="fine"></p><div class="acts"><button type="button" class="yes"></button><button type="button" class="no"></button></div></div></div>');
+      this.pitchEl.setAttribute('role', 'dialog');
+      this.pitchEl.setAttribute('aria-modal', 'true');
+      for (const ev of ['mousedown', 'touchstart', 'wheel']) this.pitchEl.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
+      this.root.append(this.pitchEl);
+    }
+    const box = this.pitchEl, q = (s) => box.querySelector(s);
+    this._pitched?.(false);
+    box.dataset.kind = o.kind || '';
+    q('.eyebrow').textContent = o.eyebrow || '';
+    q('h2').textContent = o.title;
+    q('.lead').textContent = o.lead || '';
+    // (`cases`: what it is for, a small card each — [[title, a sentence], …])
+    q('.cases').textContent = '';
+    for (const [title, text] of o.cases || []) { const c = el('div', 'case'), b = el('b'), s = el('span'); b.textContent = title; s.textContent = text; c.append(b, s); q('.cases').append(c); }
+    q('.cases').hidden = !(o.cases || []).length;
+    q('.perks').textContent = '';
+    for (const line of o.perks || []) { const li = el('li'); li.textContent = line; q('.perks').append(li); }
+    q('.fine').textContent = o.fine || '';
+    q('.art').textContent = '';
+    if (o.picture) q('.art').append(o.picture);
+    q('.art').hidden = !o.picture;
+    q('.yes').textContent = o.yes;
+    q('.no').textContent = o.no || 'Not now';
+    this.closeAll();
+    this.input.exitLock();
+    document.activeElement?.blur?.();
+    return new Promise((resolve) => {
+      const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(false); } };
+      const done = (taken) => { this._pitched = null; clearTimeout(arm); box.classList.remove('on', 'arming'); box.onclick = null; window.removeEventListener('keydown', key, true); resolve(taken); };
+      this._pitched = done;
+      q('.yes').onclick = (e) => { e.stopPropagation(); done(true); };
+      q('.no').onclick = (e) => { e.stopPropagation(); done(false); };
+      box.onclick = (e) => { if (e.target === box && !box.classList.contains('arming')) done(false); };
+      window.addEventListener('keydown', key, true);
+      box.classList.add('on', 'arming');
+      const arm = setTimeout(() => box.classList.remove('arming'), 900);
+    });
+  }
+  get pitching() { return !!this._pitched; }
 
   /** A message that stays (put out by the administrator, for instance); null takes it away. */
   banner(text) {
@@ -1062,6 +1124,7 @@ export class Hud {
 
   note(text, ms = 2600) {
     this.noteEl.textContent = text;
+    this.noteEl.classList.toggle('long', String(text).length > 64); // (a few lines to read: it wraps)
     this.noteEl.classList.add('show');
     clearTimeout(this._tn);
     this._tn = setTimeout(() => this.noteEl.classList.remove('show'), ms);
@@ -1069,6 +1132,7 @@ export class Hud {
 
   /** `room` ({ label, several }): the room one is in, named when the fair has several of them. */
   setPresence(mode, count, room = null) {
+    this._roomBox(mode, count, room);
     const dot = this.hud.querySelector('.players .dot');
     dot.className = `dot ${mode === 'online' ? 'online' : mode === 'local' ? 'local' : ''}`;
     const where = mode === 'online' && room && room.several ? `${room.label} · ` : '';
@@ -1078,6 +1142,47 @@ export class Hud {
       : mode === 'local'
         ? 'Local mode: only the tabs of this browser see each other (no presence server found).'
         : 'Offline.';
+  }
+
+  /**
+   * The room one is in, in the settings: its name first in a list of the rooms one may go to (`room`: { name,
+   * label, rooms: [{ name, label, players, quiet }], own: { on, room, price, here, host } | null }) — the common
+   * rooms, and, where rooms are sold, one's own (or the way to buy one). Choosing a line goes there.
+   */
+  /**
+   * The rooms, in the settings: the one the visitor is in, a line for each other with a button that goes there —
+   * and, where rooms of one's own are sold to who has none yet, the card that offers one.
+   */
+  _roomBox(mode, count, room) {
+    const box = this.panel.querySelector('.room-box'), list = box.querySelector('.room-list'), say = box.querySelector('.room-say'), ad = box.querySelector('.room-ad');
+    box.hidden = !(mode === 'online' && room);
+    if (box.hidden) { this._roomKey = ''; return; }
+    const key = JSON.stringify([count, room]);
+    if (key === this._roomKey) return; // (nothing changed: the lines stay as they are under the pointer)
+    this._roomKey = key;
+    list.textContent = '';
+    const line = (cls, title, sub, label, run) => {
+      const r = el('div', `room-row${cls ? ` ${cls}` : ''}`), text = el('span', 'room-id'), b = el('b'), s = el('small');
+      r.setAttribute('role', 'listitem');
+      b.textContent = title; s.textContent = sub; text.append(b, s); r.append(text);
+      if (label) { const go = el('button', 'room-go'); go.type = 'button'; go.textContent = label; go.onclick = () => { this.panel.classList.remove('on'); run(); }; r.append(go); }
+      else { const here = el('span', 'room-here'); here.textContent = 'You are here'; r.append(here); }
+      list.append(r);
+    };
+    line('here', room.label, count > 1 ? `${count} visitors, you included` : 'Nobody else just now', '', null);
+    for (const r of room.rooms || []) if (r.name !== room.name) line('', r.label, `${r.players} visitor${r.players === 1 ? '' : 's'}${r.quiet ? ' · quiet' : ''}`, 'Go there', () => this.emit('room', r.name));
+    const own = room.own;
+    if (own?.here) line('', 'The rooms of the fair', 'Back among everybody (the page loads again)', 'Go back', () => this.emit('myroom', 'leave'));
+    if (own?.room && !own.here?.host) line('mine', `★ ${own.room.name}`, 'Your own room', 'Go there', () => this.emit('myroom', 'go'));
+    say.textContent = own?.here ? 'A room of its own: only those who were given its link are here.' : list.children.length > 1 ? 'Changing room leaves you where you stand: only the company changes.' : 'The only room open just now: everybody is here.';
+    // (a room of one's own, where they are sold and this visitor has none: the card that offers it)
+    ad.hidden = !(own && !own.room);
+    if (!ad.hidden) {
+      ad.querySelector('.room-price').textContent = `${own.price} a month`;
+      const art = ad.querySelector('.art');
+      if (!art.firstChild && this.roomArt) { try { art.append(this.roomArt(144, 168)); } catch { /* no picture: the words do */ } }
+      ad.onclick = () => { this.panel.classList.remove('on'); this.emit('myroom', 'offer'); };
+    }
   }
 
   // ---------- name tags
@@ -1143,7 +1248,15 @@ export class Hud {
     if (open) { this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this._bigSize = ''; }
   }
 
-  /** The whole valley, with the places, the other visitors and oneself. */
+  /**
+   * The big attractions, for the map: [{ id, name, x, z, line: [[x, z], …] | undefined }] — a red star edged with
+   * gold and the name of each; `line`: what is drawn of it on the ground (the slide: a ribbon of red and white).
+   */
+  setAttractions(list) { this.attractions = list || []; }
+  /** The stars and their names, shown or not (the owner's switch): what is drawn on the ground stays. */
+  setStars(on) { this.starsOff = !on; }
+
+  /** The whole valley, with the places, the big attractions, the other visitors and oneself. */
   drawBigMap(x, z, heading, others) {
     const mega = this.mega && this.megaImg.complete && this.megaImg.width > 0;
     const v = mega ? this.megaView : this.mapView, img = mega ? this.megaImg : this.mapImg;
@@ -1178,7 +1291,48 @@ export class Hud {
     // (names never lie on one another: the larger places are written first, where they are; a name that would
     // cover another is moved up or down by a line or two — or left out, if there is no room at all)
     const size = Math.max(mega ? 9 : 11, Math.round(w / (mega ? 86 : 62))), placed = [];
-    const places = (this.zones || []).filter((zone) => !(zone.hidden || (mega && zone.r < 30))).sort((a, b) => b.r - a.r); // (some places are for those who find them; the mega map only names the large ones)
+    // the big attractions (the map of the valley only): what is drawn of them on the ground, a red star edged
+    // with gold, their name in gold beside it — written first: the names of the places make room for them
+    const drawn = mega ? [] : this.attractions || [], stars = this.starsOff ? [] : drawn, starred = new Set(stars.map((s) => s.id));
+    if (drawn.length) {
+      const R = Math.max(7, Math.round(w / 105));
+      for (const s of drawn) {
+        if (!s.line || s.line.length < 2) continue;
+        // (the slide: a ribbon striped red and white, like its flume, with a dark edge so that it reads on the sand)
+        const wide = Math.max(5, R * 0.74), path = () => { ctx.beginPath(); s.line.forEach(([lx, lz], i) => (i ? ctx.lineTo(X(lx), Z(lz)) : ctx.moveTo(X(lx), Z(lz)))); };
+        ctx.lineCap = 'round';
+        path(); ctx.lineWidth = wide + 3; ctx.strokeStyle = 'rgba(46, 14, 10, 0.9)'; ctx.stroke();
+        path(); ctx.lineWidth = wide; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+        ctx.lineCap = 'butt'; ctx.setLineDash([wide * 1.15, wide * 1.15]);
+        path(); ctx.lineWidth = wide; ctx.strokeStyle = '#e0252b'; ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      ctx.lineCap = 'round';
+      ctx.font = `700 ${size}px Georgia, 'Times New Roman', serif`;
+      for (const s of stars) {
+        const px = X(s.x), pz = Z(s.z);
+        ctx.beginPath();
+        for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + (i * Math.PI) / 5, r = i % 2 ? R * 0.45 : R; if (i) ctx.lineTo(px + Math.cos(a) * r, pz + Math.sin(a) * r); else ctx.moveTo(px + Math.cos(a) * r, pz + Math.sin(a) * r); }
+        ctx.closePath();
+        // (red, with a border of gold — and a dark line round the gold, so that it stands out on any ground)
+        ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(40, 14, 4, 0.92)'; ctx.stroke();
+        ctx.lineWidth = 3.6; ctx.strokeStyle = '#ffd24a'; ctx.stroke();
+        ctx.fillStyle = '#e0252b'; ctx.fill();
+        // its name: to the right of the star — to the left when the edge is near —, moved by a line if another is there
+        const half = ctx.measureText(s.name).width / 2 + 5, right = px + R + 4 + half * 2 < w - 4;
+        const tx = right ? px + R + 4 + half : px - R - 4 - half;
+        let ty = null;
+        for (const k of [0, 1, -1, 2, -2]) { const y = pz + k * size * 1.15; if (placed.every((q) => Math.abs(q.x - tx) > q.half + half || Math.abs(q.y - y) > size * 1.05)) { ty = y; break; } }
+        placed.push({ x: px, y: pz, half: R + 2 });
+        if (ty === null) continue;
+        placed.push({ x: tx, y: ty, half });
+        ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(14, 22, 17, 0.85)'; ctx.strokeText(s.name, tx, ty);
+        ctx.fillStyle = '#ffd76a'; ctx.fillText(s.name, tx, ty);
+      }
+      ctx.font = `600 ${size}px Georgia, 'Times New Roman', serif`;
+    }
+    // (a place that is an attraction has its name already, by its star)
+    const places = (this.zones || []).filter((zone) => !(zone.hidden || starred.has(zone.id) || (mega && zone.r < 30))).sort((a, b) => b.r - a.r); // (some places are for those who find them; the mega map only names the large ones)
     for (const zone of places) {
       const half = ctx.measureText(zone.name).width / 2 + 6;
       const tx = Math.min(w - half, Math.max(half, X(zone.x))); // never cut by the edge

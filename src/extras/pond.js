@@ -12,6 +12,8 @@ const KEY = 'mmf.pond.held'; // (how long one held, in ms: the three ponds are s
 export function attach(app) {
   const { world, player, hud } = app;
   const pond = new Pond(world).build();
+  // (no flowers where one starts: "Pick a flower" was offered beside "Run", and the wrong key was pressed half the time)
+  for (const at of [pond.gate, pond.wait]) if (at) world.scatter?.keepClear?.(at.x, at.z, 6);
   world.bakeShadows(); // (the circuit was not there when the shadows of what never moves were drawn)
   const read = () => { try { return parseFloat(localStorage.getItem(KEY)) || 0; } catch { return 0; } };
   pond.setBest(read());
@@ -44,10 +46,10 @@ export function attach(app) {
     run = pond.open(player, io);
     player.driver = run;
     app.audio?.play('teleport');
-    keysHelp(app).set(app.input.isTouch ? 'The legs run by themselves · the arrow jumps (again in the air: further) · stick down: slide, or dive · stick aside: to the next ring, outwards or inwards · three ponds: 15 s, 20 s, then as long as you can'
-      : 'The legs run by themselves · Space jumps (again in the air: further) · S: slide, or dive · A / D: to the next ring, outwards or inwards · three ponds: 15 s, 20 s, then as long as you can · E: leave · H: these keys again');
+    keysHelp(app).set(app.input.isTouch ? 'You set off when you like: the arrow or a push of the stick, while the lamp is green · then the legs run by themselves · the arrow jumps (again in the air: further) · stick down: slide, or dive · stick aside: to the next ring, outwards or inwards · three ponds: 15 s, 20 s, then as long as you can'
+      : 'You set off when you like: Space, A, D or W, while the lamp is green · then the legs run by themselves · Space jumps (again in the air: further) · S: slide, or dive · A / D: to the next ring, outwards or inwards · three ponds: 15 s, 20 s, then as long as you can · E: leave · H: these keys again');
   };
-  world.actionSources.push((p) => {
+  world.actionSources.unshift((p) => { // (before anything else there is to do on the spot)
     if (run) return run.over ? null : { label: 'Leave the pond', run: () => leave(false) };
     return pond.near(p.pos.x, p.pos.z) ? { label: `Run ${POND.name}`, run: start } : null;
   });

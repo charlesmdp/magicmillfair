@@ -25,6 +25,8 @@ import { restMailer } from './mail.js';
 import { route, addBan } from './routes.js';
 import { isUserRoom } from './urooms.js';
 import { knock, roomRules, settle, wardrobeOf } from './door.js';
+import { mayBeNamed } from './accounts.js';
+import { noteChat } from './chatlog.js';
 import { newDirectory, noteRoom } from './rooms.js';
 import { adminOf, looksNamed, nameAdmin } from './admins.js';
 import { geoFromHeaders } from './visitors.js';
@@ -305,6 +307,8 @@ const io = {
   ban: (who) => { addBan(api, who).catch((err) => console.error('[ban]', err.message)); },
   // what a browser may be seen wearing: asked again when it says something was bought (wardrobe.js)
   wardrobe: (dev) => wardrobeOf(api, dev),
+  // …and under which name: the name of an account is for who is signed in to it (accounts.js)
+  named: (dev, name) => mayBeNamed(store, dev, name),
 };
 
 function census() {
@@ -320,7 +324,9 @@ function onConnection(ws, roomId, from) {
   if (from.limit) { ws.send(JSON.stringify({ t: 'limit', of: from.limit.of, max: from.limit.max })); return ws.close(1013, 'limit'); } // (too many from that address)
   let room = rooms.get(roomId);
   if (!room) {
-    rooms.set(roomId, (room = new Room({ ...io, fired: (at) => { if (blasts.size > 5000) blasts.clear(); blasts.set(roomId, at); } })));
+    rooms.set(roomId, (room = new Room({ ...io, fired: (at) => { if (blasts.size > 5000) blasts.clear(); blasts.set(roomId, at); },
+      // (what is said in the chat is kept a while for the administrators: chatlog.js)
+      said: (line) => { noteChat(api, roomId, [{ ...line, t: Date.now() }]); } })));
     if (blasts.has(roomId)) room.blastAt = blasts.get(roomId);
   }
   const p = room.add(ws, undefined, from);

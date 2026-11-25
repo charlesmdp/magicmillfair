@@ -70,8 +70,9 @@ try {
   page.on('pageerror', (e) => logs.push(e.message));
   const enter = async (query = '') => {
     await page.goto(`${BASE}/?q=${opt.q || 'low'}${query}`);
-    await page.waitForSelector('.card.ready', { timeout: 240000 });
-    await page.click('.go');
+    // (back from the payment page one is in the world at once, where one stood: there is no card to pass)
+    await page.waitForFunction(() => document.querySelector('.card.ready') || (window.__mmf && window.__mmf.ready && document.querySelector('.splash.done')), null, { timeout: 240000 });
+    if (await page.evaluate(() => !document.querySelector('.splash.done'))) await page.click('.go');
     await page.waitForFunction(() => window.__mmf && window.__mmf.ready && window.__mmf.player, null, { timeout: 60000 });
   };
   const frames = (n) => page.evaluate((n) => { const app = window.__mmf; const target = app.frames + n; return new Promise((res) => { const tick = () => (app.frames >= target ? res() : requestAnimationFrame(tick)); tick(); }); }, n);
@@ -87,20 +88,25 @@ try {
   await frames(3);
   await page.screenshot({ path: path.join(ROOT, 'tools/preview/shop-screen.png') });
   const shelves = await page.evaluate(() => ({ titles: [...document.querySelectorAll('.shop .shelf h3')].map((h) => h.textContent), cards: document.querySelectorAll('.shop .card').length, mode: document.querySelector('.shop .mode').textContent }));
-  const crown = await card('hat:crown'), jet = await card('jetpack'), lite = await card('jetlite'), gold = await card('paint:gold'), bubbles = await card('trail:bubbles'), fire = await card('fireworks');
+  const crown = await card('hat:crown'), jet = await card('jetpack'), lite = await card('jetlite'), gold = await card('paint:gold'), bubbles = await card('trail:bubbles'), lava = await card('paint:lava'), fire = await card('fireworks');
   const device = await page.evaluate(() => localStorage.getItem('mmf.device'));
-  check('the item shop: its own icon, shelves of cards with a picture and a price — two jetpacks ($30, $5), hats, paints, trails, fireworks',
-    shelves.titles.join() === 'Game Pass,Gear,Paint jobs,Just for fun,Hats,Trails,Sponsor a game' && shelves.cards >= 26 && /Test mode/.test(shelves.mode) && crown?.tag === '$9.99' && crown.picture && /legendary/.test(crown.cls)
-    && jet?.tag === '$30' && lite?.tag === 'Free today' && gold?.tag === '$19' && bubbles?.tag === '$5' && fire?.tag === '$15', // (the light jetpack: a taste of it on the first day)
-    JSON.stringify({ shelves, crown, jet, lite, gold, bubbles, fire }));
+  check('the item shop: its own icon, shelves of cards with a picture and a price — two jetpacks ($30, $5), hats, nine paints, fireworks; the trails are no longer sold: nobody who has not bought one sees them',
+    shelves.titles.join() === 'Game Pass,Gear,Paint jobs,Just for fun,Hats,Sponsor a game' && shelves.cards >= 26 && /Test mode/.test(shelves.mode) && crown?.tag === '$9.99' && crown.picture && /legendary/.test(crown.cls)
+    && jet?.tag === '$30' && lite?.tag === 'Free today' && gold?.tag === '$19' && !bubbles && lava?.tag === '$14' && lava.picture && fire?.tag === '$15', // (the light jetpack: a taste of it on the first day)
+    JSON.stringify({ shelves, crown, jet, lite, gold, bubbles, lava, fire }));
   const offer = await pick('hat:crown');
   const worn = await page.evaluate(() => window.__mmf.me.look?.hat);
+  // (they stand somewhere of their own choosing when they leave for the payment page: they come back there)
+  await page.evaluate(() => { const m = window.__mmf; m.player.teleport(-64, -22, 0); });
+  const stood = await page.evaluate(() => { const p = window.__mmf.player.pos; return [p.x, p.z]; });
   await Promise.all([page.waitForURL('https://checkout.stripe.test/**', { timeout: 20000 }), page.click('.shop .detail .acts .buy')]);
   check('a hat that is not theirs can be bought, not worn; the button leads to the payment page of Stripe', offer.title === 'Crown' && offer.acts.join() === 'Buy · $9.99' && /Test mode/.test(offer.fine) && worn === 0 && asked[0]?.get('metadata[item]') === 'hat:crown' && asked[0].get('metadata[device]') === device && asked[0].get('line_items[0][price_data][unit_amount]') === '999' && asked[0].get('mode') === 'payment', JSON.stringify({ offer, worn, asked: String(asked[0]).slice(0, 300) }));
   // (Stripe says it was paid; the visitor comes back: the hat is on their head at once)
   const hook = await pay('hat:crown', device);
   await enter('&paid=hat%3Acrown');
   await page.waitForFunction(() => window.__mmf.me.look?.hat === 6, null, { timeout: 30000 });
+  const backAt = await page.evaluate(() => { const m = window.__mmf, p = m.player.pos; return { x: p.x, z: p.z, card: !document.querySelector('.splash.done'), said: [...document.querySelectorAll('.chat .log p')].map((e) => e.textContent).filter((t) => /It is yours/.test(t)).length }; });
+  check('back from the payment page they are in the world at once, where they stood when they left — no card to pass —, and what they bought is said in the chat, where it stays', !backAt.card && Math.hypot(backAt.x - stood[0], backAt.z - stood[1]) < 2 && backAt.said === 1, JSON.stringify({ stood, backAt }));
   // …and on their head for the others too — which a hat that was not bought is not: the relay checks what each
   // visitor has (server/wardrobe.js). A stranger joins the room and says they wear a crown as well.
   const seenWorn = await (async () => {
@@ -153,8 +159,9 @@ try {
   const free = await prompts();
   await page.keyboard.press('KeyE');
   await page.waitForSelector('.chooser.on .fields', { timeout: 20000 });
-  const bidForm = await page.evaluate(() => ({ title: document.querySelector('.chooser h2').textContent, lead: document.querySelector('.chooser .lead').textContent, value: document.querySelector('.chooser .fields input').value, save: document.querySelector('.chooser .fields .save').textContent }));
-  await page.locator('.chooser .fields input').first().fill('3');
+  // (what the panel will show is asked for before the payment — a name, a line, a site, a logo —, then the bid)
+  const bidForm = await page.evaluate(() => ({ title: document.querySelector('.chooser h2').textContent, lead: document.querySelector('.chooser .lead').textContent, fields: document.querySelectorAll('.chooser .fields input').length, value: [...document.querySelectorAll('.chooser .fields input')].pop().value, save: document.querySelector('.chooser .fields .save').textContent }));
+  { const f = page.locator('.chooser .fields input'); await f.nth(0).fill('Acme <b>Robotics</b>'); await f.nth(1).fill('Friendly machines since 1999'); await f.nth(2).fill('https://acme.example/'); await f.nth(3).setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: LOGO }); await f.nth(4).fill('3'); }
   asked.length = 0;
   await Promise.all([page.waitForURL('https://checkout.stripe.test/**', { timeout: 20000 }), page.click('.chooser .fields .save')]);
   const bidAsked = asked[0];
@@ -162,6 +169,10 @@ try {
   await pay('board:shoot', device, null, { amount: 300, pay: 'pi_shoptest_1' });
   await enter('&paid=board%3Ashoot');
   await page.waitForFunction(() => window.__mmf.shop.slots['board:shoot']?.mine, null, { timeout: 30000 });
+  // (…and what they said it should show went up by itself, the moment it was theirs)
+  await page.waitForFunction(() => window.__mmf.shop.slots['board:shoot']?.state === 'live', null, { timeout: 30000 });
+  await page.waitForFunction(() => [...document.querySelectorAll('.chat .log p')].some((p) => /Paid, and up/.test(p.textContent)), null, { timeout: 30000 });
+  const upAtOnce = await page.evaluate(() => ({ title: window.__mmf.shop.slots['board:shoot'].title, logo: !!window.__mmf.shop.slots['board:shoot'].logo, kept: localStorage.getItem('mmf.sponsor'), chat: [...document.querySelectorAll('.chat .log p')].map((p) => p.textContent).filter((t) => /Paid, and up/.test(t)).length }));
   await page.evaluate(() => { const m = window.__mmf, s = m.world.sponsorSlots.find((q) => q.id === 'board:shoot'); m.player.teleport(s.x, s.z, 0); });
   await frames(8);
   const mine = await prompts();
@@ -176,10 +187,11 @@ try {
   const moleAct = await page.evaluate(() => [...document.querySelectorAll('.shop .detail .acts button')].map((b) => b.textContent));
   await page.keyboard.press('Escape');
   await frames(3);
-  check('the panel of a game is auctioned: "Sponsor … · from $1" at its board, a bid typed in, paid once on Stripe; then "Set up your panel"',
-    free.includes('Sponsor this game · from $1') && /Bullseye Alley/.test(bidForm.title) && /refunded in full/.test(bidForm.lead) && bidForm.value === '1' && bidForm.save === 'Go to payment'
-    && bidAsked?.get('metadata[item]') === 'board:shoot' && bidAsked.get('metadata[bid]') === '300' && bidAsked.get('line_items[0][price_data][unit_amount]') === '300' && bidAsked.get('mode') === 'payment' && mine.includes('Set up your panel'),
-    JSON.stringify({ free, bidForm, asked: String(bidAsked).slice(0, 200), mine, slot }));
+  check('the panel of a game is auctioned: "Sponsor … · from $1" at its board; what it will show is asked for first (a name, a line, a site, a logo), then the bid, paid once on Stripe; back in the game the panel is theirs and up at once, as they said — and "Set up your panel" changes it',
+    free.includes('Sponsor this game · from $1') && /Bullseye Alley/.test(bidForm.title) && /refunded in full/.test(bidForm.lead) && bidForm.fields === 5 && bidForm.value === '1' && bidForm.save === 'Go to payment'
+    && bidAsked?.get('metadata[item]') === 'board:shoot' && bidAsked.get('metadata[bid]') === '300' && bidAsked.get('line_items[0][price_data][unit_amount]') === '300' && bidAsked.get('mode') === 'payment' && mine.includes('Set up your panel')
+    && upAtOnce.title === 'Acme b Robotics /b' && upAtOnce.logo && upAtOnce.kept === null && upAtOnce.chat === 1,
+    JSON.stringify({ free, bidForm, asked: String(bidAsked).slice(0, 200), mine, slot, upAtOnce }));
   check('the shop has a shelf to sponsor a game: the panel of each, what it went for, a button to bid',
     shelf.title === 'Sponsor a game' && shelf.cards.length === 14 && shelf.cards.includes('Flappy Robot|From $1') && shelf.cards.includes('Meltdown Run|From $1') && shelf.cards.includes('Shell Shock|From $1') && shelf.cards.includes('Bullseye Alley|Owned') && shelf.cards.includes('Whack-a-Mole|From $1') && moleAct.join() === 'Bid · from $1', JSON.stringify({ shelf, moleAct }));
   await page.keyboard.press('KeyE');
@@ -191,6 +203,7 @@ try {
   await inputs.nth(3).setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: LOGO });
   await page.click('.chooser .fields .save');
   await page.waitForFunction(() => window.__mmf.shop.slots['board:shoot']?.state === 'live', null, { timeout: 20000 });
+  await page.waitForFunction(() => /Done: it is shown to everyone/.test(document.querySelector('.hud .note')?.textContent || ''), null, { timeout: 20000 }); // (it was up already: what is waited for is the word that it was saved)
   const sent = await page.evaluate(() => ({ view: window.__mmf.shop.slots['board:shoot'], note: document.querySelector('.hud .note')?.textContent }));
   const publicView = await (await fetch(`${BASE}/api/shop`)).json();
   check('the holder fills the panel in (name, line, link, logo): it is shown at once, to everyone — nothing waits for approval', sent.view.title === 'Acme b Robotics /b' && sent.view.url === 'https://acme.example/' && !!sent.view.logo && !sent.view.draft && /shown to everyone/.test(sent.note || '') && publicView.slots['board:shoot'].state === 'live' && publicView.slots['board:shoot'].title === 'Acme b Robotics /b', JSON.stringify({ sent, publicView: publicView.slots }));
@@ -236,6 +249,46 @@ try {
   // ---- a plaque for a companion, round the plinth of the golden dog: bought at a bare plate, engraved by who paid, approved, read by all
   await page.keyboard.press('Escape');
   await frames(3);
+  // ---- (first) a gondola is taken: its sponsor is seen on the car itself — both ends, facing outwards — the Trading
+  // Post says which car it is, and the wall of thanks has them
+  {
+    const bare7 = await page.evaluate(() => window.__mmf.world.pier.gondolaShown(7));
+    await pay('gondola:7', device, 'sub_test_gondola_7');
+    const filled = await (await fetch(`${BASE}/api/sponsor`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ slot: 'gondola:7', device, title: 'Seven Seas Ice Cream', subtitle: 'on the pier since ever', url: 'https://ice.example' }) })).json();
+    await page.evaluate(() => window.__mmf.refreshShop());
+    await page.waitForFunction(() => window.__mmf.world.pier.gondolaShown(7), null, { timeout: 30000 });
+    await frames(3);
+    const car = await page.evaluate(() => {
+      const pier = window.__mmf.world.pier, mesh = pier.wheelPivot.children.find((c) => c.name === 'big-wheel-banners'), pos = mesh.geometry.attributes.position, uv = mesh.geometry.attributes.uv;
+      // (a banner of a car, in the frame of the wheel — whose x runs along the pier: which way it faces, which way its words run, how wide it is)
+      const quad = (n, side) => {
+        const o = ((n - 1) * 2 + side) * 4, P = (k) => [pos.getX(o + k), pos.getY(o + k), pos.getZ(o + k)], a = P(0), b = P(1), d = P(3);
+        const nx = (b[1] - a[1]) * (d[2] - a[2]) - (b[2] - a[2]) * (d[1] - a[1]);
+        return { faces: Math.sign(nx), runs: Math.sign((b[2] - a[2]) * (uv.getX(o + 1) - uv.getX(o))), wide: +Math.abs(b[2] - a[2]).toFixed(2), x: Math.sign(a[0]) };
+      };
+      return { shore: quad(7, 0), sea: quad(7, 1), free: quad(8, 0), shown: [7, 8].map((n) => pier.gondolaShown(n)).join() };
+    });
+    await page.evaluate(() => window.__mmf.openTrading());
+    await page.waitForSelector('.tp-car[data-id="gondola:7"] canvas', { timeout: 120000 });
+    const post7 = await page.evaluate(() => {
+      const c = document.querySelector('.tp-car[data-id="gondola:7"]'), k = c.querySelector('canvas'), px = k.getContext('2d').getImageData(0, 0, k.width, k.height).data;
+      let lit = 0;
+      for (let i = 0; i < px.length; i += 400) if (px[i] + px[i + 1] + px[i + 2] > 60) lit++;
+      return { name: c.querySelector('h3').textContent, tag: c.querySelector('.tp-tag').textContent, who: c.querySelector('.tp-who').textContent, price: c.querySelector('.tp-price')?.textContent || '', title: document.querySelector('.tp-also-w').textContent, cars: document.querySelectorAll('.tp-car').length, lit };
+    });
+    await page.evaluate(() => window.__mmf.sponsorsView.close());
+    const row = await page.evaluate(async () => {
+      const wall = window.__mmf.world.games.thanks, mine = () => wall.shown?.rows.find((r) => r.name === 'Seven Seas Ice Cream');
+      for (let i = 0; i < 100 && !mine(); i++) await new Promise((r) => setTimeout(r, 100));
+      return mine() || null;
+    });
+    check('a gondola that is taken shows its sponsor on the car — a board wider than the car on both ends, each facing outwards with its words running the right way, a free car keeping the small invitation — the Trading Post says which car it is, with a photograph of it, and the wall of thanks has them at "$29 a month", with their site and its clicks rather than where they are',
+      filled.ok === true && bare7 === false && car.shown === 'true,false' && car.shore.x === -1 && car.shore.faces === -1 && car.sea.x === 1 && car.sea.faces === 1 && car.shore.runs * car.shore.faces === -1 && car.sea.runs * car.sea.faces === -1
+      && car.shore.wide > 3 && car.sea.wide > 3 && car.free.wide < 2.2 && car.free.faces === -1
+      && post7.name === 'Gondola 7' && /Seven Seas Ice Cream/.test(post7.who) && /\$29 a month/.test(post7.price) && /1 of 24 gondolas sponsored/.test(post7.title) && post7.cars === 1 && post7.lit > 200
+      && row?.figure === '$29' && row.unit === 'a month' && !('where' in row) && typeof row.site === 'string' && row.clicks === 0,
+      JSON.stringify({ filled, bare7, car, post7, row }));
+  }
   await page.evaluate(() => window.__mmf.adminKey(''));
   const atPlate = (n) => page.evaluate((n) => { const m = window.__mmf, q = m.world.places.plaques, w = q.where(n), yaw = Math.atan2(w.x - w.sx, w.z - w.sz); m.player.teleport(w.sx, w.sz, yaw); m.player.pos.y = q.y; m.rig.snap(m.player.pos, yaw + Math.PI); m.rig.yaw = yaw + Math.PI; m.rig.pitch = -0.04; m.rig.distance = 2.4; return { count: q.count, column: q.columnAt(w.sx, w.sz), row: w.row }; }, n);
   const plates = await atPlate(3);
@@ -398,7 +451,7 @@ try {
       JSON.stringify({ tag0, liteTag, offer3, form: form3?.toString().slice(0, 220) }));
     // Stripe says it was paid; back in the game: black, the largest size, a hat that was never bought
     const paid3 = await pay('pass', dev3, 'sub_pass_shop', null, 'cus_shop');
-    await p3.goto(`${BASE}/?q=${opt.q || 'low'}&paid=pass`);
+    await p3.goto(`${BASE}/?q=${opt.q || 'low'}&paid=pass&welcome`); // (back from the payment page one is in the world at once: the card is asked for here, to pick on it)
     await p3.waitForSelector('.card.ready', { timeout: 240000 });
     await p3.waitForFunction(() => document.querySelectorAll('.splash .swatches button.locked').length === 0 && document.querySelectorAll('.splash .sizes button.locked').length === 0, null, { timeout: 30000 });
     await p3.evaluate(() => document.querySelectorAll('.splash .swatches button')[16].click());
@@ -435,10 +488,11 @@ try {
       return { noJet: player.noJet, grounded: player.grounded };
     });
     await frames3(4);
-    const note3 = await p3.evaluate(() => document.querySelector('.hud .note').textContent);
+    // (it is said on the bar of the proposals, with a button that opens the payment of the pass)
+    const note3 = await p3.evaluate(() => { const bar = document.querySelector('.offer-bar'); return bar?.classList.contains('on') ? `${bar.querySelector('.offer-text').textContent} [${bar.querySelector('.offer-yes').textContent}]` : document.querySelector('.hud .note').textContent; });
     await third.close();
     check('when the subscription ends the pass is handed back (colour, size, hat) and they are told; a day after the first visit the free jetpack is over, and asking for it says where to get one',
-      ended3 === 200 && after3.color === 0 && after3.size === 1 && after3.hat === 0 && !after3.pass && after3.lite === 'trial' && after3.told === 1 && over3.lent === null && !over3.canFly && said3.noJet && /free day with the jetpack is over/.test(note3) && /Jetpack Lite is \$5/.test(note3) && /Game Pass/.test(note3),
+      ended3 === 200 && after3.color === 0 && after3.size === 1 && after3.hat === 0 && !after3.pass && after3.lite === 'trial' && after3.told === 1 && over3.lent === null && !over3.canFly && said3.noJet && /your free day of flying/.test(note3) && /Jetpack Lite is \$5/.test(note3) && /comes with the Game Pass \(\$19 a month/.test(note3) && /\[Get the Game Pass\]$/.test(note3),
       JSON.stringify({ ended3, after3, over3, said3, note3 }));
   }
   // ---- a room of one's own (server/urooms.js — switched on for this part, as the owner would): bought by the month
@@ -453,7 +507,8 @@ try {
       const p = await context.newPage();
       p.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) logs.push(m.text().slice(0, 300)); });
       p.on('pageerror', (e) => logs.push(e.message));
-      const go = async (query = '') => { await p.goto(`${BASE}/?q=${opt.q || 'low'}${query}`); await p.waitForSelector('.card.ready', { timeout: 240000 }); await p.click('.go'); await p.waitForFunction(() => window.__mmf && window.__mmf.ready && window.__mmf.player, null, { timeout: 60000 }); };
+      // (back from the payment page one is in the world at once, where one stood: there is no card to pass then)
+      const go = async (query = '') => { await p.goto(`${BASE}/?q=${opt.q || 'low'}${query}`); await p.waitForFunction(() => document.querySelector('.card.ready') || (window.__mmf && window.__mmf.ready && document.querySelector('.splash.done')), null, { timeout: 240000 }); if (await p.evaluate(() => !document.querySelector('.splash.done'))) await p.click('.go'); await p.waitForFunction(() => window.__mmf && window.__mmf.ready && window.__mmf.player, null, { timeout: 60000 }); };
       const roomButton = (label) => p.evaluate((label) => { const b = [...document.querySelectorAll('.roster .acts button')].find((e) => e.textContent === label); if (b) b.click(); return !!b; }, label);
       const said = () => p.evaluate(() => `${[...document.querySelectorAll('.chat .log p')].map((e) => e.textContent).join(' | ')} | ${document.querySelector('.hud .note').textContent}`);
       return { context, p, go, roomButton, said };
@@ -475,6 +530,8 @@ try {
     // switched on (the owner of the game throws the switch): the card is there at once, without loading the page again
     await flip({ userRooms: true });
     const cardOn = await until(() => o.evaluate(() => { const c = document.querySelector('.shop .card[data-item="room"]'); return c ? { tag: c.querySelector('.price').textContent, shelf: [...document.querySelectorAll('.shop .shelf h3')].map((h) => h.textContent).pop() } : null; }));
+    // (its picture: an oasis at dusk — the evening sky, the pool — and the visitor's own robot on the bank)
+    const roomPic = await o.evaluate(() => { const k = document.querySelector('.shop .card[data-item="room"] canvas'); if (!k) return null; const g = k.getContext('2d'), at = (x, y) => [...g.getImageData(Math.round(k.width * x), Math.round(k.height * y), 1, 1).data].slice(0, 3); const pool = [0.08, 0.14, 0.86, 0.9].map((x) => at(x, 0.69)).sort((p, q) => (q[1] - q[0]) - (p[1] - p[0]))[0]; return { size: `${k.width}x${k.height}`, sky: at(0.5, 0.03), water: pool, robot: at(0.5, 0.45), beside: at(0.27, 0.45) }; }); // (the pool: looked for on both sides of the robot, whose hands hang over the middle of it)
     await o.evaluate(() => document.querySelector('.shop .card[data-item="room"]').click());
     const offer4 = await o.evaluate(() => ({ title: document.querySelector('.shop .detail h3').textContent, acts: [...document.querySelectorAll('.shop .detail .acts button')].map((b) => b.textContent), perks: document.querySelectorAll('.shop .detail .perks li').length, fine: document.querySelector('.shop .detail .fine').textContent }));
     const n4 = asked.length;
@@ -484,6 +541,9 @@ try {
       !/room of your own/i.test(offRoster) && !/room of your own/i.test(offShelves) && cardOn?.tag === '$59 a month' && cardOn.shelf === 'A room of your own' && offer4.title === 'A room of your own' && offer4.acts.join() === 'Get a room · $59 a month' && offer4.perks === 6 && /thirty days/.test(offer4.fine)
       && form4?.get('mode') === 'subscription' && form4.get('line_items[0][price_data][unit_amount]') === '5900' && form4.get('metadata[item]') === 'room' && form4.get('metadata[account]') === 'Roomy',
       JSON.stringify({ offRoster, offShelves, cardOn, offer4, form: form4?.toString().slice(0, 260) }));
+    check('the card of a room of one\'s own has its picture: an oasis — the evening sky, the pool — with the visitor\'s own robot standing on its bank',
+      !!roomPic && roomPic.size === '216x252' && roomPic.sky[2] > 80 && roomPic.sky[2] > roomPic.sky[0] + 30 && roomPic.water[1] > roomPic.water[0] + 40
+      && roomPic.robot.reduce((sum, v, i) => sum + Math.abs(v - roomPic.beside[i]), 0) > 60, JSON.stringify(roomPic));
     // Stripe says it was paid; back in the game the room is theirs: "Who is here" has its link and its settings
     const paid4 = await tell({ type: 'checkout.session.completed', data: { object: { id: 'cs_room_shop', payment_status: 'paid', amount_total: 5900, subscription: 'sub_room_shop', customer: 'cus_room_shop', metadata: { item: 'room', device: devO, account: 'Roomy' } } } });
     await owner.go('&paid=room');

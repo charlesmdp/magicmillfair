@@ -29,7 +29,7 @@ export class Shop {
     this.prices = { tarp: 9900, gondola: 2900, plaque: 2000, village: [], items: {}, auction: { start: 100, max: 1_000_000 } };
     this.notes = []; // what happened while the visitor was away (outbid, refunded): said once
     this.owned = new Set();
-    /** slot → { state: 'live' | 'taken', mine, title, subtitle, url, logo (an address), draft } */
+    /** slot → { state: 'live' | 'taken', mine, title, subtitle, url, logo (an address), draft, pays: { amount, monthly, total } (cents: what its sponsor pays) } */
     this.slots = {};
     this.everything = false; // the administrator has it all
     this.pass = null; // the Game Pass, while it is held: { since, gift?, until?, managed? }
@@ -83,20 +83,39 @@ export class Shop {
   async buy(item, bid) {
     if (this.pk && this.onEmbed) {
       const here = await ask('api/checkout', { method: 'POST', body: { item, device: deviceId(), ...(bid && { bid }), embed: true } });
-      if (here.ok && typeof here.body?.secret === 'string') { if (await this.onEmbed(item, here.body.secret)) return null; }
+      if (here.ok && typeof here.body?.secret === 'string') { if (await this.onEmbed(item, here.body.secret, here.body.id || '')) return null; }
       else if (here.status >= 400 && here.status < 500 && here.body?.error) return here.body.error; // (refused: Stripe's page would be refused too)
       // (the form could not be shown here: Stripe's own page, as before)
     }
     const res = await ask('api/checkout', { method: 'POST', body: { item, device: deviceId(), ...(bid && { bid }) } });
-    if (res.ok && res.body && /^https:\/\//.test(res.body.url || '')) { window.location.assign(res.body.url); return null; }
+    // (the page leaves for Stripe's: the game is told first — it notes where one stands, to come back there)
+    if (res.ok && res.body && /^https:\/\//.test(res.body.url || '')) { this.onLeave?.(item); window.location.assign(res.body.url); return null; }
     return res.body?.error || (res.status === 0 ? 'The shop cannot be reached.' : 'The payment page could not be opened.');
+  }
+
+  /** The site of the sponsor of a place is being opened: the server counts it (nobody waits for the answer). */
+  click(slot) {
+    const s = this.slots[slot];
+    if (!s || !s.url) return;
+    ask('api/click', { method: 'POST', body: { slot } }).then((res) => { if (res.ok && Number.isInteger(res.body?.clicks)) s.clicks = res.body.clicks; }).catch(() => {});
+  }
+
+  /**
+   * Back from the payment page with the name Stripe gave it: the server asks Stripe whether it was paid, and
+   * gives what was bought at once (without waiting for Stripe to say so by itself). Resolves to
+   * { ok, paid, given, item } — or null when it could not be asked.
+   */
+  async confirm(session) {
+    if (typeof session !== 'string' || !session) return null;
+    const res = await ask('api/checkout/confirm', { method: 'POST', body: { session } });
+    return res.ok && res.body ? res.body : null;
   }
 
   /** Off to Stripe's page where the Game Pass is looked after — or stopped. Resolves to an error to show, or the page leaves. */
   async portal(what = '') {
     // (`what`: 'room' — the subscription of one's own room, rather than the Game Pass)
     const res = await ask('api/portal', { method: 'POST', body: { device: deviceId(), ...(what && { what }) } });
-    if (res.ok && res.body && /^https:\/\//.test(res.body.url || '')) { window.location.assign(res.body.url); return null; }
+    if (res.ok && res.body && /^https:\/\//.test(res.body.url || '')) { this.onLeave?.(what); window.location.assign(res.body.url); return null; }
     return res.body?.error || 'That page could not be opened.';
   }
 
@@ -113,8 +132,8 @@ export class Shop {
   }
 
   /** The administrator fills a place by hand (shown at once). Resolves to null, or to what is wrong. */
-  async set(slot, { title, subtitle, url, logo, bg }, key) {
-    const res = await ask('api/sponsors', { method: 'POST', key, body: { slot, set: { title, subtitle, url, ...(logo && { logo }), ...(bg !== undefined && { bg }) } } });
+  async set(slot, { title, subtitle, url, logo, bg, paid }, key) {
+    const res = await ask('api/sponsors', { method: 'POST', key, body: { slot, set: { title, subtitle, url, ...(logo && { logo }), ...(bg !== undefined && { bg }), ...(paid !== undefined && { paid }) } } });
     return res.ok ? null : res.body?.error || 'It could not be saved.';
   }
 

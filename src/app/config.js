@@ -17,9 +17,10 @@ export const RELEASE = {
   boats: false, // The Little Regatta: radio-controlled boats racing on the Great Pond (an extra)
   hill: false, // Uphill Battle: up a long slope while logs, barrels and boulders roll down it (an extra)
   crack: false, // Between a Rock: up a cleft between two needles of rock, from wall to wall (an extra)
-  hollow: false, // The Hollow Hill: a race flown under the ground, one lap against the clock (an extra)
+  hollow: false, // The Nuclear Cave (it was The Hollow Hill): a race flown under the ground, one lap against the clock (an extra)
   caves: true, // the caves are safe places: only those nearby hear what is said there (an extra)
   stats: true, // the game in figures: the counters and the page /opendata (an extra)
+  stars: true, // the stars of the big attractions on the map, with their names (off: the map names its places only)
   sky: 'hidden', // the sky villages: 'hidden' (nothing of them), 'soon' (their gate, closed), 'open'
   userRooms: false, // rooms that players make for themselves
   // any name written in the address (?room=a-name) is a room of its own, free. Off — as the fair is delivered —

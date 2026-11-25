@@ -60,9 +60,9 @@ export const BOARDS = {
   // a run cannot be over sooner than it claims to have lasted); the others are times, the less the better
   pond: { order: 'desc', min: 1000, max: 3600_000, each: 1, unit: 'time', release: 'pond' },
   boats: { order: 'asc', min: 37_000, max: 1800_000, release: 'boats' }, // The Little Regatta: three laps
-  hill: { order: 'asc', min: 9000, max: 600_000, release: 'hill' }, // Uphill Battle: from the arch to the bell
+  hill: { order: 'asc', min: 18_000, max: 600_000, release: 'hill' }, // Uphill Battle: from the arch to the bell (run flat out with nothing in the way: 18.3 s)
   crack: { order: 'asc', min: 7000, max: 1800_000, release: 'crack' }, // Between a Rock: forty metres of cleft
-  hollow: { order: 'asc', min: 16_000, max: 600_000, release: 'hollow' }, // The Hollow Hill: one lap of the cave
+  hollow: { order: 'asc', min: 15_000, max: 600_000, release: 'hollow' }, // The Nuclear Cave: one lap of the cave
   run: { order: 'desc', min: 1, max: 60_000, length: 2_000, each: 12 }, // the arcade cabinet: metres run (52 a second at the fastest), and 25 for an isotope now and then
 };
 export const KEPT = { all: 200, month: 100, week: 100, day: 100 }, SHOWN = 10;

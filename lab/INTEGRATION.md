@@ -10,7 +10,7 @@ on over the game as it stands, each on its own, and with every switch off the ga
 | `boats` | **The Little Regatta**, radio-controlled boats racing on the Great Pond | `src/world/zones/games/boats/`, `src/extras/boats.js` | `node tools/boats-test.mjs` (18) |
 | `hill` | **Uphill Battle**, up a long slope while logs, barrels and boulders roll down it | `src/world/zones/games/hill/`, `src/extras/hill.js` | `node tools/hill-test.mjs` (12) |
 | `crack` | **Between a Rock**, up a cleft between two needles of rock, from wall to wall | `src/world/zones/games/crack/`, `src/extras/crack.js` | `node tools/crack-test.mjs` (27) |
-| `hollow` | **The Hollow Hill**, a race flown under the ground, one lap against the clock | `src/world/zones/games/hollow/`, `src/extras/hollow.js` | `node tools/hollow-test.mjs` (29) |
+| `hollow` | **The Nuclear Cave** (it was The Hollow Hill), a race flown under the ground, one lap against the clock | `src/world/zones/games/hollow/`, `src/extras/hollow.js` | `node tools/hollow-test.mjs` (32) |
 | `caves` | The caves are safe places: nearby chat only | `src/extras/caves.js` | `node tools/extras-test.mjs` (15, with the next) |
 | `stats` | The game in figures: counters, the page `/opendata`, a line in the settings | `src/extras/stats.js`, `server/stats.js`, `public/opendata/`, `public/opendate/` | the same |
 
@@ -177,7 +177,10 @@ between the needles — and, so that one can walk there, `collision.addPlatform`
 
 The extra calls `app.crackDone?.(ms)`. For the game's boards: `crack: { order: 'asc', min: 7000, max: 1800_000 }`.
 
-## The Hollow Hill
+## The Nuclear Cave
+
+(It was The Hollow Hill. Its name changed, and what one sees and reads; in the code, in the storage and for its
+board it is still `hollow`.)
 
 A race flown under the ground: one lap of a great cave dug in the hill behind the sea cliff — a ring of galleries
 and halls 558 metres round, from eight to thirty metres wide, never less than nine metres of rock over it, its
@@ -190,7 +193,15 @@ the line of the run: a full one lasts three seconds, it comes back by itself in 
 rings flown through gives a third of it back. The inside of a bend is the shorter way: in the Screw one gains a
 quarter on who flies the middle. What one hits — columns, teeth of rock from the roof and from the floor, boulders,
 arches over the lake, curtains of rock with one hole, beams of crystal — does not end the flight: it throws one
-aside and all but stops one, and the clock runs on. The walls rub.
+aside and halves one's speed, and the clock runs on. The walls rub. The flyer is thin (0.42 m round): what looks
+like a way through is one. And what is flown past closely, without touching it, gives some burst back (a seventh
+of the gauge, once a lap for each thing), as do the atoms: fifty-odd little green lights that lead into the rings
+(a twentieth each).
+
+The cave is a store of waste now: yellow drums in heaps by the walls and at the feet of the columns, pools that
+glow green on the floor and light the rock round them, pipes along two galleries, a warning plate where each
+stretch begins — all of it by the walls or on the floor, none of it in the way. The stretches are shown under
+other names (`HOLLOW.titles`); the rules keep the old ones.
 
 **The cave itself is drawn only for who flies in it** (`Hollow.inside`, a group made visible when a flight opens
 and hidden when it closes): it lies under the hill, nobody else could see any of it, and left visible it was handed
@@ -202,8 +213,8 @@ shadow and is not in the shadow pass): The Start Hall, The Lantern Gallery, The 
 Screw (once and a quarter round a pillar, going down, under glow-worms), The Lake, The Curtains, The Narrows, The
 Crystal Hall, The Way Home.
 
-The extra calls `app.hollowDone?.(ms, knocks)`. For the game's boards: `hollow: { order: 'asc', min: 16_000, max: 600_000 }`
-(the bot's clean lap is 23.07 s; the checks print the rule). The flyer of another visitor is seen where the game
+The extra calls `app.hollowDone?.(ms, knocks)`. For the game's boards: `hollow: { order: 'asc', min: 15_000, max: 600_000 }`
+(the bot's clean lap is 22.1 s; the checks print the rule). The flyer of another visitor is seen where the game
 puts it, as for the slide: each has a flight of their own in the same cave.
 
 ## The keys of a game, at any time

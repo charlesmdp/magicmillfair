@@ -48,13 +48,28 @@ try {
   const gates = await page.evaluate(() => { const e = window.__mmf.extras, g = (o) => o.gate || o.stand; return Object.fromEntries(Object.keys(e).filter((k) => g(e[k])).map((k) => [k, { x: g(e[k]).x, z: g(e[k]).z }])); });
   const labels = {};
   for (const k of ['hill', 'crack', 'hollow']) { await at(gates[k].x, gates[k].z); await frames(2); labels[k] = (await offered()).join(' | '); }
-  check('at its gate each game offers itself', /Climb Uphill Battle/.test(labels.hill) && /Climb Between a Rock/.test(labels.crack) && /Fly The Hollow Hill/.test(labels.hollow), labels);
+  check('at its gate each game offers itself', /Climb Uphill Battle/.test(labels.hill) && /Climb Between a Rock/.test(labels.crack) && /Fly The Nuclear Cave/.test(labels.hollow), labels);
   const away = await at(0, 0); await frames(2);
-  check('and away from them, none does', !(await offered()).some((l) => /Uphill|Between a Rock|Hollow Hill/.test(l)), `at ${away.x.toFixed(0)}, ${away.z.toFixed(0)}`);
+  check('and away from them, none does', !(await offered()).some((l) => /Uphill|Between a Rock|Nuclear Cave/.test(l)), `at ${away.x.toFixed(0)}, ${away.z.toFixed(0)}`);
 
   // ---- the cleft: one walks to it, the bot climbs it, one is put back on the planks
   const way = CLEFT.way, mid = await at((way.a[0] + way.b[0]) / 2, (way.a[1] + way.b[1]) / 2), land = await at(gates.crack.x, gates.crack.z);
   check('the walkway and the landing of the cleft carry the player, over the water', Math.abs(mid.y - CLEFT.floor) < 0.02 && Math.abs(land.y - CLEFT.floor) < 0.02, `at ${mid.y.toFixed(2)} m and ${land.y.toFixed(2)} m`);
+  // (its ropes hold: a walker pushed every way from eight places of the walkway and of the landing — eight metres each
+  // time — never leaves the planks, except by the open end of the walkway, onto the sand; who swims underneath passes)
+  const ropes = await page.evaluate((floor) => {
+    const m = window.__mmf, col = m.world.collision, deck = m.extras.crack.deck, r = 0.35, out = { off: 0, tried: 0, where: '' };
+    for (const [sx, sz] of [[105.1, 105.2], [100.5, 108.2], [110.2, 101.8], [112.5, 100.5], [117.8, 99.8], [115, 102.2], [115, 104.5], [112, 102.4]]) for (let k = 0; k < 16; k++) {
+      const a = (k / 16) * Math.PI * 2, p = { x: sx, z: sz };
+      for (let i = 0; i < 160; i++) { p.x += Math.cos(a) * 0.05; p.z += Math.sin(a) * 0.05; col.resolve(p, r, floor); }
+      out.tried++;
+      if (deck.heightAt(p.x, p.z) === null && !(p.x < 99.6)) { out.off++; out.where = `${p.x.toFixed(1)}, ${p.z.toFixed(1)}`; }
+    }
+    const q = { x: 105.1, z: 107.2 }; for (let i = 0; i < 80; i++) { q.z -= 0.05; col.resolve(q, r, -0.6); }
+    out.swam = +(107.2 - q.z).toFixed(1);
+    return out;
+  }, CLEFT.floor);
+  check('nobody falls off them: a walker pushed every way stays on the planks — ropes on both sides of the walkway, the landing closed all round — and who swims underneath passes', ropes.tried === 128 && ropes.off === 0 && ropes.swam > 3.5, `${ropes.tried} pushes, ${ropes.off} off the planks${ropes.where ? ` (${ropes.where})` : ''}, ${ropes.swam} m swum under them`);
   await page.evaluate(() => { const a = window.__mmf; window.__told = {}; a.crackDone = (ms) => { window.__told.crack = ms; }; a.hollowDone = (ms, hits) => { window.__told.hollow = [ms, hits]; }; a.hillDone = (ms) => { window.__told.hill = ms; }; a.climbCleft(); a.cleftClimb().auto = true; });
   await frames(30);
   const during = await page.evaluate(() => { const a = window.__mmf, c = a.cleftClimb(); return { driven: a.player.driver === c, y: a.player.pos.y, line: c.line, keys: [...document.querySelectorAll('button')].some((b) => /keys/.test(b.textContent) && b.style.display !== 'none') }; });
@@ -97,6 +112,29 @@ try {
   await page.waitForFunction(() => !window.__mmf.hillClimb(), null, { timeout: 180000 });
   const hill = await page.evaluate(() => ({ told: window.__told.hill, driver: !!window.__mmf.player.driver }));
   check('the slope is climbed by its bot in the running game, and its time told', hill.told > 9000 && hill.told < 90000 && !hill.driver, `${(hill.told / 1000).toFixed(1)} s`);
+  // ---- the regatta: asked for at the stand, it leaves with the next named start — on the clock everybody
+  // shares —, the boat sails its three laps by itself and its time is told; somebody else's boat that the network
+  // speaks of is shown while it races with the same start, and no longer once nothing is heard of it
+  await page.evaluate(async () => { const a = window.__mmf; if (!a.extras.boats) { const { loadExtras } = await import('/src/extras/index.js'); await loadExtras(a, { boats: true }); } a.boatsDone = (ms, place) => { window.__told.boats = [ms, place]; }; const s = a.extras.boats.stand; a.player.teleport(s.x, s.z, 0); a.raceBoats(); a.boatRace().auto = true; });
+  await frames(6);
+  const asked = await page.evaluate(() => { const r = window.__mmf.boatRace(); return { line: r.line, name: r.start.name, wait: (r.start.at - (Date.now())) / 1000 }; });
+  await page.waitForFunction(() => window.__mmf.boatRace()?.state.clock > 6, null, { timeout: 120000 });
+  const guest = await page.evaluate(async () => {
+    const a = window.__mmf, r = a.boatRace(), B = a.extras.boats, me = r.state.boats[0];
+    B.heard(4242, r.start.n, [me.x + 3, me.z + 2, me.yaw, 6, me.s - 4, 0, Math.round(r.state.clock * 1000), 0]);
+    B.heard(4343, r.start.n + 1, [me.x - 3, me.z - 2, me.yaw, 6, 10, 0, 500, 0]); // (of another start: not in this race)
+    await new Promise((res) => setTimeout(res, 400));
+    const seen = { same: B.racing(r.start.n), shown: [...B.guests.values()].map((g) => g.hull.visible).join(), line: r.line };
+    await new Promise((res) => setTimeout(res, 3200));
+    seen.left = B.guests.size;
+    return seen;
+  });
+  await page.waitForFunction(() => !window.__mmf.boatRace(), null, { timeout: 240000 });
+  const sailed = await page.evaluate(() => ({ told: window.__told.boats, driver: !!window.__mmf.player.driver }));
+  check('the regatta leaves with the next named start, is sailed by its bot in the running game, and its time told; another visitor\'s boat is shown while it races with the same start — one of another start is not —, and no longer once nothing is heard of it',
+    /start \w+ leaves in \d+…/.test(asked.line) && asked.wait > -1 && asked.wait <= 10.5 && guest.same === 1 && guest.shown.split(',').sort().join() === 'false,true' && /with 1 other skipper/.test(guest.line) && guest.left === 0
+    && sailed.told?.[0] > 40000 && sailed.told[0] < 70000 && sailed.told[1] >= 1 && !sailed.driver,
+    JSON.stringify({ asked, guest, sailed }));
   check('nothing was reported wrong by the browser', errors.length === 0, errors.slice(0, 3).join(' | '));
 } finally {
   await browser.close();

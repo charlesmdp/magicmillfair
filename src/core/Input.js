@@ -48,12 +48,12 @@ export class Input {
       this._pressed.add(e.code);
       const key = typeof e.key === 'string' && e.key.length === 1 ? e.key.toLowerCase() : '';
       const action = others[e.code] || (key >= 'a' && key <= 'z' ? letters[key] : key && key.toLowerCase() !== key.toUpperCase() ? places[e.code] : letters[key] || places[e.code]);
-      if (action) this.emit(action);
+      if (action) { this.emit(action); this._hold = { action, code: e.code, at: performance.now(), told: false }; }
       // (Enter opens the chat: without this, the same key press would go on to submit the empty field it has just focused)
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.code)) e.preventDefault();
     });
-    window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => { this.keys.clear(); this.pointer.down = false; });
+    window.addEventListener('keyup', (e) => { this.keys.delete(e.code); if (this._hold && this._hold.code === e.code) this._hold = null; });
+    window.addEventListener('blur', () => { this.keys.clear(); this.pointer.down = false; this._hold = null; });
 
     // mouse look: pointer lock when available, otherwise drag
     let dragging = false, lastX = 0, lastY = 0, moved = 0;
@@ -177,4 +177,12 @@ export class Input {
   consumeZoom() { const z = this._zoom; this._zoom = 0; return z; }
   /** How many times the pointer was pressed (a click, a tap) since the last call. */
   consumeClicks() { const n = this._clicks; this._clicks = 0; return n; }
+
+  /** True once, when the key of the shortcut `action` has been held down for `seconds` (X held: one lies down). */
+  heldLong(action, seconds) {
+    const h = this._hold;
+    if (!h || h.action !== action || h.told || performance.now() - h.at < seconds * 1000) return false;
+    h.told = true;
+    return true;
+  }
 }

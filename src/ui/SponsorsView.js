@@ -2,9 +2,11 @@
 // now (taken by the game itself, see Photographer below), who sponsors it if somebody does, what it takes to
 // have its panel — and, underneath, the other things a sponsor can have.
 //
-//   view.open({ cards, extras, note })
-//     cards:  [{ id, name, state: 'free' | 'live' | 'mine' | 'pending' | 'taken', sponsor: { title, subtitle, logo, url } | null,
+//   view.open({ cards, wheel, extras, note })
+//     cards:  [{ id, name, state: 'free' | 'live' | 'mine' | 'pending' | 'taken', sponsor: { title, subtitle, logo, url, site, clicks } | null,
 //                price (words), acts: [{ label, run }], photo: () → canvas | null, stamp (when it changes, the photograph is retaken) }]
+//     wheel:  the gondolas of the big wheel that somebody holds, as cards of the same kind ("Gondola 7": which
+//             one it is, a photograph of it as it goes round, whose it is) — { cards, of (how many gondolas there are) }
 //     extras: [{ title, text, act: { label, run } | null }]
 //     note:   a line under the title (the shop is closed, test mode…)
 //
@@ -15,7 +17,8 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 const TAGS = { free: 'Free', live: 'Sponsored', mine: 'Yours', pending: 'To approve', taken: 'Taken' };
 
 /**
- * Photographs of the world taken by the game's own renderer, from anywhere: shoot(from, at, w, h, fov) → a
+ * Photographs of the world taken by the game's own renderer, from anywhere (`prepare(camera)`, when set, is
+ * called before each: what is drawn for one eye only is made ready for this one): shoot(from, at, w, h, fov) → a
  * canvas. The scene is drawn once more, small, from another eye — what is in the picture is what is there
  * (a sponsor's panel included).
  */
@@ -35,6 +38,10 @@ export class Photographer {
     cam.lookAt(at[0], at[1], at[2]);
     cam.updateProjectionMatrix();
     cam.updateMatrixWorld(true);
+    cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
+    // (the ground and the trees are drawn for the eye that looks: they are told whose eye this is — the game
+    // tells them again, for the player's, with its next frame)
+    this.prepare?.(cam);
     const was = renderer.getRenderTarget();
     renderer.setRenderTarget(rt);
     renderer.clear();
@@ -70,13 +77,16 @@ export class SponsorsView {
         </header>
         <div class="tp-scroll">
           <div class="tp-grid"></div>
-          <h3 class="tp-also">Also for sponsors</h3>
+          <h3 class="tp-also tp-also-w">On the big wheel</h3>
+          <div class="tp-grid tp-wheel"></div>
+          <h3 class="tp-also tp-also-x">Also for sponsors</h3>
           <div class="tp-extras"></div>
         </div>
       </div>`;
     root.append(this.el);
     this.sheet = this.el.querySelector('.tp-sheet');
     this.grid = this.el.querySelector('.tp-grid');
+    this.wheel = this.el.querySelector('.tp-wheel');
     this.extras = this.el.querySelector('.tp-extras');
     this.el.querySelector('.tp-x').onclick = () => this.close();
     this.el.addEventListener('pointerdown', (e) => { if (e.target === this.el) this.close(); });
@@ -88,7 +98,7 @@ export class SponsorsView {
   on(name, fn) { this.handlers[name] = fn; return this; }
   get isOpen() { return this.el.classList.contains('on'); }
 
-  open({ cards = [], extras = [], note = '' } = {}) {
+  open({ cards = [], wheel = null, extras = [], note = '' } = {}) {
     this.el.classList.add('on');
     this.run = (this.run || 0) + 1;
     const held = cards.filter((c) => c.state === 'live' || c.state === 'mine' || c.state === 'taken').length;
@@ -97,9 +107,15 @@ export class SponsorsView {
     count.textContent = '';
     count.append(el('b', '', `${held}`), el('span', '', ` of ${cards.length} games sponsored`));
     this.grid.textContent = '';
-    const frames = [];
-    for (const c of cards) {
-      const card = el('article', `tp-card is-${c.state}`);
+    this.wheel.textContent = '';
+    const frames = [], cars = wheel?.cards || [];
+    // (the gondolas somebody holds, each by its number: a sponsor finds theirs here)
+    const title = this.el.querySelector('.tp-also-w');
+    title.hidden = this.wheel.hidden = !cars.length;
+    title.textContent = `On the big wheel · ${cars.length} of ${wheel?.of || cars.length} gondolas sponsored`;
+    for (const c of [...cards, ...cars]) {
+      const car = cars.includes(c);
+      const card = el('article', `tp-card${car ? ' tp-car' : ''} is-${c.state}`);
       card.dataset.id = c.id;
       const pic = el('div', 'tp-pic');
       pic.append(el('span', 'tp-tag', TAGS[c.state] || ''));
@@ -111,12 +127,14 @@ export class SponsorsView {
       if (c.sponsor && c.sponsor.title) {
         if (c.sponsor.logo) { const img = el('img', 'tp-logo'); img.alt = ''; img.loading = 'lazy'; img.decoding = 'async'; img.referrerPolicy = 'no-referrer'; img.src = c.sponsor.logo; img.onerror = () => img.remove(); who.append(img); }
         const words = el('div', 'tp-words');
-        words.append(el('small', '', c.state === 'pending' ? 'Awaiting your approval' : c.state === 'mine' ? 'Your panel' : 'Sponsored by'), el('b', '', c.sponsor.title));
+        words.append(el('small', '', c.state === 'pending' ? 'Awaiting your approval' : c.state === 'mine' ? (car ? 'Your gondola' : 'Your panel') : 'Sponsored by'), el('b', '', c.sponsor.title));
         if (c.sponsor.subtitle) words.append(el('i', '', c.sponsor.subtitle));
+        // (its site, and how many times it was opened from the game)
+        if (c.sponsor.site) words.append(el('span', 'tp-site', `${c.sponsor.site} · ${c.sponsor.clicks || 0} click${c.sponsor.clicks === 1 ? '' : 's'}`));
         who.append(words);
       } else {
         who.classList.add('none');
-        who.append(el('b', '', c.state === 'mine' ? 'Yours — nothing on it yet' : c.state === 'taken' ? 'Taken — its panel is on its way' : 'No sponsor yet'), el('i', '', c.state === 'free' ? 'Its panel says "Your brand here".' : ''));
+        who.append(el('b', '', c.state === 'mine' ? 'Yours — nothing on it yet' : c.state === 'taken' ? `Taken — its ${car ? 'banner' : 'panel'} is on its way` : 'No sponsor yet'), el('i', '', c.state === 'free' ? 'Its panel says "Your brand here".' : ''));
       }
       body.append(who);
       const acts = el('div', 'tp-acts');
@@ -129,10 +147,10 @@ export class SponsorsView {
       });
       body.append(acts);
       card.append(pic, body);
-      this.grid.append(card);
+      (car ? this.wheel : this.grid).append(card);
     }
     this.extras.textContent = '';
-    this.el.querySelector('.tp-also').hidden = !extras.length;
+    this.el.querySelector('.tp-also-x').hidden = !extras.length;
     for (const x of extras) {
       const box = el('div', 'tp-extra');
       const text = el('div');

@@ -312,7 +312,8 @@ export class Character {
 
   /**
    * A paint job over the colour of the avatar: 0 none, 1 gold plating, 2 chrome, 3 atomic glow (it pulses),
-   * 4 candy (it drifts through the rainbow) — the numbers of PAINTS in server/items.js.
+   * 4 candy (it drifts through the rainbow), 5 meltdown, 6 plasma, 7 hazard stripes, 8 mirror ball, 9 galaxy — the
+   * numbers of PAINTS in server/items.js.
    */
   setPaint(paint = 0) {
     if (paint === (this.paint || 0)) return;

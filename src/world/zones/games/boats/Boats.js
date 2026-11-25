@@ -12,11 +12,17 @@ import { LAYER } from '../../../../render/Shadows.js';
 import { ANIM } from '../../../../player/Character.js';
 import { canvasBoard } from '../Boards.js';
 import { formatTime } from '../course.js';
-import { REGATTA, course, startRace, stepRace, botHelm, ranking } from './water.js';
+import { REGATTA, course, startRace, stepRace, botHelm, ranking, nextStart, runTo, tellBoat, heardBoat, THING } from './water.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const RED = [0.95, 0.1, 0.12], WHITE = [1.6, 1.6, 1.55], NAVY = [0.07, 0.07, 0.2], YELLOW = [1.6, 1.3, 0.12], BLUE = [0.16, 0.36, 1.0], GREEN = [0.15, 0.85, 0.3], CREAM = [1.3, 1.17, 0.9], DARK = [0.05, 0.06, 0.08];
 const HULLS = [RED, BLUE, YELLOW, GREEN]; // the visitor's, then the three that sail by themselves
+// (the boats of the other visitors who race: a few hulls kept ready, in colours of their own)
+const GUESTS = [[1.0, 0.42, 0.05], [0.5, 0.16, 0.75], [0.95, 0.3, 0.6], [0.05, 0.6, 0.62], [0.9, 0.9, 0.86], [0.42, 0.24, 0.1]];
+// The outline of a boat, half of it (the +x side): [x, z, y] from the stern to the tip of the bow — its deck, and its keel under it.
+const DECK = [[0.25, -0.6, 0.15], [0.27, -0.2, 0.15], [0.23, 0.2, 0.16], [0.13, 0.5, 0.18], [0, 0.76, 0.2]];
+const KEEL = [[0.15, -0.6, -0.06], [0.17, -0.2, -0.07], [0.13, 0.2, -0.06], [0.06, 0.46, -0.03], [0, 0.62, 0.03]];
+const SILENT = 2500; // ms without a word of a boat: it is no longer shown
 const PLACES = ['1st', '2nd', '3rd', '4th'];
 /** How much burst a boat has: a bar that empties while it is used, and fills again — "ready" when it is full. */
 function gauge(b) {
@@ -86,19 +92,35 @@ export class Boats {
     this.sign = sign;
     this.group.add(sign.mesh);
 
-    // ---- the boats: a hull, a cabin, an aerial with its pennant — a little over a metre long, the bow towards +z
-    this.hulls = HULLS.map((tone, k) => {
+    // ---- the boats: little speedboats — a pointed hull, a cockpit behind its windscreen, a wing and a motor at the
+    // stern, an aerial with its pennant — a little over a metre long, the bow towards +z
+    this.guests = new Map(); // (the others' boats that were heard of: id → { run, last, prev, hull, x, z, yaw })
+    this.hulls = [...HULLS, ...GUESTS].map((tone, k) => {
       const p = new Parts(), b = p.get('paint');
-      b.tint(...tone, 1).box(-0.24, -0.06, -0.6, 0.24, 0.15, 0.26).box(-0.17, -0.06, 0.26, 0.17, 0.14, 0.5).box(-0.09, -0.05, 0.5, 0.09, 0.13, 0.68);
-      b.tint(...WHITE, 1).box(-0.25, 0.15, -0.6, 0.25, 0.18, 0.26).box(-0.16, 0.18, -0.36, 0.16, 0.33, 0.04);
-      b.tint(...DARK, 1).box(-0.15, 0.2, 0.04, 0.15, 0.31, 0.07).box(-0.2, 0.18, -0.58, 0.2, 0.26, -0.44);
-      b.tint(...tone, 1).box(-0.26, 0.3, -0.62, 0.26, 0.33, -0.5);
-      b.tint(...DARK, 1).cylinder(0.1, 0.33, -0.2, 0.008, 0.006, 0.62, 4);
-      b.tint(...tone, 1).box(0.1, 0.83, -0.205, 0.26, 0.95, -0.195);
+      // the hull: a deck that comes to a point at the bow, sides that lean in to the keel, a flat stern
+      b.tint(...tone, 1);
+      for (const side of [1, -1]) for (let i = 0; i + 1 < DECK.length; i++) {
+        const d0 = V(DECK[i][0] * side, DECK[i][2], DECK[i][1]), d1 = V(DECK[i + 1][0] * side, DECK[i + 1][2], DECK[i + 1][1]), k0 = V(KEEL[i][0] * side, KEEL[i][2], KEEL[i][1]), k1 = V(KEEL[i + 1][0] * side, KEEL[i + 1][2], KEEL[i + 1][1]);
+        if (side > 0) b.quad(k0, d0, d1, k1); else b.quad(k0, k1, d1, d0);
+      }
+      b.quad(V(-KEEL[0][0], KEEL[0][2], KEEL[0][1]), V(-DECK[0][0], DECK[0][2], DECK[0][1]), V(DECK[0][0], DECK[0][2], DECK[0][1]), V(KEEL[0][0], KEEL[0][2], KEEL[0][1]));
+      b.tint(...WHITE, 1).poly([DECK[0], ...DECK.map((q) => [-q[0], q[1], q[2]]).slice(0, -1), DECK[DECK.length - 1], ...DECK.slice(1, -1).reverse()].map((q) => V(q[0], q[2], q[1])));
+      // a stripe down the deck in the colour of the hull, a dark cockpit behind its windscreen, a roof of its colour
+      b.tint(...tone, 1).box(-0.045, 0.16, -0.02, 0.045, 0.2, 0.6).box(-0.14, 0.27, -0.3, 0.14, 0.29, -0.03);
+      b.tint(...DARK, 1).box(-0.14, 0.15, -0.3, 0.14, 0.27, -0.03).quad(V(-0.14, 0.17, 0.1), V(0.14, 0.17, 0.1), V(0.14, 0.27, -0.03), V(-0.14, 0.27, -0.03));
+      // a wing over the stern on two struts, and the motor that hangs behind it
+      b.box(-0.21, 0.15, -0.57, -0.18, 0.36, -0.51).box(0.18, 0.15, -0.57, 0.21, 0.36, -0.51).box(-0.07, 0.0, -0.73, 0.07, 0.22, -0.6);
+      b.tint(...tone, 1).box(-0.28, 0.36, -0.63, 0.28, 0.385, -0.46);
+      b.tint(...WHITE, 1).box(-0.06, 0.22, -0.72, 0.06, 0.25, -0.61);
+      // its aerial and its pennant
+      b.tint(...DARK, 1).cylinder(0.1, 0.29, -0.2, 0.008, 0.006, 0.62, 4);
+      b.tint(...tone, 1).box(0.1, 0.79, -0.205, 0.26, 0.91, -0.195);
       const g = p.toMeshes(mats, { name: `boats-boat${k}`, layers: [] });
+      if (k >= HULLS.length) g.visible = false;
       this.group.add(g);
       return g;
     });
+    this.spare = this.hulls.splice(HULLS.length); // (the hulls of the guests, until one is needed)
     // what shows the gate to take: an arrow of light over its middle
     { const p = new Parts(); p.get('glow').tint(1.4, 1.1, 0.25, 1).cylinder(0, 0, 0, 0.0, 0.38, 0.55, 4).cylinder(0, 0.55, 0, 0.13, 0.13, 0.5, 4); this.arrow = p.toMeshes(mats, { name: 'boats-arrow', layers: [] }); this.arrow.visible = false; this.group.add(this.arrow); }
     this.group.updateMatrixWorld(true);
@@ -115,6 +137,41 @@ export class Boats {
     g.updateMatrixWorld(true);
   }
 
+  /**
+   * Somebody else's boat was heard of (the network said so: see water.js, tellBoat): `id` whose it is, `run` the
+   * start they left with, `d` the eight numbers. Kept, and shown by `update` — to who races with that start, and
+   * to who watches from the bank.
+   */
+  heard(id, run, d, now = performance.now()) {
+    const h = heardBoat(d);
+    if (!h) return;
+    let g = this.guests.get(id);
+    if (!g) {
+      if (!this.spare.length) return; // (more boats than hulls: the last to come are not shown)
+      g = { hull: this.spare.pop(), x: h.x, z: h.z, yaw: h.yaw, run, last: null };
+      this.guests.set(id, g);
+    }
+    g.run = run; g.last = h; g.at = now;
+  }
+
+  /** Every frame: the others' boats, each where it was last said to be and a little further — that much time has gone by. `mine`: the start this visitor races with (only those boats are shown), or null on the bank (all of them). */
+  update(dt = 0.016, mine = null, now = performance.now()) {
+    for (const [id, g] of this.guests) {
+      if (now - g.at > SILENT) { g.hull.visible = false; this.spare.push(g.hull); this.guests.delete(id); continue; }
+      const h = g.last, age = Math.min(0.6, (now - g.at) / 1000), k = Math.min(1, dt * 9);
+      g.hull.visible = mine === null || g.run === mine;
+      if (!g.hull.visible) continue;
+      const tx = h.x + Math.sin(h.yaw) * h.way * age, tz = h.z + Math.cos(h.yaw) * h.way * age;
+      g.x += (tx - g.x) * k; g.z += (tz - g.z) * k;
+      let turn = h.yaw - g.yaw; turn = Math.atan2(Math.sin(turn), Math.cos(turn)); g.yaw += turn * k;
+      g.hull.position.set(g.x, REGATTA.level + 0.03 + Math.min(0.07, Math.abs(h.way) * 0.006), g.z);
+      g.hull.rotation.set(-Math.min(0.16, Math.max(0, h.way) * 0.014), g.yaw, 0, 'YXZ');
+      g.hull.updateMatrixWorld(true);
+    }
+  }
+  /** How many of the others' boats race with the start `run`. */
+  racing(run) { let n = 0; for (const g of this.guests.values()) if (g.run === run) n++; return n; }
+
   /** With no race on, the boats lie on the grid behind the line. */
   _moor() { startRace(this.depth).boats.forEach((b, k) => this._show(k, b, k * 3)); this.arrow.visible = false; }
 
@@ -125,31 +182,39 @@ export class Boats {
   near(x, z) { return (x - this.stand.x) ** 2 + (z - this.stand.z) ** 2 < 2.2 * 2.2; }
 
   /**
-   * A race starts: the player stays at the stand, their boat is on the grid; three, two, one… `io`: { play(sound,
-   * options), note(text), splash(x, y, z, strength) }. Returns the session — it is also the driver of the player:
+   * A race is asked for: the player stays at the stand, their boat is on the grid, and it leaves with the next
+   * start — there is one every ten seconds, each with its name, on the clock everybody shares: friends who take
+   * the same one race together, each seeing the others' boats, against the same three that sail by themselves.
+   * `io`: { play(sound, options), note(text), splash(x, y, z, strength), clock() (ms, the shared clock), slot()
+   * (which place of the visitors' row), tell(kind, run, numbers) (to the others: where this boat is) }.
+   * Returns the session — it is also the driver of the player:
    *   step(dt, player, control), camera(camera, dt) → the angle of view, line (for the screen), over (the line is
    *   crossed: `time` in ms and `place` are the race's), ended (a moment later: the game lets go — see `drop`),
    *   drop(player), close(), auto (true: the boat sails by itself).
    */
   open(player, io) {
-    const R = REGATTA, C = course(), race = startRace(this.depth), events = [], input = { throttle: 0, helm: 0, burst: false };
-    const S = { count: 3.4, cam: null, look: V(0, 0, 0), fov: 60, after: 0, shake: 0, wake: 0, acc: 0 }, _t = V(0, 0, 0), me = race.boats[0];
+    const R = REGATTA, C = course(), clock = io.clock || (() => Date.now()), start = nextStart(clock());
+    const race = startRace(this.depth, start.n, io.slot ? io.slot() : 3), events = [], input = { throttle: 0, helm: 0, burst: false };
+    const S = { cam: null, look: V(0, 0, 0), fov: 60, after: 0, shake: 0, wake: 0, told: 0, left: 99, gone: false }, _t = V(0, 0, 0), me = race.boats[0];
+    const helm = (r, inp) => botHelm(r, inp);
     const session = {
-      boats: this, over: false, ended: false, time: 0, place: 0, line: '', riding: false, anim: ANIM.idle, state: race, auto: false,
+      boats: this, over: false, ended: false, time: 0, place: 0, line: '', riding: false, anim: ANIM.idle, state: race, auto: false, start,
       step: (dt, pl, control) => {
         const inp = pl.input;
-        if (S.count > 0) {
-          const was = S.count;
-          S.count -= dt;
-          if (Math.ceil(S.count) !== Math.ceil(was) && S.count > 0 && S.count <= 3) io.play('tick');
-          if (S.count <= 0) io.play('start');
-        } else if (session.auto) {
-          S.acc += Math.min(dt, 0.25);
-          while (S.acc >= R.step) { S.acc -= R.step; botHelm(race, input); stepRace(race, R.step, input, events); }
+        // (the race is where the shared clock says: who left with the same start is at the same step at the same moment)
+        const T = (clock() - start.at) / 1000;
+        if (T < 0) {
+          const left = Math.ceil(-T);
+          if (left !== S.left) { S.left = left; if (left <= 3) io.play('tick'); }
         } else {
-          input.throttle = control ? inp.move.y : 0; input.helm = control ? inp.move.x : 0; input.burst = control && !!inp.jump;
-          stepRace(race, dt, input, events);
+          if (!S.gone) { S.gone = true; io.play('start'); }
+          if (session.auto) runTo(race, T, input, events, helm);
+          else { input.throttle = control ? inp.move.y : 0; input.helm = control ? inp.move.x : 0; input.burst = control && !!inp.jump; runTo(race, T, input, events); }
+          // (the others are told where this boat is, five times a second — and once more when it has crossed the line)
+          S.told -= dt;
+          if (S.told <= 0 && S.after < 1) { S.told = 0.2; io.tell?.(THING, start.n, tellBoat(race)); }
         }
+        this.update(dt, start.n);
         for (const e of events) this._tell(e, race, io, S);
         events.length = 0;
         race.boats.forEach((b, k) => this._show(k, b, race.clock));
@@ -167,9 +232,10 @@ export class Boats {
           if (S.after > 2.6) session.ended = true;
         }
         const place = PLACES[ranking(race).indexOf(me)];
-        session.line = S.count > 0 ? `${R.name} · ${Math.ceil(S.count) > 3 ? 'ready' : Math.ceil(S.count)}…`
+        const others = this.racing(start.n), with_ = others ? ` · with ${others} other skipper${others === 1 ? '' : 's'}` : '';
+        session.line = T < 0 ? `${R.name} · start ${start.name} leaves in ${Math.ceil(-T)}…${with_}`
           : race.over ? `${R.name} · ${formatTime(race.time)} · ${PLACES[race.place - 1]}`
-            : `Lap ${Math.min(R.laps, me.lap + 1)}/${R.laps} · ${formatTime(Math.round(race.clock * 1000))} · ${place} · ${Math.round(Math.abs(me.way) * 3.6)} km/h · ${gauge(me)}`;
+            : `Lap ${Math.min(R.laps, me.lap + 1)}/${R.laps} · ${formatTime(Math.round(race.clock * 1000))} · ${place} · ${Math.round(Math.abs(me.way) * 3.6)} km/h · ${gauge(me)}${with_}`;
       },
       /** The camera of a race: low over the water behind one's boat, looking where it goes. */
       camera: (cam, dt) => {

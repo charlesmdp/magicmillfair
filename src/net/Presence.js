@@ -7,6 +7,7 @@
 import { Track, wrapAngle } from './interp.js';
 import { BroadcastTransport } from './transports/BroadcastTransport.js';
 import { WebSocketTransport } from './transports/WebSocketTransport.js';
+import { maskChat, nameOk } from '../../server/decency.js';
 import { deviceId } from './device.js';
 
 const BUILD = typeof __BUILD__ !== 'undefined' && /^[0-9a-f]{4,12}$/.test(__BUILD__.commit || '') ? __BUILD__.commit : ''; // which version this page is (said with the hello)
@@ -23,10 +24,14 @@ const now = () => performance.now();
 const round = (v, k) => Math.round(v * k) / k;
 const int = (v, max, def = 0) => (Number.isInteger(v) && v >= 0 && v <= max ? v : def);
 
-/** Display name: no control characters or angle brackets, single spaces, at most 16 characters. */
+/**
+ * Display name: no control characters or angle brackets, single spaces, at most 16 characters — and one that
+ * may be worn (no insult, no address of a site, no @: server/decency.js, as the relay judges it).
+ */
 export function cleanName(name, fallback = 'Visitor') {
   const s = typeof name === 'string' ? name.replace(/\s+/g, ' ').replace(/[\p{C}<>]/gu, '').replace(/ {2,}/g, ' ').trim() : '';
-  return [...s].slice(0, 16).join('').trim() || fallback;
+  const n = [...s].slice(0, 16).join('').trim();
+  return n && nameOk(n) ? n : fallback;
 }
 
 /** Chat line as the relay accepts it: one line, no control characters, at most 200 characters. */
@@ -340,6 +345,17 @@ export class Presence {
   }
 
   /**
+   * A thing of ours in a game that is not our avatar — a boat of the regatta: `kind` (0..15: which game), `run`
+   * (a whole number: the start we left with) and up to eight numbers, handed on to those near enough as the
+   * event 'thing' ({ id, peer, kind, run, d }). A few times a second is plenty: the relay hands on eight a second
+   * at the most. False when it could not be sent.
+   */
+  sendThing(kind, run, numbers) {
+    if (!this._tr || !Number.isInteger(kind) || kind < 0 || kind > 15 || !Number.isInteger(run) || run < 0 || !Array.isArray(numbers) || !numbers.length || numbers.length > 8 || !numbers.every(Number.isFinite)) return false;
+    return this._tr.send({ t: 'v', k: kind, n: run, d: numbers.map((v) => Math.round(v * 100) / 100) }) !== false;
+  }
+
+  /**
    * One chat line for the room. Returns the text as sent ('' when empty, or when lines come too fast: the
    * relay would not pass them on either). Nothing is stored anywhere: who is not there does not get it.
    */
@@ -352,7 +368,7 @@ export class Presence {
     this._chat -= 1;
     // (`near`: only those within 20 m get it; `important`: an administrator's line, shown to all in another colour)
     if (this._tr) this._tr.send(important ? { t: 'c', m, i: 1 } : near ? { t: 'c', m, n: 1 } : { t: 'c', m });
-    return m;
+    return maskChat(m); // (one reads one's own line as the others do: the relay hides the same words)
   }
 
   /** The administrator's key ('' to give it up): the relay answers with an 'admin' event. */
@@ -534,6 +550,8 @@ export class Presence {
     else if (m.t === 'quiet') { const to = cleanRoom(m.to); if (to && to !== this.room) this._emit('quiet', { to, label: roomLabel(to), n: Number.isFinite(m.n) ? Math.max(0, Math.floor(m.n)) : 0 }); } // (this room has gone quiet: another has room)
     else if (m.t === 'admin') { this.admin = !!m.ok; this.owner = this.admin && !!m.owner; this._emit('admin', { ok: this.admin, owner: this.owner, out: !!m.out }); }
     else if (m.t === 'gift') this._emit('gift', { by: cleanName(m.by || '') });
+    // (the name asked for is somebody's account: the relay says which name is worn instead — the page follows)
+    else if (m.t === 'name') { const taken = cleanName(m.taken || ''); this.name = cleanName(m.name, this.name); this._persist(); this._emit('named', { taken, name: this.name, rude: m.rude === 1 }); }
     else if (m.t === 'promoted') { if (typeof m.key === 'string' && m.key) this._emit('promoted', { key: m.key, by: cleanName(m.by || '') }); else this._emit('promoted', { id: m.id }); }
     else if (m.t === 'who') { if (Array.isArray(m.list)) this._emit('who', { list: m.list, now: m.now }); }
     else if (m.t === 'join') {
@@ -541,6 +559,7 @@ export class Presence {
     } else if (m.t === 'leave') {
       if (this._leave(m.id)) this._changed();
     } else if (m.t === 'e' && this.peers.has(m.id) && int(m.e, 31, -1) >= 0) this._emit('emote', { id: m.id, emote: m.e });
+    else if (m.t === 'v') { if (this.peers.has(m.id) && Number.isInteger(m.k) && Number.isInteger(m.n) && Array.isArray(m.d) && m.d.length <= 8 && m.d.every(Number.isFinite)) this._emit('thing', { id: m.id, peer: this.peers.get(m.id), kind: m.k, run: m.n, d: m.d }); }
     else if (m.t === 'n' && mode === 'online') {
       // the big red button went off (for everybody), or it is too soon (for who pressed it)
       const wait = Number.isFinite(m.wait) ? Math.max(0, m.wait) : 0;

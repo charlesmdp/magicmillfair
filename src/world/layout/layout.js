@@ -254,7 +254,9 @@ export const NORTH = {
   beach: { face: 9, slope: 0.2, drop: 0.36, reach: 24 },
   ledge: { x: 226.5, z: -333, rx: 11, rz: 10.5, y: 44.4 },
   stairs: [{ width: 2.3, landing: 1.2, points: [[203.4, -267.6, 1.5], [212, -285, 16.2], [219, -305, 31.2], [227, -322.6, 44.4]] }],
-  statue: { x: 225.5, z: -335, yaw: -0.3, height: 15, name: 'CROKMOU', plaque: 'BEST DOG EVER' },
+  // (the dog, and with it a cat, a snake and a bird; the tablet of the plinth is for every pet — `memorial`, two
+  // lines, and `kin` under them — and names the dog, who keeps watch for them all)
+  statue: { x: 225.5, z: -335, yaw: -0.3, height: 15, name: 'CROKMOU', plaque: 'BEST DOG EVER', memorial: ['TO EVERY PET', 'WE EVER LOVED'], kin: 'Dogs, cats, birds, snakes — the best of us.' },
 };
 // Where the capes are rock, the land stands high right at the water: sea cliffs, fluted and green, of about
 // `height` metres (more or less along the coast). They only exist outside the playable valley.
@@ -565,7 +567,7 @@ export const RACE = {
 // `width`, `height`: the opening of the stage.
 export const WING = { name: 'Flappy Robot', x: -7.2, z: 12.6, yaw: Math.PI * 0.75, width: 12, height: 5.2 };
 // The boulder of the island: it rolls down the whole path, again and again (seconds; metres per second).
-export const BOULDER = { radius: 1.55, speed: 7.2, period: 52 };
+export const BOULDER = { radius: 1.55, speed: 8.28, period: 45.2 };
 
 // ---------------------------------------------------------------------------
 // Caves: galleries and chambers under the mountains. Each node is [x, z, half width, floor, height of the roof];
@@ -747,6 +749,16 @@ export const WAYS = {
   // (Billy the alligator, life coach, on the deck over the great pond: where its gangway leaves the bank)
   billy: { text: 'GET LIFE ADVICE', more: 'ASK BILLY', at: [POND_DECK.gangway[0][0], POND_DECK.gangway[0][1]] },
 };
+// The signposts of the games that are switched on one by one (the lab's: Signposts.js, buildGameSignposts): a post
+// of their own beside a few of the others, planted when the first of its games is there. `to`: the games a post
+// names, in the order of its planks (from the top) — each plank points straight at its game.
+export const GAME_SIGNPOSTS = [
+  { id: 'games-arrival', x: -116.1, z: -43.7, to: ['slide', 'hill', 'pond', 'boats', 'hollow', 'crack'] },
+  { id: 'games-plaza', x: -19.4, z: 2.5, to: ['slide', 'hollow', 'crack', 'pond', 'boats', 'hill'] },
+  { id: 'games-pondside', x: -136.4, z: 7.5, to: ['pond', 'boats', 'hill'] },
+  { id: 'games-shore', x: 21.7, z: 53.8, to: ['hollow', 'crack'] },
+  { id: 'games-beach', x: 26.1, z: -82.1, to: ['slide'] },
+];
 export const SIGNPOSTS = [
   // past the banner of the arrival, on the left of the lane: everything is ahead, the race is behind
   { id: 'arrival', x: -117.3, z: -42.4, arms: [['pier', [-108, -31.5]], ['flappy', [-109.2, -31]], ['climb', [-110.6, -30.6]], ['race', [-112, -62]]] },
@@ -769,6 +781,41 @@ export const SIGNPOSTS = [
   { id: 'pondside', x: -134.8, z: 6.3, arms: [['billy', [-140.5, 7.2]]] },
 ];
 
+// The wall of thanks (zones/games/ThanksWall.js): a tablet cut into the cliff west of the meadow of the acid
+// pond, where the rock is one even face — every sponsor of the fair on it, the most generous first. (x, z):
+// the middle of it, on the map; yaw: the way it faces (the meadow); it is `width` long and `height` up the
+// rock, its foot `lift` above the grass. How it leans and bends is the rock's own business (it reads the cliff).
+export const THANKS_WALL = { x: -268.05, z: -82.2, yaw: 70 * DEG, width: 28, height: 10, lift: 1.3 };
+
+// Twenty things left over from the world before (zones/games/Relics.js: what each is and says), all over the
+// valley. (x, z): a wish — the nearest free ground is taken (dry, level, off the path, clear of the trees and
+// of what is built) — or, `fixed`, the very spot (chosen by eye); `by`: [a path, how far along it (0 … 1), how
+// many metres to its side] — it stands on the verge of that path and looks at it; `face`: the point it looks
+// at; `sea`: it is turned so that its right hand points at the nearest sea (the arrow of the road sign);
+// `field`: it belongs in a field (the scarecrow). The last one is where nobody goes: it is meant to be found.
+export const RELICS = [
+  { id: 'barrel', x: -117.5, z: -39.6, fixed: true, face: [-113, -40] },
+  { id: 'billboard', x: -120, z: -70, face: [-113, -68] },
+  { id: 'sunflower', x: -119.5, z: -95, face: [-116.3, -97.4] },
+  { id: 'geiger', x: -229.5, z: -86.5, face: [-223, -86] },
+  { id: 'hatch', x: -63.5, z: -30.5, face: [-61.4, -24.9] },
+  { id: 'vendor', x: -366, z: 45, face: [-374.5, 37] }, // (in the court of the Lost Temple: it wants exact change there too)
+  { id: 'news', x: 5, z: -4.5, face: [0, 3] },
+  { id: 'clock', x: 9, z: 44.5, face: [6.4, 47.6] },
+  { id: 'tally', x: -2, z: -94, face: [-2, -86] }, // (on Lookout Hill: where one counts the days, looking at the sea)
+  { id: 'sign', x: 23.9, z: -89.6, fixed: true, sea: true, face: [24, -84] },
+  { id: 'scarecrow', x: -62, z: -124, field: true, face: [-62, -104] },
+  { id: 'busstop', by: ['lane', 0.2, 4.6] },
+  { id: 'trolley', by: ['pondloop', 0.5, 3.6] },
+  { id: 'dish', by: ['hill', 0.96, 5] },
+  { id: 'meter', by: ['stairs', 0.55, 2.4] },
+  { id: 'mailbox', by: ['falls', 0.6, 2.4] },
+  { id: 'car', by: ['pondloop', 0.1, 4.4] },
+  { id: 'phone', by: ['lane', 0.3, 4.6] }, // (a few steps down the road from the bus stop, on the same side — it stood behind a wall of the gate, where nobody could see it)
+  { id: 'forecast', by: ['shore', 0.3, 3] },
+  { id: 'bunker', x: 52, z: 112, face: [40, 104] }, // (in the woods of the south-east shore, sixty metres from any path)
+];
+
 // What stands on the way for visitors to read (zones/games/Notices.js): the banner and the rules where one
 // arrives; the boards of what is new, by the poppy field; the booth of the sponsors, at the Trading Post; and
 // the arcade cabinet at the top of the ramp of the pier (in the frame of the pier), its board of scores across the walk.
@@ -781,9 +828,13 @@ export const NOTICES = {
   rules: { x: -116.9, z: -53.6, yaw: -2.49 },
   // (…and, to the right, how it all came to this: the story of the opening, told another way)
   story: { x: -125.35, z: -52.0, yaw: 2.62 },
-  // (…and, beside whoever arrives, on the left of the lane: an easel of painted planks — a life coach is not
-  // far; the planks of the signposts take over further on. `yaw`: which way its front looks)
-  advice: { x: -119.75, z: -60.5, yaw: -2.8 },
+  // (…and, beside whoever arrives, on the left of the lane: an easel of painted planks that sends them to the
+  // beach. `yaw`: which way its front looks; `to`: where its arrow points — the way one walks: up the lane, then
+  // down the valley —; `far`: the place it counts the metres to)
+  beach: { x: -119.75, z: -60.5, yaw: -2.8, to: [-97, -32], far: [14, -2] },
+  // (…and the easel of the life coach: in a flower bed of the rock garden, above the house — Billy is on his
+  // deck, down by the great pond; the planks of the signposts take over further on)
+  advice: { x: -124.6, z: -16.6, yaw: -1.86 }, // (its front looks west, a little uphill: at whoever comes along the path of the garden)
   ads: { x: TRADING.x, z: TRADING.z, yaw: TRADING.yaw },
   arcade: { along: 17.6, side: -6.7 },
 };

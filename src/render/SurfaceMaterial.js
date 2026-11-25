@@ -98,7 +98,57 @@ void main() {
   float pk = uPaint.x, pm = vColor.a;
   vec3 pq = vObj * uPaint.z;
   float veins = 0.0, hot = 0.0;
-  if (pk > 3.5) {
+  vec3 pglow = vec3(0.0), prim = vec3(0.0); // (what glows by itself, and the colour of the rim of light round the body)
+  if (pk > 8.5) {
+    // galaxy: a night sky wrapped round the body — nebulas that drift, stars that twinkle
+    float t = uPaint.y;
+    vec3 c = pq * 4.2;
+    float neb = 0.5 + 0.5 * sin(c.x * 1.1 + 1.5 * sin(c.y * 0.9 + t * 0.12)) * sin(c.z * 1.3 + 1.5 * sin(c.x * 0.8 - t * 0.1));
+    vec3 sky = mix(vec3(0.015, 0.02, 0.07), mix(vec3(0.3, 0.06, 0.45), vec3(0.05, 0.28, 0.55), neb), smoothstep(0.35, 0.95, neb) * 0.85);
+    vec3 cell = floor(pq * 64.0);
+    float rnd = fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+    float star = step(0.982, rnd) * (0.45 + 0.55 * sin(t * (1.5 + rnd * 4.0) + rnd * 60.0));
+    albedo = mix(albedo, sky, pm);
+    rough = mix(rough, 0.3, pm); spec = mix(spec, 0.8, pm);
+    pglow = vec3(1.0, 0.95, 0.85) * star * 2.6 + sky * 0.9;
+    prim = vec3(0.45, 0.35, 1.0) * 0.8;
+  } else if (pk > 7.5) {
+    // mirror ball: little mirrors, each with a colour of its own, twinkling one after the other
+    float t = uPaint.y;
+    vec3 g = pq * 15.0, cell = floor(g), f = fract(g);
+    float rnd = fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+    vec3 hue = 0.5 + 0.5 * cos(6.2832 * (rnd + t * 0.04 + vec3(0.0, 0.33, 0.67)));
+    float joint = step(0.07, f.x) * step(0.07, f.y) * step(0.07, f.z);
+    albedo = mix(albedo, mix(vec3(0.8, 0.83, 0.88), hue, 0.4) * (0.75 + 0.25 * rnd) * mix(0.3, 1.0, joint), pm);
+    rough = mix(rough, 0.1, pm); spec = mix(spec, 1.0, pm);
+    pglow = hue * pow(saturate(sin(rnd * 40.0 + t * (1.2 + rnd * 2.5))), 10.0) * 1.8 * joint;
+  } else if (pk > 6.5) {
+    // hazard stripes: yellow and black, winding round the body
+    float band = pq.y * 7.0 + atan(pq.x, pq.z) * 0.95493, f = fract(band);
+    float edge = smoothstep(0.0, 0.04, f) * (1.0 - smoothstep(0.5, 0.54, f));
+    albedo = mix(albedo, mix(vec3(0.045, 0.045, 0.05), vec3(1.0, 0.76, 0.04), edge), pm);
+    rough = mix(rough, 0.3, pm); spec = mix(spec, 0.8, pm);
+  } else if (pk > 5.5) {
+    // plasma: filaments of violet and cyan chasing one another over a dark shell
+    float t = uPaint.y;
+    vec3 c = pq * 5.5;
+    float w = sin(c.y * 2.0 + t * 1.3 + 2.0 * sin(c.x * 1.5 + t * 0.7)) + sin(c.z * 2.3 - t * 1.1 + 2.0 * sin(c.y * 1.2 - t * 0.5));
+    vec3 hue = mix(vec3(0.6, 0.12, 1.0), vec3(0.05, 0.9, 1.0), smoothstep(-0.8, 0.8, w));
+    albedo = mix(albedo, vec3(0.035, 0.02, 0.08), pm);
+    rough = mix(rough, 0.25, pm); spec = mix(spec, 0.8, pm);
+    pglow = hue * (0.18 + 1.7 * pow(abs(sin(w * 2.6)), 8.0));
+    prim = hue * 1.3;
+  } else if (pk > 4.5) {
+    // meltdown: a crust of black slag, and the fire of the core in its cracks, crawling
+    float t = uPaint.y;
+    vec3 c = pq * 6.5;
+    float n = sin(c.x * 1.3 + 1.9 * sin(c.y * 0.8 - t * 0.35)) * sin(c.y * 1.2 + 1.6 * sin(c.z * 1.1 + t * 0.3)) * sin(c.z * 0.9 + 1.8 * sin(c.x * 0.7 - t * 0.25));
+    float crack = 1.0 - smoothstep(0.0, 0.12, abs(n));
+    albedo = mix(albedo, vec3(0.05, 0.032, 0.028), pm);
+    rough = mix(rough, 0.62, pm); spec = mix(spec, 0.3, pm);
+    pglow = (vec3(1.0, 0.3, 0.03) * crack * 2.0 + vec3(1.0, 0.8, 0.25) * pow(crack, 5.0) * 1.4) * (0.75 + 0.25 * sin(t * 1.7 + c.y * 0.7));
+    prim = vec3(1.0, 0.38, 0.06) * 0.7;
+  } else if (pk > 3.5) {
     // candy: a swirl of stripes, white and a colour that changes from one to the next, lacquered; it turns slowly
     float band = pq.y * 11.0 + atan(pq.x, pq.z) * 1.27324 + uPaint.y * 0.22, k = floor(band), f = fract(band);
     // (the colours of a sweet shop, one after the other: raspberry, lemon, mint, blueberry, bubble gum)
@@ -187,9 +237,12 @@ void main() {
       float pulse = 0.62 + 0.38 * sin(uPaint.y * 2.6);
       vec3 glow = vec3(0.3, 1.0, 0.1) * (veins * 1.5 + hot * 1.1) * pulse + vec3(0.45, 1.0, 0.18) * fres * (1.0 + 0.5 * pulse);
       col += glow * pm;
+    } else if (pk < 4.5 || (pk > 6.5 && pk < 8.5)) {
+      // candy, hazard stripes, the mirror ball: a lacquer — the sun in it, a pale rim (and the mirrors that twinkle)
+      col += (uSunColor * pow(sun, 70.0) * 1.3 * shadow + vec3(0.22) * fres + pglow) * pm;
     } else {
-      // candy: a lacquer — the sun in it, a pale rim
-      col += (uSunColor * pow(sun, 70.0) * 1.3 * shadow + vec3(0.22) * fres) * pm;
+      // meltdown, plasma, galaxy: what glows by itself, and a rim of it round the body
+      col += (pglow + prim * fres) * pm;
     }
   }
   #endif
@@ -225,7 +278,8 @@ void main() {
  * @param {object} o map, normalMap (textures), color [r,g,b], rough, spec, normalScale, uvScale, emissive [r,g,b];
  *   fade: the vertex alpha is an opacity (soft-edged ground decals) instead of ambient occlusion;
  *   metal: polished metal, which shows the sky and the ground round it;
- *   paint: an avatar's paint jobs (gold, chrome, atomic, candy: the uniform uPaint says which)
+ *   paint: an avatar's paint jobs (gold, chrome, atomic, candy, meltdown, plasma, hazard stripes, mirror ball,
+ *          galaxy: the uniform uPaint says which)
  */
 export function surfaceMaterial(o = {}) {
   const defines = {};

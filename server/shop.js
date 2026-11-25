@@ -4,6 +4,9 @@
 // places like the others, paid once and kept. Both hosts answer through shopRoute() (see routes.js).
 //
 //   GET    /api/shop?device=…                          → { mode, prices, owned, slots, pass, trial, now, pk? }
+//                                                      (slots: what each place shows; with it, for a sponsor's
+//                                                      place, `pays`: { amount, monthly, total } in cents — what
+//                                                      its sponsor pays, for the wall of thanks: see paysOf)
 //                                                      (pk: Stripe's publishable key, where the payment form can
 //                                                      be shown inside the game)
 //                                                      (pass: null | { since, until?, gift? } — the Game Pass;
@@ -18,7 +21,8 @@
 //   POST   /api/sponsor   { slot, device, title, subtitle, url, logo }   the holder of a place says what to show
 //   GET    /api/logo?slot=…                            the picture of a place (draft=1: the one awaiting approval)
 //   GET    /api/sponsors                               the administrator: every place, drafts included
-//   POST   /api/sponsors  { slot, approve } | { slot, set: { title, subtitle, url, logo, bg } }   (bg: the colour of the panel, #rrggbb)
+//   POST   /api/sponsors  { slot, approve } | { slot, set: { title, subtitle, url, logo, bg, paid } }   (bg: the colour of the panel, #rrggbb;
+//                                                      paid: what a sponsor entered by hand has paid, in cents — 0: not said)
 //   DELETE /api/sponsors?slot=…                        the administrator frees a place
 //
 // Who is who: a visitor is the random name their browser gave itself (`device`, see src/net/device.js); one who
@@ -46,13 +50,16 @@
 // at, why, ok, error }].
 import { allowed } from './api.js';
 import { describe, publicPrices, nextBid, AUCTION, CURRENCY } from './catalog.js';
-import { createCheckout, createPortal, verifyWebhook, refundPayment, endSubscription } from './stripe.js';
+import { createCheckout, createPortal, verifyWebhook, refundPayment, endSubscription, fetchCheckout } from './stripe.js';
 import { noteSale, noteRefund } from './stats.js';
 import { readRelease } from './release.js';
+import { BOARDS as SCORE_BOARDS } from './scores.js';
 import { accountOf, addItem, holderOf, itemsOf, passLive, sameOwner } from './accounts.js';
 import { quietOnes } from './bans.js';
 import { PASS, TRIAL, itemOf } from './items.js';
 import { userRoomsOn, roomOfAccount, openRoom, sleepRoom } from './urooms.js';
+import { cleanEmail, mailLater, passMail, sponsorMail } from './mail.js';
+import { maskWords } from './decency.js';
 
 const out = (status, body, headers = {}) => ({ status, body, headers });
 const DEVICE = /^[A-Za-z0-9_-]{16,64}$/;
@@ -128,9 +135,24 @@ async function hiddenBy(ctx) {
 }
 const selves = async (ctx, device) => { const acct = DEVICE.test(device || '') ? await accountOf(ctx.store, device) : null; return new Set(acct ? [...acct.devices, device] : device ? [device] : []); };
 const logoUrl = (id, version, draft) => `/api/logo?slot=${encodeURIComponent(id)}${draft ? '&draft=1' : ''}&v=${version}`;
-const shown = (id, s) => ({ title: s.title || '', subtitle: s.subtitle || '', url: s.url || '', logo: s.logo ? logoUrl(id, s.logo) : null, ...(s.bg && { bg: s.bg }) });
+const shown = (id, s) => ({ title: s.title || '', subtitle: s.subtitle || '', url: s.url || '', logo: s.logo ? logoUrl(id, s.logo) : null, ...(s.bg && { bg: s.bg }), ...(s.url && { clicks: s.clicks || 0 }) }); // (clicks: how many times its site was opened from here)
 /** What awaits approval, as it is told: its picture is an address (`keep`: no new picture — the one already shown stays). */
 const draftOf = (id, s) => (s.draft ? { ...s.draft, logo: s.draft.logo > 0 ? logoUrl(id, s.draft.logo, true) : null, ...(s.draft.logo === -1 && { keep: true }) } : null);
+
+const MONTH = 30.4375 * 86_400_000;
+/**
+ * What the sponsor of a place pays, for the wall of thanks: { amount (cents: the bid, or the price of a month),
+ * monthly, total (cents put in so far) } — or null: a plaque for a companion (no sponsor's), or a place the
+ * administrator filled by hand without saying what was paid. A bid counts for what was bid; a place held by
+ * the month counts every month begun since it was taken. Amounts only: who pays is said nowhere.
+ */
+export function paysOf(id, s, now) {
+  const what = describe(id);
+  if (!s || !what || what.kind !== 'slot' || what.plaque) return null;
+  if (what.auction && s.pay && s.bid > 0) return { amount: s.bid, monthly: false, total: s.bid };
+  if (!what.auction && s.sub) return { amount: what.amount, monthly: true, total: what.amount * (1 + Math.max(0, Math.floor((now - (s.at || now)) / MONTH))) };
+  return s.paid > 0 ? { amount: s.paid, monthly: false, total: s.paid } : null;
+}
 
 /** What was paid for becomes theirs (called from the webhook; safe to call twice). `customer`: who pays, at Stripe. */
 export async function grant(ctx, item, device, sub = null, customer = null, account = '') {
@@ -160,9 +182,21 @@ export async function grant(ctx, item, device, sub = null, customer = null, acco
   if (what.auction) return false; // (an auctioned place is taken by a bid: takeBid)
   const slots = await slotsOf(ctx);
   if (slots[item] && !(await sameOwner(ctx.store, slots[item].by, device))) return false; // (somebody else got there first: for the administrator to sort out)
-  slots[item] = { ...(slots[item] || { state: 'paid', logo: 0 }), by: device, sub: typeof sub === 'string' ? sub : null, at: ctx.now() };
+  slots[item] = { ...(slots[item] || { state: 'paid', logo: 0 }), by: device, sub: typeof sub === 'string' ? sub : null, ...(typeof customer === 'string' && customer && { customer }), at: ctx.now() };
   await ctx.store.put('slots', slots);
   return true;
+}
+
+/**
+ * A word of thanks, by e-mail, to whoever has just taken the Game Pass — where the host sends e-mail and an
+ * address is known: the one of their account or, failing that, the one they gave at the payment (used for
+ * this message and kept nowhere). It leaves without anybody waiting for it; once per payment (the caller sees to it).
+ */
+async function thankForPass(ctx, o, site) {
+  if (!ctx.mail) return;
+  const acct = await accountOf(ctx.store, o.metadata?.device);
+  const to = acct?.email || cleanEmail(o.customer_details?.email || o.customer_email || '');
+  if (to) mailLater(ctx, { to, ...passMail(site || '', acct?.name || '', { perks: PASS.perks, cents: PASS.price }) });
 }
 
 /** A word for a visitor who is not there: they are told the next time their browser asks about the shop. */
@@ -196,6 +230,46 @@ async function refund(ctx, cfg, pay, amount, why) {
 }
 
 /** Has this payment been counted already? (Stripe may say the same thing twice.) The last few hundred are remembered. */
+/** What a place is called in a sentence: "the board of Mostly Up", "gondola 3 of the big wheel"… */
+const placeOf = (sold) => (sold.label ? `the board of ${sold.label}` : sold.name.replace(/^Atomic Oasis — /, ''));
+// (what the whole fair is told when a new sponsor's panel goes up: its name, the place — and due praise)
+const CHEERS = [
+  (n, p) => `${n} now sponsors ${p}! Praise be to the gods of the Atomic Oasis: the fair stays free.`,
+  (n, p) => `Rejoice! ${n} is the new sponsor of ${p}. The gods of the nuclear oasis are pleased — and so is the electricity bill.`,
+  (n, p) => `Glory to the gods of the Atomic Oasis! ${n} has just sponsored ${p}. Go and thank them: the fair stays free.`,
+];
+
+/**
+ * A word of thanks, by e-mail, to whoever has just sponsored something — where the host sends e-mail and an
+ * address is known: the one of their account or, failing that, the one they gave at the payment (used for
+ * this message and kept nowhere). Once per payment (the caller sees to it).
+ */
+async function thankSponsor(ctx, o, site, sold) {
+  if (!ctx.mail) return;
+  const acct = await accountOf(ctx.store, o.metadata?.device);
+  const to = acct?.email || cleanEmail(o.customer_details?.email || o.customer_email || '');
+  if (to) mailLater(ctx, { to, ...sponsorMail(site || '', acct?.name || '', { place: placeOf(sold), cents: Number.isInteger(o.amount_total) ? o.amount_total : 0, monthly: !!sold.monthly, auction: !!sold.auction, plaque: !!sold.plaque }) });
+}
+
+/**
+ * Stripe says a payment page was completed and paid — by itself (the webhook), or asked as the buyer comes
+ * back (/api/checkout/confirm): what was bought is given; the first time it is said, the sale is counted, the
+ * buyer thanked. Safe to call twice. → was it given? (The fair is told of a new sponsor when its panel goes up:
+ * see /api/sponsor.)
+ */
+async function completed(ctx, cfg, o, site) {
+  const now = ctx.now();
+  // (the figures: what came in, once — a bid that comes too late is given back at once, and counted as given back)
+  const sold = describe(o.metadata?.item), fresh = sold ? await firstTime(ctx, o.id) : false; // (fresh: it is said for the first time)
+  if (!sold) return false;
+  if (fresh) await noteSale(ctx.store, { cents: Number.isInteger(o.amount_total) ? o.amount_total : 0, pass: sold.kind === 'pass' }, now).catch(() => {});
+  const got = sold.auction ? await takeBid(ctx, cfg, o.metadata.item, o.metadata?.device, o.amount_total, o.payment_intent)
+    : await grant(ctx, o.metadata?.item, o.metadata?.device, o.subscription, o.customer, o.metadata?.account);
+  if (got && fresh && sold.kind === 'pass') await thankForPass(ctx, o, site);
+  if (got && fresh && sold.kind === 'slot') await thankSponsor(ctx, o, site, sold).catch(() => {});
+  return got;
+}
+
 async function firstTime(ctx, id) {
   if (typeof id !== 'string' || !id) return true;
   const seen = (await ctx.store.get('sales:seen')) || [];
@@ -266,7 +340,8 @@ export async function shopRoute(req, ctx) {
       // (what somebody kept out in silence had put up is shown to them alone)
       view[id] = s.state === 'live' && (me.has(s.by) || !(await hidden(s))) ? { state: 'live', ...shown(id, s) } : { state: 'taken' };
       if (describe(id)?.auction) Object.assign(view[id], { bid: s.bid || 0, next: nextBid(s.bid || 0) }); // (what it went for, what beats it)
-      if (mine && me.has(s.by)) Object.assign(view[id], { mine: true, paid: true, draft: draftOf(id, s) });
+      if (view[id].state === 'live') { const pays = paysOf(id, s, now); if (pays) view[id].pays = pays; } // (what its sponsor pays: with what they show, never without)
+      if (mine && me.has(s.by)) Object.assign(view[id], { mine: true, paid: true, draft: draftOf(id, s), ...(s.sub && s.customer && { manage: true }) }); // (manage: held by the month — its subscription can be looked after)
     }
     // (what happened while they were away — outbid, refunded — is said once)
     let notes = [];
@@ -316,7 +391,10 @@ export async function shopRoute(req, ctx) {
     const holder = await holderOf(ctx.store, device);
     // (`what: 'room'`: the subscription of their room, rather than the Game Pass)
     const mine = body.what === 'room' && (await userRoomsOn(ctx)) && holder.account ? await roomOfAccount(ctx, holder.account) : null;
-    const customer = body.what === 'room' ? (mine?.state === 'live' && mine.customer) || '' : passLive(holder.pass, now) ? holder.pass.customer || '' : '';
+    // (`what: '<a place>'`: the subscription of a place they hold by the month — a gondola, a backdrop, a village)
+    const place = typeof body.what === 'string' && body.what.includes(':') ? (await slotsOf(ctx))[body.what] : null;
+    const theirs = place && place.customer && (await selves(ctx, device)).has(place.by);
+    const customer = theirs ? place.customer : body.what === 'room' ? (mine?.state === 'live' && mine.customer) || '' : place ? '' : passLive(holder.pass, now) ? holder.pass.customer || '' : '';
     if (!customer) return out(404, { error: 'There is no subscription to look after.' });
     try {
       return out(200, await createPortal(cfg, customer, req.site || '', ctx.fetch || fetch));
@@ -331,9 +409,11 @@ export async function shopRoute(req, ctx) {
     if (!cfg.mode) return out(501, { error: 'The shop is not open.' });
     if (limited('checkout')) return busy;
     const what = describe(body?.item), device = body?.device;
-    if (!what || !DEVICE.test(device || '')) return out(400, { error: 'Nothing of that name is sold.' });
+    if (!what || !DEVICE.test(device || '') || itemOf(what.item)?.retired) return out(400, { error: 'Nothing of that name is sold.' }); // (what is retired is no longer sold)
     // (a sky village is only for hire once the sky is open: the owner's switch)
     if (what.item.startsWith('village:') && (await readRelease(ctx)).release.sky !== 'open') return out(400, { error: 'Nothing of that name is sold.' });
+    // (…and the panel of a game that waits for its switch, once that game is on: its board does not exist before)
+    if (what.item.startsWith('board:')) { const sw = SCORE_BOARDS[what.game || what.item.slice(6)]?.release; if (sw && !(await readRelease(ctx)).release[sw]) return out(400, { error: 'Nothing of that name is sold.' }); }
     if (what.kind === 'own' && (await ownedBy(ctx, device)).includes(what.item)) return out(409, { error: 'You already have it.' });
     if (what.kind === 'pass') { const holder = await holderOf(ctx.store, device); if (passLive(holder.pass, now) && !holder.pass.gift) return out(409, { error: 'You already have the pass.' }); }
     let extra = {};
@@ -356,11 +436,45 @@ export async function shopRoute(req, ctx) {
     try {
       const embed = body.embed === true && !!cfg.publishable; // (the form inside the game: only where its key was given)
       const session = await createCheckout(cfg, { ...what, currency: CURRENCY }, device, req.site || '', ctx.fetch || fetch, extra, embed);
-      return out(200, embed ? { secret: session.secret } : { url: session.url });
+      return out(200, embed ? { secret: session.secret, id: session.id } : { url: session.url });
     } catch (err) {
       console.error('[shop]', err.message);
       return out(502, { error: 'The payment page could not be opened. Try again in a moment.' });
     }
+  }
+
+  if (path === '/api/click') {
+    // A visitor opens the site of a sponsor from the game — at its place, at the Trading Post, at the wall of
+    // thanks: counted on the place (and so for the sponsor: the wall adds up the places of each). The same
+    // address counts once every ten minutes for a place; a place that changes hands starts again from nothing.
+    if (method !== 'POST') return out(405, { error: 'Method not allowed.' }, { Allow: 'POST' });
+    if (limited('click')) return busy;
+    const slots = await slotsOf(ctx), id = body?.slot, s = typeof id === 'string' && Object.hasOwn(slots, id) ? slots[id] : null;
+    if (!s || s.state !== 'live' || !s.url) return out(404, { error: 'Nothing to count.' });
+    const seen = (ctx.clicked ||= new Map()), key = `${req.client}|${id}`, last = seen.get(key) || 0;
+    if (now - last >= 600_000) {
+      if (seen.size > 5000) seen.clear();
+      seen.set(key, now);
+      s.clicks = (s.clicks || 0) + 1;
+      await ctx.store.put('slots', slots);
+    }
+    return out(200, { ok: true, clicks: s.clicks || 0 });
+  }
+
+  if (path === '/api/checkout/confirm') {
+    // The buyer is back from the payment page: Stripe is asked whether that page was paid, and what was bought
+    // is given at once — without waiting for Stripe to say so by itself (and where no webhook was set at all).
+    // Nothing the browser says is believed: only the session Stripe returns for the id it brings back.
+    if (method !== 'POST') return out(405, { error: 'Method not allowed.' }, { Allow: 'POST' });
+    if (!cfg.mode) return out(501, { error: 'The shop is not open.' });
+    if (limited('checkout')) return busy;
+    let o = null;
+    try { o = await fetchCheckout(cfg, body?.session, ctx.fetch || fetch); } catch (err) { console.error('[shop]', err.message); return out(502, { error: 'Stripe could not be asked. Try again in a moment.' }); }
+    if (!o) return out(404, { error: 'No such payment.' });
+    const paid = o.status === 'complete' && (o.payment_status === 'paid' || o.payment_status === 'no_payment_required');
+    if (!paid) return out(200, { ok: false, paid: false });
+    const given = await completed(ctx, cfg, o, req.site);
+    return out(200, { ok: true, paid: true, given: !!given, item: typeof o.metadata?.item === 'string' ? o.metadata.item : '' });
   }
 
   if (path === '/api/stripe/webhook') {
@@ -369,10 +483,7 @@ export async function shopRoute(req, ctx) {
     if (!event) return out(400, { error: 'Not from Stripe.' });
     const o = event.data?.object || {};
     if (event.type === 'checkout.session.completed' && (o.payment_status === 'paid' || o.payment_status === 'no_payment_required')) {
-      // (the figures: what came in, once — a bid that comes too late is given back at once, and counted as given back)
-      if (describe(o.metadata?.item) && (await firstTime(ctx, o.id))) await noteSale(ctx.store, { cents: Number.isInteger(o.amount_total) ? o.amount_total : 0, pass: describe(o.metadata.item).kind === 'pass' }, now).catch(() => {});
-      if (describe(o.metadata?.item)?.auction) await takeBid(ctx, cfg, o.metadata.item, o.metadata?.device, o.amount_total, o.payment_intent);
-      else await grant(ctx, o.metadata?.item, o.metadata?.device, o.subscription, o.customer, o.metadata?.account);
+      await completed(ctx, cfg, o, req.site);
     } else if (event.type === 'invoice.paid' && o.billing_reason === 'subscription_cycle') {
       // a month more of something held by the month (where Stripe is asked to tell of these): money in, nothing new sold
       if (Number.isInteger(o.amount_paid) && o.amount_paid > 0 && (await firstTime(ctx, o.id))) await noteSale(ctx.store, { cents: o.amount_paid }, now).catch(() => {});
@@ -404,7 +515,8 @@ export async function shopRoute(req, ctx) {
     const slots = await slotsOf(ctx), id = body?.slot, s = typeof id === 'string' ? slots[id] : null;
     if (!s || !(req.admin || (DEVICE.test(body.device || '') && (await selves(ctx, body.device)).has(s.by)))) return out(403, { error: 'This place is not yours.' });
     const plaque = !!describe(id)?.plaque; // (a plaque for a companion: a name, a few words, a picture — never a link)
-    const draft = { title: cleanText(body.title, 28), subtitle: cleanText(body.subtitle, 40), url: plaque ? '' : cleanUrl(body.url), logo: 0 };
+    // (what is shown at once to everybody holds none of the words the chat hides: decency.js)
+    const draft = { title: maskWords(cleanText(body.title, 28)), subtitle: maskWords(cleanText(body.subtitle, 40)), url: plaque ? '' : cleanUrl(body.url), logo: 0 };
     if (!draft.title) return out(400, { error: 'A name is needed.' });
     if (!plaque && body.url && !draft.url) return out(400, { error: 'The link must start with https://' });
     if (body.logo) {
@@ -416,8 +528,10 @@ export async function shopRoute(req, ctx) {
     s.draft = draft;
     // A sponsor is shown at once — the owner looks afterwards, and takes down what should not be there (the
     // page /admin). A plaque for a companion waits for the fair to have looked at it.
+    const first = !plaque && s.state !== 'live' && !req.admin; // (a new sponsor's panel goes up: the whole fair is told)
     if (!plaque) await publish(ctx, slots, id);
     await ctx.store.put('slots', slots);
+    if (first && ctx.push) { const what = describe(id); if (what) await Promise.resolve(ctx.push({ t: 'say', m: CHEERS[Math.floor(Math.random() * CHEERS.length)](draft.title, placeOf(what)) })).catch(() => {}); }
     return out(200, { ok: true, state: plaque ? 'pending' : 'live' });
   }
 
@@ -456,6 +570,8 @@ export async function shopRoute(req, ctx) {
         const s = (slots[id] ||= { by: 'admin', sub: null, at: now, logo: 0 });
         Object.assign(s, { state: 'live', title, subtitle: cleanText(body.set.subtitle, 40), url: describe(id).plaque ? '' : cleanUrl(body.set.url), draft: null });
         if (body.set.bg !== undefined) s.bg = cleanColor(body.set.bg); // (the colour behind it: the administrator's choice, never the sponsor's)
+        // (what a sponsor who paid some other way has paid, for the wall of thanks: the administrator's word)
+        if (body.set.paid !== undefined) { const paid = Math.round(Number(body.set.paid)); if (paid > 0 && paid <= 100_000_000) s.paid = paid; else delete s.paid; }
         if (body.set.logo) {
           const logo = cleanLogo(body.set.logo);
           if (!logo) return out(400, { error: 'The picture must be a PNG, a JPEG or a WebP of at most 90 KB.' });
@@ -494,7 +610,7 @@ export async function shopRoute(req, ctx) {
       ...taken,
       // (the money given back — and what was kept, or could not be given back: `kept`, `ok: false`)
       refunds: ((await ctx.store.get('refunds')) || []).slice(-30).reverse().map(({ by, ...r }) => r),
-      slots: Object.fromEntries(Object.entries(slots).map(([id, s]) => [id, { state: s.state, by: s.by, sub: !!s.sub, at: s.at, ...(s.bid && { bid: s.bid }), ...shown(id, s), draft: draftOf(id, s) }])),
+      slots: Object.fromEntries(Object.entries(slots).map(([id, s]) => [id, { state: s.state, by: s.by, sub: !!s.sub, at: s.at, ...(s.bid && { bid: s.bid }), ...(s.paid && { paid: s.paid }), ...shown(id, s), draft: draftOf(id, s) }])),
     });
   }
   return null;

@@ -8,7 +8,8 @@
 // way round from either side — and its point is cut in the mesh, not in the picture.
 import * as THREE from 'three';
 import { paintWords, wordsWidth } from '../../props/handpaint.js';
-import { SIGNPOSTS, WAYS } from '../../layout/layout.js';
+import { Parts } from '../../props/MeshBuilder.js';
+import { SIGNPOSTS, WAYS, GAME_SIGNPOSTS } from '../../layout/layout.js';
 
 const H = 0.37, THICK = 0.045, TIP = 0.25, BUTT = 0.3; // a plank (m): its height, its thickness, its point, what sticks out behind the post
 const LMIN = 1.3, LMAX = 2.15, STEP = 0.44, TOP = 2.95; // …its length, from… to; from a plank to the next below; the middle of the highest
@@ -57,23 +58,24 @@ export function paintPlank(ctx, x, y, w, h, seed = '') {
  * `spots`: where things really are when the layout only knows roughly ({ race: [x, z] }).
  * Returns { mesh (the faces of the planks), posts: [{ id, x, z, arms: [{ to, text, far, yaw }] }] }.
  */
-export function buildSignposts(zone, wood, spots = {}) {
+export function buildSignposts(zone, wood, spots = {}, { posts = SIGNPOSTS, ways = WAYS, collide = (x, z, r) => zone.colliders.push({ type: 'circle', x, z, r }) } = {}) {
   const tier = zone.world.engine.tier, PX = tier.quality === 0 || tier.phone ? 112 : 168; // pixels to a metre on the planks
   const CH = Math.round(H * PX), CW = Math.round(LMAX * PX), PAD = 3;
   const arms = [];
-  for (const post of SIGNPOSTS) {
-    const y = zone.ground(post.x, post.z), list = [];
+  for (const post of posts) {
+    // (a post that carries more than five planks is taller: its lowest plank stays above the waist)
+    const y = zone.ground(post.x, post.z), list = [], top = TOP + Math.max(0, post.arms.length - 5) * STEP;
     post.arms.forEach(([to, via], i) => {
-      const way = WAYS[to], at = spots[to] || way.at, far = Math.hypot(at[0] - post.x, at[1] - post.z);
+      const way = ways[to], at = spots[to] || way.at, far = Math.hypot(at[0] - post.x, at[1] - post.z);
       // (how far it is, to the nearest ten metres; nothing is said of what is in sight)
       const metres = far >= 35 ? `${Math.round(far / 10) * 10} M` : '';
       const under = [way.more, metres].filter(Boolean).join(' · ');
       const big = (under ? 0.185 : 0.2) * PX, words = way.text.toUpperCase();
       const length = Math.min(LMAX, Math.max(LMIN, wordsWidth(words, big) / PX + 2 * TIP + 0.1, under ? wordsWidth(under, 0.085 * PX) / PX + 2 * TIP + 0.1 : 0));
-      const arm = { post, to, words, under, big, length, y: y + TOP - i * STEP, yaw: Math.atan2(-(via[1] - post.z), via[0] - post.x), side: i % 2 ? -1 : 1, far };
+      const arm = { post, to, words, under, big, length, y: y + top - i * STEP, yaw: Math.atan2(-(via[1] - post.z), via[0] - post.x), side: i % 2 ? -1 : 1, far };
       arms.push(arm); list.push(arm);
     });
-    post.built = { y, arms: list };
+    post.built = { y, arms: list, top };
   }
   // ---- the picture: every plank, one under the other in two columns
   const rows = Math.ceil(arms.length / 2), canvas = document.createElement('canvas');
@@ -116,13 +118,13 @@ export function buildSignposts(zone, wood, spots = {}) {
     wood.quad(A(xs, h, z1), A(xt, 0, z1), A(xt, 0, z0), A(xs, h, z0)).quad(A(xs, -h, z0), A(xt, 0, z0), A(xt, 0, z1), A(xs, -h, z1));
     wood.pop();
   }
-  for (const post of SIGNPOSTS) {
-    const { y } = post.built, top = TOP + H / 2 + 0.22, rnd = randomOf(`post|${post.id}`);
+  for (const post of posts) {
+    const { y } = post.built, top = post.built.top + H / 2 + 0.22, rnd = randomOf(`post|${post.id}`);
     wood.place(post.x, y, post.z, rnd() * 6.28, (rnd() - 0.5) * 0.05, (rnd() - 0.5) * 0.05);
     wood.tint(0.62, 0.47, 0.34, 1).cylinder(0, -0.5, 0, 0.095, 0.08, top + 0.5, 8);
     wood.tint(0.5, 0.37, 0.26, 1).place(0, top, 0).lathe([[0.11, 0.0], [0.07, 0.07], [0.0, 0.13]], 8).pop();
     wood.pop();
-    zone.colliders.push({ type: 'circle', x: post.x, z: post.z, r: 0.2 });
+    collide(post.x, post.z, 0.2);
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -132,6 +134,28 @@ export function buildSignposts(zone, wood, spots = {}) {
   mesh.name = 'signposts';
   return {
     mesh,
-    posts: SIGNPOSTS.map((p) => ({ id: p.id, x: p.x, z: p.z, y: p.built.y, arms: p.built.arms.map((a) => ({ to: a.to, text: a.words, under: a.under, far: a.far, yaw: a.yaw, y: a.y, length: a.length })) })),
+    posts: posts.map((p) => ({ id: p.id, x: p.x, z: p.z, y: p.built.y, arms: p.built.arms.map((a) => ({ to: a.to, text: a.words, under: a.under, far: a.far, yaw: a.yaw, y: a.y, length: a.length })) })),
   };
+}
+
+/**
+ * The signposts of the games that are switched on one by one (the lab's): posts of their own at a few forks
+ * (GAME_SIGNPOSTS), planted when the first of their games is there — a plank for each game that is on
+ * (`games`: [{ id, name, x, z }]), which points straight at it and says how far. Returns { group, posts } — the
+ * group is for whoever asked to add to the world (and to take away when the games change) — or null when no
+ * game is on. `planted`: the posts the walker already bumps into (kept by the caller from one time to the next).
+ */
+export function buildGameSignposts(zone, games, planted = new Set()) {
+  const ways = Object.fromEntries(games.map((g) => [g.id, { text: g.name, at: [g.x, g.z] }]));
+  const posts = GAME_SIGNPOSTS.map((p) => ({ id: p.id, x: p.x, z: p.z, arms: p.to.filter((id) => ways[id]).map((id) => [id, ways[id].at]) })).filter((p) => p.arms.length);
+  if (!posts.length) return null;
+  const parts = new Parts(), wood = parts.get('woodDark');
+  const collide = (x, z, r) => { const key = `${x},${z}`; if (!planted.has(key)) { planted.add(key); zone.world.collision.addCircle(x, z, r); } };
+  const signs = buildSignposts(zone, wood, {}, { posts, ways, collide });
+  const group = new THREE.Group();
+  group.name = 'signposts-games';
+  signs.mesh.name = 'signposts-games-planks';
+  group.add(parts.toMeshes(zone.world.materials, { name: 'signposts-games-wood', layers: zone.cast }), signs.mesh);
+  group.updateMatrixWorld(true);
+  return { group, posts: signs.posts };
 }

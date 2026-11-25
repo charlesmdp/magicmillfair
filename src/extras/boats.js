@@ -2,8 +2,9 @@
 // (window.__mmf), so that no file of the game is changed and the game without it is exactly the game as it was.
 // See index.js (the switches) and lab/INTEGRATION.md (its board of scores).
 import { Boats } from '../world/zones/games/boats/Boats.js';
-import { REGATTA } from '../world/zones/games/boats/water.js';
+import { REGATTA, THING } from '../world/zones/games/boats/water.js';
 import { keysHelp } from './help.js';
+import { sharedNow } from '../net/api.js';
 
 const KEY = 'mmf.boats.best';
 
@@ -20,7 +21,15 @@ export function attach(app) {
     play: (name, options) => app.audio?.play(name, options),
     note: (text) => hud.note(text, 3000),
     splash: (x, y, z, strength) => world.ripples?.splash(app.engine.time, x, y, z, strength),
+    // (the starts are on the clock everybody shares; the others are told where one's boat is, and one's place on
+    // the visitors' row goes by one's number in the room: two who race together seldom start on the same spot)
+    clock: sharedNow,
+    slot: () => (app.presence?.id || 3) % 4,
+    tell: (kind, run, numbers) => app.presence?.sendThing?.(kind, run, numbers),
   };
+  // (what the network says of the others' boats: handed to the regatta, which shows them)
+  let heard = null;
+  const listen = () => { if (app.presence && heard !== app.presence) { heard = app.presence; heard.on('thing', (e) => { if (e.kind === THING) boats.heard(e.id, e.run, e.d); }); } };
   const leave = (finished) => {
     if (!race) return;
     const s = race;
@@ -38,8 +47,8 @@ export function attach(app) {
     race = boats.open(player, io);
     player.driver = race;
     app.audio?.play('teleport');
-    keysHelp(app).set(app.input.isTouch ? 'Your boat is the red one · stick up: ahead · stick aside: the helm · the arrow: a burst of speed (the gauge says how much is left) · between the buoys, red to port'
-      : 'Your boat is the red one · W: ahead, S: astern · A / D: the helm · Space: a burst of speed (the gauge says how much is left) · between the buoys · E: leave · H: these keys again');
+    keysHelp(app).set(app.input.isTouch ? 'A start every ten seconds, each with its name: friends who take the same one race together · your boat is the red one · stick up: ahead · stick aside: the helm · the arrow: a burst of speed (the gauge says how much is left) · between the buoys, red to port'
+      : 'A start every ten seconds, each with its name: friends who take the same one race together · your boat is the red one · W: ahead, S: astern · A / D: the helm · Space: a burst of speed (the gauge says how much is left) · between the buoys · E: leave · H: these keys again');
   };
   world.actionSources.push((p) => {
     if (race) return race.over ? null : { label: 'Leave the race', run: () => leave(false) };
@@ -48,7 +57,8 @@ export function attach(app) {
   // every frame, after the game has moved the player and its own camera
   world.zones.push({
     update: (dt, time, camera) => {
-      if (!race) return;
+      listen();
+      if (!race) { boats.update(dt, null); return; } // (from the bank one sees whoever is racing)
       if (player.dead || player.driver !== race) { leave(false); return; }
       app.fair.fov = race.camera(camera, dt);
       camera.updateMatrixWorld();

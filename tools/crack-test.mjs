@@ -60,7 +60,7 @@ const gain = (side, y) => { const st = onWall(side, y); run(st, 2, (q, inp, t) =
   check('a kick carries across and up: more than a metre and a half where it is narrow, a good deal less at the top', low > 1.5 && high > 0.5 && high < low - 0.35, `${low.toFixed(2)} m, then ${high.toFixed(2)} m`);
   const speed = (drive, side = 1, y = 12.4, lead = 0.6, span = 0.4) => { const st = onWall(side, y); run(st, lead, drive); const a = st.y; run(st, span, drive); return (a - st.y) / span; };
   const hold = speed((q, inp) => { inp.x = 1; }), free = speed(null), drop = speed((q, inp) => { inp.y = -1; }, 1, 12.4, 0.45, 0.2), w = C.wet[0], wetHeld = speed((q, inp) => { inp.x = w.side; }, w.side, w.y1 - 0.9, 0.2, 0.15);
-  check('on a wall one slides: slowly while one holds towards it, faster with nothing held, fast where water runs, faster still letting go', Math.abs(hold - C.slide.hold) < 0.05 && Math.abs(free - C.slide.free) < 0.05 && wetHeld > 4 && drop > 6, `${hold.toFixed(1)}, ${free.toFixed(1)}, ${wetHeld.toFixed(1)} and ${drop.toFixed(1)} m/s`);
+  check('a wall is held by itself — one slides down it slowly, and pushing towards it changes nothing —, fast where water runs, faster still letting go', Math.abs(hold - C.slide.hold) < 0.05 && Math.abs(free - C.slide.free) < 0.05 && wetHeld > 4 && drop > 6, `${hold.toFixed(1)}, ${free.toFixed(1)}, ${wetHeld.toFixed(1)} and ${drop.toFixed(1)} m/s`);
   const away = onWall(1, 6); let left = 0; run(away, 0.5, (q, inp, t) => { inp.x = -1; if (!left && !q.wall) left = t; });
   check('held away from it, a wall is let go — after a moment, not at once', left > 0.1 && left < 0.2 && !away.wall, `${left.toFixed(2)} s`);
   const back = onWall(1, 37.4); run(back, 4, (q, inp, t) => { inp.jump = first(t); inp.x = 1; }, (q) => q.wall || q.ground);
@@ -82,11 +82,27 @@ const gain = (side, y) => { const st = onWall(side, y); run(st, 2, (q, inp, t) =
   check('and one gets onto a ledge by a kick from the wall across, taken a metre below its top', kick.ground && kick.on === 1 && over > l.y, `over it at ${over.toFixed(1)} m, then down onto it`);
 }
 {
+  // ---- the sharp kick: what there is to get good at
+  const kickAfter = (wait) => {
+    const st = startClimb(0), inp = { x: 0, y: 0, jump: false }, ev = [];
+    Object.assign(st, { ground: false, wall: 1, x: wallAt(1, 11.3) - C.body, y: 10.5, vy: 0, held: 0, started: true }); // (on the right wall, where no ledge is in the way of a kick)
+    for (let t = 0; t < wait; t += C.step) stepClimb(st, C.step, inp, null);
+    inp.jump = true; stepClimb(st, C.step, inp, ev); inp.jump = false;
+    const y0 = st.y; let top = st.y;
+    for (let t = 0; t < 1.2 && !st.wall; t += C.step) { stepClimb(st, C.step, inp, ev); top = Math.max(top, st.y); }
+    return { rise: top - y0, kick: ev.find((e) => e.type === 'kick'), st };
+  };
+  const sharp = kickAfter(0.1), late = kickAfter(0.5), next = [];
+  stepClimb(sharp.st, C.step, { x: 0, y: 0, jump: true }, next); // (and again the moment the wall across is caught)
+  check('the skill is the kick: given within a fifth of a second of catching the wall it is a sharp one — higher —, given late it is not; sharp kicks in a row are a streak',
+    sharp.kick?.sharp === true && late.kick?.sharp === false && sharp.rise > late.rise * 1.15 && next.find((e) => e.type === 'kick')?.streak === 2 && sharp.st.most === 2, `${sharp.rise.toFixed(2)} m up against ${late.rise.toFixed(2)} m`);
+}
+{
   // ---- the stones
   const a = rockAt(41, 80.3, {}), b = rockAt(41, 80.3, {}), R = C.rocks; let lanes = [0, 0, 0], lowest = 99, deep = 0, onLedge = 0, n = 0;
   for (let k = 0; k < 600; k++) { const r = rockAt(k, k * R.every + 0.01, {}); lanes[r.lane + 1]++; lowest = Math.min(lowest, r.stop); if (r.stop < R.mid) deep++; if (r.lane && C.ledges.some((l) => l.side === r.lane && Math.abs(r.stop - l.y - R.r) < 1e-9)) onLedge++; n++; }
-  check('stones come down by the clock of the world, the same for everybody: along a wall or down the middle', JSON.stringify(a) === JSON.stringify(b) && lanes.every((v) => v > 90), `${lanes[0]} down the left wall, ${lanes[1]} down the middle, ${lanes[2]} down the right`);
-  check('none gets below thirteen metres; one in two stops half-way; those of a wall break on its first ledge', lowest >= R.low && deep > 40 && deep < n * 0.5 && onLedge === lanes[0] + lanes[2], `${deep} of ${n} get below ${R.mid} m`);
+  check('stones come down by the clock of the world, the same for everybody: along a wall, never down the middle — the other wall is always safe', JSON.stringify(a) === JSON.stringify(b) && lanes[1] === 0 && lanes[0] > 200 && lanes[2] > 200, `${lanes[0]} down the left wall, ${lanes[1]} down the middle, ${lanes[2]} down the right`);
+  check('each breaks on the first ledge of its wall: below the highest ledges there are no stones, only the rock and the water', lowest >= 30 && deep === 0 && onLedge === n, `none gets below ${lowest.toFixed(1)} m`);
   // a stone down the middle that goes low, and a climber in its way
   // a stone down the left wall, a climber holding that wall above its last ledge, another on the wall across
   let k = 0; while (rockAt(k, 0, {}).lane !== -1) k++;
