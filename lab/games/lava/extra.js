@@ -19,7 +19,7 @@ export function attach(app) {
     label: (game) => { const next = game.nextStart(); return `Play ${LAVA.name} — ${next.name} start in ${Math.max(1, Math.ceil(next.wait))} s`; },
     leave: 'Leave the crater', left: 'Round left.',
     keys: (touch, run) => (touch
-      ? `You leave with the ${run.start.name} start · stick: run over the columns · the arrow jumps: one level up, never two — or over a gap of one column · the lava only rises, and covers what it reaches · columns come up where it glows: the whiter, the higher · keep high, and keep a way on`
-      : `You leave with the ${run.start.name} start · W A S D: run over the columns · Space jumps: one level up, never two — or over a gap of one column · the lava only rises, and covers what it reaches · columns come up where it glows: the whiter, the higher · keep high, and keep a way on · E: leave · H: these keys again`),
+      ? `You leave with the ${run.start.name} start · stick: run over the columns · the arrow jumps: one level up, never two — or over a gap of one column · the lava only rises, and covers what it reaches · columns come up where it glows: the whiter, the higher · keep high, and keep a way on · now and then a double rise: it is said ahead`
+      : `You leave with the ${run.start.name} start · W A S D: run over the columns · Space jumps: one level up, never two — or over a gap of one column · the lava only rises, and covers what it reaches · columns come up where it glows: the whiter, the higher · keep high, and keep a way on · now and then a double rise: it is said ahead · E: leave · H: these keys again`),
   });
 }

@@ -13,11 +13,14 @@
 // number: the same for everybody who takes that start, something else for the next one.
 //
 // What is fair in it: the columns of a pulse come as small hills — a stair up from ground that is dry, a summit,
-// lower steps round it, some of them missing. For the first eight rises (a minute) the stairs are sure: from
+// lower steps round it, some of them missing; small hills, most of them one or two levels over the lava to come,
+// so that one has to move on at nearly every pulse. For the first eleven rises (a minute) the stairs are sure: from
 // every column of the largest dry region one can walk, a step up at a time, to the largest region there will be
 // after the rise, in the time left once the columns are up. Later the hills are fewer and narrower, the notice
-// shorter, the stairs less and less sure; after the eighteenth rise nothing comes up any more. And there are lone
-// tall columns from early on — out of reach, or with no way on: to read the relief is the game.
+// shorter, the stairs less and less sure; after the eighteenth rise nothing comes up any more. Twice after the
+// minute the lava rises two levels hard on each other (a double rise, said two pulses ahead): what comes up before
+// it stands over both. And there are lone tall columns from early on — out of reach, or with no way on: to read
+// the relief is the game.
 //
 // Places on the field: x metres east and z metres south of its middle. Heights: metres over the lava as it is
 // when the round begins (a level is LAVA.lv of them). Time is counted from the start of the round (before it:
@@ -33,15 +36,16 @@ export const LAVA = {
   top: 22, // no column ever stands higher than so many levels: the crater holds that much lava, and no more
   every: 10, // s: a round leaves every so often
   step: 1 / 120,
-  run: 6.3, accel: 46, air: 24, // m/s; how fast one gets there on a column, in the air (m/s²)
-  g: 22, jump: 7.42, // m/s², m/s up: a metre and a quarter — one level is jumped, two are not
+  run: 6.9, accel: 54, air: 31, // m/s; how fast one gets there on a column, in the air (m/s²)
+  g: 26, jump: 8.07, // m/s², m/s up: a metre and a quarter, quickly — one level is jumped, two are not
   stepUp: 0.3, coyote: 0.1, // m that the feet take without a jump; s after the edge during which a jump still counts
   burn: 0.15, // m over the lava: lower than that, one is in it
-  first: 9, quickest: 3.5, quick: 120, // s: the first rise, and from one rise to the next to begin with; from one to the next in the end; when that is reached
-  surge: 0.8, // s: the lava takes so long to rise one level
-  settle: 0.3, notice: [2.6, 0.7, 0.14], // s: after a rise, before the glows; a glow lasts so long to begin with, never less than, and so much less rise after rise
-  rise: 0.7, // s: a column takes so long to come up
-  fair: 8, last: 18, // the first so many rises have a sure way on; after so many, nothing comes up any more
+  first: 6.5, quickest: 3, quick: 100, // s: the first rise, and from one rise to the next to begin with; from one to the next in the end; when that is reached
+  surge: 0.6, // s: the lava takes so long to rise one level
+  settle: 0.25, notice: [2.0, 0.6, 0.11], // s: after a rise, before the glows; a glow lasts so long to begin with, never less than, and so much less rise after rise
+  rise: 0.5, // s: a column takes so long to come up
+  fair: 11, last: 18, // the first so many rises have a sure way on; after so many, nothing comes up any more
+  twice: [13, 17], again: 1.3, // the rises to these levels come hard on the one before (so many s after it): nothing comes up between the two, and what comes up before them stands over both
 };
 
 /**
@@ -88,6 +92,8 @@ const KEY = new Map();
   }
 }
 const N = CELLS.length;
+/** Whether the rise to level `k` comes hard on the one before (a double rise: nothing comes up between the two). */
+export const twice = (k) => LAVA.twice.includes(k);
 /** How far the field reaches from its middle (m): the corners of its outermost columns. */
 export const FIELD = S3 * LAVA.R * LAVA.rings + LAVA.R;
 
@@ -105,7 +111,7 @@ export function cellAt(x, z) {
 
 /** When each rise begins (s from the start of a round): PULSES[k - 1] for the rise to level k. The same in every round. */
 export const PULSES = [];
-{ let t = LAVA.first; for (let k = 1; k <= LAVA.top; k++) { PULSES.push(t); t += lerp(LAVA.first, LAVA.quickest, clamp(t / LAVA.quick, 0, 1)); } }
+{ let t = LAVA.first; for (let k = 1; k <= LAVA.top; k++) { PULSES.push(t); t += twice(k + 1) ? LAVA.again : lerp(LAVA.first, LAVA.quickest, clamp(t / LAVA.quick, 0, 1)); } }
 
 /** The board of scores: how long one held, ms — nobody holds longer than the lava takes to cover the highest a column may stand. */
 export const BOARD = { order: 'desc', min: 1000, max: Math.ceil(PULSES[LAVA.top - 1] + LAVA.surge) * 1000 };
@@ -115,6 +121,7 @@ export const BOARD = { order: 'desc', min: 1000, max: Math.ceil(PULSES[LAVA.top 
  * lava rises next (`at`), and the time left once they are up (`left`), s.
  */
 export function pulseOf(k) {
+  if (twice(k + 1)) { const at = PULSES[k]; return { glow: at, rise: at, up: at, at, left: 0 }; } // (between the two rises of a double: nothing)
   const L = LAVA, glow = PULSES[k - 1] + L.surge + L.settle, rise = glow + Math.max(L.notice[1], L.notice[0] - L.notice[2] * (k - 1)), up = rise + L.rise, at = PULSES[k];
   return { glow, rise, up, at, left: at - up };
 }
@@ -154,7 +161,7 @@ export function regionsOf(levels, lava) {
 }
 
 /** What a move takes at a run (s): to the next column, up a level onto it, over a missing column, between two columns. */
-export const PACE = { step: 0.4, up: 0.5, gap: 0.85, between: 0.75 };
+export const PACE = { step: 0.37, up: 0.46, gap: 0.8, between: 0.7 };
 
 /**
  * How long the walk is (s, at a run) from each column to the nearest of the columns `to`, on a field of `levels`
@@ -202,7 +209,7 @@ export function wayOn(before, after, lava, jumps = true) {
 
 // ---------------------------------------------------------------------------------------------- a round
 
-const SUMMIT = [0.16, 0.4, 0.3, 0.14]; // how high a summit stands over the lava to come: one level, two, three, four
+const SUMMIT = [0.3, 0.42, 0.2, 0.08]; // how high a summit stands over the lava to come: one level, two, three, four
 const pick = (rnd, weights) => { let p = rnd(); for (let i = 0; i < weights.length; i++) { p -= weights[i]; if (p < 0) return i; } return weights.length - 1; };
 
 /**
@@ -211,12 +218,12 @@ const pick = (rnd, weights) => { let p = rnd(); for (let i = 0; i < weights.leng
  * dry ground; `more` (0 to 1): more of them still (asked when what was drawn left somebody without a way on).
  */
 function hills(k, tops, reg, rnd, sure, more) {
-  const L = LAVA, plan = new Map(), base = k + 1; // (`base`: the lava to come)
+  const L = LAVA, plan = new Map(), base = k + 1 + (twice(k + 2) ? 1 : 0); // (`base`: the lava to come — two levels more before a double rise)
   const level = (c) => (plan.has(c) ? plan.get(c) : tops[c]), free = (c) => tops[c] <= k && !plan.has(c), put = (c, lv) => plan.set(c, Math.min(L.top, lv));
   const late = sure ? 0 : clamp((k - L.fair) / (L.last - 1 - L.fair), 0, 1); // (0 to 1: how far from the minute to the last pulse)
-  // (while the stairs are sure: two hills or three, wide ones, then two, less and less wide; later one or two, or none)
-  const count = sure ? 2 + (rnd() < (k <= 3 ? 0.5 : 0.2) ? 1 : 0) + (more > 0.3 ? 1 : 0) : rnd() < 1 - 0.55 * late ? (rnd() < 0.55 - 0.55 * late ? 2 : 1) : 0;
-  const keep = sure ? [0.66 - 0.04 * (k - 1) + 0.5 * more, 0.36 - 0.03 * (k - 1) + 0.6 * more] : [0.42 - 0.32 * late, 0.16 * (1 - late)], joined = sure ? 1 : 0.9 - 0.7 * late;
+  // (while the stairs are sure: three hills or four, small ones, less and less wide; later one or two, or none)
+  const count = sure ? 3 + (rnd() < (k <= 3 ? 0.5 : 0.25) ? 1 : 0) + (more > 0.3 ? 1 : 0) + (more > 0.65 ? 1 : 0) : rnd() < 1 - 0.55 * late ? (rnd() < 0.55 - 0.55 * late ? 2 : 1) : 0;
+  const keep = sure ? [0.5 - 0.03 * (k - 1) + 0.5 * more, 0.22 - 0.02 * (k - 1) + 0.6 * more] : [0.42 - 0.32 * late, 0.16 * (1 - late)], joined = sure ? 1 : 0.9 - 0.7 * late;
   const order = reg.size.map((s, id) => id).sort((a, b) => (b === reg.most) - (a === reg.most) || reg.size[b] - reg.size[a] || a - b); // (the regions, the largest first)
   for (let h = 0; h < count; h++) {
     // ---- where its stair begins: against the largest dry region — or, later, another one, or anywhere in the lava
@@ -315,9 +322,10 @@ export function makeRound(n) {
   // ---- pulse after pulse: the lava is at level k; what comes up before it rises to k + 1
   for (let k = 1; k < L.last; k++) {
     const reg = regionsOf(tops, k), P = pulseOf(k), sure = k < L.fair;
+    if (twice(k + 1)) { pulses.push({ k, ...P, sure, cells: [] }); continue; } // (between the two rises of a double)
     let plan = null, least = Infinity;
-    for (let a = 0, tries = sure ? 60 : 1; a < tries; a++) {
-      const drawn = hills(k, tops, reg, rnd, sure, a / 59);
+    for (let a = 0, tries = sure ? 150 : 1; a < tries; a++) {
+      const drawn = hills(k, tops, reg, rnd, sure, a / 149);
       if (!sure) { plan = drawn; break; }
       // (a way on for everybody of the largest region, with time to spare — or it is drawn again, more of it)
       next.set(tops);
@@ -327,7 +335,7 @@ export function makeRound(n) {
       if (miss <= 0) break;
     }
     // (there is always something that comes up, to the last pulse: one column at the least, wherever)
-    if (!plan.size) { const free = []; for (let c = 0; c < N; c++) if (tops[c] <= k) free.push(c); plan.set(free[Math.floor(rnd() * free.length)], k + 2 + pick(rnd, [0.6, 0.3, 0.1])); }
+    if (!plan.size) { const free = []; for (let c = 0; c < N; c++) if (tops[c] <= k) free.push(c); plan.set(free[Math.floor(rnd() * free.length)], k + 2 + (twice(k + 2) ? 1 : 0) + pick(rnd, [0.6, 0.3, 0.1])); }
     const cells = [...plan.keys()].sort((a, b) => a - b);
     for (const c of cells) { tops[c] = plan.get(c); cols[c].push({ level: tops[c], glow: P.glow, rise: P.rise, up: P.up }); }
     pulses.push({ k, glow: P.glow, rise: P.rise, up: P.up, at: P.at, left: P.left, sure, cells });
@@ -460,13 +468,14 @@ function look(st, B, here) {
       if (at <= until && at <= cover(lv[b]) - 0.1 && at < arr[b]) { arr[b] = at; prev[b] = a; far[b] = 1; }
     }
   }
-  const F = regionsOf(lv, k + 1), G = regionsOf(lv, k + 2);
+  // (before a double rise the lava to come is two levels up, not one: it was said, and it reads it so)
+  const two = twice(k + 2) ? 1 : 0, F = regionsOf(lv, k + 1 + two), G = regionsOf(lv, k + 2 + two);
   let best = here, most = -Infinity;
   for (let g = 0; g < N; g++) {
     if (arr[g] === Infinity) continue;
-    const life = lv[g] - k, f = F.of[g], size = f >= 0 ? F.size[f] : 0, deep = G.of[g] >= 0 ? G.size[G.of[g]] : 0;
+    const life = lv[g] - k - two, f = F.of[g], size = f >= 0 ? F.size[f] : 0, deep = G.of[g] >= 0 ? G.size[G.of[g]] : 0;
     let room = 0;
-    for (const y of CELLS[g].n) if (lv[y] > k + 1 && Math.abs(lv[y] - lv[g]) <= 1) room++;
+    for (const y of CELLS[g].n) if (lv[y] > k + 1 + two && Math.abs(lv[y] - lv[g]) <= 1) room++;
     // (`climber`: one who does not read the relief — the highest column within reach will do, whatever is round it)
     const v = B.climber ? 25 * life - 6 * (arr[g] - t) + (g === B.goal ? 12 : 0) : B.lazy ? (life >= 2 ? 1000 : 25 * life) - 6 * (arr[g] - t) + (g === B.goal ? 12 : 0)
       : (life >= 2 ? 1000 : 0) + (f >= 0 && f === F.most ? 40 * Math.min(size, 15) : 0) + 8 * Math.min(size, 15) + 25 * Math.min(life, 4) + 3 * Math.min(deep, 8) + 2 * room

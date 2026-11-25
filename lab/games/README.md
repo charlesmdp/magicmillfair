@@ -9,7 +9,7 @@ the spiral), the combs got a floor more, and two were added (the cars, the golf)
 | Switch | What it is | Where it stands | Its checks |
 |---|---|---|---|
 | `waves` | **Wave Goodbye** — a bank of sand off the beach and the sea of everybody: one runs, jumps, is thrown back by what catches one, for as long as one can | the north beach: a bank at about (57, -56), the arch at (40.4, -62.4) | `node lab/games/waves/test.mjs` (35) |
-| `lava` | **Thin Crust** — the lava only rises, columns come up out of it: one keeps to the summits, and keeps a way on | a small volcano east of the head of the pier, at (188, 8); the gate on the deck of the pier head at (142.4, 13.3) | `node lab/games/lava/test.mjs` (34) |
+| `lava` | **Thin Crust** — the lava only rises, columns come up out of it: one keeps to the summits, and keeps a way on | a small volcano east of the head of the pier, at (188, 8); the gate on the deck of the pier head at (142.4, 13.3) | `node lab/games/lava/test.mjs` (35) |
 | `hive` | **The Bee's Knees** — four combs of wax over the sea: the cell one sets foot on gives way | the north of the bay: combs at (84, -84), the gate on the beach at (43.5, -79.5) | `node lab/games/hive/test.mjs` (29) |
 | `flip` | **Head Over Heels** — one runs on the spot in a machine of travelling girders, and one key turns gravity over | a tall frame in the sea along the south side of the pier; the gate on the south beach at (41.1, 42.8) | `node lab/games/flip/test.mjs` (44) |
 | `spiral` | **A Turn for the Worse** — a track wound round a tower: obstacles worse every turn, one touch and it is the foot again | a tower in the south of the bay, at (168, 84); the gate on the south beach at (52, 71) | `node lab/games/spiral/test.mjs` (33) |
@@ -127,8 +127,14 @@ the first eight rises (a minute) the stairs are sure; later the hills are fewer 
 shorter; after the eighteenth rise nothing comes up any more. Lone tall columns, out of reach or with no way
 on, are there from early on: to read the relief is the game.
 
-Its bot held 90 s in the running game; who stands still is out at the first or second rise. For the game's
-boards: `lava: { order: 'desc', min: 1000, max: 128_000 }`.
+Made a notch livelier after its owner asked: the first rise comes after 6.5 s (it was 9) and the rises close
+in to 3 s apart; the lava takes 0.6 s to rise a level and a column half a second to come up; more, smaller
+hills at each pulse, so that one moves at every one; one runs at 6.9 m/s (it was 6.3) with more grip in the
+air; twice in a round the lava rises two levels in quick succession, said beforehand; the way on is sure for
+the first eleven rises.
+
+Its bot held 66 s in the running game; who stands still is out at the first or second rise. For the game's
+boards: `lava: { order: 'desc', min: 1000, max: 98_000 }`.
 
 What it does not do: two visitors who took different starts stand in the same crater with different columns
 under them (each browser draws its own round) — only those who leave together see the same thing.

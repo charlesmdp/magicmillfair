@@ -13,14 +13,14 @@ import { surfaceMaterial } from '../../../src/render/SurfaceMaterial.js';
 import { PIER, pierToWorld } from '../../../src/world/layout/layout.js';
 import { formatTime } from '../../../src/world/zones/games/course.js';
 import { V, clamp, worldClock, nextStart, STARTS, gateArch } from '../kit.js';
-import { LAVA, CONE, CELLS, FIELD, PULSES, UNDER, GLOW, RISING, makeRound, lavaAt, columnAt, startRun, stepRun, botInput } from './rules.js';
+import { LAVA, CONE, CELLS, FIELD, PULSES, UNDER, GLOW, RISING, twice, makeRound, lavaAt, columnAt, startRun, stepRun, botInput } from './rules.js';
 
 const TAU = Math.PI * 2;
 const TONES = { Red: '#e23b2e', Blue: '#2f7fe6', Green: '#2fae4f', Yellow: '#f2c14e', Purple: '#9a5be0', Orange: '#f08a24' };
 const INNER = FIELD + 1.9; // m from the middle: where the lava meets the rock of the crater as a round begins
 const VIEW = { back: 16, up: 18, ahead: -2.6 }; // the camera: so far behind the middle of the field, so high over the lava; where it looks, past the middle
 const SHOW = 120; // s: who only watches is shown a round that began so long ago at most
-const EMBERS = 28, PUFFS = 12;
+const EMBERS = 40, PUFFS = 12, BUBBLES = 14, SPURTS = 3, DROPS = 5; // (a spurt throws so many drops)
 // (numbers drawn from whole numbers: what is built is the same on every device)
 const rnd = (a, b = 0) => { let h = (Math.imul(a | 0, 0x9E3779B1) ^ Math.imul((b | 0) + 0x7F4A7C15, 0x85EBCA6B)) | 0; h ^= h >>> 15; h = Math.imul(h, 0x2C1B3C6D); h ^= h >>> 12; h = Math.imul(h, 0x297A2D39); h ^= h >>> 15; return (h >>> 0) / 4294967296; };
 
@@ -125,6 +125,7 @@ ${GLSL_COMMON}
 ${GLSL_LIGHTING}
 ${NOISE}
 uniform float uHeat;
+uniform float uSurge; // 0 to 1: the lava is rising — it swells, and a wave of light runs out from the middle
 in vec2 vUv;
 in vec3 vWorld;
 void main() {
@@ -139,6 +140,7 @@ void main() {
   vec3 dark = vec3(0.05, 0.014, 0.012) * (0.6 + 0.8 * cracks) + vec3(1.5, 0.26, 0.03) * vein * vein;
   vec3 col = mix(hot, dark, crust);
   col *= 0.92 + 0.08 * sin(uTime * 0.8 + plates * 11.0) + 0.12 * uHeat;
+  col += vec3(1.6, 0.5, 0.06) * uSurge * (0.5 + 0.5 * sin(vUv.x * 18.0 - uTime * 11.0)) * (1.0 - crust * 0.6);
   // (hotter against the rock of the crater, where it wells up)
   col += vec3(0.9, 0.22, 0.02) * smoothstep(0.88, 1.0, vUv.x);
   col = applyFog(col, vWorld, cameraPosition);
@@ -159,7 +161,7 @@ export class Lava {
     /** The clock everybody shares (ms): the starts are counted on it. */
     this.clock = worldClock;
     /** What was last drawn: the level of the lava (rises so far), its height (m over where it begins), s before it rises again (0 and less: it is rising; Infinity: never again). */
-    this.shown = { level: 0, pool: 0, soon: Infinity };
+    this.shown = { level: 0, pool: 0, soon: Infinity, surge: 0 };
   }
 
   build() {
@@ -246,7 +248,7 @@ export class Lava {
       const b = new MeshBuilder(), N = 40, up = V(0, 1, 0);
       const c0 = b.vert(V(0, 0, 0), up, 0, 0);
       for (let i = 0; i <= N; i++) { const a = (i / N) * TAU, id = b.vert(V(Math.cos(a), 0, Math.sin(a)), up, 1, i / N); if (i) b.idx.push(c0, id, id - 1); }
-      const mat = makeMaterial({ uniforms: { uHeat: { value: 0 } }, vertexShader: VERT, fragmentShader: LAVA_FRAG });
+      const mat = makeMaterial({ uniforms: { uHeat: { value: 0 }, uSurge: { value: 0 } }, vertexShader: VERT, fragmentShader: LAVA_FRAG });
       mat.name = 'lava:pool';
       this.pool = new THREE.Mesh(b.build(), mat);
       this.pool.name = 'lava-pool'; this.pool.matrixAutoUpdate = false; this.pool.frustumCulled = false;
@@ -261,6 +263,15 @@ export class Lava {
       this.embers.name = 'lava-embers'; this.embers.frustumCulled = false;
       for (let k = 0; k < EMBERS; k++) this.embers.setColorAt(k, new THREE.Color(0, 0, 0));
       this.group.add(this.embers);
+    }
+    // ---- bubbles that swell on the lava and burst, and spurts of it thrown up in drops (light only, like the embers)
+    {
+      const b = new MeshBuilder();
+      b.lathe([[0.001, -1], [0.7, -0.7], [1, 0], [0.7, 0.7], [0.001, 1]], 7);
+      this.blobs = new THREE.InstancedMesh(b.build(), this.embers.material, BUBBLES + SPURTS * DROPS);
+      this.blobs.name = 'lava-blobs'; this.blobs.frustumCulled = false;
+      for (let k = 0; k < BUBBLES + SPURTS * DROPS; k++) this.blobs.setColorAt(k, new THREE.Color(0, 0, 0));
+      this.group.add(this.blobs);
     }
     // ---- smoke over the crater, seen from the pier: round puffs that go up and drift out to sea, redder at the
     // mouth the higher the lava stands (who plays is under it, and is spared it)
@@ -312,7 +323,7 @@ export class Lava {
       let x = cx + C.x, y = L.level + o.top, z = cz + C.z, warn = 0, hot = 0;
       if (s === UNDER) y -= 0.7; // (under the lava: out of the way of its surface)
       else if (s === GLOW) hot = 2 + clamp((o.level - level - 2) / 3, 0, 1);
-      else if (s === RISING) hot = 1;
+      else if (s === RISING) { hot = 1; const a = 0.07 * (1 - o.k); x += a * Math.sin(time * 71 + c * 2.3); z += a * Math.cos(time * 67 + c * 1.7); } // (it shudders as it comes up)
       else {
         hot = Math.max(0, 1 - o.k / 1.5); // (it cools)
         if (o.level === level + 1 && heat > 0) { const a = 0.012 + 0.03 * heat; warn = heat * (0.55 + 0.45 * heat); x += a * Math.sin(time * 61 + c * 1.9); z += a * Math.cos(time * 53 + c * 2.7); }
@@ -323,12 +334,14 @@ export class Lava {
     }
     this.columns.instanceMatrix.needsUpdate = true;
     this.columns.instanceColor.needsUpdate = true;
-    const wide = INNER + 0.5 + CONE.flare * pool;
-    this.pool.matrix.makeScale(wide, 1, wide).setPosition(cx, L.level + pool, cz);
+    const wide = INNER + 0.5 + CONE.flare * pool, surge = lava - level > 1e-9 ? Math.sin(Math.PI * (lava - level)) : 0; // (0 to 1 and back while it rises)
+    // (as it rises the pool swells a little over where the rules have it — a few centimetres, never over a column's top)
+    this.pool.matrix.makeScale(wide, 1, wide).setPosition(cx, L.level + pool + 0.07 * surge, cz);
+    this.pool.material.uniforms.uSurge.value = surge;
     this.pool.matrixWorld.copy(this.pool.matrix);
     this.pool.material.uniforms.uHeat.value = heat * heat;
     this.columns.material.uniforms.uLavaY.value = this.crater.material.uniforms.uLavaY.value = L.level + pool;
-    this.shown.level = level; this.shown.pool = pool; this.shown.soon = soon;
+    this.shown.level = level; this.shown.pool = pool; this.shown.soon = soon; this.shown.surge = surge;
   }
 
   /** Every frame: the lava and the columns are where the round says — one's own while one plays, else the latest to have left on an even minute. */
@@ -341,15 +354,41 @@ export class Lava {
     // ---- embers: each goes up from somewhere in the lava, again and again
     const m = this._m, col = this.embers.instanceColor.array, base = L.level + this.shown.pool;
     for (let k = 0; k < EMBERS; k++) {
-      const life = 3.2 + 2.6 * rnd(k, 41), age = (now + life * rnd(k, 42)) % life, turn = Math.floor((now + life * rnd(k, 42)) / life), u = age / life;
+      const life = (3.2 + 2.6 * rnd(k, 41)) * 0.8, age = (now + life * rnd(k, 42)) % life, turn = Math.floor((now + life * rnd(k, 42)) / life), u = age / life;
       const a = rnd(k, 43 + (turn % 97)) * TAU, r = Math.sqrt(rnd(k, 44 + (turn % 89))) * INNER, glow = Math.sin(Math.PI * Math.min(1, u * 1.15)) * (0.75 + 0.25 * Math.sin(now * 9 + k));
       const size = (1 + u) * Math.min(1, glow * 4); // (an ember that no longer glows is not there)
       m.makeScale(size, size, size).setPosition(L.at.x + Math.cos(a) * r + Math.sin(now * 0.9 + k) * 0.5 * u, base + 0.2 + u * u * 7.5 + u * 1.5, L.at.z + Math.sin(a) * r + Math.cos(now * 0.7 + k * 2) * 0.5 * u);
       this.embers.setMatrixAt(k, m);
-      col[k * 3] = 3.4 * glow; col[k * 3 + 1] = 1.1 * glow; col[k * 3 + 2] = 0.15 * glow;
+      const hot = 1 + 0.8 * this.shown.surge;
+      col[k * 3] = 3.4 * glow * hot; col[k * 3 + 1] = 1.1 * glow * hot; col[k * 3 + 2] = 0.15 * glow;
     }
     this.embers.instanceMatrix.needsUpdate = true;
     this.embers.instanceColor.needsUpdate = true;
+    // ---- bubbles: each swells somewhere on the lava, and bursts; more and quicker as a rise comes and while it rises
+    const bc = this.blobs.instanceColor.array, stir = 1 + 1.5 * this.shown.surge + (this.shown.soon > 0 && this.shown.soon < 1.5 ? 1.5 - this.shown.soon : 0);
+    this._boil = ((this._boil ?? now % 1000) + Math.min(dt, 0.1) * stir) % 100000; this._spit = ((this._spit ?? now % 1000) + Math.min(dt, 0.1) * (1 + this.shown.surge)) % 100000; // (their own clocks: quicker as a rise comes)
+    for (let k = 0; k < BUBBLES; k++) {
+      const life = 1.4 + 1.6 * rnd(k, 81), clock = this._boil + life * rnd(k, 82), u = (clock % life) / life, turn = Math.floor(clock / life);
+      const a = rnd(k, 83 + (turn % 71)) * TAU, r = Math.sqrt(rnd(k, 84 + (turn % 67))) * (INNER - 0.6), size = 0.32 * (0.6 + 0.6 * rnd(k, 85 + (turn % 59))) * Math.sqrt(u) * (u < 0.92 ? 1 : 0);
+      m.makeScale(size, size * 0.55, size).setPosition(L.at.x + Math.cos(a) * r, base + 0.02, L.at.z + Math.sin(a) * r);
+      this.blobs.setMatrixAt(k, m);
+      const g = 1.2 + 1.4 * u * u;
+      bc[k * 3] = 2.6 * g; bc[k * 3 + 1] = 0.75 * g; bc[k * 3 + 2] = 0.1 * g;
+    }
+    // ---- spurts: now and then a fountain of drops thrown up out of the lava, falling back into it
+    for (let j = 0; j < SPURTS; j++) {
+      const life = 2.6 + 2 * rnd(j, 91), clock = this._spit + life * rnd(j, 92), age = clock % life, turn = Math.floor(clock / life), fly = 0.9;
+      const a = rnd(j, 93 + (turn % 83)) * TAU, r = Math.sqrt(rnd(j, 94 + (turn % 79))) * (INNER - 0.8), px = L.at.x + Math.cos(a) * r, pz = L.at.z + Math.sin(a) * r;
+      for (let d = 0; d < DROPS; d++) {
+        const i = BUBBLES + j * DROPS + d, va = rnd(j * 7 + d, 95 + (turn % 73)) * TAU, vo = 0.6 + 1.2 * rnd(j * 7 + d, 96), up = 4 + 2.5 * rnd(j * 7 + d, 97 + (turn % 61));
+        const t = age < fly ? age : 0, y = base + up * t - 7 * t * t, size = age < fly && y > base - 0.05 ? 0.09 + 0.05 * rnd(j, d) : 0;
+        m.makeScale(size, size * 1.4, size).setPosition(px + Math.cos(va) * vo * t, y, pz + Math.sin(va) * vo * t);
+        this.blobs.setMatrixAt(i, m);
+        bc[i * 3] = 3.2; bc[i * 3 + 1] = 1.1; bc[i * 3 + 2] = 0.16;
+      }
+    }
+    this.blobs.instanceMatrix.needsUpdate = true;
+    this.blobs.instanceColor.needsUpdate = true;
     // ---- smoke: each puff swells as it leaves the mouth of the crater, goes up, drifts east, thins out
     const tint = this.smoke.instanceColor.array, full = clamp(this.shown.pool / (L.top * L.lv), 0, 1);
     for (let k = 0; k < PUFFS; k++) {
@@ -374,7 +413,7 @@ export class Lava {
     const L = LAVA, start = this.nextStart(), events = [], input = { x: 0, y: 0, jump: false };
     const middle = CELLS.map((c, i) => (c.ring <= 1 ? i : -1)).filter((i) => i >= 0);
     const st = startRun(start.n, Math.max(0, (start.at - this.clock()) / 1000), middle[Math.floor(Math.random() * middle.length)]);
-    const S = { gone: false, last: 9, after: 0, acc: 0, sunk: 0, rises: 0, told: 0, cam: 0, look: V(0, 0, 0), eye: V(0, 0, 0) };
+    const S = { gone: false, last: 9, after: 0, acc: 0, sunk: 0, rises: 0, told: 0, count: 9, shake: 0, said: 0, cam: 0, look: V(0, 0, 0), eye: V(0, 0, 0) };
     const session = {
       game: this, over: false, ended: false, score: 0, line: '', start, riding: false, anim: ANIM.idle, state: st, auto: false,
       step: (dt, pl, control) => {
@@ -398,8 +437,22 @@ export class Lava {
         const lava = lavaAt(st.round, st.clock), level = Math.floor(lava + 1e-9), rising = lava - level > 1e-9, soon = level < st.round.high ? PULSES[level] - st.clock : Infinity;
         if (!st.over) {
           if (!S.told && soon < 5 && level === 0 && st.clock > 0) { S.told = 1; io.note('The lava is about to rise: up on a higher column!', 3200); }
-          if (level + (rising ? 1 : 0) > S.rises) { S.rises = level + (rising ? 1 : 0); io.play('tick', { volume: 0.8 }); if (S.rises === 1 && S.told < 2) { S.told = 2; io.note('New columns come up where the lava glows — the whiter, the higher.', 3600); } }
+          // (the count of the last seconds before a rise: two soft ticks, then the last second — the columns about
+          // to go under beat, the camera shivers — and a rumble as the lava surges, the camera shaken)
+          const count = soon > 0 && soon <= 2 && st.clock > 0 ? Math.ceil(soon) : 9;
+          if (count < S.count) io.play('tick', { volume: count === 1 ? 0.9 : 0.5 });
+          S.count = count;
+          if (level + (rising ? 1 : 0) > S.rises) {
+            S.rises = level + (rising ? 1 : 0); S.shake = 1;
+            io.play('whack', { volume: 0.75 }); io.play('hit', { volume: 0.45 });
+            if (S.rises === 1 && S.told < 2) { S.told = 2; io.note('New columns come up where the lava glows — the whiter, the higher.', 3600); }
+            // (a double rise is said two pulses ahead, and again before it)
+            if (twice(S.rises + 3) && S.said < S.rises) { S.said = S.rises; io.play('bell', { volume: 0.7 }); io.note('After the next rise, the lava rises twice in a row — think two levels up!', 3600); }
+            if (twice(S.rises + 2) && S.said < S.rises) { S.said = S.rises; io.play('bell'); io.note('Next: a double rise — two levels at once. Get high!', 3200); }
+          }
         }
+        S.shiver = !st.over && soon > 0 && soon < 1 ? 1 - soon : 0;
+        S.shake = Math.max(0, S.shake - dt * 1.6);
         if (st.over) {
           // in the lava: one goes down into it, and that is the end of the round
           S.after += dt; S.sunk = Math.min(1.5, S.sunk + dt * 0.75);
@@ -412,7 +465,7 @@ export class Lava {
         session.anim = st.over ? ANIM.dead : !st.ground ? ANIM.jump : pl.speed > 0.6 ? ANIM.run : ANIM.idle;
         session.line = st.over ? `${L.name} · held ${formatTime(session.score)}`
           : !S.gone ? `${L.name} · ${start.name} start in ${Math.max(1, Math.ceil(wait))}…`
-            : `level ${level + (rising ? 1 : 0)} · ${formatTime(Math.max(0, Math.round(st.clock * 1000)))} · ${rising ? 'the lava rises!' : soon === Infinity ? 'the lava has it all' : `the lava rises in ${Math.max(1, Math.ceil(soon))} s`}`;
+            : `level ${level + (rising ? 1 : 0)} · ${formatTime(Math.max(0, Math.round(st.clock * 1000)))} · ${rising ? 'the lava rises!' : soon === Infinity ? 'the lava has it all' : `the lava rises${twice(level + 2) ? ' TWICE' : ''} in ${Math.max(1, Math.ceil(soon))} s${soon < 1 ? '!' : ''}`}`;
         S.pool = lava * L.lv;
       },
       /**
@@ -428,6 +481,9 @@ export class Lava {
         const far = Math.hypot(ex, ez), room = INNER + CONE.flare * (Math.min(y + VIEW.up, CONE.rim - 1.7) - L.level) - 0.9;
         if (far > room) { ex *= room / far; ez *= room / far; }
         S.eye.set(L.at.x + ex, y + VIEW.up, L.at.z + ez);
+        // (shaken as the lava surges, a shiver in the last second before it does)
+        const now = this.clock() / 1000, j = 0.2 * S.shake * S.shake + 0.035 * (S.shiver || 0);
+        if (j > 0) { S.eye.x += j * Math.sin(now * 47); S.eye.y += j * Math.sin(now * 61 + 1.3); S.look.x += j * 0.6 * Math.sin(now * 53 + 2.1); S.look.y += j * 0.6 * Math.sin(now * 43); }
         cam.position.copy(S.eye); cam.up.set(0, 1, 0); cam.lookAt(S.look);
         return tall ? 76 : 56;
       },

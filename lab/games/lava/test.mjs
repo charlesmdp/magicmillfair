@@ -1,8 +1,8 @@
 // Checks of Thin Crust, without a browser: the volcano stands in the open sea, clear of the pier, and its crater
 // holds the lava it shows; the field is sixty-one columns, one level of which is jumped and two are not; the lava
-// rises in pulses, faster and faster, and never goes down; no column ever goes down, a new one comes up out of the
+// rises in pulses, faster and faster — twice a double rise, said ahead — and never goes down; no column ever goes down, a new one comes up out of the
 // lava after a glow, at least one level above the lava to come; a round is the same for everybody and not the next
-// one's; for the first eight rises there is a way on from the largest dry region, in the time left; later the
+// one's; for the first minute (eleven rises) there is a way on from the largest dry region, in the time left; later the
 // hills are fewer and narrower; the side of a higher column is a wall, any drop is fine, the lava covers who
 // stands too low; who only stands there is out at the first rise; a bot that reads the relief holds a minute and
 // more; every round ends; the same run on every device; the line of its board of scores.
@@ -10,7 +10,7 @@
 import { check, done, ground } from '../check.mjs';
 import { PIER, pierToWorld, BOUNDS } from '../../../src/world/layout/layout.js';
 import { nextStart, STARTS } from '../kit.js';
-import { LAVA, CONE, BOARD, PULSES, PACE, CELLS, FIELD, UNDER, GLOW, RISING, UP, cellAt, makeRound, pulseOf, risesAt, lavaAt, levelsAt, regionsOf, walks, wayOn, columnAt, topAt, dryAt, startRun, stepRun, botInput, botRun, idleInput } from './rules.js';
+import { LAVA, CONE, BOARD, PULSES, PACE, twice, CELLS, FIELD, UNDER, GLOW, RISING, UP, cellAt, makeRound, pulseOf, risesAt, lavaAt, levelsAt, regionsOf, walks, wayOn, columnAt, topAt, dryAt, startRun, stepRun, botInput, botRun, idleInput } from './rules.js';
 
 const L = LAVA, N = CELLS.length, height = await ground();
 const run = (st, secs, drive, stop) => { const input = { x: 0, y: 0, jump: false }, events = [], seen = []; for (let t = 0; t < secs && !st.over; t += L.step) { input.jump = false; drive?.(st, input, t); stepRun(st, L.step, input, events); for (const e of events) seen.push({ ...e, at: st.clock }); events.length = 0; if (stop?.(st, seen)) break; } return seen; };
@@ -45,8 +45,12 @@ const mean = (a) => a.reduce((s, v) => s + v, 0) / (a.length || 1), secs = (ms) 
 }
 {
   // ---- the lava
-  const gaps = PULSES.slice(1).map((p, i) => p - PULSES[i]);
-  check('the lava rises in pulses, one level at a time, faster and faster: the first after nine seconds, the next about nine later, three and a half apart in the end', PULSES.length === L.top && PULSES[0] === 9 && gaps[0] > 8 && gaps[0] <= 9 && gaps.every((g, i) => !i || g <= gaps[i - 1] + 1e-9) && Math.abs(gaps.at(-1) - 3.5) < 1e-9 && gaps[10] < 6, `rises at ${PULSES.slice(0, 5).map((p) => p.toFixed(1)).join(', ')}… ${PULSES.slice(-2).map((p) => p.toFixed(1)).join(', ')} s`);
+  // (the gap before the rise to level i + 2 is gaps[i]; a double rise is left out of the slowing down)
+  const all = PULSES.slice(1).map((p, i) => p - PULSES[i]), gaps = all.filter((g, i) => !twice(i + 2));
+  check('the lava rises in pulses, one level at a time, faster and faster: the first after six and a half seconds, the next about six later, about three apart in the end', PULSES.length === L.top && PULSES[0] === 6.5 && gaps[0] > 6 && gaps[0] <= 6.5 && gaps.every((g, i) => !i || g <= gaps[i - 1] + 1e-9) && gaps.at(-1) < 3.3 && gaps.at(-1) >= 3 && gaps[8] < 5, `rises at ${PULSES.slice(0, 5).map((p) => p.toFixed(1)).join(', ')}… ${PULSES.slice(-2).map((p) => p.toFixed(1)).join(', ')} s; ${gaps[0].toFixed(1)} s apart at first, ${gaps.at(-1).toFixed(1)} s in the end`);
+  // a double rise: the rise to a level of L.twice comes hard on the one before, once the lava is still again; never in the first minute
+  const doubles = L.twice.every((k) => Math.abs(all[k - 2] - L.again) < 1e-9 && L.again > L.surge + 0.4 && k - 2 >= L.fair && k <= L.last) && all.filter((g) => g < 2).length === L.twice.length;
+  check('now and then a double rise: two levels hard on each other, after the first minute, and nothing comes up between the two', doubles && makeRound(4711).pulses.every((P) => !twice(P.k + 1) || P.cells.length === 0), `to levels ${L.twice.join(' and ')}, at ${L.twice.map((k) => PULSES[k - 2].toFixed(1) + ' and ' + PULSES[k - 1].toFixed(1)).join(', ')} s`);
   const R = makeRound(4711);
   let down = 0, whole = true, prev = 0;
   for (let t = -5; t < R.end + 20; t += 0.01) { const l = lavaAt(R, t); if (l < prev - 1e-12 || l > prev + 0.05) down++; prev = l; }
@@ -62,7 +66,7 @@ const mean = (a) => a.reduce((s, v) => s + v, 0) / (a.length || 1), secs = (ms) 
   check('a round leaves every ten seconds on the shared clock, each start with its name', s0.at % (L.every * 1000) === 0 && s0.wait >= 3 && s0.wait < 3 + L.every && s1.at - s0.at === L.every * 1000 && s1.name !== s0.name && s1.n === s0.n + 1, `${s0.name}, then ${s1.name}`);
   // every column of sixty rounds
   const ROUNDS = 60, over = [0, 0, 0, 0, 0], news = [], dry = [], first = [0, 0, 0, 0, 0];
-  let came = 0, order = true, wet = true, room = true, heights = true, notice = 99, spare = 99, late = 0, lone = 0, level = true, ends = 0, highest = 0, sunk = 0;
+  let twofold = 0, came = 0, order = true, wet = true, room = true, heights = true, notice = 99, spare = 99, late = 0, lone = 0, level = true, ends = 0, highest = 0, sunk = 0;
   let ways = 0, far = 0, farDry = 0, least = 99, people = 0, spared = true;
   for (let n = 9000; n < 9000 + ROUNDS; n++) {
     const R = makeRound(n);
@@ -78,8 +82,10 @@ const mean = (a) => a.reduce((s, v) => s + v, 0) / (a.length || 1), secs = (ms) 
         if (!(e.level > was.level) || !(e.glow < e.rise && e.rise < e.up)) order = false;
         // (it comes up where there is lava: what stood there is covered, and the lava is still)
         if (was.level > k || lavaAt(R, e.glow) !== k || lavaAt(R, e.up) !== k || e.glow < PULSES[k - 1] + L.surge + L.settle - 1e-9) room = false;
-        if (e.level < k + 2 || e.level > k + 5 || e.level > L.top) heights = false;
-        over[e.level - k - 1]++;
+        // (`base`: the lava to come — before a double rise, two levels up)
+        const base = k + 1 + (twice(k + 2) ? 1 : 0);
+        if (e.level < base + 1 || e.level > base + 4 || e.level > L.top) heights = false;
+        over[e.level - base]++; if (twice(k + 2)) twofold++;
         notice = Math.min(notice, e.rise - e.glow); spare = Math.min(spare, P.at - e.up);
         if (k >= L.last) late++;
         // (a lone one: nothing dry round it that is within a level of it)
@@ -107,9 +113,10 @@ const mean = (a) => a.reduce((s, v) => s + v, 0) / (a.length || 1), secs = (ms) 
   check('the relief of the start: every column stands, at one level to four; the middle of the field is level and low — nobody can stay there', level && wet && first[1] > first[2] && first[2] > first[3] && first[3] > first[4] && first[4] > 0 && first[0] === 0, `${[1, 2, 3, 4].map((l) => `${Math.round((first[l] / ROUNDS / N) * 100)} %`).join(' / ')} of them at levels 1 / 2 / 3 / 4`);
   check('no column ever goes down: what comes up where one was covered stands higher, and no top is ever lower than it was', order && sunk === 0 && came > 3000, `${came} columns came up in sixty rounds`);
   check('a column comes up out of the lava — where what stood is covered — after a glow, and is up before the lava rises again', room && notice >= L.notice[1] - 1e-9 && Math.abs(pulseOf(1).rise - pulseOf(1).glow - L.notice[0]) < 1e-9 && spare > 0.9 && late === 0, `the shortest glow ${notice.toFixed(2)} s, the first ${L.notice[0]} s; up ${spare.toFixed(2)} s before the rise at the least; nothing comes after the rise to level ${L.last}`);
-  check('a new column always stands at least one level above the lava to come — sometimes two, three or four', heights && over[0] === 0 && over[1] > over[2] && over[2] > over[3] && over[3] > over[4] && over[4] > total * 0.03, `${[1, 2, 3, 4].map((l) => `${Math.round((over[l] / total) * 100)} %`).join(' / ')} of them one / two / three / four levels above it`);
-  check(`fair for the first ${L.fair} rises (${PULSES[L.fair - 1].toFixed(0)} s): from every column of the largest dry region one can walk, a step up at a time, to the largest region there is after the rise — so to ground that stays dry — in the time left once the columns are up`, spared && ways === ROUNDS * L.fair && least >= 5 && far <= 0.7 + 1e-9 && L.fair >= 8 && PULSES[L.fair - 1] > 58, `${ways} rises looked at, ${people} columns to leave from; the longest walk takes ${Math.round(far * 100)} % of the time left (to any dry ground: ${Math.round(farDry * 100)} %); the region to come is never smaller than ${least} columns`);
-  check('later the hills are fewer and narrower, the notice shorter, and less and less stays dry', m(1, L.fair) > m(L.fair, 13) + 3 && m(L.fair, 13) > m(13, L.last) && d(1, L.fair) > 16 && d(L.fair, 13) < d(1, L.fair) - 5 && d(13, L.last) < d(L.fair, 13) && pulseOf(L.last - 1).rise - pulseOf(L.last - 1).glow < 1 && pulseOf(L.last - 1).left < pulseOf(L.fair).left - 0.8, `columns that come up at each pulse: ${m(1, L.fair).toFixed(1)}, then ${m(L.fair, 13).toFixed(1)}, then ${m(13, L.last).toFixed(1)}; dry after the rise: ${d(1, L.fair).toFixed(0)}, ${d(L.fair, 13).toFixed(0)}, ${d(13, L.last).toFixed(0)} of ${N}; time left once they are up: ${pulseOf(1).left.toFixed(1)} s, ${pulseOf(L.fair).left.toFixed(1)} s, ${pulseOf(L.last - 1).left.toFixed(1)} s`);
+  const stay = [1, 2, 3, 4].reduce((s, l) => s + l * over[l], 0) / total; // (how many rises a new column stands, on average, after the one to come)
+  check('a new column always stands at least one level above the lava to come — before a double rise, above both — mostly one or two: small hills, one has to move on at nearly every pulse', heights && over[0] === 0 && over[1] > over[3] && over[2] > over[3] && over[3] > over[4] && over[4] > total * 0.02 && stay < 2 && twofold > ROUNDS * 2, `${[1, 2, 3, 4].map((l) => `${Math.round((over[l] / total) * 100)} %`).join(' / ')} of them one / two / three / four levels above it — ${stay.toFixed(2)} on average; ${(twofold / ROUNDS).toFixed(1)} a round come up before a double rise`);
+  check(`fair for the first ${L.fair} rises (${PULSES[L.fair - 1].toFixed(0)} s): from every column of the largest dry region one can walk, a step up at a time, to the largest region there is after the rise — so to ground that stays dry — in the time left once the columns are up`, spared && ways === ROUNDS * L.fair && least >= 5 && far <= 0.7 + 1e-9 && L.fair >= 8 && PULSES[L.fair - 1] > 58 && !L.twice.some((k) => k <= L.fair + 1), `${ways} rises looked at, ${people} columns to leave from; the longest walk takes ${Math.round(far * 100)} % of the time left (to any dry ground: ${Math.round(farDry * 100)} %); the region to come is never smaller than ${least} columns`);
+  check('later the hills are fewer and narrower, the notice shorter, and less and less stays dry', m(1, L.fair) > m(L.fair, 15) + 3 && m(L.fair, 15) > m(15, L.last) && d(1, L.fair) > 16 && d(L.fair, 15) < d(1, L.fair) - 5 && d(15, L.last) < d(L.fair, 15) && pulseOf(L.last - 1).rise - pulseOf(L.last - 1).glow < 1 && pulseOf(L.last - 1).left < pulseOf(L.fair).left - 0.3 && pulseOf(L.last - 1).left > 1.2, `columns that come up at each pulse: ${m(1, L.fair).toFixed(1)}, then ${m(L.fair, 15).toFixed(1)}, then ${m(15, L.last).toFixed(1)}; dry after the rise: ${d(1, L.fair).toFixed(0)}, ${d(L.fair, 15).toFixed(0)}, ${d(15, L.last).toFixed(0)} of ${N}; time left once they are up: ${pulseOf(1).left.toFixed(1)} s, ${pulseOf(L.fair).left.toFixed(1)} s, ${pulseOf(L.last - 1).left.toFixed(1)} s`);
   check('and there are lone columns — nothing dry round them within a level: out of reach, or with no way on', lone > ROUNDS * 4 && lone < came * 0.4, `${lone} of the ${came}, ${(lone / ROUNDS).toFixed(1)} a round`);
   check('every round ends: once nothing comes up any more the lava covers what is left, and stops', wet && ends <= BOARD.max / 1000 && highest <= L.top && ends < 130, `the longest of the sixty is all lava at ${ends.toFixed(1)} s, level ${highest}`);
 }
@@ -172,7 +179,7 @@ const mean = (a) => a.reduce((s, v) => s + v, 0) / (a.length || 1), secs = (ms) 
   const slow = []; for (let k = 0; k < 12; k++) slow.push(botRun(START + k, 200, 0.4));
   check('one that looks about itself only every four tenths of a second holds a minute on most of them too', slow.filter((r) => r.time > 60000).length >= 9 && slow.every((r) => r.over), slow.map((r) => secs(r.time)).join(' · ') + ' s');
   const many = []; for (let k = 0; k < 40; k++) many.push(botRun(7000 + k).time);
-  check('on forty other starts: the eight fair rises held nearly always, nobody beyond two minutes or so', many.filter((t) => t > PULSES[L.fair - 1] * 1000).length >= 36 && Math.max(...many) < 128000 && mean(many) > 75000, `${secs(Math.min(...many))} s the shortest, ${secs(mean(many))} s the mean, ${secs(Math.max(...many))} s the longest`);
+  check('on forty other starts: the fair rises of the first minute held nearly always, nobody beyond a minute and a half or so', many.filter((t) => t > PULSES[L.fair - 1] * 1000).length >= 36 && Math.max(...many) < 100000 && mean(many) > 70000, `${secs(Math.min(...many))} s the shortest, ${secs(mean(many))} s the mean, ${secs(Math.max(...many))} s the longest`);
   const at = (dt) => { const st = startRun(START + 3), input = { x: 0, y: 0, jump: false }; let acc = 0; for (let t = 0; t < 200 && !st.over; t += dt) { acc += dt; while (acc >= L.step && !st.over) { acc -= L.step; botInput(st, input); stepRun(st, L.step, input, null); } } return st.time; };
   check('the same run at 30 and at 144 frames a second', at(1 / 30) === at(1 / 144) && at(1 / 30) === runs[3].time, `${secs(runs[3].time)} s`);
   // a wait before the start: every column stands, nothing moves, and the time counts from the start
