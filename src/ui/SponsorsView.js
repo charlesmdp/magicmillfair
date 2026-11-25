@@ -3,7 +3,7 @@
 // have its panel — and, underneath, the other things a sponsor can have.
 //
 //   view.open({ cards, wheel, extras, note })
-//     cards:  [{ id, name, state: 'free' | 'live' | 'mine' | 'pending' | 'taken', sponsor: { title, subtitle, logo, url } | null,
+//     cards:  [{ id, name, state: 'free' | 'live' | 'mine' | 'pending' | 'taken', sponsor: { title, subtitle, logo, url, site, clicks } | null,
 //                price (words), acts: [{ label, run }], photo: () → canvas | null, stamp (when it changes, the photograph is retaken) }]
 //     wheel:  the gondolas of the big wheel that somebody holds, as cards of the same kind ("Gondola 7": which
 //             one it is, a photograph of it as it goes round, whose it is) — { cards, of (how many gondolas there are) }
@@ -17,7 +17,8 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 const TAGS = { free: 'Free', live: 'Sponsored', mine: 'Yours', pending: 'To approve', taken: 'Taken' };
 
 /**
- * Photographs of the world taken by the game's own renderer, from anywhere: shoot(from, at, w, h, fov) → a
+ * Photographs of the world taken by the game's own renderer, from anywhere (`prepare(camera)`, when set, is
+ * called before each: what is drawn for one eye only is made ready for this one): shoot(from, at, w, h, fov) → a
  * canvas. The scene is drawn once more, small, from another eye — what is in the picture is what is there
  * (a sponsor's panel included).
  */
@@ -37,6 +38,10 @@ export class Photographer {
     cam.lookAt(at[0], at[1], at[2]);
     cam.updateProjectionMatrix();
     cam.updateMatrixWorld(true);
+    cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
+    // (the ground and the trees are drawn for the eye that looks: they are told whose eye this is — the game
+    // tells them again, for the player's, with its next frame)
+    this.prepare?.(cam);
     const was = renderer.getRenderTarget();
     renderer.setRenderTarget(rt);
     renderer.clear();
@@ -124,6 +129,8 @@ export class SponsorsView {
         const words = el('div', 'tp-words');
         words.append(el('small', '', c.state === 'pending' ? 'Awaiting your approval' : c.state === 'mine' ? (car ? 'Your gondola' : 'Your panel') : 'Sponsored by'), el('b', '', c.sponsor.title));
         if (c.sponsor.subtitle) words.append(el('i', '', c.sponsor.subtitle));
+        // (its site, and how many times it was opened from the game)
+        if (c.sponsor.site) words.append(el('span', 'tp-site', `${c.sponsor.site} · ${c.sponsor.clicks || 0} click${c.sponsor.clicks === 1 ? '' : 's'}`));
         who.append(words);
       } else {
         who.classList.add('none');

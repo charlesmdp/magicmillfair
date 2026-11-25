@@ -10,7 +10,7 @@ import { HATS } from './player/Cosmetics.js';
 import { ITEMS, PAINTS, TRAILS, itemOf, packKit, PASS, SIZES, SIZE, SIZE_SCALE, sizeOf, FREE_COLORS } from '../server/items.js';
 import { nameOk } from '../server/decency.js';
 import { BOARDS as GAME_NAMES } from '../server/catalog.js';
-import { rankSponsors, dollars } from './app/thanks.js';
+import { rankSponsors, dollars, siteWords } from './app/thanks.js';
 import { oasisPicture, OASIS_ROBOT } from './ui/OasisPicture.js';
 import { drawSponsor } from './world/zones/games/Boards.js';
 import { ShopView } from './ui/ShopView.js';
@@ -298,6 +298,7 @@ async function boot() {
     presence.on('emote', ({ id, emote: i }) => {
       const o = presence.peers.get(id), e = EMOTE_LIST[i];
       if (o && o.visible && i === FIREWORK) { world.sparks.firework(o.x, o.y, o.z); return; } // (somebody lit a firework)
+      if (o && o.visible && i === MUSHROOM) { world.sparks.mushroom(o.x, o.y, o.z); return; } // (…or raised their mushroom cloud: they found every relic)
       if (o && o.visible && i === BOUQUET) {
         // somebody holds out their bouquet: whoever stands right by them, hands free, takes it
         if (Math.hypot(o.x - player.pos.x, o.z - player.pos.z) < 3 && Math.abs(o.y - player.pos.y) < 2 && !look.bouquet && state.mode === 'walk' && !player.dead && !fair.session) {
@@ -519,6 +520,7 @@ async function boot() {
     if (name === 'admin') { adminKey(rest.join(' ')); return; }
     if (name === 'sit') { sitDown(); return; }
     if (name === 'lie') { sitDown(true); return; }
+    if (name === 'mushroom' || name === 'boom') { app.mushroom?.(); return; }
     const e = emoteIndex(name);
     if (e >= 0) { emote(e); return; }
     const secret = SECRETS.get(fingerprint(word.toUpperCase()));
@@ -927,7 +929,28 @@ async function boot() {
   };
   // every place that can be sponsored: id → { what, cents, limits, set(sponsor | null) }
   const places = new Map();
-  for (const sl of world.sponsorSlots || []) places.set(sl.id, { what: sl.what, spot: sl, set: sl.set });
+  // The big attractions — those with a star on the map — share their panel between up to five sponsors, shown
+  // turn by turn (a few seconds each; while a place is left, "your brand here" has its turn too). Their places:
+  // 'board:<id>' and 'board:<id>-2' … '-5' (server/catalog.js), all painted on the one panel of the stand.
+  const MAJOR_GAMES = ['sky', 'race', 'wing', 'slide', 'pond', 'boats', 'hill', 'crack', 'hollow'], rotors = [];
+  const gameOf = (id) => String(id).split(':')[1]?.replace(/-\d$/, '') || '';
+  const addPlace = (sl) => {
+    if (!sl.id.startsWith('board:') || !MAJOR_GAMES.includes(gameOf(sl.id))) { places.set(sl.id, { what: sl.what, spot: sl, set: sl.set }); return; }
+    const ids = [sl.id, ...[2, 3, 4, 5].map((n) => `${sl.id}-${n}`)], rotor = { ids, frames: new Map(), k: 0, current: sl.id, spot: sl };
+    rotor.show = () => {
+      const live = ids.filter((id) => rotor.frames.get(id));
+      // (each sponsor twice for one turn of the invitation, while a place is left)
+      const turns = live.length && live.length < ids.length ? [...live, ...live, ''] : live, id = turns.length ? turns[rotor.k % turns.length] : '';
+      rotor.current = id || sl.id;
+      if (rotor.shown === id && id) return;
+      rotor.shown = id;
+      sl.set(id ? rotor.frames.get(id) : null);
+    };
+    for (const id of ids) places.set(id, { what: sl.what, spot: sl, rotor, set: (sp) => { rotor.frames.set(id, sp || null); rotor.shown = undefined; rotor.show(); } });
+    rotors.push(rotor);
+  };
+  for (const sl of world.sponsorSlots || []) addPlace(sl);
+  { let since = 0; world.zones.push({ update: (dt) => { since += dt; if (since < 6) return; since = 0; for (const r of rotors) { r.k++; r.show(); } } }); }
   for (let n = 1; n <= (world.pier.gondolas || 0); n++) places.set(`gondola:${n}`, { what: `gondola ${n} of the big wheel`, set: (sp) => world.pier.setGondola(n, sp) });
   for (const v of sky.villages) places.set(`village:${v.id}`, { what: `the sky village ${v.name}`, village: v, set: (sp) => { if (sp) sky.setSponsor(v.index, { name: sp.title, motto: sp.subtitle, url: sp.url }); } });
   const plaques = world.places.plaques; // (the plaques of the companions, round the plinth of the golden dog: places paid once)
@@ -945,6 +968,17 @@ async function boot() {
     const logos = await Promise.all(rows.map((r) => loadImage(r.logo)));
     if (key === thanked) wall.set(rows.map((r, i) => ({ ...r, logo: logos[i] })), info);
   };
+  // (at the foot of the wall: every sponsor in a list, the most generous first — its site, how often it was
+  // opened — and a click opens it; when they do not fit on one face of the rock, the wall turns its pages)
+  const openThanks = () => {
+    const rows = rankSponsors(shop.slots, GAME_NAMES);
+    if (!rows.length) { hud.note('Nobody sponsors the fair yet. The Trading Post is at the foot of the pier: the first name cut here could be yours.', 7000); return; }
+    hud.choose('Thanks to them, the game is free', 'Every sponsor of the fair, the most generous first. Pick one to open its site — it is counted for them.',
+      rows.map((r, i) => ({ label: `#${i + 1}  ${r.name}`, note: [r.site || 'no site given', r.site ? `${r.clicks} click${r.clicks === 1 ? '' : 's'}` : '', r.figure ? `${r.figure}${r.unit ? ` ${r.unit}` : ''}` : r.note].filter(Boolean).join(' · '), color: i < 3 ? [0.9, 0.7, 0.2] : undefined })))
+      .then((i) => { if (i === null) return; const r = rows[i]; if (r.url) { visitSponsor(r.first, r.url); setTimeout(() => refreshShop(), 1500); } else hud.note(`${r.name} gave no site.`, 4000); });
+  };
+  world.actionSources.push((p) => { const w = world.games.thanks; return w && Math.abs(p.pos.y - data.heightAt(p.pos.x, p.pos.z)) < 1.5 && (p.pos.x - w.x) ** 2 + (p.pos.z - w.z) ** 2 < 13 * 13 ? { label: 'The sponsors and their sites', run: openThanks } : null; });
+  { let since = 0; world.zones.push({ update: (dt) => { since += dt; if (since > 12) { since = 0; world.games.thanks?.turn(); } } }); }
   const applySponsors = async () => {
     for (const [id, place] of places) {
       const view = shop.slots[id], live = view && view.state === 'live';
@@ -1019,22 +1053,73 @@ async function boot() {
     if (!wrong) { if (who.admin) pending = (await shop.all(who.key)) || {}; await refreshShop(); }
   };
   let pending = {}; // the administrator: every place as the server keeps it (drafts included)
+  /** Opens the site of the sponsor of the place `id` — from its place, the Trading Post or the wall of thanks: counted for the sponsor. */
+  const visitSponsor = (id, url) => { if (!url) return; shop.click(id); window.open(url, '_blank', 'noopener,noreferrer'); };
+  // What a sponsor shows is asked for BEFORE the payment — a name, a line, a site, a logo —, kept in this
+  // browser while they are at the payment page, and sent the moment the place is theirs (see arrived()).
+  const SPONSOR_DRAFT = 'mmf.sponsor';
+  const sponsorFields = (village = false) => [
+    { key: 'title', label: village ? 'Its name (22 letters at most)' : 'Your name — a company, a site, yourself (28 letters at most)', value: '', max: village ? 22 : 28 },
+    { key: 'subtitle', label: village ? 'A line under it (34 letters at most)' : 'A line under it (40 letters at most)', value: '', max: village ? 34 : 40 },
+    { key: 'url', label: 'Your website (https://…): visitors open it from your place', value: '', max: 200, hint: 'https://' },
+    ...(village ? [] : [{ key: 'logo', label: 'Your logo (PNG, JPEG or WebP) — it can also be added later', type: 'file' }]),
+  ];
+  /** Keeps what the form of a sponsor brought back, for after the payment. False when something is wrong (and said). */
+  const keepSponsor = async (id, got) => {
+    if (!got.title) { hud.note('A name is needed: it is what your place will say.', 5000); return false; }
+    const url = String(got.url || '').trim();
+    if (url && !/^https:\/\//i.test(url)) { hud.note('The link must start with https://', 5000); return false; }
+    let logo = null;
+    if (got.logo) { logo = await logoData(got.logo, 256, false); if (!logo) { hud.note('That picture cannot be used: a PNG, a JPEG or a WebP, please.', 6000); return false; } }
+    store.set(SPONSOR_DRAFT, JSON.stringify({ id, title: got.title, subtitle: got.subtitle || '', url, logo, at: Date.now() }));
+    return true;
+  };
+  /** What was kept for the place `id` (a day at the most), or null. */
+  const keptSponsor = (id) => { try { const d = JSON.parse(store.get(SPONSOR_DRAFT)); return d && d.id === id && Date.now() - d.at < 86_400_000 ? d : null; } catch { return null; } };
+  /** A place held by the month (a gondola, a backdrop): what it will show, then off to the payment page. */
+  const sponsorOffer = async (id, what, cents) => {
+    if (!shop.open) { hud.note('The shop is not open yet. Come back soon!', 5200); return; }
+    const got = await hud.form(`Sponsor ${what}`, `${price(cents)} a month, for as long as you like: your name, a line under it, your logo and a link, shown to every visitor. Say what it should show, then pay: it goes up the moment you are back. ${shop.mode === 'test' ? 'Test mode: no real money.' : 'Paid on Stripe.'}`,
+      sponsorFields(), `Go to payment · ${price(cents)} a month`);
+    if (!got || !(await keepSponsor(id, got))) return;
+    hud.note('Opening the payment page…', 8000);
+    const wrong = await shop.buy(id);
+    if (wrong) hud.note(wrong, 7000);
+  };
   /** What can be done about the place `id`, for who stands by it: [{ label, run }] */
   /** A bid for the panel of a game: how much, then off to the payment page. */
   const bidFor = async (id) => {
     if (!shop.open) { hud.note('The shop is not open yet. Come back soon!', 5200); return; }
+    const rot = places.get(id)?.rotor;
+    if (rot && id === rot.ids[0]) id = rot.ids.find((k) => !shop.slots[k]) || rot.ids.slice().sort((a, b) => (shop.slots[a]?.bid || 0) - (shop.slots[b]?.bid || 0))[0];
     const place = places.get(id), view = shop.slots[id], least = shop.least(id);
-    const got = await hud.form(`Sponsor ${GAME_NAMES[id.split(':')[1]] || place.what}`,
-      `${view ? `Its sponsor paid ${price(view.bid || 0)}: bid at least ${price(least)} and the panel is yours.` : `Nobody sponsors it yet: the first bid is ${price(least)}.`} You pay once and keep the panel — your name, a line, your logo, a link — until somebody bids more. That day you are refunded in full, automatically, and they take your place.`,
-      [{ key: 'bid', label: `Your bid, in US dollars (at least ${price(least)})`, value: String(least / 100), max: 9 }], 'Go to payment');
+    const shared = rot ? ` Up to ${rot.ids.length} sponsors share the panel of this game, each shown in turn — ${rot.ids.filter((k) => !shop.slots[k]).length} of the places are free.` : '';
+    const got = await hud.form(`Sponsor ${GAME_NAMES[gameOf(id)] || place.what}`,
+      `${view ? `${rot ? 'Its five places are taken; the least paid for went for' : 'Its sponsor paid'} ${price(view.bid || 0)}: bid at least ${price(least)} and ${rot ? 'that place' : 'the panel'} is yours.` : `${rot ? 'A place is free' : 'Nobody sponsors it yet'}: the first bid is ${price(least)}.`}${shared} You pay once and keep the panel — your name, a line, your logo, a link — until somebody bids more. That day you are refunded in full, automatically, and they take your place. Say what it should show, then pay: it goes up the moment you are back.`,
+      [...sponsorFields(), { key: 'bid', label: `Your bid, in US dollars (at least ${price(least)})`, value: String(least / 100), max: 9 }], 'Go to payment');
     if (!got) return;
     const bid = Math.round(Number(String(got.bid).replace(',', '.').replace(/[^0-9.]/g, '')) * 100);
     if (!Number.isFinite(bid) || bid < least) { hud.note(`The bid must be at least ${price(least)}.`, 5000); return; }
+    if (!(await keepSponsor(id, got))) return;
     hud.note('Opening the payment page…', 8000);
     const wrong = await shop.buy(id, bid);
     if (wrong) { hud.note(wrong, 7000); refreshShop(); }
   };
   const placeActions = (id, row = '') => {
+    const rot = places.get(id)?.rotor;
+    if (!rot || id !== rot.ids[0]) return placeActionsOne(id, row);
+    // (the panel of a big attraction: one's own place first; otherwise a bid — for the first free place, or
+    // against the one that went for the least — and the site of the sponsor shown just now)
+    const own = rot.ids.find((k) => shop.slots[k]?.mine);
+    if (own) return placeActionsOne(own, row);
+    const out = [], place = places.get(id), free = rot.ids.filter((k) => !shop.slots[k]), cur = shop.slots[rot.current];
+    const target = free[0] || rot.ids.slice().sort((a, b) => (shop.slots[a]?.bid || 0) - (shop.slots[b]?.bid || 0))[0];
+    if (who.admin && shop.open) out.push({ label: 'Fill a place in (administrator)', run: () => fillPlace(target) });
+    if (shop.open && out.length < 2) out.push({ label: free.length ? `Sponsor ${place.what} · from ${price(shop.least(target))}` : `Outbid a sponsor · from ${price(shop.least(target))}`, run: () => bidFor(id) });
+    if (cur?.state === 'live' && cur.url) out.push({ label: `Visit ${cur.title}`, run: () => visitSponsor(rot.current, cur.url) });
+    return out;
+  };
+  const placeActionsOne = (id, row = '') => {
     const place = places.get(id), view = shop.slots[id], out = [];
     const cents = shop.cost(id, place.village?.tier);
     if (who.admin && pending[id]?.draft) {
@@ -1051,11 +1136,12 @@ async function boot() {
       return out;
     }
     if (view?.mine || (who.admin && shop.open)) out.push({ label: view?.mine ? (view.draft ? 'Change what you sent' : 'Set up your panel') : 'Fill this place in (administrator)', run: () => fillPlace(id) });
-    if (view?.state === 'live' && view.url) out.push({ label: `Visit ${view.title}`, run: () => window.open(view.url, '_blank', 'noopener,noreferrer') });
+    if (view?.mine && view.manage && out.length < 2) out.push({ label: 'Look after it, or stop it (Stripe)', run: async () => { hud.note('Opening the page of your subscription…', 8000); const wrong = await shop.portal(id); if (wrong) hud.note(wrong, 7000); } });
+    if (view?.state === 'live' && view.url) out.push({ label: `Visit ${view.title}`, run: () => visitSponsor(id, view.url) });
     if (id.startsWith('board:')) {
       // the panel of a game goes to the highest bidder: from one dollar; whoever is outbid is refunded
       if (shop.open && !view?.mine && out.length < 2) out.push({ label: view ? `Outbid the sponsor · from ${price(shop.least(id))}` : `Sponsor ${place.what} · from ${price(shop.least(id))}`, run: () => bidFor(id) });
-    } else if (!view && shop.open && !out.length) out.push({ label: `Sponsor ${place.what} · ${price(cents)} a month`, run: () => offer(id, `Sponsor ${place.what}`, `${price(cents)} a month, for as long as you like: your name, a line under it, your logo and a link, shown to every visitor. It appears once the fair has approved it.`, cents, true) });
+    } else if (!view && shop.open && !out.length) out.push({ label: `Sponsor ${place.what} · ${price(cents)} a month`, run: () => sponsorOffer(id, place.what, cents) });
     return out;
   };
   world.actionSources.push((p) => {
@@ -1119,7 +1205,8 @@ async function boot() {
   });
   // the Trading Post, on the plaza at the foot of the pier: every game on a card — a photograph of it, who
   // sponsors it, the way to take its panel (ui/SponsorsView.js)
-  const boardIds = () => Object.keys(GAME_NAMES).map((k) => `board:${k}`).filter((id) => places.has(id));
+  // (the big attractions — those with a star on the map — first, then the stalls of the pier)
+  const boardIds = () => Object.keys(GAME_NAMES).sort((a, b) => (MAJOR_GAMES.includes(a) ? MAJOR_GAMES.indexOf(a) : 99) - (MAJOR_GAMES.includes(b) ? MAJOR_GAMES.indexOf(b) : 99)).map((k) => `board:${k}`).filter((id) => places.has(id));
   const adRows = () => boardIds().map((id) => { const v = shop.slots[id]; return { game: GAME_NAMES[id.split(':')[1]], sponsor: v?.state === 'live' ? v.title : '', offer: shop.open ? `from ${price(shop.least(id))}` : 'free' }; });
   // the stand of the wheel: its gondolas, who sponsors them, which are free
   const gondolaIds = () => Array.from({ length: world.pier.gondolas || 0 }, (_, k) => `gondola:${k + 1}`);
@@ -1140,13 +1227,32 @@ async function boot() {
       return { label: `Look at ${q.label}`, run: () => {
         const first = !seen.has(q.id), all = relics.list.length;
         seen.add(q.id);
-        if (first) store.set('mmf.relics', [...seen].join(','));
-        hud.note(`${q.text}${!first ? '' : seen.size >= all ? ` — That was the last of the ${all} relics of the world before. Now you know.` : ` — Relic ${seen.size} of ${all}.`}`, 12000);
+        if (first) { store.set('mmf.relics', [...seen].join(',')); hud.setMushroom(seen.size, all); }
+        hud.note(`${q.text}${!first ? '' : seen.size >= all ? ` — That was the last of the ${all} relics of the world before. Now you know — and the mushroom cloud is yours: in the emotes (T).` : ` — Relic ${seen.size} of ${all}.`}`, 12000);
         audio.play('tick');
+        // (the last one found: a cloud goes up at once, with its confetti — and from now on whenever they like)
+        if (first && seen.size >= all) { world.sparks.mushroom(player.pos.x, player.pos.y, player.pos.z); audio.play('victory'); presence?.sendEmote(MUSHROOM); }
       } };
     });
+    hud.setMushroom(seen.size, relics.list.length);
+    // the mushroom cloud of those who found them all: a small one, over their head, with confetti — everybody near sees it
+    let cloudAt = -10;
+    app.mushroom = () => {
+      if (state.mode !== 'walk' || player.dead || fair.session) return;
+      if (seen.size < relics.list.length) { hud.note(`The mushroom cloud is for those who found the ${relics.list.length} relics of the world before: you have found ${seen.size}. Look for what does not belong here.`, 7000); return; }
+      if (state.time - cloudAt < 4) return;
+      cloudAt = state.time;
+      world.sparks.mushroom(player.pos.x, player.pos.y, player.pos.z);
+      audio.play('rocket');
+      presence?.sendEmote(MUSHROOM);
+    };
+    // (the periscope of the hidden shelter looks at whoever comes near)
+    world.zones.push({ update: () => relics.watch(player.pos.x, player.pos.z) });
   }
   const photographer = new Photographer(engine);
+  // (the ground is chosen piece by piece for the eye that looks, and so are the trees: without this a photograph
+  // taken far from the player had no ground under it — white where the meadow should be)
+  photographer.prepare = (cam) => { world.terrain.update(cam); world.forest.update(cam); };
   /** A photograph of a game as it stands right now: from in front of it, a little to the side. */
   const photoOf = (key) => {
     const b = world.games.booths.list.find((q) => q.id === key), W = 480, H = 300;
@@ -1161,10 +1267,22 @@ async function boot() {
     if (key === 'wing') return photographer.shoot([WING.x + 11.2, 5.6, WING.z - 9.6], [WING.x, 5.8, WING.z], W, H, 50);
     if (key === 'sky') return photographer.shoot([CLIMB.x + 3, CLIMB.y + 1.6, CLIMB.z - 12], [CLIMB.x, CLIMB.y + 20, CLIMB.z], W, H, 78); // (from the foot of the climb, looking up its stones)
     if (key === 'race') { const pd = world.games.race.paddock, g = world.groundAt(pd.x, pd.z); return photographer.shoot([pd.x - 14, g + 3.6, pd.z + 9], [pd.x + 2, g + 2, pd.z - 3], W, H, 56); }
-    // (a game of the lab: its gate and its board, from a few steps away)
+    // (a game of the lab: the whole of it — its slide, its ponds, its slope, its rock — from the side of its
+    // board, far enough to hold it all; failing that, its gate and its board from a few steps away)
     const stand = fair.stands[key], game = app.extras?.[key], gate = game && (game.gate || game.stand);
     if (stand && gate) {
       const bx = stand.board.mesh.position.x, bz = stand.board.mesh.position.z, mx = (bx + gate.x) / 2, mz = (bz + gate.z) / 2, g = world.groundAt(mx, mz);
+      const box = game.group ? new THREE.Box3().setFromObject(game.group) : null;
+      if (box && !box.isEmpty()) {
+        const c = box.getCenter(new THREE.Vector3()), s = box.getSize(new THREE.Vector3());
+        let dx = bx - c.x, dz = bz - c.z;
+        // (what lies flat — ponds, a circuit on the water — is looked down upon; what stands — a slide, a rock — is looked at from in front)
+        const dl = Math.hypot(dx, dz) || 1, R = Math.hypot(s.x, s.z) / 2, flat = s.y < R * 0.5;
+        const far = Math.min(95, flat ? R * 0.85 + 5 : Math.max(R * 1.16, s.y * 0.9) + 7);
+        dx /= dl; dz /= dl;
+        const fx = c.x + dx * far, fz = c.z + dz * far, fy = flat ? Math.max(world.groundAt(fx, fz) + 3, c.y + R * 0.6 + 5) : Math.max(world.groundAt(fx, fz) + 2.6, c.y + Math.max(2.5, s.y * 0.25));
+        return photographer.shoot([fx, fy, fz], [c.x, c.y - s.y * 0.08, c.z], W, H, 60);
+      }
       const nx = Math.sin(stand.board.mesh.rotation.y), nz = Math.cos(stand.board.mesh.rotation.y);
       return photographer.shoot([mx + nx * 11, g + 3.4, mz + nz * 11], [mx, g + 2.2, mz], W, H, 58);
     }
@@ -1176,12 +1294,15 @@ async function boot() {
     input.exitLock();
     input.keys.clear(); // (nothing stays pressed behind the window)
     const first = (a) => (/^Visit /.test(a.label) ? 1 : 0); // (what one comes for first: the panel; its sponsor's site after)
-    const cards = boardIds().map((id) => {
-      const key = id.split(':')[1], v = shop.slots[id], d = who.admin && pending[id]?.draft;
+    const cards = boardIds().map((card) => {
+      // (a big attraction has five places on its panel: one's own is shown, or the best-paid of them; the others are counted)
+      const key = card.split(':')[1], rot = places.get(card)?.rotor, ids = rot ? rot.ids : [card], held = ids.filter((k) => shop.slots[k]);
+      const byBid = held.slice().sort((a, b) => (shop.slots[b].bid || 0) - (shop.slots[a].bid || 0)), id = ids.find((k) => shop.slots[k]?.mine) || byBid[0] || card;
+      const v = shop.slots[id], d = who.admin && pending[id]?.draft;
       const state = d ? 'pending' : v?.mine ? 'mine' : v?.state === 'live' ? 'live' : v ? 'taken' : 'free';
-      const sponsor = d ? { title: d.title, subtitle: d.subtitle } : v?.state === 'live' ? { title: v.title, subtitle: v.subtitle, logo: v.logo, url: v.url } : null;
-      const says = !shop.open ? '' : !v ? `From ${price(shop.least(id))}` : v.mine ? '' : `Its sponsor paid ${price(v.bid || 0)}`;
-      return { id, name: GAME_NAMES[key], state, sponsor, price: says, acts: placeActions(id).sort((a, b) => first(a) - first(b)), photo: () => photoOf(key), stamp: `${state}|${sponsor?.title || ''}|${sponsor?.logo || ''}|${v?.bg || ''}` };
+      const sponsor = d ? { title: d.title, subtitle: d.subtitle } : v?.state === 'live' ? { title: v.title, subtitle: v.subtitle, logo: v.logo, url: v.url, site: siteWords(v.url), clicks: v.clicks || 0 } : null;
+      const says = !shop.open ? '' : rot ? `${held.length} of ${ids.length} places taken · from ${price(shop.least(ids.find((k) => !shop.slots[k]) || byBid[byBid.length - 1] || card))}` : !v ? `From ${price(shop.least(id))}` : v.mine ? '' : `Its sponsor paid ${price(v.bid || 0)}`;
+      return { id: card, name: GAME_NAMES[key], state, sponsor, price: says, acts: placeActions(card).sort((a, b) => first(a) - first(b)), photo: () => photoOf(key), stamp: `${state}|${sponsor?.title || ''}|${sponsor?.logo || ''}|${v?.bg || ''}` };
     });
     const extras = [];
     const gondolas = gondolaIds(), freeG = gondolas.filter((id) => !shop.slots[id]).length;
@@ -1189,7 +1310,7 @@ async function boot() {
     const cars = gondolas.filter((id) => shop.slots[id] || (who.admin && pending[id]?.draft)).map((id) => {
       const n = +id.split(':')[1], v = shop.slots[id], d = who.admin && pending[id]?.draft;
       const state = d ? 'pending' : v?.mine ? 'mine' : v?.state === 'live' ? 'live' : 'taken';
-      const sponsor = d ? { title: d.title, subtitle: d.subtitle } : v?.state === 'live' ? { title: v.title, subtitle: v.subtitle, logo: v.logo, url: v.url } : null;
+      const sponsor = d ? { title: d.title, subtitle: d.subtitle } : v?.state === 'live' ? { title: v.title, subtitle: v.subtitle, logo: v.logo, url: v.url, site: siteWords(v.url), clicks: v.clicks || 0 } : null;
       const photo = () => { const g = world.pier.gondolaView(n); return photographer.shoot(g.from, g.at, 480, 300, 46); };
       // (the wheel turns: its photograph is taken again when the window is opened a while later)
       return { id, name: `Gondola ${n}`, state, sponsor, price: shop.open ? `${price(shop.prices.gondola)} a month` : '', acts: placeActions(id).sort((a, b) => first(a) - first(b)), photo, stamp: `${state}|${sponsor?.title || ''}|${sponsor?.logo || ''}|${v?.bg || ''}|${Math.floor(Date.now() / 30_000)}` };
@@ -1249,7 +1370,7 @@ async function boot() {
       const deck = o.deck && { y: gate.y, width: 2.7, pixels: 0.75, foot: gate.y - Math.min(world.data.heightAt(spot.x, spot.z), 0) + 0.6 };
       fair.stands[id] = world.games.lateStand(id, spot.x, spot.z, spot.yaw, { title: `${GAME_NAMES[id].toUpperCase()} — ${o.title}`, sub: o.sub, format: formatTime, what: 'this game', ...deck });
       const slot = (world.sponsorSlots || []).find((q) => q.id === `board:${id}`);
-      if (slot) { places.set(slot.id, { what: slot.what, spot: slot, set: slot.set }); slot.offer?.(shop.open ? `from ${price(shop.least(slot.id))} · step up and bid` : ''); }
+      if (slot) { addPlace(slot); slot.offer?.(shop.open ? `from ${price(shop.least(slot.id))} · step up and bid` : ''); }
       added = true;
     }
     if (added) { refreshBoards(); applySponsors(); shopView.stale('board:'); if (shopView.isOpen) shopView.refresh(shopItems()); }
@@ -1333,7 +1454,7 @@ async function boot() {
       if (view?.mine || (who.admin && (pending[id]?.draft || view))) { const acts = placeActions(id); if (acts.length) return acts[0]; }
       if (v.forHire && !view) return { label: `Buy ${v.name} · ${money(v.price)} a month`, run: () => hireVillage(v) };
     }
-    return v.url && (near(p, v.sign, 3.4) || (!v.forHire && near(p, v.board, 3.2))) ? { label: `Visit ${v.name}`, run: () => window.open(v.url, '_blank', 'noopener,noreferrer') } : null;
+    return v.url && (near(p, v.sign, 3.4) || (!v.forHire && near(p, v.board, 3.2))) ? { label: `Visit ${v.name}`, run: () => visitSponsor(`village:${v.id}`, v.url) } : null;
   });
   Object.assign(app, { travel, sky });
   // ---------- the item shop: everything that is sold, on one screen (ui/ShopView.js)
@@ -1611,6 +1732,13 @@ async function boot() {
     });
     if (!taken) return false;
     if (!account.name) { hud.note('A room belongs to an account: make yours first — it is free — and come back for the room.', 9000); accountAction('create'); return true; }
+    if (who.admin && who.key) {
+      // (an administrator tries the thing out: a room for their account, for nothing — no subscription, it never falls asleep)
+      const res = await callApi('api/urooms', { method: 'POST', key: who.key, body: { open: true, device: deviceId() } });
+      if (res?.room) { await refreshMine(true); hud.note(`Your room is open — for nothing, as an administrator: "${res.room.name}". Its link and its settings are in "Who is here"; its boards of scores are also on the page /admin, "High scores".`, 12000); audio.play('victory'); }
+      else hud.note('The room could not be opened: is this browser signed in to your account, and are the rooms of players switched on (/admin, Releases)?', 9000);
+      return true;
+    }
     hud.note('Opening the payment page…', 8000);
     const wrong = await shop.buy('room');
     if (wrong) hud.note(wrong, 7000);
@@ -1639,7 +1767,7 @@ async function boot() {
     .on('manage', async (id) => { hud.note('Opening the page of your subscription…', 8000); const wrong = await shop.portal(id === 'room' ? 'room' : ''); if (wrong) hud.note(wrong, 7000); })
     .on('close', () => { document.getElementById('view')?.focus({ preventScroll: true }); });
   // a firework (for who has the box): up it goes, and those around see it too
-  const FIREWORK = 31, BOUQUET = 30; // (the numbers they travel under, among the emotes: a firework lit, a bouquet held out)
+  const FIREWORK = 31, BOUQUET = 30, MUSHROOM = 29; // (the numbers they travel under, among the emotes: a firework lit, a bouquet held out, a mushroom cloud raised)
   let fireworkAt = -10;
   const lightFirework = () => {
     if (state.mode !== 'walk' || player.dead || fair.session) return;
@@ -1663,6 +1791,8 @@ async function boot() {
   const arrived = (paid) => {
     hud.note('Thank you! It will be here in a moment…', 6000);
     let tries = 0;
+    // (said in the chat too: a note goes by while the world loads, the chat keeps it)
+    const tell = (text, ms = 10000) => { hud.note(text, ms); hud.addChat('✦', 5, text, true); };
     const again = async () => {
       await refreshShop();
       if (paid === 'room') {
@@ -1680,31 +1810,46 @@ async function boot() {
       if (shop.owned.has(paid) || shop.slots[paid]?.mine || (paid === PASS.id && shop.pass)) {
         audio.play('victory');
         const plate = paid.startsWith('plaque:') && shop.slots[paid]?.mine;
-        hud.note(paid === PASS.id ? `The ${PASS.name} is yours. Thank you — it keeps the lights on! Pick a size and a colour in the settings.` : plate ? 'The plate is theirs, for good. Thank you!' : shop.slots[paid]?.mine ? 'It is yours. Go to it to set it up: your name, your link, your logo.' : 'It is yours. Thank you!', 9000);
+        const place = !plate && shop.slots[paid]?.mine, kept = place ? keptSponsor(paid) : null;
+        if (kept) {
+          // (what they said their place should show, before paying: sent now that it is theirs)
+          const wrong = await shop.fill(paid, { title: kept.title, subtitle: kept.subtitle, url: kept.url, logo: kept.logo });
+          store.del(SPONSOR_DRAFT);
+          await refreshShop();
+          tell(wrong ? `The place is yours — thank you! What it should show could not be sent (${wrong}): walk up to it, "Set up your panel".` : `Paid, and up: "${shop.slots[paid]?.title || kept.title}" is shown to every visitor. Thank you — the fair stays free thanks to you! To change it: walk up to your place, "Set up your panel".`, 12000);
+        } else tell(paid === PASS.id ? `The ${PASS.name} is yours. Thank you — it keeps the lights on! Pick a size and a colour in the settings.` : plate ? 'The plate is theirs, for good. Thank you!' : place ? 'It is yours — thank you! Say what it shows: your name, your link, your logo.' : 'It is yours. Thank you!', 9000);
+        // (a place whose words were not given before paying: they are asked for right away)
+        if (place && !kept && !shop.slots[paid].draft && shop.slots[paid].state !== 'live') { const ask = () => { if (state.mode === 'walk') fillPlace(paid); else setTimeout(ask, 900); }; ask(); }
         // (what goes on a plaque is asked for right away — the plate itself is a swim and a climb away —, once they are in the world)
         if (plate && !shop.slots[paid].draft && shop.slots[paid].state !== 'live') { const ask = () => { if (state.mode === 'walk') fillPlace(paid); else setTimeout(ask, 900); }; ask(); }
         // (what can be worn is put on at once)
         if (itemOf(paid) && WEARABLE.includes(paid.split(':')[0])) { equip(paid, true); shopView.refresh(shopItems()); }
       }
-      else if (++tries < 8) setTimeout(again, 2500);
+      else if (++tries < 10) setTimeout(again, 2500);
+      // (Stripe has not said it yet: nothing is lost — it is given as soon as it does)
+      else tell('The payment page says it is paid, but Stripe has not told the game yet. Nothing is lost: it will be here the moment it does — reload the page in a minute. If it never comes, write to the fair (the address is in the terms).', 15000);
     };
     again();
   };
-  refreshShop().then(() => {
-    const paid = params.get('paid');
+  // (leaving for Stripe's page — to pay, or to look after a subscription: where one stands is noted, to come back there)
+  shop.onLeave = () => { if (input.enabled && !SHOT) store.set('mmf.resume', JSON.stringify({ x: player.pos.x, z: player.pos.z, yaw: rig.yaw, room: presence?.room || '' }), true); };
+  refreshShop().then(async () => {
+    const paid = params.get('paid'), session = params.get('cs');
     if (paid === null) return;
-    params.delete('paid');
+    params.delete('paid'); params.delete('cs');
     history.replaceState(null, '', location.pathname + (params.toString() ? `?${params}` : '') + location.hash);
     if (!paid) { hud.note('Nothing was paid.', 4000); return; }
+    // (Stripe is asked about that payment at once: what was bought is there without waiting to be told)
+    if (session) await shop.confirm(session);
     arrived(paid);
   });
   // paying without leaving the game, where the server has Stripe's publishable key: their form on a card
   // (ui/PayView.js). When it cannot be shown, the shop sends the visitor to Stripe's page as before.
-  shop.onEmbed = (item, secret) => {
+  shop.onEmbed = (item, secret, session = '') => {
     hud.closeAll();
     input.exitLock();
     input.keys.clear();
-    return payView.open(shop.pk, secret, { title: 'Payment', test: shop.mode === 'test', paid: () => arrived(item) });
+    return payView.open(shop.pk, secret, { title: 'Payment', test: shop.mode === 'test', paid: async () => { if (session) await shop.confirm(session); arrived(item); } });
   };
   account.load().then(() => { showAccount(); if (account.name) world.games.setMe(account.name); }); // (on the boards, "me" is the account when there is one)
   hud.setSettings(settings);
@@ -1837,6 +1982,7 @@ async function boot() {
     .on('size', (i) => { if (i && !shop.hasPass) return; size = i; store.set('mmf.size', SIZES[size]); keepProfile(); })
     .on('sit', () => sitDown())
     .on('lie', () => sitDown(true))
+    .on('mushroom', () => app.mushroom?.())
     .on('gift', (to) => giftTo(to))
     .on('name', (n) => { if (!n) return; if (!nameOk(n)) { hud.note('That name cannot be worn here (no insult, no address of a site, no @): pick another.', 6000); hud.setName(name); return; } name = n; presence?.setIdentity(name, color); store.set('mmf.name', name); world.games.setMe(account.name || name); keepProfile(); })
     .on('quality', (q) => {
@@ -2120,7 +2266,7 @@ async function boot() {
   hasApi().then((first) => updates.start(first)); // (what is released, which version is online: followed from here on)
   const resume = (() => { try { return JSON.parse(store.get('mmf.resume', true)); } catch { return null; } })();
   store.del('mmf.resume', true);
-  if (resume && Number.isFinite(resume.x) && Number.isFinite(resume.z)) {
+  if (resume && Number.isFinite(resume.x) && Number.isFinite(resume.z) && !params.has('welcome')) { // (?welcome: the card, whatever)
     // back from a quality change, or from a new version: straight into the world, where we were (and in the same room)
     if (typeof resume.room === 'string') backTo = resume.room;
     player.teleport(resume.x, resume.z, (resume.yaw || 0) + Math.PI);

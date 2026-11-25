@@ -598,6 +598,7 @@ body.playing canvas { cursor: none; }
 .row small { color: var(--ink-soft); font-size: 11.5px; }
 .emotes .held, .emotes .boom { display: none; }
 .emotes.fireworks .boom { display: flex; }
+.emotes [data-mushroom].locked { opacity: 0.6; }
 .emotes.holding .held { display: flex; }
 
 /* the end of the road: the picture drains of its colour, a band crosses the screen */
@@ -906,6 +907,7 @@ button.pill.players { pointer-events: auto; }
 #ui .tp-who.none { background: rgba(255, 255, 255, 0.05); border: 1px dashed rgba(255, 255, 255, 0.22); flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; }
 #ui .tp-logo { flex: none; width: 40px; height: 40px; border-radius: 7px; object-fit: contain; background: #fff; }
 #ui .tp-words { min-width: 0; display: flex; flex-direction: column; }
+#ui .tp-site { font-size: 11.5px; opacity: 0.72; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #ui .tp-who small { font: 700 9.5px/1.2 system-ui, sans-serif; letter-spacing: 0.1em; text-transform: uppercase; color: #ffd978; }
 #ui .tp-who b { font: 800 14.5px/1.2 system-ui, sans-serif; color: #fff; overflow-wrap: anywhere; }
 #ui .tp-who i { font: 500 12px/1.3 system-ui, sans-serif; font-style: normal; color: #cfc6ee; overflow-wrap: anywhere; }

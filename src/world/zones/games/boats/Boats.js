@@ -19,6 +19,9 @@ const RED = [0.95, 0.1, 0.12], WHITE = [1.6, 1.6, 1.55], NAVY = [0.07, 0.07, 0.2
 const HULLS = [RED, BLUE, YELLOW, GREEN]; // the visitor's, then the three that sail by themselves
 // (the boats of the other visitors who race: a few hulls kept ready, in colours of their own)
 const GUESTS = [[1.0, 0.42, 0.05], [0.5, 0.16, 0.75], [0.95, 0.3, 0.6], [0.05, 0.6, 0.62], [0.9, 0.9, 0.86], [0.42, 0.24, 0.1]];
+// The outline of a boat, half of it (the +x side): [x, z, y] from the stern to the tip of the bow — its deck, and its keel under it.
+const DECK = [[0.25, -0.6, 0.15], [0.27, -0.2, 0.15], [0.23, 0.2, 0.16], [0.13, 0.5, 0.18], [0, 0.76, 0.2]];
+const KEEL = [[0.15, -0.6, -0.06], [0.17, -0.2, -0.07], [0.13, 0.2, -0.06], [0.06, 0.46, -0.03], [0, 0.62, 0.03]];
 const SILENT = 2500; // ms without a word of a boat: it is no longer shown
 const PLACES = ['1st', '2nd', '3rd', '4th'];
 /** How much burst a boat has: a bar that empties while it is used, and fills again — "ready" when it is full. */
@@ -89,16 +92,29 @@ export class Boats {
     this.sign = sign;
     this.group.add(sign.mesh);
 
-    // ---- the boats: a hull, a cabin, an aerial with its pennant — a little over a metre long, the bow towards +z
+    // ---- the boats: little speedboats — a pointed hull, a cockpit behind its windscreen, a wing and a motor at the
+    // stern, an aerial with its pennant — a little over a metre long, the bow towards +z
     this.guests = new Map(); // (the others' boats that were heard of: id → { run, last, prev, hull, x, z, yaw })
     this.hulls = [...HULLS, ...GUESTS].map((tone, k) => {
       const p = new Parts(), b = p.get('paint');
-      b.tint(...tone, 1).box(-0.24, -0.06, -0.6, 0.24, 0.15, 0.26).box(-0.17, -0.06, 0.26, 0.17, 0.14, 0.5).box(-0.09, -0.05, 0.5, 0.09, 0.13, 0.68);
-      b.tint(...WHITE, 1).box(-0.25, 0.15, -0.6, 0.25, 0.18, 0.26).box(-0.16, 0.18, -0.36, 0.16, 0.33, 0.04);
-      b.tint(...DARK, 1).box(-0.15, 0.2, 0.04, 0.15, 0.31, 0.07).box(-0.2, 0.18, -0.58, 0.2, 0.26, -0.44);
-      b.tint(...tone, 1).box(-0.26, 0.3, -0.62, 0.26, 0.33, -0.5);
-      b.tint(...DARK, 1).cylinder(0.1, 0.33, -0.2, 0.008, 0.006, 0.62, 4);
-      b.tint(...tone, 1).box(0.1, 0.83, -0.205, 0.26, 0.95, -0.195);
+      // the hull: a deck that comes to a point at the bow, sides that lean in to the keel, a flat stern
+      b.tint(...tone, 1);
+      for (const side of [1, -1]) for (let i = 0; i + 1 < DECK.length; i++) {
+        const d0 = V(DECK[i][0] * side, DECK[i][2], DECK[i][1]), d1 = V(DECK[i + 1][0] * side, DECK[i + 1][2], DECK[i + 1][1]), k0 = V(KEEL[i][0] * side, KEEL[i][2], KEEL[i][1]), k1 = V(KEEL[i + 1][0] * side, KEEL[i + 1][2], KEEL[i + 1][1]);
+        if (side > 0) b.quad(k0, d0, d1, k1); else b.quad(k0, k1, d1, d0);
+      }
+      b.quad(V(-KEEL[0][0], KEEL[0][2], KEEL[0][1]), V(-DECK[0][0], DECK[0][2], DECK[0][1]), V(DECK[0][0], DECK[0][2], DECK[0][1]), V(KEEL[0][0], KEEL[0][2], KEEL[0][1]));
+      b.tint(...WHITE, 1).poly([DECK[0], ...DECK.map((q) => [-q[0], q[1], q[2]]).slice(0, -1), DECK[DECK.length - 1], ...DECK.slice(1, -1).reverse()].map((q) => V(q[0], q[2], q[1])));
+      // a stripe down the deck in the colour of the hull, a dark cockpit behind its windscreen, a roof of its colour
+      b.tint(...tone, 1).box(-0.045, 0.16, -0.02, 0.045, 0.2, 0.6).box(-0.14, 0.27, -0.3, 0.14, 0.29, -0.03);
+      b.tint(...DARK, 1).box(-0.14, 0.15, -0.3, 0.14, 0.27, -0.03).quad(V(-0.14, 0.17, 0.1), V(0.14, 0.17, 0.1), V(0.14, 0.27, -0.03), V(-0.14, 0.27, -0.03));
+      // a wing over the stern on two struts, and the motor that hangs behind it
+      b.box(-0.21, 0.15, -0.57, -0.18, 0.36, -0.51).box(0.18, 0.15, -0.57, 0.21, 0.36, -0.51).box(-0.07, 0.0, -0.73, 0.07, 0.22, -0.6);
+      b.tint(...tone, 1).box(-0.28, 0.36, -0.63, 0.28, 0.385, -0.46);
+      b.tint(...WHITE, 1).box(-0.06, 0.22, -0.72, 0.06, 0.25, -0.61);
+      // its aerial and its pennant
+      b.tint(...DARK, 1).cylinder(0.1, 0.29, -0.2, 0.008, 0.006, 0.62, 4);
+      b.tint(...tone, 1).box(0.1, 0.79, -0.205, 0.26, 0.91, -0.195);
       const g = p.toMeshes(mats, { name: `boats-boat${k}`, layers: [] });
       if (k >= HULLS.length) g.visible = false;
       this.group.add(g);

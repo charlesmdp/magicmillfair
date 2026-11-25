@@ -8,7 +8,7 @@ import { LAYER } from '../../../../render/Shadows.js';
 import { ANIM } from '../../../../player/Character.js';
 import { canvasBoard } from '../Boards.js';
 import { formatTime } from '../course.js';
-import { HILL, nextStart, startClimb, stepClimb, slopeAt, rolling, botInput } from './slope.js';
+import { HILL, nextStart, startClimb, stepClimb, slopeAt, rolling, botInput, stretchOf } from './slope.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const CREAM = [1.3, 1.17, 0.9], RED = [0.95, 0.1, 0.12], GOLD = [1.5, 1.05, 0.2], ROPE = [1.1, 0.95, 0.7], NAVY = [0.07, 0.07, 0.2], YELLOW = [1.6, 1.3, 0.12];
@@ -62,10 +62,10 @@ export class Hill {
     const top = arch(H.length, NAVY, 'THE TOP', '');
     const bell = this.at(H.length + 0.4, 0);
     paint.tint(...GOLD, 1).place(bell.x, top.y - 1.5, bell.z).lathe([[0.03, 0.4], [0.14, 0.36], [0.24, 0.1], [0.34, -0.05], [0.37, -0.12]], 10).pop();
-    // ---- where the barrels and the boulders are stopped: a row of bales across, with a way through at each… no:
-    // a fence of low stakes at both sides and a board that says what is beyond
-    for (const [kind, text] of [['barrel', 'BARRELS BEYOND'], ['boulder', 'BOULDERS BEYOND']]) {
-      const s = H.kinds[kind].end, p = this.at(s, H.half + 1.6);
+    // ---- the foot of each stretch, where part of what comes down is stopped: a line painted across, and a board
+    // at the side that says what is beyond
+    for (const [k, text] of [[0, 'STRETCH 2 · BARRELS BEYOND'], [1, 'STRETCH 3 · BOULDERS BEYOND'], [2, 'STRETCH 4 · EVERYTHING AT ONCE']]) {
+      const s = H.tiers[k], p = this.at(s, H.half + 1.6);
       bark.tint(0.9, 0.85, 0.8, 1).cylinder(p.x, p.y - 0.3, p.z, 0.08, 0.07, 2.3, 6);
       const board = canvasBoard(512, 128, (ctx, w, hh) => { ctx.fillStyle = '#12122e'; ctx.fillRect(0, 0, w, hh); ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 6; ctx.strokeRect(6, 6, w - 12, hh - 12); ctx.fillStyle = '#f6e7b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '700 50px system-ui, sans-serif'; ctx.fillText(text, w / 2, hh / 2 + 2, w * 0.9); }, 2.2, 0.55, { both: true });
       board.mesh.position.set(p.x, p.y + 1.9, p.z); board.mesh.rotation.y = H.yaw; board.mesh.name = 'hill-sign';
@@ -141,7 +141,7 @@ export class Hill {
         session.anim = st.knock > 0 ? ANIM.sit : st.h > 0.05 ? ANIM.jump : pl.speed > 0.5 ? ANIM.run : ANIM.idle;
         if (st.over) { S.after += dt; if (!session.over) { session.over = true; session.time = st.time; } if (S.after > 2) session.ended = true; }
         session.line = !S.gone ? `${H.name} · ${start.name} start in ${Math.max(1, Math.ceil(wait))}…`
-          : st.over ? `${H.name} · ${formatTime(st.time)}` : `${formatTime(Math.round(st.clock * 1000))} · ${Math.max(0, Math.round(H.length - st.s))} m to the bell${st.hits ? ` · hit ${st.hits} time${st.hits === 1 ? '' : 's'}` : ''}`;
+          : st.over ? `${H.name} · ${formatTime(st.time)}` : `${formatTime(Math.round(st.clock * 1000))} · stretch ${stretchOf(st.s)} of 4 · ${Math.max(0, Math.round(H.length - st.s))} m to the bell${st.hits ? ` · hit ${st.hits} time${st.hits === 1 ? '' : 's'}` : ''}`;
       },
       /** The camera: behind the climber and above, looking up the slope at what comes. */
       camera: (cam, dt) => {

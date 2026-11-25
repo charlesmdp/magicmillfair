@@ -10,7 +10,9 @@
 //
 //   wall.set(rows, info)   rows: what rankSponsors() gives, `logo` being a picture already loaded (or null);
 //                          info: { open, from, gondola, backdrop } — the words of the invitation ("from $1"…)
-//   wall.shown             what is on it right now: { title, cols, rows: [{ rank, name, figure, unit, where }], ghosts }
+//   wall.shown             what is on it right now: { title, cols, rows: [{ rank, name, figure, unit, site, clicks }], ghosts, page, pages }
+//   wall.turn()            when the sponsors do not fit on one face (more than 28): the next page of them
+//                          (the game calls it every dozen seconds)
 //
 // Nothing a sponsor wrote is ever anything but text painted on that sheet; a logo is a picture served by the
 // game (the same safe way as on the panels: net/Shop.js loadImage).
@@ -124,7 +126,7 @@ function plate(ctx, x, y, s, logo, name, ghost) {
   carve(ctx, ghost ? '+' : (String(name || '?').trim()[0] || '?').toUpperCase(), x + s / 2, y + s * 0.53, ghost ? FAINT : INK, 1.5);
 }
 
-/** One line of the list, in its cell. `r`: a sponsor ({ name, tagline, where, note, figure, unit, logo }); `ghost`: an invitation instead. */
+/** One line of the list, in its cell. `r`: a sponsor ({ name, tagline, site, clicks, note, figure, unit, logo }); `ghost`: an invitation instead ({ …, where }). */
 function line(ctx, x, y, w, h, rank, r, ghost) {
   const pad = Math.max(6, h * 0.1), medal = !ghost && rank <= 3 ? MEDALS[rank - 1] : null, rich = h >= 60;
   if (medal) { ctx.fillStyle = medal[2]; rounded(ctx, x, y + 2, w, h - 4, h * 0.22); ctx.fill(); ctx.strokeStyle = 'rgba(40, 32, 24, 0.3)'; ctx.lineWidth = 1.2; ctx.stroke(); }
@@ -154,7 +156,8 @@ function line(ctx, x, y, w, h, rank, r, ghost) {
   // who it is
   const tx = px + s + h * 0.2, tw = Math.max(20, right - tx);
   ctx.textAlign = 'left';
-  const small = [r.where, r.note].filter(Boolean).join(' · ');
+  // (under the name: its site and how many times it was opened from the game — an invitation says where to ask)
+  const small = (ghost ? [r.where, r.note] : [r.site, r.site && r.clicks ? `${r.clicks} click${r.clicks === 1 ? '' : 's'}` : '', r.note]).filter(Boolean).join(' · ');
   if (rich) {
     carve(ctx, fit(ctx, r.name, tw, Math.round(h * 0.31), 700, SERIF, 12), tx, y + h * (r.tagline ? 0.27 : 0.36), ghost ? FAINT : INK, 1.7);
     if (r.tagline) { const t = fit(ctx, r.tagline, tw, Math.round(h * 0.2), 600, SANS, 10); carve(ctx, t, tx, y + h * 0.545, FAINT, 1); }
@@ -167,9 +170,10 @@ function line(ctx, x, y, w, h, rank, r, ghost) {
 
 /**
  * Paints the tablet. rows: the sponsors, ranked; info: { open, from, gondola, backdrop }.
- * Returns what was painted: { title, cols, rows: [{ rank, name, figure, unit, where }], ghosts, more }.
+ * Returns what was painted: { title, cols, rows: [{ rank, name, figure, unit, site, clicks }], ghosts, page, pages }.
+ * `page`: when they do not all fit on one face, which page of them (they are ranked across the pages).
  */
-export function drawThanks(ctx, w, h, bare, rows = [], info = {}) {
+export function drawThanks(ctx, w, h, bare, rows = [], info = {}, page = 0) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.drawImage(bare, 0, 0, w, h);
   ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
@@ -197,26 +201,20 @@ export function drawThanks(ctx, w, h, bare, rows = [], info = {}) {
   }
   const lay = LAYOUTS.find((l) => Math.max(rows.length, ghosts.length) <= l.max) || LAYOUTS[LAYOUTS.length - 1];
   const cells = lay.cols * lay.rows;
-  let more = 0;
-  if (rows.length > cells) { more = rows.length - (cells - 1); list = rows.slice(0, cells - 1); }
+  // (more of them than a face holds: the wall has pages, and turns them)
+  const pages = Math.max(1, Math.ceil(rows.length / cells)), at = ((page % pages) + pages) % pages, base = at * cells;
+  if (rows.length > cells) list = rows.slice(base, base + cells);
   else if (rows.length && rows.length < cells) ghosts.push(invite); // (a place left: the next one is invited)
   const top = 218 * K, bottom = h - 62 * K, gap = lay.cols > 1 ? 26 * K : 0, inner = lay.cols === 1 ? Math.round(w * 0.6) : w - 150 * K;
   const cw = (inner - gap * (lay.cols - 1)) / lay.cols, x0 = (w - inner) / 2, rh = (bottom - top) / lay.rows;
   const cell = (i) => [x0 + Math.floor(i / lay.rows) * (cw + gap), top + (i % lay.rows) * rh];
-  list.forEach((r, i) => { const [x, y] = cell(i); line(ctx, x, y + 2, cw, rh - 4, i + 1, r, false); });
+  list.forEach((r, i) => { const [x, y] = cell(i); line(ctx, x, y + 2, cw, rh - 4, base + i + 1, r, false); });
   ghosts.forEach((r, k) => { const i = list.length + k; if (i >= cells) return; const [x, y] = cell(i); line(ctx, x, y + 2, cw, rh - 4, i + 1, r, true); });
-  if (more) {
-    const [x, y] = cell(cells - 1);
-    ctx.textAlign = 'center'; ctx.font = `700 ${Math.round(rh * 0.34)}px ${SERIF}`;
-    carve(ctx, `… and ${more} more`, x + cw / 2, y + rh * 0.38, INK, 1.5);
-    ctx.font = `700 ${Math.round(rh * 0.2)}px ${SANS}`;
-    carve(ctx, 'ALL OF THEM AT THE TRADING POST', x + cw / 2, y + rh * 0.72, FAINT, 1);
-  }
   // how to be on it
   ctx.textAlign = 'center';
-  const foot = rows.length ? `YOUR BRAND HERE?  ASK AT THE TRADING POST, AT THE FOOT OF THE PIER${info.open && info.from ? `  ·  ${String(info.from).toUpperCase()}` : ''}` : 'THE TRADING POST IS AT THE FOOT OF THE PIER  ·  EVERY SPONSOR IS THANKED HERE, THE MOST GENEROUS FIRST';
+  const foot = pages > 1 ? `PAGE ${at + 1} OF ${pages}  ·  ${rows.length} SPONSORS, THE MOST GENEROUS FIRST  ·  STEP UP TO THE WALL TO OPEN THEIR SITES` : rows.length ? `YOUR BRAND HERE?  ASK AT THE TRADING POST, AT THE FOOT OF THE PIER${info.open && info.from ? `  ·  ${String(info.from).toUpperCase()}` : ''}` : 'THE TRADING POST IS AT THE FOOT OF THE PIER  ·  EVERY SPONSOR IS THANKED HERE, THE MOST GENEROUS FIRST';
   carve(ctx, fit(ctx, foot, w - 160 * K, Math.round(21 * K), 800, SANS, 11), w / 2, h - 38 * K, FAINT, 1.2 * K);
-  return { title: THANKS_TITLE.join(' '), cols: lay.cols, rows: list.map((r, i) => ({ rank: i + 1, name: r.name, figure: r.figure, unit: r.unit, where: r.where })), ghosts: Math.min(ghosts.length, cells - list.length), more };
+  return { title: THANKS_TITLE.join(' '), cols: lay.cols, rows: list.map((r, i) => ({ rank: base + i + 1, name: r.name, figure: r.figure, unit: r.unit, site: r.site || '', clicks: r.clicks || 0 })), ghosts: Math.min(ghosts.length, cells - list.length), page: at, pages };
 }
 
 /**
@@ -306,10 +304,21 @@ export function buildThanksWall(zone) {
     shown: null,
     /** Who is thanked, the most generous first (see the top of this file). Painted again only when something changed. */
     set(list = [], info = {}) {
-      const key = JSON.stringify([list.map((r) => [r.name, r.tagline, r.where, r.note, r.figure, r.unit, r.logo ? `${r.logo.width}x${r.logo.height}:${r.logo.src || ''}` : 0]), info]);
+      const key = JSON.stringify([list.map((r) => [r.name, r.tagline, r.site, r.clicks, r.note, r.figure, r.unit, r.logo ? `${r.logo.width}x${r.logo.height}:${r.logo.src || ''}` : 0]), info]);
       if (key === wall.key) return false;
       wall.key = key;
-      wall.shown = drawThanks(ctx, CW, CH, bare, list, info);
+      wall.list = list; wall.info = info;
+      wall.shown = drawThanks(ctx, CW, CH, bare, list, info, wall.page);
+      wall.page = wall.shown.page;
+      texture.needsUpdate = true;
+      return true;
+    },
+    page: 0, list: [], info: {},
+    /** The next page of the sponsors, when they do not fit on one face. → did it turn? */
+    turn() {
+      if (!wall.shown || wall.shown.pages < 2) return false;
+      wall.shown = drawThanks(ctx, CW, CH, bare, wall.list, wall.info, wall.page + 1);
+      wall.page = wall.shown.page;
       texture.needsUpdate = true;
       return true;
     },

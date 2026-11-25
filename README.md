@@ -577,15 +577,50 @@ ground: a swelling of the rock face, dressed flat where the words are cut. No bo
 one sheet — a canvas of 2048 × 732, painted when the list changes and not otherwise — on one mesh; the
 buttress is merged with the rest of the rock of the fair; logos come the same safe way as on the panels.
 
-**Ten relics** of the world before stand by the paths (`Relics.js`; where: `RELICS` in `layout.js` — a wish,
-and the nearest free ground is taken: dry, level, off the paths, clear of the trees and of what is built): a
-road sign whose evacuation route points into the sea, a vending machine under the ivy, the door of a shelter
+**Becoming a sponsor**, step by step. What the place will show is asked for *before* the payment — a name, a
+line, a site, a logo (and the bid, for the panel of a game) — and kept in the browser while the buyer is at
+Stripe's. Back in the game they stand where they stood (no card to pass), the server asks Stripe about that
+payment itself (`POST /api/checkout/confirm` with the name of the payment page, which Stripe writes in the
+address it sends the buyer back to: nothing waits for the webhook, and a shop whose webhook was never set
+still gives what was paid for — the webhook remains what tells of the months that follow, and of an end), the
+place is theirs, and what they said it should show goes up at once. The whole fair is told in the chat, by
+name and with due praise; the sponsor is thanked by e-mail (the address of their account, or the one given at
+the payment); a place held by the month is looked after — or stopped — from the place itself. What a panel
+says holds none of the words the chat hides.
+
+**Five sponsors on a big attraction.** The games with a star on the map (Mostly Up, Quadmania, Flappy Robot
+and the six of the lab) share their panel between up to five sponsors, shown turn by turn — each a few
+seconds, twice for one turn of "your brand here" while a place is left. Their places are `board:<id>` and
+`board:<id>-2` … `-5` (`server/catalog.js`: `MAJOR_BOARDS`), each an auction of its own: a bid goes to the
+first free place or, when the five are taken, against the one that went for the least. The stalls of the
+pier keep one sponsor each. The Trading Post lists the big attractions first, each with a photograph of the
+whole of it (the ground and the trees are told whose eye looks before each photograph: without that a
+picture taken far from the player had no ground under it).
+
+**Clicks.** Opening the site of a sponsor from the game — at its place, at the Trading Post, from the list at
+the foot of the wall — is counted on the place (`POST /api/click`; the same address once in ten minutes for
+a place; a place that changes hands starts again). The wall of thanks writes, under each name, its site and
+the clicks of all its places together — no longer where the places are — and, when there are more sponsors
+than one face of the rock holds (28), turns its pages every twelve seconds, ranks running on from page to
+page.
+
+**Twenty relics** of the world before stand all over the valley (`Relics.js`; where: `RELICS` in `layout.js`
+— a wish, and the nearest free ground is taken: dry, level, off the paths, clear of the trees and of what is
+built; or `by` a path: so far along it, so many metres to its side): a road sign whose evacuation route
+points into the sea, a vending machine under the ivy (in the court of the Lost Temple), the door of a shelter
 ("back in 5 minutes"), a yellow barrel somebody planted flowers in, a Geiger counter by the acid pond, a
-billboard burnt right through, a clock stopped on the last afternoon, a stone of tally marks, a sunflower
-with two heads, the last newspaper. Walked up to, each offers "Look at …" and says a line or two (a note of
-the screen, which now wraps when it is long); which ones were looked at is kept in the browser (`mmf.relics`)
-and the tenth says they were all found. They weigh next to nothing: their wood, metal and stone are merged
-with the rest of the fair, and everything written or drawn on them is one canvas of 1024 × 1024 on one mesh.
+billboard burnt right through, a clock stopped on the last afternoon, a stone of tally marks (on Lookout
+Hill), a sunflower with two heads, the last newspaper, a scarecrow in a hazmat suit, a bus stop whose next
+bus is always four minutes away, a shopping trolley by the Great Pond, a dish that listens to a silent sky, a
+parking meter, a mailbox full of bills, a car with a tree through its roof, a telephone that rings, a weather
+board — and, in the woods of the south-east shore, sixty metres from any path, a fallout shelter whose
+periscope turns to look at whoever found it. Walked up to, each offers "Look at …" and says a line or two (a
+note of the screen, which wraps when it is long); which ones were looked at is kept in the browser
+(`mmf.relics`). Whoever has found them all sees a small **mushroom cloud** go up over their head, with
+confetti — and may raise one whenever they like from then on (the emotes, or `/mushroom`): it travels as an
+emote, so that the others see it too; until then the button says how many are found. They weigh next to
+nothing: their wood, metal and stone are merged with the rest of the fair, everything written or drawn on
+them is one canvas of 1024 × 1024 on one mesh, and the cloud is made of the same points as the fireworks.
 
 **Wooden signposts** stand at the forks of the paths — past the banner of the arrival, in front of the
 mill, half way down the valley, on the plaza, on the boardwalk, by the paddock of the race: a post, and
@@ -1375,7 +1410,7 @@ notebook, with the rest. No new Durable Object class: such a room is a room like
 |---|---|
 | `npm run bake` | bakes the world, the statue and the textures again |
 | `npm run bake:statue` | sculpts the golden dog and its companions again (`-- --preview=dog.png` also draws them from six sides, `-- --cell=0.012` makes a finer mesh) |
-| `npm test` | 252 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password), the rooms that players make (bought, entered with a ticket, their own boards, asleep when unpaid, freed) |
+| `npm test` | 257 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password), the rooms that players make (bought, entered with a ticket, their own boards, asleep when unpaid, freed) |
 | `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (188 in all) |
 | `npm run test:update` | a delivery from end to end, in the real game: two builds, a visitor in the world, the owner at the back office (`/admin`: the switches, a word to every room, a line refused, somebody kept out, the figures, two games of the lab thrown on — fetched and built as the game runs, each played by its own bot, its time on its board; each with its stand, its panel for a sponsor, its star on the map and its planks at the forks —, the sky villages stage by stage), every page asked to refresh but never in the middle of a sentence, then the server replaced by the next version — the page says so, refreshes, comes back at the same spot and says what is new; and a plain build leaves nothing of the game on the page (14 checks) |
 | `node tools/extras-test.mjs`, `node tools/slide-test.mjs`, `node tools/pond-test.mjs`, `node tools/boats-test.mjs`, `node tools/hill-test.mjs`, `node tools/crack-test.mjs`, `node tools/hollow-test.mjs`, `node tools/games-test.mjs` | the lab's own checks of its extras and of each of its games — the last one plays them in the running game, in a browser (see `lab/INTEGRATION.md`) |

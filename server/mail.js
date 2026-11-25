@@ -148,6 +148,36 @@ ${para('See you at the fair,<br><i>Atomic Oasis — made by a guy on a couch, no
 }
 
 /**
+ * The word of thanks to whoever has just sponsored something, or had a plaque engraved. `place`: what it is, in
+ * words ("the board of Mostly Up", "gondola 3 of the big wheel"); `cents`: what was paid; `monthly`: it is paid
+ * by the month; `auction`: it is kept until somebody bids more; `plaque`: a plaque for a companion.
+ */
+export function sponsorMail(site, name, { place = '', cents = 0, monthly = false, auction = false, plaque = false } = {}) {
+  const where = siteOf(site), hello = name ? `Thank you, ${name}!` : 'Thank you!';
+  const sum = cents > 0 ? `$${(cents / 100).toFixed(2).replace(/\.00$/, '')}${monthly ? ' a month' : ''}` : '';
+  const got = plaque ? `A plaque at the feet of the golden dog is reserved, for good${sum ? ` (${sum})` : ''}.` : `You now sponsor ${place}${sum ? ` (${sum})` : ''}.`;
+  const next = plaque
+    ? 'What goes on it — a name, a few words, a picture — is asked for in the game, at the plaque itself: "Have your plaque engraved". It is engraved once the fair has looked at it.'
+    : 'What you gave before paying — your name, a line, your link, your logo — goes up as soon as you are back in the game. To change it, walk up to your place or open the Trading Post: "Set up your panel".';
+  const keep = plaque ? '' : auction
+    ? 'You paid once, and you keep the panel until somebody bids more. That day you are refunded in full, automatically, and they take your place.'
+    : monthly ? 'It is paid by the month, on Stripe. Stop whenever you like — in the game, at your place: "Look after it, or stop it" — and the place is free again at the end of the month you paid for.' : '';
+  const why = 'Sponsors are why Atomic Oasis is free for everybody. It is not made by a multinational, but by a guy on a couch: you have just made his day — for real.';
+  const because = `You get this message because something was paid for at Atomic Oasis with this address${name ? ` (account "${name}")` : ''}. ${RARELY}`;
+  const text = [hello, '', got, '', next, ...(keep ? ['', keep] : []), '', why, ...(where ? ['', where] : []), '', because].join('\n');
+  const html = dressed({
+    title: plaque ? 'Their plaque is reserved' : 'You are a sponsor of Atomic Oasis', preview: plaque ? 'A plaque at the feet of the golden dog — thank you.' : `You now sponsor ${place} — thank you.`, site, button: 'Back to the fair',
+    body: `<h1 style="margin:0 0 14px;font:700 26px/1.2 Georgia,'Times New Roman',serif;color:${INK}">${esc(hello)}</h1>
+${para(`<b>${esc(got)}</b>`)}
+${para(esc(next))}
+${keep ? para(esc(keep)) : ''}
+${para(esc(why))}`,
+    why: esc(because),
+  });
+  return { subject: plaque ? 'Their plaque is reserved — thank you' : `You sponsor ${place} — thank you`, text, html };
+}
+
+/**
  * The word of thanks to whoever has just taken the Game Pass. `name`: their account, '' when they have none;
  * `perks`: what the pass gives (items.js); `cents`: what a month of it costs.
  */

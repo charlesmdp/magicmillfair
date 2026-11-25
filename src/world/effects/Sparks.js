@@ -62,7 +62,7 @@ export class Sparks {
     this.items = Array.from({ length: MAX }, () => ({ on: false, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, t: 0, life: 1, r: 1, g: 1, b: 1, glow: 1, size: 0.1, kind: 0, drag: 0, grav: 0, sway: 0 }));
     this.next = 0;
     this.count = 0;
-    this.rockets = []; // fireworks on their way up
+    this.rockets = []; this.clouds = []; // fireworks on their way up
   }
 
   _spawn(o) {
@@ -104,6 +104,16 @@ export class Sparks {
     }
   }
 
+  /**
+   * A small mushroom cloud over (x, y, z) — a flash at the foot, a stem that climbs, a cap that rolls out — and a
+   * rain of confetti from it: it lasts two seconds and a half (see update()).
+   */
+  mushroom(x, y, z) {
+    if (this.clouds.length >= 6) return;
+    for (let k = 0; k < 16; k++) { const a = rnd(0, 6.283), v = rnd(2, 5.5); this._spawn({ x, y: y + 0.4, z, vx: Math.cos(a) * v, vy: rnd(0.2, 1.4), vz: Math.sin(a) * v, life: rnd(0.4, 0.8), r: 1, g: 0.92, b: 0.6, glow: 3, size: rnd(0.5, 0.9), drag: 3 }); }
+    this.clouds.push({ x, y, z, t: 0 });
+  }
+
   /** A rocket leaves from (x, y, z), climbs, and bursts. */
   firework(x, y, z) {
     if (this.rockets.length >= 12) return;
@@ -113,6 +123,16 @@ export class Sparks {
   update(dt, camera, height) {
     // (points are sized in pixels: so many per metre, one metre away)
     this.uniforms.uScale.value = height / (2 * Math.tan((camera.fov * Math.PI) / 360));
+    // the mushroom clouds: the stem first, then the cap at its top, then the confetti that falls from it
+    for (let i = this.clouds.length - 1; i >= 0; i--) {
+      const c = this.clouds[i], some = (rate) => { const w = rate * dt; return Math.floor(w) + (Math.random() < w % 1 ? 1 : 0); };
+      c.t += dt;
+      // (the stem: hot at the foot, it climbs for as long as the cap rolls; the cap: a wide ring of fire and smoke thrown outwards, a narrower one under it)
+      if (c.t < 1.7) for (let k = some(34); k > 0; k--) { const hot = Math.random(); this._spawn({ x: c.x + rnd(-0.22, 0.22), y: c.y + 0.3, z: c.z + rnd(-0.22, 0.22), vx: rnd(-0.25, 0.25), vy: rnd(3.6, 4.6), vz: rnd(-0.25, 0.25), life: rnd(1.1, 1.5), r: 1.0, g: 0.4 + hot * 0.35, b: 0.1 + hot * 0.2, glow: 1.9, size: rnd(0.75, 1.15), drag: 0.9 }); }
+      if (c.t > 0.5 && c.t < 1.8) for (let k = some(52); k > 0; k--) { const a = rnd(0, 6.283), low = Math.random() < 0.3, v = low ? rnd(0.5, 1.4) : rnd(1.6, 3.6); this._spawn({ x: c.x, y: c.y + (low ? 3.7 : 4.7) + rnd(-0.25, 0.45), z: c.z, vx: Math.cos(a) * v, vy: rnd(0.1, 0.9), vz: Math.sin(a) * v, life: rnd(1.2, 1.9), r: 1.0, g: rnd(0.42, 0.78), b: rnd(0.12, 0.38), glow: 1.7, size: rnd(1.1, 1.7), drag: 1.7 }); }
+      if (c.t > 0.9 && c.t < 2.4) for (let k = some(60); k > 0; k--) { const p = PAPER[Math.floor(Math.random() * PAPER.length)], a = rnd(0, 6.283), d = rnd(0, 2.7); this._spawn({ x: c.x + Math.cos(a) * d, y: c.y + 4.8 + rnd(0, 0.8), z: c.z + Math.sin(a) * d, vx: rnd(-0.8, 0.8), vy: rnd(0.2, 1.6), vz: rnd(-0.8, 0.8), life: rnd(1.8, 2.8), r: p[0], g: p[1], b: p[2], size: rnd(0.14, 0.22), kind: 1, grav: 3.2, drag: 1.2, sway: rnd(2, 5) }); }
+      if (c.t > 2.5) this.clouds.splice(i, 1);
+    }
     for (let i = this.rockets.length - 1; i >= 0; i--) {
       const r = this.rockets[i];
       r.fuse -= dt; r.vy -= 9 * dt;

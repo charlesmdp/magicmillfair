@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
-import { HILL, nextStart, thingAt, rolling, startClimb, stepClimb, slopeAt, botInput, botClimb } from '../src/world/zones/games/hill/slope.js';
+import { HILL, nextStart, thingAt, rolling, startClimb, stepClimb, slopeAt, botInput, botClimb, stretchOf } from '../src/world/zones/games/hill/slope.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const results = [];
@@ -21,7 +21,7 @@ const T = new Float32Array(fs.readFileSync(path.join(ROOT, 'public/assets/world/
 const run = (st, secs, drive, stop) => { const input = { up: 0, side: 0, jump: false }, events = [], seen = []; for (let t = 0; t < secs && !st.over; t += H.step) { input.jump = false; drive?.(st, input, t); stepClimb(st, H.step, input, events); for (const e of events) seen.push({ ...e, at: t }); events.length = 0; if (stop?.(st, seen)) break; } return seen; };
 /** A moment of the world's clock when a thing of that kind is about to come past metre `s`, and that thing. */
 // (`quiet`: a moment when nothing else is coming down the same way — the slope is busy now, and one thing is looked at)
-const meeting = (kind, s, quiet = false) => { for (let c = 20; c < 6000; c += 0.05) { let found = null; const all = []; rolling(c, (t) => { all.push({ ...t }); if (t.kind === kind && t.s > s + 6 && t.s < s + 7) found = { ...t }; }); if (found && (!quiet || all.every((t) => t.n === found.n || t.s < s - 2 || t.s > s + 17 || Math.abs(t.u - found.u) > t.half + found.half + 0.8))) return { clock: c, thing: found }; } return null; };
+const meeting = (kind, s, quiet = false) => { for (let c = 20; c < 6000; c += 0.05) { let found = null; const all = []; rolling(c, (t) => { all.push({ ...t }); if (t.kind === kind && t.s > s + 6 && t.s < s + 7 && t.end < s - 2) found = { ...t }; /* (one that goes on past the place: it is not stopped at a line before) */ }); if (found && (!quiet || all.every((t) => t.n === found.n || t.s < s - 2 || t.s > s + 17 || Math.abs(t.u - found.u) > t.half + found.half + 0.8))) return { clock: c, thing: found }; } return null; };
 
 {
   let trees = 0, worst = 0, wet = 0; const hs = [];
@@ -38,6 +38,13 @@ const meeting = (kind, s, quiet = false) => { for (let c = 20; c < 6000; c += 0.
   for (let c = 100; c < 400; c += 0.25) { let n = 0; rolling(c, (t) => { n++; kinds[t.kind] = (kinds[t.kind] || 0) + 1; ends[t.kind] = Math.min(ends[t.kind], t.s); if (Math.abs(t.u) + t.half > H.half + 0.01) kinds.out = 1; }); most = Math.max(most, n); }
   check('what rolls is the same for everybody, and stays on the slope', JSON.stringify(a) === JSON.stringify(b) && !kinds.out);
   check('logs, barrels and boulders — and it gets worse as one climbs: the boulders stop first, then the barrels', kinds.log > kinds.barrel && kinds.barrel > kinds.boulder && ends.log < 1 && Math.abs(ends.barrel - H.kinds.barrel.end) < 1 && Math.abs(ends.boulder - H.kinds.boulder.end) < 1, `logs to the foot, barrels down to ${H.kinds.barrel.end} m, boulders to ${H.kinds.boulder.end} m; ${most} rolling at once at most`);
+  // four stretches, each busier than the one below: a log now and then at the foot — nothing else —, barrels from the second, boulders from the third
+  const on = [0, 0, 0, 0], seen = [new Set(), new Set(), new Set(), new Set()]; let looks = 0;
+  for (let c = 100; c < 700; c += 0.5) { looks++; rolling(c, (t) => { if (t.s < 0 || t.s > H.length) return; const k = stretchOf(t.s) - 1; on[k]++; seen[k].add(t.kind); }); }
+  const mean = on.map((n) => n / looks);
+  check('four stretches, each busier than the one below: a log now and then on the first and nothing else, barrels from the second, boulders from the third, everything on the last',
+    H.tiers.length === 3 && mean[0] < 1.2 && mean[1] > mean[0] * 1.6 && mean[2] > mean[1] * 1.6 && mean[3] > mean[2] * 1.3 && [...seen[0]].join() === 'log' && [...seen[1]].sort().join() === 'barrel,log' && seen[2].size === 3 && seen[3].size === 3
+    && stretchOf(1) === 1 && stretchOf(20) === 2 && stretchOf(40) === 3 && stretchOf(60) === 4, `things on each stretch at once: ${mean.map((v) => v.toFixed(1)).join(' / ')}`);
   const apex = (H.jump * H.jump) / (2 * H.g);
   check('a jump clears a log, not a barrel', apex > H.kinds.log.clear + 0.2 && apex < H.kinds.barrel.r * 2 + 0.1, `a jump goes ${apex.toFixed(2)} m up`);
 }
@@ -61,7 +68,7 @@ const meeting = (kind, s, quiet = false) => { for (let c = 20; c < 6000; c += 0.
   const runs = []; for (let k = 0; k < 12; k++) runs.push(botClimb(1000 + k * H.every));
   // (the slope is a slog now: three times as long as it was — about half a minute for the bot, which is hit on the way)
   const med = runs.map((r) => r.time).sort((p, q) => p - q)[runs.length >> 1];
-  check('a bot gets to the bell, whichever start it takes — in about half a minute, hit a few times on the way: nobody rushes it', runs.every((r) => r.over && r.hits <= 16 && r.time > H.length / H.run * 1000 && r.time < 75000) && med > 26000 && med < 45000, runs.map((r) => `${(r.time / 1000).toFixed(1)} s`).join(' · '));
+  check('a bot gets to the bell, whichever start it takes — in about half a minute, hit a few times on the way: nobody rushes it', runs.every((r) => r.over && r.hits <= 16 && r.time > H.length / H.run * 1000 && r.time < 75000) && med > 20000 && med < 40000, runs.map((r) => `${(r.time / 1000).toFixed(1)} s`).join(' · '));
   const plod = startClimb(1000); run(plod, 240, (q, i) => { i.up = 1; });
   check('who only runs straight up gets there too, much later', plod.over && plod.time > med * 1.4, `${(plod.time / 1000).toFixed(1)} s, hit ${plod.hits} times`);
   const at = (dt) => { const st = startClimb(1040), input = { up: 0, side: 0, jump: false }; let acc = 0; for (let t = 0; t < 60 && !st.over; t += dt) { acc += dt; while (acc >= H.step && !st.over) { acc -= H.step; botInput(st, input); stepClimb(st, H.step, input, null); } } return st.time; };

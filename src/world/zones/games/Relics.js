@@ -1,11 +1,13 @@
-// Ten things left over from before. The oasis is all that is left of the planet, and here and there something
-// says so: a road sign that sends the evacuation into the sea, a vending machine under the ivy, the door of a
-// shelter whose note says "back in 5 minutes"… Each stands by a path, is looked at (the prompt of the game says
-// "Look at…"), and has a line or two to say. Who has looked at all ten is told so.
+// Twenty things left over from before. The oasis is all that is left of the planet, and here and there
+// something says so: a road sign that sends the evacuation into the sea, a vending machine under the ivy, a
+// scarecrow in a hazmat suit, a bus stop where the next bus is always four minutes away… — and, where nobody
+// goes, a fallout shelter whose periscope turns to look at who found it. Each is looked at (the prompt of the
+// game says "Look at…") and has a line or two to say. Who has looked at them all is told so — and may, from
+// then on, raise a small mushroom cloud over their head (the game: the emotes).
 //
 // They cost little: their wood, metal and stone are in the materials of the fair (merged with the rest of the
-// zone), and everything that is written or drawn on them is on ONE picture, on one mesh — two draw calls for the
-// ten of them. Where each stands: RELICS in layout.js (a wish: the nearest free ground is taken — dry, level,
+// zone), and everything that is written or drawn on them is on ONE picture, on one mesh — two draw calls for all
+// of them (and one more for the head of the periscope, which turns). Where each stands: RELICS in layout.js (a wish: the nearest free ground is taken — dry, level,
 // off the paths, clear of the trees and of what is built).
 import * as THREE from 'three';
 import { Parts } from '../../props/MeshBuilder.js';
@@ -25,6 +27,16 @@ export const RELIC_WORDS = {
   tally: { r: 1.0, label: 'the scratched stone', text: 'Somebody counted the days here, five by five. The marks go on and on — and then they stop, and under them: "…then we stopped counting, and built a fair."' },
   sunflower: { r: 0.4, label: 'the sunflower', text: 'It has two heads. Both look at the sun, and they do not always agree where it is. Otherwise a perfectly ordinary sunflower, it would like you to know.' },
   news: { r: 0.5, label: 'the newspaper box', text: 'The last newspaper ever printed is still in it. The headline: "EVERYTHING FINE, SAY EXPERTS". It costs a coin nobody mints any more.' },
+  scarecrow: { r: 0.6, label: 'the scarecrow', text: 'A scarecrow in a hazmat suit. The crows keep their distance. So does everybody else. The wheat has never done better.' },
+  busstop: { r: 1.2, label: 'the bus stop', text: 'The timetable says the next bus is in 4 minutes. It has said so for longer than anybody can remember. Somebody still dusts the bench.' },
+  trolley: { r: 0.7, label: 'the shopping trolley', text: 'A shopping trolley, by the water. There is no shop within a thousand kilometres. Trolleys always find water: it is what they do.' },
+  dish: { r: 0.9, label: 'the dish', text: 'It still listens to the sky, night and day. The sky has had nothing to say for a long time. The little screen says NO SIGNAL — which is, in its way, a signal.' },
+  meter: { r: 0.35, label: 'the parking meter', text: 'EXPIRED. Somebody owes it a few decades of parking. There is no car, no road, no street — it stands its ground, and waits to be paid.' },
+  mailbox: { r: 0.4, label: 'the mailbox', text: 'The flag is up: there is mail. There is always mail — nobody knows who brings it. All bills, addressed to "The Occupant, What Is Left Of The World".' },
+  car: { r: 1.9, label: 'the car', text: 'A car, with a tree through its roof. The tree is forty years old. It had right of way.' },
+  phone: { r: 0.4, label: 'the telephone', text: 'A public telephone. Now and then it rings. Nobody dares to pick up: whoever is calling has been very patient, and may want something.' },
+  forecast: { r: 0.8, label: 'the weather board', text: '"TODAY: radiation mild, with sunny spells. TOMORROW: same." Somebody chalks it up again every morning. It has never once been wrong.' },
+  bunker: { r: 1.7, label: 'the mound', text: 'A fallout shelter, sealed from the inside — and so well hidden that you may be the first to find it. The periscope turns to look at you. Somebody is still down there, waiting for it all to be over. Nobody has had the heart to tell them.' },
 };
 
 // Where each picture is on the sheet: [x, y, w, h] in pixels (the sheet is 1024 × 1024).
@@ -32,7 +44,9 @@ const SHEET = 1024;
 const CELL = {
   billboard: [0, 0, 768, 384], vendor: [772, 0, 250, 480], sign: [0, 388, 640, 220], geiger: [644, 388, 76, 66], tally: [0, 612, 384, 256],
   billback: [388, 612, 384, 192], news: [776, 484, 240, 340], clock: [0, 872, 150, 150], trefoil: [154, 872, 150, 150], hatch: [388, 808, 212, 212],
+  forecast: [772, 828, 250, 194], bus: [604, 808, 168, 214], nosignal: [720, 388, 48, 60], expired: [720, 452, 48, 60],
 };
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
 // The hole burnt through the billboard, in the picture of its front (the back is its mirror): around (HOLE.x, HOLE.y) of the board.
 const HOLE = { x: 0.71, y: 0.73, r: 0.2 };
 
@@ -116,6 +130,21 @@ function paint(ctx) {
     ctx.beginPath(); ctx.arc(w / 2, h / 2, w * 0.075, 0, 7); ctx.fill();
     for (let i = 0; i < 3; i++) { const a = -Math.PI / 2 + (i * Math.PI * 2) / 3; ctx.beginPath(); ctx.arc(w / 2, h / 2, w * 0.36, a - 0.52, a + 0.52); ctx.arc(w / 2, h / 2, w * 0.13, a + 0.52, a - 0.52, true); ctx.fill(); }
   });
+  cell('forecast', (w, h) => {
+    // a blackboard, chalked up again every morning
+    ctx.fillStyle = '#1d2a25'; ctx.fillRect(0, 0, w, h); ctx.strokeStyle = '#6b4a2a'; ctx.lineWidth = 10; ctx.strokeRect(5, 5, w - 10, h - 10);
+    words('TODAY', w * 0.36, 36, 24, '#f4f1e4', SERIF, 700); words('radiation: mild,', w / 2, 76, 21, '#e8e4d2', SERIF, 400, w - 30); words('with sunny spells', w / 2, 104, 21, '#e8e4d2', SERIF, 400, w - 30);
+    words('TOMORROW: same', w / 2, 152, 19, '#c9c4ae', SERIF, 700, w - 30);
+    ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(w * 0.78, 36, 12, 0, 7); ctx.stroke(); for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; ctx.beginPath(); ctx.moveTo(w * 0.78 + Math.cos(a) * 16, 36 + Math.sin(a) * 16); ctx.lineTo(w * 0.78 + Math.cos(a) * 22, 36 + Math.sin(a) * 22); ctx.stroke(); }
+  });
+  cell('bus', (w, h) => {
+    ctx.fillStyle = '#f1ede0'; ctx.fillRect(0, 0, w, h); ctx.fillStyle = '#1f4f9a'; ctx.fillRect(0, 0, w, 44); words('BUS STOP', w / 2, 23, 21, '#fff', SANS, 800, w - 16);
+    words('NEXT BUS', w / 2, 70, 15, '#333', SANS, 700); words('4 min', w / 2, 106, 40, '#b3261e', SANS, 800);
+    ctx.fillStyle = '#8d8672'; for (let i = 0; i < 6; i++) { ctx.fillRect(14, 140 + i * 11, 44, 3); ctx.fillRect(70, 140 + i * 11, w - 84 - (i % 3) * 14, 3); }
+    rust(w, h, 8, 6.1);
+  });
+  cell('nosignal', (w, h) => { ctx.fillStyle = '#05080a'; ctx.fillRect(0, 0, w, h); words('NO', w / 2, h * 0.36, 13, '#7dff9a', SANS, 800); words('SIGNAL', w / 2, h * 0.62, 11, '#7dff9a', SANS, 800, w - 4); });
+  cell('expired', (w, h) => { ctx.fillStyle = '#b3261e'; ctx.fillRect(0, 0, w, h); words('EXPIRED', w / 2, h / 2, 10, '#fff', SANS, 800, w - 4); });
   cell('geiger', (w, h) => {
     ctx.fillStyle = '#d9d2bd'; ctx.fillRect(0, 0, w, h); ctx.strokeStyle = '#2d2a26'; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(w / 2, h * 0.86, w * 0.4, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
@@ -131,7 +160,7 @@ function settle(zone, taken, wish, need) {
     if (!data.inside(px, pz, 6) || h < data.waterAt(px, pz) + 0.3) return false;
     for (const [dx, dz] of R) { const q = g(px + dx, pz + dz); if (Math.abs(q - h) > 0.18 + need * 0.22 || q < data.waterAt(px + dx, pz + dz) + 0.15) return false; }
     data.surfaceAt(px, pz, layers);
-    if (layers[7] > 0.4) return false; // (a field)
+    if (!wish.field && layers[7] > 0.4) return false; // (a field — unless it belongs in one: the scarecrow)
     for (const [ax, az, bx, bz, half] of taken.paths) { // (a path, a lane, the track of the race)
       const ux = bx - ax, uz = bz - az, t = Math.max(0, Math.min(1, ((px - ax) * ux + (pz - az) * uz) / (ux * ux + uz * uz || 1)));
       if ((ax + ux * t - px) ** 2 + (az + uz * t - pz) ** 2 < (half + need * 0.5 + 0.4) ** 2) return false;
@@ -161,13 +190,24 @@ export function buildRelics(zone) {
   const taken = { built, trees: (() => { try { return world.forest.colliders(); } catch { return []; } })(), paths: [] };
   for (const p of zone.data.meta.paths || []) for (let i = 1; i < p.samples.length; i++) taken.paths.push([p.samples[i - 1][0], p.samples[i - 1][1], p.samples[i][0], p.samples[i][1], ((p.width || 2) + 0.8) / 2]);
   const pos = [], uv = [], idx = [], list = [];
+  let scope = null; // (where the head of the periscope is)
   for (const wish of RELICS) {
     const say = RELIC_WORDS[wish.id];
     if (!say) continue;
-    const [x, z, settled] = wish.fixed ? [wish.x, wish.z, true] : settle(zone, taken, wish, say.r), y = zone.ground(x, z);
+    // (`by`: on the verge of a path — so far along it, so many metres to its side — looking at the path)
+    let wx = wish.x, wz = wish.z, look = wish.face;
+    if (wish.by) {
+      const [id, along, aside] = wish.by, path = (zone.data.meta.paths || []).find((q) => q.id === id);
+      if (path) {
+        const n = path.samples.length, i = Math.max(0, Math.min(n - 2, Math.round(along * (n - 1)))), a = path.samples[i], b = path.samples[i + 1], dx = b[0] - a[0], dz = b[1] - a[1], dl = Math.hypot(dx, dz) || 1;
+        wx = a[0] - (dz / dl) * aside; wz = a[1] + (dx / dl) * aside; look = [a[0], a[1]];
+      }
+    }
+    if (!Number.isFinite(wx) || !Number.isFinite(wz)) continue;
+    const [x, z, settled] = wish.fixed ? [wx, wz, true] : settle(zone, taken, { x: wx, z: wz, field: wish.field }, say.r), y = zone.ground(x, z);
     // which way it faces: a point it looks at — or, for the road sign, so that its right hand points at the sea
     const sea = wish.sea ? seaward(zone.data, x, z) : null;
-    const yaw = sea ? Math.atan2(-sea[1], sea[0]) : Math.atan2(wish.face[0] - x, wish.face[1] - z);
+    const yaw = sea ? Math.atan2(-sea[1], sea[0]) : look ? Math.atan2(look[0] - x, look[1] - z) : 0;
     const c = Math.cos(yaw), s = Math.sin(yaw), at = (lx, ly, lz) => [x + lx * c + lz * s, y + ly, z - lx * s + lz * c];
     // (a picture of the sheet on a rectangle that faces the way the relic does: its middle, its size, how far forward;
     // `lean`: turned in its own plane; `back`: it faces the other way)
@@ -240,11 +280,100 @@ export function buildRelics(zone) {
       metal.tint(0.62, 0.12, 0.1, 1).box(-0.26, 0.5, -0.2, 0.26, 1.2, 0.2);
       metal.tint(0.12, 0.12, 0.13, 1).cylinder(0, -0.1, 0, 0.05, 0.05, 0.6, 6).cylinder(0, -0.05, 0, 0.22, 0.2, 0.1, 8);
       face('news', 0, 0.85, 0.5, 0.68, 0.206);
+    } else if (wish.id === 'scarecrow') {
+      // a stake, a stick across it — and on them a yellow suit with its hood and its visor, straw at the cuffs
+      wood.tint(0.75, 0.7, 0.62, 1).cylinder(0, -0.4, 0, 0.05, 0.045, 2.5, 6).rod(V(-0.78, 1.45, 0), V(0.78, 1.45, 0), 0.04, 5);
+      metal.tint(0.95, 0.8, 0.1, 1).box(-0.26, 0.75, -0.14, 0.26, 1.55, 0.14).box(-0.74, 1.36, -0.09, -0.26, 1.54, 0.09).box(0.26, 1.36, -0.09, 0.74, 1.54, 0.09).box(-0.24, 0.2, -0.12, -0.03, 0.75, 0.12).box(0.03, 0.2, -0.12, 0.24, 0.75, 0.12);
+      metal.lathe([[0, 1.55], [0.2, 1.58], [0.25, 1.78], [0.2, 1.98], [0.08, 2.06], [0, 2.07]], 8);
+      metal.tint(0.07, 0.09, 0.11, 1).box(-0.15, 1.7, 0.16, 0.15, 1.9, 0.245).box(-0.87, 1.34, -0.07, -0.74, 1.56, 0.07).box(0.74, 1.34, -0.07, 0.87, 1.56, 0.07);
+      metal.tint(0.78, 0.64, 0.26, 1).box(-0.21, 0.08, -0.08, -0.06, 0.2, 0.08).box(0.06, 0.08, -0.08, 0.21, 0.2, 0.08);
+      face('trefoil', 0, 1.16, 0.24, 0.24, 0.146);
+    } else if (wish.id === 'busstop') {
+      // a pole with its plate and its timetable, and the bench one waits on
+      metal.tint(0.3, 0.32, 0.35, 1).cylinder(-0.9, -0.3, 0, 0.045, 0.045, 2.95, 6).box(-1.13, 1.16, 0.0, -0.67, 1.74, 0.045);
+      metal.tint(0.1, 0.3, 0.75, 1).box(-1.16, 2.15, -0.02, -0.64, 2.62, 0.02);
+      face('bus', -0.9, 1.45, 0.42, 0.535, 0.052);
+      wood.tint(0.72, 0.62, 0.5, 1).box(-0.3, 0.42, -0.2, 1.1, 0.48, 0.2).box(-0.3, 0.48, -0.2, 1.1, 0.92, -0.14);
+      metal.tint(0.2, 0.2, 0.22, 1).box(-0.25, -0.2, -0.18, -0.19, 0.42, 0.18).box(0.99, -0.2, -0.18, 1.05, 0.42, 0.18);
+    } else if (wish.id === 'trolley') {
+      // a trolley of wire, lying half on its side where it was left
+      const bar = (x0, y0, z0, x1, y1, z1, r = 0.012) => metal.rod(V(x0, y0, z0), V(x1, y1, z1), r, 4);
+      metal.place(0, -0.12, 0, 0, 0.16, 0.42);
+      metal.tint(0.62, 0.64, 0.66, 1);
+      for (const [by, hw, z0, z1] of [[0.42, 0.2, -0.35, 0.3], [0.9, 0.26, -0.42, 0.4]]) { bar(-hw, by, z0, hw, by, z0); bar(-hw, by, z1, hw, by, z1); bar(-hw, by, z0, -hw, by, z1); bar(hw, by, z0, hw, by, z1); }
+      for (const sx of [-1, 1]) for (let i = 0; i <= 5; i++) { const t = i / 5; bar(sx * 0.2, 0.42, -0.35 + 0.65 * t, sx * 0.26, 0.9, -0.42 + 0.82 * t); }
+      for (let i = 1; i < 4; i++) { const t = i / 4; bar(-0.2 + 0.4 * t, 0.42, -0.35, -0.26 + 0.52 * t, 0.9, -0.42); bar(-0.2 + 0.4 * t, 0.42, 0.3, -0.26 + 0.52 * t, 0.9, 0.4); bar(-0.2 + 0.4 * t, 0.42, -0.35, -0.2 + 0.4 * t, 0.42, 0.3); }
+      for (const sx of [-1, 1]) for (const [zt, zb] of [[-0.35, -0.4], [0.3, 0.34]]) { bar(sx * 0.2, 0.42, zt, sx * 0.21, 0.09, zb, 0.016); }
+      metal.tint(0.8, 0.12, 0.1, 1).rod(V(-0.27, 1.0, -0.5), V(0.27, 1.0, -0.5), 0.02, 6);
+      bar(-0.26, 0.9, -0.42, -0.27, 1.0, -0.5, 0.014); bar(0.26, 0.9, -0.42, 0.27, 1.0, -0.5, 0.014);
+      metal.tint(0.08, 0.08, 0.08, 1);
+      for (const sx of [-1, 1]) for (const zb of [-0.4, 0.34]) metal.rod(V(sx * 0.21 - 0.025, 0.06, zb), V(sx * 0.21 + 0.025, 0.06, zb), 0.06, 8);
+      metal.pop();
+    } else if (wish.id === 'dish') {
+      // a dish on its post, turned up at the sky, and the little screen that says what it hears
+      metal.tint(0.4, 0.42, 0.44, 1).cylinder(0, -0.3, 0, 0.07, 0.06, 1.75, 6);
+      const both = parts.get('doubleSided');
+      both.place(x, y, z, yaw); both.place(0, 1.5, 0, 0, 0.85, 0);
+      both.tint(0.86, 0.87, 0.9, 1).lathe([[0, 0.0], [0.26, 0.03], [0.5, 0.11], [0.7, 0.24], [0.73, 0.275]], 14);
+      both.pop(); both.pop();
+      metal.place(0, 1.5, 0, 0, 0.85, 0);
+      metal.tint(0.3, 0.3, 0.32, 1).rod(V(0, 0.02, 0), V(0, 0.74, 0), 0.016, 4).box(-0.05, 0.72, -0.05, 0.05, 0.84, 0.05);
+      metal.pop();
+      metal.tint(0.1, 0.1, 0.11, 1).box(-0.14, 0.82, 0.06, 0.14, 1.12, 0.13);
+      face('nosignal', 0, 0.97, 0.2, 0.25, 0.134);
+    } else if (wish.id === 'meter') {
+      metal.tint(0.35, 0.36, 0.38, 1).cylinder(0, -0.3, 0, 0.035, 0.035, 1.4, 6);
+      metal.tint(0.25, 0.27, 0.3, 1).lathe([[0, 1.08], [0.11, 1.1], [0.135, 1.28], [0.1, 1.44], [0, 1.47]], 8);
+      metal.tint(0.05, 0.05, 0.06, 1).box(-0.075, 1.2, 0.09, 0.075, 1.37, 0.135);
+      face('expired', 0, 1.285, 0.12, 0.15, 0.137);
+    } else if (wish.id === 'mailbox') {
+      // a box with a round top on its post, its flag up, letters sticking out — and more at its foot
+      wood.tint(0.7, 0.62, 0.55, 1).cylinder(0, -0.3, 0, 0.05, 0.045, 1.4, 6);
+      metal.tint(0.2, 0.3, 0.5, 1).box(-0.13, 1.08, -0.3, 0.13, 1.24, 0.3).rod(V(0, 1.24, -0.3), V(0, 1.24, 0.3), 0.13, 10);
+      metal.tint(0.85, 0.12, 0.1, 1).box(0.135, 1.2, 0.05, 0.15, 1.52, 0.1).box(0.135, 1.42, 0.05, 0.15, 1.52, 0.24);
+      metal.tint(0.95, 0.94, 0.9, 1).box(-0.08, 1.12, 0.3, 0.06, 1.15, 0.43).box(-0.05, 1.17, 0.3, 0.09, 1.2, 0.4).box(-0.1, 1.21, 0.28, 0.02, 1.235, 0.38)
+        .box(0.18, 0.01, 0.1, 0.4, 0.03, 0.26).box(0.24, 0.03, 0.2, 0.46, 0.05, 0.36).box(-0.42, 0.01, 0.05, -0.2, 0.03, 0.2);
+    } else if (wish.id === 'car') {
+      // what is left of a car — and the tree that came up through its roof
+      metal.tint(0.5, 0.26, 0.14, 1).box(-0.85, 0.22, -1.9, 0.85, 0.82, 1.9);
+      metal.tint(0.42, 0.22, 0.12, 1).box(-0.78, 0.82, -1.05, 0.78, 1.38, 0.7);
+      metal.tint(0.05, 0.06, 0.07, 1).box(-0.8, 0.92, -0.95, -0.76, 1.28, 0.6).box(0.76, 0.92, -0.95, 0.8, 1.28, 0.6).box(-0.7, 0.92, 0.68, 0.7, 1.28, 0.72).box(-0.7, 0.92, -1.07, 0.7, 1.28, -1.03);
+      metal.tint(0.85, 0.82, 0.7, 1).box(-0.72, 0.5, 1.9, -0.42, 0.68, 1.93).box(0.42, 0.5, 1.9, 0.72, 0.68, 1.93);
+      metal.tint(0.07, 0.07, 0.07, 1);
+      for (const sx of [-1, 1]) for (const sz of [-1.2, 1.25]) metal.rod(V(sx * 0.68, 0.26, sz), V(sx * 0.9, 0.26, sz), 0.34, 10);
+      wood.tint(0.6, 0.46, 0.33, 1).cylinder(0.1, 0.3, -0.2, 0.2, 0.13, 3.7, 7);
+      for (const [lx, ly, lz, lr] of [[0.1, 4.4, -0.2, 1.4], [-0.9, 3.9, 0.4, 0.95], [1.0, 3.8, -0.7, 0.9]]) { metal.place(lx, 0, lz); metal.tint(0.18 + lr * 0.03, 0.46, 0.15, 1).lathe([[0, ly - lr], [lr * 0.62, ly - lr * 0.78], [lr, ly], [lr * 0.62, ly + lr * 0.78], [0, ly + lr]], 8); metal.pop(); }
+    } else if (wish.id === 'phone') {
+      metal.tint(0.3, 0.32, 0.35, 1).cylinder(0, -0.3, 0, 0.05, 0.05, 1.95, 6);
+      metal.tint(0.15, 0.35, 0.6, 1).box(-0.2, 1.05, 0.03, 0.2, 1.62, 0.2).box(-0.24, 1.62, -0.02, 0.24, 1.68, 0.26);
+      metal.tint(0.75, 0.76, 0.78, 1).box(-0.06, 1.12, 0.2, 0.15, 1.38, 0.215);
+      metal.tint(0.06, 0.06, 0.07, 1).box(-0.17, 1.2, 0.2, -0.1, 1.55, 0.265).box(-0.14, 0.86, 0.2, -0.13, 1.2, 0.21);
+      for (let i = 0; i < 9; i++) metal.tint(0.2, 0.2, 0.22, 1).box(-0.04 + (i % 3) * 0.06, 1.15 + Math.floor(i / 3) * 0.07, 0.215, 0.0 + (i % 3) * 0.06, 1.2 + Math.floor(i / 3) * 0.07, 0.222);
+    } else if (wish.id === 'forecast') {
+      for (const lx of [-0.5, 0.5]) wood.tint(0.7, 0.65, 0.6, 1).cylinder(lx, -0.3, 0, 0.045, 0.04, 2.1, 6);
+      wood.tint(0.5, 0.45, 0.4, 1).box(-0.66, 0.78, -0.03, 0.66, 1.8, 0.0);
+      face('forecast', 0, 1.29, 1.24, 0.96, 0.012);
+    } else if (wish.id === 'bunker') {
+      // a mound the grass has taken back; in it a round steel hatch, ajar; a pipe to breathe by; and the tube of a
+      // periscope (its head is a part of its own: it turns to look at who comes — see below)
+      stone.tint(0.5, 0.62, 0.36, 1).lathe([[0, -0.4], [1.95, -0.4], [1.75, 0.12], [1.25, 0.58], [0.55, 0.86], [0, 0.92]], 12);
+      metal.tint(0.3, 0.32, 0.34, 1).cylinder(0, 0.8, 0.4, 0.52, 0.52, 0.12, 12);
+      metal.place(0, 0.94, -0.08, 0, -0.5, 0);
+      metal.tint(0.42, 0.44, 0.46, 1).cylinder(0, 0, 0.48, 0.5, 0.5, 0.07, 12);
+      metal.tint(0.75, 0.6, 0.12, 1).cylinder(0, 0.07, 0.48, 0.17, 0.17, 0.04, 8);
+      metal.pop();
+      metal.tint(0.3, 0.3, 0.32, 1).cylinder(-0.95, 0.25, -0.5, 0.07, 0.07, 0.85, 6).cylinder(-0.95, 1.1, -0.5, 0.13, 0.13, 0.06, 6);
+      metal.tint(0.25, 0.3, 0.22, 1).cylinder(0.9, 0.25, -0.3, 0.045, 0.045, 1.3, 6);
+      scope = { x: x + 0.9 * c - 0.3 * s, y: y + 1.55, z: z - 0.9 * s - 0.3 * c };
     }
     for (const b of [metal, wood, stone]) b.pop();
     const r = Math.min(say.r, 1.1);
-    zone.colliders.push({ type: 'circle', x, z, r: wish.id === 'billboard' ? 0.3 : r * 0.8 });
+    // what one walks into: the thing itself — its posts for the billboard, its pole and its bench for the bus stop,
+    // the whole length of the car, the mound of the shelter
     if (wish.id === 'billboard') for (const lx of [-1.45, 1.45]) zone.colliders.push({ type: 'circle', x: x + lx * c, z: z - lx * s, r: 0.2 });
+    else if (wish.id === 'busstop') zone.colliders.push({ type: 'circle', x: x - 0.9 * c, z: z + 0.9 * s, r: 0.16 }, { type: 'box', x: x + 0.4 * c, z: z - 0.4 * s, hw: 0.75, hl: 0.26, yaw });
+    else if (wish.id === 'car') zone.colliders.push({ type: 'box', x, z, hw: 0.92, hl: 1.95, yaw });
+    else zone.colliders.push({ type: 'circle', x, z, r: wish.id === 'bunker' ? 1.5 : r * 0.8 });
     taken.built.push({ type: 'circle', x, z, r: say.r });
     list.push({ id: wish.id, x, y, z, yaw, r, settled, label: say.label, text: say.text });
   }
@@ -263,8 +392,21 @@ export function buildRelics(zone) {
   const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ map: texture, toneMapped: false, alphaTest: 0.5 }));
   mesh.name = 'relics-faces';
   zone.group.add(mesh);
+  // ---- the head of the periscope: it turns towards whoever is near (the game tells it where they are)
+  let head = null;
+  if (scope) {
+    const p = new Parts(), b = p.get('paint');
+    b.tint(0.25, 0.3, 0.22, 1).box(-0.07, -0.07, -0.1, 0.07, 0.07, 0.14);
+    b.tint(0.05, 0.07, 0.09, 1).box(-0.05, -0.05, 0.14, 0.05, 0.05, 0.155);
+    b.tint(0.6, 0.8, 0.9, 1).box(-0.02, 0.0, 0.155, 0.02, 0.03, 0.16);
+    head = p.toMeshes(zone.world.materials, { name: 'relics-periscope', layers: [] });
+    head.position.set(scope.x, scope.y, scope.z);
+    zone.group.add(head);
+  }
   return {
-    list, mesh,
+    list, mesh, head,
+    /** The periscope looks at whoever stands at (px, pz) — when they are near enough to be worth a look. */
+    watch: (px, pz) => { if (!head || (px - scope.x) ** 2 + (pz - scope.z) ** 2 > 60 * 60) return; head.rotation.y = Math.atan2(px - scope.x, pz - scope.z); head.updateMatrixWorld(true); },
     /** The relic one stands by (within reach of it), or null. */
     near: (px, pz) => { for (const q of list) if ((q.x - px) ** 2 + (q.z - pz) ** 2 < (q.r + 1.9) ** 2) return q; return null; },
   };

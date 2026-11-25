@@ -47,7 +47,7 @@ import { chatLogRoute } from './chatlog.js';
 import { banned, addBan, bansRoute, anyQuiet, keptOut } from './bans.js';
 import { statsRoute } from './stats.js';
 import { BOARDS as GAME_NAMES, PRICES } from './catalog.js';
-import { uroomsRoute, memberOf, userRoom, userRoomsOn } from './urooms.js';
+import { uroomsRoute, memberOf, userRoom, userRoomsOn, isUserRoom } from './urooms.js';
 
 const out = (status, body, headers = {}) => ({ status, body, headers });
 
@@ -201,7 +201,8 @@ export async function route(req, ctx) {
       const from = async (key, id) => { const stored = await ctx.store.get(key); return own?.[id] ? topsWith(stored, own[id], id, now) : topsOf(stored, now); };
       const show = (id) => from(`board:${id}`, id);
       // (asked from a room a player made, with the note of a member: the boards of that room come with the world's)
-      const inRoom = (await memberOf(ctx, query.get('room') || '', device, query.get('member') || '')) ? query.get('room') : '';
+      // (an administrator — their key with the request — reads the boards of any room a player made)
+      const inRoom = (req.admin && isUserRoom(query.get('room'))) || (await memberOf(ctx, query.get('room') || '', device, query.get('member') || '')) ? query.get('room') : '';
       if (board === 'all') {
         // every board at once (the game asks for them all when it starts)
         const boards = {}, theirs = {};

@@ -6,6 +6,13 @@ export const NEWS = [
   {
     date: '25 November 2026',
     items: [
+      ['Ten more relics', 'Twenty things are now left over from the world before, all over the valley. The vending machine went to the Lost Temple, the scratched stone to Lookout Hill — and one of them is very well hidden.'],
+      ['A mushroom cloud of your own', 'Find the twenty relics and it is yours: a small mushroom cloud over your head, with confetti. In the emotes (T).'],
+      ['Uphill Battle, in four stretches', 'Quiet at the foot — a log now and then —, then barrels, then boulders, then everything at once near the bell. Lines across the slope say where each begins.'],
+      ['Speedboats on the pond', 'The boats of The Little Regatta have a pointed hull, a cockpit and a wing now.'],
+      ['Sponsoring, made simple', 'Say what your place should show, then pay: it is up the moment you are back — where you stood. The fair cheers every new sponsor in the chat.'],
+      ['Five sponsors per attraction', 'The games with a star on the map share their panel between five sponsors, turn by turn. The Trading Post lists them first, with new pictures.'],
+      ['The wall counts clicks', 'Under each sponsor: its site, and how often it was opened from the fair. Step up to the wall to open them.'],
       ['Five new paint jobs', 'Galaxy, Meltdown, Plasma, Mirror ball and Hazard stripes are in the item shop (O). The trails have left the shelves: whoever bought one keeps it.'],
       ['A kinder chat', 'Slurs, strong insults, threats and addresses of sites now come out as ********. Swearing at the boulder is still allowed.'],
       ['Lie down', 'Hold X and your robot lies down, wherever it stands. On the beach the towels are for that: step up to one.'],

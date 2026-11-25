@@ -787,22 +787,33 @@ export const SIGNPOSTS = [
 // rock, its foot `lift` above the grass. How it leans and bends is the rock's own business (it reads the cliff).
 export const THANKS_WALL = { x: -268.05, z: -82.2, yaw: 70 * DEG, width: 28, height: 10, lift: 1.3 };
 
-// Ten things left over from the world before, by the paths (zones/games/Relics.js: what each is and says).
-// (x, z): a wish — the nearest free ground is taken (dry, level, off the path, clear of the trees and of what
-// is built) — or, `fixed`, the very spot (on the verge of the lane, at the corner of the deck: chosen by eye);
-// `face`: the point it looks at; `sea`: it is turned so that its right hand points at the nearest sea (the
-// arrow of the road sign).
+// Twenty things left over from the world before (zones/games/Relics.js: what each is and says), all over the
+// valley. (x, z): a wish — the nearest free ground is taken (dry, level, off the path, clear of the trees and
+// of what is built) — or, `fixed`, the very spot (chosen by eye); `by`: [a path, how far along it (0 … 1), how
+// many metres to its side] — it stands on the verge of that path and looks at it; `face`: the point it looks
+// at; `sea`: it is turned so that its right hand points at the nearest sea (the arrow of the road sign);
+// `field`: it belongs in a field (the scarecrow). The last one is where nobody goes: it is meant to be found.
 export const RELICS = [
   { id: 'barrel', x: -117.5, z: -39.6, fixed: true, face: [-113, -40] },
   { id: 'billboard', x: -120, z: -70, face: [-113, -68] },
   { id: 'sunflower', x: -119.5, z: -95, face: [-116.3, -97.4] },
   { id: 'geiger', x: -229.5, z: -86.5, face: [-223, -86] },
   { id: 'hatch', x: -63.5, z: -30.5, face: [-61.4, -24.9] },
-  { id: 'vendor', x: -22, z: 5, face: [-17.9, 0.6] },
+  { id: 'vendor', x: -366, z: 45, face: [-374.5, 37] }, // (in the court of the Lost Temple: it wants exact change there too)
   { id: 'news', x: 5, z: -4.5, face: [0, 3] },
   { id: 'clock', x: 9, z: 44.5, face: [6.4, 47.6] },
-  { id: 'tally', x: -45.5, z: -93.5, face: [-41.6, -91.2] },
+  { id: 'tally', x: -2, z: -94, face: [-2, -86] }, // (on Lookout Hill: where one counts the days, looking at the sea)
   { id: 'sign', x: 23.9, z: -89.6, fixed: true, sea: true, face: [24, -84] },
+  { id: 'scarecrow', x: -62, z: -124, field: true, face: [-62, -104] },
+  { id: 'busstop', by: ['lane', 0.2, 4.6] },
+  { id: 'trolley', by: ['pondloop', 0.5, 3.6] },
+  { id: 'dish', by: ['hill', 0.96, 5] },
+  { id: 'meter', by: ['stairs', 0.55, 2.4] },
+  { id: 'mailbox', by: ['falls', 0.6, 2.4] },
+  { id: 'car', by: ['pondloop', 0.1, 4.4] },
+  { id: 'phone', by: ['lane', 0.1, -4.6] },
+  { id: 'forecast', by: ['shore', 0.3, 3] },
+  { id: 'bunker', x: 52, z: 112, face: [40, 104] }, // (in the woods of the south-east shore, sixty metres from any path)
 ];
 
 // What stands on the way for visitors to read (zones/games/Notices.js): the banner and the rules where one

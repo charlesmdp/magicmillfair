@@ -4,7 +4,8 @@
 //   what a visitor owns, once and for good: the list of items.js (two jetpacks, the hats, paints, trails,
 //   a box of fireworks) — 'jetpack', 'hat:crown', 'paint:gold'…
 //   board:<id>      the sponsor's panel over the board of a game: an auction. A bid is paid once; whoever
-//                   bids more takes the panel, and the one who held it is refunded in full (see shop.js)
+//                   bids more takes the panel, and the one who held it is refunded in full (see shop.js).
+//                   A big attraction has five such places ('board:<id>-2' … '-5'): see MAJOR_BOARDS
 //   tarp:shoot      the backdrop of the shooting gallery, by the month
 //   gondola:<n>     a gondola of the big wheel (1 to 24), by the month
 //   village:<id>    a sky village, by the month: ten prices, the higher the village the dearer
@@ -29,6 +30,18 @@ export const BOARDS = {
   hoop: 'Buzzer Beater', stack: 'Stack It', geiger: 'Geiger Says', fish: 'Hook, Line & Sinker', scram: 'SCRAM!', cups: 'Shell Shock', run: 'Meltdown Run',
   slide: 'Mostly Down', pond: 'The Endless Pond', boats: 'The Little Regatta', hill: 'Uphill Battle', crack: 'Between a Rock', hollow: 'The Hollow Hill',
 };
+/**
+ * The big attractions — those with a star on the map: their panel is shared by up to BOARD_PLACES sponsors,
+ * shown turn by turn. Its places are 'board:<id>' and 'board:<id>-2' … '-5': each an auction of its own.
+ */
+export const MAJOR_BOARDS = ['sky', 'race', 'wing', 'slide', 'pond', 'boats', 'hill', 'crack', 'hollow'], BOARD_PLACES = 5;
+/** The place of a panel: 'slide-3' → ['slide', 3], 'slide' → ['slide', 1]; null when there is no such place. */
+export const boardPlace = (id) => {
+  const m = /^([a-z]+)(?:-([2-9]))?$/.exec(typeof id === 'string' ? id : '');
+  if (!m || !Object.hasOwn(BOARDS, m[1])) return null;
+  const n = m[2] ? Number(m[2]) : 1;
+  return n === 1 || (MAJOR_BOARDS.includes(m[1]) && n <= BOARD_PLACES) ? [m[1], n] : null;
+};
 // (Every game has a panel for a sponsor over its board — those of the games that wait for a switch are sold
 // once their game is on: shop.js asks.)
 export const GONDOLAS = 24;
@@ -46,7 +59,10 @@ export function describe(item) {
   if (own) return { item, kind: 'own', amount: own.price, monthly: false, name: `Atomic Oasis — ${own.name}` };
   if (item === PASS.id) return { item, kind: 'pass', amount: PASS.price, monthly: true, name: `Atomic Oasis — ${PASS.name}` };
   if (item === 'room') return { item, kind: 'room', amount: PRICES.room, monthly: true, name: 'Atomic Oasis — a room of your own' };
-  if (type === 'board' && Object.hasOwn(BOARDS, id)) return { item, kind: 'slot', auction: true, amount: AUCTION.start, monthly: false, label: BOARDS[id], name: `Atomic Oasis — sponsor of ${BOARDS[id]} (your bid)` };
+  if (type === 'board') {
+    const at = boardPlace(id);
+    if (at) { const [game, n] = at, label = n > 1 ? `${BOARDS[game]} (place ${n})` : BOARDS[game]; return { item, kind: 'slot', auction: true, amount: AUCTION.start, monthly: false, label, game, name: `Atomic Oasis — sponsor of ${label} (your bid)` }; }
+  }
   if (item === 'tarp:shoot') return { item, kind: 'slot', amount: PRICES.tarp, monthly: true, name: 'Atomic Oasis — the backdrop of Bullseye Alley' };
   if (type === 'gondola' && /^[1-9]\d?$/.test(id || '') && +id <= GONDOLAS) return { item, kind: 'slot', amount: PRICES.gondola, monthly: true, name: `Atomic Oasis — gondola ${id} of the big wheel` };
   if (type === 'plaque' && /^[1-9]\d?$/.test(id || '') && +id <= PLAQUE_COUNT) return { item, kind: 'slot', plaque: true, amount: PRICES.plaque, monthly: false, name: `Atomic Oasis — a plaque for a companion, at the feet of the golden dog (no. ${id})` };

@@ -238,7 +238,7 @@ export class Hud {
       </div>
       <div class="stats"></div>
       <div class="emotes" role="dialog" aria-label="Emotes">
-        <div class="acts"><b class="title">Emotes</b><span class="sit"><button data-sit>Sit on the ground (X)</button><button data-lie>Lie down (hold X)</button></span><span class="held"><button data-drop>Put the bouquet down (B)</button></span><span class="boom"><button data-firework>Light a firework (V)</button></span></div>
+        <div class="acts"><b class="title">Emotes</b><span class="sit"><button data-sit>Sit on the ground (X)</button><button data-lie>Lie down (hold X)</button></span><span class="held"><button data-drop>Put the bouquet down (B)</button></span><span class="boom"><button data-firework>Light a firework (V)</button></span><span class="cloud"><button data-mushroom>☢ Mushroom cloud</button></span></div>
       </div>
       <div class="wasted" aria-live="assertive"><div class="band"><b>WASTED</b><span></span></div></div>
       <div class="sight" aria-hidden="true"></div>
@@ -403,6 +403,7 @@ export class Hud {
     this.emotes.querySelector('[data-sit]').onclick = () => { this.emit('sit'); this.emotes.classList.remove('on'); };
     this.emotes.querySelector('[data-lie]').onclick = () => { this.emit('lie'); this.emotes.classList.remove('on'); };
     this.emotes.querySelector('[data-firework]').onclick = () => { this.emit('firework'); this.emotes.classList.remove('on'); };
+    this.emotes.querySelector('[data-mushroom]').onclick = () => { this.emit('mushroom'); this.emotes.classList.remove('on'); };
     h.querySelector('.open-shop').onclick = () => { this.panel.classList.remove('on'); this.emit('shop'); };
     this._robotUI(h.querySelector('.swatches.robot'), h.querySelector('.sizes.robot'), h.querySelector('.panel .passhint'));
     this.wastedEl = h.querySelector('.wasted');
@@ -499,6 +500,8 @@ export class Hud {
   closeAll() { this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this.toggleBigMap(false); this.closeRoster(); this.toggleChat(false); }
   /** Whoever has the box of fireworks gets a button for it in the emotes. */
   setFireworks(on) { this.emotes.classList.toggle('fireworks', !!on); }
+  /** The mushroom cloud of those who found every relic: how many they found, of how many (it says so until they have them all). */
+  setMushroom(found, total) { const b = this.emotes.querySelector('[data-mushroom]'); b.textContent = found >= total ? '☢ Mushroom cloud' : `☢ Mushroom cloud — find the ${total} relics (${found} found)`; b.classList.toggle('locked', found < total); }
   /** A dot on the icon of the shop while something is sold there. */
   setShop(open) { this.hud.querySelector('.shop-icon').classList.toggle('selling', !!open); }
 

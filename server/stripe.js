@@ -57,9 +57,9 @@ export async function createCheckout(cfg, what, device, site, fetcher = fetch, e
   if (embed) {
     form.set('ui_mode', 'embedded');
     form.set('redirect_on_completion', 'if_required');
-    form.set('return_url', `${site}/?paid=${encodeURIComponent(what.item)}`);
+    form.set('return_url', `${site}/?paid=${encodeURIComponent(what.item)}&cs={CHECKOUT_SESSION_ID}`);
   } else {
-    form.set('success_url', `${site}/?paid=${encodeURIComponent(what.item)}`);
+    form.set('success_url', `${site}/?paid=${encodeURIComponent(what.item)}&cs={CHECKOUT_SESSION_ID}`); // (Stripe writes the session there: the game asks about it as the buyer comes back)
     form.set('cancel_url', `${site}/?paid=`);
   }
   const res = await fetcher(`${cfg.api}/v1/checkout/sessions`, {
@@ -70,6 +70,17 @@ export async function createCheckout(cfg, what, device, site, fetcher = fetch, e
   const body = await res.json().catch(() => null);
   if (!res.ok || !body || typeof (embed ? body.client_secret : body.url) !== 'string') throw new Error(`Stripe: ${body?.error?.message || res.status}`);
   return embed ? { id: String(body.id || ''), secret: body.client_secret } : { id: String(body.id || ''), url: body.url };
+}
+
+/**
+ * A payment page as Stripe has it now — to learn that it was paid without waiting to be told (the buyer is
+ * back in the game before the webhook, or no webhook was ever set). Resolves to the session, or null.
+ */
+export async function fetchCheckout(cfg, id, fetcher = fetch) {
+  if (typeof id !== 'string' || !/^cs_[A-Za-z0-9_]{4,250}$/.test(id)) return null;
+  const res = await fetcher(`${cfg.api}/v1/checkout/sessions/${id}`, { headers: { Authorization: `Bearer ${cfg.key}` } });
+  const body = await res.json().catch(() => null);
+  return res.ok && body && body.id === id ? body : null;
 }
 
 /**

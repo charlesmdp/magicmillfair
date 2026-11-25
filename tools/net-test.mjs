@@ -40,7 +40,7 @@ const STRIPE_KEY = 'sk_test_magicmillfairtests', STRIPE_HOOK = 'whsec_magicmillf
 const MAIL_FILE = path.join(os.tmpdir(), `mmf-net-test-mail-${process.pid}.jsonl`);
 process.on('exit', () => { try { fs.rmSync(MAIL_FILE, { force: true }); } catch { /* nothing to remove */ } });
 // A stand-in for Stripe: it hands out payment pages and remembers what it was asked.
-const stripe = { asked: [], refunds: [], portals: [], cancelled: [], port: 0, server: null };
+const stripe = { sessions: {}, asked: [], refunds: [], portals: [], cancelled: [], port: 0, server: null };
 async function startStripe() {
   stripe.port = await freePort();
   stripe.server = http.createServer((req, res) => {
@@ -67,7 +67,19 @@ async function startStripe() {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ id: `bps_test_${stripe.portals.length}`, url: `https://billing.stripe.test/p/session/${stripe.portals.length}` }));
       }
+      const one = /^\/v1\/checkout\/sessions\/(cs_\w+)$/.exec(req.url);
+      if (one && req.method === 'GET') {
+        // a payment page, asked about: as it stands (the test says when it is paid: stripe.sessions[id])
+        const s = req.headers.authorization === `Bearer ${STRIPE_KEY}` ? stripe.sessions[one[1]] : null;
+        res.writeHead(s ? 200 : 404, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify(s || { error: { message: 'No such checkout.session' } }));
+      }
       stripe.asked.push({ url: req.url, auth: req.headers.authorization, version: req.headers['stripe-version'] || '', form });
+      if (ok) {
+        const id = `cs_test_${stripe.asked.length}`, month = form.get('mode') === 'subscription';
+        stripe.sessions[id] = { id, status: 'open', payment_status: 'unpaid', amount_total: Number(form.get('line_items[0][price_data][unit_amount]')), payment_intent: month ? null : `pi_${id}`, subscription: month ? `sub_${id}` : null, customer: `cus_${id}`,
+          customer_details: { email: 'buyer@example.org' }, metadata: Object.fromEntries([...form].filter(([k]) => /^metadata\[\w+\]$/.test(k)).map(([k, v]) => [k.slice(9, -1), v])) };
+      }
       res.writeHead(ok ? 200 : 401, { 'Content-Type': 'application/json' });
       // (a form to show inside the game has no page: Stripe gives a secret for its script instead)
       const session = form.get('ui_mode') === 'embedded' ? { id: `cs_test_${stripe.asked.length}`, client_secret: `cs_test_secret_${stripe.asked.length}`, url: null } : { id: `cs_test_${stripe.asked.length}`, url: `https://checkout.stripe.test/pay/cs_test_${stripe.asked.length}` };
@@ -1112,7 +1124,7 @@ async function testShop({ port }) {
   stripe.asked.length = 0;
   res = await post('/api/checkout', { item: 'hat:crown', device: ann, amount: 1, price: 1 });
   const asked = stripe.asked[0]?.form;
-  check('shop: a payment page is asked of Stripe at the price of the catalogue, for this visitor', res.status === 200 && /^https:\/\/checkout\.stripe\.test\//.test(json(res)?.url || '') && asked?.get('mode') === 'payment' && asked.get('line_items[0][price_data][unit_amount]') === '999' && asked.get('line_items[0][price_data][currency]') === 'usd' && asked.get('metadata[item]') === 'hat:crown' && asked.get('metadata[device]') === ann && asked.get('client_reference_id') === ann && asked.get('success_url').endsWith('/?paid=hat%3Acrown'), [res.status, res.body.toString().slice(0, 160), asked?.toString().slice(0, 300)]);
+  check('shop: a payment page is asked of Stripe at the price of the catalogue, for this visitor', res.status === 200 && /^https:\/\/checkout\.stripe\.test\//.test(json(res)?.url || '') && asked?.get('mode') === 'payment' && asked.get('line_items[0][price_data][unit_amount]') === '999' && asked.get('line_items[0][price_data][currency]') === 'usd' && asked.get('metadata[item]') === 'hat:crown' && asked.get('metadata[device]') === ann && asked.get('client_reference_id') === ann && asked.get('success_url').endsWith('/?paid=hat%3Acrown&cs={CHECKOUT_SESSION_ID}'), [res.status, res.body.toString().slice(0, 160), asked?.toString().slice(0, 300)]);
   // (a sky village is for hire only once the sky is open: the owner's switch)
   const shutSky = await post('/api/checkout', { item: 'village:eagle-rest', device: bob });
   await post('/api/release', { set: { sky: 'open' } }, { authorization: `Bearer ${ADMIN_KEY}` });
@@ -1136,7 +1148,7 @@ async function testShop({ port }) {
     stripeConfig({ STRIPE_SECRET_KEY: 'sk_test_abc', STRIPE_PUBLISHABLE_KEY: 'pk_test_abcdefghijklmnop' }), stripeConfig({ STRIPE_LIVE_SECRET_KEY: 'sk_live_abc', STRIPE_TEST_SECRET_KEY: 'sk_test_abc', STRIPE_LIVE_PUBLISHABLE_KEY: 'pk_live_abcdefghijklmnop', STRIPE_TEST_PUBLISHABLE_KEY: 'pk_test_abcdefghijklmnop' })];
   check('shop: with Stripe\'s publishable key the payment form can be shown inside the game — the game is told the key, and Stripe is asked for a form to embed (a secret for its script, no page), at the price of the catalogue; a key of the wrong kind or mode does not count',
     shop.pk === STRIPE_PK && inGame.status === 200 && /^cs_test_secret_/.test(json(inGame)?.secret || '') && !json(inGame).url
-    && emb?.form.get('ui_mode') === 'embedded' && emb.form.get('redirect_on_completion') === 'if_required' && emb.form.get('return_url').endsWith('/?paid=hat%3Acowboy') && !emb.form.get('success_url') && !emb.form.get('cancel_url')
+    && emb?.form.get('ui_mode') === 'embedded' && emb.form.get('redirect_on_completion') === 'if_required' && emb.form.get('return_url').endsWith('/?paid=hat%3Acowboy&cs={CHECKOUT_SESSION_ID}') && /^cs_test_/.test(json(inGame).id || '') && !emb.form.get('success_url') && !emb.form.get('cancel_url')
     && emb.form.get('line_items[0][price_data][unit_amount]') === '999' && emb.form.get('metadata[item]') === 'hat:cowboy' && emb.form.get('metadata[device]') === ann && emb.version === '2025-03-31.basil' && stripe.asked.length === 1
     && keys[0].publishable === '' && keys[1].publishable === '' && keys[2].publishable === '' && keys[3].publishable === 'pk_test_abcdefghijklmnop' && keys[4].mode === 'live' && keys[4].publishable === 'pk_live_abcdefghijklmnop',
     [shop.pk, inGame.status, inGame.body.toString().slice(0, 120), emb?.form.toString().slice(0, 300), emb?.version, keys.map((k) => k.publishable)]);
@@ -1432,6 +1444,58 @@ async function testChatLog({ port }) {
     && Math.abs(got.lines[1].t - Date.now()) < 120000 && got.keeps?.days === 14 && got.keeps.lines === 5000 && nobody.status === 403 && page?.lines?.length === 1 && page.more === true && older?.lines?.[0]?.name === 'Ada Talks'
     && wiped.status === 200 && after?.lines?.length === 0,
     [got?.lines?.slice(0, 2), nobody.status, page, older?.lines?.[0], wiped.status, after]);
+}
+
+// ------------------------------------------------------------- back from the payment page (no webhook needed); a new sponsor
+async function testPaid({ port }) {
+  const json = (res) => { try { return JSON.parse(res.body.toString()); } catch { return null; } };
+  // (from an address of its own: these calls do not count against what the other checks may ask)
+  const post = (target, body) => request(port, target, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), from: '127.0.0.80' });
+  const owned = async (device) => json(await request(port, `/api/shop?device=${device}`));
+  const pay = (id) => Object.assign(stripe.sessions[id], { status: 'complete', payment_status: 'paid' });
+  const cat = randomId(16);
+  stripe.asked.length = 0;
+  const page = await post('/api/checkout', { item: 'hat:beanie', device: cat }), id = `cs_test_${stripe.asked.length}`, back = stripe.asked[stripe.asked.length - 1]?.form.get('success_url') || '';
+  const early = await post('/api/checkout/confirm', { session: id });
+  pay(id);
+  const done = await post('/api/checkout/confirm', { session: id }), has = (await owned(cat)).owned, again = await post('/api/checkout/confirm', { session: id });
+  const none = await post('/api/checkout/confirm', { session: 'cs_test_9999' }), junk = await post('/api/checkout/confirm', { session: '../../etc' });
+  check('paid, without Stripe having to say so: the payment page comes back with its name in the address; asked, the server asks Stripe — not paid yet: nothing; paid: what was bought is given, once; a page that does not exist gives nothing',
+    page.status === 200 && /[?&]cs=\{CHECKOUT_SESSION_ID\}/.test(back) && /[?&]paid=hat%3Abeanie/.test(back) && json(early)?.ok === false && json(done)?.ok === true && json(done).given === true && json(done).item === 'hat:beanie'
+    && has.join() === 'hat:beanie' && json(again)?.ok === true && none.status === 404 && junk.status === 404, [page.status, back, json(early), json(done), has, json(again), none.status, junk.status]);
+  // a sponsor: what the panel shows goes up right after the payment, the whole fair is told — by name —, and the sponsor is thanked by e-mail
+  const ear = new Client(port, 'main');
+  await ear.hello('Ear', 1);
+  const dog = randomId(16);
+  stripe.asked.length = 0;
+  const bidPage = await post('/api/checkout', { item: 'board:cups', device: dog, bid: 700 }), bid = `cs_test_${stripe.asked.length}`;
+  pay(bid);
+  const took = await post('/api/checkout/confirm', { session: bid }), mine = (await owned(dog)).slots['board:cups'];
+  const filled = await post('/api/sponsor', { slot: 'board:cups', device: dog, title: 'Acme Robots', subtitle: 'quel connard, ce robot', url: 'https://example.org/acme' });
+  const heard = await ear.wait((m) => m.t === 'say' && /Acme Robots/.test(m.m), 4000), shown = (await owned(randomId(16))).slots['board:cups'];
+  const changed = await post('/api/sponsor', { slot: 'board:cups', device: dog, title: 'Acme Robots Inc', subtitle: 'robots, mostly', url: 'https://example.org/acme' });
+  await sleep(400);
+  const cheers = ear.msgs.filter((m) => m.t === 'say' && /Acme/.test(m.m)).length;
+  ear.ws.close();
+  const mails = CF || !fs.existsSync(MAIL_FILE) ? null : fs.readFileSync(MAIL_FILE, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((m) => m.to === 'buyer@example.org' && /^You sponsor the board of Shell Shock/.test(m.subject));
+  check('a new sponsor: the bid is taken as they come back; what their panel says goes up at once — without the words the chat hides —; the whole fair is told once, by name, with due praise; changing the panel later says nothing; the sponsor is thanked by e-mail',
+    bidPage.status === 200 && json(took)?.given === true && mine?.mine === true && filled.status === 200 && json(filled).state === 'live' && shown?.title === 'Acme Robots' && shown.subtitle === 'quel ********, ce robot' && shown.url === 'https://example.org/acme'
+    && /Acme Robots/.test(heard?.m || '') && /the board of Shell Shock/.test(heard.m) && /gods of the (Atomic|nuclear) [Oo]asis/.test(heard.m) && changed.status === 200 && cheers === 1 && (mails === null || (mails.length === 1 && /\$7/.test(mails[0].text) && /refunded in full/.test(mails[0].text))),
+    [bidPage.status, json(took), mine, filled.status, shown, heard, cheers, mails?.map((m) => m.subject)]);
+  // a big attraction has five places on its panel, each an auction of its own; a stall of the pier has one
+  const second = await post('/api/checkout', { item: 'board:sky-2', device: dog, bid: 500 }), secondId = `cs_test_${stripe.asked.length}`, sixth = await post('/api/checkout', { item: 'board:sky-6', device: dog, bid: 500 }), stall = await post('/api/checkout', { item: 'board:cups-2', device: dog, bid: 500 });
+  pay(secondId);
+  const tookSecond = await post('/api/checkout/confirm', { session: secondId }), places = (await owned(dog)).slots;
+  check('five places on the panel of a big attraction: "board:sky-2" is bid for and taken like any panel — beside the first, which stays free —, there is no sixth, and a stall of the pier has only one',
+    second.status === 200 && sixth.status === 400 && stall.status === 400 && json(tookSecond)?.given === true && places['board:sky-2']?.mine === true && places['board:sky-2'].bid === 500 && !places['board:sky'],
+    [second.status, sixth.status, stall.status, json(tookSecond), places['board:sky-2'], places['board:sky']]);
+  // the site of a sponsor, opened from the game, is counted on its place — the same address once in a while — and added up for the sponsor
+  const click = (slot, from) => request(port, '/api/click', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ slot }), from });
+  const c1 = json(await click('board:cups', '127.0.0.80')), c2 = json(await click('board:cups', '127.0.0.80')), c3 = json(await click('board:cups', '127.0.0.81')), nope = await click('board:nope', '127.0.0.81');
+  const { rankSponsors } = await import('../src/app/thanks.js');
+  const row = rankSponsors((await owned(randomId(16))).slots, { cups: 'Shell Shock' }).find((r) => r.name === 'Acme Robots Inc');
+  check('clicks: the site of a sponsor opened from the game is counted on its place — the same address only once in ten minutes —, nothing is counted for a place that has no site; the wall of thanks adds them up for the sponsor, with its site in a few letters',
+    c1?.clicks === 1 && c2?.clicks === 1 && c3?.clicks === 2 && nope.status === 404 && row?.clicks === 2 && row.site === 'example.org' && row.first === 'board:cups' && row.figure === '$7', [c1, c2, c3, nope.status, row]);
 }
 
 // ------------------------------------------------------------- what may not be said, nor worn as a name (decency.js)
@@ -2494,6 +2558,15 @@ async function testUserRooms(start, dist) {
     made.push(shut.knock);
     await release({ userRooms: true });
     const kept = json(await get(`/api/myroom?device=${ada}`));
+    // an administrator tries a room out: one for the account their browser is signed in to, for nothing; and reads the boards of any room
+    const boss = randomId(16), bossName = `Boss ${randomId(3).replace(/[^A-Za-z0-9]/g, 'x')}`;
+    await post('/api/account', { action: 'create', device: boss, name: bossName, password: 'a good password' });
+    const bossNoKey = await post('/api/urooms', { open: true, device: boss }), bossNoAcct = await post('/api/urooms', { open: true, device: randomId(16) }, key);
+    const bossRoom = json(await post('/api/urooms', { open: true, device: boss }, key)), bossTwice = json(await post('/api/urooms', { open: true, device: boss }, key));
+    const bossMine = json(await get(`/api/myroom?device=${boss}`)), bossSeen = json(await get(`/api/scores?board=all&room=${id}`, key)), bossUnseen = json(await get(`/api/scores?board=all&room=${id}`));
+    check('an administrator tries a room of one\'s own out for nothing — one for their account, once, with no subscription — and reads the boards of any room a player made; nobody else does either',
+      bossNoKey.status === 403 && bossNoAcct.status === 403 && /^own-[a-z0-9]{8}$/.test(bossRoom?.room?.id || '') && bossRoom.fresh === true && bossTwice?.room?.id === bossRoom.room.id && bossTwice.fresh === false && bossMine?.room?.id === bossRoom.room.id && bossMine.room.state === 'live'
+      && !!bossSeen?.room?.boards && bossSeen.room.id === id && !bossUnseen?.room, [bossNoKey.status, bossNoAcct.status, bossRoom, bossTwice?.fresh, bossMine?.room, Object.keys(bossSeen?.room?.boards || {}).length, bossUnseen?.room]);
     check('rooms of players: switched off again nothing answers any more, and nothing is lost — switched on, the room is there as it was', shut.enter.status === 404 && shut.knock.no === 'closed' && kept?.room?.id === id && kept.room.name === 'The Clubhouse 3', [shut.enter.status, shut.knock.no, kept]);
   } finally {
     for (const m of made) { try { m.c.ws.close(); } catch { /* closed */ } }
@@ -2588,6 +2661,7 @@ try {
     await section('presence', () => testPresence(server));
     await section('api', () => testApi(server));
     await section('shop', () => testShop(server));
+    await section('paid', () => testPaid(server));
     await section('accounts', () => testAccounts(server));
     await section('chatlog', () => testChatLog(server));
     await section('decency', () => testDecency(server));
@@ -2614,6 +2688,7 @@ try {
     await section('presence', () => testPresence(server));
     await section('api', () => testApi(server));
     await section('shop', () => testShop(server));
+    await section('paid', () => testPaid(server));
     await section('accounts', () => testAccounts(server));
     await section('chatlog', () => testChatLog(server));
     await section('decency', () => testDecency(server));

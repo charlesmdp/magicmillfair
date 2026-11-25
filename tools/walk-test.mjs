@@ -863,12 +863,14 @@ try {
       !!wall.sheet && wall.sheet[0] <= 2048 && wall.above.length === 9 && wall.above.every((d) => d > 0.2 && d < 3) && wall.lean > 15 && wall.lean < 40 && wall.foot > 0.8 && wall.foot < 3 && wall.faces > 0.85 && wall.pond > 15 && wall.pond < 45
       && wall.shown?.title === 'THANKS TO THOSE COMPANIES, THE GAME IS FREE FOR YOU!' && wall.shown.rows.length === 0 && wall.shown.ghosts === 3 && wall.shown.cols === 1, JSON.stringify(wall));
   }
-  // --- the relics of the world before: ten things by the paths. Each is walked up to: the game offers to look at it,
-  // looking says its line — and the tenth, that they were all found; the browser remembers which
+  // --- the relics of the world before: twenty things all over the valley. Each is walked up to: the game offers to
+  // look at it, looking says its line — and the last, that they were all found: a mushroom cloud goes up, and is
+  // theirs to raise from then on; the browser remembers which were found
   {
     const relics = await page.evaluate(async () => {
       const m = window.__mmf, R = m.world.games.relics, d = m.world.data, trees = m.world.forest.colliders();
       const out = { ids: R.list.map((q) => q.id).sort().join(','), bad: [], looks: [], quads: 0 };
+      const cloud = () => document.querySelector('.emotes [data-mushroom]').textContent;
       const frames = (n) => new Promise((res) => { const target = m.frames + n, tick = () => (m.frames >= target ? res() : requestAnimationFrame(tick)); tick(); });
       for (const q of R.list) {
         const wet = d.waterAt(q.x, q.z) > q.y - 0.2, tree = trees.some(([x, z, r]) => Math.hypot(x - q.x, z - q.z) < r + 0.3), close = R.list.some((o) => o !== q && Math.hypot(o.x - q.x, o.z - q.z) < 15);
@@ -887,14 +889,19 @@ try {
         m.interact.press(0);
         return { id: q.id, asked: asked === `Look at ${q.label}`, said: note.textContent.startsWith(q.text) && note.classList.contains('show') && note.classList.contains('long'), tail: note.textContent.slice(q.text.length) };
       };
+      out.locked = cloud(); m.mushroom(); out.refused = m.world.sparks.clouds.length;
       for (const q of R.list) out.looks.push(await look(q));
+      out.clouds = m.world.sparks.clouds.length; out.unlocked = cloud();
+      // (the periscope of the hidden shelter looks at who stands by it)
+      { const b = R.list.find((q) => q.id === 'bunker'); m.player.teleport(b.x + 3, b.z + 3, 0); await frames(3); const h = R.head, want = Math.atan2(m.player.pos.x - h.position.x, m.player.pos.z - h.position.z); out.scope = Math.abs(Math.atan2(Math.sin(h.rotation.y - want), Math.cos(h.rotation.y - want))); }
       out.again = await look(R.list[0]);
       out.kept = (localStorage.getItem('mmf.relics') || '').split(',').sort().join(',');
       return out;
     });
-    check('ten relics of the world before stand by the paths — on dry ground, off the road, out of the trees, far from one another; walked up to, each is offered to be looked at and says its line, counting; the tenth says they were all found, the browser remembers which, and one looked at again says its line and no more',
-      relics.ids === 'barrel,billboard,clock,geiger,hatch,news,sign,sunflower,tally,vendor' && relics.bad.length === 0 && relics.quads === 11
-      && relics.looks.length === 10 && relics.looks.every((l, i) => l.asked && l.said && (i < 9 ? l.tail === ` — Relic ${i + 1} of 10.` : /the last of the 10 relics/.test(l.tail)))
+    check('twenty relics of the world before stand all over the valley — on dry ground, off the road, out of the trees, far from one another; walked up to, each is offered to be looked at and says its line, counting; the last says they were all found — a mushroom cloud goes up, and the emote that was locked is theirs —, the browser remembers which, one looked at again says its line and no more; the periscope of the hidden shelter looks at who comes',
+      relics.ids === 'barrel,billboard,bunker,busstop,car,clock,dish,forecast,geiger,hatch,mailbox,meter,news,phone,scarecrow,sign,sunflower,tally,trolley,vendor' && relics.bad.length === 0 && relics.quads === 16
+      && relics.looks.length === 20 && relics.looks.every((l, i) => l.asked && l.said && (i < 19 ? l.tail === ` — Relic ${i + 1} of 20.` : /the last of the 20 relics/.test(l.tail) && /mushroom cloud is yours/.test(l.tail)))
+      && /find the 20 relics \(0 found\)/.test(relics.locked) && relics.refused === 0 && relics.clouds === 1 && relics.unlocked === '☢ Mushroom cloud' && relics.scope < 0.05
       && relics.again.asked && relics.again.said && relics.again.tail === '' && relics.kept === relics.ids, JSON.stringify(relics));
   }
   // --- the fair: the four booths of the pier, played by a bot through the pointer; the race, driven by a bot

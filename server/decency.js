@@ -4,6 +4,7 @@
 //   maskChat(text) → the line with every address of a site, and every word or phrase of the list, replaced by
 //                    ********. Plain swearing is left alone: it is slurs, strong insults thrown at somebody,
 //                    threats, calls to hurt oneself and slogans of hate that go.
+//   maskWords(text) → the same without touching addresses (the words of a sponsor's panel).
 //   nameOk(name)   → may a robot be called that? No address of a site, no "http", no @ — and none of the
 //                    words of the list, nor the swear words the chat lets pass.
 //
@@ -74,13 +75,17 @@ function spans(s, name = false) {
   return out.sort((p, q) => p[0] - q[0]);
 }
 
+/** A text with the words and the phrases of the list replaced by ******** (what a sponsor's panel says: its site may stay). */
+export function maskWords(text) {
+  if (typeof text !== 'string' || !text) return '';
+  let out = '', at = 0;
+  for (const [a, b] of spans(text)) { out += text.slice(at, a) + STARS; at = b; }
+  return out + text.slice(at);
+}
+
 /** A chat line with the addresses of sites and the words of the list replaced by ********. */
 export function maskChat(text) {
-  if (typeof text !== 'string' || !text) return '';
-  const s = text.replace(SITE, STARS);
-  let out = '', at = 0;
-  for (const [a, b] of spans(s)) { out += s.slice(at, a) + STARS; at = b; }
-  return out + s.slice(at);
+  return typeof text === 'string' && text ? maskWords(text.replace(SITE, STARS)) : '';
 }
 
 /** May a robot (an account, a line of a board) be called that? */

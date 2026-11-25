@@ -126,14 +126,24 @@
     $('urooms-box').hidden = !res.ok;
     if (!res.ok) return;
     const box = $('urooms'), rooms = res.body.rooms || [];
+    // (the rooms whose boards can be read on the page of the high scores)
+    const pick = $('scores-room'), chosen = pick.value;
+    pick.textContent = '';
+    pick.append(Object.assign(el('option', '', 'the world'), { value: '' }));
+    for (const r of rooms) pick.append(Object.assign(el('option', '', `${r.name} — of ${r.owner}`), { value: r.id }));
+    pick.value = rooms.some((r) => r.id === chosen) ? chosen : '';
+    $('scores-room-box').hidden = !rooms.length;
     if (!rooms.length) return empty(box, 'None yet.');
     box.textContent = '';
     for (const r of rooms) {
       const title = el('b', '', `${r.name} `);
       title.append(el('small', '', r.id));
       if (r.state !== 'live') title.append(el('span', 'tag old', 'asleep'));
-      box.append(item(title, `of ${r.owner} · since ${when(r.since)} · ${r.locked ? 'has a password' : 'no password'}${r.state !== 'live' && r.until ? ` · freed ${when(r.until)}` : ''}`,
-        r.state === 'live' ? Object.assign(el('a', '', 'Open it'), { href: `/?room=${encodeURIComponent(r.id)}`, target: '_blank', rel: 'noopener' }) : el('span')));
+      const acts = el('span', 'acts');
+      // (its own boards of scores: on the page of the high scores, with this room chosen)
+      acts.append(button('Its boards', 'ghost small', () => { $('scores-room').value = r.id; location.hash = 'scores'; open('scores'); }));
+      if (r.state === 'live') acts.append(Object.assign(el('a', '', 'Open it'), { href: `/?room=${encodeURIComponent(r.id)}`, target: '_blank', rel: 'noopener' }));
+      box.append(item(title, `of ${r.owner} · since ${when(r.since)} · ${r.locked ? 'has a password' : 'no password'}${r.state !== 'live' && r.until ? ` · freed ${when(r.until)}` : ''}`, acts));
     }
   }
   $('rules-form').onsubmit = async (e) => {
@@ -170,7 +180,9 @@
   let period = 'all';
   const shownInFull = new Set(), FIRST = 5;
   async function showScores(reload = true) {
-    if (reload || !boards) { const res = await api('/api/scores?board=all'); if (!res.ok) return; boards = res.body.boards; }
+    // (the boards of the world — or those of a room a player made, chosen above: scores made in it, by its members)
+    const ofRoom = $('scores-room').value;
+    if (reload || !boards) { const res = await api(`/api/scores?board=all${ofRoom ? `&room=${encodeURIComponent(ofRoom)}` : ''}`); if (!res.ok) return; boards = ofRoom ? res.body.room?.boards || {} : res.body.boards; }
     for (const b of $('period').querySelectorAll('button')) b.classList.toggle('on', b.dataset.period === period);
     const box = $('scores'), all = $('scores-empty').checked;
     box.textContent = '';
@@ -187,13 +199,13 @@
           if (said(await api(`/api/scores?board=${encodeURIComponent(id)}&name=${encodeURIComponent(e.name)}`, { method: 'DELETE' }), 'Taken off.')) showScores();
         });
         refuse.title = 'Refuse this line: the name comes off the four lists of this board';
-        row.append(el('span', 'rank', `${i + 1}`), el('span', 'who', e.name), el('span', 'num', scoreText(unit, e.score)), refuse);
+        row.append(el('span', 'rank', `${i + 1}`), el('span', 'who', e.name), el('span', 'num', scoreText(unit, e.score)), ofRoom ? el('span') : refuse); // (a room's boards are its owner's to empty)
         card.append(row);
       });
       if (list.length > FIRST) card.append(button(shownInFull.has(id) ? 'Show the first five' : `Show all ${list.length}`, 'ghost small', () => { if (shownInFull.has(id)) shownInFull.delete(id); else shownInFull.add(id); showScores(false); }));
       box.append(card);
     }
-    if (!box.children.length) empty(box, 'Nobody on any board for this period.');
+    if (!box.children.length) empty(box, ofRoom ? 'Nobody has scored in this room for this period.' : 'Nobody on any board for this period.');
   }
   // (the scores the server played again and did not believe: the owner's to take, or to let go)
   async function showFlagged() {
@@ -210,12 +222,20 @@
     }
   }
   for (const b of $('period').querySelectorAll('button')) b.onclick = () => { period = b.dataset.period; showScores(false); };
+  $('scores-room').onchange = () => showScores(true);
+  // (an administrator tries a room of one's own out: one for the account this browser is signed in to, for nothing)
+  $('uroom-open').onclick = async () => {
+    const device = (() => { try { return localStorage.getItem('mmf.device') || ''; } catch { return ''; } })();
+    if (!device) return toast('Open the game in this browser first, and sign in to your account (Settings).');
+    const res = await api('/api/urooms', { method: 'POST', body: { open: true, device } });
+    if (res.ok) { toast(res.body.fresh ? `"${res.body.room.name}" is open: its link is below, and in the game under "Who is here".` : `Your account already has a room: "${res.body.room.name}".`); showUserRooms(); } else said(res, '');
+  };
   $('scores-empty').onchange = () => showScores(false);
 
   // ---------------------------------------------------------------------------------- the sponsors, the plaques
   const placeName = (id) => {
     const [type, rest] = id.split(':');
-    if (type === 'board') return `The panel of ${me.boards.find((b) => b.id === rest)?.name || rest}`;
+    if (type === 'board') { const [game, n] = rest.split('-'); return `The panel of ${me.boards.find((b) => b.id === game)?.name || game}${n ? ` (place ${n})` : ''}`; }
     if (type === 'gondola') return `Gondola ${rest} of the big wheel`;
     if (type === 'tarp') return 'The backdrop of Bullseye Alley';
     if (type === 'village') return `The sky village "${rest}"`;

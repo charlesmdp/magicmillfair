@@ -3,10 +3,11 @@
 //
 // A long open slope between the Great Pond and the old tree. One runs up it as fast as one can while things
 // roll down it: logs, lying across — jumped, or gone round —, barrels that wander from side to side — too tall
-// to jump —, boulders — wide, and no jumping those either. It gets harder as one climbs: every kind is let go
-// at the top, but the boulders are stopped two thirds of the way down and the barrels one third, so that the
-// foot of the slope sees only logs. What hits one carries one back down a few metres: nobody is sent back to
-// the start.
+// to jump —, boulders — wide, and no jumping those either. It gets harder as one climbs, in four stretches:
+// everything is let go at the top, and at the foot of each stretch a part of what comes down is stopped (a
+// line of stakes across the slope). The first stretch sees a log now and then and nothing else; the second,
+// more logs and the first barrels; the third, boulders too; the last, everything that is let go — there is
+// always something coming. What hits one carries one back down a few metres: nobody is sent back to the start.
 //
 // What rolls is let go by the clock of the world, the same for everybody, and the climbs leave together, every
 // ten seconds, each start with its name: friends who take the same one run up side by side, with the same logs
@@ -26,10 +27,15 @@ export const HILL = {
   g: 18, jump: 6.3, // m/s², m/s up: a little over a metre high
   body: 0.35, // half the width of a climber
   period: 0.4, // s between two things let go at the top: there is always something coming
+  // The lines where part of what comes down is stopped (m up the slope): four stretches. `pass`, for each kind:
+  // of those that reach a line, the share that goes on below it (the lowest line first) — a barrel never passes
+  // the first line, a boulder never the second. So, a second: 0.4 things on the first stretch (logs), 0.9 on
+  // the second, 1.6 on the third, 2.5 on the last.
+  tiers: [16.5, 33, 49.5],
   kinds: {
-    log: { share: 0.5, r: 0.42, speed: [7, 9.5], wide: [3, 5.2], end: -3, clear: 0.72 }, // lying across: so wide; cleared by feet that high
-    barrel: { share: 0.3, r: 0.55, speed: [9, 11.5], sway: 1.7, end: 4 }, // it wanders so far to each side
-    boulder: { share: 0.2, r: 1.1, speed: [5.5, 7], end: 12 },
+    log: { share: 0.5, r: 0.42, speed: [7, 9.5], wide: [3, 5.2], end: -3, clear: 0.72, pass: [0.6, 0.7, 0.75] }, // lying across: so wide; cleared by feet that high
+    barrel: { share: 0.3, r: 0.55, speed: [9, 11.5], sway: 1.7, end: 16.5, pass: [0, 0.5, 0.6] }, // it wanders so far to each side
+    boulder: { share: 0.2, r: 1.1, speed: [5.5, 7], end: 33, pass: [0, 0, 0.5] },
   },
   knock: { time: 1.0, keep: 0.8, safe: 0.5 }, // hit: carried down so long, at so much of the thing's speed; then left alone so long
 };
@@ -46,7 +52,8 @@ export function nextStart(now, least = 3) {
 
 /**
  * The n-th thing let go at the top, at `clock` (s of the world's clock): { n, kind, r, s, u, half (how far to each
- * side of `u` it reaches), v, alive, turn (how far it has rolled, radians) } — the same for everybody.
+ * side of `u` it reaches), v, end (where it is stopped), alive, turn (how far it has rolled, radians) } — the same
+ * for everybody.
  */
 export function thingAt(n, clock, out = {}) {
   const H = HILL, pick = hash(n, 1), kind = pick < H.kinds.log.share ? 'log' : pick < H.kinds.log.share + H.kinds.barrel.share ? 'barrel' : 'boulder', K = H.kinds[kind];
@@ -57,10 +64,17 @@ export function thingAt(n, clock, out = {}) {
   const room = H.half - out.half - (kind === 'log' ? 0 : 0.2);
   out.u = (hash(n, 4) * 2 - 1) * room;
   if (kind === 'barrel') out.u = clamp(out.u + K.sway * Math.sin(age * 1.9 + hash(n, 5) * 6.28), -room, room);
-  out.alive = age >= 0 && out.s > K.end;
+  // (where it is stopped: the first line, coming down, that it does not pass — or the foot of its kind)
+  let end = K.end;
+  for (let k = H.tiers.length - 1; k >= 0; k--) if (hash(n, 6 + k) >= K.pass[k]) { end = H.tiers[k]; break; }
+  out.end = end;
+  out.alive = age >= 0 && out.s > end;
   out.turn = (v * age) / K.r;
   return out;
 }
+
+/** The stretch of the slope one is on, `s` metres up it: 1 (the foot) … 4 (the top). */
+export const stretchOf = (s) => 1 + HILL.tiers.filter((t) => s >= t).length;
 
 /** Calls `each(thing)` for everything that is rolling at `clock` (the thing is the same object every time). */
 export function rolling(clock, each) {
