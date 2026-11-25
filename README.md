@@ -605,7 +605,9 @@ the foot of the wall — is counted on the place (`POST /api/click`; the same ad
 a place; a place that changes hands starts again). The wall of thanks writes, under each name, its site and
 the clicks of all its places together — no longer where the places are — and, when there are more sponsors
 than one face of the rock holds (28), turns its pages every twelve seconds, ranks running on from page to
-page.
+page. The list at its foot ("The sponsors and their sites", `Hud.thanks`) is one to read: a line for each
+sponsor, the most generous first — its rank (the first three in gold, silver and bronze), its logo or its
+initials on a colour of their own, its name and the line under it, where it is and its site, what it put in.
 
 **Twenty-five relics** of the world before stand all over the valley (`Relics.js`; where: `RELICS` in `layout.js`
 — a wish, and the nearest free ground is taken: dry, level, off the paths, clear of the trees and of what is

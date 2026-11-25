@@ -585,6 +585,62 @@ export class Hud {
   get choosing() { return !!this._choice; }
   closeChoice() { this._choice?.(null); }
 
+  /**
+   * The sponsors of the fair, one under the other, as one reads a list of thanks: their rank (the first three
+   * in gold, silver and bronze), their logo — or their initials, on a colour of their own —, their name, the line
+   * under it, where they are and their site, and what they put in. `rows`: what app/thanks.js ranks — [{ name,
+   * tagline, logo, where, site, clicks, url, figure, unit, note }]. Resolves to the index of the one picked (its
+   * site is then opened), or to null when the list is closed (button, Escape, click outside). Nothing a sponsor
+   * wrote is read as HTML.
+   */
+  thanks(title, lead, rows) {
+    const box = this.hud.querySelector('.chooser'), list = box.querySelector('.list'), close = box.querySelector('.close');
+    this._choice?.(null);
+    box.querySelector('h2').textContent = title;
+    box.querySelector('.lead').textContent = lead || '';
+    list.textContent = '';
+    list.classList.add('thanks');
+    close.textContent = 'Close';
+    this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this.toggleBigMap(false);
+    this.input.exitLock(); // the list is clicked: the pointer must be free
+    const words = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; e.textContent = text; return e; };
+    return new Promise((resolve) => {
+      const done = (i) => { this._choice = null; box.classList.remove('on'); list.classList.remove('thanks'); close.textContent = 'Stay here'; box.onclick = null; resolve(i); };
+      this._choice = done;
+      rows.forEach((r, i) => {
+        const b = el('button', `sp${i < 3 ? ` top top${i + 1}` : ''}${r.url ? '' : ' nosite'}`);
+        b.type = 'button';
+        b.title = r.url ? `Open ${r.site || 'their site'}` : 'No site given';
+        // (the logo; or the initials, on a colour drawn from the name, when there is none or it does not load)
+        const mark = el('span', 'mark');
+        const initials = () => {
+          let h = 0;
+          for (const c of String(r.name)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+          mark.textContent = '';
+          mark.classList.add('mono');
+          mark.style.background = `hsl(${h % 360} 52% 40%)`;
+          mark.append(words('span', '', String(r.name).trim().split(/\s+/).slice(0, 2).map((w) => [...w][0] || '').join('').toUpperCase()));
+        };
+        if (r.logo) { const img = document.createElement('img'); img.alt = ''; img.loading = 'lazy'; img.decoding = 'async'; img.referrerPolicy = 'no-referrer'; img.src = r.logo; img.onerror = initials; mark.append(img); } else initials();
+        const who = el('span', 'who');
+        who.append(words('span', 'name', r.name));
+        if (r.tagline) who.append(words('span', 'line', r.tagline));
+        const meta = [r.where, r.url ? `${r.site} ↗${r.clicks ? ` · ${r.clicks} click${r.clicks === 1 ? '' : 's'}` : ''}` : ''].filter(Boolean).join(' · ');
+        if (meta) who.append(words('span', 'meta', meta));
+        const gives = el('span', 'gives');
+        if (r.figure) gives.append(words('span', 'figure', r.figure));
+        if (r.unit || r.note) gives.append(words('span', 'unit', r.figure ? [r.unit, r.note].filter(Boolean).join(' · ') : r.note));
+        b.append(words('span', 'rank', String(i + 1)), mark, who, gives);
+        b.onclick = (e) => { e.stopPropagation(); done(i); };
+        list.append(b);
+      });
+      close.onclick = (e) => { e.stopPropagation(); done(null); };
+      box.onclick = (e) => { if (e.target === box) done(null); };
+      box.classList.add('on');
+      list.scrollTop = 0;
+    });
+  }
+
   // ---------- emotes, settings
   /**
    * The emotes offered: [{ index, id, label, clip | move | rank, days, locked }] (see EMOTE_LIST). The animals of

@@ -975,8 +975,8 @@ async function boot() {
   const openThanks = () => {
     const rows = rankSponsors(shop.slots, GAME_NAMES);
     if (!rows.length) { hud.note('Nobody sponsors the fair yet. The Trading Post is at the foot of the pier: the first name cut here could be yours.', 7000); return; }
-    hud.choose('Thanks to them, the game is free', 'Every sponsor of the fair, the most generous first. Pick one to open its site — it is counted for them.',
-      rows.map((r, i) => ({ label: `#${i + 1}  ${r.name}`, note: [r.site || 'no site given', r.site ? `${r.clicks} click${r.clicks === 1 ? '' : 's'}` : '', r.figure ? `${r.figure}${r.unit ? ` ${r.unit}` : ''}` : r.note].filter(Boolean).join(' · '), color: i < 3 ? [0.9, 0.7, 0.2] : undefined })))
+    // (a list one reads: each with its logo, its name and the line under it, where it is, what it put in — Hud.thanks)
+    hud.thanks('Thanks to them, the game is free', `${rows.length === 1 ? 'One sponsor keeps' : `${rows.length} sponsors keep`} Atomic Oasis free for everybody — the most generous first. Pick one to open its site: it is counted for them.`, rows)
       .then((i) => { if (i === null) return; const r = rows[i]; if (r.url) { visitSponsor(r.first, r.url); setTimeout(() => refreshShop(), 1500); } else hud.note(`${r.name} gave no site.`, 4000); });
   };
   world.actionSources.push((p) => { const w = world.games.thanks; return w && Math.abs(p.pos.y - data.heightAt(p.pos.x, p.pos.z)) < 1.5 && (p.pos.x - w.x) ** 2 + (p.pos.z - w.z) ** 2 < 13 * 13 ? { label: 'The sponsors and their sites', run: openThanks } : null; });
@@ -1353,7 +1353,7 @@ async function boot() {
     const ads = world.games.notices.ads;
     return near(p, [ads.x, ads.z], ads.reach) ? { label: 'The games and their sponsors', run: openTrading } : null;
   });
-  Object.assign(app, { sponsorsView, openTrading });
+  Object.assign(app, { sponsorsView, openTrading, openThanks });
   // ---------- what is released, and new versions (app/Updates.js; the switches: RELEASE in app/config.js)
   // The extras of src/extras are loaded when their switch is on — as the game runs when it goes on later;
   // one that goes off again is only undone by loading the page again.

@@ -335,6 +335,28 @@ try {
       && owner.list.length === 3 && owner.list.some((t) => /^Fill it in \(administrator\)/.test(t)) && owner.list.some((t) => /^By the month · \$29/.test(t)) && owner.list.some((t) => /^For good · \$199/.test(t)),
       JSON.stringify({ free9, ways, form9, asked9: asked9 && Object.fromEntries(asked9), mine9, held9, owner }));
   }
+  // ---- the list of thanks, at the foot of the wall: every sponsor one under the other — their rank, their logo or
+  // their initials, their name and the line under it, where they are and their site, what they put in — readable
+  {
+    await page.evaluate(() => window.__mmf.openThanks());
+    await page.waitForSelector('.chooser.on .list.thanks .sp', { timeout: 20000 });
+    await page.waitForFunction(() => [...document.querySelectorAll('.chooser .list.thanks .mark img')].every((i) => i.complete), null, { timeout: 20000 }).catch(() => {});
+    const thanks = await page.evaluate(() => {
+      const rows = [...document.querySelectorAll('.chooser .list.thanks .sp')].map((b) => ({ rank: b.querySelector('.rank').textContent, name: b.querySelector('.name').textContent, line: b.querySelector('.line')?.textContent || '', meta: b.querySelector('.meta')?.textContent || '', figure: b.querySelector('.figure')?.textContent || '', unit: b.querySelector('.unit')?.textContent || '', logo: !!b.querySelector('.mark img'), mono: b.querySelector('.mark.mono')?.textContent || '', top: b.className, high: b.getBoundingClientRect().height }));
+      return { title: document.querySelector('.chooser h2').textContent, lead: document.querySelector('.chooser .lead').textContent, close: document.querySelector('.chooser .close').textContent, rows, markup: !!document.querySelector('.chooser .list.thanks .name b') };
+    });
+    await page.screenshot({ path: path.join(ROOT, 'tools/preview/shop-thanks.png') });
+    await page.keyboard.press('Escape');
+    await frames(3);
+    const shut = await page.evaluate(() => ({ on: !!document.querySelector('.chooser.on'), thanks: !!document.querySelector('.chooser .list.thanks'), close: document.querySelector('.chooser .close').textContent }));
+    const nine = thanks.rows.find((r) => r.name === 'Nine Lives Cat Cafe'), seas = thanks.rows.find((r) => r.name === 'Seven Seas Ice Cream'), acme = thanks.rows.find((r) => /Acme/.test(r.name));
+    check('the list of thanks is one to read: every sponsor one under the other, the most generous first — its rank in gold for the first, its logo (or its initials), its name and the line under it, where it is and its site, what it put in; Escape closes it',
+      thanks.title === 'Thanks to them, the game is free' && /sponsors keep Atomic Oasis free/.test(thanks.lead) && thanks.close === 'Close' && thanks.rows.length >= 3 && thanks.rows[0].name === 'Nine Lives Cat Cafe' && thanks.rows[0].rank === '1' && /top1/.test(thanks.rows[0].top)
+      && nine.figure === '$199' && nine.line === 'purring since the end of the world' && /Gondola 9/.test(nine.meta) && /cats\.example ↗/.test(nine.meta) && nine.mono === 'NL'
+      && seas?.figure === '$29' && /a month/.test(seas.unit) && seas.line === 'on the pier since ever' && /Gondola 7/.test(seas.meta)
+      && !!acme && acme.logo && /Shooting|Bullseye/.test(acme.meta) && !thanks.markup && thanks.rows.every((r) => r.high >= 58)
+      && !shut.on && !shut.thanks && shut.close === 'Stay here', JSON.stringify({ thanks, shut }));
+  }
   const atPlate = (n) => page.evaluate((n) => { const m = window.__mmf, q = m.world.places.plaques, w = q.where(n), yaw = Math.atan2(w.x - w.sx, w.z - w.sz); m.player.teleport(w.sx, w.sz, yaw); m.player.pos.y = q.y; m.rig.snap(m.player.pos, yaw + Math.PI); m.rig.yaw = yaw + Math.PI; m.rig.pitch = -0.04; m.rig.distance = 2.4; return { count: q.count, column: q.columnAt(w.sx, w.sz), row: w.row }; }, n);
   const plates = await atPlate(3);
   await frames(10);
