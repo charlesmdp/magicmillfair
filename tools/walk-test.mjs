@@ -968,6 +968,7 @@ try {
       for (const booth of g.booths.list) {
         // (a rehearsal: the game is played with a seed, as when a server draws one — what is written down of it can then be played again)
         const seed = (Math.random() * 4294967296) >>> 0;
+        input._clicks = 0; input.pointer.down = false; // (a click of the bot of the booth before, made as its game ended, is not the first of this one)
         app.fair.seed = seed; app.playBooth(booth); app.fair.seed = undefined;
         const s = app.fair.session, dyn = booth.dyn, keys = keysOn();
         let n = 0, sight = false, hidden = false;
