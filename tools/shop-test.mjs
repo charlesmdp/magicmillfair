@@ -87,12 +87,12 @@ try {
   await frames(3);
   await page.screenshot({ path: path.join(ROOT, 'tools/preview/shop-screen.png') });
   const shelves = await page.evaluate(() => ({ titles: [...document.querySelectorAll('.shop .shelf h3')].map((h) => h.textContent), cards: document.querySelectorAll('.shop .card').length, mode: document.querySelector('.shop .mode').textContent }));
-  const crown = await card('hat:crown'), jet = await card('jetpack'), lite = await card('jetlite'), gold = await card('paint:gold'), bubbles = await card('trail:bubbles'), fire = await card('fireworks');
+  const crown = await card('hat:crown'), jet = await card('jetpack'), lite = await card('jetlite'), gold = await card('paint:gold'), bubbles = await card('trail:bubbles'), lava = await card('paint:lava'), fire = await card('fireworks');
   const device = await page.evaluate(() => localStorage.getItem('mmf.device'));
-  check('the item shop: its own icon, shelves of cards with a picture and a price — two jetpacks ($30, $5), hats, paints, trails, fireworks',
-    shelves.titles.join() === 'Game Pass,Gear,Paint jobs,Just for fun,Hats,Trails,Sponsor a game' && shelves.cards >= 26 && /Test mode/.test(shelves.mode) && crown?.tag === '$9.99' && crown.picture && /legendary/.test(crown.cls)
-    && jet?.tag === '$30' && lite?.tag === 'Free today' && gold?.tag === '$19' && bubbles?.tag === '$5' && fire?.tag === '$15', // (the light jetpack: a taste of it on the first day)
-    JSON.stringify({ shelves, crown, jet, lite, gold, bubbles, fire }));
+  check('the item shop: its own icon, shelves of cards with a picture and a price — two jetpacks ($30, $5), hats, nine paints, fireworks; the trails are no longer sold: nobody who has not bought one sees them',
+    shelves.titles.join() === 'Game Pass,Gear,Paint jobs,Just for fun,Hats,Sponsor a game' && shelves.cards >= 26 && /Test mode/.test(shelves.mode) && crown?.tag === '$9.99' && crown.picture && /legendary/.test(crown.cls)
+    && jet?.tag === '$30' && lite?.tag === 'Free today' && gold?.tag === '$19' && !bubbles && lava?.tag === '$14' && lava.picture && fire?.tag === '$15', // (the light jetpack: a taste of it on the first day)
+    JSON.stringify({ shelves, crown, jet, lite, gold, bubbles, lava, fire }));
   const offer = await pick('hat:crown');
   const worn = await page.evaluate(() => window.__mmf.me.look?.hat);
   await Promise.all([page.waitForURL('https://checkout.stripe.test/**', { timeout: 20000 }), page.click('.shop .detail .acts .buy')]);

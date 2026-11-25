@@ -182,7 +182,7 @@ room; `?village=name` arrives straight in a sky village.
 | Sit down on the ground, cross-legged, wherever you are | X (or `/sit` in the chat); the first step gets up | Emotes → Sit on the ground | |
 | Lie down on the ground, wherever you are (and on the towels of the beach: step up to one) | hold X half a second (or `/lie`); the first step gets up | Emotes → Lie down | |
 | Put the bouquet down (or give it: see *Flowers*) | B | Emotes → Put the bouquet down | |
-| The item shop (the Game Pass, hats, jetpacks, paint, trails) | O, or the bag at the top right | the bag at the top right | |
+| The item shop (the Game Pass, hats, jetpacks, paint) | O, or the bag at the top right | the bag at the top right | |
 | A firework (for who has the box) | V | Emotes → Light a firework | |
 | Chat | Enter, type, Enter (Escape to cancel) | speech-bubble button | |
 | Emotes | T; 1 to 6 for the gestures, 7 to 0 to cheer, clap, jump for joy, rage; or by name in the chat: `/wave`, `/cheer`, `/bow`… | smiley button | |
@@ -363,11 +363,14 @@ the first time the panel is opened (`rankPicture`). The administrator has them a
   the game itself. Pick a card: what it is, what it costs, and a button to buy it (or to put it on and take
   it off, once it is yours). On the shelves: two **jetpacks** (the real one, a second and a half of thrust;
   the light one, three tenths of a second — three metres or so — once every fifteen seconds), twelve **hats** (crown, wizard hat, top hat, cowboy hat, straw hat,
-  cap, beanie, pirate hat, Viking helmet, chef's hat, a cap whose propeller turns, party hat), four **paint jobs** drawn by the
+  cap, beanie, pirate hat, Viking helmet, chef's hat, a cap whose propeller turns, party hat), nine **paint jobs** drawn by the
   material of the robot itself (gold plating: facets and gold dust that glitters; chrome: a mirror with the
   sky, the horizon and the grass in it; an atomic glow: a dark shell with green veins that breathe; candy
-  paint: lacquered stripes in five flavours, turning slowly), four **trails** left behind when you run
-  (stardust, confetti, bubbles, fallout) and a **box of fireworks** (V: a rocket goes up and bursts).
+  paint: lacquered stripes in five flavours, turning slowly; galaxy: a night sky with nebulas that drift and
+  stars that twinkle; meltdown: black slag with the fire of the core crawling in its cracks; plasma: filaments
+  of violet and cyan; a mirror ball: little mirrors that twinkle; hazard stripes, yellow and black) and a
+  **box of fireworks** (V: a rocket goes up and bursts). The four **trails** (stardust, confetti, bubbles,
+  fallout) are no longer sold: whoever bought one keeps it, wears it, and still finds it in their shop.
   Everybody sees what you wear and leave behind you; none of it helps at the games. The first shelf is the
   **Game Pass** (see *The shop*).
 - **Jetpack**: press jump again in the air. A second and a half of thrust, refilled on landing; it does not
@@ -415,7 +418,7 @@ the first time the panel is opened (`rankPicture`). The administrator has them a
 ### The shop
 
 While the server has no Stripe key, **nothing is sold and everything is free** — hats, jetpacks, paint,
-trails, fireworks: the item shop says so and lets everything be put on. With a key, the shop opens
+fireworks: the item shop says so and lets everything be put on. With a key, the shop opens
 (`/api/status` then says `"shop": "test"` or `"live"`) and the bag at the top right carries a gold dot:
 
 | What | Price | |
@@ -424,8 +427,7 @@ trails, fireworks: the item shop says so and lets everything be put on. With a k
 | The jetpack | $30, once | the item shop |
 | The light jetpack (a small tank, one go every fifteen seconds; free for the first day) | $5, once | the item shop |
 | A hat (each of the twelve) | $9.99, once | the item shop |
-| A paint job: gold plating, chrome, atomic glow, candy paint | $19, $15, $12, $9, once | the item shop |
-| A trail: fallout, confetti, stardust, bubbles | $12, $9, $7, $5, once | the item shop |
+| A paint job: gold plating, galaxy, chrome, meltdown, plasma, atomic glow, mirror ball, candy paint, hazard stripes | $19, $16, $15, $14, $13, $12, $12, $9, $7, once | the item shop |
 | The box of fireworks (never empty) | $15, once | the item shop |
 | The sponsor's panel over the board of a game (fourteen of them) | an auction, from $1 (see below) | step up to the board ("Sponsor this game · from $1"), or the shelf *Sponsor a game* of the item shop |
 | The backdrop of the shooting gallery | $99 a month | at the counter side of Bullseye Alley |

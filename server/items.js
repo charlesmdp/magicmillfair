@@ -6,6 +6,7 @@
 //   group   the shelf of the shop: gear, hats, paint, trails, fun
 //   rarity  how the card is dressed: uncommon, rare, epic, legendary
 //   blurb   what the card says
+//   retired no longer sold (the trails): whoever bought it keeps it and can wear it; the shop shows it to nobody else
 //
 // Nothing here changes how well anybody plays against the others: the two jetpacks are for wandering (the
 // games do without them), the rest is for show.
@@ -35,11 +36,16 @@ export const ITEMS = [
   { id: 'paint:chrome', name: 'Chrome finish', price: 1500, group: 'paint', rarity: 'epic', blurb: 'A mirror on legs: the blue of the sky on your head, the horizon in a white line, the grass under your chin.' },
   { id: 'paint:atomic', name: 'Atomic glow', price: 1200, group: 'paint', rarity: 'epic', blurb: 'A dark shell, and under it something that glows: green veins that breathe, a rim of light round you. The doctor says it is fine. The doctor glows too.' },
   { id: 'paint:candy', name: 'Candy paint', price: 900, group: 'paint', rarity: 'rare', blurb: 'Candy-cane stripes in five flavours — raspberry, lemon, mint, blueberry, bubble gum — lacquered, and turning slowly round you.' },
+  { id: 'paint:galaxy', name: 'Galaxy', price: 1600, group: 'paint', rarity: 'legendary', blurb: 'A night sky wrapped round a robot: nebulas that drift, stars that twinkle. The sky fell; somebody had to wear it.' },
+  { id: 'paint:lava', name: 'Meltdown', price: 1400, group: 'paint', rarity: 'epic', blurb: 'A crust of black slag and, in its cracks, the fire of the core, crawling as you walk. Do not hug anybody.' },
+  { id: 'paint:plasma', name: 'Plasma', price: 1300, group: 'paint', rarity: 'epic', blurb: 'Filaments of violet and cyan chase one another over a dark shell. Somewhere, a physicist weeps with joy.' },
+  { id: 'paint:disco', name: 'Mirror ball', price: 1200, group: 'paint', rarity: 'epic', blurb: 'A thousand little mirrors, each with a colour of its own, twinkling as you turn. The party is wherever you stand.' },
+  { id: 'paint:hazard', name: 'Hazard stripes', price: 700, group: 'paint', rarity: 'rare', blurb: 'Yellow and black, from top to toe. At last you are clearly labelled.' },
 
-  { id: 'trail:fallout', name: 'Fallout trail', price: 1200, group: 'trails', rarity: 'epic', blurb: 'Green sparks float up behind you wherever you run. Perfectly safe. Probably.' },
-  { id: 'trail:confetti', name: 'Confetti trail', price: 900, group: 'trails', rarity: 'rare', blurb: 'Every step is a parade: paper of all colours flutters behind you.' },
-  { id: 'trail:stardust', name: 'Stardust trail', price: 700, group: 'trails', rarity: 'rare', blurb: 'A wake of golden sparkles, like a comet with legs.' },
-  { id: 'trail:bubbles', name: 'Bubble trail', price: 500, group: 'trails', rarity: 'uncommon', blurb: 'Soap bubbles drift up behind you. Nobody can stay grumpy near bubbles.' },
+  { id: 'trail:fallout', name: 'Fallout trail', price: 1200, group: 'trails', retired: true, rarity: 'epic', blurb: 'Green sparks float up behind you wherever you run. Perfectly safe. Probably.' },
+  { id: 'trail:confetti', name: 'Confetti trail', price: 900, group: 'trails', retired: true, rarity: 'rare', blurb: 'Every step is a parade: paper of all colours flutters behind you.' },
+  { id: 'trail:stardust', name: 'Stardust trail', price: 700, group: 'trails', retired: true, rarity: 'rare', blurb: 'A wake of golden sparkles, like a comet with legs.' },
+  { id: 'trail:bubbles', name: 'Bubble trail', price: 500, group: 'trails', retired: true, rarity: 'uncommon', blurb: 'Soap bubbles drift up behind you. Nobody can stay grumpy near bubbles.' },
 ];
 
 /** The Game Pass: held by the month. `perks`: what the shop says it gives (the order of the card). */
@@ -79,9 +85,9 @@ export const itemOf = (id) => BY_ID.get(id);
 
 // What an avatar shows besides its hat travels as one small number, its "kit" (see packKit): the paint,
 // the trail, and a place kept for a companion.
-export const PAINTS = ['none', 'gold', 'chrome', 'atomic', 'candy'];
-export const TRAILS = ['none', 'stardust', 'confetti', 'bubbles', 'fallout'];
+export const PAINTS = ['none', 'gold', 'chrome', 'atomic', 'candy', 'lava', 'plasma', 'hazard', 'disco', 'galaxy'];
+export const TRAILS = ['none', 'stardust', 'confetti', 'bubbles', 'fallout']; // (no longer sold: see `retired` above)
 export const PETS = ['none', 'pup'];
-/** { paint, trail, pet } (numbers in the lists above) → 0..255 */
-export const packKit = ({ paint = 0, trail = 0, pet = 0 } = {}) => (paint & 7) | ((trail & 7) << 3) | ((pet & 3) << 6);
-export const unpackKit = (k) => ({ paint: k & 7, trail: (k >> 3) & 7, pet: (k >> 6) & 3 });
+/** { paint, trail, pet } (numbers in the lists above) → 0..255: four bits of paint, three of trail, one of companion */
+export const packKit = ({ paint = 0, trail = 0, pet = 0 } = {}) => (paint & 15) | ((trail & 7) << 4) | ((pet & 1) << 7);
+export const unpackKit = (k) => ({ paint: k & 15, trail: (k >> 4) & 7, pet: (k >> 7) & 1 });

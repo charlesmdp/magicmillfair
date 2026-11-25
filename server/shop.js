@@ -365,7 +365,7 @@ export async function shopRoute(req, ctx) {
     if (!cfg.mode) return out(501, { error: 'The shop is not open.' });
     if (limited('checkout')) return busy;
     const what = describe(body?.item), device = body?.device;
-    if (!what || !DEVICE.test(device || '')) return out(400, { error: 'Nothing of that name is sold.' });
+    if (!what || !DEVICE.test(device || '') || itemOf(what.item)?.retired) return out(400, { error: 'Nothing of that name is sold.' }); // (what is retired is no longer sold)
     // (a sky village is only for hire once the sky is open: the owner's switch)
     if (what.item.startsWith('village:') && (await readRelease(ctx)).release.sky !== 'open') return out(400, { error: 'Nothing of that name is sold.' });
     // (…and the panel of a game that waits for its switch, once that game is on: its board does not exist before)
