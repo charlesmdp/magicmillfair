@@ -15,11 +15,11 @@ export function attach(app) {
     // (a start every ten seconds on the clock everybody shares: who asks together leaves together)
     label: (game) => { const next = game.nextStart(); return `Run ${FLIP.name} — ${next.name} start in ${Math.max(1, Math.ceil(next.wait))} s`; },
     // (four short lines: the panel that shows them hangs over the top of the machine for a few seconds)
-    keys: (touch) => `You run on the spot: ${touch ? 'the arrow' : 'Space'} turns gravity over (feet on a girder only) · a girder in your way pushes you back: turn gravity over before the left tower · pushed out or fallen out, you go back to a flag — a spark takes time off${touch ? '' : ' · E: leave — H: these keys again'}`,
+    keys: (touch) => `You run on the spot: ${touch ? 'the arrow' : 'Space'} turns gravity over (feet on a girder or on another runner) · a girder or a runner in your way holds you back: get free before the left tower · out, you drop back in after a moment, 3 s added — a spark takes a quarter of a second off${touch ? '' : ' · E: leave — H: these keys again'}`,
     leave: 'Leave the run',
     left: 'Run left.',
     format: formatTime,
     board: BOARD,
-    sub: 'seven hundred metres of girders · the time to the arch, a quarter of a second off for each spark',
+    sub: 'a thousand metres of girders · the machine\'s time, 3 s for each fall, a quarter of a second off for each spark',
   });
 }

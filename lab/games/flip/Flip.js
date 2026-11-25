@@ -6,7 +6,9 @@
 // one passes on the other side; flags, sparks, the name of each stretch going by — and a run is run: a session
 // that drives the player (see PlayerController.driver), seen from the sea, side on, the whole machine in view,
 // the pier and the big wheel behind. Nobody running, it shows the first seconds of the latest start: friends
-// who leave together see the same girders.
+// who leave together see the same girders, the machine moving the same for all of them. The other visitors in
+// the machine (io.peers) are other runners: each is made a box of the course, solid for one's own run. (They see
+// one upright even when one runs head down: the network of the game does not carry which way up one is.)
 import * as THREE from 'three';
 import { Parts } from '../../../src/world/props/MeshBuilder.js';
 import { staticCaster } from '../../../src/render/Shadows.js';
@@ -16,7 +18,7 @@ import { canvasBoard } from '../../../src/world/zones/games/Boards.js';
 import { formatTime } from '../../../src/world/zones/games/course.js';
 import { PIER, pierToWorld } from '../../../src/world/layout/layout.js';
 import { V, clamp, gateArch, worldClock, nextStart, STARTS } from '../kit.js';
-import { FLIP, FLAGS, startRun, stepRun, frameAt, speedAt, stretchAt, scoreOf, lagOf, scrollAfter, botInput } from './rules.js';
+import { FLIP, FLAGS, startRun, stepRun, frameAt, speedAt, stretchAt, scoreOf, lagOf, chaseAt, scrollAfter, boxOf, botInput } from './rules.js';
 
 const CREAM = [1.32, 1.2, 0.95], RED = [1.0, 0.1, 0.1], BLUE = [0.16, 0.5, 2.0], NAVY = [0.07, 0.08, 0.2], YELLOW = [1.7, 1.3, 0.1], GOLD = [1.5, 1.05, 0.2];
 // (what carries the girders stands behind them and is seen through them: pale, so that it is not taken for something to run into)
@@ -25,7 +27,7 @@ const TONES = [RED, YELLOW, [0.15, 0.85, 0.35], [0.75, 0.3, 1.0]]; // the pennan
 const W = FLIP.window; // m: the machine between its towers
 const D = 0.9; // m: half the depth of a girder (the runner runs along its middle)
 const LOW = 1.5, TOP = 20.7; // m: the underside of the beams below, of the beams above
-const POOL = 420; // boxes: what the girders in the machine are made of at any moment
+const POOL = 480; // boxes: what the girders in the machine are made of at any moment
 const HB = FLIP.body.tall / 2;
 const P = (x, y, z) => new THREE.Vector3(x, y, z);
 const ease = (k) => k * k * (3 - 2 * k);
@@ -142,6 +144,8 @@ export class Flip {
     this._m = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._e = new THREE.Euler(); this._sc = new THREE.Vector3(); this._v = new THREE.Vector3();
     this._clock = 0;
     this.group.add(frame);
+    frame.updateMatrixWorld(true);
+    this._inv = frame.matrixWorld.clone().invert(); // (from the world to the frame of the machine: where the other runners are in it)
     this._show(this._idle(this.clock()), null);
     // ---- the gate, on the sand of the south beach, the machine out at sea before it: where one asks to run;
     // one's own best under it
@@ -168,8 +172,8 @@ export class Flip {
   nextStart() { return nextStart(this.clock(), FLIP.every, STARTS, FLIP.count); }
 
   /**
-   * What the machine shows when nobody runs in it here: the run of the latest start, as far as it has got if
-   * nothing has held it back — and, three seconds before the next start, it winds back to the beginning: who
+   * What the machine shows when nobody runs in it here: the run of the latest start, as far as it has got (it
+   * moves the same for every runner of a start) — and, three seconds before the next start, it winds back to the beginning: who
    * waits for that start is seen standing where the others see the first girder.
    */
   _idle(now) {
@@ -196,9 +200,9 @@ export class Flip {
       if (x1 < 0.03 || x0 > W - 0.03) continue;
       const a = Math.max(0, x0), b = Math.min(W, x1);
       if (g.kind !== 'girder') {
-        // a block to be passed on the other side: bands of yellow and navy
-        const h = (g.top - g.bottom) / 3;
-        for (let k = 0; k < 3; k++) put(a, g.bottom + k * h, -D + 0.12, b, g.bottom + (k + 1) * h, D - 0.12, k % 2 ? NAVY : YELLOW);
+        // a block to be passed on the other side, or the pillar of a hollow frame: bands of yellow and navy
+        const n = g.kind === 'post' ? Math.max(3, Math.round((g.top - g.bottom) / 0.7) | 1) : 3, h = (g.top - g.bottom) / n, e = g.kind === 'post' ? 0.2 : 0.12;
+        for (let k = 0; k < n; k++) put(a, g.bottom + k * h, -D + e, b, g.bottom + (k + 1) * h, D - e, k % 2 ? NAVY : YELLOW);
         continue;
       }
       // a cream web between a red flange and a blue one, a navy plate on each end that is in the machine
@@ -238,15 +242,29 @@ export class Flip {
 
   /**
    * A run is asked for: the player is put in the machine, on the first girder, and runs with the next start of
-   * the clock everybody shares. `io`: { play, note, splash }. Returns the session — the driver of the player:
+   * the clock everybody shares. `io`: { play, note, splash, peers }. Returns the session — the driver of the player:
    * see lab/games/kit.js. `auto`: true (it runs by itself, any way to the end) or 'keen' (by itself, after every
    * spark). The run goes by that clock, not by the frames: who leaves with the same start is at the same girder.
    */
   open(player, io) {
     const R = FLIP, start = this.nextStart(), st = startRun(start.wait), events = [], input = { flip: false };
     // what is shown that the rules do not keep: how far round the runner has turned, where it tumbles after a
-    // fall, how far the machine has wound back
-    const S = { turn: 0, want: 0, after: 0, acc: 0, last: this.clock(), press: false, fall: null, wind: null, touch: false }, pos = V(0, 0, 0), t = V(0, 0, 0), look = V(0, 0, 0);
+    // fall, how it drops back in; the other runners as last seen (for which way they move)
+    const S = { turn: 0, want: 0, after: 0, acc: 0, last: this.clock(), press: false, fall: null, drop: 0, touch: false, seen: new Map(), boxes: [] }, pos = V(0, 0, 0), t = V(0, 0, 0), look = V(0, 0, 0), here = V(0, 0, 0);
+    /** The other runners: the visitors seen inside the machine, each a box in one's own run (what is seen of them is a tenth of a second late). */
+    const others = (real) => {
+      const list = S.boxes, now = this.clock();
+      list.length = 0;
+      for (const p of io.peers?.() || []) {
+        here.set(p.x, p.y, p.z).applyMatrix4(this._inv);
+        if (here.x < 0.3 || here.x > W - 0.3 || Math.abs(here.z) > 1.3 || here.y < R.low || here.y > R.high) continue;
+        const was = S.seen.get(p.id), prev = was && now - was.at < 300 ? was.box : null;
+        const box = boxOf(p.id, here.x, here.y, st.scroll, prev, prev ? Math.max(real, 1e-3) : 0, 0.1);
+        S.seen.set(p.id, { box, at: now });
+        list.push(box);
+      }
+      return list;
+    };
     const session = {
       flip: this, over: false, ended: false, score: 0, time: 0, line: '', riding: false, anim: ANIM.idle, state: st, auto: false, start, scroll: st.scroll,
       step: (dt, pl, control) => {
@@ -255,31 +273,31 @@ export class Flip {
         S.touch = !!inp?.isTouch;
         if (control && inp?.jump) S.press = true;
         S.acc += real;
+        const boxes = others(real);
         while (S.acc >= R.step && !st.over) {
           S.acc -= R.step;
           if (session.auto) botInput(st, input, session.auto === 'keen' ? 'keen' : 'mid'); else { input.flip = S.press; S.press = false; }
-          stepRun(st, R.step, input, events);
+          stepRun(st, R.step, input, events, boxes);
         }
         for (const e of events) {
           if (e.type === 'tick') { if (e.n <= 3) io.play('tick'); }
           else if (e.type === 'go') io.play('start');
           else if (e.type === 'flip') { io.play('jump', { volume: 0.6 }); S.want += Math.PI; }
           else if (e.type === 'land') io.play('land', { volume: clamp(e.v / 22, 0.25, 0.8) });
-          else if (e.type === 'bump') io.play('hit', { volume: 0.5 });
+          else if (e.type === 'bump') io.play('hit', { volume: e.by === 'runner' ? 0.3 : 0.5 });
           else if (e.type === 'spark') io.play('pick');
           else if (e.type === 'flag') io.play('checkpoint');
           else if (e.type === 'fall') {
             S.fall = { kind: e.kind, t: 0, x: st.s - st.scroll, c: st.c, vy: e.kind === 'left' ? 3 : st.vy, wet: false };
-            S.wind = { from: st.scroll, to: FLAGS[st.flag].s - R.place, t: 0 };
             io.play(e.kind === 'left' ? 'hit' : 'fail');
-            io.note(e.kind === 'left' ? 'Pushed out of the machine!' : e.kind === 'sea' ? 'Out below, into the sea!' : 'Lost in the sky!');
-          } else if (e.type === 'back') { S.fall = null; S.wind = null; S.turn = S.want = 0; io.play('respawn'); }
+            io.note(`${e.kind === 'left' ? 'Pushed out of the machine!' : e.kind === 'sea' ? 'Out below, into the sea!' : 'Lost in the sky!'} +${R.fall.cost} s`);
+          } else if (e.type === 'back') { S.fall = null; S.drop = 0.3; S.turn = S.want = st.g > 0 ? Math.PI : 0; io.play('respawn'); }
           else if (e.type === 'end') { io.play('bell'); io.play('victory', { volume: 0.7 }); io.note(`Through the arch! ${formatTime(e.time)}`, 4000); }
         }
         events.length = 0;
-        // ---- where the machine is, between two steps of the rules; wound back to the flag after a fall
-        const running = st.wait <= 0 && !(st.out > 0) && !(st.hold > 0) && !st.over, v = speedAt(st.scroll + R.place), lead = running ? S.acc : 0;
-        if (S.wind) { S.wind.t += real; session.scroll = S.wind.from + (S.wind.to - S.wind.from) * ease(clamp(S.wind.t / R.fall.out, 0, 1)); } else session.scroll = st.scroll + v * lead;
+        // ---- where the machine is, between two steps of the rules: it never winds back, whatever befalls one
+        const running = st.wait <= 0 && !(st.out > 0) && !st.over, v = speedAt(st.scroll + R.place), lead = running ? S.acc : 0;
+        session.scroll = Math.min(R.length - R.place, st.scroll + (st.wait <= 0 && !st.over ? v * S.acc : 0));
         // ---- where the runner is shown: it turns about the middle of its body on the way over
         const f = S.fall;
         if (f) {
@@ -291,17 +309,20 @@ export class Flip {
           this.at(x, Math.max(-2.4, y) - HB * Math.cos(S.turn), aside - HB * Math.sin(S.turn), pos);
         } else {
           S.turn += clamp(S.want - S.turn, -real * 18, real * 18);
-          const x = st.s - st.scroll - (st.held ? v * lead : lagOf(st) > 1e-6 ? -v * lead * R.gain : 0), y = st.c + (running && st.on < 0 ? st.vy * lead : 0);
+          // (dropping back in after a fall: from a little way off, the way its feet point)
+          S.drop = Math.max(0, S.drop - real);
+          const x = st.s - st.scroll - (st.held ? v * lead : lagOf(st) > 1e-6 ? -v * lead * chaseAt(lagOf(st)) : 0), y = st.c + (running && st.on === -1 ? st.vy * lead : 0) - st.g * 1.6 * (S.drop / 0.3) ** 2;
           this.at(x, y - HB * Math.cos(S.turn), -HB * Math.sin(S.turn), pos);
         }
         pl.pos.copy(pos); pl.yaw = this.yaw; pl.pitch = 0; pl.roll = S.turn % (Math.PI * 2);
-        pl.speed = running ? v : 0; pl.grounded = st.on >= 0;
-        session.anim = f ? ANIM.jump : !running ? ANIM.idle : st.on >= 0 ? ANIM.run : ANIM.jump;
+        pl.speed = running ? v : 0; pl.grounded = st.on !== -1;
+        session.anim = f ? ANIM.jump : !running ? ANIM.idle : st.on !== -1 ? ANIM.run : ANIM.jump;
         if (st.over) { S.after += real; if (!session.over) { session.over = true; session.time = session.score = st.time; } if (S.after > 2.2) session.ended = true; }
-        const n = st.sparks, falls = st.falls;
+        // (the time on it is the machine's, the same for everybody of the start, three seconds for each fall, less the sparks)
+        const n = st.sparks, falls = st.falls, fell = `${falls} fall${falls === 1 ? '' : 's'} (+${falls * R.fall.cost} s)`;
         session.line = st.wait > 0 ? `${R.name} · ${start.name} start in ${Math.max(1, Math.ceil(st.wait))}…`
-          : st.over ? `${R.name} · ${formatTime(st.time)} · ${n} spark${n === 1 ? '' : 's'}${falls ? `, ${falls} fall${falls === 1 ? '' : 's'}` : ', not a fall'}`
-            : `${formatTime(scoreOf(st))} · ${R.stretches[stretchAt(st.s)].name}${n ? ` · ${n} spark${n === 1 ? '' : 's'}` : ''}${falls ? ` · ${falls} fall${falls === 1 ? '' : 's'}` : ''}`;
+          : st.over ? `${R.name} · ${formatTime(st.time)} · ${n} spark${n === 1 ? '' : 's'}, ${falls ? fell : 'not a fall'}`
+            : `${formatTime(scoreOf(st))} · ${R.stretches[stretchAt(st.s)].name}${n ? ` · ${n} spark${n === 1 ? '' : 's'}` : ''}${falls ? ` · ${fell}` : ''}${st.out > 0 ? ' · back in a moment' : ''}`;
       },
       /**
        * The camera: out at sea, side on, and it does not move — the whole machine in view, from the tower one

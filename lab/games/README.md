@@ -11,7 +11,7 @@ the spiral), the combs got a floor more, and two were added (the cars, the golf)
 | `waves` | **Wave Goodbye** — a bank of sand off the beach and the sea of everybody: one runs, jumps, is thrown back by what catches one, for as long as one can | the north beach: a bank at about (57, -56), the arch at (40.4, -62.4) | `node lab/games/waves/test.mjs` (35) |
 | `lava` | **Thin Crust** — the lava only rises, columns come up out of it: one keeps to the summits, and keeps a way on | a small volcano east of the head of the pier, at (188, 8); the gate on the deck of the pier head at (142.4, 13.3) | `node lab/games/lava/test.mjs` (34) |
 | `hive` | **The Bee's Knees** — four combs of wax over the sea: the cell one sets foot on gives way | the north of the bay: combs at (84, -84), the gate on the beach at (43.5, -79.5) | `node lab/games/hive/test.mjs` (29) |
-| `flip` | **Head Over Heels** — one runs on the spot in a machine of travelling girders, and one key turns gravity over | a tall frame in the sea along the south side of the pier; the gate on the south beach at (41.1, 42.8) | `node lab/games/flip/test.mjs` (36) |
+| `flip` | **Head Over Heels** — one runs on the spot in a machine of travelling girders, and one key turns gravity over | a tall frame in the sea along the south side of the pier; the gate on the south beach at (41.1, 42.8) | `node lab/games/flip/test.mjs` (44) |
 | `spiral` | **A Turn for the Worse** — a track wound round a tower: obstacles worse every turn, one touch and it is the foot again | a tower in the south of the bay, at (168, 84); the gate on the south beach at (52, 71) | `node lab/games/spiral/test.mjs` (33) |
 | `cars` | **Round the Bend** — radio-controlled cars raced on a table, seen from above | the meadow south of the acid pond: a table at (-243.5, -55.8), the arch at (-243.5, -45.9) | `node lab/games/cars/test.mjs` (39) |
 | `golf` | **Par for the Course** — nine holes of crazy golf round the acid pond | round the acid pond (-236, -82); the gate at (-225.5, -75.6) | `node lab/games/golf/test.mjs` (51) |
@@ -159,29 +159,49 @@ robots could do it: not tried). Runs differ by seed, so the board has some luck 
 
 ### Head Over Heels (`flip`)
 
-*Reworked after its owner tried it ("four or five times as long, more room, a rhythm that quickens").*
+*Reworked twice after its owner tried it: first "four or five times as long, more room, a rhythm that quickens",
+then "300 m more, more kinds of obstacle, and players who get in each other's way".*
 
 A machine stands in the sea along the south side of the pier, ten metres off its head: a tall striped frame in
 which painted girders travel from right to left, as the scenery does in the flying theatre (one asks to play on
 the sand of the south beach, at (41.1, 42.8)). One runs in it on the spot, a third of the way from its left
-end, faster and faster (7 m/s at the start, 17 at the end, over some 700 m of course), and has **one key: it
+end, faster and faster (7 m/s at the start, 18.5 at the end, over 1000 m of course), and has **one key: it
 turns gravity over**. One then falls up to the underside of what is above — or back down onto what is below —
-and runs on there, head down, in a space sixteen metres high with five or six levels of girders. Gravity is
-turned over only while one's feet are on a girder (or have just left it), never in the air.
+and runs on there, head down, in a space sixteen metres high. Gravity is turned over only while one's feet are
+on something (a girder, another runner) or have just left it, never in the air.
 
-**Running into the end of a girder does not end the run at once**: the girder holds one back while the others
-go by, and pushes one towards the left end of the machine. Freed in time — gravity turned over, most often —
-one runs a little faster than the girders until one is back in one's place. Pushed out at the left end, or
-fallen out above or below, one is put back at the last flag (the machine winds back) and the clock runs on.
-Sparks hang along the less obvious ways: each one caught takes a quarter of a second off — they are what tells
-the runs apart.
+Fourteen stretches, a flag every seventy metres: Easy Does It, The Steps, The Long Drop, In Step, **The Frames**
+(hollow boxes: one runs under one and on top of the next, floor and ceiling in pieces), The Teeth, Upstairs
+Downstairs, **Wide Open** (long girders far apart), **The Scatter** (short girders on four levels between an
+unbroken floor and ceiling), Open Air, The Comb, **Crossing Stairs** (a staircase going down crosses one going
+up: one hops between them in rhythm), Sea to Sky, The Dash.
 
-A start every ten seconds on the shared clock, each with its name: those who leave together see the same
-girders, and a browser that is not playing shows the latest start. The bot's run: 56.6 s in the running game.
-For the game's boards: `flip: { order: 'asc', min: 50000, max: 600000 }`.
+**A girder in one's way does not end the run at once**: it holds one back while the others go by, and pushes
+one towards the left end of the machine. Freed in time, one runs faster than the girders until one is back in
+one's place — the further behind, the faster. **The machine never winds back**: pushed out at the left end, or
+fallen out above or below, one drops back in after a moment, and pays for it in time. One's time is the time
+the machine takes (84.5 s, the same for everybody) plus 3 s for every fall, less a quarter of a second for
+every spark caught.
 
-What it does not do: **other visitors see the runner upright inside the ceiling** — the game's network does not
-carry which way up one is (it would take a message of the game's own).
+**Several players**: a start every ten seconds on the shared clock, and those who leave together are in the
+same machine at the same metre from first to last. The other runners are solid: one cannot run through
+another — running into a back holds one up as the end of a girder does — and one can land on another, on its
+head from above, under its feet from below. So two runners with opposite gravities who meet between two
+girders stop against each other and run on, each standing on the other; when one turns gravity over, the other
+falls on. Who was held up catches up, and queues behind who is ahead. The game reads where the other visitors
+are from what the game's network already carries (a tenth of a second late), and is forgiving with it: a
+runner is solid only once it has been seen for a moment, and never from inside one.
+
+Its bot: 76.5 s without a fall (76 flips; the tightest moment to flip is half a second wide in the first
+third, 0.22 s after); with every one of the 67 sparks, 67.8 s. For the game's boards:
+`flip: { order: 'asc', min: 67000, max: 600_000 }`.
+
+What it does not do, and what nobody has seen: **two real players have not been tried** — only runners
+simulated by the rules, each fed the other a tenth of a second late. Other visitors see a runner upright even
+when it runs head down (the game's network does not carry which way up one is), so the game guesses it from
+the girders round them. Runners who leave together start in the same spot and are solid for each other only
+once they have parted. A runner of another start is solid where one sees it, though it is at another metre of
+the course.
 
 ### A Turn for the Worse (`spiral`)
 
