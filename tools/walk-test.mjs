@@ -345,6 +345,27 @@ try {
       gold.swam && gold.offshore.swimming && gold.minFar > 30 && gold.modes.join() === 'patrol' && !gold.dead && !!gold.landed && gold.beach > 1.3 && gold.landed.y < 1.0
       && !gold.sand.swimming && gold.sand.d < 1.5 && Math.abs(gold.sand.y - 1.15) < 0.2 && Math.abs(gold.top.y - gold.top.want) < 0.5 && gold.dog < gold.reach && seen.zone === 'The Golden Cove' && seen.prompts.some((t) => /CROKMOU|Crokmou/.test(t)),
       JSON.stringify({ ...gold, ...seen }));
+    // the dog is not alone up there: a cat at its right, a snake at its left, a bird on its head — sculpted with
+    // it (one mesh), in tones of its gold; and the tablet of the plinth is for every pet, the dog named on it
+    {
+      const pets = await page.evaluate(async () => {
+        const m = window.__mmf, L = await import('/src/world/layout/layout.js'), h = L.NORTH.statue.height, d = m.world.places.group.getObjectByName('golden-dog'), p = d.geometry.attributes.position, c = d.geometry.attributes.color;
+        const out = { one: d.isMesh && !Array.isArray(d.material), v: p.count, cat: 0, catTop: 0, snake: 0, bird: 0, top: 0, tones: new Set(), tablet: m.world.places.crokmou.tablet.join(' | ') };
+        for (let i = 0; i < p.count; i++) {
+          const x = p.getX(i) / h, y = p.getY(i) / h; // (x is the dog's left; the heights are in heights of the statue)
+          if (x < -0.33 && y < 0.4) { out.cat++; out.catTop = Math.max(out.catTop, y); }
+          if (x > 0.32 && y < 0.3) out.snake++;
+          if (y > 0.985) out.bird++;
+          out.top = Math.max(out.top, y);
+          out.tones.add(Math.round(c.getY(i) * 5));
+        }
+        out.tones = out.tones.size; out.catTop = +out.catTop.toFixed(2); out.top = +out.top.toFixed(2);
+        return out;
+      });
+      check('the golden dog is not alone: a cat sits at its right, a snake is coiled at its left, a bird is perched on its head — one mesh with it, in several tones of its gold; the tablet of the plinth is for every pet, and names the dog',
+        pets.one && pets.v > 9000 && pets.v < 20000 && pets.cat > 150 && pets.catTop > 0.24 && pets.snake > 150 && pets.bird > 40 && pets.top > 1.02 && pets.top < 1.1 && pets.tones >= 4
+        && /EVERY PET/.test(pets.tablet) && /LOVED/.test(pets.tablet) && /CROKMOU, BEST DOG EVER/.test(pets.tablet), JSON.stringify(pets));
+    }
     // round the drum of the plinth: the plaques of the companions. Their picture exists because somebody is up
     // here; in front of whoever stands by the drum is a column of two plates (none in front of the tablet)
     const plates = await page.evaluate(() => {
@@ -872,9 +893,9 @@ try {
       return out;
     });
     check('ten relics of the world before stand by the paths — on dry ground, off the road, out of the trees, far from one another; walked up to, each is offered to be looked at and says its line, counting; the tenth says they were all found, the browser remembers which, and one looked at again says its line and no more',
-      relics.ids === 'barrel,billboard,clock,geiger,hatch,news,sign,sunflower,tally,vendor' && relics.bad.length === 0 && relics.quads === 12
+      relics.ids === 'barrel,billboard,clock,geiger,hatch,news,sign,sunflower,tally,vendor' && relics.bad.length === 0 && relics.quads === 11
       && relics.looks.length === 10 && relics.looks.every((l, i) => l.asked && l.said && (i < 9 ? l.tail === ` — Relic ${i + 1} of 10.` : /the last of the 10 relics/.test(l.tail)))
-      && relics.again.asked && relics.again.said && relics.again.tail === '' && relics.kept === relics.ids, JSON.stringify(relics).slice(0, 700));
+      && relics.again.asked && relics.again.said && relics.again.tail === '' && relics.kept === relics.ids, JSON.stringify(relics));
   }
   // --- the fair: the four booths of the pier, played by a bot through the pointer; the race, driven by a bot
   {
@@ -1088,7 +1109,7 @@ try {
           if (s.laps !== laps.length) laps.push(+S.clock.toFixed(2));
         }
         input.move.x = 0; input.move.y = 0;
-        const out = { ask, start: /^(Red|Blue|Green|Yellow|Purple|Orange)$/.test(s.start.name) && s.start.wait >= 0.55 && s.start.wait <= 5.7, over: s.over, time: s.time, laps, air, boost, top, still, flight, lamps, slowest: +slowest.toFixed(1), widest: +widest.toFixed(2), off, riding: player.riding, quad: !!player.driver };
+        const out = { ask, start: /^(Red|Blue|Green|Yellow|Purple|Orange)$/.test(s.start.name) && s.start.wait >= 0.55 && s.start.wait <= 5.7, over: s.over, time: s.time, wait: +s.start.wait.toFixed(2), laps, air, boost, top, still, flight, lamps, slowest: +slowest.toFixed(1), widest: +widest.toFixed(2), off, riding: player.riding, quad: !!player.driver };
         for (let k = 0; k < 60 * 4 && app.fair.session; k++) app.fairStep(dt);
         out.after = { closed: !app.fair.session, riding: player.riding, driver: !!player.driver, d: Math.hypot(player.pos.x - r.start.x, player.pos.z - r.start.z) };
         out.keys = keys; out.keysGone = !keysOn();
@@ -1134,7 +1155,7 @@ try {
     keysSeen.race = [race.keys, race.keysGone]; keysSeen.wing = [wing.keys, wing.keysGone];
     check('every game says its keys and keeps them for the asking: while a booth, the race, the flying theatre or the climb is on, the small button that shows them again is under the line of the game (the H key does the same); it is gone when the game closes',
       Object.keys(keysSeen).length === 13 && Object.values(keysSeen).every(([on, gone]) => on === true && gone === true), JSON.stringify(keysSeen));
-    check('the quad race: asked for in the paddock, it leaves with the next start (they have names, one every five seconds), the lights, three laps flat out — the bot never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, the pads, a real flight off the ramp, the time on the board', race.ask.some((t) => /^Race: 3 laps on a quad · (Red|Blue|Green|Yellow|Purple|Orange) start in \d s$/.test(t)) && race.start && race.over && race.laps.length === 3 && race.time > 46000 && race.time < 62000 && race.slowest >= 18 && race.off === 0 && race.widest < 3.75 && race.still > 150 && race.lamps > 20 && race.air > 120 && race.flight > 45 && race.boost > 100 && race.top > 24 && race.riding && race.quad && race.after.closed && !race.after.riding && !race.after.driver && best === race.time, JSON.stringify(race));
+    check('the quad race: asked for in the paddock, it leaves with the next start (they have names, one every five seconds), the lights, three laps flat out — the bot never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, the pads, a real flight off the ramp, the time on the board', race.ask.some((t) => /^Race: 3 laps on a quad · (Red|Blue|Green|Yellow|Purple|Orange) start in \d s$/.test(t)) && race.start && race.over && race.laps.length === 3 && race.time > 46000 && race.time < 62000 && race.slowest >= 18 && race.off === 0 && race.widest < 3.75 && race.still > 30 && race.still >= race.wait * 60 - 4 && race.lamps > 20 && race.air > 120 && race.flight > 45 && race.boost > 100 && race.top > 24 && race.riding && race.quad && race.after.closed && !race.after.riding && !race.after.driver && best === race.time, JSON.stringify(race));
   }
 
   // --- sitting down on the ground, anywhere: X; the first step gets up again

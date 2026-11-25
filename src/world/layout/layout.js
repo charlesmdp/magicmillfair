@@ -254,7 +254,9 @@ export const NORTH = {
   beach: { face: 9, slope: 0.2, drop: 0.36, reach: 24 },
   ledge: { x: 226.5, z: -333, rx: 11, rz: 10.5, y: 44.4 },
   stairs: [{ width: 2.3, landing: 1.2, points: [[203.4, -267.6, 1.5], [212, -285, 16.2], [219, -305, 31.2], [227, -322.6, 44.4]] }],
-  statue: { x: 225.5, z: -335, yaw: -0.3, height: 15, name: 'CROKMOU', plaque: 'BEST DOG EVER' },
+  // (the dog, and with it a cat, a snake and a bird; the tablet of the plinth is for every pet — `memorial`, two
+  // lines, and `kin` under them — and names the dog, who keeps watch for them all)
+  statue: { x: 225.5, z: -335, yaw: -0.3, height: 15, name: 'CROKMOU', plaque: 'BEST DOG EVER', memorial: ['TO EVERY PET', 'WE EVER LOVED'], kin: 'Dogs, cats, birds, snakes — the best of us.' },
 };
 // Where the capes are rock, the land stands high right at the water: sea cliffs, fluted and green, of about
 // `height` metres (more or less along the coast). They only exist outside the playable valley.
