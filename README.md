@@ -107,7 +107,7 @@ Worker sees — `"npc": true`, `"admin": true` — without showing any of it.
 | `ADMIN_KEY` | **The administrator's key**: any long password of your own invention. In the game, type `/admin <the key>` in the chat (it is checked by the server and sent to nobody) — or open the site once with `#admin=<the key>` at the end of the address (typed after the address of a page that is already open, it works too; spaces round the key do not count, and the game says why when it is refused). Without this secret, nobody is the administrator. |
 | `SCORE_SECRET` | Optional: signs the notes of the game runs (see "Cheating"). The notebook draws one by itself otherwise. |
 | `STRIPE_SECRET_KEY` | **Opens the shop.** The secret key of your Stripe account: `sk_test_…` to try with test cards, `sk_live_…` to sell. Without it nothing is sold and everything is free (see *The shop*). |
-| `STRIPE_WEBHOOK_SECRET` | The signing secret (`whsec_…`) of the webhook that Stripe calls when something is paid: without it no payment is ever believed. See *The shop* for the three steps. |
+| `STRIPE_WEBHOOK_SECRET` | The signing secret (`whsec_…`) of the webhook that Stripe calls when something is paid, when a month more is paid and when a subscription ends. A payment is also believed when its buyer comes back to the game (the server then asks Stripe itself), so a shop without it still gives what was paid for — but nothing then tells of a buyer who closed the page before coming back, nor of a subscription that ended: its place, its pass or its room would never be handed back. See *The shop* for the steps. |
 | `STRIPE_PUBLISHABLE_KEY` | Optional: Stripe's *publishable* key (`pk_test_…` / `pk_live_…`, of the same mode as the secret key). With it the payment form is shown **inside the game**, on a card, instead of sending the visitor to Stripe's page (see *The shop*, step 5). It is not a secret — browsers are meant to read it — but adding it as one makes it survive deployments. |
 
 Billy answers whatever is said to him — a question, a hello, a bad day — one line at a time, and follows
@@ -493,8 +493,11 @@ is shown on a card inside the game and nobody leaves: step 5 below.)
    of test mode (`sk_test_…`): payments are then made with Stripe's test cards (4242 4242 4242 4242) and no
    money moves; the game says "Test mode: no real money" on what it offers.
 2. *Developers → Webhooks → Add endpoint*: the address is `https://<your site>/api/stripe/webhook`, the
-   events are `checkout.session.completed` and `customer.subscription.deleted`. Copy its **signing secret**
-   (`whsec_…`) into the secret `STRIPE_WEBHOOK_SECRET`.
+   events are `checkout.session.completed` (something was paid), `customer.subscription.deleted` (a pass, a
+   room or a place by the month was stopped: it is handed back) and `invoice.paid` (a month more was paid: it
+   is counted in the takings). Copy its **signing secret** (`whsec_…`) into the secret
+   `STRIPE_WEBHOOK_SECRET`. (A buyer who comes back to the game is given what they paid for even before the
+   webhook says so — see *Becoming a sponsor* — but the webhook is the only thing that tells of an end.)
 3. Deploy once more, check `https://<your site>/api/status` (`"shop": "test"`), buy a hat with a test card.
    To sell for real, do the same two steps in live mode and replace the two secrets with the live ones.
 4. For the Game Pass: *Settings → Billing → Customer portal*, switch it on once (in test mode, then in
