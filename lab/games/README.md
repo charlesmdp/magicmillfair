@@ -42,6 +42,10 @@ A folder for each, four files (see the top of `kit.js`, which they share):
 
 `kit.js` holds what they share (the plug into the game, the starts on the shared clock, the arch where one asks
 to play, a sign on a stake), `check.mjs` what their checks share (the lines PASS / FAIL, the ground of the world).
+`tunes.js` is their music: a tune for each game, in the notation of the climb's (`src/audio/tunes.js`), written
+on the game's own synthesiser while a run is on — the world's music steps back meanwhile — with voices that
+come in as the run goes on; `node lab/games/tunes-test.mjs` (165) checks the player and the tunes. Nobody has
+heard them yet: that is for their owner's ears.
 `shots.mjs` takes pictures of a game in the running game: `node lab/games/shots.mjs waves far=30,26,-78,-115,-28
 gate=gate a=play:8` (its top says how).
 
