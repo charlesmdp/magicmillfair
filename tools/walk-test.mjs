@@ -516,7 +516,7 @@ try {
 
   // --- sitting down to work on a beanbag, lying in a hammock
   {
-    const spot = await page.evaluate(() => { const w = window.__mmf.world, s = w.seats.find((q) => q.work), h = w.seats.find((q) => q.pose === 6); return { s: [s.x, s.z], h: [h.x, h.z] }; });
+    const spot = await page.evaluate(() => { const w = window.__mmf.world, s = w.seats.find((q) => q.work), h = w.seats.find((q) => q.pose === 6 && !/towel/.test(q.label || '')), t = w.seats.find((q) => /towel/.test(q.label || '')); return { s: [s.x, s.z], h: [h.x, h.z], t: t ? [t.x, t.z] : null }; });
     await place(spot.s[0] + 0.5, spot.s[1] + 0.9, 0);
     await frames(3);
     const offered = await prompt();
@@ -539,6 +539,15 @@ try {
     await page.keyboard.press('Space');
     await frames(6);
     check('lies down in a hammock, jumps out of it', offer2.includes('Lie down') && lying === 6 && !(await page.evaluate(() => !!window.__mmf.player.seat)), `${JSON.stringify(offer2)}, pose ${lying}`);
+    await place(spot.t[0] + 1.1, spot.t[1] + 0.3, 0);
+    await frames(3);
+    const offer3 = await prompt();
+    await page.keyboard.press('KeyE');
+    await frames(10);
+    const towel = await page.evaluate(() => window.__mmf.player.anim);
+    await page.keyboard.press('Space');
+    await frames(6);
+    check('lies down on a towel of the beach, and is up again with a jump', offer3.includes('Lie down on the towel') && towel === 6 && !(await page.evaluate(() => !!window.__mmf.player.seat)), `${JSON.stringify(offer3)}, pose ${towel}`);
   }
 
   // --- the big wheel: boarded from the platform when a car comes by

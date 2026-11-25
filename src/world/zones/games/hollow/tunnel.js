@@ -1,12 +1,15 @@
-// The Hollow Hill: its rules. No renderer here: the game, its checks and the flyer that plays by itself all
+// The Nuclear Cave (it was The Hollow Hill: the code still says `hollow`): its rules. No renderer here: the game, its checks and the flyer that plays by itself all
 // read this.
 //
 // A race against the clock, flown under the ground: one lap of a great cave dug in the hill behind the sea
 // cliff — a ring of galleries and halls, half a kilometre round, never nearer the open air than a dozen metres
 // of rock. One flies by oneself: the flyer goes forward, one only steers (left and right, up and down) and
 // chooses when to burst (it is spent, it comes back slowly, and every ring flown through gives some back).
-// What one hits — a column, a tooth of rock, a curtain missed — does not end the flight: it throws one aside
-// and all but stops one, and the clock runs on. The walls rub: one loses speed along them.
+// What one hits — a column, a tooth of rock, a blast door missed — does not end the flight: it throws one aside
+// and halves one's speed, and the clock runs on. The walls rub: one loses speed along them. What one flies past
+// closely, without touching, gives some burst back — and so do the atoms, little lights that lead into every
+// ring: the fast lap is the daring one. The cave was a store of what the world before could not get rid of:
+// drums along its walls, pools that glow, pipes, and names to match (`titles`).
 //   The Lantern Gallery     a few columns, left and right
 //   The Forest of Columns   a hall as wide as a church, full of them
 //   The Teeth               rows of rock from the roof, rows from the floor: under, over, under
@@ -24,16 +27,21 @@
 // Time advances in steps of 1/120 s whatever the frame rate.
 
 export const HOLLOW = {
-  name: 'The Hollow Hill',
+  name: 'The Nuclear Cave',
   step: 1 / 120,
   cruise: 18, burst: 27, accel: 6, // m/s by itself, and bursting; how fast speed comes back
   agility: 12, snap: 60, // m/s across and up at most; how fast one gets there (m/s²)
-  body: 0.55, skin: 0.5, // the flyer, as a ball; and how far the rough of the rock comes in from where the wall is drawn
+  body: 0.42, skin: 0.18, // the flyer, as a ball; and how far the rough of the rock comes in from where the wall is drawn (what one sees is what one hits)
   floor: 0.75, // the cave has a floor: flat, so much of its half height under its middle line
-  crash: { keep: 0.25, least: 4.5, stun: 0.5, aside: 6, shield: 0.7 }, // what a hit leaves of the speed; for how long one hardly steers; and for how long nothing else knocks one (a curtain apart)
+  crash: { keep: 0.5, least: 8, stun: 0.35, aside: 6, shield: 0.7 }, // what a hit leaves of the speed; for how long one hardly steers; and for how long nothing else knocks one (a curtain apart)
   rub: 0.9, bump: 5, // along a wall: so much of the speed lost a second; and a wall met faster than this across is a knock
   gauge: { time: 3.2, fill: 16, ring: 0.3 }, // s of burst in a full gauge; s for it to come back by itself; what a ring gives back
   ring: { r: 2.1, kick: 4 }, // a ring: its radius, and the push it gives (m/s, soon gone)
+  close: { reach: 0.9, give: 0.14 }, // a thing flown past within so much of touching it: so much burst back (once a lap for each)
+  atom: { r: 1.25, give: 0.045, lead: [13, 10, 7, 4] }, // the atoms: taken within so much; what each gives back; how far before its ring each one is
+  // what each stretch is called (the names of the nodes, below, are the ones the code goes by)
+  titles: { 'The Start Hall': 'The Airlock', 'The Lantern Gallery': 'The Waste Gallery', 'The Forest of Columns': 'The Cooling Hall', 'The Teeth': 'The Teeth', 'The Screw': 'The Centrifuge',
+    'The Lake': 'The Cooling Pond', 'The Curtains': 'The Blast Doors', 'The Narrows': 'The Service Duct', 'The Crystal Hall': 'The Core', 'The Way Home': 'The Way Out' },
   count: 3, // s of count before the off
   water: 7.4, // m above the sea: the level of the lake (and of whatever part of the cave is lower)
   mouth: { x: 89.4, z: 110.6, yaw: 0 }, // outside: before the mouth of the mine at the foot of the cliff, where one asks
@@ -190,7 +198,21 @@ export function course() {
   things.sort((p, q) => p.s - q.s); rings.sort((p, q) => p.s - q.s);
   things.forEach((t, i) => { t.id = i; t.reach = t.kind === 'curtain' ? 0.6 : Math.max(t.r1, t.r2) + H.body; });
   rings.forEach((r, i) => { r.id = i; });
-  laid = { length: L.length, stretches: L.stretches.map((q) => ({ name: q.name, from: q.from, to: q.to })), things, rings };
+  // the atoms: a few lights before every ring, coming in from nearer the middle of the cave — none inside a thing
+  const atoms = [];
+  for (const r of rings) for (const back of H.atom.lead) {
+    const s = (((r.s - back) % L.length) + L.length) % L.length, k = 1 - back / 30, u = r.u * k, v = r.v * k;
+    const inside = things.some((t) => {
+      let d = Math.abs(s - t.s); if (d > L.length / 2) d = L.length - d;
+      if (t.kind === 'curtain') return d < 0.8 && Math.hypot(u - t.u, v - t.v) > t.r - 0.9;
+      const eu = t.u2 - t.u1, ev = t.v2 - t.v1, l2 = eu * eu + ev * ev, w = l2 > 1e-9 ? clamp(((u - t.u1) * eu + (v - t.v1) * ev) / l2, 0, 1) : 0;
+      return d < 2.2 && Math.hypot(u - (t.u1 + eu * w), v - (t.v1 + ev * w)) < t.r1 + (t.r2 - t.r1) * w + 1.1;
+    });
+    const here = tunnelAt(s, {}); // (and none in the rock, nor in the water: the cave is not as wide everywhere)
+    if (!inside && (u / (here.a - 0.9)) ** 2 + (v / (here.b - 0.9)) ** 2 <= 1 && v >= here.water + 0.6 && v >= -here.b * H.floor + 0.7) atoms.push({ s, u, v });
+  }
+  atoms.sort((p, q) => p.s - q.s).forEach((a, i) => { a.id = i; });
+  laid = { length: L.length, stretches: L.stretches.map((q) => ({ name: q.name, from: q.from, to: q.to })), things, rings, atoms };
   return laid;
 }
 
@@ -205,12 +227,13 @@ export function stretchAt(s) {
 
 /** A flyer waiting for the off in the Start Hall: see stepFlight. */
 export function startFlight() {
-  return { s: 2, u: 0, v: 0, vu: 0, vv: 0, speed: 0, extra: 0, gauge: 1, bursting: false, stun: 0, rub: 0, wet: false, wait: HOLLOW.count, gone: false, clock: 0, acc: 0, over: false, time: 0, hits: 0, rings: 0, taken: {}, shield: 0, stretch: 0, top: 0 };
+  return { s: 2, u: 0, v: 0, vu: 0, vv: 0, speed: 0, extra: 0, gauge: 1, bursting: false, stun: 0, rub: 0, wet: false, wait: HOLLOW.count, gone: false, clock: 0, acc: 0, over: false, time: 0, hits: 0, rings: 0, taken: {}, near: {}, close: 0, got: {}, atoms: 0, shield: 0, stretch: 0, top: 0 };
 }
 
 /**
  * Advances a flight by `dt` seconds. `input`: { x (-1 left … 1 right), y (-1 down … 1 up), burst (held) }.
- * `events`: { type: 'go' | 'crash' (kind) | 'knock' (a wall met hard) | 'ring' | 'stretch' (n) | 'over' (time) }.
+ * `events`: { type: 'go' | 'crash' (kind) | 'knock' (a wall met hard) | 'close' (a thing flown past closely) | 'ring' |
+ * 'atom' (id) | 'stretch' (n) | 'over' (time) }.
  */
 export function stepFlight(st, dt, input, events) {
   st.acc += Math.min(dt, 0.25);
@@ -250,7 +273,7 @@ function sub(st, dt, input, events) {
     rubbing = true;
   }
   st.wet = false;
-  const low = -f.b * H.floor + H.body + 0.25;
+  const low = -f.b * H.floor + H.body + 0.4; // (clear of what lies on the floor)
   if (st.v < low) { st.v = low; if (st.vv < 0) st.vv = 0; rubbing = true; }
   if (st.v < f.water + 0.4) { st.v = f.water + 0.4; if (st.vv < 0) st.vv = 0; st.wet = true; st.speed -= st.speed * 0.5 * dt; }
   if (rubbing) { st.speed -= st.speed * H.rub * dt; st.rub += dt; }
@@ -272,7 +295,12 @@ function sub(st, dt, input, events) {
     // a stick: how near its middle line is the flyer?
     const eu = t.u2 - t.u1, ev = t.v2 - t.v1, l2 = eu * eu + ev * ev, w = l2 > 1e-9 ? clamp(((st.u - t.u1) * eu + (st.v - t.v1) * ev) / l2, 0, 1) : 0;
     const qu = t.u1 + eu * w, qv = t.v1 + ev * w, r = t.r1 + (t.r2 - t.r1) * w + H.body, du = st.u - qu, dv = st.v - qv;
-    if (d * d + du * du + dv * dv >= r * r) continue;
+    if (d * d + du * du + dv * dv >= r * r) {
+      // (not touched — but flown past closely: some burst back, once a lap for each thing)
+      let d0 = m0 - t.s; if (d0 > L / 2) d0 -= L; else if (d0 < -L / 2) d0 += L;
+      if (d0 < 0 && d >= 0 && st.near[t.id] !== lap && du * du + dv * dv < (r + H.close.reach) ** 2) { st.near[t.id] = lap; st.close++; st.gauge = Math.min(1, st.gauge + H.close.give); events?.push({ type: 'close', kind: t.kind }); }
+      continue;
+    }
     // thrown aside, away from it: across the cave, whichever way is nearer
     const far = Math.hypot(du, dv);
     let nu = far > 0.05 ? du / far : l2 > 1e-9 ? -ev / Math.sqrt(l2) : 0, nv = far > 0.05 ? dv / far : l2 > 1e-9 ? eu / Math.sqrt(l2) : 1;
@@ -288,6 +316,16 @@ function sub(st, dt, input, events) {
     if (!(d0 < 0 && d >= 0) || Math.hypot(st.u - r.u, st.v - r.v) > r.r) continue;
     st.taken[r.id] = lap; st.rings++; st.gauge = Math.min(1, st.gauge + H.gauge.ring); st.extra = Math.max(st.extra, H.ring.kick);
     events?.push({ type: 'ring', id: r.id });
+  }
+  // ---- the atoms
+  for (const a of C.atoms) {
+    if (st.got[a.id] === lap) continue;
+    let d = m - a.s; if (d > L / 2) d -= L; else if (d < -L / 2) d += L;
+    if (d < 0 || d > 2) continue;
+    let d0 = m0 - a.s; if (d0 > L / 2) d0 -= L; else if (d0 < -L / 2) d0 += L;
+    if (d0 >= 0 || Math.hypot(st.u - a.u, st.v - a.v) > H.atom.r) continue;
+    st.got[a.id] = lap; st.atoms++; st.gauge = Math.min(1, st.gauge + H.atom.give);
+    events?.push({ type: 'atom', id: a.id });
   }
   // ---- where one is: the stretch, the end of the lap
   if (st.speed + st.extra > st.top) st.top = st.speed + st.extra;

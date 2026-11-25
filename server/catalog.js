@@ -28,7 +28,7 @@ export const nextBid = (bid = 0) => (bid > 0 ? bid + Math.max(100, Math.ceil(bid
 export const BOARDS = {
   sky: 'Mostly Up', race: 'Quadmania', wing: 'Flappy Robot', shoot: 'Bullseye Alley', mole: 'Whack-a-Mole', milk: 'Feed the Clown', bell: 'Ring the Bell',
   hoop: 'Buzzer Beater', stack: 'Stack It', geiger: 'Geiger Says', fish: 'Hook, Line & Sinker', scram: 'SCRAM!', cups: 'Shell Shock', run: 'Meltdown Run',
-  slide: 'Mostly Down', pond: 'The Endless Pond', boats: 'The Little Regatta', hill: 'Uphill Battle', crack: 'Between a Rock', hollow: 'The Hollow Hill',
+  slide: 'Mostly Down', pond: 'The Endless Pond', boats: 'The Little Regatta', hill: 'Uphill Battle', crack: 'Between a Rock', hollow: 'The Nuclear Cave',
 };
 /**
  * The big attractions — those with a star on the map: their panel is shared by up to BOARD_PLACES sponsors,

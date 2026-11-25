@@ -1,4 +1,4 @@
-// Checks of The Hollow Hill, without a browser: the cave lies whole under the hill — rock over it everywhere,
+// Checks of The Nuclear Cave (the game `hollow`: it was The Hollow Hill), without a browser: the cave lies whole under the hill — rock over it everywhere,
 // its floor above the sea, never crossing itself; the lap is a closed ring, its bends are flyable; what is in
 // the way is in the cave and always leaves a way; one flies by oneself, bursts on a gauge that the rings fill,
 // gains on the inside of a bend, cannot leave the cave; what one hits all but stops one and never ends the
@@ -81,6 +81,14 @@ const clear = (t, u, v) => { const eu = t.u2 - t.u1, ev = t.v2 - t.v1, l2 = eu *
   let blocked = 0;
   for (const r of C.rings) { tunnelAt(r.s, f); const A = f.a - H.body - H.skin, B = f.b - H.body - H.skin; if ((r.u / A) ** 2 + (r.v / B) ** 2 > 1 || r.v < f.water + 0.4) blocked++; for (const t of C.things) if (t.kind !== 'curtain' && Math.abs(t.s - r.s) < Math.max(t.r1, t.r2) + H.body && clear(t, r.u, r.v) < H.body + 0.15) blocked++; }
   check('eighteen rings, each with its middle in the clear', C.rings.length === 18 && blocked === 0);
+  let lost = 0; const led = new Set();
+  for (const a of C.atoms) {
+    tunnelAt(a.s, f);
+    if ((a.u / (f.a - 0.9)) ** 2 + (a.v / (f.b - 0.9)) ** 2 > 1 || a.v < f.water + 0.6) lost++;
+    for (const t of C.things) if (t.kind !== 'curtain' && Math.abs(t.s - a.s) < Math.max(t.r1, t.r2) + H.body && clear(t, a.u, a.v) < H.body) lost++;
+    for (const r of C.rings) { let d = r.s - a.s; if (d < 0) d += L; if (d > 0 && d < 14) led.add(r.id); }
+  }
+  check('atoms lead into the rings — some fifty little lights, none in the rock, in the water or in a thing in the way', C.atoms.length >= 45 && C.atoms.length <= 72 && lost === 0 && led.size >= 16 && C.atoms.every((a, i) => a.id === i), `${C.atoms.length} atoms before ${led.size} of the ${C.rings.length} rings`);
 }
 {
   // ---- flying
@@ -96,6 +104,9 @@ const clear = (t, u, v) => { const eu = t.u2 - t.u1, ev = t.v2 - t.v1, l2 = eu *
   const ring = C.rings[0], through = flying(ring.s - 3, ring.u, ring.v, { gauge: 0.2 }), beside = flying(ring.s - 3, ring.u + ring.r + 0.3, ring.v, { gauge: 0.2 });
   const e1 = run(through, 0.6), e2 = run(beside, 0.6);
   check('a ring flown through gives a third of the gauge back, and a push; flown beside, nothing', e1.filter((e) => e.type === 'ring').length === 1 && through.gauge > 0.5 && through.extra > 1 && !e2.some((e) => e.type === 'ring') && beside.gauge < 0.25);
+  const atom = C.atoms.find((a) => !C.rings.some((r) => Math.abs(r.s - a.s) < 3)), taker = flying(atom.s - 2, atom.u + 0.6, atom.v, { gauge: 0.2 }), past = flying(atom.s - 2, atom.u + H.atom.r + 0.5, atom.v, { gauge: 0.2 });
+  const e3 = run(taker, 0.2), e4 = run(past, 0.2);
+  check('an atom flown through is taken — once — and gives a little of the gauge back; flown beside, nothing', e3.filter((e) => e.type === 'atom' && e.id === atom.id).length === 1 && taker.atoms === 1 && Math.abs(taker.gauge - (0.2 + H.atom.give + 0.2 / H.gauge.fill)) < 0.01 && !e4.some((e) => e.type === 'atom' && e.id === atom.id), `${(taker.gauge * 100).toFixed(0)} % after it, from 20`);
   // the inside of a bend: in the Screw, between two boulders
   const from = S['The Screw'].from + (S['The Screw'].to - S['The Screw'].from) * 0.35, mid = flying(from, 0, 2.2), inside = flying(from, -4.2, 2.2), outside = flying(from, 4.2, 2.2);
   run(mid, 0.6); run(inside, 0.6); run(outside, 0.6);
@@ -112,8 +123,8 @@ const clear = (t, u, v) => { const eu = t.u2 - t.u1, ev = t.v2 - t.v1, l2 = eu *
   const col = C.things.find((t) => t.kind === 'column'), st = flying(col.s - 9, col.u1, 0);
   const ev = run(st, 1.0), hit = ev.find((e) => e.type === 'crash');
   const after = flying(col.s - 9, col.u1, 0); run(after, 0.52);
-  const on = flying(col.s - 9, col.u1, 0); run(on, 2.6);
-  check('a column met head on all but stops one, and throws one aside — and the flight goes on', !!hit && hit.kind === 'column' && st.hits === 1 && after.speed <= H.cruise * H.crash.keep + 0.6 && Math.abs(after.u - col.u1) > col.r1 + H.body - 0.05 && !on.over && on.s > col.s + 12 && on.speed > after.speed + 6, `down to ${after.speed.toFixed(1)} m/s, ${(Math.abs(after.u - col.u1)).toFixed(2)} m aside; ${on.speed.toFixed(1)} m/s again two seconds on`);
+  const on = flying(col.s - 9, col.u1, 0); run(on, 1.5);
+  check('a column met head on halves one\'s speed, and throws one aside — and the flight goes on', !!hit && hit.kind === 'column' && st.hits === 1 && after.speed <= H.cruise * H.crash.keep + 0.6 && after.speed >= H.crash.least && Math.abs(after.u - col.u1) > col.r1 + H.body - 0.05 && !on.over && on.s > col.s + 8 && on.speed > after.speed + 4, `down to ${after.speed.toFixed(1)} m/s, ${(Math.abs(after.u - col.u1)).toFixed(2)} m aside; ${on.speed.toFixed(1)} m/s again a second on`);
   const cur = C.things.find((t) => t.kind === 'curtain'), good = flying(cur.s - 6, cur.u, cur.v), bad = flying(cur.s - 6, cur.u + cur.r + 1.2, cur.v - 1);
   const eg = run(good, 0.6), eb = run(bad, 0.6);
   check('a curtain is passed by its hole; who misses it is stopped, and goes through the hole all the same', !eg.some((e) => e.type === 'crash') && eb.some((e) => e.type === 'crash' && e.kind === 'curtain') && bad.s > cur.s && Math.hypot(bad.u - cur.u, bad.v - cur.v) < cur.r && bad.hits === 1);
@@ -139,6 +150,13 @@ const clear = (t, u, v) => { const eu = t.u2 - t.u1, ev = t.v2 - t.v1, l2 = eu *
   check('the clock starts at the off and stops at the line, one lap on; the stretches come in order', !!go && !!over && st.time === Math.round(st.clock * 1000) && Math.abs(over.at - go.at - st.time / 1000) < 0.02 && st.s >= L && st.s < L + 1 && order.join() === '1,2,3,4,5,6,7,8,9,0');
   const pose = flightPose(flying(S['The Lake'].from + 10, 2, -1), {}), mid = tunnelPoint(S['The Lake'].from + 10, 2, -1, {});
   check('the flyer is where the rules say it is, heading the way the cave goes', Math.hypot(pose.x - mid.x, pose.y - mid.y, pose.z - mid.z) < 1e-9 && Math.abs(pose.roll) < 1e-9 && Number.isFinite(pose.yaw + pose.pitch));
+  {
+    // ---- what one flies past closely
+    const lone = C.things.find((t) => t.kind === 'column' && !C.things.some((o) => o !== t && Math.abs(o.s - t.s) < 7)) || C.things.find((t) => t.kind === 'column');
+    const side = lone.u1 > 0 ? -1 : 1, shave = flying(lone.s - 5, lone.u1 + side * (lone.r1 + H.body + 0.3), lone.v1 + (lone.v2 - lone.v1) * 0.5, { gauge: 0.2 }), wide = flying(lone.s - 5, lone.u1 + side * (lone.r1 + H.body + H.close.reach + 0.5), lone.v1 + (lone.v2 - lone.v1) * 0.5, { gauge: 0.2 });
+    const e5 = run(shave, 0.5), e6 = run(wide, 0.5);
+    check('a thing shaved past without touching it gives some burst back — once; flown wide of, nothing', e5.filter((e) => e.type === 'close').length === 1 && shave.hits === 0 && shave.close === 1 && shave.gauge > 0.2 + H.close.give && !e6.some((e) => e.type === 'close') && wide.hits === 0 && wide.gauge < 0.25, `${(shave.gauge * 100).toFixed(0)} % after it, from 20; the flyer is ${H.body} m, a shave is within ${H.close.reach} m more`);
+  }
   console.log(`\n  a rule for the board of its best times:  hollow: { order: 'asc', min: ${Math.floor((bot.time * 0.7) / 1000) * 1000}, max: 600_000 }   (the bot's lap: ${(bot.time / 1000).toFixed(2)} s)`);
 }
 {

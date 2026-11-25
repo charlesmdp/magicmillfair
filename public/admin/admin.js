@@ -54,7 +54,7 @@
     boats: ['The Little Regatta', 'Radio-controlled boats racing on the Great Pond: three laps against three others.'],
     hill: ['Uphill Battle', 'Up a long slope while logs, barrels and boulders roll down it — a start every ten seconds.'],
     crack: ['Between a Rock', 'Up a cleft between two needles of rock in the sea, from wall to wall.'],
-    hollow: ['The Hollow Hill', 'A race flown under the ground: one lap of a great cave, against the clock.'],
+    hollow: ['The Nuclear Cave', 'A race flown under the ground: one lap of a great cave where waste was buried, against the clock.'],
     caves: ['The caves are safe places', 'In a cave, only those nearby hear what is said.'],
     stats: ['The game in figures', 'The counters, and the page /opendata.'],
     stars: ['Stars on the map', 'On: the big attractions wear a red star and their name on the map (M). Off: the map names its places only.'],

@@ -906,7 +906,7 @@ async function testRelease(start, dist) {
       const posted = {};
       for (const b of ids) posted[b] = json(await post({ board: b, name: `Lab ${b}`, score: LAB[b], run: await note(b, LAB[b] + 2500) }));
       // (too good to be true: under what each board believes — and a pond held for a minute, ten seconds after its run began)
-      const low = { boats: await post({ board: 'boats', name: 'Quick', score: 30_000, run: await note('boats', 60_000) }), hollow: await post({ board: 'hollow', name: 'Quick', score: 15_000, run: await note('hollow', 60_000) }) };
+      const low = { boats: await post({ board: 'boats', name: 'Quick', score: 30_000, run: await note('boats', 60_000) }), hollow: await post({ board: 'hollow', name: 'Quick', score: 14_000, run: await note('hollow', 60_000) }) };
       const soon = await post({ board: 'pond', name: 'Quick', score: 60_000, run: await note('pond', 10_000) });
       const longer = json(await post({ board: 'pond', name: 'Longer', score: 45_000, run: await note('pond', 48_000) }));
       const after = json(await call('/api/scores?board=all')), desk = json(await call('/api/admin', null, ADMIN_KEY));

@@ -6,6 +6,7 @@ export const NEWS = [
   {
     date: '25 November 2026',
     items: [
+      ['The Nuclear Cave', 'The Hollow Hill has a new name, and a reason for it: drums, glowing pools, and green atoms that lead you into the rings. You are thinner in there, a knock costs less, and shaving past the rock fills your burst.'],
       ['Ten more relics', 'Twenty things are now left over from the world before, all over the valley. The vending machine went to the Lost Temple, the scratched stone to Lookout Hill — and one of them is very well hidden.'],
       ['A mushroom cloud of your own', 'Find the twenty relics and it is yours: a small mushroom cloud over your head, with confetti. In the emotes (T).'],
       ['Uphill Battle, in four stretches', 'Quiet at the foot — a log now and then —, then barrels, then boulders, then everything at once near the bell. Lines across the slope say where each begins.'],

@@ -203,7 +203,7 @@ try {
   // they are built as the game runs (in a build made as the delivered one is); each is played by its own bot, and
   // its time is on its board — the server noted when the run began, the game said when it ended
   await throwSwitch('Uphill Battle');
-  await throwSwitch('The Hollow Hill');
+  await throwSwitch('The Nuclear Cave');
   await page.waitForFunction(() => { const m = window.__mmf, e = m.extras || {}; return !!(e.hill && e.hollow && m.climbHill && m.flyHollow); }, null, { timeout: 60000 });
   await frames(6);
   const labOn = await state();

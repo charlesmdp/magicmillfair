@@ -1,4 +1,4 @@
-// The Hollow Hill as an extra: plugged into the running game from outside, through what the game exposes
+// The Nuclear Cave (the game `hollow`: it was The Hollow Hill) as an extra: plugged into the running game from outside, through what the game exposes
 // (window.__mmf), so that no file of the game is changed and the game without it is exactly the game as it was.
 // See index.js (the switches) and lab/INTEGRATION.md (its board of scores).
 import { Hollow } from '../world/zones/games/hollow/Hollow.js';
@@ -14,7 +14,7 @@ export function attach(app) {
   const read = () => { try { return parseInt(localStorage.getItem(KEY), 10) || 0; } catch { return 0; } };
   cave.setBest(read());
   let flight = null, saved = false;
-  const io = { play: (name, options) => app.audio?.play(name, options), note: (text) => hud.note(text, 3200) };
+  const io = { play: (name, options) => app.audio?.play(name, options), note: (text, ms = 3200) => hud.note(text, ms) };
   const leave = (done) => {
     if (!flight) return;
     const s = flight;
@@ -32,8 +32,8 @@ export function attach(app) {
     flight = cave.open(player, io);
     player.driver = flight;
     app.audio?.play('teleport');
-    keysHelp(app).set(app.input.isTouch ? 'You fly by yourself · the stick steers: left, right, up, down · tap the arrow to burst, tap again to stop (the gauge is on the line above; the rings fill it) · what you hit all but stops you'
-      : 'You fly by yourself · A / D: left, right · W / S: up, down · hold Space (or Shift) to burst — the gauge is on the line above, the rings fill it · what you hit all but stops you · E: leave · H: these keys again');
+    keysHelp(app).set(app.input.isTouch ? 'You fly by yourself · the stick steers: left, right, up, down · tap the arrow to burst, tap again to stop (the gauge is on the line above: the rings fill it, the green atoms too, and so does shaving past the rock) · what you hit halves your speed'
+      : 'You fly by yourself · A / D: left, right · W / S: up, down · hold Space (or Shift) to burst — the gauge is on the line above: the rings fill it, the green atoms too, and so does shaving past the rock · what you hit halves your speed · E: leave · H: these keys again');
   };
   world.actionSources.push((p) => {
     if (flight) return flight.over ? null : { label: 'Leave the flight', run: () => leave(false) };

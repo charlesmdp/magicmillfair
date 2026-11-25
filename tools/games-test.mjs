@@ -48,9 +48,9 @@ try {
   const gates = await page.evaluate(() => { const e = window.__mmf.extras, g = (o) => o.gate || o.stand; return Object.fromEntries(Object.keys(e).filter((k) => g(e[k])).map((k) => [k, { x: g(e[k]).x, z: g(e[k]).z }])); });
   const labels = {};
   for (const k of ['hill', 'crack', 'hollow']) { await at(gates[k].x, gates[k].z); await frames(2); labels[k] = (await offered()).join(' | '); }
-  check('at its gate each game offers itself', /Climb Uphill Battle/.test(labels.hill) && /Climb Between a Rock/.test(labels.crack) && /Fly The Hollow Hill/.test(labels.hollow), labels);
+  check('at its gate each game offers itself', /Climb Uphill Battle/.test(labels.hill) && /Climb Between a Rock/.test(labels.crack) && /Fly The Nuclear Cave/.test(labels.hollow), labels);
   const away = await at(0, 0); await frames(2);
-  check('and away from them, none does', !(await offered()).some((l) => /Uphill|Between a Rock|Hollow Hill/.test(l)), `at ${away.x.toFixed(0)}, ${away.z.toFixed(0)}`);
+  check('and away from them, none does', !(await offered()).some((l) => /Uphill|Between a Rock|Nuclear Cave/.test(l)), `at ${away.x.toFixed(0)}, ${away.z.toFixed(0)}`);
 
   // ---- the cleft: one walks to it, the bot climbs it, one is put back on the planks
   const way = CLEFT.way, mid = await at((way.a[0] + way.b[0]) / 2, (way.a[1] + way.b[1]) / 2), land = await at(gates.crack.x, gates.crack.z);
