@@ -1,7 +1,9 @@
 // A Turn for the Worse: what is seen of it and how it is run. Its rules are in rules.js; here the tower is built
 // — a striped tower on a rock in the sea, the gallery of planks that winds up round it, its rails and its bulbs,
 // what stands in the way and what moves, a pointed roof and a bell — and a run is a session that drives the
-// player (see PlayerController.driver). What moves is drawn from the clock of the world: everybody sees the same.
+// player (see PlayerController.driver): the legs do what the stick asks — up, they run; let go, they stop —, and
+// the camera rides behind, as one piece with the runner: it stops when the runner stops. What moves is drawn
+// from the clock of the world: everybody sees the same.
 //
 // What stands in the way says what it asks by its paint: yellow and black is jumped, red and white is slid
 // under, navy and cream is gone round, and a crate is jumped onto (a blue band: one jump; a red band: two).
@@ -284,8 +286,9 @@ export class Spiral {
       ctx.fillStyle = '#ffffff'; ctx.font = '700 84px Georgia, serif'; ctx.fillText(this.best ? formatTime(this.best) : '—', w / 2, 138);
       ctx.fillStyle = '#c9d2ff'; ctx.font = '500 26px system-ui, sans-serif'; ctx.fillText(this.best ? 'in one attempt, from the foot' : 'the bell has not rung yet', w / 2, 214, w * 0.9);
     }, 1.7, 0.85, { both: true });
-    const bx = gx - Math.cos(yaw) * 2.9, bz = gz + Math.sin(yaw) * 2.9;
-    this.board.mesh.position.set(bx, this.data.heightAt(bx, bz) + 1.25, bz); this.board.mesh.rotation.y = yaw + 0.3; this.board.mesh.name = 'spiral-board';
+    // (to the left of the gate, a step back, on dry sand: the stand of the best times is to its right)
+    const bx = gx + Math.cos(yaw) * 3.1 - Math.sin(yaw) * 0.6, bz = gz - Math.sin(yaw) * 3.1 - Math.cos(yaw) * 0.6;
+    this.board.mesh.position.set(bx, this.data.heightAt(bx, bz) + 1.25, bz); this.board.mesh.rotation.y = yaw - 0.3; this.board.mesh.name = 'spiral-board';
     this.group.add(this.board.mesh);
     this.gate = { x: gx, y: gy, z: gz, yaw };
     this.group.updateMatrixWorld(true);
@@ -324,59 +327,64 @@ export class Spiral {
   update() { const st = this.session?.state; this._place(st ? st.t0 + st.total : this.clock() / 1000); }
 
   /**
-   * A run is asked for: the player is put at the foot of the track, and goes. `io`: { play, note }. Returns the
-   * session — the driver of the player: step(dt, player, control), camera(camera, dt), line, over (`score`: the
-   * time of the attempt that reached the bell, ms), ended, drop(player), close(), auto (true: it runs by itself).
+   * A run is asked for: the player is put at the foot of the track, and stands there — the clock of the attempt
+   * waits for the first step. `io`: { play, note }. Returns the session — the driver of the player: step(dt,
+   * player, control), camera(camera, dt), line, over (`score`: the time of the attempt that reached the bell,
+   * ms), ended, drop(player), close(), auto (true: it runs by itself).
    */
   open(player, io) {
-    const st = startRun(this.clock() / 1000), events = [], input = { side: 0, jump: false, down: false, crouch: false }, pose = {};
-    const K = { acc: 0, wasY: 0, camS: null, camU: 0, camY: 0, look: V(0, 0, 0), after: 0, lie: 0, count: 9 };
+    const st = startRun(this.clock() / 1000), events = [], input = { side: 0, run: 0, jump: false, down: false, crouch: false }, pose = {};
+    const K = { acc: 0, low: false, camS: null, camU: 0, camY: 0, after: 0, lie: 0 };
     const _c = V(0, 0, 0), _l = V(0, 0, 0);
     const session = {
       spiral: this, over: false, ended: false, score: 0, time: 0, line: '', riding: false, anim: ANIM.idle, state: st, auto: false,
       step: (dt, pl, control) => {
-        const inp = pl.input, my = control ? inp.move.y : 0;
+        const inp = pl.input, mx = control ? inp.move.x : 0, my = control ? inp.move.y : 0;
         if (session.auto) {
           // (running by itself, it decides at every step of the run, as the checks do)
           K.acc += Math.min(dt, 0.25);
           while (K.acc >= S.step && !st.over) { K.acc -= S.step; botInput(st, input); stepRun(st, S.step, input, events); }
         } else {
-          input.side = control ? inp.move.x : 0; input.jump = control && !!inp.jump;
-          input.down = my < -0.5 && K.wasY >= -0.5; input.crouch = my < -0.5; // (down is a push of the stick, counted once; held, the slide goes on a little)
+          // (the stick is round — up and aside together, or W and D, are 0.7 of each: the legs run full out from a
+          // little over half-way up, and one steers full out from two thirds aside, so that one does both at once)
+          input.run = clamp((my - 0.15) / 0.4, 0, 1); input.side = clamp(mx / 0.65, -1, 1); input.jump = control && !!inp.jump;
+          // (down is a push of the stick, counted once; held, the slide goes on a little — and a duck for as long.
+          // On a keyboard S counts while W is still held: the two together read as a stick in its middle)
+          const keys = control && typeof inp.keys?.has === 'function' ? inp.keys : null;
+          input.crouch = my < -0.5 || (!!keys && (keys.has('KeyS') || keys.has('ArrowDown'))); input.down = input.crouch && !K.low;
+          K.low = input.crouch;
           if (!st.over) stepRun(st, dt, input, events);
         }
-        K.wasY = my;
-        // (three, two, one before the first attempt)
-        if (st.attempt === 1 && st.wait > 0 && Math.ceil(st.wait) !== K.count) { K.count = Math.ceil(st.wait); if (K.count <= 3) io.play('tick'); }
         for (const e of events) this._tell(e, st, io);
         events.length = 0;
         // ---- where the runner is, and how it holds itself
         spiralAt(st.s, st.u, pose);
-        const down = st.down > 0, sliding = st.slide > 0 && !st.air && !down;
+        const down = st.down > 0, low = (st.slide > 0 || st.duck > 0) && !st.air && !down; // (low: sliding, or ducking where one stands)
         if (down && st.why !== 'hole') K.lie = Math.min(1, K.lie + dt * 9); else K.lie = 0;
-        pl.pos.set(pose.x, pose.y + st.h - (sliding ? 0.28 : 0) + K.lie * 0.12, pose.z);
+        pl.pos.set(pose.x, pose.y + st.h - (low ? 0.28 : 0) + K.lie * 0.12, pose.z);
         pl.yaw = pose.yaw - clamp(st.vu / S.side, -1, 1) * 0.3; // (it turns a little the way it steers: to the right is towards the rail)
-        pl.pitch = sliding ? -0.5 : -1.35 * K.lie; pl.roll = 0;
-        pl.speed = st.wait > 0 || down || st.over ? 0 : st.v; pl.grounded = true;
-        session.anim = st.over || st.wait > 0 ? ANIM.idle : down ? (st.why === 'hole' ? ANIM.jump : ANIM.sit) : sliding ? ANIM.sit : st.air ? ANIM.jump : ANIM.run;
+        pl.pitch = low ? -0.2 - 0.3 * clamp(st.v / 3, 0, 1) : -1.35 * K.lie; pl.roll = 0; // (a slide leans back; a duck sits up)
+        pl.speed = st.wait > 0 || down || st.over ? 0 : Math.max(st.v, Math.abs(st.vu) * 0.6); pl.grounded = true;
+        session.anim = st.over || st.wait > 0 ? ANIM.idle : down ? (st.why === 'hole' ? ANIM.jump : ANIM.sit) : low ? ANIM.sit : st.air ? ANIM.jump : st.v > 3 ? ANIM.run : st.v > 0.3 || Math.abs(st.vu) > 1 ? ANIM.walk : ANIM.idle;
         // (its shadow, on what is under it: the planks, the top of a crate — nothing over a hole)
         const G = floorAt(st.s, st.u);
         this.blob.visible = Number.isFinite(G) && !down;
         if (this.blob.visible) { const k = clamp(1 - (st.h - G) / 3, 0.45, 1); this.blob.position.set(pose.x, pose.y + G + 0.03, pose.z); this.blob.scale.setScalar(k); this.blob.updateMatrixWorld(true); }
         if (st.over) { K.after += dt; if (!session.over) { session.over = true; session.score = session.time = st.time; } if (K.after > 2.8) session.ended = true; }
-        const turn = turnOf(st.s);
+        const turn = turnOf(st.s), best = `best ${heightOf(st.best).toFixed(1)} m of ${Math.round(heightOf(LENGTH))} up`;
         session.line = st.over ? `${S.name} · the bell in ${formatTime(st.time)} · attempt ${st.attempt}`
-          : st.attempt === 1 && st.wait > 0 ? `${S.name} · ${Math.ceil(st.wait) > 3 ? 'ready' : Math.ceil(st.wait)}…`
-            : `Attempt ${st.attempt} · turn ${turn + 1} of ${S.turns}: ${S.names[turn]} · ${formatTime(Math.round(st.clock * 1000))} · best ${heightOf(st.best).toFixed(1)} m of ${Math.round(heightOf(LENGTH))} up`;
+          : !st.going ? `Attempt ${st.attempt} · at the foot — the clock starts with your first step${st.best > 0 ? ` · ${best}` : ''}`
+            : `Attempt ${st.attempt} · turn ${turn + 1} of ${S.turns}: ${S.names[turn]} · ${formatTime(Math.round(st.clock * 1000))} · ${best}`;
       },
       /**
        * The camera: behind the runner, a little outside the gallery and above it, looking down the track ahead —
        * it goes round with the runner, the tower always on its left and never in the way; back at the foot, it
-       * is there at once.
+       * is there at once. Along the track it is one piece with the runner — where it stands and what it looks at
+       * are both counted from the runner's place —: when the legs stop it stops with them, without a swing.
        */
       camera: (cam, dt) => {
         const D = S.cam, cr = S.r + D.out;
-        if (K.camS === null || Math.abs(st.s - K.camS) > 12) { K.camU = st.u; K.camY = 0; K.look.set(0, 0, 0); }
+        if (K.camS === null || Math.abs(st.s - K.camS) > 12) { K.camU = st.u; K.camY = 0; }
         K.camS = st.s;
         K.camU += (st.u - K.camU) * Math.min(1, dt * 4);
         K.camY += (Math.max(0, st.h) - K.camY) * Math.min(1, dt * 3);
@@ -384,8 +392,7 @@ export class Spiral {
         _c.set(C.x + Math.cos(a) * (cr + K.camU * 0.35), y, C.z + Math.sin(a) * (cr + K.camU * 0.35));
         const la = angleOf(st.s + D.ahead);
         _l.set(C.x + Math.cos(la) * (S.r + K.camU * 0.5 - 0.7), trackY(st.s + D.ahead) + 0.3 + K.camY * 0.3, C.z + Math.sin(la) * (S.r + K.camU * 0.5 - 0.7));
-        if (K.look.lengthSq() === 0) K.look.copy(_l); else K.look.lerp(_l, Math.min(1, dt * 10));
-        cam.position.copy(_c); cam.up.set(0, 1, 0); cam.lookAt(K.look);
+        cam.position.copy(_c); cam.up.set(0, 1, 0); cam.lookAt(_l);
         return 66;
       },
       /** The run is over (the bell), or left: the player is put back at the gate, on the sand. */
@@ -401,7 +408,8 @@ export class Spiral {
     if (e.type === 'jump') io.play('jump', { volume: 0.5 });
     else if (e.type === 'again') io.play('jump', { volume: 0.4, rate: 1.3 });
     else if (e.type === 'land') io.play('land', { volume: 0.35 });
-    else if (e.type === 'go') io.play(e.attempt === 1 ? 'start' : 'respawn', { volume: 0.6 });
+    else if (e.type === 'go') io.play('start', { volume: e.attempt === 1 ? 0.6 : 0.35 }); // (the first step: the clock starts)
+    else if (e.type === 'foot') io.play('respawn', { volume: 0.6 });
     else if (e.type === 'turn') { io.play('checkpoint', { volume: 0.6 }); io.note(`Turn ${e.n + 1}: ${S.names[e.n]}`, 1800); }
     else if (e.type === 'out') { io.play(e.why === 'hole' ? 'fail' : 'hit'); io.note(`${WHY[e.why] || 'Out!'} ${heightOf(e.s).toFixed(1)} m up — back to the foot.`, 1700); }
     else if (e.type === 'top') { io.play('bell'); io.play('victory', { volume: 0.7 }); io.note(`The bell! ${formatTime(e.time)}, at attempt ${e.attempt}`, 5000); }

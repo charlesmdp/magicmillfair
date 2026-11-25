@@ -31,7 +31,7 @@ export const CARS = {
   gates: 16,
   road: 1.15, wall: 1.45, body: 0.2, // half the tarmac; the boards, from the centre line; a car, as the boards and the other cars feel it
   top: 7.5, accel: 9.5, brake: 7.5, coast: 3.2, // m/s flat out; m/s² from rest; lost when the stick is let go; lost over the top speed with the stick full
-  grip: 13, over: 1.8, turn: 5.5, // m/s² the tyres hold across; how much faster the nose turns than they can follow; rad/s at most
+  grip: 13, slide: 0.3, over: 1.8, turn: 5.5, // m/s² the tyres hold across — and the share of it lost once the car slides; how much faster the nose turns than they can follow; rad/s at most
   boost: { time: 0.9, top: 10.5, accel: 17, back: 4 }, // the jump: so long, so fast; the seconds before it is there again
   pad: { kick: 3.2, top: 11 }, cap: 11.5, // the pad on the straight: m/s more, up to so much; nothing ever goes faster than the cap
   verge: { top: 0.6, grip: 0.7, drag: 5 }, sand: { top: 0.45, grip: 0.6, drag: 9 }, // off the tarmac, in the sand: the share of the speed and of the grip left, m/s² lost
@@ -154,14 +154,13 @@ export const BOARD = { order: 'asc', min: Math.floor((C.laps * SHORTEST) / C.cap
 // (clear of the sand and of the oil), and how fast each place of it can be taken
 const ROOM = C.road - 0.33, LO = new Float64Array(M).fill(-ROOM), HI = new Float64Array(M).fill(ROOM);
 for (const zone of [SAND, OIL]) for (let n = -3; n < zone.n + 3; n++) { const k = (((zone.k0 + n) % M) + M) % M; if (zone.l1 < 0.3) LO[k] = Math.max(LO[k], zone.l1 + 0.3); else HI[k] = Math.min(HI[k], zone.l0 - 0.3); }
-const ITER = Number(globalThis.process?.env?.CARS_ITER) || 3000;
 const OFF = new Float64Array(M), SPEED = new Float64Array(M), FREE = new Uint8Array(M);
 {
   // (found on every fourth sample: each in its turn is put where the line bends least between its four
   // neighbours — the square of its bend, along its own length: where its places lie closer, on the inside of a
   // bend, a bend weighs more — again and again; then it is drawn through all of them)
   const W = 4, n = M / W, o = new Float64Array(n), w = new Float64Array(n).fill(1), X = (i) => PX[i * W] + NX[i * W] * o[i], Z = (i) => PZ[i * W] + NZ[i * W] * o[i];
-  for (let it = 0; it < ITER; it++) {
+  for (let it = 0; it < 1500; it++) {
     if (it % 8 === 0) for (let i = 0; i < n; i++) { const a = (i + n - 1) % n, b = (i + 1) % n; w[i] = (2 * W * DS / (Math.hypot(X(i) - X(a), Z(i) - Z(a)) + Math.hypot(X(b) - X(i), Z(b) - Z(i)))) ** 3; }
     for (let i = 0; i < n; i++) {
       const a2 = (i + n - 2) % n, a1 = (i + n - 1) % n, b1 = (i + 1) % n, b2 = (i + 2) % n, k = i * W, sum = w[a1] + 4 * w[i] + w[b1];
@@ -188,9 +187,13 @@ const OFF = new Float64Array(M), SPEED = new Float64Array(M), FREE = new Uint8Ar
   let off = 3; for (let v = C.boost.top; v > 3; v -= 0.1) { if (v <= SPEED[(lip + Math.ceil((v * flight(v)) / DS) + 2) % M]) { off = v; break; } }
   for (let k = RAMP.k0 - 2; k <= lip; k++) SPEED[(k + M) % M] = Math.min(SPEED[(k + M) % M], off);
   back();
-  // where the boost is worth it: flat out for a good while, and no ramp on the way
-  const far = Math.round(8 / DS), ramp = Math.round(13 / DS);
-  for (let k = 0; k < M; k++) { let ok = (((RAMP.k0 - k) % M) + M) % M > ramp || (((k - RAMP.k0) % M) + M) % M < RAMP.n; if (ok && (((k - RAMP.k0) % M) + M) % M < RAMP.n) ok = false; for (let j = 0; ok && j < far; j++) if (SPEED[(k + j) % M] < C.top + 1.6) ok = false; FREE[k] = ok ? 1 : 0; }
+  // where the boost is worth it — 2: flat out for a good while; 1: long enough to get past a car — and no ramp on the way
+  const far = Math.round(8 / DS), near = Math.round(4.5 / DS), ramp = Math.round(13 / DS);
+  for (let k = 0; k < M; k++) {
+    const to = (((RAMP.k0 - k) % M) + M) % M;
+    let n = 0; while (n < far && SPEED[(k + n) % M] >= C.top + (n < near ? 0.6 : 1.6)) n++;
+    FREE[k] = to < ramp || to > M - RAMP.n ? 0 : n >= far ? 2 : n >= near ? 1 : 0;
+  }
 }
 /** The line of the cars that drive by themselves: `off` (metres to the left of the centre line, sample by sample) and `speed` (m/s it can be taken at). */
 export const RACING = { off: OFF, speed: SPEED, lo: LO, hi: HI };
@@ -201,9 +204,9 @@ export const RACING = { off: OFF, speed: SPEED, lo: LO, hi: HI };
 export const ACE = { name: 'you', pace: 1, top: 1, wander: 0, boost: true, delay: 0 };
 /** The three rivals, as they stand on the grid: the best in front. */
 export const RIVALS = [
-  { name: 'Blue', pace: 0.93, top: 0.98, wander: 0.1, boost: true, delay: 0.06 },
-  { name: 'Yellow', pace: 0.87, top: 0.955, wander: 0.2, boost: false, delay: 0.2 },
-  { name: 'White', pace: 0.8, top: 0.93, wander: 0.3, boost: false, delay: 0.32 },
+  { name: 'Blue', pace: 0.87, top: 0.95, wander: 0.1, boost: false, delay: 0.06 },
+  { name: 'Yellow', pace: 0.81, top: 0.925, wander: 0.2, boost: false, delay: 0.2 },
+  { name: 'White', pace: 0.75, top: 0.9, wander: 0.3, boost: false, delay: 0.32 },
 ];
 
 /** Puts a car on the track: `s` metres along the lap from the line, `l` to the left of the centre line, going at `v` the way of the lap. */
@@ -324,7 +327,7 @@ function drive(c, i, cmd, events) {
     if (along < want) along += Math.min((c.boost > 0 ? C.boost.accel : C.accel) * Math.min(1.3, 1 - along / lim) * (c.oil > 0 ? 0.3 : 1) * dt, want - along);
     else { let drag = C.coast + (1 - cmd.m) * (C.brake - C.coast); if (surf && along > top) drag = Math.max(drag, surf.drag); along -= Math.min(drag * dt, along - want); }
     // across it: the tyres take away what they can hold, the rest slides
-    const held = grip * dt, keep = across > held ? (across - held) / across : 0;
+    const held = grip * (1 - C.slide * clamp((across - 1.2) / 1.3, 0, 1)) * dt, keep = across > held ? (across - held) / across : 0;
     c.vx = fx * along + lx * keep; c.vz = fz * along + lz * keep; c.slip = across * keep;
     if (!c.drift && c.slip > 2) { c.drift = true; events?.push({ type: 'drift', car: i }); } else if (c.drift && c.slip < 0.8) c.drift = false;
   }
@@ -380,18 +383,27 @@ function botDrive(st, i, cmd, skill) {
   if (st.clock < S.delay) return cmd;
   const pace = c.done ? 0.5 : S.pace, j = (c.k + Math.round((0.9 + speed * 0.2) / DS)) % M;
   let off = OFF[j] + (S.wander ? S.wander * Math.sin(c.k * 0.045 + st.clock * 0.4 + c.phase) : 0);
+  let may = SPEED[(c.k + 1) % M] * pace, pass = false;
+  // (a car in its way where the road is straight, or beside it anywhere: it keeps to the side it is on — from
+  // right behind, the side with more room — and does not drive into its back)
   for (let n = 0; n < st.cars.length; n++) {
     const o = st.cars[n];
     if (n === i || Math.abs(o.y - c.y) > 0.2) continue;
-    const ahead = ((((o.k - c.k) % M) + M) % M) * DS;
-    if (ahead > 0.05 && ahead < 1.6 && Math.abs(o.l - c.l) < 0.55 && Math.hypot(o.vx, o.vz) < speed + 0.5) off = o.l > 0 ? o.l - 0.8 : o.l + 0.8;
+    let ahead = (o.s - c.s) * DS; ahead -= Math.round(ahead / LENGTH) * LENGTH;
+    const gap = o.l - c.l, theirs = Math.hypot(o.vx, o.vz);
+    if (ahead < -0.45 || ahead > 3 || Math.abs(gap) > 0.75 || (ahead > 0.3 && theirs > speed + 0.5)) continue;
+    if (ahead > 0.6 && !FREE[c.k]) { if (ahead < 1.1 && Math.abs(gap) < 0.45) may = Math.min(may, theirs); continue; } // (in a bend it waits behind)
+    let side = Math.abs(gap) > 0.12 ? -Math.sign(gap) : o.l > 0 ? -1 : 1;
+    if ((side > 0 ? HI[j] - o.l : o.l - LO[j]) < 0.55) side = -side;
+    off = o.l + side * 0.8;
+    if (ahead > 0 && ahead < 0.6 && Math.abs(gap) < 0.38) may = Math.min(may, theirs);
+    if (ahead > 0.3) pass = true;
   }
   off = clamp(off, LO[j], HI[j]);
   const tx = PX[j] + NX[j] * off - c.x, tz = PZ[j] + NZ[j] * off - c.z, tl = Math.hypot(tx, tz) || 1;
   cmd.dx = tx / tl; cmd.dz = tz / tl;
-  const may = SPEED[(c.k + 1) % M] * pace;
   cmd.m = speed > may + 0.3 ? 0 : clamp(may / (C.top * c.top), 0.2, 1);
-  cmd.boost = !!S.boost && !c.done && c.charge >= 1 && !c.air && speed > 3 && !!FREE[c.k];
+  cmd.boost = !!S.boost && !c.done && c.charge >= 1 && !c.air && speed > 3 && FREE[c.k] > (pass ? 0 : 1);
   return cmd;
 }
 /** The stick that says `cmd`, as the picture is turned. */
@@ -405,6 +417,13 @@ const _bot = { dx: 0, dz: 1, m: 0, boost: false };
 export function botInput(st, out = { x: 0, y: 0, jump: false }) { return stickOf(st, botDrive(st, 0, _bot, ACE), out); }
 /** Who never touches the stick. */
 export function idleInput(st, out = { x: 0, y: 0, jump: false }) { out.x = 0; out.y = 0; out.jump = false; return out; }
+/** A driver with a keyboard: what the car that drives by itself would do, but eight ways only, the stick full or let go. */
+export function keysInput(st, out = { x: 0, y: 0, jump: false }) {
+  botInput(st, out);
+  const m = Math.hypot(out.x, out.y), a = Math.round(Math.atan2(out.x, out.y) / (Math.PI / 4)) * (Math.PI / 4), go = m > 0.5 ? 1 : 0;
+  out.x = Math.round(Math.sin(a)) * go; out.y = Math.round(Math.cos(a)) * go;
+  return out;
+}
 /** A clumsy driver: the stick always full, at the middle of the road a little way ahead and a little beside it; never lifts, hammers the boost. */
 export function clumsyInput(st, out = { x: 0, y: 0, jump: false }) {
   const c = st.cars[0], j = (c.k + 9) % M, off = 0.55 * Math.sin(st.clock * 1.3 + st.seed);

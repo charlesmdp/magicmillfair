@@ -50,7 +50,7 @@ export const LAVA = {
  * it at the teeth of rock that stand on it; `foot`: where the cone meets the sea, metres from the middle, about;
  * `within`: nothing of it is further out than that.
  */
-export const CONE = { flare: 0.2, rim: LAVA.level + LAVA.top * LAVA.lv + 2.7, low: 1.65, tall: 5.4, foot: 26, within: 26.9 };
+export const CONE = { flare: 0.2, rim: LAVA.level + LAVA.top * LAVA.lv + 2.7, low: 1.65, tall: 5.7, foot: 26, within: 26.9 };
 
 export const UNDER = 0, GLOW = 1, RISING = 2, UP = 3;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -214,12 +214,13 @@ function hills(k, tops, reg, rnd, sure, more) {
   const L = LAVA, plan = new Map(), base = k + 1; // (`base`: the lava to come)
   const level = (c) => (plan.has(c) ? plan.get(c) : tops[c]), free = (c) => tops[c] <= k && !plan.has(c), put = (c, lv) => plan.set(c, Math.min(L.top, lv));
   const late = sure ? 0 : clamp((k - L.fair) / (L.last - 1 - L.fair), 0, 1); // (0 to 1: how far from the minute to the last pulse)
-  const count = sure ? 2 + (rnd() < 0.5 ? 1 : 0) + (more > 0.3 ? 1 : 0) : rnd() < 1 - 0.55 * late ? (rnd() < 0.55 - 0.55 * late ? 2 : 1) : 0;
-  const keep = sure ? [0.66 + 0.34 * more, 0.36 + 0.6 * more] : [0.45 - 0.35 * late, 0.16 * (1 - late)], joined = sure ? 1 : 0.9 - 0.7 * late;
+  // (while the stairs are sure: two hills or three, wide ones, then two, less and less wide; later one or two, or none)
+  const count = sure ? 2 + (rnd() < (k <= 3 ? 0.5 : 0.2) ? 1 : 0) + (more > 0.3 ? 1 : 0) : rnd() < 1 - 0.55 * late ? (rnd() < 0.55 - 0.55 * late ? 2 : 1) : 0;
+  const keep = sure ? [0.66 - 0.04 * (k - 1) + 0.5 * more, 0.36 - 0.03 * (k - 1) + 0.6 * more] : [0.42 - 0.32 * late, 0.16 * (1 - late)], joined = sure ? 1 : 0.9 - 0.7 * late;
   const order = reg.size.map((s, id) => id).sort((a, b) => (b === reg.most) - (a === reg.most) || reg.size[b] - reg.size[a] || a - b); // (the regions, the largest first)
   for (let h = 0; h < count; h++) {
-    // ---- where its stair begins: against dry ground — the largest region, the next one, in turn — or, later, anywhere
-    const id = sure ? order[(h & 1) && order.length > 1 && reg.size[order[1]] > 1 ? 1 : 0] : rnd() < joined ? order[0] : rnd() < 0.5 ? order[Math.floor(rnd() * order.length)] : -1;
+    // ---- where its stair begins: against the largest dry region — or, later, another one, or anywhere in the lava
+    const id = !order.length ? -1 : sure || rnd() < joined ? order[0] : rnd() < 0.5 ? order[Math.floor(rnd() * order.length)] : -1;
     const feet = [];
     for (let c = 0; c < N; c++) if (free(c) && (id < 0 || CELLS[c].n.some((a) => reg.of[a] === id))) feet.push(c);
     if (!feet.length) continue;
@@ -237,6 +238,39 @@ function hills(k, tops, reg, rnd, sure, more) {
     const top = level(c), ring = [];
     for (const x of CELLS[c].n) if (free(x) && rnd() < keep[0]) { put(x, Math.max(base + 1, top - 1)); ring.push(x); }
     for (const x of ring) { const low = level(x) - 1; if (low > base) for (const y of CELLS[x].n) if (free(y) && rnd() < keep[1]) put(y, low); }
+  }
+  // ---- to begin with, a causeway from the next regions to the largest — three columns at the most, a level over
+  // the lava to come — where one can be laid: who climbed the wrong knoll is not left on an island at once
+  if (sure) for (const id of order.slice(1, 3)) {
+    if (reg.size[id] < 2 || rnd() > 0.85) continue;
+    const from = new Int16Array(N).fill(-2), deep = new Int8Array(N), queue = [];
+    for (let c = 0; c < N; c++) if (free(c) && CELLS[c].n.some((a) => reg.of[a] === id)) { from[c] = -1; deep[c] = 1; queue.push(c); }
+    let end = -1;
+    for (let i = 0; i < queue.length && end < 0; i++) {
+      const c = queue[i];
+      // (it lands against ground of the largest region that stays dry, or against a hill that is coming up there)
+      if (CELLS[c].n.some((a) => (reg.of[a] === order[0] || plan.has(a)) && level(a) > base && level(a) <= base + 2)) end = c;
+      else if (deep[c] < 3) for (const x of CELLS[c].n) if (free(x) && from[x] === -2) { from[x] = c; deep[x] = deep[c] + 1; queue.push(x); }
+    }
+    for (let c = end; c >= 0; c = from[c]) put(c, base + 1);
+  }
+  // ---- a spire, now and then: a thin stair that leads out into the lava, to a tall summit with nothing round it
+  // — tempting, and a dead end unless something else comes up there
+  if ((sure ? k >= 2 && rnd() < 0.45 : rnd() < 0.35 * (1 - late))) {
+    const feet = [];
+    for (let c = 0; c < N; c++) if (free(c) && CELLS[c].n.some((a) => tops[a] > k)) feet.push(c);
+    if (feet.length) {
+      let c = feet[Math.floor(rnd() * feet.length)], lv = base + 1;
+      put(c, lv);
+      for (let s = 1, long = 3 + (rnd() < 0.5 ? 1 : 0); s < long; s++) {
+        // (each step to the column with the least dry ground round it)
+        let on = [], least = 99;
+        for (const x of CELLS[c].n) { if (!free(x)) continue; let n = 0; for (const y of CELLS[x].n) if (y !== c && level(y) > k) n++; if (n < least) { least = n; on = [x]; } else if (n === least) on.push(x); }
+        if (!on.length) break;
+        c = on[Math.floor(rnd() * on.length)];
+        put(c, ++lv);
+      }
+    }
   }
   // ---- and lone tall columns: out in the lava, or against ground too low to climb them from
   const lone = sure ? (k >= 2 && rnd() < 0.5 ? 1 : 0) : (rnd() < 0.4 + 0.5 * late ? 1 : 0) + (late > 0.4 && rnd() < 0.5 ? 1 : 0);
@@ -281,7 +315,6 @@ export function makeRound(n) {
   // ---- pulse after pulse: the lava is at level k; what comes up before it rises to k + 1
   for (let k = 1; k < L.last; k++) {
     const reg = regionsOf(tops, k), P = pulseOf(k), sure = k < L.fair;
-    if (reg.most < 0) break; // (nothing is dry any more: nothing comes)
     let plan = null, least = Infinity;
     for (let a = 0, tries = sure ? 60 : 1; a < tries; a++) {
       const drawn = hills(k, tops, reg, rnd, sure, a / 59);
@@ -293,6 +326,8 @@ export function makeRound(n) {
       if (miss < least) { least = miss; plan = drawn; }
       if (miss <= 0) break;
     }
+    // (there is always something that comes up, to the last pulse: one column at the least, wherever)
+    if (!plan.size) { const free = []; for (let c = 0; c < N; c++) if (tops[c] <= k) free.push(c); plan.set(free[Math.floor(rnd() * free.length)], k + 2 + pick(rnd, [0.6, 0.3, 0.1])); }
     const cells = [...plan.keys()].sort((a, b) => a - b);
     for (const c of cells) { tops[c] = plan.get(c); cols[c].push({ level: tops[c], glow: P.glow, rise: P.rise, up: P.up }); }
     pulses.push({ k, glow: P.glow, rise: P.rise, up: P.up, at: P.at, left: P.left, sure, cells });
@@ -432,8 +467,10 @@ function look(st, B, here) {
     const life = lv[g] - k, f = F.of[g], size = f >= 0 ? F.size[f] : 0, deep = G.of[g] >= 0 ? G.size[G.of[g]] : 0;
     let room = 0;
     for (const y of CELLS[g].n) if (lv[y] > k + 1 && Math.abs(lv[y] - lv[g]) <= 1) room++;
-    const v = (life >= 2 ? 1000 : 0) + (f >= 0 && f === F.most ? 40 * Math.min(size, 15) : 0) + 8 * Math.min(size, 15) + 25 * Math.min(life, 4) + 3 * Math.min(deep, 8) + 2 * room
-      - 6 * (arr[g] - t) - 0.3 * Math.sqrt(CELLS[g].x ** 2 + CELLS[g].z ** 2) + (g === B.goal ? 12 : 0);
+    // (`climber`: one who does not read the relief — the highest column within reach will do, whatever is round it)
+    const v = B.climber ? 25 * life - 6 * (arr[g] - t) + (g === B.goal ? 12 : 0) : B.lazy ? (life >= 2 ? 1000 : 25 * life) - 6 * (arr[g] - t) + (g === B.goal ? 12 : 0)
+      : (life >= 2 ? 1000 : 0) + (f >= 0 && f === F.most ? 40 * Math.min(size, 15) : 0) + 8 * Math.min(size, 15) + 25 * Math.min(life, 4) + 3 * Math.min(deep, 8) + 2 * room
+        - 6 * (arr[g] - t) - 0.3 * Math.sqrt(CELLS[g].x ** 2 + CELLS[g].z ** 2) + (g === B.goal ? 12 : 0);
     if (v > most) { most = v; best = g; }
   }
   let c = best;
@@ -494,10 +531,13 @@ export function botInput(st, out = { x: 0, y: 0, jump: false }) {
 /** Who only stands there: the input of somebody who does nothing. */
 export function idleInput(st, out = { x: 0, y: 0, jump: false }) { out.x = 0; out.y = 0; out.jump = false; return out; }
 
-/** Plays round `n` with the bot (`every`: how often it looks about itself, s): { time (ms), jumps, over }. */
-export function botRun(n, limit = 200, every = 0.1) {
+/**
+ * Plays round `n` with the bot (`every`: how often it looks about itself, s; `climber`: it only goes for the
+ * highest column within reach, without reading what is round it): { time (ms), jumps, over }.
+ */
+export function botRun(n, limit = 200, every = 0.1, climber = false) {
   const st = startRun(n, 0), input = { x: 0, y: 0, jump: false };
-  st.bot = { every };
+  st.bot = { every, climber };
   for (let t = 0; t < limit && !st.over; t += LAVA.step) { botInput(st, input); stepRun(st, LAVA.step, input, null); }
   return { time: st.time, jumps: st.jumps, over: st.over };
 }

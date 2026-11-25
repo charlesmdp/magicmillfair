@@ -48,8 +48,8 @@ export const WAVES = {
   // ---- the mood of the sea, by the second of its cycle: flat until `lull`, building until `wild`, wild until
   // `greats`, then the great ones
   cycle: 150, lull: 13, wild: 100, greats: 130,
-  pause: [2.0, 0.85],
-  tall: [0.5, 2], // from so wild on, a wall or a breaker comes after so many small ones at the most // s between one wave (or one set) and the next: when the sea begins to build, when it is wild
+  pause: [2.0, 0.85], // s between one wave (or one set) and the next: when the sea begins to build, when it is wild
+  tall: [0.5, 2], // from so wild on (0 … 1), a wall or a breaker comes after so many small ones at the most
   kinds: {
     roller: { h: [0.95, 1.15], v: 7.2 }, // h: m tall at the front edge of the bank; v: m/s
     sweeper: { h: [1.0, 1.25], tall: [1.6, 1.85], v: 6.6, k: [0.42, 0.62] }, // k: m further out per metre across (its angle); tall: the ones of a wild sea

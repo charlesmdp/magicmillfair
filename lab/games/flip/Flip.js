@@ -1,8 +1,12 @@
-// Head Over Heels: what is seen of it and how it is run. Its rules are in rules.js; here it is built — a line
-// of girders hung from a gantry on piles over the sea, along the south side of the pier: every girder a magnet,
-// red on top (one stands on it), blue underneath (one hangs from it, head down); blocks in yellow and navy
-// that one passes on the other side; flags, sparks, bulbs — and a run is run: a session that drives the player
-// (see PlayerController.driver), seen from the sea, side on, the pier and the big wheel behind.
+// Head Over Heels: what is seen of it and how it is run. Its rules are in rules.js; here it is built — a machine
+// on piles in the sea, along the south side of the pier: two striped towers, beams between them above and below,
+// and between the beams the girders of the course, which come out of the right tower and go into the left one
+// as the runner runs on the spot (the flying theatre does the same with its scenery). Every girder is a magnet,
+// red on top (one stands on it), blue underneath (one hangs from it, head down); blocks in yellow and navy that
+// one passes on the other side; flags, sparks, the name of each stretch going by — and a run is run: a session
+// that drives the player (see PlayerController.driver), seen from the sea, side on, the whole machine in view,
+// the pier and the big wheel behind. Nobody running, it shows the first seconds of the latest start: friends
+// who leave together see the same girders.
 import * as THREE from 'three';
 import { Parts } from '../../../src/world/props/MeshBuilder.js';
 import { staticCaster } from '../../../src/render/Shadows.js';
@@ -10,18 +14,21 @@ import { surfaceMaterial } from '../../../src/render/SurfaceMaterial.js';
 import { ANIM } from '../../../src/player/Character.js';
 import { canvasBoard } from '../../../src/world/zones/games/Boards.js';
 import { formatTime } from '../../../src/world/zones/games/course.js';
-import { PIER } from '../../../src/world/layout/layout.js';
-import { V, clamp, gateArch } from '../kit.js';
-import { FLIP, FLAGS, startRun, stepRun, lineAt, speedAt, stretchAt, scoreOf, botInput } from './rules.js';
+import { PIER, pierToWorld } from '../../../src/world/layout/layout.js';
+import { V, clamp, gateArch, worldClock, nextStart, STARTS } from '../kit.js';
+import { FLIP, FLAGS, startRun, stepRun, frameAt, speedAt, stretchAt, scoreOf, lagOf, scrollAfter, botInput } from './rules.js';
 
 const CREAM = [1.32, 1.2, 0.95], RED = [1.0, 0.1, 0.1], BLUE = [0.16, 0.5, 2.0], NAVY = [0.07, 0.08, 0.2], YELLOW = [1.7, 1.3, 0.1], GOLD = [1.5, 1.05, 0.2];
-// (what carries the rail stands behind the line and is seen through it: pale, so that it is not taken for something to run into)
+// (what carries the girders stands behind them and is seen through them: pale, so that it is not taken for something to run into)
 const STEEL = [0.5, 0.54, 0.62], PALE = [0.86, 0.9, 0.98], WHITE = [1.5, 1.5, 1.45], BLACK = [0.05, 0.05, 0.06];
 const TONES = [RED, YELLOW, [0.15, 0.85, 0.35], [0.75, 0.3, 1.0]]; // the pennants of the flags
-const W = 0.9; // m: half the depth of a girder (the runner runs along its middle)
-const TOP = 10.6; // m: the underside of the rail the girders hang from
+const W = FLIP.window; // m: the machine between its towers
+const D = 0.9; // m: half the depth of a girder (the runner runs along its middle)
+const LOW = 1.5, TOP = 20.7; // m: the underside of the beams below, of the beams above
+const POOL = 420; // boxes: what the girders in the machine are made of at any moment
 const HB = FLIP.body.tall / 2;
 const P = (x, y, z) => new THREE.Vector3(x, y, z);
+const ease = (k) => k * k * (3 - 2 * k);
 
 export class Flip {
   constructor(world) {
@@ -31,123 +38,124 @@ export class Flip {
     this.group.name = 'flip';
     this.session = null;
     this.best = 0;
-    // the heading of who runs the line (a heading of the valley: 0 looks south)
+    this.clock = worldClock;
+    // the heading of who runs in the machine (a heading of the valley: 0 looks south)
     this.yaw = Math.PI / 2 - PIER.heading;
     this._p = {};
   }
 
-  /** A place of the line in the world: `s` along it, `y` over the sea, `aside` to the south of it. */
-  at(s, y = 0, aside = 0, out = V(0, 0, 0)) { const p = lineAt(s, aside, this._p); return out.set(p.x, y, p.z); }
+  /** A place of the machine in the world: `x` from its left end, `y` over the sea, `aside` to the south of it. */
+  at(x, y = 0, aside = 0, out = V(0, 0, 0)) { const p = frameAt(x, aside, this._p); return out.set(p.x, y, p.z); }
 
   build() {
     const world = this.world, mats = world.materials, R = FLIP, cast = staticCaster(world.engine.tier);
-    // ---- the line is built in a frame of its own: x along it, y up, z towards the sea side (who looks at it)
-    const line = (this.line = new THREE.Group());
-    line.name = 'flip-line';
-    const o = lineAt(0, 0);
-    line.position.set(o.x, 0, o.z);
-    line.rotation.y = -PIER.heading;
+    // ---- the machine is built in a frame of its own: x along it, y up, z towards the sea side (who looks at it)
+    const frame = (this.frame = new THREE.Group());
+    frame.name = 'flip-machine';
+    const o = frameAt(0, 0);
+    frame.position.set(o.x, 0, o.z);
+    frame.rotation.y = -PIER.heading;
     const parts = new Parts(), paint = parts.get('paint'), matte = parts.get('matte'), piles = parts.get('woodWet'), glow = parts.get('glow');
-    // the girders: a cream web between a red flange and a blue one, a navy plate on each end
-    for (const g of R.girders) {
-      if (g.kind === 'stud' || g.kind === 'fang') {
-        // a block to be passed on the other side: bands of yellow and navy
-        const n = 3, h = (g.top - g.bottom) / n;
-        for (let k = 0; k < n; k++) paint.tint(...(k % 2 ? NAVY : YELLOW), 1).box(g.from, g.bottom + k * h, -W + 0.12, g.to, g.bottom + (k + 1) * h, W - 0.12);
-        continue;
-      }
-      paint.tint(...CREAM, 1).box(g.from + 0.08, g.bottom + 0.08, -W + 0.1, g.to - 0.08, g.top - 0.08, W - 0.1, { faces: 'yYzZ' });
-      paint.tint(...RED, 1).box(g.from, g.top - 0.08, -W, g.to, g.top, W);
-      paint.tint(...BLUE, 1).box(g.from, g.bottom, -W, g.to, g.bottom + 0.08, W);
-      for (const x of [g.from, g.to - 0.08]) paint.tint(...NAVY, 1).box(x, g.bottom + 0.08, -W + 0.04, x + 0.08, g.top - 0.08, W - 0.04);
-      // (hung from the rail above by two rods, at its back)
-      const hang = g.to - g.from > 2 ? [g.from + 0.5, g.to - 0.5] : [(g.from + g.to) / 2];
-      for (const x of hang) if (x > -5.5) matte.tint(...STEEL, 1).rod(P(x, g.top, -W + 0.06), P(x, TOP, -W + 0.06), 0.03, 5, { caps: false });
+    const bed = (x, z) => { const w = this.at(x, 0, z); return Math.min(-0.6, this.data.heightAt(w.x, w.z)) - 0.7; };
+    // the two towers, in bands: the girders come out of the right one (navy) and go into the left one (red: who
+    // is pushed as far as that is out)
+    for (const [x0, x1, left] of [[-1.4, 0, true], [W, W + 1.4, false]]) {
+      const n = 12, h = (TOP + 0.9 - LOW) / n;
+      for (let k = 0; k < n; k++) paint.tint(...(k % 2 ? CREAM : left ? RED : NAVY), 1).box(x0, LOW + k * h, -1.25, x1, LOW + (k + 1) * h, 1.25);
+      for (const z of [-0.9, 0.9]) for (const x of [x0 + 0.3, x1 - 0.3]) { const y = bed(x, z); piles.tint(0.95, 0.9, 0.85, 1).cylinder(x, y, z, 0.22, 0.19, LOW + 0.1 - y, 8); }
+      paint.tint(...GOLD, 1).place((x0 + x1) / 2, TOP + 0.9, 0).lathe([[0.001, 0.8], [0.24, 0.66], [0.38, 0.32], [0.26, 0.05], [0.001, 0]], 8).pop();
     }
-    // the rail the girders hang from, and the gallows that carry it: two piles in the sea, a mast, an arm over the line
-    const x0 = -6, x1 = R.length + 3.4;
-    paint.tint(...NAVY, 1).box(x0, TOP, -W - 0.12, x1, TOP + 0.3, -W + 0.24);
-    const bents = [];
-    for (let x = -4; x <= x1; x += 15.2) bents.push(x);
-    for (const x of bents) {
-      const w = this.at(x, 0, -4.6), bed = Math.min(-0.6, this.data.heightAt(w.x, w.z)) - 0.7;
-      for (const z of [-3.9, -5.3]) piles.tint(0.95, 0.9, 0.85, 1).cylinder(x, bed, z, 0.2, 0.17, 2.6 - bed, 8);
-      piles.tint(0.95, 0.9, 0.85, 1).beam(P(x, 2.25, -5.6), P(x, 2.25, -3.6), 0.22, 0.22);
-      paint.tint(...PALE, 1).box(x - 0.1, 2.36, -4.7, x + 0.1, TOP + 0.95, -4.5);
-      paint.tint(...PALE, 1).box(x - 0.09, TOP + 0.5, -4.6, x + 0.09, TOP + 0.72, -W + 0.3);
-      paint.tint(...PALE, 1).beam(P(x, TOP - 1.9, -4.6), P(x, TOP + 0.5, -2.2), 0.1, 0.1);
-      paint.tint(...STEEL, 1).box(x - 0.07, TOP + 0.3, -W - 0.05, x + 0.07, TOP + 0.5, -W + 0.2);
-      paint.tint(...GOLD, 1).place(x, TOP + 0.95, -4.6).lathe([[0.001, 0.3], [0.1, 0.25], [0.15, 0.13], [0.1, 0.02], [0.001, 0]], 8).pop();
+    // the beams between them, a pair above and a pair below (the runner that falls out passes between the two of a pair)
+    for (const y of [LOW, TOP]) for (const z of [-1.25, 0.65]) paint.tint(...NAVY, 1).box(0, y, z, W, y + 0.6, z + 0.6);
+    for (let k = 1; k < 6; k++) {
+      const x = (k * W) / 6;
+      for (const y of [LOW, TOP]) paint.tint(...PALE, 1).box(x - 0.1, y + 0.2, -0.65, x + 0.1, y + 0.4, 0.65);
+      // (a thin post behind the girders, from the beams below to those above)
+      matte.tint(...PALE, 1).box(x - 0.05, LOW + 0.6, -1.2, x + 0.05, TOP, -1.1);
     }
-    // a string of bulbs under the rail, sagging from arm to arm
-    for (let k = 0; k + 1 < bents.length; k++) {
-      const a = bents[k], b = bents[k + 1], n = 9;
-      let prev = null;
-      for (let i = 0; i <= n; i++) {
-        const t = i / n, p = P(a + (b - a) * t, TOP - 0.1 - 1.5 * t * (1 - t), -W - 0.3);
-        if (prev) matte.tint(...BLACK, 1).rod(prev, p, 0.012, 4, { caps: false });
-        if (i > 0 && i < n) glow.tint(...(i % 2 ? [1.5, 1.2, 0.5] : [1.5, 0.5, 0.4]), 1).place(p.x, p.y - 0.1, p.z).lathe([[0.001, -0.09], [0.075, -0.05], [0.09, 0.02], [0.05, 0.08], [0.001, 0.1]], 6).pop();
-        prev = p;
-      }
+    for (const x of [W / 3, (2 * W) / 3]) {
+      for (const z of [-0.95, 0.95]) { const y = bed(x, z); piles.tint(0.95, 0.9, 0.85, 1).cylinder(x, y, z, 0.2, 0.17, LOW - 0.1 - y, 8); }
+      piles.tint(0.95, 0.9, 0.85, 1).beam(P(x, LOW - 0.12, -1.3), P(x, LOW - 0.12, 1.3), 0.24, 0.24);
     }
-    // the flags: a pole at the back of the girder, a pennant
-    FLAGS.forEach((f, k) => {
-      paint.tint(...CREAM, 1).cylinder(f.s, f.y, -W + 0.12, 0.035, 0.03, 2.5, 6);
-      const tone = TONES[k % TONES.length], a = P(f.s + 0.03, f.y + 2.45, -W + 0.12), b = P(f.s + 0.03, f.y + 1.85, -W + 0.12), c = P(f.s + 1.0, f.y + 2.15, -W + 0.12);
-      paint.tint(...tone, 1).tri(a, b, c).tri(a, c, b);
+    // the rails the girders travel along, one behind each level
+    for (let k = 0; k < R.levels.count; k++) { const y = R.levels.base + k * R.levels.rise + R.levels.thick / 2; matte.tint(...STEEL, 1).box(0, y - 0.05, -1.12, W, y + 0.05, -1.02); }
+    // bulbs along the beam above, a horseshoe magnet over the name of the machine
+    for (let i = 0; i < 24; i++) glow.tint(...(i % 2 ? [1.5, 1.2, 0.5] : [1.5, 0.5, 0.4]), 1).place(1 + (i * (W - 2)) / 23, TOP - 0.1, 1.36).lathe([[0.001, -0.11], [0.09, -0.06], [0.11, 0.02], [0.06, 0.1], [0.001, 0.12]], 6).pop();
+    {
+      const cx = W / 2, cy = TOP + 3.05, r = 0.6, n = 12, z = 0.95;
+      for (let i = 0; i < n; i++) { const a0 = (i / n) * Math.PI, a1 = ((i + 1) / n) * Math.PI; paint.tint(...RED, 1).rod(P(cx + Math.cos(a0) * r, cy + Math.sin(a0) * r, z), P(cx + Math.cos(a1) * r, cy + Math.sin(a1) * r, z), 0.16, 8); }
+      for (const side of [-1, 1]) { paint.tint(...RED, 1).rod(P(cx + side * r, cy, z), P(cx + side * r, cy - 0.5, z), 0.16, 8); paint.tint(...WHITE, 1).rod(P(cx + side * r, cy - 0.5, z), P(cx + side * r, cy - 0.85, z), 0.16, 8); }
+      for (const x of [cx - 3.2, cx + 3.2]) paint.tint(...STEEL, 1).box(x - 0.06, TOP + 0.6, 0.8, x + 0.06, TOP + 1.9, 0.92);
+    }
+    frame.add(parts.toMeshes(mats, { name: 'flip-frame', layers: cast }));
+    const name = canvasBoard(1024, 160, (ctx, w, h) => {
+      ctx.fillStyle = '#12122e'; ctx.fillRect(0, 0, w, h); ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 7; ctx.strokeRect(7, 7, w - 14, h - 14);
+      ctx.fillStyle = '#f6e7b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = "700 92px Georgia, 'Times New Roman', serif";
+      ctx.fillText(R.name.toUpperCase(), w / 2, h / 2 + 4, w * 0.92);
+    }, 8, 1.25, { both: true });
+    name.mesh.position.set(W / 2, TOP + 1.4, 0.95); name.mesh.name = 'flip-name';
+    frame.add(name.mesh);
+    // ---- what travels: every girder in the machine is a few boxes of one mesh, cut at the towers
+    const unit = new Parts();
+    unit.get('paint').tint(1, 1, 1, 1).box(0, 0, 0, 1, 1, 1);
+    const boxes = (this.boxes = new THREE.InstancedMesh(unit.get('paint').build(), mats.paint, POOL));
+    boxes.name = 'flip-girders'; boxes.frustumCulled = false; boxes.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    boxes.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(POOL * 3), 3); boxes.instanceColor.setUsage(THREE.DynamicDrawUsage);
+    frame.add(boxes);
+    // the flags (a pole at the back of the girder, a pennant: one of each colour is enough, a flag at a time goes by)
+    this.flags = TONES.map((tone) => {
+      const f = new Parts(), p = f.get('paint'), a = P(0.03, 2.45, -D + 0.12), b = P(0.03, 1.85, -D + 0.12), c = P(1.0, 2.15, -D + 0.12);
+      p.tint(...CREAM, 1).cylinder(0, 0, -D + 0.12, 0.035, 0.03, 2.5, 6);
+      p.tint(...tone, 1).tri(a, b, c).tri(a, c, b);
+      const g = f.toMeshes(mats, { name: 'flip-flag' });
+      g.visible = false; frame.add(g);
+      return g;
     });
-    // the start: stairs from the sand up to the deck, a horseshoe magnet over it
-    {
-      const from = -11, run = 5, foot = this.at(from, 0, 0), y0 = this.data.heightAt(foot.x, foot.z) - 0.1, top = R.levels.floor, n = 10, rise = (x) => y0 + ((top - y0) * (x - from)) / run;
-      for (let k = 0; k < n; k++) { const xa = from + (run * k) / n; paint.tint(...(k % 2 ? CREAM : RED), 1).box(xa, rise(xa + run / n) - 0.12, -W, xa + run / n + 0.03, rise(xa + run / n), W); }
-      for (const z of [-W + 0.05, W - 0.05]) { paint.tint(...NAVY, 1).beam(P(from, y0 + 0.95, z), P(from + run, top + 0.95, z), 0.07, 0.07); for (const x of [from + 0.1, from + run / 2, from + run - 0.05]) paint.tint(...NAVY, 1).box(x - 0.04, rise(x) - 0.2, z - 0.04, x + 0.04, rise(x) + 0.95, z + 0.04); }
-      const cx = 1, cy = TOP + 2.3, r = 0.85, n2 = 12;
-      for (let i = 0; i < n2; i++) { const a0 = (i / n2) * Math.PI, a1 = ((i + 1) / n2) * Math.PI; paint.tint(...RED, 1).rod(P(cx + Math.cos(a0) * r, cy + Math.sin(a0) * r, -W + 0.06), P(cx + Math.cos(a1) * r, cy + Math.sin(a1) * r, -W + 0.06), 0.2, 8); }
-      for (const side of [-1, 1]) { paint.tint(...RED, 1).rod(P(cx + side * r, cy, -W + 0.06), P(cx + side * r, cy - 0.75, -W + 0.06), 0.2, 8); paint.tint(...WHITE, 1).rod(P(cx + side * r, cy - 0.75, -W + 0.06), P(cx + side * r, cy - 1.25, -W + 0.06), 0.2, 8); }
-      paint.tint(...STEEL, 1).box(cx - 0.05, TOP + 0.3, -W, cx + 0.05, cy + r - 0.15, -W + 0.12);
-    }
-    // the end: black and white squares along the last girder, an arch, a bell
-    {
-      const g = R.girders[R.girders.length - 1], n = 6, h = (g.top - g.bottom - 0.16) / 2, y = g.bottom + 0.08;
-      for (let i = 0; i < n; i++) for (let j = 0; j < 2; j++) paint.tint(...((i + j) % 2 ? WHITE : BLACK), 1).box(R.length - 1.5 + i * 0.5, y + j * h, W - 0.1, R.length - 1.0 + i * 0.5, y + (j + 1) * h, W - 0.07, { faces: 'Z' });
-      for (const z of [-W + 0.1, W - 0.1]) for (let hh = g.top, k = 0; hh < g.top + 3.9; hh += 0.5, k++) paint.tint(...(k % 2 ? CREAM : NAVY), 1).cylinder(R.length, hh, z, 0.1, 0.1, Math.min(0.5, g.top + 3.9 - hh), 8);
-      paint.tint(...NAVY, 1).box(R.length - 0.1, g.top + 3.9, -W, R.length + 0.1, g.top + 4.15, W);
-      paint.tint(...GOLD, 1).place(R.length, g.top + 3.35, 0).lathe([[0.03, 0.45], [0.16, 0.4], [0.27, 0.12], [0.37, -0.04], [0.41, -0.12]], 10).pop();
-    }
-    line.add(parts.toMeshes(mats, { name: 'flip-gantry', layers: cast }));
-    // the name of each stretch, on the rail over where it begins (read from the sea, as the run is seen)
-    R.stretches.forEach((stretch, k) => {
+    // the name of each stretch, which goes by under the beams above as the stretch begins
+    this.signs = R.stretches.map((stretch, k) => {
       const board = canvasBoard(512, 80, (ctx, w, h) => {
         ctx.fillStyle = '#12122e'; ctx.fillRect(0, 0, w, h); ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 4; ctx.strokeRect(4, 4, w - 8, h - 8);
         ctx.fillStyle = '#f6e7b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = "700 46px Georgia, 'Times New Roman', serif";
         ctx.fillText(`${k + 1} · ${stretch.name.toUpperCase()}`, w / 2, h / 2 + 2, w * 0.92);
-      }, 3.6, 0.5625, { both: true });
-      board.mesh.position.set(stretch.from + 2.6, TOP + 0.6, -W + 0.3); board.mesh.name = 'flip-stretch';
-      line.add(board.mesh);
+      }, 4.8, 0.75, { both: true });
+      board.mesh.name = 'flip-stretch'; board.mesh.visible = false;
+      frame.add(board.mesh);
+      return board.mesh;
     });
+    // the end: an arch on the last girder, a bell, black and white squares along the girder under it
+    {
+      const e = new Parts(), p = e.get('paint'), n = 6, h = 0.17;
+      for (let i = 0; i < n; i++) for (let j = 0; j < 2; j++) p.tint(...((i + j) % 2 ? WHITE : BLACK), 1).box(-1.5 + i * 0.5, -0.42 + j * h, D + 0.005, -1.0 + i * 0.5, -0.42 + (j + 1) * h, D + 0.03, { faces: 'Z' });
+      for (const z of [-D + 0.1, D - 0.1]) for (let y = 0, k = 0; y < 3.9; y += 0.5, k++) p.tint(...(k % 2 ? CREAM : NAVY), 1).cylinder(0, y, z, 0.1, 0.1, Math.min(0.5, 3.9 - y), 8);
+      p.tint(...NAVY, 1).box(-0.1, 3.9, -D, 0.1, 4.15, D);
+      p.tint(...GOLD, 1).place(0, 3.35, 0).lathe([[0.03, 0.45], [0.16, 0.4], [0.27, 0.12], [0.37, -0.04], [0.41, -0.12]], 10).pop();
+      this.arch = e.toMeshes(mats, { name: 'flip-arch' });
+      this.arch.visible = false; frame.add(this.arch);
+    }
     // ---- the sparks: one mesh for all of them, turned and bobbed by the clock; one's own catches are hidden
     const spark = new Parts();
     spark.get('paint').tint(1.7, 1.25, 0.15, 1).lathe([[0.001, -0.46], [0.3, 0], [0.001, 0.46]], 4);
     this.sparkMat = surfaceMaterial({ name: 'flip-spark', rough: 0.35, spec: 0.3, emissive: [1.15, 0.72, 0.04] });
     const sparks = (this.sparks = new THREE.InstancedMesh(spark.get('paint').build(), this.sparkMat, R.sparks.length));
     sparks.name = 'flip-sparks'; sparks.frustumCulled = false; sparks.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    line.add(sparks);
+    frame.add(sparks);
     this._m = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._e = new THREE.Euler(); this._sc = new THREE.Vector3(); this._v = new THREE.Vector3();
     this._clock = 0;
-    this._sparks(0, 0);
-    this.group.add(line);
-    // ---- the gate, on the sand before the stairs: where one asks to run; one's own best under it
-    const gp = this.at(R.gate, 0, 0), gy = this.data.heightAt(gp.x, gp.z);
-    this.gate = { x: gp.x, y: gy, z: gp.z, yaw: this.yaw };
+    this.group.add(frame);
+    this._show(this._idle(this.clock()), null);
+    // ---- the gate, on the sand of the south beach, the machine out at sea before it: where one asks to run;
+    // one's own best under it
+    const gp = pierToWorld(R.gate.along, R.gate.side), gy = this.data.heightAt(gp[0], gp[1]);
+    this.gate = { x: gp[0], y: gy, z: gp[1], yaw: this.yaw };
     const here = new Parts();
-    gateArch(this.group, here.get('paint'), gp.x, gy, gp.z, this.yaw, R.name.toUpperCase(), 'RUN THE GIRDERS · ONE KEY TURNS GRAVITY OVER', { tone: BLUE, ink: '#12122e' });
+    gateArch(this.group, here.get('paint'), gp[0], gy, gp[1], this.yaw, R.name.toUpperCase(), 'RUN IN THE MACHINE · ONE KEY TURNS GRAVITY OVER', { tone: BLUE, ink: '#12122e' });
     this.group.add(here.toMeshes(mats, { name: 'flip-gate', layers: cast }));
     this.board = canvasBoard(512, 96, (ctx, w, h) => {
       ctx.fillStyle = '#12122e'; ctx.fillRect(0, 0, w, h); ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 5; ctx.strokeRect(5, 5, w - 10, h - 10);
       ctx.fillStyle = '#f6e7b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '700 44px system-ui, sans-serif';
       ctx.fillText(this.best ? `YOUR BEST  ${formatTime(this.best)}` : 'NO TIME OF YOURS YET', w / 2, h / 2 + 2, w * 0.9);
     }, 2.6, 0.49, { both: true });
-    this.board.mesh.position.set(gp.x, gy + 2.05, gp.z); this.board.mesh.rotation.y = this.yaw; this.board.mesh.name = 'flip-best';
+    this.board.mesh.position.set(gp[0], gy + 2.05, gp[1]); this.board.mesh.rotation.y = this.yaw; this.board.mesh.name = 'flip-best';
     this.group.add(this.board.mesh);
     this.group.updateMatrixWorld(true);
     world.scene.add(this.group);
@@ -156,93 +164,156 @@ export class Flip {
 
   setBest(ms) { this.best = ms || 0; this.board?.redraw(); }
   near(x, z) { return (x - this.gate.x) ** 2 + (z - this.gate.z) ** 2 < 2.4 * 2.4; }
+  /** The start one who asks now leaves with: { n, name, at (ms of the shared clock), wait (s) }. */
+  nextStart() { return nextStart(this.clock(), FLIP.every, STARTS, FLIP.count); }
 
-  /** Puts the sparks where the clock says (they turn, they bob); those of `got` (bits) are not shown. */
-  _sparks(clock, got) {
-    const m = this._m, list = FLIP.sparks;
-    for (let k = 0; k < list.length; k++) {
-      const shown = !(got & (1 << k)), sc = shown ? 1 + 0.12 * Math.sin(clock * 5 + k * 1.7) : 0.0001;
-      this._e.set(0, clock * 2.4 + k, 0);
-      m.compose(this._v.set(list[k][0], list[k][1] + (shown ? 0.07 * Math.sin(clock * 3 + k) : 0), 0), this._q.setFromEuler(this._e), this._sc.set(sc, sc, sc));
-      this.sparks.setMatrixAt(k, m);
-    }
-    this.sparks.instanceMatrix.needsUpdate = true;
+  /**
+   * What the machine shows when nobody runs in it here: the run of the latest start, as far as it has got if
+   * nothing has held it back — and, three seconds before the next start, it winds back to the beginning: who
+   * waits for that start is seen standing where the others see the first girder.
+   */
+  _idle(now) {
+    const R = FLIP, t = (((now / 1000) % R.every) + R.every) % R.every, shown = R.every - R.count;
+    return t < shown ? scrollAfter(t) : scrollAfter(shown) + (scrollAfter(0) - scrollAfter(shown)) * ease(clamp((t - shown) / 0.7, 0, 1));
   }
 
   /**
-   * A run is asked for: the player is put on the deck at the start, and runs after a count of three. `io`:
-   * { play, note, splash }. Returns the session — the driver of the player: see lab/games/kit.js. `auto`: true (it
-   * runs by itself, any way to the end) or 'keen' (by itself, after every spark).
+   * Puts in the machine what of the course is between its towers when the metre `scroll` is at its left end:
+   * the girders (cut at the towers), the sparks (not those of `got`), the flag, the name of the stretch, the arch.
+   */
+  _show(scroll, got) {
+    const R = FLIP, m = this.boxes.instanceMatrix.array, tint = this.boxes.instanceColor.array;
+    let n = 0;
+    const put = (x0, y0, z0, x1, y1, z1, c) => {
+      if (n >= POOL) return;
+      const i = n * 16, j = n * 3;
+      m[i] = x1 - x0; m[i + 5] = y1 - y0; m[i + 10] = z1 - z0; m[i + 12] = x0; m[i + 13] = y0; m[i + 14] = z0;
+      tint[j] = c[0]; tint[j + 1] = c[1]; tint[j + 2] = c[2];
+      n++;
+    };
+    for (const g of R.girders) {
+      const x0 = g.from - scroll, x1 = g.to - scroll;
+      if (x1 < 0.03 || x0 > W - 0.03) continue;
+      const a = Math.max(0, x0), b = Math.min(W, x1);
+      if (g.kind !== 'girder') {
+        // a block to be passed on the other side: bands of yellow and navy
+        const h = (g.top - g.bottom) / 3;
+        for (let k = 0; k < 3; k++) put(a, g.bottom + k * h, -D + 0.12, b, g.bottom + (k + 1) * h, D - 0.12, k % 2 ? NAVY : YELLOW);
+        continue;
+      }
+      // a cream web between a red flange and a blue one, a navy plate on each end that is in the machine
+      const in0 = x0 >= 0, in1 = x1 <= W;
+      if (b - a > 0.2) put(a + (in0 ? 0.08 : 0), g.bottom + 0.08, -D + 0.1, b - (in1 ? 0.08 : 0), g.top - 0.08, D - 0.1, CREAM);
+      put(a, g.top - 0.08, -D, b, g.top, D, RED);
+      put(a, g.bottom, -D, b, g.bottom + 0.08, D, BLUE);
+      if (in0) put(a, g.bottom + 0.08, -D + 0.04, Math.min(b, a + 0.08), g.top - 0.08, D - 0.04, NAVY);
+      if (in1) put(Math.max(a, b - 0.08), g.bottom + 0.08, -D + 0.04, b, g.top - 0.08, D - 0.04, NAVY);
+    }
+    // (yellow marks along the beams, which go by with the girders: how fast the machine turns is seen even
+    // where it is empty)
+    for (let x = 2 - ((((scroll % 2) + 2) % 2)); x < W - 0.7; x += 2) for (const y of [LOW + 0.22, TOP + 0.22]) put(Math.max(0, x), y, 1.25, x + 0.7, y + 0.16, 1.27, YELLOW);
+    this.boxes.count = n;
+    this.boxes.instanceMatrix.needsUpdate = true; this.boxes.instanceColor.needsUpdate = true;
+    // the sparks turn and bob
+    const mm = this._m, list = R.sparks, clock = this._clock;
+    for (let k = 0; k < list.length; k++) {
+      const x = list[k][0] - scroll, shown = !(got && got[k]) && x > 0.45 && x < W - 0.45, sc = shown ? 1 + 0.12 * Math.sin(clock * 5 + k * 1.7) : 0.0001;
+      this._e.set(0, clock * 2.4 + k, 0);
+      mm.compose(this._v.set(shown ? x : 1, list[k][1] + (shown ? 0.07 * Math.sin(clock * 3 + k) : 0), 0), this._q.setFromEuler(this._e), this._sc.set(sc, sc, sc));
+      this.sparks.setMatrixAt(k, mm);
+    }
+    this.sparks.instanceMatrix.needsUpdate = true;
+    // the flag in the machine, the name of the stretch (which unrolls out of the right tower and rolls into the left one), the arch
+    for (const f of this.flags) f.visible = false;
+    for (let k = 0; k < FLAGS.length; k++) { const x = FLAGS[k].s - scroll; if (x > 0.3 && x < W - 1.2) { const f = this.flags[k % this.flags.length]; f.position.set(x, FLAGS[k].y, 0); f.visible = true; } }
+    for (let k = 0; k < this.signs.length; k++) {
+      const s = this.signs[k], left = R.stretches[k].from + 1.6 - scroll, a = Math.max(0.05, left), b = Math.min(W - 0.05, left + 4.8);
+      s.visible = b - a > 0.1;
+      if (s.visible) { s.position.set((a + b) / 2, TOP - 0.75, 0); s.scale.x = (b - a) / 4.8; }
+    }
+    const x = R.length - scroll;
+    this.arch.visible = x > 0.4 && x < W - 0.4;
+    if (this.arch.visible) this.arch.position.set(x, R.finish, 0);
+  }
+
+  /**
+   * A run is asked for: the player is put in the machine, on the first girder, and runs with the next start of
+   * the clock everybody shares. `io`: { play, note, splash }. Returns the session — the driver of the player:
+   * see lab/games/kit.js. `auto`: true (it runs by itself, any way to the end) or 'keen' (by itself, after every
+   * spark). The run goes by that clock, not by the frames: who leaves with the same start is at the same girder.
    */
   open(player, io) {
-    const R = FLIP, st = startRun(R.count), events = [], input = { flip: false };
-    // what is shown that the rules do not keep: how far round the runner has turned, where it tumbles after a fall
-    const S = { turn: 0, want: 0, cam: 0, look: null, after: 0, acc: 0, fall: null, touch: false }, pos = V(0, 0, 0), t = V(0, 0, 0);
+    const R = FLIP, start = this.nextStart(), st = startRun(start.wait), events = [], input = { flip: false };
+    // what is shown that the rules do not keep: how far round the runner has turned, where it tumbles after a
+    // fall, how far the machine has wound back
+    const S = { turn: 0, want: 0, after: 0, acc: 0, last: this.clock(), press: false, fall: null, wind: null, touch: false }, pos = V(0, 0, 0), t = V(0, 0, 0), look = V(0, 0, 0);
     const session = {
-      flip: this, over: false, ended: false, score: 0, time: 0, line: '', riding: false, anim: ANIM.idle, state: st, auto: false,
+      flip: this, over: false, ended: false, score: 0, time: 0, line: '', riding: false, anim: ANIM.idle, state: st, auto: false, start, scroll: st.scroll,
       step: (dt, pl, control) => {
-        const inp = pl.input;
+        const inp = pl.input, now = this.clock(), real = clamp((now - S.last) / 1000, 0, 0.25);
+        S.last = now;
         S.touch = !!inp?.isTouch;
-        if (session.auto) {
-          S.acc += Math.min(dt, 0.25);
-          while (S.acc >= R.step && !st.over) { S.acc -= R.step; botInput(st, input, session.auto === 'keen' ? 'keen' : 'mid'); stepRun(st, R.step, input, events); }
-        } else {
-          input.flip = control && !!inp.jump;
-          if (!st.over) stepRun(st, dt, input, events);
+        if (control && inp?.jump) S.press = true;
+        S.acc += real;
+        while (S.acc >= R.step && !st.over) {
+          S.acc -= R.step;
+          if (session.auto) botInput(st, input, session.auto === 'keen' ? 'keen' : 'mid'); else { input.flip = S.press; S.press = false; }
+          stepRun(st, R.step, input, events);
         }
         for (const e of events) {
-          if (e.type === 'tick') io.play('tick');
+          if (e.type === 'tick') { if (e.n <= 3) io.play('tick'); }
           else if (e.type === 'go') io.play('start');
           else if (e.type === 'flip') { io.play('jump', { volume: 0.6 }); S.want += Math.PI; }
-          else if (e.type === 'land') io.play('land', { volume: clamp(e.v / 16, 0.25, 0.8) });
+          else if (e.type === 'land') io.play('land', { volume: clamp(e.v / 22, 0.25, 0.8) });
+          else if (e.type === 'bump') io.play('hit', { volume: 0.5 });
           else if (e.type === 'spark') io.play('pick');
           else if (e.type === 'flag') io.play('checkpoint');
           else if (e.type === 'fall') {
-            S.fall = { kind: e.kind, t: 0, s: st.s, c: st.c, vy: e.kind === 'crash' ? 2 : st.vy, wet: false };
-            io.play(e.kind === 'crash' ? 'hit' : 'fail');
-            io.note(e.kind === 'crash' ? 'Into the end of a girder!' : e.kind === 'sea' ? 'Into the sea!' : 'Lost in the sky!');
-          } else if (e.type === 'back') { S.fall = null; S.turn = S.want = 0; io.play('respawn'); }
-          else if (e.type === 'end') { io.play('bell'); io.play('victory', { volume: 0.7 }); io.note(`The end of the line! ${formatTime(e.time)}`, 4000); }
+            S.fall = { kind: e.kind, t: 0, x: st.s - st.scroll, c: st.c, vy: e.kind === 'left' ? 3 : st.vy, wet: false };
+            S.wind = { from: st.scroll, to: FLAGS[st.flag].s - R.place, t: 0 };
+            io.play(e.kind === 'left' ? 'hit' : 'fail');
+            io.note(e.kind === 'left' ? 'Pushed out of the machine!' : e.kind === 'sea' ? 'Out below, into the sea!' : 'Lost in the sky!');
+          } else if (e.type === 'back') { S.fall = null; S.wind = null; S.turn = S.want = 0; io.play('respawn'); }
+          else if (e.type === 'end') { io.play('bell'); io.play('victory', { volume: 0.7 }); io.note(`Through the arch! ${formatTime(e.time)}`, 4000); }
         }
         events.length = 0;
+        // ---- where the machine is, between two steps of the rules; wound back to the flag after a fall
+        const running = st.wait <= 0 && !(st.out > 0) && !(st.hold > 0) && !st.over, v = speedAt(st.scroll + R.place), lead = running ? S.acc : 0;
+        if (S.wind) { S.wind.t += real; session.scroll = S.wind.from + (S.wind.to - S.wind.from) * ease(clamp(S.wind.t / R.fall.out, 0, 1)); } else session.scroll = st.scroll + v * lead;
         // ---- where the runner is shown: it turns about the middle of its body on the way over
         const f = S.fall;
         if (f) {
-          // tumbling: thrown back from a girder and down into the sea; or on down, or on up
-          f.t += dt;
-          const up = f.kind === 'sky', g = f.kind === 'crash' ? 22 : R.g;
-          const y = f.c + f.vy * f.t + (up ? 0.5 : -0.5) * g * f.t * f.t, s = f.s - (f.kind === 'crash' ? 2.6 * f.t : 0);
-          if (!up && y < 0.3 && !f.wet) { f.wet = true; this.at(s, 0, 0, pos); io.splash(pos.x, 0, pos.z, 1.2); io.play('splash'); }
-          S.turn += dt * 9;
-          this.at(s, Math.max(-2.4, y) - HB * Math.cos(S.turn), -HB * Math.sin(S.turn), pos);
+          // tumbling: thrown out in front of the left tower and down into the sea; or on down, or on up
+          f.t += real;
+          const up = f.kind === 'sky', y = f.c + f.vy * f.t + (up ? 0.5 : -0.5) * (f.kind === 'left' ? 34 : R.g) * f.t * f.t, x = f.kind === 'left' ? Math.max(0.4, f.x) : f.x, aside = f.kind === 'left' ? Math.min(3.4, 7 * f.t) : 0;
+          if (!up && y < 0.3 && !f.wet) { f.wet = true; this.at(x, 0, aside, pos); io.splash(pos.x, 0, pos.z, 1.2); io.play('splash'); }
+          S.turn += real * 9;
+          this.at(x, Math.max(-2.4, y) - HB * Math.cos(S.turn), aside - HB * Math.sin(S.turn), pos);
         } else {
-          S.turn += clamp(S.want - S.turn, -dt * 15, dt * 15);
-          this.at(st.s, st.c - HB * Math.cos(S.turn), -HB * Math.sin(S.turn), pos);
+          S.turn += clamp(S.want - S.turn, -real * 18, real * 18);
+          const x = st.s - st.scroll - (st.held ? v * lead : lagOf(st) > 1e-6 ? -v * lead * R.gain : 0), y = st.c + (running && st.on < 0 ? st.vy * lead : 0);
+          this.at(x, y - HB * Math.cos(S.turn), -HB * Math.sin(S.turn), pos);
         }
         pl.pos.copy(pos); pl.yaw = this.yaw; pl.pitch = 0; pl.roll = S.turn % (Math.PI * 2);
-        const running = st.wait <= 0 && !(st.out > 0) && !(st.hold > 0) && !st.over;
-        pl.speed = running ? speedAt(st.s) : 0; pl.grounded = st.on >= 0;
+        pl.speed = running ? v : 0; pl.grounded = st.on >= 0;
         session.anim = f ? ANIM.jump : !running ? ANIM.idle : st.on >= 0 ? ANIM.run : ANIM.jump;
-        if (st.over) { S.after += dt; if (!session.over) { session.over = true; session.time = session.score = st.time; } if (S.after > 2.2) session.ended = true; }
+        if (st.over) { S.after += real; if (!session.over) { session.over = true; session.time = session.score = st.time; } if (S.after > 2.2) session.ended = true; }
         const n = st.sparks, falls = st.falls;
-        session.line = st.wait > 0 ? `${R.name} · ${Math.max(1, Math.ceil(st.wait))}…`
+        session.line = st.wait > 0 ? `${R.name} · ${start.name} start in ${Math.max(1, Math.ceil(st.wait))}…`
           : st.over ? `${R.name} · ${formatTime(st.time)} · ${n} spark${n === 1 ? '' : 's'}${falls ? `, ${falls} fall${falls === 1 ? '' : 's'}` : ', not a fall'}`
             : `${formatTime(scoreOf(st))} · ${R.stretches[stretchAt(st.s)].name}${n ? ` · ${n} spark${n === 1 ? '' : 's'}` : ''}${falls ? ` · ${falls} fall${falls === 1 ? '' : 's'}` : ''}`;
       },
       /**
-       * The camera: out at sea, side on, a little ahead of the runner. Further out on a screen held upright (to
-       * see as far ahead), and on one played with a finger: the line then fits between what the game shows in
-       * the corners of such a screen.
+       * The camera: out at sea, side on, and it does not move — the whole machine in view, from the tower one
+       * is pushed out at to the tower the girders come out of. On a screen too narrow for that (one held
+       * upright) it keeps the left tower in view and shows as far ahead as it can.
        */
-      camera: (cam, dt) => {
-        const v = speedAt(st.s), ahead = st.s + (st.wait > 0 || st.hold > 0 ? 3 : 1.6 + 0.5 * v), fov = 50, aspect = cam.aspect || 1.6;
-        S.cam = S.look === null ? ahead : S.cam + (ahead - S.cam) * Math.min(1, dt * (st.out > 0 ? 3 : 7));
-        const half = Math.tan((fov * Math.PI) / 360) * aspect, finger = S.touch && aspect > 1;
-        const away = finger ? 27 : clamp(11.5 / half, 16.5, 34), mid = (R.levels.floor + R.levels.ceiling) / 2 + (finger ? 0.7 : 0.25);
-        this.at(S.cam, mid + 0.35, away, t);
+      camera: (cam) => {
+        const fov = 50, aspect = cam.aspect || 1.6, half = Math.tan((fov * Math.PI) / 360) * aspect, need = W / 2 + 3.4;
+        const away = clamp((need / half) * (S.touch && aspect > 1 ? 1.08 : 1), 27, 54), wide = away * half, cx = wide >= need ? W / 2 : wide - 3.4;
+        this.at(cx, 11.6, away, t);
         cam.position.copy(t); cam.up.set(0, 1, 0);
-        S.look = this.at(S.cam, mid, 0, S.look || V(0, 0, 0));
-        cam.lookAt(S.look);
+        cam.lookAt(this.at(cx, 11.0, 0, look));
         return fov;
       },
       /** The run is over (or left): the player is put back on the sand, before the gate. */
@@ -251,11 +322,15 @@ export class Flip {
     };
     this.session = session;
     io.play('tick');
-    if (this.world.engine.camera.aspect < 1) io.note('Turn the screen on its side: you will see further ahead.', 4500);
+    if (this.world.engine.camera.aspect < 1) io.note('Turn the screen on its side: you will see the whole machine.', 4500);
     session.step(0, player, false);
     return session;
   }
 
-  /** Every frame, played or not: the sparks turn; who runs no longer sees those already caught. */
-  update(dt) { this._clock += dt; this._sparks(this._clock, this.session ? this.session.state.got : 0); }
+  /** Every frame, played or not: the girders go by — one's own run if one runs, the latest start otherwise; the sparks turn. */
+  update(dt) {
+    this._clock += dt;
+    const s = this.session;
+    this._show(s ? s.scroll : this._idle(this.clock()), s ? s.state.got : null);
+  }
 }

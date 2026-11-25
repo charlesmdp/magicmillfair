@@ -20,7 +20,7 @@ const TONES = { Red: '#e23b2e', Blue: '#2f7fe6', Green: '#2fae4f', Yellow: '#f2c
 const INNER = FIELD + 1.9; // m from the middle: where the lava meets the rock of the crater as a round begins
 const VIEW = { back: 16, up: 18, ahead: -2.6 }; // the camera: so far behind the middle of the field, so high over the lava; where it looks, past the middle
 const SHOW = 120; // s: who only watches is shown a round that began so long ago at most
-const EMBERS = 28;
+const EMBERS = 28, PUFFS = 12;
 // (numbers drawn from whole numbers: what is built is the same on every device)
 const rnd = (a, b = 0) => { let h = (Math.imul(a | 0, 0x9E3779B1) ^ Math.imul((b | 0) + 0x7F4A7C15, 0x85EBCA6B)) | 0; h ^= h >>> 15; h = Math.imul(h, 0x2C1B3C6D); h ^= h >>> 12; h = Math.imul(h, 0x297A2D39); h ^= h >>> 15; return (h >>> 0) / 4294967296; };
 
@@ -87,7 +87,12 @@ void main() {
   float side = 1.0 - saturate(N.y);
   float glows = step(1.5, vInst.y), tall = saturate(vInst.y - 2.0), hot = vInst.y * (1.0 - glows);
   // (the stone: the grain of the game's granite, and the cracks that cut a column of basalt into drums)
+  #ifdef CRATER
+  // (the inside of the crater: beds of rock, broken ones, of no two heights the same)
+  float drum = smoothstep(0.0, 0.06, abs(fract(vUv.y * 0.37 + 0.6 * vnoise(vUv * vec2(0.11, 0.3))) - 0.5) - 0.43) * step(0.42, vnoise(vUv * vec2(0.3, 1.9) + 3.7)) * 0.6;
+  #else
   float drum = smoothstep(0.0, 0.05, abs(fract(vUv.y * 0.9 + 0.13 * sin(vUv.x * 2.3)) - 0.5) - 0.44) * side;
+  #endif
   vec3 albedo = vColor.rgb * vInst.z * (0.4 + 0.9 * texture(uMap, vUv * 0.45).rgb) * (1.0 - 0.5 * drum);
   albedo *= 1.0 - 0.72 * max(vInst.x, hot); // (what is about to be covered, or has just come up out of the lava, is charred: its own light shows the better)
   float shadow = sunShadow(vWorld, N);
@@ -128,12 +133,12 @@ void main() {
   vec2 flow = vec2(fbm(p * 0.55 + t), fbm(p * 0.55 - t + 5.2)) - 0.5;
   float plates = fbm(p + flow * 1.9 + vec2(t * 0.7, -t));
   float cracks = fbm(p * 2.5 - flow * 2.3 + vec2(-t, t * 1.3));
-  float crust = smoothstep(0.37 + 0.16 * uHeat, 0.5 + 0.16 * uHeat, plates);
+  float crust = smoothstep(0.37 + 0.11 * uHeat, 0.5 + 0.11 * uHeat, plates);
   float vein = 1.0 - smoothstep(0.0, 0.075 + 0.05 * uHeat, abs(cracks - 0.5));
-  vec3 hot = mix(vec3(1.9, 0.36, 0.035), vec3(2.6, 1.05, 0.16), saturate(1.2 - plates * 2.6 + vein * 0.3 + 0.5 * uHeat));
+  vec3 hot = mix(vec3(1.9, 0.36, 0.035), vec3(2.6, 1.05, 0.16), saturate(1.2 - plates * 2.6 + vein * 0.3 + 0.25 * uHeat));
   vec3 dark = vec3(0.05, 0.014, 0.012) * (0.6 + 0.8 * cracks) + vec3(1.5, 0.26, 0.03) * vein * vein;
   vec3 col = mix(hot, dark, crust);
-  col *= 0.92 + 0.08 * sin(uTime * 0.8 + plates * 11.0) + 0.3 * uHeat;
+  col *= 0.92 + 0.08 * sin(uTime * 0.8 + plates * 11.0) + 0.12 * uHeat;
   // (hotter against the rock of the crater, where it wells up)
   col += vec3(0.9, 0.22, 0.02) * smoothstep(0.88, 1.0, vUv.x);
   col = applyFog(col, vWorld, cameraPosition);
@@ -165,7 +170,7 @@ export class Lava {
     const SEG = 64, ROWS = 17, LIP = 6, crest = [], wob = [], f = [rnd(1, 7) * TAU, rnd(2, 7) * TAU, rnd(3, 7) * TAU, rnd(4, 7) * TAU];
     for (let i = 0; i < SEG; i++) {
       const a = (i / SEG) * TAU, e = 0.5 + 0.5 * Math.cos(a); // (a from the east)
-      crest.push(CONE.rim + 1.6 * e * e + 0.5 * Math.sin(3 * a + f[0]) + 0.3 * Math.sin(7 * a + f[1]) + (rnd(i, 11) - 0.5) * 0.6);
+      crest.push(CONE.rim + 1.6 * e * e + 0.5 * Math.sin(3 * a + f[0]) + 0.3 * Math.sin(7 * a + f[1]) + 0.7 * Math.max(0, Math.sin(2 * a + f[2])) + (rnd(i, 11) - 0.5) * 0.6);
       wob.push(0.9 * Math.sin(2 * a + f[2]) + 0.5 * Math.sin(5 * a + f[3]) + (rnd(i, 12) - 0.5) * 0.6);
     }
     const P = (i, j, out = V(0, 0, 0)) => {
@@ -197,10 +202,12 @@ export class Lava {
           n.crossVectors(a, c).normalize();
           if (j > 0) along += p.distanceTo(P(i, j - 1, d));
           const u = (i / SEG) * TAU * (INNER + 4), t = 0.42 + 0.12 * rnd((i % SEG) * 31 + j, 5);
-          if (j <= LIP) { const s = 0.52 + 0.12 * rnd((i % SEG) * 31 + j, 5); inside[i].push(wall.vert(p, n, u, along, [s * 0.34, s * 0.27, s * 0.25, j < 2 ? 0.6 : 0.85])); }
+          if (j <= LIP) { const s = 0.52 + 0.12 * rnd((i % SEG) * 31 + j, 5); inside[i].push(wall.vert(p, n, u, along, [s * 0.17, s * 0.135, s * 0.125, j < 2 ? 0.6 : 0.85])); }
           if (j >= LIP) {
-            const k = (j === 7 || j === 8 ? t + 0.06 : t) * (flow && j > 7 && j < 14 ? 0.62 : 1), warm = flow && j > 7 && j < 14 ? 1.12 : 1;
-            outside[i].push(rock.vert(p, n, u / rock.tile, along / rock.tile, j === LIP ? [k * 0.9, k * 0.74, k * 0.68, 0.85] : [k * 0.86 * warm, k * 0.82, k * 0.84, 1]));
+            // (burnt black under the crest, the paler ash of old eruptions towards the foot, bed over bed)
+            const ash = [0, 0, 0, 0.1, 0.4, 0.75, 1, 1, 0.8, 0.8, 0.8][j - LIP], bed = j > 8 && j < 13 ? 0.94 + 0.12 * rnd(j, 61) : 1, old = flow && j > 7 && j < 14;
+            const k = t * (0.72 + 0.6 * ash) * bed * (old ? 0.5 : 1);
+            outside[i].push(rock.vert(p, n, u / rock.tile, along / rock.tile, j === LIP ? [k * 0.9, k * 0.74, k * 0.68, 0.85] : [k * (0.86 + 0.1 * ash) * (old ? 1.1 : 1), k * (0.8 + 0.06 * ash), k * (0.82 - 0.08 * ash), 1]));
           }
         }
       }
@@ -210,8 +217,8 @@ export class Lava {
       }
     }
     // ---- teeth of rock along the crest, boulders where the sea breaks on the foot
-    for (let k = 0; k < 7; k++) {
-      const i = Math.floor(rnd(k, 21) * SEG), q = P(i, 7), s = 0.8 + rnd(k, 22) * 0.8, t = 0.36 + 0.1 * rnd(k, 23);
+    for (let k = 0; k < 11; k++) {
+      const i = Math.floor(rnd(k, 21) * SEG), q = P(i, 7), s = 0.75 + rnd(k, 22) * 0.65, t = 0.3 + 0.1 * rnd(k, 23);
       rock.tint(t * 0.86, t * 0.82, t * 0.84, 1).place(q.x, q.y - 0.6, q.z, rnd(k, 24) * TAU, (rnd(k, 25) - 0.5) * 0.5, (rnd(k, 26) - 0.5) * 0.5)
         .lathe([[1.25 * s, -0.6], [1.1 * s, 0.5 * s], [0.85 * s, 1.2 * s], [0.5 * s, 1.75 * s], [0.12 * s, 2.0 * s], [0.01, 2.02 * s]], 5).pop();
     }
@@ -227,9 +234,9 @@ export class Lava {
     this.group.add(parts.toMeshes(mats, { name: 'lava-islet', layers: staticCaster(world.engine.tier) }));
 
     // ---- basalt: the inside of the crater (the lava lights it from below, wherever it is) and the columns
-    const basalt = () => { const mat = makeMaterial({ uniforms: { uMap: { value: mats.granite.uniforms.uMap.value }, uLavaY: { value: L.level } }, vertexShader: VERT, fragmentShader: BASALT_FRAG, vertexColors: true }); mat.name = 'lava:basalt'; return mat; };
+    const basalt = (defines = {}) => { const mat = makeMaterial({ uniforms: { uMap: { value: mats.granite.uniforms.uMap.value }, uLavaY: { value: L.level } }, defines, vertexShader: VERT, fragmentShader: BASALT_FRAG, vertexColors: true }); mat.name = 'lava:basalt'; return mat; };
     {
-      const mesh = new THREE.Mesh(wall.build(), basalt());
+      const mesh = new THREE.Mesh(wall.build(), basalt({ CRATER: 1 }));
       mesh.name = 'lava-crater'; mesh.matrixAutoUpdate = false;
       this.crater = mesh;
       this.group.add(mesh);
@@ -254,6 +261,16 @@ export class Lava {
       this.embers.name = 'lava-embers'; this.embers.frustumCulled = false;
       for (let k = 0; k < EMBERS; k++) this.embers.setColorAt(k, new THREE.Color(0, 0, 0));
       this.group.add(this.embers);
+    }
+    // ---- smoke over the crater, seen from the pier: round puffs that go up and drift out to sea, redder at the
+    // mouth the higher the lava stands (who plays is under it, and is spared it)
+    {
+      const b = new MeshBuilder();
+      b.lathe([[0.001, -1], [0.6, -0.8], [0.94, -0.34], [1, 0.1], [0.82, 0.58], [0.46, 0.89], [0.001, 1]], 7);
+      this.smoke = new THREE.InstancedMesh(b.build(), surfaceMaterial({ name: 'lava:smoke', color: [1, 1, 1], rough: 1, spec: 0 }), PUFFS);
+      this.smoke.name = 'lava-smoke'; this.smoke.frustumCulled = false;
+      for (let k = 0; k < PUFFS; k++) this.smoke.setColorAt(k, new THREE.Color(0.5, 0.5, 0.5));
+      this.group.add(this.smoke);
     }
     // ---- the columns: one shape, sixty-one times — a prism long enough to stand in the lava whatever its level;
     // each is put where the round has it, every frame
@@ -302,7 +319,7 @@ export class Lava {
       }
       m.makeTranslation(x, y, z);
       this.columns.setMatrixAt(c, m);
-      col[c * 3] = warn; col[c * 3 + 1] = hot; col[c * 3 + 2] = 0.62 + 0.11 * clamp(o.level - lava, 0, 5) + 0.1 * rnd(c, 3); // (the higher over the lava, the paler: heights are read at a glance)
+      col[c * 3] = warn; col[c * 3 + 1] = hot; col[c * 3 + 2] = 0.5 + 0.16 * clamp(o.level - lava, 0, 4.5) + 0.05 * rnd(c, 3); // (the higher over the lava, the paler: heights are read at a glance)
     }
     this.columns.instanceMatrix.needsUpdate = true;
     this.columns.instanceColor.needsUpdate = true;
@@ -333,6 +350,18 @@ export class Lava {
     }
     this.embers.instanceMatrix.needsUpdate = true;
     this.embers.instanceColor.needsUpdate = true;
+    // ---- smoke: each puff swells as it leaves the mouth of the crater, goes up, drifts east, thins out
+    const tint = this.smoke.instanceColor.array, full = clamp(this.shown.pool / (L.top * L.lv), 0, 1);
+    for (let k = 0; k < PUFFS; k++) {
+      const life = 15 + 5 * rnd(k, 71), u = ((now + life * rnd(k, 72)) % life) / life, turn = Math.floor((now + life * rnd(k, 72)) / life), a = rnd(k, 73 + (turn % 53)) * TAU, r = 5 * rnd(k, 74 + (turn % 61));
+      const size = s ? 0 : (2.2 + 4.2 * Math.sqrt(u)) * Math.min(1, u * 9) * Math.min(1, (1 - u) * 2.6), warm = (1 - Math.min(1, u * 3.5)) * (0.25 + 0.75 * full);
+      m.makeScale(size, size * 0.86, size).setPosition(L.at.x + Math.cos(a) * r * (1 + u) + 26 * u * u, CONE.rim - 2 + 34 * u - 9 * u * u, L.at.z + Math.sin(a) * r * (1 + u) - 7 * u * u);
+      this.smoke.setMatrixAt(k, m);
+      const grey = 0.4 + 0.22 * u + 0.06 * rnd(k, 75);
+      tint[k * 3] = grey + 1.5 * warm; tint[k * 3 + 1] = grey + 0.34 * warm; tint[k * 3 + 2] = grey * 1.04;
+    }
+    this.smoke.instanceMatrix.needsUpdate = true;
+    this.smoke.instanceColor.needsUpdate = true;
   }
 
   /**

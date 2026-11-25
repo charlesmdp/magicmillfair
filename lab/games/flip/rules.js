@@ -41,7 +41,7 @@ export const FLIP = {
   spark: { reach: 0.95, worth: 0.25 }, // caught within so many metres of the middle of the body; s off the clock for each
   levels: { count: 6, base: BASE, rise: RISE, thick: THICK, tooth: TOOTH }, // girder k: from base + k × rise up to that + thick
   gate: { along: 28.8, side: 34 }, // where one asks to run, on the sand of the south beach
-  stretches: [], flags: [], girders: [], sparks: [], // the course: written below
+  stretches: [], flags: [], girders: [], sparks: [], finish: 0, // the course: written below (finish: the height of the girder the arch stands on)
 };
 const HB = FLIP.body.tall / 2, HALF = FLIP.body.half;
 
@@ -123,7 +123,7 @@ function write() {
       for (const q of girders) { const p = list[list.length - 1]; if (p && q.kind === 'girder' && p.kind === 'girder' && p.level === q.level && q.from <= p.to + 0.01) p.to = Math.max(p.to, q.to); else list.push(q); }
       R.girders = list.sort((a, b) => a.from - b.from);
       R.sparks = sparks.sort((a, b) => a[0] - b[0]);
-      R.stretches = stretches; R.flags = flags;
+      R.stretches = stretches; R.flags = flags; R.finish = over(level);
     },
   };
   return c;
@@ -410,4 +410,4 @@ export function fromFlag(k) { return value(backAt(startRun(0), k)); }
 
 // Its line for the boards of scores: the time to the end, in ms — the less the better. `min`: no run can be
 // shorter than that of the runner that catches every spark and is never held back (the checks print it).
-export const BOARD = { order: 'asc', min: 40_000, max: 600_000 };
+export const BOARD = { order: 'asc', min: 50_000, max: 600_000 };

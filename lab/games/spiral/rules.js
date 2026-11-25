@@ -60,7 +60,7 @@ export const SPIRAL = {
   edge: 0.18, lip: 0.22, drop: 1, // m: how far over an edge a foot may be; the step one still gets up; how deep a hole takes one
   bar: { t: 0.15, low: 0.55, high: 0.85, hung: 1.45, top: 2.5 }, // what stands across: half its thickness; the top of a hurdle; the foot of a hung board, and its top; the top of a fence
   fall: 0.5, back: 0.3, // s between the end of an attempt and the foot; there before the legs answer again
-  cam: { back: 7.4, out: 3.9, up: 5.8, ahead: 2.8 }, // the camera: so far behind (m of arc), outside the middle of the track (beyond its rail), above; looking so far ahead
+  cam: { back: 7.4, out: 3.9, up: 5.8, ahead: 2.25 }, // the camera: so far behind (m of arc), outside the middle of the track (beyond its rail), above; looking so far ahead (as it looked at a run when its eye trailed: the same picture, standing or running)
 };
 const S = SPIRAL;
 /** Metres of track a turn, along its middle; and from the foot to the bell. */
@@ -297,7 +297,7 @@ function sub(st, dt, input, events) {
   else if (st.slide > 0) { /* (as it began) */ }
   else if (want > st.v) st.v = Math.min(want, st.v + (full / S.start) * dt);
   else if (want < st.v) st.v = Math.max(want, st.v - (full / S.stop) * dt);
-  if (run >= 0.5) { st.pace = st.v; st.since = 0; } else if (st.since < 9) st.since += dt;
+  if (run >= 1) { st.pace = st.v; st.since = 0; } else if (st.since < 9) st.since += dt; // (what one ran at, the stick full up: remembered a moment for a slide)
   // (the clock of the attempt starts with its first step: thinking at the foot is free)
   if (!st.going && st.v > 0) { st.going = true; events?.push({ type: 'go', attempt: st.attempt }); }
   if (st.going) st.clock += dt;

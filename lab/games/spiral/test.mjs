@@ -202,20 +202,20 @@ const windowOf = (key, from, to, u = 0) => { let n = 0; for (let k = 0; k < 240;
     }
   }
   check('each thing that moves is got past whatever the moment one comes to it', stopped.length === 0, stopped.length ? stopped.slice(0, 4).join(', ') : `${mills.length} mills, ${stomps.length} stompers, ${hammers.length} hammers, ${rolls.length} runs of barrels, thirty moments each: ${met} times past`);
-  // (and met from a standstill, a step before it: the runner that plays by itself lets go of the stick when the way is shut, and waits for its moment)
+  // (and met from a standstill right before it, by the tower, in the middle, by the rail: the runner that plays by itself lets go of the stick when the way is shut, and waits for its moment)
   let from0 = 0, waits = 0, longest = 0; const held = [];
   for (const m of [...mills, ...stomps, ...hammers, ...rolls]) {
-    const from = m.kind === 'mill' ? m.s - m.arm - 0.6 : m.kind === 'barrels' ? before(m.s0, 3) : m.s0 - S.along - 0.4;
+    const from = m.kind === 'mill' ? m.s - m.arm - 0.3 : m.kind === 'barrels' ? before(m.s0, 3) : m.s0 - S.along - 0.1;
     const span = m.kind === 'mill' ? TAU / m.turn : m.kind === 'barrels' ? m.every : m.period;
-    for (let k = 0; k < 12; k++) {
-      const st = stander(from, 0, 40 + (k * span * 3.1) / 12), input = { side: 0, run: 0, jump: false, down: false, crouch: false }, events = [];
+    for (const u of m.kind === 'barrels' ? [0] : [-1.3, 0, 1.3]) for (let k = 0; k < 12; k++) {
+      const st = stander(from, u, 40 + (k * span * 3.1) / 12), input = { side: 0, run: 0, jump: false, down: false, crouch: false }, events = [];
       let out = '', t = 0, stood = 0;
       for (; t < 30 && st.s < m.s1 + 0.8 && !out; t += S.step) { botInput(st, input); if (!input.run && st.v === 0) stood += S.step; stepRun(st, S.step, input, events); out = events.find((e) => e.type === 'out')?.why || ''; }
       from0++; if (st.bot.stops) waits++; longest = Math.max(longest, stood);
-      if (out || st.s < m.s1 + 0.8) held.push(`${m.kind} at ${m.s0.toFixed(0)} m (${out || 'not past it after 30 s'})`);
+      if (out || st.s < m.s1 + 0.8) held.push(`${m.kind} at ${m.s0.toFixed(0)} m, ${u} across, moment ${k} (${out || 'not past it after 30 s'})`);
     }
   }
-  check('and by one who had stopped a step before it: the runner that plays by itself waits for its moment, then goes', held.length === 0 && waits > 0 && longest < 6, held.length ? held.slice(0, 4).join(', ') : `twelve moments each: ${from0} times past, ${waits} of them after letting go of the stick to wait — ${longest.toFixed(1)} s at the longest`);
+  check('and by one who had stopped right before it: the runner that plays by itself waits for its moment, then goes', held.length === 0 && waits > 0 && longest < 6, held.length ? `${held.length} of ${from0}: ${held.slice(0, 4).join(', ')}` : `across the track, twelve moments each: ${from0} times past, ${waits} of them after letting go of the stick to wait — ${longest.toFixed(1)} s at the longest`);
   // (what moves leaves nowhere to stand for ever: within a mill, under a stomper, in the swing of a hammer, one is caught within one of its turns)
   let spots = 0, safe = 0;
   for (const m of mills) for (let ds = -1.5; ds <= 1.5; ds += 0.5) for (const u of [-1.3, -0.65, 0, 0.65, 1.3]) { if (Math.hypot(ds, u) > m.arm) continue; spots++; if (go(stander(m.s + ds, u, 40), 999, still, TAU / m.turn + 0.1).out !== 'mill') safe++; }
@@ -235,6 +235,9 @@ const windowOf = (key, from, to, u = 0) => { let n = 0; for (let k = 0; k < 240;
   // ---- the runner that plays by itself
   const runs = []; for (let k = 0; k < 12; k++) runs.push(botRun(k * 7.3));
   check('a runner that plays by itself reaches the bell at its first attempt, whenever it starts', runs.every((r) => r.over && r.attempts === 1 && r.time > fastest() && r.time < globalThis.SLOWEST * 1000 && r.time <= r.clock * 1000 + 1), `${runs.map((r) => (r.time / 1000).toFixed(1)).join(' · ')} s from the first step; ${Math.round(runs.reduce((a, r) => a + r.keys, 0) / runs.length)} keys pressed; the stick let go to wait ${runs.reduce((a, r) => a + r.stops, 0)} times in all`);
+  // (the same runner on slower legs: every jump is shorter, every slide too — and still nothing on the way is shut)
+  const legs = S.speed.slice(), slower = [0.75, 0.5].map((k) => { S.speed = legs.map((v) => v * k); const r = botRun(11, 600); S.speed = legs; return { k, ...r }; });
+  check('nothing on the way needs the full speed: on legs that never go faster than three quarters of it, than half of it, the same runner reaches the bell at its first attempt', slower.every((r) => r.over && r.attempts === 1), slower.map((r) => `at ${Math.round(r.k * 100)} %: ${r.over ? `${(r.time / 1000).toFixed(1)} s` : `not there — ${r.why.slice(0, 3).join(', ')}`}`).join(' · '));
   const at = (dt) => { const st = startRun(3), input = { side: 0, run: 0, jump: false, down: false, crouch: false }; let acc = 0; for (let t = 0; t < 120 && !st.over; t += dt) { acc += dt; while (acc >= S.step && !st.over) { acc -= S.step; botInput(st, input); stepRun(st, S.step, input, null); } } return st.time; };
   check('the same run at 30 and at 144 frames a second', at(1 / 30) === at(1 / 144) && at(1 / 30) > 0);
   // ---- each turn worse than the last

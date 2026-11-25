@@ -3,21 +3,23 @@
 import { formatTime } from '../../../src/world/zones/games/course.js';
 import { plug } from '../kit.js';
 import { Flip } from './Flip.js';
-import { FLIP } from './rules.js';
+import { FLIP, BOARD } from './rules.js';
 
-/** Hangs the line of girders along the pier of `app` (the game, once it runs) and lets the player run it. Returns it. */
+/** Stands the machine in the sea along the pier of `app` (the game, once it runs) and lets the player run in it. Returns it. */
 export function attach(app) {
   const flip = new Flip(app.world).build();
-  app.world.bakeShadows(); // (the gantry was not there when the shadows of what never moves were drawn)
+  app.world.bakeShadows(); // (the machine was not there when the shadows of what never moves were drawn)
   return plug(app, flip, {
     id: 'flip',
-    label: () => `Run ${FLIP.name}`,
-    // (four short lines: the panel that shows them hangs over the top of the line for a few seconds)
-    keys: (touch) => (touch
-      ? 'You run by yourself · the arrow turns gravity over (feet on a girder only) · a spark takes time off, a fall puts you back at a flag'
-      : 'You run by yourself · Space turns gravity over (feet on a girder only) · a spark takes time off, a fall puts you back at a flag · E: leave — H: these keys again'),
+    name: FLIP.name,
+    // (a start every ten seconds on the clock everybody shares: who asks together leaves together)
+    label: (game) => { const next = game.nextStart(); return `Run ${FLIP.name} — ${next.name} start in ${Math.max(1, Math.ceil(next.wait))} s`; },
+    // (four short lines: the panel that shows them hangs over the top of the machine for a few seconds)
+    keys: (touch) => `You run on the spot: ${touch ? 'the arrow' : 'Space'} turns gravity over (feet on a girder only) · a girder in your way pushes you back: turn gravity over before the left tower · pushed out or fallen out, you go back to a flag — a spark takes time off${touch ? '' : ' · E: leave — H: these keys again'}`,
     leave: 'Leave the run',
     left: 'Run left.',
     format: formatTime,
+    board: BOARD,
+    sub: 'seven hundred metres of girders · the time to the arch, a quarter of a second off for each spark',
   });
 }
