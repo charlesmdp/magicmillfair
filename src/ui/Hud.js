@@ -141,10 +141,12 @@ export class Hud {
    * The colours and the sizes a robot can have, as buttons in `colours` and `sizes` (two elements): the first
    * sixteen colours are everybody's; the two rows after them, and the sizes other than the usual one, come
    * with the Game Pass — without it they are shown with a padlock and cannot be picked (`hint` then says why).
-   * Emits 'color' (its number) and 'size' (its number: see SIZES in items.js). Kept in step by setRobot().
+   * `plain`: what is not theirs is not shown at all — neither the colours of the pass nor the sizes (the card
+   * of the first visit: nothing on it looks like something to sell). Emits 'color' (its number) and 'size' (its
+   * number: see SIZES in items.js). Kept in step by setRobot().
    */
-  _robotUI(colours, sizes, hint) {
-    const ui = { colours: [], sizes: [], hint };
+  _robotUI(colours, sizes, hint, plain = false) {
+    const ui = { colours: [], sizes: [], hint, plain, row: null, box: sizes, label: sizes.previousElementSibling?.tagName === 'LABEL' ? sizes.previousElementSibling : null };
     const locked = (b) => b.classList.contains('locked');
     const why = () => { if (hint) { hint.hidden = false; hint.textContent = 'That comes with the Game Pass ($19 a month, in the item shop): two more rows of colours, four sizes, every hat, the Jetpack Lite.'; } this.emit('wantpass'); };
     colours.textContent = '';
@@ -154,7 +156,7 @@ export class Hud {
       b.style.background = `#${c.toString(16).padStart(6, '0')}`;
       b.setAttribute('aria-label', `Colour ${i + 1}${i >= FREE_COLORS ? ' (Game Pass)' : ''}`);
       if (i >= FREE_COLORS) { b.classList.add('extra'); b.innerHTML = LOCK; }
-      if (i === FREE_COLORS) colours.append(el('small', 'passrow', 'With the Game Pass'));
+      if (i === FREE_COLORS) { ui.row = el('small', 'passrow', 'With the Game Pass'); colours.append(ui.row); }
       b.onclick = () => { if (locked(b)) { why(); return; } this.setRobot({ color: i }); this.emit('color', i); };
       colours.append(b);
       ui.colours.push(b);
@@ -184,6 +186,15 @@ export class Hud {
       ui.colours.forEach((b, i) => { b.setAttribute('aria-pressed', String(i === r.color)); b.classList.toggle('locked', i >= FREE_COLORS && !r.pass); });
       ui.sizes.forEach((b, i) => { b.setAttribute('aria-pressed', String(i === r.size)); b.classList.toggle('locked', i > 0 && !r.pass); });
       if (ui.hint && r.pass) ui.hint.hidden = true;
+      // (plain: without the pass, its colours and the sizes are not there at all — the robot is of the usual size)
+      if (ui.plain) {
+        const off = !r.pass;
+        ui.colours.forEach((b, i) => { b.hidden = off && i >= FREE_COLORS; });
+        if (ui.row) ui.row.hidden = off;
+        ui.box.hidden = off;
+        if (ui.label) ui.label.hidden = off;
+        if (off && ui.hint) ui.hint.hidden = true;
+      }
     }
   }
 
@@ -194,7 +205,8 @@ export class Hud {
     s.querySelector('.card').classList.add('ready');
     const input = s.querySelector('#mmf-name');
     input.value = name;
-    this._robotUI(s.querySelector('.swatches'), s.querySelector('.sizes'), s.querySelector('.passhint'));
+    // (the first card shows only what is everybody's: no colour, no size of the Game Pass — nothing to sell here)
+    this._robotUI(s.querySelector('.swatches'), s.querySelector('.sizes'), s.querySelector('.passhint'), true);
     this.setRobot({ color, size, pass });
     s.querySelector('.keys').innerHTML = touch
       ? 'Drag on the left to walk, on the right to look around.'

@@ -192,6 +192,7 @@ html, body {
 .passtag { margin-left: 6px; padding: 1px 6px; border-radius: 6px; background: rgba(242, 193, 78, 0.2); color: var(--accent); font-size: 9.5px; letter-spacing: 0.1em; }
 .passhint { margin: 7px 0 0; font-size: 12px; line-height: 1.4; color: var(--accent); }
 .passhint[hidden] { display: none; }
+.swatches button[hidden], .swatches .passrow[hidden], .sizes[hidden], .form label[hidden] { display: none !important; } /* (the first card: what comes with the Game Pass is not shown) */
 .panel .swatches.robot { margin-top: 4px; gap: 6px; }
 .panel .sizes.robot { margin-top: 8px; }
 .go {

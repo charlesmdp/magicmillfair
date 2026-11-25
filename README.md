@@ -389,11 +389,12 @@ the first time the panel is opened (`rankPicture`). The administrator has them a
   the twenty-four hours that follow a first visit (the shop tags it *Free today* and says how long is
   left; a line in the chat says so on the first visit). After that, pressing jump in the air says — kindly — that the free day is over, and that the light jetpack
   is $5 in the shop or comes with the Game Pass: the line carries a **Get the Game Pass** button that opens the payment at once.
-- **Four sizes**: the card of the welcome (and Settings → *Your robot*) asks for a size next to the name
-  and the colour — *Pocket* (a tenth smaller), *Classic* (everybody's), *Jumbo* (a tenth bigger) or
-  *Titan* (a fifth bigger). Everybody around sees it. The three that are not Classic, and two more rows
-  of colours (black among them), belong to the Game Pass: without it they carry a padlock. In the quad
-  race everybody is the same size.
+- **Four sizes**: Settings → *Your robot* asks for a size next to the colour — *Pocket* (a tenth smaller),
+  *Classic* (everybody's), *Jumbo* (a tenth bigger) or *Titan* (a fifth bigger). Everybody around sees it. The
+  three that are not Classic, and two more rows of colours (black among them), belong to the Game Pass:
+  without it they carry a padlock there. The card of the welcome shows only what is everybody's — the
+  sixteen colours, no size to choose, not a word of the pass (nothing on a first visit looks like something
+  to sell) —, and all of it to who holds the pass. In the quad race everybody is the same size.
 - **Sitting on the ground**: X, anywhere on dry land — the robot sits down cross-legged, hands on its
   knees, and the others see it. The first step gets up.
 - **Flowers**: walk up to a flower and pick it (E): a bouquet grows in your hand, flower by flower. B puts

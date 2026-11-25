@@ -493,17 +493,20 @@ try {
     const pick3 = async (id) => { await p3.evaluate((id) => document.querySelector(`.shop .card[data-item="${id}"]`).click(), id); return p3.evaluate(() => ({ acts: [...document.querySelectorAll('.shop .detail .acts button')].map((b) => b.textContent), perks: document.querySelectorAll('.shop .detail ul.perks li').length, why: document.querySelector('.shop .detail p.why')?.textContent || '' })); };
     await p3.goto(`${BASE}/?q=${opt.q || 'low'}`);
     await p3.waitForSelector('.card.ready', { timeout: 240000 });
-    // the welcome card: the colours and the sizes of the pass are shown, with a padlock
+    // the welcome card of a first visit: only what is everybody's — sixteen colours, no size to choose, not a word
+    // of the Game Pass (nothing on it looks like something to sell)
     await p3.waitForFunction(() => document.querySelectorAll('.splash .swatches button.locked').length === 16, null, { timeout: 30000 });
-    await p3.click('.splash .swatches button.extra');
-    await p3.click('.splash .sizes button:nth-child(3)');
-    const card0 = await p3.evaluate(() => ({ sizes: document.querySelectorAll('.splash .sizes button.locked').length, picked: [...document.querySelectorAll('.splash .swatches button')].findIndex((b) => b.getAttribute('aria-pressed') === 'true'), size: document.querySelector('.splash .sizes button[aria-pressed="true"]')?.textContent || '', hint: document.querySelector('.splash .passhint').hidden ? '' : document.querySelector('.splash .passhint').textContent }));
+    const card0 = await p3.evaluate(() => {
+      const seen = (e) => !!e && e.getClientRects().length > 0, sw = [...document.querySelectorAll('.splash .swatches button')];
+      return { colours: sw.filter(seen).length, extra: sw.slice(16).some(seen), row: seen(document.querySelector('.splash .swatches .passrow')), sizes: seen(document.querySelector('.splash .sizes')), labels: [...document.querySelectorAll('.splash .form label')].filter(seen).map((l) => l.textContent).join(), picked: sw.findIndex((b) => b.getAttribute('aria-pressed') === 'true'), words: document.querySelector('.splash .form').innerText };
+    });
+    await p3.screenshot({ path: path.join(ROOT, 'tools/preview/shop-first-card.png') });
     await p3.click('.go');
     await p3.waitForFunction(() => window.__mmf && window.__mmf.ready && window.__mmf.player && window.__mmf.shop.open, null, { timeout: 60000 });
     const dev3 = await p3.evaluate(() => localStorage.getItem('mmf.device'));
     const day1 = await p3.evaluate(() => { const a = window.__mmf; return { color: a.me.colorIndex, size: a.me.size, lent: a.shop.lent('jetlite'), has: a.shop.has('jetlite'), canFly: a.player.canFly(a.player.pos), tank: a.player.tank, hours: a.shop.trialLeft('jetlite') / 3600_000, pass: a.shop.hasPass }; });
-    check('a newcomer: the colours and the sizes of the Game Pass are locked on the welcome card (a word says why); the light jetpack is theirs for a day',
-      card0.sizes === 3 && card0.picked < 16 && card0.size === 'Classic' && /Game Pass/.test(card0.hint) && day1.color < 16 && day1.size === 1 && !day1.pass && day1.lent === 'trial' && !day1.has && day1.canFly && Math.abs(day1.tank - 0.3) < 0.01 && day1.hours > 23 && day1.hours <= 24,
+    check('a newcomer: the welcome card shows only what is everybody\'s — sixteen colours, no size to choose, not a word of the Game Pass; the light jetpack is theirs for a day',
+      card0.colours === 16 && !card0.extra && !card0.row && !card0.sizes && card0.labels === 'Your name,Colour' && card0.picked < 16 && !/Game Pass|Pocket|Jumbo|Titan/.test(card0.words) && day1.color < 16 && day1.size === 1 && !day1.pass && day1.lent === 'trial' && !day1.has && day1.canFly && Math.abs(day1.tank - 0.3) < 0.01 && day1.hours > 23 && day1.hours <= 24,
       JSON.stringify({ card0, day1 }));
     // the pass in the shop: what it gives, what it costs; the button leads to Stripe, by the month
     await p3.click('.shop-icon');
@@ -521,6 +524,8 @@ try {
     await p3.goto(`${BASE}/?q=${opt.q || 'low'}&paid=pass&welcome`); // (back from the payment page one is in the world at once: the card is asked for here, to pick on it)
     await p3.waitForSelector('.card.ready', { timeout: 240000 });
     await p3.waitForFunction(() => document.querySelectorAll('.splash .swatches button.locked').length === 0 && document.querySelectorAll('.splash .sizes button.locked').length === 0, null, { timeout: 30000 });
+    // (with the pass, the card has all of it: the thirty-two colours, the four sizes)
+    const card1 = await p3.evaluate(() => { const seen = (e) => !!e && e.getClientRects().length > 0; return { colours: [...document.querySelectorAll('.splash .swatches button')].filter(seen).length, sizes: [...document.querySelectorAll('.splash .sizes button')].filter(seen).map((b) => b.textContent).join() }; });
     await p3.evaluate(() => document.querySelectorAll('.splash .swatches button')[16].click());
     await p3.click('.splash .sizes button:nth-child(4)'); // (the largest: Titan)
     await p3.click('.go');
@@ -536,8 +541,8 @@ try {
     await frames3(4);
     const with3 = await p3.evaluate(() => { const a = window.__mmf; return { color: a.me.colorIndex, size: a.me.size, hat: a.me.look.hat, lite: a.shop.lent('jetlite'), pass: a.shop.hasPass, told: [...document.querySelectorAll('.chat .log p')].map((e) => e.textContent).join(' | ') + ' ' + document.querySelector('.hud .note').textContent }; });
     check('with the pass: black and the largest size are picked on the welcome card, every hat can be worn without being bought, the light jetpack is lent; the pass says it is active',
-      paid3 === 200 && with3.color === 16 && Math.abs(with3.size - 1.2) < 0.01 && hatTag === 'With your pass' && hat3.acts.join() === 'Equip,Keep it · $9.99' && with3.hat === 9 && with3.lite === 'pass' && with3.pass && passTag === 'Active' && /Look after it/.test(held3.acts.join()),
-      JSON.stringify({ paid3, with3: { ...with3, told: with3.told.slice(-160) }, hatTag, hat3, passTag, held3 }));
+      paid3 === 200 && card1.colours === 32 && card1.sizes === 'Pocket,Classic,Jumbo,Titan' && with3.color === 16 && Math.abs(with3.size - 1.2) < 0.01 && hatTag === 'With your pass' && hat3.acts.join() === 'Equip,Keep it · $9.99' && with3.hat === 9 && with3.lite === 'pass' && with3.pass && passTag === 'Active' && /Look after it/.test(held3.acts.join()),
+      JSON.stringify({ paid3, card1, with3: { ...with3, told: with3.told.slice(-160) }, hatTag, hat3, passTag, held3 }));
     // the subscription ends: back to everybody's colours, the usual size, bare-headed — and they are told
     const ended3 = await tell({ type: 'customer.subscription.deleted', data: { object: { id: 'sub_pass_shop' } } });
     await p3.evaluate(() => window.__mmf.refreshShop());
