@@ -1,10 +1,10 @@
 // Small bright things that fly about for a moment: the trails some avatars leave behind them (stardust,
-// confetti, bubbles, fallout) and the fireworks. One set of points for the whole world, one draw call, a fixed
-// number of them: when everything is taken the oldest make room.
+// confetti, bubbles, fallout), the fireworks, and the mushroom cloud of those who found every relic. One set of
+// points for the whole world, one draw call, a fixed number of them: when everything is taken the oldest make room.
 import * as THREE from 'three';
 import { makeMaterial, GLSL_COMMON, GLSL_LIGHTING } from '../../render/globals.js';
 
-const MAX = 900;
+const MAX = 1800; // (a mushroom cloud is some three hundred of them at its fullest)
 
 const VERT = /* glsl */ `
 ${GLSL_COMMON}
@@ -41,6 +41,16 @@ void main() {
 const rnd = (a, b) => a + Math.random() * (b - a);
 const PAPER = [[1.0, 0.2, 0.25], [1.0, 0.78, 0.1], [0.15, 0.7, 1.0], [0.35, 0.9, 0.3], [1.0, 0.45, 0.9], [0.6, 0.35, 1.0]];
 const BURSTS = [[1.0, 0.3, 0.25], [1.0, 0.85, 0.3], [0.35, 0.8, 1.0], [0.5, 1.0, 0.45], [1.0, 0.5, 0.95], [1.0, 0.65, 0.2]];
+// A puff of the mushroom cloud, by how hot it is — from 1, the white of the flash, down through yellow, orange and
+// a dull red to 0, the grey-brown of smoke: [heat, r, g, b, glow] (under 1 a puff no longer glows: it hides what is behind it).
+const FIRE = [[0, 0.27, 0.24, 0.23, 0.92], [0.18, 0.5, 0.2, 0.1, 1.05], [0.45, 1.0, 0.45, 0.12, 1.7], [0.75, 1.0, 0.78, 0.3, 2.3], [1, 1.0, 0.97, 0.8, 3.2]];
+const fire = (heat) => {
+  const h = Math.min(1, Math.max(0, heat));
+  let k = 1;
+  while (k < FIRE.length - 1 && FIRE[k][0] < h) k++;
+  const a = FIRE[k - 1], b = FIRE[k], t = (h - a[0]) / (b[0] - a[0]);
+  return { r: a[1] + (b[1] - a[1]) * t, g: a[2] + (b[2] - a[2]) * t, b: a[3] + (b[3] - a[3]) * t, glow: a[4] + (b[4] - a[4]) * t };
+};
 
 export class Sparks {
   constructor() {
@@ -105,13 +115,17 @@ export class Sparks {
   }
 
   /**
-   * A small mushroom cloud over (x, y, z) — a flash at the foot, a stem that climbs, a cap that rolls out — and a
-   * rain of confetti from it: it lasts two seconds and a half (see update()).
+   * A mushroom cloud over (x, y, z), six metres of it: the flash at the foot and the ring of dust it sends along
+   * the ground; the stem that climbs; the ball of fire it carries up, which rolls as it goes — out over the top,
+   * down at its rim, back in under itself — and cools from white to orange to smoke; a ring of vapour round the
+   * stem as the cap goes through; embers; and, this being a fair, a fallout of confetti. Some five seconds in
+   * all (see update()).
    */
   mushroom(x, y, z) {
-    if (this.clouds.length >= 6) return;
-    for (let k = 0; k < 16; k++) { const a = rnd(0, 6.283), v = rnd(2, 5.5); this._spawn({ x, y: y + 0.4, z, vx: Math.cos(a) * v, vy: rnd(0.2, 1.4), vz: Math.sin(a) * v, life: rnd(0.4, 0.8), r: 1, g: 0.92, b: 0.6, glow: 3, size: rnd(0.5, 0.9), drag: 3 }); }
-    this.clouds.push({ x, y, z, t: 0 });
+    if (this.clouds.length >= 5) return;
+    for (let k = 0; k < 10; k++) { const a = rnd(0, 6.283), d = rnd(0, 0.5); this._spawn({ x: x + Math.cos(a) * d, y: y + rnd(0.3, 1.1), z: z + Math.sin(a) * d, vx: 0, vy: rnd(0.5, 1.5), vz: 0, life: rnd(0.22, 0.4), r: 1, g: 0.98, b: 0.88, glow: 4, size: rnd(1.1, 1.6) }); }
+    for (let k = 0; k < 40; k++) { const a = (k / 40) * 6.283 + rnd(-0.06, 0.06), v = rnd(6.5, 9); this._spawn({ x: x + Math.cos(a) * 0.3, y: y + rnd(0.12, 0.3), z: z + Math.sin(a) * 0.3, vx: Math.cos(a) * v, vy: rnd(0, 0.5), vz: Math.sin(a) * v, life: rnd(0.8, 1.25), r: 0.82, g: 0.74, b: 0.6, glow: 0.6, size: rnd(0.6, 0.95), drag: 3.2 }); }
+    this.clouds.push({ x, y, z, t: 0, ring: false });
   }
 
   /** A rocket leaves from (x, y, z), climbs, and bursts. */
@@ -123,15 +137,38 @@ export class Sparks {
   update(dt, camera, height) {
     // (points are sized in pixels: so many per metre, one metre away)
     this.uniforms.uScale.value = height / (2 * Math.tan((camera.fov * Math.PI) / 360));
-    // the mushroom clouds: the stem first, then the cap at its top, then the confetti that falls from it
+    // the mushroom clouds. `top`: how high the cap has climbed (fast at first, then it hangs); `heat`: 1 at the
+    // flash, 0 when all of it is smoke; `R`: how wide the cap has rolled out
     for (let i = this.clouds.length - 1; i >= 0; i--) {
       const c = this.clouds[i], some = (rate) => { const w = rate * dt; return Math.floor(w) + (Math.random() < w % 1 ? 1 : 0); };
       c.t += dt;
-      // (the stem: hot at the foot, it climbs for as long as the cap rolls; the cap: a wide ring of fire and smoke thrown outwards, a narrower one under it)
-      if (c.t < 1.7) for (let k = some(34); k > 0; k--) { const hot = Math.random(); this._spawn({ x: c.x + rnd(-0.22, 0.22), y: c.y + 0.3, z: c.z + rnd(-0.22, 0.22), vx: rnd(-0.25, 0.25), vy: rnd(3.6, 4.6), vz: rnd(-0.25, 0.25), life: rnd(1.1, 1.5), r: 1.0, g: 0.4 + hot * 0.35, b: 0.1 + hot * 0.2, glow: 1.9, size: rnd(0.75, 1.15), drag: 0.9 }); }
-      if (c.t > 0.5 && c.t < 1.8) for (let k = some(52); k > 0; k--) { const a = rnd(0, 6.283), low = Math.random() < 0.3, v = low ? rnd(0.5, 1.4) : rnd(1.6, 3.6); this._spawn({ x: c.x, y: c.y + (low ? 3.7 : 4.7) + rnd(-0.25, 0.45), z: c.z, vx: Math.cos(a) * v, vy: rnd(0.1, 0.9), vz: Math.sin(a) * v, life: rnd(1.2, 1.9), r: 1.0, g: rnd(0.42, 0.78), b: rnd(0.12, 0.38), glow: 1.7, size: rnd(1.1, 1.7), drag: 1.7 }); }
-      if (c.t > 0.9 && c.t < 2.4) for (let k = some(60); k > 0; k--) { const p = PAPER[Math.floor(Math.random() * PAPER.length)], a = rnd(0, 6.283), d = rnd(0, 2.7); this._spawn({ x: c.x + Math.cos(a) * d, y: c.y + 4.8 + rnd(0, 0.8), z: c.z + Math.sin(a) * d, vx: rnd(-0.8, 0.8), vy: rnd(0.2, 1.6), vz: rnd(-0.8, 0.8), life: rnd(1.8, 2.8), r: p[0], g: p[1], b: p[2], size: rnd(0.14, 0.22), kind: 1, grav: 3.2, drag: 1.2, sway: rnd(2, 5) }); }
-      if (c.t > 2.5) this.clouds.splice(i, 1);
+      const t = c.t, rise = 1 - Math.exp(-t / 0.8), top = c.y + 1.0 + 5.4 * rise, heat = Math.max(0, 1 - t / 3.0), R = 0.5 + 1.9 * (1 - Math.exp(-t / 0.9));
+      // (the stem: smoke that climbs from the ground to the cap, hottest just under it, wider at its foot)
+      if (t < 3.3) for (let k = some(46); k > 0; k--) {
+        const f = Math.random() ** 0.8, w = (f < 0.12 ? 0.55 : 0.2) + 0.12 * Math.random(), a = rnd(0, 6.283), d = Math.sqrt(Math.random()) * w;
+        this._spawn({ x: c.x + Math.cos(a) * d, y: c.y + 0.25 + f * (top - c.y - 0.6), z: c.z + Math.sin(a) * d, vx: rnd(-0.12, 0.12), vy: rnd(1.0, 2.2) * (0.4 + rise), vz: rnd(-0.12, 0.12), life: rnd(0.7, 1.1), ...fire(heat * (0.45 + 0.5 * f) - 0.03), size: rnd(0.55, 0.85), drag: 0.6 });
+      }
+      if (t > 0.12 && t < 3.4) {
+        // (the crown of the cap: thrown out from its middle, it falls as it goes — a dome)
+        for (let k = some(70); k > 0; k--) {
+          const a = rnd(0, 6.283), v = rnd(0.8, 1.6) * (1.2 + 0.67 * R), d = rnd(0, 0.35);
+          this._spawn({ x: c.x + Math.cos(a) * d, y: top + rnd(-0.1, 0.5), z: c.z + Math.sin(a) * d, vx: Math.cos(a) * v, vy: rnd(0.5, 1.5), vz: Math.sin(a) * v, life: rnd(0.95, 1.45), ...fire(heat * rnd(0.75, 1.05)), size: rnd(0.85, 1.25), drag: 1.5, grav: 1.9 });
+        }
+        // (its rim: cooler, it sinks and is drawn back in towards the stem — the roll of the cap)
+        for (let k = some(44); k > 0; k--) {
+          const a = rnd(0, 6.283), v = rnd(0.3, 0.9);
+          this._spawn({ x: c.x + Math.cos(a) * R, y: top + rnd(-0.55, 0.05), z: c.z + Math.sin(a) * R, vx: -Math.cos(a) * v, vy: rnd(-0.9, -0.2), vz: -Math.sin(a) * v, life: rnd(0.7, 1.1), ...fire(heat * rnd(0.3, 0.7) - 0.05), size: rnd(0.7, 1.05), drag: 0.8 });
+        }
+      }
+      // (the ring of white vapour round the stem, half-way up, as the cap goes through)
+      if (!c.ring && t > 0.55) {
+        c.ring = true;
+        for (let k = 0; k < 30; k++) { const a = (k / 30) * 6.283, v = rnd(2.2, 2.8); this._spawn({ x: c.x + Math.cos(a) * 0.4, y: c.y + 3.0 + rnd(-0.08, 0.08), z: c.z + Math.sin(a) * 0.4, vx: Math.cos(a) * v, vy: 0.15, vz: Math.sin(a) * v, life: rnd(0.9, 1.3), r: 0.96, g: 0.96, b: 0.98, glow: 0.5, size: rnd(0.45, 0.65), drag: 2.4 }); }
+      }
+      // (embers out of the cap while it burns — and the fallout: confetti, from under the cap, once it has cooled)
+      if (t > 0.4 && t < 2.2) for (let k = some(10); k > 0; k--) { const a = rnd(0, 6.283), v = rnd(2.5, 5); this._spawn({ x: c.x, y: top, z: c.z, vx: Math.cos(a) * v, vy: rnd(1, 3.5), vz: Math.sin(a) * v, life: rnd(0.8, 1.4), r: 1, g: 0.7, b: 0.25, glow: 2.6, size: rnd(0.1, 0.18), grav: 5, drag: 0.6 }); }
+      if (t > 2.0 && t < 3.6) for (let k = some(34); k > 0; k--) { const p = PAPER[Math.floor(Math.random() * PAPER.length)], a = rnd(0, 6.283), d = Math.sqrt(Math.random()) * (R + 0.6); this._spawn({ x: c.x + Math.cos(a) * d, y: top + rnd(-0.9, -0.2), z: c.z + Math.sin(a) * d, vx: rnd(-0.6, 0.6), vy: rnd(-0.2, 0.9), vz: rnd(-0.6, 0.6), life: rnd(1.8, 2.8), r: p[0], g: p[1], b: p[2], size: rnd(0.1, 0.15), kind: 1, grav: 2.2, drag: 1.5, sway: rnd(3, 7) }); }
+      if (t > 3.7) this.clouds.splice(i, 1);
     }
     for (let i = this.rockets.length - 1; i >= 0; i--) {
       const r = this.rockets[i];

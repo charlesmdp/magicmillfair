@@ -607,7 +607,7 @@ the clicks of all its places together — no longer where the places are — and
 than one face of the rock holds (28), turns its pages every twelve seconds, ranks running on from page to
 page.
 
-**Twenty relics** of the world before stand all over the valley (`Relics.js`; where: `RELICS` in `layout.js`
+**Twenty-five relics** of the world before stand all over the valley (`Relics.js`; where: `RELICS` in `layout.js`
 — a wish, and the nearest free ground is taken: dry, level, off the paths, clear of the trees and of what is
 built; or `by` a path: so far along it, so many metres to its side): a road sign whose evacuation route
 points into the sea, a vending machine under the ivy (in the court of the Lost Temple), the door of a shelter
@@ -617,11 +617,18 @@ Hill), a sunflower with two heads, the last newspaper, a scarecrow in a hazmat s
 bus is always four minutes away, a shopping trolley by the Great Pond, a dish that listens to a silent sky, a
 parking meter, a mailbox full of bills, a car with a tree through its roof, a telephone that rings, a weather
 board — and, in the woods of the south-east shore, sixty metres from any path, a fallout shelter whose
-periscope turns to look at whoever found it. Walked up to, each offers "Look at …" and says a line or two (a
+periscope turns to look at whoever found it. Five more are where one has to go and look (a wish may say `y`:
+the relic then stands on something built, or under the rock, and what stops the walker only does so at that
+height): a coin telescope at the top of the tower of those who watch the climb, a garden gnome in a gas mask at
+the back of a hollow half-way up the island of the boulder, a message in a bottle on the sand of the secret
+cove, a rack of bleached postcards on the beach at the foot of the stairs to the golden statues, and a stack of
+tins — all peaches, no opener — in the grotto behind the waterfall. Walked up to, each offers "Look at …" and says a line or two (a
 note of the screen, which wraps when it is long); which ones were looked at is kept in the browser
-(`mmf.relics`). Whoever has found them all sees a small **mushroom cloud** go up over their head, with
-confetti — and may raise one whenever they like from then on (the emotes, or `/mushroom`): it travels as an
-emote, so that the others see it too; until then the button says how many are found. They weigh next to
+(`mmf.relics`). Whoever has found them all sees a **mushroom cloud** go up over their head — six metres of it:
+a flash and a ring of dust along the ground, a stem, a cap that rolls out and cools from white to orange to
+smoke, a ring of vapour round the stem, and confetti for fallout (`effects/Sparks.js`), with a small boom —
+and may raise one whenever they like from then on (the emotes, or `/mushroom`): it travels as an emote, so
+that the others see and hear it too; until then the button says how many are found. They weigh next to
 nothing: their wood, metal and stone are merged with the rest of the fair, everything written or drawn on
 them is one canvas of 1024 × 1024 on one mesh, and the cloud is made of the same points as the fireworks.
 

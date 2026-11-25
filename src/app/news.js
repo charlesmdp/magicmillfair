@@ -6,10 +6,11 @@ export const NEWS = [
   {
     date: '25 November 2026',
     items: [
-      ['The telephone, where it can be found', 'One of the twenty relics stood behind a wall by the gate, where nobody could see it. The public telephone is now by the road, a few steps down from the bus stop, under a blue hood.'],
+      ['Five more relics, further off', 'Twenty-five things are now left over from the world before. The five new ones are where one has to go and look: the top of a tower, a hollow in the rock, two beaches nobody walks to, a cave behind a waterfall.'],
+      ['The mushroom cloud has grown up', 'A flash, a stem, a cap that rolls and cools from white to smoke — and confetti for fallout. It is for those who found every relic: there are twenty-five of them now. In the emotes (T).'],
+      ['The telephone, where it can be found', 'One of the relics stood behind a wall by the gate, where nobody could see it. The public telephone is now by the road, a few steps down from the bus stop, under a blue hood.'],
       ['The Nuclear Cave', 'The Hollow Hill has a new name, and a reason for it: drums, glowing pools, and green atoms that lead you into the rings. You are thinner in there, a knock costs less, and shaving past the rock fills your burst.'],
-      ['Ten more relics', 'Twenty things are now left over from the world before, all over the valley. The vending machine went to the Lost Temple, the scratched stone to Lookout Hill — and one of them is very well hidden.'],
-      ['A mushroom cloud of your own', 'Find the twenty relics and it is yours: a small mushroom cloud over your head, with confetti. In the emotes (T).'],
+      ['Ten more relics', 'More things are left over from the world before, all over the valley. The vending machine went to the Lost Temple, the scratched stone to Lookout Hill — and one of them is very well hidden.'],
       ['Uphill Battle, in four stretches', 'Quiet at the foot — a log now and then —, then barrels, then boulders, then everything at once near the bell. Lines across the slope say where each begins.'],
       ['Speedboats on the pond', 'The boats of The Little Regatta have a pointed hull, a cockpit and a wing now.'],
       ['Sponsoring, made simple', 'Say what your place should show, then pay: it is up the moment you are back — where you stood. The fair cheers every new sponsor in the chat.'],
