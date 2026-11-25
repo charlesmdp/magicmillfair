@@ -779,6 +779,12 @@ export const SIGNPOSTS = [
   { id: 'pondside', x: -134.8, z: 6.3, arms: [['billy', [-140.5, 7.2]]] },
 ];
 
+// The wall of thanks (zones/games/ThanksWall.js): a tablet cut into the cliff west of the meadow of the acid
+// pond, where the rock is one even face — every sponsor of the fair on it, the most generous first. (x, z):
+// the middle of it, on the map; yaw: the way it faces (the meadow); it is `width` long and `height` up the
+// rock, its foot `lift` above the grass. How it leans and bends is the rock's own business (it reads the cliff).
+export const THANKS_WALL = { x: -268.05, z: -82.2, yaw: 70 * DEG, width: 28, height: 10, lift: 1.3 };
+
 // What stands on the way for visitors to read (zones/games/Notices.js): the banner and the rules where one
 // arrives; the boards of what is new, by the poppy field; the booth of the sponsors, at the Trading Post; and
 // the arcade cabinet at the top of the ramp of the pier (in the frame of the pier), its board of scores across the walk.

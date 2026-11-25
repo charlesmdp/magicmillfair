@@ -9,6 +9,8 @@ import { CharacterFactory, EMOTE_LIST, AVATAR_COLORS, emoteIndex, packLook } fro
 import { HATS } from './player/Cosmetics.js';
 import { ITEMS, PAINTS, TRAILS, itemOf, packKit, PASS, SIZES, SIZE, SIZE_SCALE, sizeOf, FREE_COLORS } from '../server/items.js';
 import { BOARDS as GAME_NAMES } from '../server/catalog.js';
+import { rankSponsors, dollars } from './app/thanks.js';
+import { oasisPicture, OASIS_ROBOT } from './ui/OasisPicture.js';
 import { drawSponsor } from './world/zones/games/Boards.js';
 import { ShopView } from './ui/ShopView.js';
 import { Arcade } from './ui/Arcade.js';
@@ -922,6 +924,18 @@ async function boot() {
   const plaques = world.places.plaques; // (the plaques of the companions, round the plinth of the golden dog: places paid once)
   for (let n = 1; n <= (plaques?.count || 0); n++) places.set(`plaque:${n}`, { what: 'a plaque round the golden dog', plaque: n, set: (sp) => plaques.set(n, sp) });
   const shown = new Map(); // what is painted where: id → the address of its picture + its words
+  // the wall of thanks, cut into the cliff by the acid pond: every sponsor, the one who puts in the most first
+  // (who counts and in which order: app/thanks.js). Painted again only when the list changes.
+  let thanked = '';
+  const feedThanks = async () => {
+    const wall = world.games.thanks, rows = rankSponsors(shop.slots, GAME_NAMES);
+    const info = shop.open ? { open: true, from: `from ${dollars(shop.prices.auction?.start || 100)}`, gondola: dollars(shop.prices.gondola), backdrop: dollars(shop.prices.tarp) } : { open: false };
+    const key = JSON.stringify([rows, info]);
+    if (!wall || key === thanked) return;
+    thanked = key;
+    const logos = await Promise.all(rows.map((r) => loadImage(r.logo)));
+    if (key === thanked) wall.set(rows.map((r, i) => ({ ...r, logo: logos[i] })), info);
+  };
   const applySponsors = async () => {
     for (const [id, place] of places) {
       const view = shop.slots[id], live = view && view.state === 'live';
@@ -937,6 +951,7 @@ async function boot() {
     }
     hud.setVillages(sky.villages, data.meta.size, villageLabel);
     world.games.notices.ads.set(adRows()); // (the board of the booth of the sponsors)
+    feedThanks();
   };
   let shopKnown = false; // (has the server said what is theirs yet?)
   let ownedWas = null; // (what this browser had the last time the relay was told)
@@ -982,12 +997,15 @@ async function boot() {
         ...(isPlaque ? [] : [{ key: 'url', label: 'Your website (https://…)', value: was.url || '', max: 200, hint: 'https://' }]),
         ...(isVillage ? [] : [{ key: 'logo', label: isPlaque ? 'Their picture (PNG, JPEG or WebP) — leave empty to keep the one you sent' : 'Your logo (PNG, JPEG or WebP) — leave empty to keep the one you sent', type: 'file' }]),
         ...(byHand && !isVillage && !isPlaque ? [{ key: 'bg', label: 'The colour of the panel behind it', type: 'color', value: view.bg || '#fbf7ec' }] : []),
+        // (a sponsor who paid some other way: what they paid ranks them on the wall of thanks)
+        ...(byHand && !isPlaque && !view.pays?.monthly && !view.bid ? [{ key: 'paid', label: 'What they paid, in dollars — for the wall of thanks (empty: not said)', value: pending[id]?.paid ? String(pending[id].paid / 100) : '', max: 9 }] : []),
       ], byHand ? 'Save' : 'Send it');
     if (!got) return;
     if (!got.title) { hud.note('A name is needed.', 4000); return; }
     let logo = null;
     if (got.logo) { logo = await logoData(got.logo, 256, isPlaque); if (!logo) { hud.note('That picture cannot be used: a PNG, a JPEG or a WebP, please.', 6000); return; } }
-    const wrong = byHand ? await shop.set(id, { title: got.title, subtitle: got.subtitle, url: got.url, logo, ...(got.bg !== undefined && { bg: got.bg }) }, who.key) : await shop.fill(id, { title: got.title, subtitle: got.subtitle, url: got.url, logo });
+    const paid = got.paid !== undefined ? Math.max(0, Math.round((parseFloat(String(got.paid).replace(/[$,\s]/g, '')) || 0) * 100)) : undefined;
+    const wrong = byHand ? await shop.set(id, { title: got.title, subtitle: got.subtitle, url: got.url, logo, ...(got.bg !== undefined && { bg: got.bg }), ...(paid !== undefined && { paid }) }, who.key) : await shop.fill(id, { title: got.title, subtitle: got.subtitle, url: got.url, logo });
     hud.note(wrong || (byHand || !isPlaque ? 'Done: it is shown to everyone.' : 'Sent. Their plaque will be engraved as soon as the fair has looked at it.'), 7000);
     if (!wrong) { if (who.admin) pending = (await shop.all(who.key)) || {}; await refreshShop(); }
   };
@@ -1142,10 +1160,19 @@ async function boot() {
     });
     const extras = [];
     const gondolas = gondolaIds(), freeG = gondolas.filter((id) => !shop.slots[id]).length;
+    // the gondolas somebody holds, each by its number and photographed as it goes round: a sponsor sees which is theirs
+    const cars = gondolas.filter((id) => shop.slots[id] || (who.admin && pending[id]?.draft)).map((id) => {
+      const n = +id.split(':')[1], v = shop.slots[id], d = who.admin && pending[id]?.draft;
+      const state = d ? 'pending' : v?.mine ? 'mine' : v?.state === 'live' ? 'live' : 'taken';
+      const sponsor = d ? { title: d.title, subtitle: d.subtitle } : v?.state === 'live' ? { title: v.title, subtitle: v.subtitle, logo: v.logo, url: v.url } : null;
+      const photo = () => { const g = world.pier.gondolaView(n); return photographer.shoot(g.from, g.at, 480, 300, 46); };
+      // (the wheel turns: its photograph is taken again when the window is opened a while later)
+      return { id, name: `Gondola ${n}`, state, sponsor, price: shop.open ? `${price(shop.prices.gondola)} a month` : '', acts: placeActions(id).sort((a, b) => first(a) - first(b)), photo, stamp: `${state}|${sponsor?.title || ''}|${sponsor?.logo || ''}|${v?.bg || ''}|${Math.floor(Date.now() / 30_000)}` };
+    });
     if (gondolas.length) extras.push({ title: 'The big wheel', text: `${gondolas.length} gondolas, a banner on each, in sight of the whole bay · ${freeG} free${shop.open ? ` · ${price(shop.prices.gondola)} a month` : ''}`, act: { label: 'Choose a gondola', run: chooseGondola } });
     if (places.has('tarp:shoot')) { const v = shop.slots['tarp:shoot'], act = placeActions('tarp:shoot')[0]; extras.push({ title: 'The backdrop of Bullseye Alley', text: v?.state === 'live' ? `Held by ${v.title}.` : `The whole wall behind the targets${shop.open && !v ? ` · ${price(shop.prices.tarp)} a month` : v ? ' · taken' : ''}`, act: act ? { label: act.label.length > 34 ? 'Take the backdrop' : act.label, run: act.run } : null }); }
     if (plaques?.count) { const taken = Array.from({ length: plaques.count }, (_, k) => `plaque:${k + 1}`).filter((id) => shop.slots[id]).length; extras.push({ title: 'A plaque for a companion', text: `${plaques.count} brass plates round the golden dog, ${taken} of them taken${shop.open ? ` · ${price(shop.prices.plaque)}, once` : ''}. They are chosen on the spot: swim north along the cliffs to the Golden Cove, then climb.`, act: null }); }
-    sponsorsView.open({ cards, extras, note: shop.open ? '' : 'The shop is not open yet: sponsoring starts soon. Meanwhile, here is every game and who sponsors it.' });
+    sponsorsView.open({ cards, wheel: { cards: cars, of: gondolas.length }, extras, note: shop.open ? '' : 'The shop is not open yet: sponsoring starts soon. Meanwhile, here is every game and who sponsors it.' });
     audio.play('pick');
   };
   sponsorsView.on('close', () => { document.getElementById('view')?.focus({ preventScroll: true }); });
@@ -1333,7 +1360,9 @@ async function boot() {
     ctx.font = `italic 600 ${Math.round(th * 0.115)}px Georgia, 'Times New Roman', serif`; ctx.fillText('admit one robot · every day', 0, th * 0.28);
     return c;
   };
-  const shopView = new ShopView(hud.root, (id, w, h) => (id === PASS.id ? passPicture(w, h) : id.startsWith('board:') ? panelPicture(id, w, h) : previewer.shot(id, color, w, h)));
+  // (a room of one's own: an oasis, with the visitor's own robot on its bank)
+  const roomPicture = (w, h) => { let robot = null; try { robot = previewer.shot('', color, Math.round(w * OASIS_ROBOT), Math.round(h * OASIS_ROBOT)); } catch { robot = null; } return oasisPicture(w, h, robot); };
+  const shopView = new ShopView(hud.root, (id, w, h) => (id === PASS.id ? passPicture(w, h) : id === 'room' ? roomPicture(w, h) : id.startsWith('board:') ? panelPicture(id, w, h) : previewer.shot(id, color, w, h)));
   const wornNow = (type, sub) => (type === 'hat' ? HATS[look.hat]?.id === sub : type === 'paint' ? PAINTS[kit.paint] === sub : type === 'trail' ? TRAILS[kit.trail] === sub : type === 'jetpack' || type === 'jetlite' ? jetOn() === type : false);
   const shopItems = () => {
     const list = ITEMS.map((it) => {

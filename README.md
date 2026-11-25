@@ -528,7 +528,40 @@ board. Under the cards, what else a sponsor can have: a gondola of the big wheel
 Alley, a plaque for a companion. The photographs are not files: the game takes them itself when the window
 opens (`Photographer` in `src/ui/SponsorsView.js` draws the scene once more, small, from in front of each
 game — one a frame), so they show the booths as they stand, a sponsor's panel included, and cost nothing
-to download.
+to download. Under the games, **the gondolas that somebody holds** have a card each — *On the big wheel*:
+its number ("Gondola 7"), a photograph of it as it goes round right now, whose it is — so that a sponsor
+finds theirs. On the wheel itself a sponsored gondola carries, on both ends, a board wider than the car,
+with its number on a stub at the end; a free one keeps a small "Your brand here". (Those banners were
+there from the start and nobody had ever seen one: they were wound facing into the car, and the renderer
+does not draw the back of a sheet. They now face outwards, and read from left to right from the shore as
+from the open sea.)
+
+**The wall of thanks** is cut into the cliff west of the meadow of the acid pond, where the rock is one
+even face: a tablet twenty-eight metres long and ten up the rock — *THANKS TO THOSE COMPANIES, THE GAME
+IS FREE FOR YOU!*, read from across the meadow — and under it every sponsor of the fair, the one who puts
+in the most first: a rank, their logo, their name and their line, where they are, what they pay. In one
+column while they are three, up to four columns of seven (beyond that, "… and 6 more"); the first three
+are washed with gold, silver and bronze; and while a place is left the next one is invited ("Your brand
+here — from $1 — ask at the Trading Post"). The rules (`src/app/thanks.js`):
+
+- **who is on it**: whoever shows something on the panel of a game, on a gondola, on the backdrop of
+  Bullseye Alley or on a sky village. Not the plaques of the companions (they are for pets, by people), and
+  not the village dressed as an example (nobody pays for it);
+- **the order**: what each has put in so far — a bid counts for what was bid, a place held by the month
+  for every month begun since it was taken. The wall says how each pays: "$29 a month" is written as a
+  month, never as a lump sum. One sponsor with several places is one line, added up;
+- **a sponsor entered by hand** (paid some other way) is ranked by what the administrator says was paid —
+  one more field of "Fill this place in" — and comes last, without a figure, when nothing was said;
+- **where the figures come from**: `GET /api/shop` gives, with what a sponsor shows and never before,
+  `pays: { amount, monthly, total }` in cents (`paysOf` in `server/shop.js`). Amounts only: who pays is
+  said nowhere, and what a bid went for was already told to everybody who bids.
+
+The tablet is in the rock rather than on it (`ThanksWall.js`): it reads the cliff in section and its face
+bends with it, half a metre proud — far enough for the distant, coarser drawing of the ground never to
+swallow it — and from its edges a buttress of faceted rock, in the tone of the cliff, runs back into the
+ground: a swelling of the rock face, dressed flat where the words are cut. No boulder lies over it. It is
+one sheet — a canvas of 2048 × 732, painted when the list changes and not otherwise — on one mesh; the
+buttress is merged with the rest of the rock of the fair; logos come the same safe way as on the panels.
 
 **Wooden signposts** stand at the forks of the paths — past the banner of the arrival, in front of the
 mill, half way down the valley, on the plaza, on the boardwalk, by the paddock of the race: a post, and
@@ -774,6 +807,7 @@ src/
                            booths of the walk; PierGames.js, WingRules.js, core.js: the rules of the games, with nothing of the 3D
                            library in them (the server plays a game again with these: `server/replay.js`); kit.js: what booths share; Notices.js: the banner and the rules of the arrival, the boards of what is new, the booth of the
                            sponsors (the Trading Post), the arcade cabinet; Signposts.js: the wooden signposts; Race.js: the quad race;
+                           ThanksWall.js: the wall of thanks, cut into the cliff (who is on it and in which order: app/thanks.js);
                            Boards.js: score boards and sponsor panels
     zones/sky/             the fifty sky villages and the Sky Gate
   player/                  animated avatar and its poses, controller (walk, swim, jump, sit, fly, die), cameras,
@@ -787,7 +821,8 @@ src/
                            Scores.js (the leaderboards)
   ui/                      welcome screen, minimap and large map, chat, action prompts, settings, touch controls;
                            LegalView.js: the terms of use and the privacy policy (their words: app/legal.js);
-                           SponsorsView.js: the window of the Trading Post, and the photographs the game takes of itself
+                           SponsorsView.js: the window of the Trading Post, and the photographs the game takes of itself;
+                           OasisPicture.js: the picture of the card of a room of one's own
   app/Benchmark.js         benchmark tour
   app/Updates.js           what is released and new versions, on the visitor's side: the bar, the refresh at a safe moment
   extras/                  the lab's extras (the caves, the figures, the slide and five other games): loaded when their switch is on
@@ -913,8 +948,15 @@ account for a quarter of an hour, and an address may try ten a minute. A **recov
 when the account is made, and sets a new password (*Forgot the password*). Without an e-mail address, lose
 both and the account is lost — the administrator cannot read a password either.
 
-**E-mails.** The game sends one kind of e-mail, and only where it has been given the means: a code to set
-a new password, to an account that carries an address. Where the server can send e-mails
+**E-mails.** The game sends three kinds of e-mail, and only where it has been given the means: **a
+welcome** to whoever makes an account with an address; **a word of thanks** to whoever takes the Game
+Pass — what it gives, how to stop it — at the address of their account or, failing that, at the one they
+gave at the payment (used for that message and kept nowhere); and **a code** to set a new password. No
+newsletter. The first two are in the colours of the fair, with a twin in plain text, and everything is in
+the message itself: tables and inline styles, the sign of the fair as a character — no picture, no font
+and no script from anywhere, no link that counts who clicked (`welcomeMail`, `passMail` in
+`server/mail.js`). They leave while the request that caused them is answered (nobody waits for a mail
+server), and once: Stripe saying twice that a pass was paid is one message. Where the server can send e-mails
 (`/api/status` says `"mail": true`), the card of the account offers an optional *E-mail* field, *Forgot
 the password* offers *Send me a code by e-mail* (a code good for half an hour, once; one message every
 two minutes and five a day per account at the most; the answer is the same whether or not the account
@@ -1186,7 +1228,8 @@ tests, `npm run dev`) has it open.
 `userRooms` of the back office is off there is no card in the shop, no corner in "Who is here", no path that
 answers, and a name of that kind is no room. Switched on:
 
-- **a room of one's own is bought in the shop, by the month ($59)**, from a browser signed in to an account —
+- **a room of one's own is bought in the shop, by the month ($59)** — its card shows an oasis at dusk with
+  the visitor's own robot on its bank (`src/ui/OasisPicture.js`: drawn, not downloaded) —, from a browser signed in to an account —
   one room for an account. Stripe says when it is paid (the webhook), as for everything else;
 - it is **reached by its link only** (`?room=own-xxxxxxxx`, in no list), **holds fifty**, and is **kept** — its
   name, its owner, its password, its boards — even when nobody is in it. **No sky village** hangs over it: the
@@ -1343,6 +1386,10 @@ Game and multiplayer
   that would enter the first five of a list are played again.
 - **The boulder, the shark** follow each visitor's own clock: two visitors standing side by side see the
   boulder in the same place only as far as their devices agree on the time (usually within a second).
+- **The welcome and the thank-you were never opened in a real mail reader**: they were looked at in a
+  browser, at the width of a desk and at that of a phone, and are written the cautious way (tables, inline
+  styles, a plain background colour under every gradient) — but Outlook and Gmail each have their habits.
+  The first account made with your own address is the test.
 - **No e-mail was ever sent for real**: the Node server only writes them to a file, and the three lines
   of the Worker that hand a message to Cloudflare's Email Service were written from its documentation —
   the first code mailed to your own address is the test.

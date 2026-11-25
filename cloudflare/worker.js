@@ -199,6 +199,7 @@ export class Room extends DurableObject {
       // e-mails leave through Cloudflare's Email Service: with its binding (EMAIL) where the Worker has one,
       // through its REST API with three secrets otherwise (see server/mail.js)
       mail,
+      later: (work) => this.ctx.waitUntil(work), // (a message that leaves while its request is answered: mail.js)
       flags: { npc: !!env.ANTHROPIC_API_KEY, admin: !!env.ADMIN_KEY, shop: stripe.mode || 'off', mail: !!mail },
       // the secret that signs the notes of the runs: given, or drawn once and kept here
       secret: async () => {

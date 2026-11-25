@@ -29,7 +29,7 @@ export class Shop {
     this.prices = { tarp: 9900, gondola: 2900, plaque: 2000, village: [], items: {}, auction: { start: 100, max: 1_000_000 } };
     this.notes = []; // what happened while the visitor was away (outbid, refunded): said once
     this.owned = new Set();
-    /** slot → { state: 'live' | 'taken', mine, title, subtitle, url, logo (an address), draft } */
+    /** slot → { state: 'live' | 'taken', mine, title, subtitle, url, logo (an address), draft, pays: { amount, monthly, total } (cents: what its sponsor pays) } */
     this.slots = {};
     this.everything = false; // the administrator has it all
     this.pass = null; // the Game Pass, while it is held: { since, gift?, until?, managed? }
@@ -113,8 +113,8 @@ export class Shop {
   }
 
   /** The administrator fills a place by hand (shown at once). Resolves to null, or to what is wrong. */
-  async set(slot, { title, subtitle, url, logo, bg }, key) {
-    const res = await ask('api/sponsors', { method: 'POST', key, body: { slot, set: { title, subtitle, url, ...(logo && { logo }), ...(bg !== undefined && { bg }) } } });
+  async set(slot, { title, subtitle, url, logo, bg, paid }, key) {
+    const res = await ask('api/sponsors', { method: 'POST', key, body: { slot, set: { title, subtitle, url, ...(logo && { logo }), ...(bg !== undefined && { bg }), ...(paid !== undefined && { paid }) } } });
     return res.ok ? null : res.body?.error || 'It could not be saved.';
   }
 

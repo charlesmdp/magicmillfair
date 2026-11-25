@@ -97,7 +97,7 @@ export class ShopView {
     const b = el('button', `card ${it.rarity}${big ? ' big' : ''}${wide ? ' passcard' : ''}${it.owned ? ' owned' : ''}${it.worn ? ' worn' : ''}`);
     b.type = 'button';
     b.dataset.item = it.id;
-    b.append(el('span', 'shine'), wide ? this._picture(it.id, 420, 264) : it.group === 'sponsor' || it.group === 'room' ? el('div', 'nopic') : this._picture(it.id, 216, 252));
+    b.append(el('span', 'shine'), wide ? this._picture(it.id, 420, 264) : it.group === 'sponsor' ? el('div', 'nopic') : this._picture(it.id, 216, 252)); // (the room: an oasis, its owner on the bank)
     if (wide && it.pitch) { const pitch = el('span', 'pitch'); for (const line of it.pitch) pitch.append(el('i', '', line)); b.append(pitch); }
     const foot = el('span', 'foot');
     foot.append(el('b', '', it.name), el('i', `price${it.owned || it.lent ? ' has' : ''}`, it.lent === 'trial' ? 'Free today' : it.worn ? 'Equipped' : it.owned ? (it.group === 'pass' ? 'Active' : 'Owned') : it.lent === 'pass' ? 'With your pass' : it.cost));

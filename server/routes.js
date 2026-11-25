@@ -26,6 +26,7 @@
 //        secret(): the signing secret of this deployment, flags: { npc, admin, shop, mail }, now(): ms,
 //        stripe: what is configured for payments (stripe.js),
 //        mail: async ({ to, subject, text, html }) → sends an e-mail, or null where none can be sent (mail.js),
+//        later(promise): optional — what goes on once the answer is given (an e-mail leaving), where the host must be told,
 //        build(): the version of the files the host serves, push(message): tells every room (release.js),
 //        here(): how many visitors are connected (stats.js),
 //        directory(), keep(), tell(room, message), maxPlayers: the rooms and their door (door.js) }

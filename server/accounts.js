@@ -12,7 +12,7 @@
 //        reset   { name, code, password }                    → { account }             (a new password, with the recovery code
 //                                                                                       — or with the code that was mailed)
 //   and, where the host can send e-mail (mail.js) — elsewhere no address is ever kept:
-//        create  { …, email? }                               the account carries an address
+//        create  { …, email? }                               the account carries an address (and is welcomed there: mail.js)
 //        email   { email, password }                         → { account }   (signed in: the address is given, changed, or — '' — taken away)
 //        mailcode { name }                                   → { ok }        (a code is mailed to the address of that account, if it has
 //                                                                            one: good for half an hour, once. The answer never tells.)
@@ -30,7 +30,7 @@
 import { randomId, sameSecret } from './token.js';
 import { cleanName } from './protocol.js';
 import { COLORS, sizeOf } from './items.js';
-import { cleanEmail, maskEmail, codeMail } from './mail.js';
+import { cleanEmail, maskEmail, codeMail, mailLater, welcomeMail } from './mail.js';
 
 const enc = new TextEncoder();
 const ROUNDS = 100_000, DEVICES = 12, FAILS = 10, LOCK = 15 * 60_000;
@@ -237,7 +237,10 @@ export async function accountRoute(req, ctx, limited) {
     if (ctx.mail && body.email && !email) return out(400, { error: 'That does not look like an e-mail address.' });
     const salt = randomId(16), code = recoveryCode();
     const acct = { name, salt, hash: await hashOf(body.password, salt), code: await hashOf(cleanCode(code), salt), created: now, devices: [], items: [], visit: null, profile: cleanProfile(body.profile), fails: 0, lock: 0, ...(email && { email }) };
-    return out(200, { account: shown(await attach(store, acct, device, now)), recovery: code });
+    const made = await attach(store, acct, device, now);
+    // (a welcome, to whoever gave an address: it leaves while they are answered — nobody waits for it)
+    if (email) mailLater(ctx, { to: email, ...welcomeMail(req.site || '', name) });
+    return out(200, { account: shown(made), recovery: code });
   }
   // (the same answer whether the name or the password is wrong: nobody learns which names exist)
   const wrong = out(403, { error: action === 'login' ? 'Wrong name or password.' : 'Wrong name or recovery code.' });
