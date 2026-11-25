@@ -87,46 +87,50 @@ one `collision.addPlatform` (the waves only matter to who has waded in under the
 
 ### Thin Crust (`lava`)
 
-A crater on an islet of rock in the open sea, east of the head of the pier ((188, 8); one asks to play on the
-deck of the pier head, a little before its rail, at (142.4, 13.3)), a pool of lava in it, and standing in the
-lava sixty-one columns of basalt, six-sided, at three heights. One runs and jumps on their tops (a jump takes
-one step of the columns, not two; it crosses one missing column, not two). A column **warns — it glows, it
-trembles — then sinks**; some come back, fewer and fewer of them. Whoever touches the lava is out: the score
-is how long one held.
+*Reworked after its owner tried it ("the lava only rises, columns come up, one keeps to the summits").*
 
-**A round leaves every ten seconds** on the clock everybody shares, each start with its name (as on the slope
-of Uphill Battle), and what the columns do in a round is drawn from its number: the same for everybody who
-takes that start, something else for the next one — the rim first, rings, a sweep across, thirds, one by one.
-A browser that is not playing shows the latest round, so that the field lives for who watches from the pier.
-Nothing in it is unfair to begin with: nothing warns before two and a half seconds; a warning lasts 1.4 s for
-the first quarter of a minute, never under half a second after; for 35 s a column that warns has a neighbour
-to step to, then, to a minute, at least one to jump to. After that the field thins out (twelve columns at a
-minute, three at a minute and a half) and every round ends.
+A small volcano stands in the sea east of the head of the pier ((188, 8); one asks to play on the deck of the
+pier head, at (142.4, 13.3)); deep in its crater a pool of lava, and standing in it sixty-one columns of basalt,
+six-sided. One runs and jumps on their tops. Heights are counted in levels: a jump climbs one level, never two;
+any drop is fine. **The lava only rises** — a level at a time, in pulses, faster and faster — and a column
+whose top it reaches is covered: whoever stands on it is out. Before each rise **new columns come up out of the
+lava**: a glow shows where (the whiter, the higher), then they rise to at least one level above where the lava
+is about to be, sometimes two, three or four. No column ever goes down. So the field becomes a relief of
+terraces and summits that keeps climbing: what matters is to be high enough *and* to have a way on from where
+one is. The score is how long one held; the camera follows the level.
 
-A bot that sees no more than a player holds 45 to 92 s over twelve starts; who only stands there is in the
-lava in 11 to 18 s. For the game's boards: `lava: { order: 'desc', min: 1000, max: 243_000 }`.
+A round leaves every ten seconds on the clock everybody shares, each start with its name, and what comes up in
+a round is drawn from its number: the same for everybody who takes that start. What is fair in it: the columns
+of a pulse come as small hills — a stair up from dry ground, a summit, lower steps round it, some missing. For
+the first eight rises (a minute) the stairs are sure; later the hills are fewer and narrower, the notice
+shorter; after the eighteenth rise nothing comes up any more. Lone tall columns, out of reach or with no way
+on, are there from early on: to read the relief is the game.
 
-What it does not do: two visitors who took different starts stand on the same field with different columns
+Its bot held 90 s in the running game; who stands still is out at the first or second rise. For the game's
+boards: `lava: { order: 'desc', min: 1000, max: 128_000 }`.
+
+What it does not do: two visitors who took different starts stand in the same crater with different columns
 under them (each browser draws its own round) — only those who leave together see the same thing.
 
 ### The Bee's Knees (`hive`)
 
-Three round combs of wax, fifty-five cells each, hang one above the other over the sea in the north of the bay
-(19, 13 and 7 m up), from a great crook of timber with a straw skep at its tip; one asks to play on the sand
-of the north beach, at (43.5, -79.5). One runs on the combs, and **the cell one sets foot on gives way**: it
-holds a moment — 0.6 s on the top comb, 0.5 on the middle one, 0.4 on the lowest — and drops, whether one is
-still on it or not; it does not come back. Through a hole one falls to the comb below; from the last one, into
-the sea, and that is the run: how long one held. A run is one's own, and starts when one asks.
+Four round combs of wax, fifty-five cells each, hang one above the other over the sea in the north of the bay
+(25, 19, 13 and 7 m up — the fourth was asked for by its owner after trying three), from a great crook of
+timber with a straw skep at its tip; one asks to play on the sand of the north beach, at (43.5, -79.5). One
+runs on the combs, and **the cell one sets foot on gives way**: it holds a moment — 0.65 s on the top comb,
+then 0.6, 0.5 and 0.4 on the lowest — and drops, whether one is still on it or not; it does not come back.
+Through a hole one falls to the comb below; from the last one, into the sea, and that is the run: how long one
+held. A run is one's own, and starts when one asks.
 
-One is not alone up there: on each comb a bee takes the wax apart by itself, a cell every 1.3 s, on a path
-drawn from the seed of the run — so nobody can stand and wait. Amber caps hold two seconds; on the two lower
-combs three cells of royal jelly throw the first foot that touches them back up to the comb above, once. The
-camera looks down from behind, towards the beach; the comb over one's head is hidden, those below are dimmed
-so that a hole reads as a hole.
+One is not alone up there: on each comb a bee takes the wax apart by itself, on a path drawn from the seed of
+the run — so nobody can stand and wait. Amber caps hold two seconds; on the three lower combs three cells of
+royal jelly throw the first foot that touches them back up to the comb above, once. The camera looks down from
+behind, towards the beach; the comb over one's head is hidden, those below are dimmed so that a hole reads as
+a hole.
 
-The bot holds 50 to 70 s over the twelve seeds of the checks (39 to 71 over two hundred); who stands still is
-in the sea in 5 s, who runs round without looking in about 20. A run has an end whatever one does: the bees
-have landed on every cell by 75 s. For the game's boards: `hive: { order: 'desc', min: 5000, max: 80_000 }`.
+The bot holds 61 to 75 s over the twelve seeds of the checks; who stands still is in the sea in 6.5 s. A run
+has an end whatever one does: the bees have landed on every cell by 76 s. For the game's boards:
+`hive: { order: 'desc', min: 6000, max: 90_000 }`.
 
 What it does not do: the broken cells are each player's own — another visitor is seen running on whole combs
 and falling through solid wax, and friends do not break each other's cells (reading the place of the other
@@ -134,35 +138,40 @@ robots could do it: not tried). Runs differ by seed, so the board has some luck 
 
 ### Head Over Heels (`flip`)
 
-A line of painted girders on pylons over the sea, 158 m along the south side of the pier, ten metres off the
-edge of its head (from (54, 44) to an arch at (211, 61); one asks to play on the sand of the south beach, at
-(41.1, 42.8), where painted stairs lead up). One runs along it by oneself, faster and faster (5.2 m/s at the
-start, 8.5 at the end), and has **one key: it turns gravity over**. One then falls up to the underside of what
-is above — or back down onto what is below — and runs on there, head down. Gravity is turned over only while
-one's feet are on a girder (or have just left it), never in the air. Running into the end of a girder, falling
-into the sea or up into the sky is a fall: one is put back at the last flag after a moment, and the clock runs
-on. The course is fixed, in five stretches that teach, then ask: a gap under a ceiling that goes on, staggered
-steps, short girders in rhythm, blocks that stand out from floor and ceiling in turn ("The Teeth"), a dash.
+*Reworked after its owner tried it ("four or five times as long, more room, a rhythm that quickens").*
 
-Sparks hang along the less obvious ways: each one caught takes a quarter of a second off the clock. They are
-what tells the runs apart — the speed depends only on where one is, so every run without a fall lasts the
-same 23.53 s; the plain way catches 7 sparks of the 14.
+A machine stands in the sea along the south side of the pier, ten metres off its head: a tall striped frame in
+which painted girders travel from right to left, as the scenery does in the flying theatre (one asks to play on
+the sand of the south beach, at (41.1, 42.8)). One runs in it on the spot, a third of the way from its left
+end, faster and faster (7 m/s at the start, 17 at the end, over some 700 m of course), and has **one key: it
+turns gravity over**. One then falls up to the underside of what is above — or back down onto what is below —
+and runs on there, head down, in a space sixteen metres high with five or six levels of girders. Gravity is
+turned over only while one's feet are on a girder (or have just left it), never in the air.
 
-The bot finishes without a fall (18 flips, 21.78 s on the clock; the tightest moment to flip is 0.42 s wide,
-most are 0.8 s); one that goes for every spark makes 20.03 s, and no run can beat it. For the game's boards:
-`flip: { order: 'asc', min: 20000, max: 600_000 }`.
+**Running into the end of a girder does not end the run at once**: the girder holds one back while the others
+go by, and pushes one towards the left end of the machine. Freed in time — gravity turned over, most often —
+one runs a little faster than the girders until one is back in one's place. Pushed out at the left end, or
+fallen out above or below, one is put back at the last flag (the machine winds back) and the clock runs on.
+Sparks hang along the less obvious ways: each one caught takes a quarter of a second off — they are what tells
+the runs apart.
+
+A start every ten seconds on the shared clock, each with its name: those who leave together see the same
+girders, and a browser that is not playing shows the latest start. The bot's run: 56.6 s in the running game.
+For the game's boards: `flip: { order: 'asc', min: 50000, max: 600000 }`.
 
 What it does not do: **other visitors see the runner upright inside the ceiling** — the game's network does not
-carry which way up one is (it would take a message of the game's own). The board has a hard floor at 20.03 s:
-the best will tie there. On a phone held upright the view is too narrow (a note asks to turn the screen).
+carry which way up one is (it would take a message of the game's own).
 
 ### A Turn for the Worse (`spiral`)
 
 A striped helter-skelter stands on a stone plinth in the sea, in the south of the bay ((168, 84); one asks to
 play on the sand of the south beach, at (52, 71)), and a track of planks winds up round it like a giant spiral
-stair: six turns of sixty metres from the foot to a bell, forty-six metres higher. The legs run by themselves,
-faster as one climbs; one steers across the track (a rail on each side: nobody falls off it), jumps — and again
-in the air, higher and further —, slides, dives back down. **What is in the way never changes place**: it is
+stair: six turns of sixty metres from the foot to a bell, forty-six metres higher. **One runs as the stick
+asks** (its owner asked for that after trying legs that ran by themselves): pushed up, the legs run — a little
+faster as one climbs —; let go, they stop within a quarter of a second; nobody runs back down. One steers across
+the track (a rail on each side: nobody falls off it), jumps — as far as the run before it, and again in the
+air, higher and further —, slides, dives back down, ducks when standing. So one may stop before what moves,
+read it, and go: the clock is what that costs, and it starts with the first step of an attempt. **What is in the way never changes place**: it is
 the same for everybody, and learnt run after run. Each turn has its theme, and each is worse than the last:
 
 | Turn | | What is in the way |
@@ -181,9 +190,9 @@ one's best height so far. The time that counts is the time of the attempt that r
 inside of the track is the shorter way round: who hugs the tower gains on who runs along the rail (without
 that every finish would take exactly the same time).
 
-The bot reaches the bell at its first attempt, in 51.2 to 52.4 s; each of the nine things that move was passed
-at thirty moments of arrival. For the game's boards: `spiral: { order: 'asc', min: 46000, max: 61000 }` (every
-finish there can be lies between the two: all along the tower, all along the rail).
+The bot reaches the bell at its first attempt (51.8 s in the running game). For the game's boards:
+`spiral: { order: 'asc', min: 46000, max: 900000 }` (46 s is the fastest finish there can be: all along the tower
+at a run).
 
 What its owner should look at first: back to the foot every time means some forty seconds of easy turns before
 each try at the last one — it may tire before it thrills (a checkpoint a turn, or a way to practise one turn,

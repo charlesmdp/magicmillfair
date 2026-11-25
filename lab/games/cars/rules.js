@@ -31,7 +31,7 @@ export const CARS = {
   gates: 16,
   road: 1.15, wall: 1.45, body: 0.2, // half the tarmac; the boards, from the centre line; a car, as the boards and the other cars feel it
   top: 7.5, accel: 9.5, brake: 7.5, coast: 3.2, // m/s flat out; m/s² from rest; lost when the stick is let go; lost over the top speed with the stick full
-  grip: 13, slide: 0.3, over: 1.8, turn: 5.5, // m/s² the tyres hold across — and the share of it lost once the car slides; how much faster the nose turns than they can follow; rad/s at most
+  grip: 13, slide: 0.55, over: 1.8, turn: 5.5, // m/s² the tyres hold across — and the share of it lost once the car slides; how much faster the nose turns than they can follow; rad/s at most
   boost: { time: 0.9, top: 10.5, accel: 17, back: 4 }, // the jump: so long, so fast; the seconds before it is there again
   pad: { kick: 3.2, top: 11 }, cap: 11.5, // the pad on the straight: m/s more, up to so much; nothing ever goes faster than the cap
   verge: { top: 0.6, grip: 0.7, drag: 5 }, sand: { top: 0.45, grip: 0.6, drag: 9 }, // off the tarmac, in the sand: the share of the speed and of the grip left, m/s² lost
@@ -122,7 +122,7 @@ export const PAD = stretch(-1.5, 5.9, 1.2, -1.05, -0.15);
 /** The sand, on the outside of the sweep. */
 export const SAND = stretch(6.5 + 5.1 * Math.sin(0.61), 0.8 + 5.1 * Math.cos(0.61), 6.7, -C.road, -0.45);
 /** The ramp, across the straight of the far side: it rises the way one goes, and ends in the air. */
-export const RAMP = stretch(-1.5, -5.9, C.ramp.length, -1.1, 1.1);
+export const RAMP = stretch(-2.5, -5.9, C.ramp.length, -1.1, 1.1);
 /** The oil, before the second hairpin, on the side one would cut it from. */
 export const OIL = stretch(-4.4, -1.9, 1.1, -0.95, -0.15);
 /** Is the place (s: samples along the lap, l) on this stretch? */
@@ -312,6 +312,7 @@ function drive(c, i, cmd, events) {
   const speed = Math.hypot(c.vx, c.vz);
   if (c.air) { c.vy -= C.g * dt; c.y += c.vy * dt; c.airT += dt; c.slip = 0; } else {
     // what is under the wheels
+    const free = c.oil > 0, v0x = c.vx, v0z = c.vz;
     const surf = inZone(SAND, c.s, c.l) ? C.sand : Math.abs(c.l) > C.road ? C.verge : null;
     let grip = C.grip * (surf ? surf.grip : 1);
     // the nose: on oil it goes round by itself; else it turns the way one points, faster than the tyres follow
@@ -324,11 +325,12 @@ function drive(c, i, cmd, events) {
     const lx = c.vx - fx * along, lz = c.vz - fz * along, across = Math.hypot(lx, lz);
     // along the nose: towards the speed the stick asks for
     const share = surf ? surf.top : 1, top = C.top * c.top * share, lim = c.boost > 0 ? Math.max(top, C.boost.top * share) : top, want = cmd.m * lim;
-    if (along < want) along += Math.min((c.boost > 0 ? C.boost.accel : C.accel) * Math.min(1.3, 1 - along / lim) * (c.oil > 0 ? 0.3 : 1) * dt, want - along);
+    if (along < want) along += Math.min((c.boost > 0 ? C.boost.accel : C.accel) * (c.boost > 0 ? 1 : Math.min(1.3, 1 - along / lim)) * (c.oil > 0 ? 0.3 : 1) * dt, want - along);
     else { let drag = C.coast + (1 - cmd.m) * (C.brake - C.coast); if (surf && along > top) drag = Math.max(drag, surf.drag); along -= Math.min(drag * dt, along - want); }
     // across it: the tyres take away what they can hold, the rest slides
     const held = grip * (1 - C.slide * clamp((across - 1.2) / 1.3, 0, 1)) * dt, keep = across > held ? (across - held) / across : 0;
     c.vx = fx * along + lx * keep; c.vz = fz * along + lz * keep; c.slip = across * keep;
+    if (free) { c.vx = v0x * (1 - 0.25 * dt); c.vz = v0z * (1 - 0.25 * dt); c.slip = 0; } // (on oil nothing grips and nothing pulls: it goes on the way it went)
     if (!c.drift && c.slip > 2) { c.drift = true; events?.push({ type: 'drift', car: i }); } else if (c.drift && c.slip < 0.8) c.drift = false;
   }
   const now = Math.hypot(c.vx, c.vz);
@@ -440,8 +442,8 @@ export function clumsyInput(st, out = { x: 0, y: 0, jump: false }) {
 export function raceRun(seed = 1, play = botInput, secs = C.limit + 5) {
   const st = startRace(seed), input = { x: 0, y: 0, jump: false }, events = [], count = {}, laps = [], order = [];
   while (st.clock < secs && !st.out && !(st.over && st.cars.every((c) => c.done))) {
-    play(st, input); stepRace(st, STEP, input, events);
-    for (const e of events) { if (e.car === 0 || e.type === 'out') count[e.type] = (count[e.type] || 0) + 1; if (e.car === 0 && e.type === 'gate') { order.push(e.gate); if (!e.gate) laps.push(e.time); } }
+    const home = st.cars[0].done; play(st, input); stepRace(st, STEP, input, events);
+    for (const e of events) { if (home && e.car === 0) continue; if (e.car === 0 || e.type === 'out') count[e.type] = (count[e.type] || 0) + 1; if (e.car === 0 && e.type === 'gate') { order.push(e.gate); if (!e.gate) laps.push(e.time); } }
     events.length = 0;
   }
   return { time: st.time, place: st.place, over: st.over, state: st, laps, order, events: count };

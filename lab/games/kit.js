@@ -119,7 +119,9 @@ export function plug(app, game, o) {
     told = true;
     return run;
   };
-  world.actionSources.push((p) => {
+  // (asked before the world's own actions: at its gate and while it is played, the game is what the E key means —
+  // not the flower one happens to stand by)
+  world.actionSources.unshift((p) => {
     if (run) return run.over ? null : { label: o.leave || 'Leave the game', run: () => leave(false) };
     return game.near(p.pos.x, p.pos.z) ? { label: o.label(game), run: start } : null;
   });
