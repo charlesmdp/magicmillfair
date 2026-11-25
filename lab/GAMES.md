@@ -12,7 +12,7 @@ They borrow the *mechanics* of games one knows — never their look, their names
 | `lava` | **Thin Crust** — the lava only rises, columns come up out of it: one keeps to the summits, and keeps a way on | a small volcano east of the head of the pier, at (188, 8); the gate on the deck of the pier head at (142.4, 13.3) | `node tools/lava-test.mjs` (36) |
 | `hive` | **The Bee's Knees** — four combs of wax over the sea: the cell one sets foot on gives way | the north of the bay: combs at (84, -84), the gate on the beach at (43.5, -79.5) | `node tools/hive-test.mjs` (30) |
 | `flip` | **Head Over Heels** — one runs on the spot in a machine of travelling girders, and one key turns gravity over | a tall frame in the sea along the south side of the pier; the gate on the south beach at (41.1, 42.8) | `node tools/flip-test.mjs` (45) |
-| `spiral` | **A Turn for the Worse** — a track wound round a tower: obstacles worse every turn, up to the bell | a tower in the south of the bay, at (168, 84); the gate on the south beach at (52, 71) | `node tools/spiral-test.mjs` (49) |
+| `spiral` | **A Turn for the Worse** — a track wound round a tower: obstacles worse every turn, up to the bell | a tower in the south of the bay, at (168, 84); the gate on the south beach at (52, 71) | `node tools/spiral-test.mjs` (52) |
 | `cars` | **Round the Bend** — radio-controlled cars raced on a table, seen from above | the meadow south of the acid pond: a table at (-243.5, -55.8), the arch at (-243.5, -45.9) | `node tools/cars-test.mjs` (40) |
 | `golf` | **Par for the Course** — nine holes of crazy golf round the acid pond | round the acid pond (-236, -82); the gate at (-225.5, -75.6) | `node tools/golf-test.mjs` (52) |
 
@@ -233,22 +233,27 @@ every turn has its theme: yellow and black is jumped, red and white is slid unde
 | 9 | Three High — a stair of crates, a hole behind | 19 | The Last Straw — a mix, then planks a foot wide that give way, to the bell |
 | 10 | Up and Down — bars that go low and high, in rhythm | | |
 
-**One touch — or a hole — and the attempt is over**: one is back at the foot within a second, and the clock
-waits there for the first step. That is its owner's rule, and the default. Because a clean climb now takes
-some three minutes, the other way is built too, behind one constant: six landings (a short level stretch with
-nothing in the way, a painted line and a flag) are there in both cases, and with `SPIRAL.back = 'landing'` a
-touch puts one back at the last landing reached while the clock runs on (the line of the run then counts the
-falls). The inside of the track is the shorter way round: who hugs the tower gains on who runs along the rail.
+**A landing is a save.** There are six of them — a short level stretch with nothing in the way, a painted line,
+a flag and a green sign "SAVE · 23 m" — every three turns, which is every 23 metres up (23, 46, 69, 92, 115 and
+138 m; the bell is at 146). One touch — or a hole — and one is back within a second on the last landing one
+reached, the clock running on: the time that counts is the time from the first step to the bell, falls and all
+(the line of the run counts the falls and says where one is saved). Before the first landing nothing is saved:
+a touch puts one back at the foot, where the clock waits for the first step again. Its owner asked for a save
+every thirty metres; the landings were there, level and empty — the only places where one can be put back
+without something landing on one's head — so they are the saves: a little closer together than asked. The first
+rule (one touch and it is the foot again, the bell in one attempt) is still there behind one constant,
+`SPIRAL.back = 'foot'`. The inside of the track is the shorter way round: who hugs the tower gains on who runs
+along the rail.
 
 The bot reaches the bell at its first attempt in 161 to 163 s (138 keys, three waits); the tightest moment it
 has to act in is 0.29 s wide, half of them 0.41 s or more; the longest wait for something that moves is 2 s.
 The fastest finish there can be is 144.9 s. For the game's boards:
 `spiral: { order: 'asc', min: 144000, max: 900000 }`.
 
-What its owner should look at first: three minutes without a touch, from the foot every time — the bot does
-it, a person may well find it more discouraging than thrilling; `'landing'` is there to be tried. What nobody
-has seen: the 'landing' way in the running game (it is checked in the rules only), and play beyond the sixth
-turn in a picture taken while playing.
+What its owner should look at first: whether a save every 23 metres makes the climb a pleasure, or too easy.
+What nobody has seen: a person falling and being put back on a landing in the running game (the rules check it,
+and the bot that plays in the browser never falls), and play beyond the sixth turn in a picture taken while
+playing.
 
 ### Round the Bend (`cars`)
 

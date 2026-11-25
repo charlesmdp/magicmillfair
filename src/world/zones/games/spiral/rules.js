@@ -37,10 +37,12 @@
 //   Pistons               rams that shoot across the track, from the tower or from the rail, and draw back
 //   Clock of Hammers      hammers four in a row, each a beat after the one before
 //   The Last Straw        a little of everything, then planks a foot wide that give way, to the bell
-// One touch — or a hole — and the attempt is over: one is back at the foot within a second, and the clock waits
-// there for the first step (`back: 'foot'`). Every three turns there is a landing — a short level stretch with
-// nothing on it, a painted line and a flag —: a breather; and, with `back: 'landing'`, where one is put back
-// after a touch, the clock running on. The time that counts is the time of the attempt that reaches the bell.
+// Every three turns — every twenty-three metres up — there is a landing: a short level stretch with nothing on
+// it, a painted line and a flag. It is a breather, and a save: one touch — or a hole — and one is back within a
+// second on the last landing one reached, the clock running on (`back: 'landing'`, the rule). Before the first
+// landing there is nothing to go back to but the foot, where the clock waits for the first step again — as it
+// does after every touch with `back: 'foot'` (no saves: the bell in one attempt). The time that counts is the
+// time since the first step of the attempt that reaches the bell, falls and all.
 // The inside of the track is the shorter way round: who hugs the tower gains on who runs along the rail.
 //
 // Places on the track: `s` metres up it from the foot, measured along its middle, `u` metres across it from its
@@ -64,8 +66,9 @@ export const SPIRAL = {
   from: Math.PI, // where the foot is, about the tower (radians; 0 is east, π/2 south): west, facing the beach
   names: ['Mind the Gap', 'Duck!', 'Step Up', 'Clockwork', 'Roll Out the Barrel', 'The Works', 'Give Way', 'Spring Tide', 'Three High', 'Up and Down', 'Gusts', 'Against the Grain', 'Sliding Doors', 'Cannonade', 'Tightrope', 'Low Bridge', 'Pistons', 'Clock of Hammers', 'The Last Straw'],
   // the landings: at the end of the third turn, then at the start of the seventh, the tenth … the nineteenth; so
-  // long, level. Who touches something is put back at the foot ('foot'), or at the last landing reached ('landing')
-  landings: [3, 6, 9, 12, 15, 18], land: 5, back: 'foot',
+  // long, level. Who touches something is put back at the last landing reached ('landing': each is a save), or
+  // at the foot whatever was reached ('foot')
+  landings: [3, 6, 9, 12, 15, 18], land: 5, back: 'landing',
   step: 1 / 120,
   speed: [6, 7.6], // m/s along the middle of the track, the stick full up: at the foot, at the bell
   start: 0.3, stop: 0.25, // s from standing to that speed; and from it to standing, the stick let go
@@ -295,7 +298,8 @@ export function course() {
   return made;
 }
 /**
- * Its line for the boards of scores: the time of the attempt that rings the bell (ms), the lower the better.
+ * Its line for the boards of scores: the time from the first step to the bell (ms; falls and all, once a
+ * landing has been reached), the lower the better.
  * No finish is faster than `min`; who stops and waits takes as long as it takes — a quarter of an hour at most
  * is counted.
  */
@@ -405,7 +409,8 @@ export const backTo = (st) => (S.back === 'landing' && st.home > 0 ? st.home + S
  * happened: { type: 'go' (the first step of an attempt: its clock starts) | 'jump' | 'again' (the second jump)
  * | 'dive' | 'land' | 'slide' | 'spring' (thrown by a springboard) | 'turn' (n) | 'out' (why: 'hole' | 'low' |
  * 'high' | 'fence' | 'crate' | 'mill' | 'stomp' | 'hammer' | 'barrel' | 'lift' | 'door' | 'cannon' | 'trolley' |
- * 'ram'; s, attempt) | 'foot' (put back at the foot, or at a landing: attempt, s) | 'top' (time, attempt) }.
+ * 'ram'; s, attempt) | 'foot' (put back at the foot, or at a landing: attempt, s) | 'save' (a landing reached
+ * for the first time, with `back: 'landing'`: n — 1 for the first —, s) | 'top' (time, attempt) }.
  */
 export function stepRun(st, dt, input, events) {
   if (input?.jump) st.want.jump = S.buffer; // (asked a moment too early, it still goes off on landing)
@@ -419,6 +424,7 @@ function sub(st, dt, input, events) {
   st.n++; st.total += dt;
   const now = st.t0 + st.total;
   const on = S.back === 'landing' && st.going; // (put back at a landing, the clock runs on)
+  const kept = on && st.home > 0; // (…with no landing reached yet it is the foot, and a new start: the clock waits there)
   if (st.down > 0) {
     // ---- the attempt is over: a moment — down the hole, or on one's back — then at the foot again (or at the
     // last landing), standing
@@ -427,7 +433,7 @@ function sub(st, dt, input, events) {
     if (st.why === 'hole') { st.vh -= S.g * dt; st.h += st.vh * dt; }
     if (st.down <= 0) {
       const s = backTo(st);
-      Object.assign(st, { s, u: 0, vu: 0, h: 0, vh: 0, air: false, jumps: 0, coyote: 0, slide: -1, slid: 0, duck: 0, v: 0, pace: 0, since: 9, going: on, clock: on ? st.clock : 0, turn: turnOf(s), wait: S.ready, attempt: st.attempt + 1, trod: [], home: on ? st.home : 0 });
+      Object.assign(st, { s, u: 0, vu: 0, h: 0, vh: 0, air: false, jumps: 0, coyote: 0, slide: -1, slid: 0, duck: 0, v: 0, pace: 0, since: 9, going: kept, clock: kept ? st.clock : 0, turn: turnOf(s), wait: S.ready, attempt: st.attempt + 1, trod: [], home: kept ? st.home : 0 });
       st.want.jump = st.want.down = 0;
       events?.push({ type: 'foot', attempt: st.attempt, s });
     }
@@ -513,7 +519,8 @@ function sub(st, dt, input, events) {
       }
     }
   }
-  for (const a of LANDINGS) if (st.s >= a && a > st.home) st.home = a; // (the last landing reached)
+  // (the last landing reached: a save, where a touch puts one back)
+  for (let k = 0; k < LANDINGS.length; k++) if (st.s >= LANDINGS[k] && LANDINGS[k] > st.home) { st.home = LANDINGS[k]; if (S.back === 'landing') events?.push({ type: 'save', n: k + 1, s: LANDINGS[k] }); }
   // ---- the bell
   if (st.s >= LENGTH) { st.s = LENGTH; st.best = LENGTH; st.over = true; st.time = Math.min(BOARD.max, Math.round(st.clock * 1000)); events?.push({ type: 'top', time: st.time, attempt: st.attempt }); return; }
   if (st.s > st.best) st.best = st.s;

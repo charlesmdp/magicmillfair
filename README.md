@@ -1250,7 +1250,7 @@ second (those have a gate one asks to play under, and are plugged in by `src/ext
 | `lava` | **Thin Crust**: basalt columns in a crater; the lava only rises, columns come up out of it | a volcano off the head of the pier | how long one held |
 | `hive` | **The Bee's Knees**: four combs of wax over the sea; the cell one stands on gives way | the north of the bay | how long one held |
 | `flip` | **Head Over Heels**: one runs by oneself in a machine of travelling girders, and one key turns gravity over | in the sea along the south side of the pier | the machine's time, 3 s more for each fall, a quarter of a second less for each spark |
-| `spiral` | **A Turn for the Worse**: a track wound round a tower, nineteen turns of obstacles up to its bell | a tower in the south of the bay | a time |
+| `spiral` | **A Turn for the Worse**: a track wound round a tower, nineteen turns of obstacles up to its bell — a landing every 23 m up is a save: a fall puts one back on the last one reached | a tower in the south of the bay | a time, falls and all |
 | `cars` | **Round the Bend**: radio-controlled cars on a table, seen from above — three laps against three others | the meadow south of the acid pond | a time |
 | `golf` | **Par for the Course**: nine holes of crazy golf, each the valley in miniature | round the acid pond | its strokes, then the seconds of the round |
 

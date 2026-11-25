@@ -59,7 +59,7 @@
     lava: ['Thin Crust', 'A volcano off the head of the pier: basalt columns, and lava that only rises — a round every ten seconds.'],
     hive: ["The Bee's Knees", 'Four combs over the sea: the wax one stands on gives way, and the bees take it apart too.'],
     flip: ['Head Over Heels', 'A machine along the pier: one runs by oneself and turns gravity over — a thousand metres, a start every ten seconds.'],
-    spiral: ['A Turn for the Worse', 'A track wound round a tower in the bay: nineteen turns of obstacles, up to its bell.'],
+    spiral: ['A Turn for the Worse', 'A track wound round a tower in the bay: nineteen turns of obstacles, up to its bell — a save at every landing.'],
     cars: ['Round the Bend', 'Radio-controlled cars raced on a table by the acid pond, seen from above: three laps against three others.'],
     golf: ['Par for the Course', 'Nine holes of crazy golf round the acid pond, each the valley in miniature.'],
     caves: ['The caves are safe places', 'In a cave, only those nearby hear what is said.'],

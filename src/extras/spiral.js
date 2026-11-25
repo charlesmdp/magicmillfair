@@ -11,7 +11,7 @@ const { SPIRAL } = rules;
 export function attach(app) {
   const tower = new Spiral(app.world).build();
   app.world.bakeShadows(); // (the tower was not there when the shadows of what never moves were drawn)
-  const back = SPIRAL.back === 'landing' ? 'one touch: back to the last landing' : 'one touch: back to the foot';
+  const back = SPIRAL.back === 'landing' ? `a save at every landing, every ${Math.round(rules.heightOf(rules.LANDINGS[0]))} m up: one touch, and you are back on the last one you reached (before the first: at the foot)` : 'one touch: back to the foot';
   return plug(app, tower, {
     id: 'spiral', rules,
     label: () => `Run up ${SPIRAL.name}`,

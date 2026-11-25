@@ -18,7 +18,7 @@ import { LAYER } from '../../../../render/Shadows.js';
 import { ANIM } from '../../../../player/Character.js';
 import { canvasBoard } from '../Boards.js';
 import { formatTime } from '../course.js';
-import { V, clamp, worldClock, gateArch } from '../gates.js';
+import { V, clamp, worldClock, gateArch, stakeSign } from '../gates.js';
 import { SPIRAL, TURN, LENGTH, LANDINGS, course, trackY, slopeAt, spiralAt, floorAt, startRun, stepRun, botInput, millAngle, stompAt, stompSoon, hammerAt, barrelsOf, heightOf, turnOf, liftAt, gustAt, doorAt, cannonAt, ramAt, trolleysOf, trodAt } from './rules.js';
 
 const S = SPIRAL, C = S.at, H = S.half, TAU = Math.PI * 2;
@@ -164,9 +164,11 @@ export class Spiral {
     for (const [a, b] of runs) { rail(H - 0.07, 1.02, TURN / 24, RED, a, b); rail(-H + 0.07, 0.9, TURN / 12, NAVY, a, b); }
     rail(H - 0.07, 1.02, 1.3, RED, LENGTH + 0.6, S1); rail(-H + 0.07, 0.9, 1.3, NAVY, LENGTH + 0.6, S1);
 
-    // ---- the landings: a painted line across at each end, a flag by the rail
+    // ---- the landings: a painted line across at each end, a flag by the rail — and, when they are saves, a sign
+    // that says so and how high one is (read as one arrives: it faces down the track)
     LANDINGS.forEach((a, i) => {
       chunk(a);
+      if (S.back === 'landing') { const p = at(a + 0.7, H + 0.3), q = at(a + 1.7, H + 0.3); stakeSign(this.group, dark, p.x, p.y, p.z, Math.atan2(q.x - p.x, q.z - p.z), `SAVE · ${Math.round(heightOf(a))} m`, { w: 1.5, h: 0.5, up: 2.2, back: '#0f3d2a' }); }
       for (const s of [a + 0.15, a + S.land - 0.15]) {
         const n = 8;
         for (let k = 0; k < n; k++) { const u0 = -H + (2 * H * k) / n, u1 = -H + (2 * H * (k + 1)) / n; paint.tint(...(k % 2 ? GOLD : WHITE), 1).quad(at(s - 0.12, u0, 0.012), at(s - 0.12, u1, 0.012), at(s + 0.12, u1, 0.012), at(s + 0.12, u0, 0.012)); }
@@ -405,7 +407,7 @@ export class Spiral {
 
     // ---- the gate, on the sand of the south beach, looking at the tower
     const gx = S.gate.x, gz = S.gate.z, gy = this.data.heightAt(gx, gz), yaw = Math.atan2(C.x - gx, C.z - gz), gate = new Parts();
-    gateArch(this.group, gate.get('paint'), gx, gy, gz, yaw, S.name.toUpperCase(), S.back === 'landing' ? 'UP THE TOWER TO THE BELL · ONE TOUCH AND IT IS THE LAST LANDING AGAIN' : 'UP THE TOWER TO THE BELL · ONE TOUCH AND IT IS THE FOOT AGAIN', { width: 4 });
+    gateArch(this.group, gate.get('paint'), gx, gy, gz, yaw, S.name.toUpperCase(), S.back === 'landing' ? `UP THE TOWER TO THE BELL · A SAVE AT EVERY LANDING, EVERY ${Math.round(heightOf(LANDINGS[0]))} M UP` : 'UP THE TOWER TO THE BELL · ONE TOUCH AND IT IS THE FOOT AGAIN', { width: 4 });
     this.group.add(gate.toMeshes(mats, { name: 'spiral-gate', layers: [LAYER.STATIC_CASTER] }));
     this.board = canvasBoard(512, 256, (ctx, w, h) => {
       ctx.fillStyle = '#12122e'; ctx.fillRect(0, 0, w, h); ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 8; ctx.strokeRect(7, 7, w - 14, h - 14);
@@ -531,7 +533,7 @@ export class Spiral {
         if (this.blob.visible) { const k = clamp(1 - (st.h - G) / 3, 0.45, 1); this.blob.position.set(pose.x, pose.y + G + 0.03, pose.z); this.blob.scale.setScalar(k); this.blob.updateMatrixWorld(true); }
         if (st.over) { K.after += dt; if (!session.over) { session.over = true; session.score = session.time = st.time; } if (K.after > 2.8) session.ended = true; }
         const turn = turnOf(st.s), best = `best ${heightOf(st.best).toFixed(1)} m of ${Math.round(heightOf(LENGTH))} up`, landing = S.back === 'landing';
-        const who = landing ? (st.outs ? `${st.outs} fall${st.outs > 1 ? 's' : ''}` : 'no fall yet') : `Attempt ${st.attempt}`;
+        const who = landing ? `${st.outs ? `${st.outs} fall${st.outs > 1 ? 's' : ''}` : 'no fall yet'}${st.home > 0 ? ` · saved at ${Math.round(heightOf(st.home))} m` : ''}` : `Attempt ${st.attempt}`;
         session.line = st.over ? `${S.name} · the bell in ${formatTime(st.time)} · ${landing ? who : `attempt ${st.attempt}`}`
           : !st.going ? `${who} · at the foot — the clock starts with your first step${st.best > 0 ? ` · ${best}` : ''}`
             : `${who} · turn ${turn + 1} of ${S.turns}: ${S.names[turn]} · ${formatTime(Math.round(st.clock * 1000))} · ${best}`;
@@ -572,7 +574,9 @@ export class Spiral {
     else if (e.type === 'foot') io.play('respawn', { volume: 0.6 });
     else if (e.type === 'spring') io.play('jump', { volume: 0.7, rate: 0.7 });
     else if (e.type === 'turn') { io.play('checkpoint', { volume: 0.6 }); io.note(`Turn ${e.n + 1}: ${S.names[e.n]}`, 1800); }
-    else if (e.type === 'out') { io.play(e.why === 'hole' ? 'fail' : 'hit'); io.note(`${WHY[e.why] || 'Out!'} ${heightOf(e.s).toFixed(1)} m up — back to ${S.back === 'landing' && st.home > 0 ? 'the last landing' : 'the foot'}.`, 1700); }
+    else if (e.type === 'out') { io.play(e.why === 'hole' ? 'fail' : 'hit'); io.note(`${WHY[e.why] || 'Out!'} ${heightOf(e.s).toFixed(1)} m up — back to ${S.back === 'landing' && st.home > 0 ? `your save, ${Math.round(heightOf(st.home))} m up` : 'the foot'}.`, 1700); }
+    // (a landing reached: saved — said after the name of the turn that begins there, which it would hide)
+    else if (e.type === 'save') { io.play('checkpoint', { volume: 0.8, rate: 1.25 }); io.note(`Saved, ${Math.round(heightOf(e.s))} m up — a fall brings you back here · next: ${S.names[turnOf(e.s + S.land + 1)]}`, 3400); }
     else if (e.type === 'top') { io.play('bell'); io.play('victory', { volume: 0.7 }); io.note(`The bell! ${formatTime(e.time)}, at attempt ${e.attempt}`, 5000); }
   }
 }

@@ -365,9 +365,28 @@ const windowOf = (key, from, to, u = 0) => { let n = 0; for (let k = 0; k < 240;
     return { why: r.out, s: st.s, clock: st.clock, at, t, going: st.going };
   };
   const land = touch('landing'), foot = touch('foot');
-  check("back: 'landing' — a touch puts one back at the last landing reached, and the clock runs on; back: 'foot' (the rule) — at the foot, and the clock waits for the first step",
-    S.back === 'foot' && land.why === 'low' && Math.abs(land.s - (L + S.land / 2)) < 1e-6 && land.going && Math.abs(land.clock - land.at - land.t) < 1e-6 && foot.why === 'low' && foot.s === 0 && foot.clock === 0 && !foot.going,
+  check("a landing is a save (back: 'landing', the rule): a touch puts one back on the last landing reached, and the clock runs on — with back: 'foot', at the foot, where the clock waits for the first step",
+    S.back === 'landing' && land.why === 'low' && Math.abs(land.s - (L + S.land / 2)) < 1e-6 && land.going && Math.abs(land.clock - land.at - land.t) < 1e-6 && foot.why === 'low' && foot.s === 0 && foot.clock === 0 && !foot.going,
     `a hurdle ${(hit.s - L).toFixed(0)} m past the landing at ${heightOf(L).toFixed(0)} m: 'landing' puts one back on it, the clock ${land.at.toFixed(1)} s then ${land.clock.toFixed(1)} s after ${land.t.toFixed(1)} s; 'foot' puts one at the foot, the clock at 0`);
+  {
+    // every landing saves once, as it is first reached: a run to the bell tells the six of them, in order
+    const st = startRun(0), input = { side: 0, run: 0, jump: false, down: false, crouch: false }, events = [], saves = [];
+    for (let t = 0; t < 600 && !st.over; t += S.step) { botInput(st, input); stepRun(st, S.step, input, events); for (const e of events) if (e.type === 'save') saves.push(e); events.length = 0; }
+    const heights = saves.map((e) => heightOf(e.s)), gaps = [...heights.map((h, i) => h - (i ? heights[i - 1] : 0)), heightOf(LENGTH) - (heights[heights.length - 1] || 0)], most = Math.max(...gaps);
+    check('a run to the bell is saved six times, at each landing as it is first reached: from the foot to a save, from a save to the next, from the last to the bell, never thirty metres of climb',
+      st.over && saves.length === 6 && saves.every((e, i) => e.n === i + 1 && e.s === LANDINGS[i]) && most < 30, `saved ${heights.map((h) => h.toFixed(0)).join(', ')} m up; the most to climb between two: ${most.toFixed(1)} m`);
+  }
+  {
+    // a fall after a save costs the way back from that save, not the climb: one goes on, and the time is the whole of it
+    const st = runner(L - 3), r = go(st, hit.s + 2), at = st.clock, input = { side: 0, run: 0, jump: false, down: false, crouch: false };
+    for (let t = 0; t < 600 && !st.over; t += S.step) { botInput(st, input); stepRun(st, S.step, input); }
+    check('a fall after a save: one goes on from that landing and rings the bell at the second attempt — the clock never went back: the fall is in the time',
+      r.out === 'low' && st.over && st.attempt === 2 && st.outs === 1 && Math.abs(st.time - Math.round(st.clock * 1000)) <= 1 && st.clock > at + S.fall, `touched ${at.toFixed(1)} s after the landing, the bell ${(st.time / 1000).toFixed(1)} s after it`);
+    // before the first landing there is no save: the foot, and a new start — the clock waits for the first step
+    const hole = things.find((t) => t.kind === 'hole'), early = runner(Math.max(1, hole.s0 - 4)), fell = go(early, hole.s1 + 3);
+    for (let k = 0; k < 400 && (early.down > 0 || early.wait > 0); k++) stepRun(early, S.step, { side: 0, run: 0, jump: false, down: false, crouch: false });
+    check('before the first landing nothing is saved: a fall puts one back at the foot, the clock at nought, waiting for the first step', fell.out === 'hole' && early.s === 0 && early.clock === 0 && !early.going && early.home === 0 && early.attempt === 2, `a hole ${heightOf(hole.s0).toFixed(1)} m up`);
+  }
 }
 {
   // ---- the runner that plays by itself
@@ -388,7 +407,7 @@ const windowOf = (key, from, to, u = 0) => { let n = 0; for (let k = 0; k < 240;
     `${count.join(', ')} things (the barrels and the boards on the track at once counted); new: ${fresh.map((f, i) => `${i + 1}: ${f.join(' ') || '—'}`).join(' · ')}; nothing in the first ${firstAt} m`);
   // ---- its line for the boards of scores
   const late = startRun(0); Object.assign(late, { s: LENGTH - 0.05, going: true, clock: 3600 }); stepRun(late, 0.1, { run: 1 });
-  check('its board: the time of the attempt that rings the bell, the lower the better — from the time nobody can beat (along the tower, thrown by the springboards) to a quarter of an hour, the most that is counted',
+  check('its board: the time from the first step to the bell — falls and all, once a landing has saved one —, the lower the better — from the time nobody can beat (along the tower, thrown by the springboards) to a quarter of an hour, the most that is counted',
     BOARD.order === 'asc' && BOARD.min === Math.floor(fastest() / 1000) * 1000 && BOARD.max === 900_000 && [...runs, ...slower].every((r) => r.time >= BOARD.min && r.time <= BOARD.max) && late.over && late.time === BOARD.max,
     `${(fastest() / 1000).toFixed(1)} s at the least; an attempt of an hour is told as ${late.time / 1000} s`);
   { const S = SERVER.spiral || {}; check('the server keeps its board by the same line (server/scores.js), behind its switch', S.order === BOARD.order && S.min === BOARD.min && S.max === BOARD.max && S.release === 'spiral', JSON.stringify(S)); }

@@ -1366,7 +1366,7 @@ async function boot() {
     lava: { title: 'LONGEST RUNS', sub: 'the lava only rises · who held the longest', at: [4.4, -0.5, 0], level: true },
     hive: { title: 'LONGEST RUNS', sub: 'four combs over the sea · who held the longest', at: [4.4, -0.5, 0] },
     flip: { title: 'BEST TIMES', sub: 'a thousand metres of girders · 3 s for each fall, a quarter of a second off for each spark', at: [4.4, -0.5, 0] },
-    spiral: { title: 'BEST TIMES', sub: 'nineteen turns up to the bell · fastest', at: [4.4, -0.5, 0] },
+    spiral: { title: 'BEST TIMES', sub: 'nineteen turns up to the bell · fastest, falls and all', at: [4.4, -0.5, 0] },
     cars: { title: 'BEST TIMES', sub: 'three laps of the table · fastest', at: [4.4, -0.5, 0] },
     golf: { title: 'FEWEST STROKES', sub: 'nine holes round the acid pond · the fewest strokes, then the fastest', at: [4.4, -0.5, 0], format: golfScore },
   };
