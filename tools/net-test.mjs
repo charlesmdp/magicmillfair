@@ -1434,6 +1434,29 @@ async function testChatLog({ port }) {
     [got?.lines?.slice(0, 2), nobody.status, page, older?.lines?.[0], wiped.status, after]);
 }
 
+// ------------------------------------------------------------- a thing one steers in a game (a boat): {t:'v'}
+async function testThings({ port }) {
+  const a = new Client(port, 'pondside'), b = new Client(port, 'pondside'), far = new Client(port, 'pondside');
+  await a.hello('Skipper A', 1);
+  await b.hello('Skipper B', 2);
+  await far.hello('Far Away', 3);
+  a.send({ t: 's', p: [0, 10, 0, 0], a: 0 });
+  b.send({ t: 's', p: [30, 10, 0, 0], a: 0 });
+  far.send({ t: 's', p: [400, 10, 0, 0], a: 0 });
+  await sleep(400);
+  a.send({ t: 'v', k: 1, n: 17955, d: [12.3456, -7.891, 0.5, 6, 120.4, 2, 31000, 0] });
+  const got = await b.wait((m) => m.t === 'v');
+  // (what has not the shape of one is not handed on)
+  for (const bad of [{ t: 'v', k: 99, n: 1, d: [1] }, { t: 'v', k: 1, n: -1, d: [1] }, { t: 'v', k: 1, n: 1, d: [] }, { t: 'v', k: 1, n: 1, d: [1, 2, 3, 4, 5, 6, 7, 8, 9] }, { t: 'v', k: 1, n: 1, d: [1e9] }, { t: 'v', k: 1, n: 1, d: ['x'] }]) a.send(bad);
+  // (a flood: a few get through, the rest are dropped)
+  for (let i = 0; i < 40; i++) a.send({ t: 'v', k: 1, n: 2, d: [i] });
+  await sleep(600);
+  const all = b.msgs.filter((m) => m.t === 'v'), flood = all.filter((m) => m.n === 2).length, bads = all.filter((m) => m.n === 1 || m.n === -1 || m.k === 99).length, farGot = far.msgs.filter((m) => m.t === 'v').length;
+  a.ws.close(); b.ws.close(); far.ws.close();
+  check('a thing one steers in a game — a boat of the regatta — is handed on to those near enough, carried to the hundredth, with whose it is; what has not its shape is not; a flood is cut to a few a second; who is far away is told nothing',
+    got?.id === a.id && got.k === 1 && got.n === 17955 && JSON.stringify(got.d) === '[12.35,-7.89,0.5,6,120.4,2,31000,0]' && bads === 0 && flood >= 1 && flood <= 14 && farGot === 0, [got, bads, flood, farGot]);
+}
+
 async function testAccounts({ port }) {
   const json = (res) => { try { return JSON.parse(res.body.toString()); } catch { return null; } };
   const post = (target, body, headers = {}) => request(port, target, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
@@ -2535,6 +2558,7 @@ try {
     await section('shop', () => testShop(server));
     await section('accounts', () => testAccounts(server));
     await section('chatlog', () => testChatLog(server));
+    await section('things', () => testThings(server));
     await section('cloudflare', () => testCloudflare(server, fx));
     await section('crowd', () => testCrowd(startWorker, fx.dist));
     await section('moderation', () => testModeration(startWorker, fx.dist));
@@ -2559,6 +2583,7 @@ try {
     await section('shop', () => testShop(server));
     await section('accounts', () => testAccounts(server));
     await section('chatlog', () => testChatLog(server));
+    await section('things', () => testThings(server));
     await section('crowd', () => testCrowd(startServer, fx.dist));
     await section('moderation', () => testModeration(startServer, fx.dist));
     await section('visitors', () => testVisitors(startServer, fx.dist));

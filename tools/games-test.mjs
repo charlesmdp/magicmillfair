@@ -112,6 +112,29 @@ try {
   await page.waitForFunction(() => !window.__mmf.hillClimb(), null, { timeout: 180000 });
   const hill = await page.evaluate(() => ({ told: window.__told.hill, driver: !!window.__mmf.player.driver }));
   check('the slope is climbed by its bot in the running game, and its time told', hill.told > 9000 && hill.told < 90000 && !hill.driver, `${(hill.told / 1000).toFixed(1)} s`);
+  // ---- the regatta: asked for at the stand, it leaves with the next named start — on the clock everybody
+  // shares —, the boat sails its three laps by itself and its time is told; somebody else's boat that the network
+  // speaks of is shown while it races with the same start, and no longer once nothing is heard of it
+  await page.evaluate(async () => { const a = window.__mmf; if (!a.extras.boats) { const { loadExtras } = await import('/src/extras/index.js'); await loadExtras(a, { boats: true }); } a.boatsDone = (ms, place) => { window.__told.boats = [ms, place]; }; const s = a.extras.boats.stand; a.player.teleport(s.x, s.z, 0); a.raceBoats(); a.boatRace().auto = true; });
+  await frames(6);
+  const asked = await page.evaluate(() => { const r = window.__mmf.boatRace(); return { line: r.line, name: r.start.name, wait: (r.start.at - (Date.now())) / 1000 }; });
+  await page.waitForFunction(() => window.__mmf.boatRace()?.state.clock > 6, null, { timeout: 120000 });
+  const guest = await page.evaluate(async () => {
+    const a = window.__mmf, r = a.boatRace(), B = a.extras.boats, me = r.state.boats[0];
+    B.heard(4242, r.start.n, [me.x + 3, me.z + 2, me.yaw, 6, me.s - 4, 0, Math.round(r.state.clock * 1000), 0]);
+    B.heard(4343, r.start.n + 1, [me.x - 3, me.z - 2, me.yaw, 6, 10, 0, 500, 0]); // (of another start: not in this race)
+    await new Promise((res) => setTimeout(res, 400));
+    const seen = { same: B.racing(r.start.n), shown: [...B.guests.values()].map((g) => g.hull.visible).join(), line: r.line };
+    await new Promise((res) => setTimeout(res, 3200));
+    seen.left = B.guests.size;
+    return seen;
+  });
+  await page.waitForFunction(() => !window.__mmf.boatRace(), null, { timeout: 240000 });
+  const sailed = await page.evaluate(() => ({ told: window.__told.boats, driver: !!window.__mmf.player.driver }));
+  check('the regatta leaves with the next named start, is sailed by its bot in the running game, and its time told; another visitor\'s boat is shown while it races with the same start — one of another start is not —, and no longer once nothing is heard of it',
+    /start \w+ leaves in \d+…/.test(asked.line) && asked.wait > -1 && asked.wait <= 10.5 && guest.same === 1 && guest.shown.split(',').sort().join() === 'false,true' && /with 1 other skipper/.test(guest.line) && guest.left === 0
+    && sailed.told?.[0] > 40000 && sailed.told[0] < 70000 && sailed.told[1] >= 1 && !sailed.driver,
+    JSON.stringify({ asked, guest, sailed }));
   check('nothing was reported wrong by the browser', errors.length === 0, errors.slice(0, 3).join(' | '));
 } finally {
   await browser.close();

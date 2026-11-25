@@ -1172,7 +1172,7 @@ switch goes on, all of them off as delivered — six games:
 |---|---|---|---|
 | `slide` | **Mostly Down**, the water slide | from the cliffs to the sea | a time |
 | `pond` | **The Endless Pond**: three circuits, fifteen seconds, twenty, then as long as one can | the east bank of the Great Pond | how long one held |
-| `boats` | **The Little Regatta**: radio-controlled boats, three laps against three others | the Great Pond | a time |
+| `boats` | **The Little Regatta**: radio-controlled boats, three laps against three that sail by themselves — and against whoever took the same start | the Great Pond | a time |
 | `hill` | **Uphill Battle**: up a slope while logs, barrels and boulders roll down it | between the Great Pond and the old tree | a time |
 | `crack` | **Between a Rock**: up a cleft between two needles of rock, from wall to wall | in the sea, at the south end of the bay | a time |
 | `hollow` | **The Hollow Hill**: a race flown under the ground, one lap | a mine at the foot of the sea cliff | a time |
@@ -1198,7 +1198,16 @@ one touches is held by itself — nothing to hold down —; a kick given within 
 a wall is a *sharp* kick, which carries higher, rings, and counts in a streak shown on the screen; the game
 says so at the first walls. And nothing is left to luck: stones come down the walls only, never the middle,
 on the top quarter of the climb, each announced by a mark on its wall — one is on the other wall. The music
-of the climb rises with the climber.) The files of the lab are the lab's: `src/extras/**`,
+of the climb rises with the climber. *The Little Regatta*: **a start every ten seconds**, each with its name
+(Alpha, Bravo…), on the clock everybody shares — one joins the next until its last moment, and friends who
+take the same one race together: the race is where that clock says, so that every screen of one start is at
+the same step, against the same three boats that sail by themselves (2 % slower than they were, a little
+better or worse from one start to the next). Each visitor's game says where its boat is five times a second
+— eight numbers in the one message the relay has for "a thing I steer in a game" (`{t:'v'}` in
+`server/protocol.js`: its shape is checked, eight a second at the most from one visitor, handed on within
+160 m, nothing kept, nothing from who is kept out in silence) — and the others' boats are drawn where they
+were said to be, a little further for the time gone by, in colours of their own; from the bank one sees
+whoever is racing. Boats of visitors do not push each other: each is where its owner's screen says.) The files of the lab are the lab's: `src/extras/**`,
 `src/world/zones/games/{slide,pond,boats,hill,crack,hollow}/**`, `server/stats.js`, `public/opendata/**`,
 `public/opendate/**`, `lab/**` and its tests are not edited here.
 
@@ -1332,8 +1341,8 @@ notebook, with the rest. No new Durable Object class: such a room is a room like
 |---|---|
 | `npm run bake` | bakes the world, the statue and the textures again |
 | `npm run bake:statue` | sculpts the golden dog again (`-- --preview=dog.png` also draws it from five sides, `-- --cell=0.012` makes a finer mesh) |
-| `npm test` | 249 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password), the rooms that players make (bought, entered with a ticket, their own boards, asleep when unpaid, freed) |
-| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (187 in all) |
+| `npm test` | 250 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password), the rooms that players make (bought, entered with a ticket, their own boards, asleep when unpaid, freed) |
+| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (188 in all) |
 | `npm run test:update` | a delivery from end to end, in the real game: two builds, a visitor in the world, the owner at the back office (`/admin`: the switches, a word to every room, a line refused, somebody kept out, the figures, two games of the lab thrown on — fetched and built as the game runs, each played by its own bot, its time on its board; each with its stand, its panel for a sponsor, its star on the map and its planks at the forks —, the sky villages stage by stage), every page asked to refresh but never in the middle of a sentence, then the server replaced by the next version — the page says so, refreshes, comes back at the same spot and says what is new; and a plain build leaves nothing of the game on the page (14 checks) |
 | `node tools/extras-test.mjs`, `node tools/slide-test.mjs`, `node tools/pond-test.mjs`, `node tools/boats-test.mjs`, `node tools/hill-test.mjs`, `node tools/crack-test.mjs`, `node tools/hollow-test.mjs`, `node tools/games-test.mjs` | the lab's own checks of its extras and of each of its games — the last one plays them in the running game, in a browser (see `lab/INTEGRATION.md`) |
 | `npm run test:load` | a crowd at the door, with the real rules: 600 connections arrive in twenty seconds and walk (everybody gets in, rooms of about fifty, the lists say what is true, a state reaches the neighbours in time), 230 more follow one link (that room holds 200, never one more; the relay refuses whoever comes without asking; the owner still gets in), then most leave (the rooms that have emptied are offered a livelier one, nobody is moved or cut off) — 11 checks; `-- --cloudflare` plays it against the real Worker in the local Workers runtime, `-- --visitors=400` changes the crowd |
