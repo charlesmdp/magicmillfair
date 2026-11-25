@@ -255,6 +255,8 @@ export class PierZone {
         cloth.place(px + 1.2, gy + 0.03, pz + 0.4, r * 3);
         cloth.quad(V(-0.45, 0, 0.9), V(0.45, 0, 0.9), V(0.45, 0, -0.9), V(-0.45, 0, -0.9));
         cloth.pop();
+        // (one lies down on it, and gets up beside it)
+        { const tx = px + 1.2, tz = pz + 0.4, ty = r * 3; this.world.seats.push({ x: tx, y: gy + 0.05, z: tz, yaw: ty, pose: ANIM.lie, label: 'Lie down on the towel', exit: [tx + Math.cos(ty) * 0.95, tz - Math.sin(ty) * 0.95], reach: 1.5 }); }
       }
     }
   }

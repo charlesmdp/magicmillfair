@@ -6,6 +6,9 @@ export const NEWS = [
   {
     date: '25 November 2026',
     items: [
+      ['Lie down', 'Hold X and your robot lies down, wherever it stands. On the beach the towels are for that: step up to one.'],
+      ['The Endless Pond, easier to start', 'No more flowers in the way at its gate — and a step aside sets off as well as a jump, when the lamp is green.'],
+      ['The boulder is in a hurry', 'On the island it now rolls down faster, and comes more often. Mind the hollows.'],
       ['A wall of thanks', 'Cut into the cliff above the poppies, in the north-west: every sponsor of the fair, the most generous first. Thanks to them, the game is free.'],
       ['Good company for the golden dog', 'Remade after its model — fluffier, its ears dropped — and no longer alone up there: a cat, a snake and a bird sit with it. The tablet now honours every pet we ever loved.'],
       ['Ten relics of before', 'Here and there by the paths, something is left of the world before the oasis: a road sign, a vending machine, a clock that stopped… Walk up and look. There are ten.'],

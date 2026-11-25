@@ -567,7 +567,7 @@ export const RACE = {
 // `width`, `height`: the opening of the stage.
 export const WING = { name: 'Flappy Robot', x: -7.2, z: 12.6, yaw: Math.PI * 0.75, width: 12, height: 5.2 };
 // The boulder of the island: it rolls down the whole path, again and again (seconds; metres per second).
-export const BOULDER = { radius: 1.55, speed: 7.2, period: 52 };
+export const BOULDER = { radius: 1.55, speed: 8.28, period: 45.2 };
 
 // ---------------------------------------------------------------------------
 // Caves: galleries and chambers under the mountains. Each node is [x, z, half width, floor, height of the roof];

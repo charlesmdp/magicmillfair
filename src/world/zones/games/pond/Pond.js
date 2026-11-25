@@ -180,13 +180,14 @@ export class Pond {
           input.jump = control && !!inp.jump;
           input.down = my < -0.5 && S.was.y >= -0.5;
           input.side = mx > 0.5 && S.was.x <= 0.5 ? 1 : mx < -0.5 && S.was.x >= -0.5 ? -1 : 0;
+          input.go = my > 0.5 && S.was.y <= 0.5; // (a push forward: it only counts to set off)
         }
         S.was.x = mx; S.was.y = my;
         if (S.count > 0) {
-          // (the beam turns by the clock of the world: one picks one's moment — on a jump, while the lamp is green.
+          // (the beam turns by the clock of the world: one picks one's moment — a jump, a step aside or a push forward, while the lamp is green.
           // Playing by itself, it goes at the first green.)
           S.wait += dt;
-          const fair = fairStart(this.clock()), asked = S.wait > 0.4 && (session.auto ? fair : input.jump);
+          const fair = fairStart(this.clock()), asked = S.wait > 0.4 && (session.auto ? fair : input.jump || input.side !== 0 || input.go);
           if (asked && fair) { S.count = 0; S.lead = LEAD; io.play('start'); st = session.state = startRun(this.clock()); }
           else if (asked && S.wait - S.no > 0.6) { S.no = S.wait; io.play('fail', { volume: 0.35 }); io.note('Not yet — set off when the lamp is green.'); }
         } else if (session.auto) {
@@ -223,7 +224,7 @@ export class Pond {
         pl.speed = S.count > 0 || st.over ? 0 : st.v; pl.grounded = true;
         this._place(S.count > 0 ? this.clock() : st.t0 + st.clock, st.caught, st.stage);
         const left = P.fly.lily - (st.flies % P.fly.lily), lilies = `${st.lilies} lily pad${st.lilies === 1 ? '' : 's'}`;
-        session.line = S.count > 0 ? `${P.name} · ${fairStart(this.clock()) ? 'the lamp is green: jump to set off!' : 'wait for the green lamp…'}`
+        session.line = S.count > 0 ? `${P.name} · ${fairStart(this.clock()) ? 'the lamp is green: jump or step to set off!' : 'wait for the green lamp…'}`
           : st.over ? `${P.name} · held ${formatTime(score(st))}${st.stage < 2 ? ` · pond ${st.stage + 1}` : ''}`
             : st.mode !== 'run' ? `On to ${P.ponds[st.stage + 1]?.name || 'the next pond'}…`
               : st.stage < 2 ? `Pond ${st.stage + 1} of 3 · ${Math.max(1, Math.ceil(pond.time - st.t))} s to the next · ${lilies}`

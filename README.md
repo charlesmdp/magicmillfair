@@ -180,6 +180,7 @@ room; `?village=name` arrives straight in a sky village.
 | Sit, lie down, board, pick a flower, talk, travel, get up | E when the action is offered (walking away or jumping gets up too) | tap the action shown above the jump button | |
 | Open or close the laptop; second action | L | tap the second action | |
 | Sit down on the ground, cross-legged, wherever you are | X (or `/sit` in the chat); the first step gets up | Emotes → Sit on the ground | |
+| Lie down on the ground, wherever you are (and on the towels of the beach: step up to one) | hold X half a second (or `/lie`); the first step gets up | Emotes → Lie down | |
 | Put the bouquet down (or give it: see *Flowers*) | B | Emotes → Put the bouquet down | |
 | The item shop (the Game Pass, hats, jetpacks, paint, trails) | O, or the bag at the top right | the bag at the top right | |
 | A firework (for who has the box) | V | Emotes → Light a firework | |
@@ -348,7 +349,7 @@ the first time the panel is opened (`rankPicture`). The administrator has them a
   the pier to the valley. A ring races over the water; when it reaches you, the boom, a trembling camera
   and a gust in the trees. Nobody is hurt (and a game being played is not shaken). One for the whole room
   every fifteen minutes: the button's lamp is green when it is ready, and the prompt counts down.
-- **The boulder of the island**: every 52 seconds a boulder rolls down the whole path of the island. The top
+- **The boulder of the island**: every 45 seconds a boulder rolls down the whole path of the island. The top
   of the screen says how far above you it is: step into one of the hollows cut in the rock, or out onto one
   of the timber walkways over the drop, and let it pass. Stay on the path and you are flattened.
 - **Ways to end up WASTED**: the boulder; a pond of acid hidden in the woods of the north-west (nobody will

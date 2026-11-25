@@ -238,7 +238,7 @@ export class Hud {
       </div>
       <div class="stats"></div>
       <div class="emotes" role="dialog" aria-label="Emotes">
-        <div class="acts"><b class="title">Emotes</b><span class="sit"><button data-sit>Sit on the ground (X)</button></span><span class="held"><button data-drop>Put the bouquet down (B)</button></span><span class="boom"><button data-firework>Light a firework (V)</button></span></div>
+        <div class="acts"><b class="title">Emotes</b><span class="sit"><button data-sit>Sit on the ground (X)</button><button data-lie>Lie down (hold X)</button></span><span class="held"><button data-drop>Put the bouquet down (B)</button></span><span class="boom"><button data-firework>Light a firework (V)</button></span></div>
       </div>
       <div class="wasted" aria-live="assertive"><div class="band"><b>WASTED</b><span></span></div></div>
       <div class="sight" aria-hidden="true"></div>
@@ -401,6 +401,7 @@ export class Hud {
     this.cameraBtn = h.querySelector('[data-act="camera"]');
     this.emotes.querySelector('[data-drop]').onclick = () => { this.emit('drop'); this.emotes.classList.remove('on'); };
     this.emotes.querySelector('[data-sit]').onclick = () => { this.emit('sit'); this.emotes.classList.remove('on'); };
+    this.emotes.querySelector('[data-lie]').onclick = () => { this.emit('lie'); this.emotes.classList.remove('on'); };
     this.emotes.querySelector('[data-firework]').onclick = () => { this.emit('firework'); this.emotes.classList.remove('on'); };
     h.querySelector('.open-shop').onclick = () => { this.panel.classList.remove('on'); this.emit('shop'); };
     this._robotUI(h.querySelector('.swatches.robot'), h.querySelector('.sizes.robot'), h.querySelector('.panel .passhint'));

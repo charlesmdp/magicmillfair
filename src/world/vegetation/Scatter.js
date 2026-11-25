@@ -275,6 +275,16 @@ export class Scatter {
    * A flower within reach of (x, z): its kind ('poppy', 'daisy'…), or null. Looks through the cells already
    * generated around that point (a few thousand plants: call it a few times a second, not every frame).
    */
+  /** Nothing is scattered within `r` of (x, z) any more: what grew there goes (the gate of a game built as one plays). */
+  keepClear(x, z, r) {
+    this.keepOut.push({ x, z, r });
+    for (const key of [...this.cells.keys()]) {
+      const [cx, cz] = key.split(',').map(Number);
+      if (x + r >= cx * CELL && x - r <= (cx + 1) * CELL && z + r >= cz * CELL && z - r <= (cz + 1) * CELL) this.cells.delete(key);
+    }
+    this._key = '';
+  }
+
   flowerNear(x, z, reach = 1.3) {
     const cx = Math.floor(x / CELL), cz = Math.floor(z / CELL), r2 = reach * reach;
     let best = null, bestD = r2;

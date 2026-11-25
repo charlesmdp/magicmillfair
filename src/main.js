@@ -460,9 +460,11 @@ async function boot() {
   };
   // sitting, lying down, boarding
   const interact = new Interact({ player, world, hud, peers: () => (avatars ? avatars.list : []) });
-  // sitting down on the ground, legs crossed, wherever one stands (X, /sit, or the emotes): a step gets up again
-  const sitDown = () => {
+  // sitting down on the ground, legs crossed, wherever one stands (X, /sit, or the emotes) — or lying down on it
+  // (X held, /lie, the emotes): a step gets up again
+  const sitDown = (lie = false) => {
     if (state.mode !== 'walk' || fair.session || player.dead) return;
+    if (lie) { if (!player.lieOnGround()) hud.note('Not here: find some ground to lie on.', 2600); return; }
     if (player.cross) { player.cross = false; return; }
     if (!player.sitOnGround()) hud.note('Not here: find some ground to sit on.', 2600);
   };
@@ -514,6 +516,7 @@ async function boot() {
     if (name === 'kill') { if (!player.dead) player.die('Took the easy way out', [SPAWN.x, SPAWN.z, SPAWN.yaw + Math.PI]); return; }
     if (name === 'admin') { adminKey(rest.join(' ')); return; }
     if (name === 'sit') { sitDown(); return; }
+    if (name === 'lie') { sitDown(true); return; }
     const e = emoteIndex(name);
     if (e >= 0) { emote(e); return; }
     const secret = SECRETS.get(fingerprint(word.toUpperCase()));
@@ -1830,6 +1833,7 @@ async function boot() {
     .on('color', (i) => { if (i >= FREE_COLORS && !shop.hasPass) return; color = i; me.setColor(i); store.set('mmf.color', String(color)); presence?.setIdentity(name, color); shopView.stale(); keepProfile(); })
     .on('size', (i) => { if (i && !shop.hasPass) return; size = i; store.set('mmf.size', SIZES[size]); keepProfile(); })
     .on('sit', () => sitDown())
+    .on('lie', () => sitDown(true))
     .on('gift', (to) => giftTo(to))
     .on('name', (n) => { if (!n) return; name = n; presence?.setIdentity(name, color); store.set('mmf.name', name); world.games.setMe(account.name || name); keepProfile(); })
     .on('quality', (q) => {
@@ -1896,6 +1900,7 @@ async function boot() {
       for (let i = 0; i < 10; i++) if (input.pressed(`Digit${(i + 1) % 10}`)) emote(hud.quickEmote(i));
       if (input.pressed('KeyE')) interact.press(0);
       if (input.pressed('KeyL')) interact.press(1);
+      if (input.heldLong('sit', 0.45)) sitDown(true); // (X held: one lies down)
       player.update(dt, rig.heading, true);
       rig.update(dt, player.pos, player);
       playClock(dt);

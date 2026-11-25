@@ -66,7 +66,7 @@ export class PlayerController {
     this.diving = false; // head first into deep water, from high up
     this._peak = 0; // the highest the feet have been since they left the ground
     this._plunge = 0; // seconds under water left after a dive
-    this.cross = false; // sitting on the ground, legs crossed (anywhere: see sitOnGround)
+    this.cross = false; // sitting on the ground, legs crossed — or 'lie': lying on it (anywhere: see sitOnGround, lieOnGround)
     this.noJet = false; // "jump" was pressed in the air and no jetpack answered (read and cleared by the game)
     this.jetEvery = 0; // seconds a jetpack needs between two goes (0: none — the light one needs some)
     this.jetCool = 0; // …and how many of them are left to wait
@@ -214,6 +214,13 @@ export class PlayerController {
    * @param camYaw heading of the camera (radians), movement is relative to it
    * @param control false while something else reads the inputs (free camera): the character just stands
    */
+  /** Lies down on the ground where it stands (or sits). Any step or jump gets up again. */
+  lieOnGround() {
+    if (!this.cross && !this.sitOnGround()) return false;
+    this.cross = 'lie';
+    return true;
+  }
+
   /** Sits down on the ground where it stands, legs crossed. Any step or jump gets up again. */
   sitOnGround() {
     if (this.dead || this.seat || this.driver || this.riding || this.swimming || !this.grounded || this.sliding) return false;
@@ -233,7 +240,7 @@ export class PlayerController {
       if (control && (Math.abs(inp.move.x) > 0.2 || Math.abs(inp.move.y) > 0.2 || inp.jump)) this.cross = false;
       else {
         this.speed = 0;
-        this.anim = ANIM.cross;
+        this.anim = this.cross === 'lie' ? ANIM.lie : ANIM.cross;
         this.character.setAnim(this.anim, 0);
         this.character.update(dt);
         this._sync();
