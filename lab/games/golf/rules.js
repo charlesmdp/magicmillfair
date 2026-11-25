@@ -1,18 +1,21 @@
 // Par for the Course: its rules. No renderer here: the game, its checks and the player that plays by itself all
 // read this.
 //
-// Nine holes of crazy golf on a little walk round the pond of acid of the north-western meadow: each a bed of
-// felt in its timber kerb, built level whatever the meadow does, with one idea of its own — and each a little
-// harder than the last. One putts: the stick turns the aim left and right, a gauge swings up and down by itself
-// (held back, the stick slows it), and the jump hits at the strength the gauge shows. The ball rolls and slows
+// Nine holes of crazy golf on a little walk round the pond of acid of the north-western meadow, each the valley
+// in miniature: the big red button, the swan pond, the temple stairs, the water mill, the floating stones of Mostly
+// Up, the golden dog, the big wheel of the pier, a plank over the acid and the island with its boulder. Each is a
+// bed of felt in a striped kerb, built level (but for its own slopes) half a metre over the meadow, with one idea
+// of its own; none is holed by putting straight down its lane. One putts: the stick turns the aim left and right, a gauge swings up and down by itself
+// (held back, the stick slows it), and the jump hits at the strength the gauge shows. On the tee the aim is the
+// tee's own axis, straight down the lane; further on it points along the way to the cup. The ball rolls and slows
 // on the felt, runs down what slopes, comes back off a cushion with most of its speed, and drops into the cup
-// when it crosses it slowly enough (a fast one lips out). Off the bed or in the acid, it is put back where it was
-// hit from, with one stroke more. Seven strokes at most a hole, then on to the next. The fewer strokes the
+// when it crosses it slowly enough (a fast one lips out). Off the bed, in the water or in the acid, it is put back
+// where it was hit from, with one stroke more. Seven strokes at most a hole, then on to the next. The fewer strokes the
 // better; the time of the round breaks ties.
 //
 // Places: each hole has a frame of its own, in metres from its tee: the hole lies towards -z, `x` is to the right
 // of who looks down it, `y` is counted from its felt. `at` (its tee) and `yaw` (its heading: 0 north, a quarter
-// turn west) put it in the world. What moves by itself — the sails of the mill, the sliding walls — is where the
+// turn west) put it in the world. What moves by itself — the swan, the mill wheel, the big wheels — is where the
 // clock of the world says: the same for everybody. Time advances in steps of 1/120 s whatever the frame rate.
 
 export const GOLF = {
@@ -27,6 +30,7 @@ export const GOLF = {
   g: 9.8, slope: 7, // m/s²: in the air; down a slope (a rolling ball takes five sevenths of it)
   cushion: 0.8, // the share of its speed a cushion gives back
   kerb: 0.14, // m: how high a kerb stands over the felt (a ball that flies higher goes over it)
+  raise: 0.5, // m: how high the felt stands, at least, over the meadow
   sweep: 1.1, slow: 0.4, // s: the gauge from nothing to full; its pace when the stick is held back
   reach: [0.4, 22], // m on level felt: the least and the most of the gauge (the most is less near the cup)
   turn: [0.3, 2.4, 1.7], // rad/s: how fast the aim turns at first, how much faster each second the stick is held, at most
@@ -44,60 +48,99 @@ const SPEED = 9.4; // m/s: no ball goes faster (less than its own radius a step:
 
 // ---- the shapes of the beds
 const box = (x0, z0, x1, z1) => [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
-const round = (cx, cz, r, n) => Array.from({ length: n }, (_, k) => [cx + Math.sin((k / n) * TAU) * r, cz - Math.cos((k / n) * TAU) * r]);
-/** The hump of the third hole: a ridge across the lane. */
-const hump = (x, z) => { const u = (z + 4.2) / 1.7; return u > -1 && u < 1 ? 0.21 * (1 + Math.cos(Math.PI * u)) : 0; };
+const round = (cx, cz, r, n, off = 0) => Array.from({ length: n }, (_, k) => [cx + Math.sin(((k + off) / n) * TAU) * r, cz - Math.cos(((k + off) / n) * TAU) * r]);
+const smooth = (u) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
+/** The stairs of the temple: three steps of 13 cm, each a smooth rise over 40 cm. */
+export const STAIRS = [-3.5, -6.4, -9.3];
+const stairs = (x, z) => 0.13 * (smooth((STAIRS[0] - z) / 0.4) + smooth((STAIRS[1] - z) / 0.4) + smooth((STAIRS[2] - z) / 0.4));
+/** The dog's hill: the lane runs down 60 cm before its legs. */
+const hill = (x, z) => -0.6 * smooth((-1.6 - z) / 1.4);
 /** The ramp of the ninth: the last two metres of its lane rise half a metre, and end in the air. */
 const ramp = (x, z) => (z < -5.6 ? 0.25 * (-5.6 - z) : 0);
-/** The green of the island: a shallow bowl, the cup at its lowest. */
-const bowl = (x, z) => 0.1 * Math.max(0, Math.hypot(x, z + 10.2) - 0.25);
-const ISLE = round(0, -10.2, 1.3, 20);
+/** The green of the island: a shallow bowl round its middle (the cup is not there: a ball for it must be slow). */
+const bowl = (x, z) => 0.06 * Math.max(0, Math.hypot(x, z + 10.2) - 0.3);
+const ISLE = round(0, -10.2, 1.3, 20, 0.5); // (a side of it, not a corner, faces the ramp)
+const ALL = [0, 1, 2, 3];
+/** The dog's bowl: an octagon, a side of it to the tee. */
+export const BOWL = round(0, -6.7, 0.24, 8, 0.5);
 
 /**
- * The nine holes. `beds`: the felt — `poly` (its outline), `open` (the sides without a kerb), `air` (the sides
- * with nothing under them), `y` (how high it lies over the felt of the tee), `h` (its relief), `look` ('deck':
- * planks). `blocks`: what stands on the felt (x0, z0, x1, z1, height). `walls`: more cushions (x, z, x, z,
- * height). `bumpers`: (x, z, radius). `movers`: what goes by the clock. `pipe`: where the ball is swallowed and
- * where it comes out. `links`: what the felt alone does not join (x, z → x, z, as so many metres). `view`: how far
- * the camera turns from the heading of the hole. `acid`: the pond is its hazard.
+ * The nine holes, each after a place of the valley (`place`), in miniature. `beds`: the felt — `poly` (its
+ * outline), `open` (the sides without a kerb), `air` (the sides with nothing under them), `y` (how high it lies
+ * over the felt of the tee), `h` (its relief), `look` ('deck': planks; 'stone': a floating stone). `blocks`: what
+ * stands on the felt (x0, z0, x1, z1, height). `walls`: more cushions (x, z, x, z, height). `bumpers`: (x, z,
+ * radius). `pools`: water (x, z, radius): a ball that rolls into it is lost. `movers`: what goes by the clock.
+ * `links`: what the felt alone does not join (x, z → x, z, as so many metres). `view`: how far the camera turns from the heading of the hole. `acid`: the pond is
+ * its hazard. At the tee the aim is the tee's own axis, straight down the lane: on no hole is that the line.
  */
 export const HOLES = [
-  { name: 'Warm-up', tip: 'straight in', par: 2, at: [-231, -73.3], yaw: Math.PI / 2, cup: [0, -7.5],
-    beds: [{ poly: box(-1.2, 1, 1.2, -8.6) }] },
-  { name: 'Round the Corner', tip: 'play it off the slanted cushion', par: 2, at: [-244.5, -73.3], yaw: Math.PI / 2, cup: [5.3, -5.8], view: 0.6,
-    beds: [{ poly: [[-1.2, 1], [1.2, 1], [1.2, -4.6], [6.5, -4.6], [6.5, -7], [1.2, -7], [-1.2, -4.6]] }] },
-  { name: 'The Hump', tip: 'too soft and it rolls back', par: 3, at: [-254, -81.5], yaw: 0, cup: [0, -7.9],
-    beds: [{ poly: box(-1.2, 1, 1.2, -9.2), h: hump }] },
-  { name: 'The Windmill', tip: 'wait for the sails', par: 3, at: [-250.3, -91.3], yaw: -Math.PI / 2, cup: [0, -8.6], view: 0.55,
-    beds: [{ poly: box(-1.3, 1, 1.3, -10) }],
-    blocks: [[-1.3, -5.6, -0.42, -4.4, 1.2], [0.42, -5.6, 1.3, -4.4, 1.2]],
-    movers: [{ kind: 'sail', z: -4.28, r: 2.05, up: 2.15, hw: 0.36, hd: 0.06, period: 6, max: 0.33, high: 0.4 }] },
-  { name: 'The Mushrooms', tip: 'they kick', par: 3, at: [-237.5, -97], yaw: -Math.PI / 2, cup: [0, -6.9],
-    beds: [{ poly: box(-2.2, 1, 2.2, -8) }],
-    bumpers: [[0, -2.7, 0.34], [-1.15, -4.2, 0.34], [1.15, -4.2, 0.34], [0, -5.6, 0.34]] },
-  { name: 'Down the Drain', tip: 'into the funnel: the pipe does the rest', par: 3, at: [-225.5, -96.6], yaw: -Math.PI / 2, cup: [5.6, -8.5], view: 0.5,
-    beds: [{ poly: [[-1.2, 1], [1.2, 1], [1.2, -4.2], [0.32, -6], [-0.32, -6], [-1.2, -4.2]] }, { poly: box(0.9, -7.3, 6.9, -9.7), y: 0.25 }],
-    pipe: { in: [0, -5.78], r: 0.3, out: [1.45, -8.5], dir: [1, 0], time: 1.1, gain: 0.75, least: 2, most: 5.5, bend: [1.3, -7.2, 1.3] },
-    links: [[0, -5.6, 1.6, -8.5, 1]] },
-  { name: 'Sliding Doors', tip: 'three walls that never stand still', par: 3, at: [-214.8, -82], yaw: 1.082, cup: [0, -9.9],
-    beds: [{ poly: box(-1.2, 1, 1.2, -11) }],
+  { name: 'The Big Red Button', place: 'the big red button', tip: 'go round the button: it kicks', par: 2, at: [-230, -73.5], yaw: Math.PI / 2, cup: [0.62, -9.1],
+    beds: [{ poly: box(-1.3, 1.2, 1.3, -10.6) }],
+    bumpers: [[0, -4.9, 0.42]] },
+  { name: 'The Swan Pond', place: 'the great pond and its swans', tip: 'by the left of the pond, when the swan has passed', par: 3, at: [-244, -73.5], yaw: Math.PI / 2, cup: [0.55, -10.5], view: -0.15,
+    beds: [{ poly: box(-1.5, 1.2, 1.5, -11.8) }],
+    pools: [[0.3, -5.6, 1.12]],
+    movers: [{ kind: 'slide', look: 'swan', z: -5.6, x0: -0.1, hw: 0.28, hd: 0.15, amp: 1.05, period: 7, phase: 0.1, high: 0.4 }] },
+  { name: 'The Temple Stairs', place: 'the waterfall and the stairway to the temple', tip: 'three steps up: too soft and it rolls back', par: 3, at: [-254, -78.2], yaw: 0, cup: [-0.45, -11.2],
+    beds: [{ poly: box(-1.3, 1.2, 1.3, -12.6), h: stairs }] },
+  { name: 'The Water Mill', place: 'the old mill and its water wheel', tip: 'under the paddles and through the door', par: 3, at: [-250.5, -95.5], yaw: -Math.PI / 2, cup: [0.5, -10.8],
+    beds: [{ poly: box(-1.3, 1.2, 1.3, -12.4) }],
+    blocks: [[-1.3, -5.9, -0.35, -4.7, 1.3], [0.35, -5.9, 1.3, -4.7, 1.3]],
+    movers: [{ kind: 'wheel', n: 4, z: -4.0, r: 1.0, up: 1.08, hw: 0.45, hd: 0.05, period: 6, max: 0.33, high: 0.4 }] },
+  { name: 'The Floating Stones', place: 'the floating stones of Mostly Up', tip: 'firm enough to hop the gaps, soft enough to stop', par: 3, at: [-235, -99.8], yaw: -Math.PI / 2, cup: [-0.65, -9.8], floor: -1.4, lift: 0.45,
+    beds: [
+      { poly: box(-1.1, 1.2, 1.1, -2.4), open: [2], air: [2] },
+      { poly: box(-0.7, -2.75, 0.7, -4.6), y: -0.2, open: [0, 2], air: ALL, look: 'stone' },
+      { poly: box(-0.7, -4.95, 0.7, -6.8), y: -0.4, open: [0, 2], air: ALL, look: 'stone' },
+      { poly: box(-1.3, -7.15, 1.3, -10.8), y: -0.6, open: [0], air: ALL, look: 'stone' }],
+    links: [[0, -2.2, 0, -2.95, 0.75], [0, -4.4, 0, -5.15, 0.75], [0, -6.6, 0, -7.35, 0.75]] },
+  { name: 'The Golden Dog', place: 'the golden dog on its cliff', tip: 'down the hill, under the dog, off the corner', par: 3, at: [-221.5, -97.5], yaw: -2.03, cup: [-4.5, -8.3], view: -0.55,
+    beds: [{ poly: [[-1.2, 1.2], [1.2, 1.2], [1.2, -7.8], [-0.2, -9.2], [-6, -9.2], [-6, -6.4], [-1.2, -6.4]], h: hill }],
+    blocks: [[-1.2, -5.0, -0.5, -4.3, 1.0], [0.5, -5.0, 1.2, -4.3, 1.0]],
+    // (its bowl, in the way of who putts straight)
+    walls: BOWL.map((p, k) => [...p, ...BOWL[(k + 1) % 8], 0.22]) },
+  { name: 'The Big Wheel', place: 'the grand pier and its big wheel', tip: 'the gondolas come down across the lane', par: 3, at: [-209.5, -86.5], yaw: 1.3, cup: [-0.55, -10.7],
+    beds: [{ poly: box(-1.2, 1.2, 1.2, -12.4), look: 'deck' }],
+    blocks: [[-1.2, -3.65, -0.55, -3.35, 0.9], [0.55, -3.65, 1.2, -3.35, 0.9], [-1.2, -7.85, -0.55, -7.55, 0.9], [0.55, -7.85, 1.2, -7.55, 0.9]],
     movers: [
-      { kind: 'slide', z: -3, hw: 0.55, hd: 0.13, amp: 0.45, period: 3.6, phase: 0, high: 0.4 },
-      { kind: 'slide', z: -5.6, hw: 0.55, hd: 0.13, amp: 0.45, period: 2.8, phase: 0.33, high: 0.4 },
-      { kind: 'slide', z: -8.2, hw: 0.55, hd: 0.13, amp: 0.45, period: 4.4, phase: 0.6, high: 0.4 }] },
-  { name: 'The Plank', tip: 'no kerb over the acid', par: 4, at: [-231, -84.9], yaw: Math.PI / 2, cup: [0.4, -10.4], acid: true, floor: -0.7,
+      { kind: 'sail', look: 'gondola', n: 6, z: -3.5, r: 2.2, up: 2.75, hw: 0.28, hd: 0.2, period: 14, max: 0.22, high: 0.45 },
+      { kind: 'sail', look: 'gondola', n: 6, z: -7.7, r: 2.2, up: 2.75, hw: 0.28, hd: 0.2, period: 11, max: 0.22, high: 0.45 }] },
+  { name: 'The Plank', place: 'the acid pond', tip: 'no kerb over the acid', par: 4, at: [-231, -84.9], yaw: Math.PI / 2, cup: [0.4, -10.4], acid: true, floor: -0.7,
     beds: [
-      { poly: [[-1.2, 1], [1.2, 1], [1.2, -1.8], [0.45, -1.8], [-0.45, -1.8], [-1.2, -1.8]], open: [3] },
-      { poly: box(-0.45, -1.75, 0.45, -8.05), open: [0, 1, 2, 3], air: [0, 1, 2, 3], look: 'deck' },
-      { poly: [[-0.9, -8], [-0.45, -8], [0.45, -8], [1.7, -8], [1.7, -11.6], [-0.9, -11.6]], open: [1] }] },
-  { name: 'The Acid Test', tip: 'up the ramp, over the acid, onto the island', par: 4, at: [-246.2, -82], yaw: -Math.PI / 2, cup: [0, -10.2], acid: true, floor: -0.75, lift: 0.1,
+      { poly: [[-1.2, 1.2], [1.2, 1.2], [1.2, -1.8], [0.4, -1.8], [-0.4, -1.8], [-1.2, -1.8]], open: [3] },
+      { poly: box(-0.4, -1.75, 0.4, -8.05), open: ALL, air: ALL, look: 'deck' },
+      { poly: [[-0.9, -8], [-0.4, -8], [0.4, -8], [1.7, -8], [1.7, -11.6], [-0.9, -11.6]], open: [1] }] },
+  { name: 'The Acid Test', place: 'the island and its rolling boulder', tip: 'up the ramp, over the acid, onto the island', par: 4, at: [-246.2, -82], yaw: -Math.PI / 2, cup: [0.5, -10.4], acid: true, floor: -0.75, lift: 0.1,
     beds: [
-      { poly: [[-1.1, 1], [1.1, 1], [1.1, -5.6], [1.1, -7.6], [-1.1, -7.6], [-1.1, -5.6]], open: [3], h: ramp },
+      { poly: [[-1.1, 1.2], [1.1, 1.2], [1.1, -5.6], [1.1, -7.6], [-1.1, -7.6], [-1.1, -5.6]], open: [3], h: ramp },
       { poly: ISLE, y: -0.42, h: bowl, air: ISLE.map((_, k) => k), isle: true }],
     // (the back of the island is boarded up: a ball that comes in hard stops there and drops onto the green)
-    walls: [16, 17, 18, 19, 0, 1, 2, 3].map((k) => [...ISLE[k], ...ISLE[(k + 1) % 20], 0.9]),
+    walls: [16, 17, 18, 19, 0, 1, 2].map((k) => [...ISLE[k], ...ISLE[(k + 1) % 20], 0.9]),
     links: [[0, -7.4, 0, -9.3, 2.5]] },
 ];
+
+/**
+ * The grounds round the holes (world x, z): the path of planks (broken lines: from the gate round all nine holes,
+ * with a spur to each tee), the poles that carry the bunting and its bulbs (strung from one to the next, in
+ * runs), the benches and the tubs of flowers ([x, z, heading: where one looks, 0 north]), and the ticket kiosk
+ * beside the gate. Nothing of it stands on a bed or near the acid.
+ */
+export const GROUNDS = {
+  path: [
+    [[-225.9, -75.4], [-228.3, -75.6], [-241.7, -75.6], [-254.0, -76.1], [-251.9, -76.3], [-252.0, -77.4], [-252.0, -92.8], [-252.6, -93.5], [-237.4, -93.5], [-236.9, -97.4], [-236.9, -97.6], [-224.0, -97.6], [-223.1, -98.3]],
+    [[-226.8, -75.5], [-228.2, -73.5]],
+    [[-241.7, -75.6], [-241.8, -73.5]],
+    [[-252.6, -93.5], [-252.6, -95.5]],
+    [[-236.9, -97.6], [-236.9, -99.8]],
+    [[-209.9, -97.9], [-212.0, -92.4], [-207.4, -88.0], [-207.6, -86.3], [-207.6, -84.6], [-208.8, -83.8], [-222.0, -87.9], [-228.6, -86.6], [-229.2, -84.9]],
+    [[-222.0, -87.9], [-225.2, -82.2], [-226.4, -77.6], [-225.9, -75.4]],
+    [[-242.0, -87.3], [-248.2, -87.0], [-248.2, -82.0], [-248.4, -75.9]]],
+  poles: [[-227.4, -76.8], [-232.6, -76.4], [-238.4, -76.5], [-244.4, -76.7], [-250.4, -77.0], [-224.4, -78.0], [-223.2, -82.8], [-221.6, -87.0]],
+  runs: [[0, 1, 2, 3, 4], [0, 5, 6, 7]],
+  benches: [[-246.6, -77.7, 0], [-236.6, -91.6, Math.PI], [-219.4, -84.3, 2.6]],
+  tubs: [[-224.7, -77.2, 0], [-226.4, -73.6, 0], [-251.0, -76.4, 0], [-206.9, -84.7, 0], [-238.2, -92.4, 0], [-249.4, -86.0, 0]],
+  kiosk: [-222.3, -77.4, -1.87],
+};
 
 // ---- each hole made ready: its frame, its beds, its cushions
 for (const [i, H] of HOLES.entries()) {
@@ -105,7 +148,9 @@ for (const [i, H] of HOLES.entries()) {
   H.cos = Math.cos(H.yaw); H.sin = Math.sin(H.yaw);
   H.floor ??= -0.6;
   H.tee = [0, 0];
-  H.walls ||= []; H.blocks ||= []; H.bumpers ||= []; H.movers ||= []; H.links ||= [];
+  H.walls ||= []; H.blocks ||= []; H.bumpers ||= []; H.movers ||= []; H.links ||= []; H.pools ||= [];
+  // (how far from its middle a mover can stop a ball, along the lane: a paddle of the wheel swings to and fro)
+  for (const m of H.movers) m.band = m.hd + (m.kind === 'wheel' ? m.r * Math.sin(m.max) : 0);
   const walls = [];
   const wall = (ax, az, bx, bz, bed, high) => { const dx = bx - ax, dz = bz - az, l = Math.hypot(dx, dz); walls.push({ ax, az, dx, dz, il2: 1 / (l * l), nx: -dz / l, nz: dx / l, x0: Math.min(ax, bx), x1: Math.max(ax, bx), z0: Math.min(az, bz), z1: Math.max(az, bz), bed, high }); };
   for (const bed of H.beds) {
@@ -149,7 +194,7 @@ function bedAt(H, x, z, top) {
 }
 /** The height of the felt at (x, z) of a hole (-Infinity: none). */
 export function feltAt(H, x, z) { bedAt(H, x, z, 99); return _fy; }
-/** The level of the felt of the tee of a hole, over the sea: its beds clear the ground everywhere. `ground(x, z)`: the ground of the world. */
+/** The level of the felt of the tee of a hole, over the sea: its felt stands `GOLF.raise` over the highest ground under it (no blade of the meadow comes through). `ground(x, z)`: the ground of the world. */
 export function levelOf(H, ground) {
   let top = -Infinity;
   const w = [0, 0];
@@ -157,40 +202,42 @@ export function levelOf(H, ground) {
     if (bed.isle) continue; // (it stands in the pond)
     for (let k = 0; k < bed.n; k++) {
       const a = bed.poly[k], b = bed.poly[(k + 1) % bed.n], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.5));
-      for (let i = 0; i < n; i++) { toWorld(H, a[0] + ((b[0] - a[0]) * i) / n, a[1] + ((b[1] - a[1]) * i) / n, w); if (!bed.air.includes(k) || !H.acid) top = Math.max(top, ground(w[0], w[1]) - bed.y); }
+      for (let i = 0; i < n; i++) { const x = a[0] + ((b[0] - a[0]) * i) / n, z = a[1] + ((b[1] - a[1]) * i) / n; toWorld(H, x, z, w); if (!bed.air.includes(k) || !H.acid) top = Math.max(top, ground(w[0], w[1]) - bed.y - (bed.h ? bed.h(x, z) : 0)); }
     }
-    for (let x = bed.x0 + 0.25; x < bed.x1; x += 0.5) for (let z = bed.z0 + 0.25; z < bed.z1; z += 0.5) { if (!inPoly(bed, x, z) || (H.acid && bed.air.length)) continue; toWorld(H, x, z, w); top = Math.max(top, ground(w[0], w[1]) - bed.y); }
+    for (let x = bed.x0 + 0.25; x < bed.x1; x += 0.5) for (let z = bed.z0 + 0.25; z < bed.z1; z += 0.5) { if (!inPoly(bed, x, z) || (H.acid && bed.air.length)) continue; toWorld(H, x, z, w); top = Math.max(top, ground(w[0], w[1]) - bed.y - (bed.h ? bed.h(x, z) : 0)); }
   }
-  return top + 0.12 + (H.lift || 0);
+  return top + GOLF.raise + (H.lift || 0);
 }
 
 // ---- what goes by the clock of the world
-const _mv = { x: 0, z: 0, hw: 0, hd: 0, ux: 0, on: false, turn: 0 };
+const _mv = { x: 0, z: 0, hw: 0, hd: 0, ux: 0, uz: 0, on: false, turn: 0 };
 /**
  * Where a mover of a hole is at the second `tw` of the clock of the world: { x, z (its middle), hw, hd (half its
- * width and depth), ux (m/s, across the lane), on (is it in the way of a ball?), turn (the sails: how far they
- * have turned, rad) }. A sliding wall goes from side to side; of the sails of the mill only the one that comes
- * down across the door counts, while it is low enough to stop a ball.
+ * width and depth), ux, uz (m/s, across and along the lane), on (is it in the way of a ball?), turn (a wheel: how
+ * far it has turned, rad) }. A sliding thing (the swan) goes from side to side. Of a wheel that turns across the
+ * lane (the big wheel: `sail`) only the gondola that comes down through the lane counts, while it is low enough to
+ * stop a ball; of a wheel that turns along it (the mill: `wheel`), the paddle that sweeps the felt, towards the tee.
  */
 export function moverAt(m, tw, out = {}) {
   const t = tw / m.period;
-  out.z = m.z; out.hw = m.hw; out.hd = m.hd;
+  out.z = m.z; out.hw = m.hw; out.hd = m.hd; out.uz = 0;
   if (m.kind === 'slide') {
     const a = TAU * (t - Math.floor(t) + m.phase);
-    out.x = m.amp * Math.sin(a); out.ux = ((m.amp * TAU) / m.period) * Math.cos(a); out.on = true; out.turn = 0;
+    out.x = (m.x0 || 0) + m.amp * Math.sin(a); out.ux = ((m.amp * TAU) / m.period) * Math.cos(a); out.on = true; out.turn = 0;
   } else {
-    const a = TAU * (t - Math.floor(t)), q = Math.PI / 2, e = a + q / 2 - Math.floor((a + q / 2) / q) * q - q / 2;
-    out.turn = a; out.x = m.r * Math.sin(e); out.ux = ((m.r * TAU) / m.period) * Math.cos(e); out.on = Math.abs(e) < m.max;
+    const a = TAU * (t - Math.floor(t)), q = TAU / (m.n || 4), e = a + q / 2 - Math.floor((a + q / 2) / q) * q - q / 2, w = ((m.r * TAU) / m.period) * Math.cos(e);
+    out.turn = a; out.on = Math.abs(e) < m.max;
+    if (m.kind === 'wheel') { out.x = 0; out.ux = 0; out.z = m.z + m.r * Math.sin(e); out.uz = w; } else { out.x = m.r * Math.sin(e); out.ux = w; }
   }
   return out;
 }
 
 // ---- the ball
 /** A ball at rest at (x, z) of a hole. */
-export function ballAt(H, x, z, b = {}) { b.x = x; b.z = z; b.y = feltAt(H, x, z); b.vx = 0; b.vz = 0; b.vy = 0; b.air = false; b.pipe = 0; b.keep = 0; b.lip = false; return b; }
+export function ballAt(H, x, z, b = {}) { b.x = x; b.z = z; b.y = feltAt(H, x, z); b.vx = 0; b.vz = 0; b.vy = 0; b.air = false; b.lip = false; return b; }
 
 function collide(H, b, tw, ev) {
-  // the cushions: the kerbs of the beds, the foot of the mill, the boards of the island
+  // the cushions: the kerbs of the beds, the walls of the mill, the paws of the dog, the dog's bowl, the boards of the island
   const W = H.cushions;
   for (let i = 0; i < W.length; i++) {
     const w = W[i];
@@ -204,7 +251,7 @@ function collide(H, b, tw, ev) {
     const vn = b.vx * nx + b.vz * nz;
     if (vn < 0) { const k = (1 + GOLF.cushion) * vn; b.vx -= k * nx; b.vz -= k * nz; if (ev && vn < -0.5) ev.push({ type: 'bounce', speed: -vn }); }
   }
-  // the mushrooms: they give back more than they get
+  // the button: it gives back more than it gets
   for (let i = 0; i < H.bumpers.length; i++) {
     const m = H.bumpers[i], ex = b.x - m[0], ez = b.z - m[1], rr = m[2] + R, d2 = ex * ex + ez * ez;
     if (d2 >= rr * rr || b.y > 0.45) continue;
@@ -218,10 +265,10 @@ function collide(H, b, tw, ev) {
       if (ev) ev.push({ type: 'bump', n: i, speed: out });
     }
   }
-  // what moves: a wall that slides shoves the ball along; a sail stops it
+  // what moves: the swan shoves the ball along; a gondola, a paddle stop it (or send it back)
   for (let i = 0; i < H.movers.length; i++) {
     const m = H.movers[i];
-    if (b.y > m.high || b.z < m.z - m.hd - R || b.z > m.z + m.hd + R) continue;
+    if (b.y > m.high || b.z < m.z - m.band - R || b.z > m.z + m.band + R) continue;
     const v = moverAt(m, tw, _mv);
     if (!v.on) continue;
     const qx = clamp(b.x, v.x - v.hw, v.x + v.hw), qz = clamp(b.z, v.z - v.hd, v.z + v.hd), ex = b.x - qx, ez = b.z - qz, d2 = ex * ex + ez * ez;
@@ -233,33 +280,28 @@ function collide(H, b, tw, ev) {
       if (pz < px) { nx = 0; nz = b.z < v.z ? -1 : 1; push = pz + R; } else { nx = b.x < v.x ? -1 : 1; nz = 0; push = px + R; }
     }
     b.x += nx * push; b.z += nz * push;
-    const vn = (b.vx - v.ux) * nx + b.vz * nz;
-    if (vn < 0) { const k = (1 + GOLF.cushion) * vn; b.vx -= k * nx; b.vz -= k * nz; if (ev && vn < -0.5) ev.push({ type: 'bounce', speed: -vn, moving: true }); }
+    const vn = (b.vx - v.ux) * nx + (b.vz - v.uz) * nz;
+    if (vn < 0) { const k = (1 + GOLF.cushion) * vn; b.vx -= k * nx; b.vz -= k * nz; const s = Math.hypot(b.vx, b.vz); if (s > SPEED) { b.vx *= SPEED / s; b.vz *= SPEED / s; } if (ev && vn < -0.5) ev.push({ type: 'bounce', speed: -vn, moving: true }); }
   }
 }
 
-/** A ball that stops in the way of what moves is put just clear of it (towards the tee, before the sails). */
+/** A ball that stops in the way of what moves is put just clear of it (towards the tee, before the wheels). */
 function settle(H, b) {
   for (const m of H.movers) {
-    const band = m.hd + R + 0.03;
-    if (Math.abs(b.z - m.z) < band) b.z = m.z + (m.kind === 'sail' || b.z >= m.z ? band : -band);
+    const band = m.band + R + 0.03;
+    if (Math.abs(b.z - m.z) < band) b.z = m.z + (m.kind !== 'slide' || b.z >= m.z ? band : -band);
   }
 }
 
-export const ROLLS = 0, RESTS = 1, HOLED = 2, ACID = 3, OUT = 4;
+export const ROLLS = 0, RESTS = 1, HOLED = 2, ACID = 3, OUT = 4, WATER = 5;
 /**
  * Advances a ball of hole `H` by one step of 1/120 s; `tw`: the second of the clock of the world at the end of
- * the step. Returns ROLLS, RESTS (it has stopped), HOLED, ACID or OUT (it is lost: in the pond, or off the bed).
- * `events`: { type: 'bounce' (speed) | 'bump' | 'land' (speed) | 'lip' | 'in' | 'out' (the pipe) }.
+ * the step. Returns ROLLS, RESTS (it has stopped), HOLED, ACID, WATER or OUT (it is lost: in the acid, in the
+ * water of a hole, or off the bed).
+ * `events`: { type: 'bounce' (speed) | 'bump' | 'land' (speed) | 'lip' }.
  */
 export function ballStep(H, b, tw, ev) {
   const dt = STEP;
-  if (b.pipe > 0) {
-    // in the pipe: it comes out at the other end, with part of the speed it went in with
-    b.pipe -= dt;
-    if (b.pipe <= 0) { const p = H.pipe, v = clamp(b.keep * p.gain, p.least, p.most); b.pipe = 0; b.x = p.out[0]; b.z = p.out[1]; b.y = feltAt(H, b.x, b.z); b.vx = p.dir[0] * v; b.vz = p.dir[1] * v; b.vy = 0; if (ev) ev.push({ type: 'out', speed: v }); }
-    return ROLLS;
-  }
   if (b.air) {
     // in the air: it comes down on felt that was under it — or on nothing
     const y0 = b.y;
@@ -268,7 +310,10 @@ export function ballStep(H, b, tw, ev) {
     if (bedAt(H, b.x, b.z, y0 + 0.02) && b.y <= _fy) {
       const hit = -b.vy;
       b.y = _fy;
-      if (hit > 1.4) { b.vy = hit * 0.32; b.vx *= 0.86; b.vz *= 0.86; if (ev) ev.push({ type: 'land', speed: hit }); } else { b.air = false; b.vy = 0; }
+      if (hit > 1.4) { b.vy = hit * 0.32; b.vx *= 0.86; b.vz *= 0.86; if (ev) ev.push({ type: 'land', speed: hit }); } else {
+        // (down on the felt: from now on it follows it, down a slope as well as on the level)
+        b.air = false; const y = b.y; b.vy = bedAt(H, b.x + b.vx * dt, b.z + b.vz * dt, y + 0.06) ? (_fy - y) / dt : 0;
+      }
     } else if (b.y < H.floor) return H.acid && (b.x - H.acid[0]) ** 2 + (b.z - H.acid[1]) ** 2 < H.acid[2] * H.acid[2] ? ACID : OUT;
     return ROLLS;
   }
@@ -291,6 +336,7 @@ export function ballStep(H, b, tw, ev) {
   const fall = b.y + b.vy * dt - 0.5 * G * dt * dt;
   if (_fy < fall - 1e-5) { b.air = true; b.y = fall; b.vy -= G * dt; return ROLLS; } // (the felt drops away faster than it falls: off a crest, off a lip)
   b.vy = (_fy - b.y) / dt; b.y = _fy;
+  for (let i = 0; i < H.pools.length; i++) { const p = H.pools[i]; if ((b.x - p[0]) ** 2 + (b.z - p[1]) ** 2 < p[2] * p[2]) return WATER; }
   // the cup: it takes a ball that crosses it slowly enough — the nearer its middle, the faster that may be
   const cx = b.x - H.cup[0], cz = b.z - H.cup[1], d2 = cx * cx + cz * cz;
   if (d2 < CUP2) {
@@ -301,10 +347,6 @@ export function ballStep(H, b, tw, ev) {
     b.vx = (b.vx - cx * k) * slow; b.vz = (b.vz - cz * k) * slow;
     if (!b.lip) { b.lip = true; if (ev) ev.push({ type: 'lip', speed: s }); }
   } else b.lip = false;
-  if (H.pipe) {
-    const p = H.pipe, ex = b.x - p.in[0], ez = b.z - p.in[1];
-    if (ex * ex + ez * ez < p.r * p.r) { b.keep = Math.hypot(b.vx, b.vz); b.pipe = p.time; b.vx = 0; b.vz = 0; if (ev) ev.push({ type: 'in', speed: b.keep }); }
-  }
   return ROLLS;
 }
 
@@ -323,6 +365,7 @@ function mapOf(H) {
     let free = true;
     for (const w of H.cushions) { const t = clamp(((x - w.ax) * w.dx + (z - w.az) * w.dz) * w.il2, 0, 1); if (Math.hypot(x - w.ax - w.dx * t, z - w.az - w.dz * t) < CLEAR) { free = false; break; } }
     for (const m of H.bumpers) if (Math.hypot(x - m[0], z - m[1]) < m[2] + CLEAR) free = false;
+    for (const p of H.pools) if (Math.hypot(x - p[0], z - p[1]) < p[2] + CLEAR) free = false;
     for (const k of H.blocks) if (x > k[0] && x < k[2] && z > k[1] && z < k[3]) free = false;
     if (free) ok[j * nx + i] = 1;
   }
@@ -367,7 +410,7 @@ export function farFrom(H, x, z) {
   if (n < 0 || M.dist[n] === Infinity) return 60;
   return M.dist[n] + Math.hypot((n % M.nx + M.i0) * CELL - x, (Math.floor(n / M.nx) + M.j0) * CELL - z);
 }
-/** Is the straight line from (ax, az) to (bx, bz) free for a ball: on felt all the way, clear of the cushions and of the mushrooms? */
+/** Is the straight line from (ax, az) to (bx, bz) free for a ball: on felt all the way, clear of the cushions, of the button and of the water? */
 function clearLine(H, ax, az, bx, bz) {
   const l = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(l / 0.1));
   for (let k = 1; k <= n; k++) {
@@ -375,6 +418,7 @@ function clearLine(H, ax, az, bx, bz) {
     if (!bedAt(H, x, z, 99)) return false;
     for (const w of H.cushions) { if (x < w.x0 - R || x > w.x1 + R || z < w.z0 - R || z > w.z1 + R) continue; const t = clamp(((x - w.ax) * w.dx + (z - w.az) * w.dz) * w.il2, 0, 1); if (Math.hypot(x - w.ax - w.dx * t, z - w.az - w.dz * t) < R * 0.9 && k < n) return false; }
     for (const m of H.bumpers) if (Math.hypot(x - m[0], z - m[1]) < m[2] + R) return false;
+    for (const p of H.pools) if (Math.hypot(x - p[0], z - p[1]) < p[2] + R) return false;
   }
   return true;
 }
@@ -387,7 +431,7 @@ export function wayFrom(H, x, z, out = [0, 0]) {
   for (let k = 0; k < 400 && n >= 0; k++) {
     const px = (n % M.nx + M.i0) * CELL, pz = (Math.floor(n / M.nx) + M.j0) * CELL;
     if (Math.hypot(px - x, pz - z) > 0.3) { if (clearLine(H, x, z, px, pz)) { out[0] = px; out[1] = pz; seen = true; } else if (seen) break; }
-    if (M.leap[n]) { if (!seen || (out[0] === px && out[1] === pz)) { out[0] = px + (px - x) * 0.01; out[1] = pz + (pz - z) * 0.01; } break; } // (a pipe, a jump: one aims at where it begins)
+    if (M.leap[n]) { if (!seen || (out[0] === px && out[1] === pz)) { out[0] = px + (px - x) * 0.01; out[1] = pz + (pz - z) * 0.01; } break; } // (a jump: one aims at where it begins)
     n = M.next[n];
   }
   return out;
@@ -397,8 +441,8 @@ export function aimFrom(H, x, z) { const w = wayFrom(H, x, z, _w); return Math.a
 const _w = [0, 0];
 
 /**
- * How far along the aim a ball would be stopped: by the first cushion, mushroom or foot of the mill, or by the
- * end of the felt — within `far` metres. Returns that distance; `out`: where ([x, z]) and the way it would come
+ * How far along the aim a ball would be stopped: by the first cushion, the button or a foot of the mill, or by
+ * the end of the felt or the edge of the water — within `far` metres. Returns that distance; `out`: where ([x, z]) and the way it would come
  * back ([dx, dz]; 0, 0 when nothing sends it back).
  */
 export function sightLine(H, x, z, aim, far, out) {
@@ -419,7 +463,7 @@ export function sightLine(H, x, z, aim, far, out) {
     if (t > 1e-6 && t < best) { best = t; nx = (x + dx * t - m[0]) / (m[2] + R); nz = (z + dz * t - m[1]) / (m[2] + R); }
   }
   // (the end of the felt, where no kerb stops the ball)
-  for (let t = 0.1; t < best; t += 0.1) if (!bedAt(H, x + dx * t, z + dz * t, 99)) { best = t; nx = 0; nz = 0; break; }
+  for (let t = 0.1; t < best; t += 0.1) if (!bedAt(H, x + dx * t, z + dz * t, 99) || H.pools.some((p) => (x + dx * t - p[0]) ** 2 + (z + dz * t - p[1]) ** 2 < p[2] * p[2])) { best = t; nx = 0; nz = 0; break; }
   if (out) { out[0] = x + dx * best; out[1] = z + dz * best; const vn = dx * nx + dz * nz; out[2] = nx || nz ? dx - 2 * vn * nx : 0; out[3] = nx || nz ? dz - 2 * vn * nz : 0; }
   return best;
 }
@@ -460,7 +504,8 @@ export function lineOf(st) {
 function aimAgain(st) {
   const H = HOLES[st.hole], b = st.ball;
   st.phase = 'aim'; st.gauge = 0; st.since = 0; st.held = 0; st.dir = 0;
-  st.aim = aimFrom(H, b.x, b.z);
+  // (on the tee the aim is the tee's own axis, straight down the lane: the line is the player's to find; further on it points along the way)
+  st.aim = b.x === 0 && b.z === 0 ? 0 : aimFrom(H, b.x, b.z);
   st.far = reachFor(farFrom(H, b.x, b.z));
 }
 function nextHole(st, events) {
@@ -476,7 +521,7 @@ function pickUp(st, events) { st.phase = 'picked'; st.wait = GOLF.wait.picked; s
 /**
  * Advances a round by `dt` seconds. `input`: { x (-1 … 1: turns the aim), y (-1 … 1: held back, it slows the
  * gauge), jump (true on the frame it is asked: hits) }. `events`: those of the ball, and { type: 'tee' (hole) |
- * 'hit' (power, speed) | 'rest' | 'lost' (what: 'acid' | 'out', x, z, y) | 'back' | 'holed' (hole, strokes, par)
+ * 'hit' (power, speed) | 'rest' | 'lost' (what: 'acid' | 'water' | 'out', x, z, y) | 'back' | 'holed' (hole, strokes, par)
  * | 'picked' (hole) | 'over' (score, strokes, time) }.
  */
 export function stepRound(st, dt, input, events) {
@@ -507,11 +552,11 @@ function sub(st, input, events) {
     const code = ballStep(H, b, st.t0 + st.clock, events);
     if (code === RESTS) { if (events) events.push({ type: 'rest' }); if (st.strokes[st.hole] >= GOLF.most) pickUp(st, events); else aimAgain(st); }
     else if (code === HOLED) { st.phase = 'holed'; st.wait = GOLF.wait.holed; st.holed[st.hole] = true; st.time = st.clock; if (events) events.push({ type: 'holed', hole: st.hole, strokes: st.strokes[st.hole], par: H.par }); }
-    else if (code === ACID || code === OUT) {
+    else if (code === ACID || code === OUT || code === WATER) {
       // lost: one stroke more (never more than seven), and back where it was hit from
       if (st.strokes[st.hole] < GOLF.most) { st.strokes[st.hole]++; st.total++; }
       st.phase = 'lost'; st.wait = GOLF.wait.lost;
-      if (events) events.push({ type: 'lost', what: code === ACID ? 'acid' : 'out', x: b.x, z: b.z, y: b.y });
+      if (events) events.push({ type: 'lost', what: code === ACID ? 'acid' : code === WATER ? 'water' : 'out', x: b.x, z: b.z, y: b.y });
     }
   } else if (st.phase === 'tee') {
     st.wait -= STEP;
@@ -544,7 +589,7 @@ function tryPutt(st, B, aim, k) {
   B.sims++;
   B.end = code;
   if (code === HOLED) return (B.safe ? 3 : 1000) - k * 0.01 - n * 0.001;
-  if (code === ACID || code === OUT) return -B.here - 7;
+  if (code === ACID || code === OUT || code === WATER) return -B.here - 7;
   return -farFrom(H, b.x, b.z) - k * 0.002;
 }
 /** How many steps it takes to turn the aim by `a` radians. */
@@ -555,7 +600,7 @@ function turnSteps(a) {
 
 /** The search, a putt at a time (it is taken up again step after step: the bot thinks while the gauge swings). */
 function* search(st, B) {
-  const H = HOLES[st.hole], way = st.aim, tries = [];
+  const H = HOLES[st.hole], way = aimFrom(H, st.ball.x, st.ball.z), tries = [];
   // the gauge and the clock, step by step, as the round will count them
   let g = st.gauge, c = st.clock;
   B.gauge = [g]; B.clock = [c];

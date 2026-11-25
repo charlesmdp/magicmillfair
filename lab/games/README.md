@@ -13,8 +13,8 @@ the spiral), the combs got a floor more, and two were added (the cars, the golf)
 | `hive` | **The Bee's Knees** — four combs of wax over the sea: the cell one sets foot on gives way | the north of the bay: combs at (84, -84), the gate on the beach at (43.5, -79.5) | `node lab/games/hive/test.mjs` (29) |
 | `flip` | **Head Over Heels** — one runs on the spot in a machine of travelling girders, and one key turns gravity over | a tall frame in the sea along the south side of the pier; the gate on the south beach at (41.1, 42.8) | `node lab/games/flip/test.mjs` (36) |
 | `spiral` | **A Turn for the Worse** — a track wound round a tower: obstacles worse every turn, one touch and it is the foot again | a tower in the south of the bay, at (168, 84); the gate on the south beach at (52, 71) | `node lab/games/spiral/test.mjs` (33) |
-| `cars` | **Round the Bend** — radio-controlled cars raced on a table, seen from above | the meadow north of the acid pond: a table at (-243.5, -55.8), the arch at (-243.5, -45.9) | `node lab/games/cars/test.mjs` (39) |
-| `golf` | **Par for the Course** — nine holes of crazy golf round the acid pond | round the acid pond (-236, -82); the gate at (-225.5, -75.6) | `node lab/games/golf/test.mjs` (42) |
+| `cars` | **Round the Bend** — radio-controlled cars raced on a table, seen from above | the meadow south of the acid pond: a table at (-243.5, -55.8), the arch at (-243.5, -45.9) | `node lab/games/cars/test.mjs` (39) |
+| `golf` | **Par for the Course** — nine holes of crazy golf round the acid pond | round the acid pond (-236, -82); the gate at (-225.5, -75.6) | `node lab/games/golf/test.mjs` (51) |
 
 `node lab/games/browser-test.mjs` plays all seven in the running game, in a headless browser: before a game is
 attached nothing of it is in the world; attached it is built, its board of scores by its gate, offered there,
@@ -223,7 +223,7 @@ would be a choice of rules). The fourth turn asks one to read what moves on the 
 
 *Reworked after its owner drove it ("the up arrow should make it go forward; drift, brighter colours, fire").*
 
-A table stands in the meadow north of the acid pond ((-243.5, -55.8), 27 × 15.6 m), and on it a circuit of
+A table stands in the meadow south of the acid pond ((-243.5, -55.8), 27 × 15.6 m), and on it a circuit of
 some eighty metres for radio-controlled cars, **seen from straight above** by a camera that does not move: a
 toy track in bright colours — a striped green infield, kerbs and tyre walls of six colours, bunting round the
 table, a pad that glows, a patch of sand, a ramp under a hoop of fire, a patch of oil. One asks to play under an
@@ -249,31 +249,37 @@ drifts nor meets a jet. The table is only seen (one walks through it).
 
 ### Par for the Course (`golf`)
 
-Nine holes of crazy golf round the acid pond (inside x -255 … -213, z -99 … -72; the gate at (-225.5, -75.6),
-the first tee six metres on), each a bed of felt with a timber kerb, its tee, its cup and flag, its number and
-par on a stake, each with one idea, harder as one goes:
+*Reworked after its owner played it ("make it belong to our world, a little harder, and aim straight at the start").*
 
-| | | par |
-|---|---|---|
-| 1 | Warm-up — a straight lane | 2 |
-| 2 | Round the Corner — played off a slanted cushion | 2 |
-| 3 | The Hump — a ridge across: too soft and the ball rolls back | 3 |
-| 4 | The Windmill — a door between two piers, sails by the clock of the world | 3 |
-| 5 | The Mushrooms — four bumpers that kick | 3 |
-| 6 | Down the Drain — a funnel into a pipe that drops onto a raised green | 3 |
-| 7 | Sliding Doors — three walls that slide at different paces | 3 |
-| 8 | The Plank — no kerb, a deck over the acid | 4 |
-| 9 | The Acid Test — a ramp over the acid to an island green | 4 |
+Nine holes of crazy golf round the acid pond (inside x -264 … -204, z -114 … -71; the gate, a striped ticket
+kiosk and the board of scores make its entrance at (-225.5, -75.6)). **Each hole takes after a place of the
+valley**, in miniature and in the paint of the fair; the beds stand half a metre over the meadow on painted
+skirts, a path of planks goes from hole to hole, a rope on stakes keeps one off the acid, and there are poles
+with bunting and bulbs, benches, flower tubs.
+
+| | | after | par |
+|---|---|---|---|
+| 1 | The Big Red Button | the big red button: it kicks the ball back | 2 |
+| 2 | The Swan Pond | the great pond: one passes on its left once the swan has glided by | 3 |
+| 3 | The Temple Stairs | the stairway to the temple: three steps, a soft ball rolls back down | 3 |
+| 4 | The Water Mill | the mill: paddles sweep the lane, then a narrow door through it | 3 |
+| 5 | The Floating Stones | Mostly Up: the ball must hop two gaps onto lower stones | 3 |
+| 6 | The Golden Dog | the golden dog: down a hill, between its legs, off a cushion round the corner | 3 |
+| 7 | The Big Wheel | the grand pier: the gondolas of two wheels come down through the lane | 3 |
+| 8 | The Plank | the acid pond: a plank 0.8 m wide over it | 4 |
+| 9 | The Acid Test | the island and its boulder: a ramp over the acid to an island green | 4 |
 
 The ball is putted: the stick aims (a line of dots shows the way), a gauge swings up and down by itself, the
-jump key hits at the strength it shows (stick back slows the gauge). The ball rolls with friction, comes back
-off the cushions, is taken by the cup when it goes slowly enough; in the acid or off the bed it comes back
-where it was hit from, a stroke more. Seven strokes at most a hole, then on. The whole round is one session;
-the score is the strokes, time breaking ties: `strokes × 1000 + seconds`, written "31 strokes (2:07)".
+jump key hits at the strength it shows (stick back slows the gauge). **At the tee the aim points straight down
+the lane** — never along the line that holes the ball: on no hole does a putt straight down the lane go in, at
+any strength. The ball rolls with friction, follows the slopes, comes back off the cushions, is taken by the
+cup when it goes slowly enough; in the water, in the acid or off the bed it comes back where it was hit from,
+a stroke more. Seven strokes at most a hole, then on. The score is the strokes, time breaking ties:
+`strokes × 1000 + seconds`, written "31 strokes (2:07)". Par is 28.
 
-Its bot aims by playing the putt forward with the rules, and holes every one of the nine in one (9 strokes,
-53 s) — which no person will; clumsy bots take 14 to 21 strokes. For the game's boards:
+Its bot aims by playing the putt forward with the rules and still holes every one in one (9 strokes, 55 s) —
+which no person will; clumsy bots take 16 to 20 strokes. For the game's boards:
 `golf: { order: 'asc', min: 9000, max: 63999 }`.
 
-What its maker could not see: the line of dots and the gauge in a picture (the bot hits at once), the swing of
-the putter. The meadow's grass pokes through the felt in places.
+What nobody knows yet: how hard the holes feel to a person (par 28 is a judgement from the odds of a random
+putt, not from play). The meadow's grass pokes through the path of planks in places.

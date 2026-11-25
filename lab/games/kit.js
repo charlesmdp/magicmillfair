@@ -23,7 +23,7 @@
 //       state                       its state, as the rules keep it
 //       anim, riding: false         how the avatar holds itself
 //       drop(player, done)          lets the player go, where one should be then; close()
-//   io: { play(name, options), note(text, ms), splash(x, y, z, strength) }
+//   io: { play(name, options), note(text, ms), splash(x, y, z, strength), peers() (the other visitors in sight) }
 //
 // Its board of scores: rules.js says its line — `export const BOARD = { order: 'asc' | 'desc', min, max }`, the
 // one its checks print — and extra.js hands it to `plug` with the name of the game (`name`, `board`, `sub`).
@@ -93,6 +93,9 @@ export function plug(app, game, o) {
     play: (name, options) => app.audio?.play(name, options),
     note: (text, ms = 2600) => hud.note(text, ms),
     splash: (x, y, z, strength = 1) => world.ripples?.splash(app.engine.time, x, y, z, strength),
+    // the other visitors one sees, where the game shows them at this moment: [{ id, name, x, y, z, yaw }] — a game
+    // in which players get in each other's way reads them (what the network carries: a tenth of a second late)
+    peers: () => { const list = []; if (app.presence) for (const p of app.presence.peers.values()) if (p.visible && !p.far) list.push(p); return list; },
   };
   const leave = (done) => {
     if (!run) return;
