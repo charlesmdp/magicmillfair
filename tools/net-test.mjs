@@ -883,7 +883,7 @@ async function testRelease(start, dist) {
     // the lab's five other games: a switch each, and a board that waits for it — a time for four of them (the
     // less the better), how long one held for the three ponds (the more the better: never longer than the run lasted)
     {
-      const LAB = { pond: 20_000, boats: 40_000, hill: 12_000, crack: 9_000, hollow: 20_000 }, ids = Object.keys(LAB);
+      const LAB = { pond: 20_000, boats: 40_000, hill: 34_000, crack: 9_000, hollow: 20_000 }, ids = Object.keys(LAB);
       const note = (b, ago) => sign(SCORE_SECRET, { b, t: Date.now() - ago, n: randomId(9) });
       // (what an address may post is counted: each of these scores comes from an address of its own)
       let who = 150;
