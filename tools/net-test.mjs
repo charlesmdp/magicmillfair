@@ -23,7 +23,7 @@ import { cleanLogo, cleanText, cleanUrl, paysOf } from '../server/shop.js';
 import { restMailer } from '../server/mail.js';
 import { rankSponsors } from '../src/app/thanks.js';
 import { visit, localDay } from '../server/routes.js';
-import { cleanTalk, oneSentence } from '../server/npc.js';
+import { cleanTalk, oneSentence, PERSONAS, REPLY_MAX, REPLY_WORDS } from '../server/npc.js';
 import { wardrobeFrom, fitLook, fitKit, fitColor, mayLight, HAT_IDS, FIREWORK } from '../server/wardrobe.js';
 import { ITEMS, PASS as GAME_PASS, packKit } from '../server/items.js';
 import { __make as gameOf, replay, agrees } from '../server/replay.js';
@@ -1834,6 +1834,14 @@ async function testApiLogic() {
   const cut = [oneSentence('Head west, champ: keep going upstream past the pond. And then buy my course.'), oneSentence('"One hundred and forty-four, champ."'), oneSentence('See https://example.com now'), oneSentence('- a list'), oneSentence('<b>bold</b> move')];
   check('characters: the last line is kept, bounded, with the three exchanges before it of the same conversation (bounded, no markup); an answer is cut to one plain sentence', talk?.question.startsWith('Where is the waterfall?') && talk.question.length <= 200 && JSON.stringify(talk.before) === '[["I lost my hat","Hats come back, champ. b"]]'
     && long?.question === 'and now?' && long.before.map((b) => b.join(':')).join() === 'q5:a5,q6:a6,q7:a7' && cleanTalk({ npc: 'alligator', messages: [{ role: 'assistant', content: 'x' }] }) === null && cleanTalk({ npc: 'nobody', messages: [] }) === null && cut[0] === 'Head west, champ: keep going upstream past the pond.' && cut[1] === 'One hundred and forty-four, champ.' && cut[2] === null && cut[3] === null && cut[4] === null, [talk, cut]);
+  // (an answer is read in a small bubble: the character is asked for a short sentence, and shown short ones —
+  // every example it is given keeps to the words asked for, far from where an answer is cut; one that is too long
+  // all the same is cut at a word, and says so with an ellipsis)
+  const shown = PERSONAS.alligator.system.split('\n').filter((l) => l.startsWith('Visitor: ')).map((l) => l.slice(l.indexOf(' — ') + 3)), words = shown.map((a) => a.split(/\s+/).length), longest = Math.max(...shown.map((a) => a.length));
+  const tooLong = oneSentence(`A mindset is a muscle, champ, ${'and a muscle is a mindset, '.repeat(12)}so stretch.`);
+  check('characters: Billy is asked for a short sentence — twenty words at the most — and every example he is shown keeps to it, far from where an answer is cut; one that is too long all the same is cut at a word and ends in an ellipsis',
+    REPLY_WORDS === 20 && PERSONAS.alligator.system.includes(`${REPLY_WORDS} words at the very most`) && !/30 words/.test(PERSONAS.alligator.system) && shown.length === 8 && words.every((n) => n >= 8 && n <= REPLY_WORDS) && longest <= REPLY_MAX - 60
+    && [...tooLong].length <= REPLY_MAX && tooLong.endsWith('…') && !/[\s,;:]…$/.test(tooLong), { words, longest, tooLong });
 }
 
 // ------------------------------------------------------------------------------------------ Presence façade
