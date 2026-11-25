@@ -107,7 +107,7 @@ export async function route(req, ctx) {
   const released = await releaseRoute(req, ctx, owner);
   if (released) return released;
   // the rooms that players make for themselves (urooms.js — nothing answers while they are switched off)
-  const mine = await uroomsRoute(req, ctx, PRICES.room);
+  const mine = await uroomsRoute(req, ctx, PRICES.room, PRICES.roomLife);
   if (mine) return mine;
   // (a board of scores can wait for its game to be released: until then it is as if it did not exist)
   const shut = async (board) => { const sw = BOARDS[board]?.release; return !!sw && !(await readRelease(ctx)).release[sw]; };

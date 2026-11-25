@@ -756,17 +756,19 @@ export class Hud {
       if (others.length) { const note = el('p', 'rooms-note'); note.textContent = 'Each room has its own visitors, its own chat and its own big red button. The scores, the shop and the news of the fair are the same in all of them.'; roomsEl.append(note); }
     }
     // A room of one's own (`own`: only while such rooms are switched on — { room: the one this visitor pays for,
-    // price, here: { host } when the room one is in is such a room }): its link and its settings, or where to
-    // get one; and the way back to the rooms of the fair ('myroom' is emitted with what was asked).
+    // price (a month), life (for good, once), here: { host } when the room one is in is such a room }): its link
+    // and its settings, or — for who has none — a card that says what it is and what it gives; and the way back
+    // to the rooms of the fair ('myroom' is emitted with what was asked).
     if (own && mode === 'online') {
       const act = (acts, label, title, what, cls = '') => { const b = el('button', cls); b.type = 'button'; b.textContent = label; b.title = title; b.onclick = () => this.emit('myroom', what); acts.append(b); };
       const line = (title, sub, fill) => { const row = el('div', 'who room mine'), text = el('span', 'id'), name = el('b'), small = el('small'), acts = el('span', 'acts'); name.textContent = title; small.textContent = sub; text.append(name, small); fill(acts); row.append(text, acts); return row; };
       if (own.here) roomsEl.append(line('The rooms of the fair', 'Leave this room for the common ones (the page loads again)', (acts) => act(acts, 'Go back', 'To the rooms everybody shares', 'leave')));
       const head = el('h3'); head.textContent = 'A room of your own';
       roomsEl.append(head);
-      const r = own.room, cost = own.price ? `$${(own.price / 100).toFixed(2).replace(/\.00$/, '')} a month` : '';
+      const dollars = (cents) => `$${(cents / 100).toFixed(2).replace(/\.00$/, '')}`;
+      const r = own.room, cost = own.price ? `${dollars(own.price)} a month` : '', good = own.life ? `${dollars(own.life)} once` : '';
       if (r && r.state === 'live') {
-        roomsEl.append(line(r.name, `Yours · reached by its link only · up to 50 visitors · ${r.locked ? 'has a password' : 'no password'}`, (acts) => {
+        roomsEl.append(line(r.name, `Yours${r.life ? ' for good' : ''} · reached by its link only · up to 50 visitors · ${r.locked ? 'has a password' : 'no password'}`, (acts) => {
           if (!(own.here && own.here.host)) act(acts, 'Go there', 'Opens your room (the page loads again)', 'go', 'good');
           act(acts, 'Copy its link', 'Whoever opens it comes to your room', 'link');
           act(acts, 'Name, password', 'Rename it, or give it a password', 'edit');
@@ -775,9 +777,23 @@ export class Hud {
           if (r.managed) act(acts, 'Subscription', 'Look after what you pay for it — or stop it', 'manage');
         }));
       } else if (r) {
-        roomsEl.append(line(r.name, `Asleep: nobody can enter it. It is kept until ${new Date(r.until).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}, then freed.`, (acts) => act(acts, 'Wake it', `Pay for it again${cost ? ` (${cost})` : ''}: it wakes as it was`, 'buy', 'good')));
+        roomsEl.append(line(r.name, `Asleep: nobody can enter it. It is kept until ${new Date(r.until).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}, then freed.`, (acts) => act(acts, 'Wake it', `Pay for it again${cost ? ` (${cost}${good ? `, or ${good}: for good` : ''})` : ''}: it wakes as it was`, 'buy', 'good')));
       } else {
-        roomsEl.append(line('Friends only', `A room nobody walks into: you give its link to whoever you like.${cost ? ` ${cost}.` : ''}`, (acts) => act(acts, 'See it in the shop', 'A room of your own, by the month', 'buy', 'good')));
+        // (none yet: a card — its picture, what it is, what it gives, the two ways to pay for it)
+        const card = el('div', 'room-offer'), art = el('span', 'art'), words = el('div', 'words'), put = (tag, cls, text) => { const e = el(tag, cls); e.textContent = text; return e; };
+        art.setAttribute('aria-hidden', 'true');
+        if (this.roomArt) { try { art.append(this.roomArt(168, 196)); } catch { /* no picture: the words do */ } }
+        const perks = el('ul');
+        for (const p of ['Your own high scores: boards that only know your names', 'Up to 50 of you at once — your own chat, your own big red button', 'A password if you want one, and a name of your choice']) perks.append(put('li', '', p));
+        const prices = el('p', 'prices');
+        if (cost) prices.append(put('span', '', cost));
+        if (cost && good) prices.append(put('i', '', 'or'));
+        if (good) prices.append(put('span', 'good', `${good} — yours for good`));
+        const acts = el('span', 'acts');
+        act(acts, 'See it in the shop', 'A room of your own: by the month, or for good', 'buy', 'good');
+        words.append(put('b', '', 'Friends only'), put('p', 'lead', 'The whole oasis for your people — friends, a team, the viewers of a stream. Nobody walks in: you give its link to whoever you like.'), perks, prices, acts);
+        card.append(art, words);
+        roomsEl.append(card);
       }
     }
     const ago = (t) => { const m = Math.max(0, Math.round((now - t) / 60000)); return m < 1 ? 'just arrived' : m < 60 ? `here for ${m} min` : `here for ${Math.floor(m / 60)} h ${m % 60} min`; };
@@ -1178,7 +1194,7 @@ export class Hud {
     // (a room of one's own, where they are sold and this visitor has none: the card that offers it)
     ad.hidden = !(own && !own.room);
     if (!ad.hidden) {
-      ad.querySelector('.room-price').textContent = `${own.price} a month`;
+      ad.querySelector('.room-price').textContent = `${own.price} a month${own.life ? ` · or ${own.life} for good` : ''}`;
       const art = ad.querySelector('.art');
       if (!art.firstChild && this.roomArt) { try { art.append(this.roomArt(144, 168)); } catch { /* no picture: the words do */ } }
       ad.onclick = () => { this.panel.classList.remove('on'); this.emit('myroom', 'offer'); };

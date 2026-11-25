@@ -144,7 +144,11 @@ export class ShopView {
     const acts = d.querySelector('.acts');
     acts.textContent = '';
     const act = (label, cls, fn) => { const b = el('button', cls, label); b.type = 'button'; b.onclick = fn; acts.append(b); return b; };
-    if (it.act) act(it.act, 'buy', () => this.emit('buy', id)); // (a place to sponsor: a bid; the Game Pass: by the month)
+    if (it.act) {
+      act(it.act, 'buy', () => this.emit('buy', id)); // (a place to sponsor: a bid; the Game Pass: by the month)
+      // (…and what may also be bought for good, paid once: a room of one's own — the buyer chooses)
+      if (it.act2) act(it.act2, 'buy good', () => this.emit('buy', id, { life: true }));
+    }
     else if (!it.owned) {
       // (lent by the pass or by the free day: it can be worn — and bought, to keep it)
       if (it.lent && it.wearable) act(it.worn ? 'Take it off' : 'Equip', it.worn ? 'off' : 'equip', () => this.emit('equip', id));

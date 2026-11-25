@@ -327,12 +327,12 @@ try {
     await page.evaluate(() => window.__mmf.adminKey(''));
     await page.waitForFunction(() => !window.__mmf.who?.admin, null, { timeout: 20000 });
     check('a gondola is taken by the month or bought for good, as one chooses: the stand says both prices; "for good" asks what the banner should show, then for one payment of $199 — no subscription —; back from it the gondola is theirs for good, its banner up, with nothing to look after; and the administrator is offered both ways to pay as well as filling it in',
-      /Free · \$29 a month, or \$199 for good/.test(free9) && ways.list.length === 2 && /^By the month · \$29 a month/.test(ways.list[0]) && /^For good · \$199, once/.test(ways.list[1]) && /pay once/.test(ways.lead)
+      /Free · \$29 a month, or \$199 for good/.test(free9) && ways.list.join(' | ') === 'By the month · $29Stop whenever you like | For good · $199Paid once — yours to keep' && /pay once/.test(ways.lead)
       && form9.title === 'Buy gondola 9 of the big wheel' && /\$199, once, and it is yours for good/.test(form9.lead) && form9.save === 'Go to payment · $199, once'
       && asked9?.get('mode') === 'payment' && asked9.get('line_items[0][price_data][unit_amount]') === '19900' && asked9.get('line_items[0][price_data][recurring][interval]') === null && asked9.get('metadata[item]') === 'gondola:9' && asked9.get('metadata[life]') === '1'
       && mine9.mine && mine9.life && !mine9.manage && mine9.title === 'Nine Lives Cat Cafe' && mine9.pays?.amount === 19900 && mine9.pays.monthly === false
       && /Yours for good: set it up/.test(held9[0]) && /Free · \$29 a month, or \$199 for good/.test(held9[1])
-      && owner.list.length === 3 && owner.list.some((t) => /^Fill this place in \(administrator\)/.test(t)) && owner.list.some((t) => /^By the month · \$29 a month/.test(t)) && owner.list.some((t) => /^For good · \$199, once/.test(t)),
+      && owner.list.length === 3 && owner.list.some((t) => /^Fill it in \(administrator\)/.test(t)) && owner.list.some((t) => /^By the month · \$29/.test(t)) && owner.list.some((t) => /^For good · \$199/.test(t)),
       JSON.stringify({ free9, ways, form9, asked9: asked9 && Object.fromEntries(asked9), mine9, held9, owner }));
   }
   const atPlate = (n) => page.evaluate((n) => { const m = window.__mmf, q = m.world.places.plaques, w = q.where(n), yaw = Math.atan2(w.x - w.sx, w.z - w.sz); m.player.teleport(w.sx, w.sz, yaw); m.player.pos.y = q.y; m.rig.snap(m.player.pos, yaw + Math.PI); m.rig.yaw = yaw + Math.PI; m.rig.pitch = -0.04; m.rig.distance = 2.4; return { count: q.count, column: q.columnAt(w.sx, w.sz), row: w.row }; }, n);
@@ -577,13 +577,26 @@ try {
     const cardOn = await until(() => o.evaluate(() => { const c = document.querySelector('.shop .card[data-item="room"]'); return c ? { tag: c.querySelector('.price').textContent, shelf: [...document.querySelectorAll('.shop .shelf h3')].map((h) => h.textContent).pop() } : null; }));
     // (its picture: an oasis at dusk — the evening sky, the pool — and the visitor's own robot on the bank)
     const roomPic = await o.evaluate(() => { const k = document.querySelector('.shop .card[data-item="room"] canvas'); if (!k) return null; const g = k.getContext('2d'), at = (x, y) => [...g.getImageData(Math.round(k.width * x), Math.round(k.height * y), 1, 1).data].slice(0, 3); const pool = [0.08, 0.14, 0.86, 0.9].map((x) => at(x, 0.69)).sort((p, q) => (q[1] - q[0]) - (p[1] - p[0]))[0]; return { size: `${k.width}x${k.height}`, sky: at(0.5, 0.03), water: pool, robot: at(0.5, 0.45), beside: at(0.27, 0.45) }; }); // (the pool: looked for on both sides of the robot, whose hands hang over the middle of it)
+    // (who has no room is told what one is in "Who is here": a card — its picture, its own high scores first, the
+    // two ways to pay for it — whose button leads to the shop)
+    await o.keyboard.press('Escape');
+    await o.click('.pill.players');
+    await o.waitForSelector('.roster.on .room-offer', { timeout: 20000 });
+    const ad4 = await o.evaluate(() => { const c = document.querySelector('.roster .room-offer'); return { head: [...document.querySelectorAll('.roster .rooms h3')].map((h) => h.textContent).join(), title: c.querySelector('b').textContent, lead: c.querySelector('.lead').textContent, perks: [...c.querySelectorAll('li')].map((e) => e.textContent), prices: [...c.querySelectorAll('.prices span')].map((e) => e.textContent), act: c.querySelector('.acts button').textContent, art: !!c.querySelector('.art canvas'), wide: c.getBoundingClientRect().width <= document.querySelector('.roster').getBoundingClientRect().width }; });
+    await o.screenshot({ path: path.join(ROOT, 'tools/preview/shop-room-offer.png') });
+    await o.click('.roster .room-offer .acts button');
+    await o.waitForSelector('.shop.on', { timeout: 20000 });
+    const adShop = await o.evaluate(() => ({ roster: document.querySelector('.roster').classList.contains('on'), picked: document.querySelector('.shop .card.picked')?.dataset.item || '' }));
+    check('who has no room of their own is told what one is in "Who is here": a card with its picture — friends only; their own high scores first, fifty of them at once, a password —, by the month or for good; its button opens the shop on it',
+      /A room of your own/.test(ad4.head) && ad4.title === 'Friends only' && /you give its link to whoever you like/.test(ad4.lead) && ad4.perks.length === 3 && /^Your own high scores/.test(ad4.perks[0]) && /50/.test(ad4.perks[1]) && /password/.test(ad4.perks[2])
+      && ad4.prices.join(' | ') === '$59 a month | $199 once — yours for good' && ad4.act === 'See it in the shop' && ad4.art && ad4.wide && !adShop.roster && adShop.picked === 'room', JSON.stringify({ ad4, adShop }));
     await o.evaluate(() => document.querySelector('.shop .card[data-item="room"]').click());
     const offer4 = await o.evaluate(() => ({ title: document.querySelector('.shop .detail h3').textContent, acts: [...document.querySelectorAll('.shop .detail .acts button')].map((b) => b.textContent), perks: document.querySelectorAll('.shop .detail .perks li').length, fine: document.querySelector('.shop .detail .fine').textContent }));
     const n4 = asked.length;
     await Promise.all([o.waitForURL(/checkout\.stripe\.test/, { timeout: 20000 }), o.evaluate(() => document.querySelector('.shop .detail .acts button').click())]);
     const form4 = asked[n4];
-    check('a room of one\'s own: nothing of it while it is switched off; switched on, its card is in the shop at once — $59 a month, what it gives — and its button leads to the payment page, as a subscription for that account',
-      !/room of your own/i.test(offRoster) && !/room of your own/i.test(offShelves) && cardOn?.tag === '$59 a month' && cardOn.shelf === 'A room of your own' && offer4.title === 'A room of your own' && offer4.acts.join() === 'Get a room · $59 a month' && offer4.perks === 6 && /thirty days/.test(offer4.fine)
+    check('a room of one\'s own: nothing of it while it is switched off; switched on, its card is in the shop at once — $59 a month or $199 for good, what it gives — with a button for each way to pay; the first leads to the payment page, as a subscription for that account',
+      !/room of your own/i.test(offRoster) && !/room of your own/i.test(offShelves) && cardOn?.tag === '$59 a month · or $199 for good' && cardOn.shelf === 'A room of your own' && offer4.title === 'A room of your own' && offer4.acts.join() === 'Get a room · $59 a month,Buy it for good · $199, once' && offer4.perks === 6 && /thirty days/.test(offer4.fine) && /Or for good: \$199, once, and it never falls asleep/.test(offer4.fine)
       && form4?.get('mode') === 'subscription' && form4.get('line_items[0][price_data][unit_amount]') === '5900' && form4.get('metadata[item]') === 'room' && form4.get('metadata[account]') === 'Roomy',
       JSON.stringify({ offRoster, offShelves, cardOn, offer4, form: form4?.toString().slice(0, 260) }));
     check('the card of a room of one\'s own has its picture: an oasis — the evening sky, the pool — with the visitor\'s own robot standing on its bank',
@@ -659,6 +672,34 @@ try {
     check('the owner of the room puts a visitor out from "Who is here": the visitor is back in a room of the fair, and told why',
       hostActs.join() === 'Put out' && /^main/.test(outF?.room || '') && outF.own === false && /room=main/.test(outF.address) && /The owner of "The Den" has put you out of it/.test(saidOut) && backIn === 200,
       JSON.stringify({ hostActs, outF, saidOut: saidOut.slice(-160), backIn }));
+    // ---- a room for good: the friend who was put out buys one of their own, once — no subscription, and it is said so
+    {
+      const devF = await f.evaluate(() => localStorage.getItem('mmf.device'));
+      await f.evaluate(async (device) => { await fetch('/api/account', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'create', device, name: 'Goody', password: 'another long password' }) }); }, devF);
+      await friend.go();
+      await f.waitForFunction(() => document.querySelector('.shop-icon').classList.contains('selling'), null, { timeout: 20000 });
+      await f.click('.shop-icon');
+      await f.waitForSelector('.shop.on .card[data-item="room"]', { timeout: 20000 });
+      await f.evaluate(() => document.querySelector('.shop .card[data-item="room"]').click());
+      const nG = asked.length;
+      await Promise.all([f.waitForURL(/checkout\.stripe\.test/, { timeout: 20000 }), f.evaluate(() => [...document.querySelectorAll('.shop .detail .acts button')].find((b) => /for good/.test(b.textContent)).click())]);
+      const formG = asked[nG];
+      const paidG = await tell({ type: 'checkout.session.completed', data: { object: { id: 'cs_room_good', payment_status: 'paid', amount_total: 19900, subscription: null, customer: 'cus_room_good', metadata: { item: 'room', device: devF, account: 'Goody', life: '1' } } } });
+      await friend.go('&paid=room');
+      const toldG = await until(async () => { const t = await friend.said(); return /"Goody's room"/.test(t) ? t : null; });
+      await f.click('.pill.players');
+      await f.waitForSelector('.roster.on', { timeout: 20000 });
+      const mineG = await until(() => f.evaluate(() => { const row = [...document.querySelectorAll('.roster .who.room.mine')].find((r) => /Goody/.test(r.textContent)); return row ? { sub: row.querySelector('small').textContent, acts: [...row.querySelectorAll('.acts button')].map((b) => b.textContent), offer: !!document.querySelector('.roster .room-offer') } : null; }));
+      const recG = await f.evaluate(async () => (await (await fetch(`/api/myroom?device=${localStorage.getItem('mmf.device')}`)).json()));
+      // (a subscription that ends elsewhere leaves it awake)
+      await tell({ type: 'customer.subscription.deleted', data: { object: { id: 'sub_room_shop_other' } } });
+      const stillG = await f.evaluate(async () => (await (await fetch(`/api/myroom?device=${localStorage.getItem('mmf.device')}`)).json()).room?.state);
+      check('a room may be bought for good instead: the second button of its card asks for one payment of $199 — no subscription —; paid, the room is theirs for good: "Who is here" says so, there is no subscription to look after, and nothing puts it to sleep',
+        formG?.get('mode') === 'payment' && formG.get('line_items[0][price_data][unit_amount]') === '19900' && formG.get('line_items[0][price_data][recurring][interval]') === null && formG.get('metadata[item]') === 'room' && formG.get('metadata[life]') === '1' && formG.get('metadata[account]') === 'Goody'
+        && paidG === 200 && !!toldG && /Yours for good · reached by its link only/.test(mineG?.sub || '') && mineG.acts.join() === 'Go there,Copy its link,Name, password,Empty its boards' && !mineG.offer
+        && recG.room?.life === true && recG.room.managed === false && recG.price === 5900 && recG.life === 19900 && stillG === 'live',
+        JSON.stringify({ form: formG?.toString().slice(0, 300), paidG, toldG: (toldG || '').slice(-140), mineG, recG, stillG }));
+    }
     await flip({ userRooms: false });
     await friend.context.close();
     await owner.context.close();

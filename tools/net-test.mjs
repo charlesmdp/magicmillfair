@@ -2639,6 +2639,22 @@ async function testUserRooms(start, dist) {
       bossNoKey.status === 403 && bossNoAcct.status === 403 && /^own-[a-z0-9]{8}$/.test(bossRoom?.room?.id || '') && bossRoom.fresh === true && bossTwice?.room?.id === bossRoom.room.id && bossTwice.fresh === false && bossMine?.room?.id === bossRoom.room.id && bossMine.room.state === 'live'
       && !!bossSeen?.room?.boards && bossSeen.room.id === id && !bossUnseen?.room, [bossNoKey.status, bossNoAcct.status, bossRoom, bossTwice?.fresh, bossMine?.room, Object.keys(bossSeen?.room?.boards || {}).length, bossUnseen?.room]);
     check('rooms of players: switched off again nothing answers any more, and nothing is lost — switched on, the room is there as it was', shut.enter.status === 404 && shut.knock.no === 'closed' && kept?.room?.id === id && kept.room.name === 'The Clubhouse 3', [shut.enter.status, shut.knock.no, kept]);
+    // a room for good: paid once instead of by the month — no subscription behind it, and nothing puts it to sleep
+    {
+      const zed = randomId(16), zedName = `Zed ${randomId(3).replace(/[^A-Za-z0-9]/g, 'x')}`;
+      const zedMade = await post('/api/account', { action: 'create', device: zed, name: zedName, password: 'a good password' });
+      stripe.asked.length = 0;
+      const buyGood = CF ? null : await post('/api/checkout', { item: 'room', device: zed, life: true }), formGood = stripe.asked[0]?.form;
+      await hook({ type: 'checkout.session.completed', data: { object: { id: 'cs_room_good', payment_status: 'paid', amount_total: 19900, subscription: null, customer: 'cus_zed', metadata: { item: 'room', device: zed, account: zedName, life: '1' } } } });
+      const good = json(await get(`/api/myroom?device=${zed}`));
+      await hook({ type: 'customer.subscription.deleted', data: { object: { id: 'sub_of_nobody_2' } } });
+      const goodStill = json(await get(`/api/myroom?device=${zed}`)), goodTwice = CF ? null : await post('/api/checkout', { item: 'room', device: zed, life: true });
+      const notes = json(await get(`/api/shop?device=${zed}`))?.notes || [];
+      check('rooms of players: a room may be bought for good — one payment of $199, no subscription —: it is theirs, said to be for good, with nothing to look after; no subscription that ends puts it to sleep; and an account has one room',
+        zedMade.status === 200 && (CF || (buyGood.status === 200 && formGood?.get('mode') === 'payment' && formGood.get('line_items[0][price_data][unit_amount]') === '19900' && formGood.get('line_items[0][price_data][recurring][interval]') === null && formGood.get('metadata[life]') === '1' && formGood.get('metadata[account]') === zedName && /a room of your own, for good$/.test(formGood.get('line_items[0][price_data][product_data][name]')) && goodTwice.status === 409))
+        && good?.room?.state === 'live' && good.room.life === true && good.room.managed === false && good.price === 5900 && good.life === 19900 && goodStill?.room?.state === 'live' && notes.some((n) => /yours for good/.test(n)),
+        [zedMade.status, buyGood?.status, formGood && Object.fromEntries(formGood), good, goodStill?.room?.state, goodTwice?.status, notes]);
+    }
   } finally {
     for (const m of made) { try { m.c.ws.close(); } catch { /* closed */ } }
     await server.stop();

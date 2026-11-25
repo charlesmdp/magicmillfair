@@ -225,7 +225,7 @@ async function boot() {
   // the rooms one may go to and one's own, where rooms are sold)
   const roomInfo = () => (presence && presence.mode === 'online' ? {
     name: presence.room, label: presence.label, several: /^Room (?!1$)/.test(presence.label) || (roster.rooms || []).some((r) => r.name !== presence.room),
-    rooms: roster.rooms || [], own: mine.on || presence.inOwn ? { room: mine.room, price: price(mine.price || 5900), here: presence.inOwn ? { host: presence.host } : null } : null,
+    rooms: roster.rooms || [], own: mine.on || presence.inOwn ? { room: mine.room, price: price(mine.price || 5900), life: mine.life ? price(mine.life) : '', here: presence.inOwn ? { host: presence.host } : null } : null,
   } : null);
   const startPresence = () => {
     presence = new Presence({ name, color, kit: packKit(kit), ...(backTo && { back: backTo }) });
@@ -389,14 +389,14 @@ async function boot() {
     }
     hud.showRoster({ people, mode: presence?.mode || 'offline', admin: who.admin && presence?.admin, owner: who.owner, details: roster.details, bans: roster.bans, admins: roster.admins, visitors: roster.visitors, now: roster.now, rooms: roster.rooms, room: roomInfo(), badge: badgeOn,
       // (a room of one's own — only while such rooms are switched on: the one this visitor pays for, and whether the room they are in is one)
-      own: mine.on ? { room: mine.room, price: mine.price, here: presence?.inOwn ? { host: presence.host } : null } : null });
+      own: mine.on ? { room: mine.room, price: mine.price, life: mine.life, here: presence?.inOwn ? { host: presence.host } : null } : null });
   };
   // ---------- a room of one's own (server/urooms.js): nothing of it while its switch is off
-  const mine = { on: false, room: null, price: 0 };
+  const mine = { on: false, room: null, price: 0, life: 0 }; // (price: by the month; life: bought for good, once — cents)
   const refreshMine = async (on = mine.on) => {
     mine.on = !!on;
     const got = mine.on ? await callApi(`api/myroom?device=${deviceId()}`) : null;
-    mine.room = got?.room || null; mine.price = got?.price || 0;
+    mine.room = got?.room || null; mine.price = got?.price || 0; mine.life = got?.life || 0;
     if (presence) hud.setPresence(presence.mode, presence.count, roomInfo()); // (the settings name the rooms too)
     if (hud.rosterOpen) showRoster();
     if (shopView.isOpen) shopView.refresh(shopItems());
@@ -1236,7 +1236,9 @@ async function boot() {
         if (acts.length === 1) { acts[0].run(); return; }
         // (several things can be done about it — by the month or for good; the administrator may also fill it in —: one chooses)
         hud.choose(`Gondola ${i + 1}`, shop.slots[ids[i]] ? 'What would you like to do with it?' : 'It is free. By the month, you stop whenever you like; for good, you pay once and it goes round with your banner for as long as the fair stands.',
-          acts.map((a) => ({ label: a.label.replace(/^(Sponsor|Buy) gondola \d+ of the big wheel( for good)? · /, (m, verb, good) => (good ? 'For good · ' : 'By the month · ')), note: /for good/.test(a.label) ? 'Paid once — yours for as long as the fair stands' : /a month/.test(a.label) ? 'Stop whenever you like' : '', color: /for good/.test(a.label) ? [0.9, 0.7, 0.2] : undefined })))
+          acts.map((a) => (/for good/.test(a.label) ? { label: `For good · ${price(shop.prices.gondolaLife)}`, note: 'Paid once — yours to keep', color: [0.9, 0.7, 0.2] }
+            : /a month$/.test(a.label) ? { label: `By the month · ${price(shop.prices.gondola)}`, note: 'Stop whenever you like' }
+              : /administrator/.test(a.label) ? { label: 'Fill it in (administrator)', note: 'By hand, for nothing' } : { label: a.label, note: '' })))
           .then((k) => { if (k !== null && acts[k]) acts[k].run(); });
       });
   };
@@ -1599,16 +1601,18 @@ async function boot() {
         fine: mine ? 'Yours: go to the board of the game to set up your panel. Outbid, you are refunded in full.' : 'An auction: you pay your bid once and hold the panel until somebody bids more — then you are refunded in full, automatically.',
       });
     }
-    // a room of one's own, by the month (only while such rooms are switched on, and things are sold)
+    // a room of one's own, by the month — or for good, paid once (only while such rooms are switched on, and things are sold)
     if (shop.open && mine.on) {
-      const room = mine.room, live = room?.state === 'live', cost = `${price(mine.price || 5900)} a month`;
+      const room = mine.room, live = room?.state === 'live', cost = `${price(mine.price || 5900)} a month`, good = mine.life ? `${price(mine.life)}, once` : '';
       list.push({
-        id: 'room', name: room ? room.name : 'A room of your own', group: 'room', rarity: 'legendary', owned: live, wearable: false, cost,
+        id: 'room', name: room ? room.name : 'A room of your own', group: 'room', rarity: 'legendary', owned: live, wearable: false, cost: good && !live ? `${cost} · or ${price(mine.life)} for good` : cost,
         act: live ? null : room ? `Wake it · ${cost}` : `Get a room · ${cost}`,
+        act2: live || !good ? null : room ? `Wake it for good · ${good}` : `Buy it for good · ${good}`,
         manage: live && room.managed ? 'Look after it, or stop it' : null,
-        blurb: live ? 'It is yours. Its link, its name and its password are in "Who is here".' : room ? 'Your room is asleep: nobody can enter it. Pay for it again and it wakes as it was — its name, its password, its boards.' : 'The whole oasis, for your people only — a team, a band of friends, the viewers of a stream. One link to hand out, no stranger walks in, and boards of scores that only know your names.',
+        blurb: live ? `It is yours${room.life ? ' — for good' : ''}. Its link, its name and its password are in "Who is here".` : room ? 'Your room is asleep: nobody can enter it. Pay for it again and it wakes as it was — its name, its password, its boards.' : 'The whole oasis, for your people only — a team, a band of friends, the viewers of a stream. One link to hand out, no stranger walks in, and boards of scores that only know your names.',
         perks: ROOM_PERKS,
-        fine: `Paid by the month on Stripe; stop whenever you like. It takes an account (free). No sky village hangs over a room of one's own. When it is no longer paid for it falls asleep: it is kept for thirty days, then freed.${account.name ? '' : ' Create an account first, in the settings.'}`,
+        fine: live && room.life ? 'Bought for good: nothing to renew, nothing to stop. No sky village hangs over a room of one\'s own.'
+          : `By the month on Stripe: stop whenever you like — a room that is no longer paid for falls asleep, is kept for thirty days, then freed.${good ? ` Or for good: ${good}, and it never falls asleep.` : ''} It takes an account (free). No sky village hangs over a room of one's own.${account.name ? '' : ' Create an account first, in the settings.'}`,
       });
     }
     return list;
@@ -1759,14 +1763,14 @@ async function boot() {
   // ---------- a room of one's own, offered in full: who it is for, what it gives, what it costs — and the payment
   const roomPitch = async () => {
     if (hud.pitching) return false;
-    const cost = `${price(mine.price || 5900)} a month`;
+    const cost = `${price(mine.price || 5900)} a month`, good = mine.life ? `${price(mine.life)}, once` : '';
     audio.play('pick');
     const taken = await hud.pitch({
-      kind: 'room', eyebrow: `A room of your own · ${cost}`, title: 'The whole oasis, for your people only',
+      kind: 'room', eyebrow: `A room of your own · ${cost}${good ? ` — or ${price(mine.life)} for good` : ''}`, title: 'The whole oasis, for your people only',
       lead: 'The same valley, the same pier, the same big wheel — and nobody you did not invite. One link to hand out, and boards of scores that only know your names.',
       cases: ROOM_CASES, perks: ROOM_PERKS,
-      fine: 'It takes an account (free). Paid by the month on Stripe: the game never sees your card, and you stop whenever you like. A room that is no longer paid for falls asleep, and is kept for thirty days.',
-      yes: `Get my room · ${cost}`, no: 'Maybe later', picture: roomPicture(360, 420),
+      fine: `It takes an account (free). By the month on Stripe: the game never sees your card, and you stop whenever you like — a room that is no longer paid for falls asleep, and is kept for thirty days.${good ? ` Or for good: ${good}, and it never falls asleep.` : ''}`,
+      yes: good ? 'Get my room' : `Get my room · ${cost}`, no: 'Maybe later', picture: roomPicture(360, 420),
     });
     if (!taken) return false;
     if (!account.name) { hud.note('A room belongs to an account: make yours first — it is free — and come back for the room.', 9000); accountAction('create'); return true; }
@@ -1777,8 +1781,11 @@ async function boot() {
       else hud.note('The room could not be opened: is this browser signed in to your account, and are the rooms of players switched on (/admin, Releases)?', 9000);
       return true;
     }
+    // (by the month, or for good: one chooses)
+    const life = good ? await hud.choose('A room of your own', 'By the month, you stop whenever you like. For good, you pay once and it is yours for as long as the fair stands.', [{ label: `By the month · ${price(mine.price || 5900)}`, note: 'Stop whenever you like' }, { label: `For good · ${price(mine.life)}`, note: 'Paid once — never falls asleep', color: [0.9, 0.7, 0.2] }]) : 0;
+    if (life === null) return true;
     hud.note('Opening the payment page…', 8000);
-    const wrong = await shop.buy('room');
+    const wrong = await shop.buy('room', 0, life === 1);
     if (wrong) hud.note(wrong, 7000);
     return true;
   };
@@ -1795,10 +1802,10 @@ async function boot() {
   };
   Object.assign(app, { pitch, playedFor: (seconds) => { if (seconds !== undefined) played = seconds; return played; } });
   shopView
-    .on('buy', async (id) => {
+    .on('buy', async (id, how) => {
       if (id.startsWith('board:')) { shopView.close(); bidFor(id); return; } // (a place to sponsor: how much?)
       hud.note('Opening the payment page…', 8000);
-      const wrong = await shop.buy(id);
+      const wrong = await shop.buy(id, 0, how?.life === true); // (life: bought for good, paid once — a room of one's own)
       if (wrong) hud.note(wrong, 7000);
     })
     .on('equip', (id) => { const [type, sub] = id.split(':'); if (!shop.owns(id)) return; equip(id, !wornNow(type, sub)); shopView.refresh(shopItems()); audio.play('pick'); })
@@ -1838,7 +1845,7 @@ async function boot() {
         await refreshMine(true);
         if (mine.room?.state === 'live') {
           audio.play('victory');
-          const text = `"${mine.room.name}" is yours. Its link and its settings are in "Who is here": give the link to whoever you like.`;
+          const text = `"${mine.room.name}" is yours${mine.room.life ? ' — for good' : ''}. Its link and its settings are in "Who is here": give the link to whoever you like.`;
           hud.note(text, 10000);
           hud.addChat('✦', 5, text, true); // (a note goes by while the world loads: the chat keeps it)
         }

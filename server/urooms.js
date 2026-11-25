@@ -7,7 +7,8 @@
 // nobody is in it. No sky village hangs over it: those are the common rooms' (the page sees to that).
 //
 //   GET  /api/myroom?device=…   → { room: null | { id, name, locked, state: 'live' | 'asleep', since, until?,
-//                                 managed }, price }   (`price`: what a room costs a month, in cents)
+//                                 managed, life }, price, life }   (`price`: what a room costs a month, in cents;
+//                                 `life`: what it costs bought for good, once — and, on a room, that it was)
 //   POST /api/myroom { device, name?, password?, reset? }   its owner: a new name, a password ('' : none any
 //                                 more), its boards emptied (reset: true)   → { room }
 //   POST /api/room/enter { room, device, password? }
@@ -167,10 +168,10 @@ export async function memberOf(ctx, room, dev, note) {
   return !!rec && rec.state === 'live';
 }
 
-const shown = (rec) => ({ id: rec.id, name: rec.name, locked: !!rec.pw, state: rec.state, since: rec.since, ...(rec.state === 'asleep' && { until: (rec.asleep || 0) + USER_ROOM.sleep }), managed: !!rec.customer });
+const shown = (rec) => ({ id: rec.id, name: rec.name, locked: !!rec.pw, state: rec.state, since: rec.since, ...(rec.state === 'asleep' && { until: (rec.asleep || 0) + USER_ROOM.sleep }), managed: !!rec.customer && !!rec.sub, ...(rec.life && { life: true }) }); // (managed: a subscription to look after — a room bought for good has none)
 
-/** The paths above. `price`: what a room costs (catalog.js). Returns an answer, or null for another path — or while the switch is off. */
-export async function uroomsRoute(req, ctx, price = 0) {
+/** The paths above. `price`: what a room costs a month, `life`: bought for good (catalog.js). Returns an answer, or null for another path — or while the switch is off. */
+export async function uroomsRoute(req, ctx, price = 0, life = 0) {
   const { method, path, query, body } = req;
   if (path !== '/api/myroom' && path !== '/api/room/enter' && path !== '/api/urooms') return null;
   if (!(await userRoomsOn(ctx))) return null; // (switched off: as if these paths did not exist)
@@ -207,7 +208,7 @@ export async function uroomsRoute(req, ctx, price = 0) {
   if (!DEVICE.test(device || '')) return out(400, { error: 'Not a browser of the game.' });
   const acct = await accountOf(ctx.store, device);
   let rec = acct ? await roomOfAccount(ctx, acct.name) : null;
-  if (reading) return out(200, { room: rec ? shown(rec) : null, price, account: !!acct });
+  if (reading) return out(200, { room: rec ? shown(rec) : null, price, life, account: !!acct });
   if (method !== 'POST') return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD, POST' });
   if (limited('myroom')) return busy;
   if (!acct) return out(403, { error: 'Sign in first.' });

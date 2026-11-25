@@ -6,6 +6,7 @@ export const NEWS = [
   {
     date: '25 November 2026',
     items: [
+      ['A room of your own, for good', 'Friends only, with your own high scores: a room of your own can now be bought once — $199, and it never falls asleep — or taken by the month as before ($59). In "Who is here", or in the item shop (O).'],
       ['A gondola for good', 'At the red kiosk of the big wheel, a free gondola can now be bought once — $199, and your banner goes round for as long as the fair stands — or taken by the month as before ($29). You choose.'],
       ['Five more relics, further off', 'Twenty-five things are now left over from the world before. The five new ones are where one has to go and look: the top of a tower, a hollow in the rock, two beaches nobody walks to, a cave behind a waterfall.'],
       ['The mushroom cloud has grown up', 'A flash, a stem, a cap that rolls and cools from white to smoke — and confetti for fallout. It is for those who found every relic: there are twenty-five of them now. In the emotes (T).'],

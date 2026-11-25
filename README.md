@@ -1363,9 +1363,14 @@ tests, `npm run dev`) has it open.
 `userRooms` of the back office is off there is no card in the shop, no corner in "Who is here", no path that
 answers, and a name of that kind is no room. Switched on:
 
-- **a room of one's own is bought in the shop, by the month ($59)** — its card shows an oasis at dusk with
-  the visitor's own robot on its bank (`src/ui/OasisPicture.js`: drawn, not downloaded) —, from a browser signed in to an account —
-  one room for an account. Stripe says when it is paid (the webhook), as for everything else;
+- **a room of one's own is bought in the shop, by the month ($59) — or for good, paid once ($199): the buyer
+  chooses** (two buttons on its card; `forLife` in `server/catalog.js`: the same item, asked for with `life`, is
+  one payment and no subscription — a room bought for good never falls asleep) — its card shows an oasis at dusk
+  with the visitor's own robot on its bank (`src/ui/OasisPicture.js`: drawn, not downloaded) —, from a browser
+  signed in to an account — one room for an account. Stripe says when it is paid (the webhook), as for everything
+  else. **Who has none is told what one is in "Who is here"**: a card — *Friends only* — with that picture, what
+  it gives (their own high scores first: boards that only know their names; fifty of them at once; a password),
+  both prices, and a button to the shop;
 - it is **reached by its link only** (`?room=own-xxxxxxxx`, in no list), **holds fifty**, and is **kept** — its
   name, its owner, its password, its boards — even when nobody is in it. **No sky village** hangs over it: the
   page that opens such a link builds the world without them;
@@ -1432,8 +1437,8 @@ notebook, with the rest. No new Durable Object class: such a room is a room like
 |---|---|
 | `npm run bake` | bakes the world, the statue and the textures again |
 | `npm run bake:statue` | sculpts the golden dog and its companions again (`-- --preview=dog.png` also draws them from six sides, `-- --cell=0.012` makes a finer mesh) |
-| `npm test` | 260 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password), the rooms that players make (bought, entered with a ticket, their own boards, asleep when unpaid, freed) |
-| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (197 in all) |
+| `npm test` | 261 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password), the rooms that players make (bought, entered with a ticket, their own boards, asleep when unpaid, freed) |
+| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (198 in all) |
 | `npm run test:update` | a delivery from end to end, in the real game: two builds, a visitor in the world, the owner at the back office (`/admin`: the switches, a word to every room, a line refused, somebody kept out, the figures, two games of the lab thrown on — fetched and built as the game runs, each played by its own bot, its time on its board; each with its stand, its panel for a sponsor, its star on the map and its planks at the forks —, the sky villages stage by stage), every page asked to refresh but never in the middle of a sentence, then the server replaced by the next version — the page says so, refreshes, comes back at the same spot, and puts no card of what is new in the way (the boards by the poppy field say it); and a plain build leaves nothing of the game on the page (14 checks) |
 | `node tools/extras-test.mjs`, `node tools/slide-test.mjs`, `node tools/pond-test.mjs`, `node tools/boats-test.mjs`, `node tools/hill-test.mjs`, `node tools/crack-test.mjs`, `node tools/hollow-test.mjs`, `node tools/games-test.mjs` | the lab's own checks of its extras and of each of its games — the last one plays them in the running game, in a browser (see `lab/INTEGRATION.md`) |
 | `node tools/waves-test.mjs`, `node tools/lava-test.mjs`, `node tools/hive-test.mjs`, `node tools/flip-test.mjs`, `node tools/spiral-test.mjs`, `node tools/cars-test.mjs`, `node tools/golf-test.mjs`, `node tools/tunes-test.mjs`, `node tools/play-test.mjs` | the checks of the seven games with a gate — the rules of each (its bot plays it; the line of its board is held against `server/scores.js`), their music, and the seven played in the running game, in a browser, each switched on the way the game does it (see `lab/GAMES.md`) |
