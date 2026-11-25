@@ -108,8 +108,8 @@ try {
     foreign: [...document.querySelectorAll('script[src], link[href], img[src]')].map((n) => n.src || n.href).filter((u) => !u.startsWith(location.origin)),
   }));
   check('the back office: /admin opens with the owner\'s key and no other; the page is fenced in (nothing from elsewhere, never framed); it says which version is online, how many are connected, and shows every switch as it stands',
-    desk.url === '/admin/' && /script-src 'self'/.test(fence) && /frame-ancestors 'none'/.test(fence) && /not recognised/.test(refusedKey.text) && refusedKey.shut && /owner/.test(desk.who) && desk.tabs === 'Releases,Rooms,High scores,Sponsors & plaques,Kept out,Figures,Administrators'
-    && desk.build === ONE && desk.here === '1' && desk.old === '0' && desk.switches.includes('The game in figures=true') && desk.switches.includes('Mostly Down — the water slide=false') && desk.switches.includes('The sky villages=Hidden') && !desk.foreign.length, JSON.stringify({ fence, refusedKey, desk }));
+    desk.url === '/admin/' && /script-src 'self'/.test(fence) && /frame-ancestors 'none'/.test(fence) && /not recognised/.test(refusedKey.text) && refusedKey.shut && /owner/.test(desk.who) && desk.tabs === 'Releases,Rooms,High scores,Chat,Sponsors & plaques,Kept out,Figures,Administrators'
+    && desk.build === ONE && desk.here === '1' && desk.old === '0' && desk.switches.includes('The game in figures=true') && desk.switches.includes('Stars on the map=true') && desk.switches.includes('Mostly Down — the water slide=false') && desk.switches.includes('The sky villages=Hidden') && !desk.foreign.length, JSON.stringify({ fence, refusedKey, desk }));
   const throwSwitch = (title) => office.evaluate((title) => [...document.querySelectorAll('#switches .switch')].find((s) => s.querySelector('b').textContent === title).querySelector('.toggle').click(), title);
 
   // ---- a word to every room, said from there
