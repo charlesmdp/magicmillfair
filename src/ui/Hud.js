@@ -265,7 +265,7 @@ export class Hud {
           <h3>Your room</h3>
           <div class="room-list" role="list" aria-label="The rooms of the fair: the one you are in, and the others"></div>
           <p class="room-say"></p>
-          <button type="button" class="room-ad" hidden><span class="art" aria-hidden="true"></span><span class="txt"><b>A room of your own</b><small>Your team, your friends, your community: the whole oasis to yourselves, with boards of scores of your own.</small></span><span class="tag"></span></button>
+          <button type="button" class="room-ad" hidden><span class="art" aria-hidden="true"></span><span class="txt"><b>A room of your own</b><small>Your team, your friends, your community: the whole oasis to yourselves, with boards of scores of your own.</small></span><span class="room-price"></span></button>
         </div>
         <h3>Graphics quality</h3>
         <div class="seg quality"><button data-q="auto">Auto</button>${TIER_ORDER.map((q) => `<button data-q="${q}">${TIERS[q].label}</button>`).join('')}</div>
@@ -1157,11 +1157,11 @@ export class Hud {
     this._roomKey = key;
     list.textContent = '';
     const line = (cls, title, sub, label, run) => {
-      const r = el('div', `room-row${cls ? ` ${cls}` : ''}`), text = el('span', 'id'), b = el('b'), s = el('small');
+      const r = el('div', `room-row${cls ? ` ${cls}` : ''}`), text = el('span', 'room-id'), b = el('b'), s = el('small');
       r.setAttribute('role', 'listitem');
       b.textContent = title; s.textContent = sub; text.append(b, s); r.append(text);
-      if (label) { const go = el('button', 'go'); go.type = 'button'; go.textContent = label; go.onclick = () => { this.panel.classList.remove('on'); run(); }; r.append(go); }
-      else { const here = el('span', 'here'); here.textContent = 'You are here'; r.append(here); }
+      if (label) { const go = el('button', 'room-go'); go.type = 'button'; go.textContent = label; go.onclick = () => { this.panel.classList.remove('on'); run(); }; r.append(go); }
+      else { const here = el('span', 'room-here'); here.textContent = 'You are here'; r.append(here); }
       list.append(r);
     };
     line('here', room.label, count > 1 ? `${count} visitors, you included` : 'Nobody else just now', '', null);
@@ -1173,7 +1173,7 @@ export class Hud {
     // (a room of one's own, where they are sold and this visitor has none: the card that offers it)
     ad.hidden = !(own && !own.room);
     if (!ad.hidden) {
-      ad.querySelector('.tag').textContent = `${own.price} a month`;
+      ad.querySelector('.room-price').textContent = `${own.price} a month`;
       const art = ad.querySelector('.art');
       if (!art.firstChild && this.roomArt) { try { art.append(this.roomArt(144, 168)); } catch { /* no picture: the words do */ } }
       ad.onclick = () => { this.panel.classList.remove('on'); this.emit('myroom', 'offer'); };
