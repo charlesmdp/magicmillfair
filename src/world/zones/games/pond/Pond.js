@@ -102,8 +102,8 @@ export class Pond {
       const lx = first.x + ox * (R + 1.2) - oz * 1.05, lz = first.z + oz * (R + 1.2) + ox * 1.05;
       wet.tint(0.9, 0.9, 0.9, 1).cylinder(lx, y0 - 2.6, lz, 0.07, 0.06, 2.6 + 1.55, 6);
       paint.tint(...NAVY, 1).cylinder(lx, y0 + 1.5, lz, 0.13, 0.13, 0.36, 8);
-      const lamp = (name, tone) => { const p = new Parts(); p.get('glow').tint(...tone, 1).lathe([[0, -0.15], [0.12, -0.1], [0.15, 0], [0.12, 0.1], [0, 0.15]], 8); const g = p.toMeshes(mats, { name, layers: [] }); g.position.set(lx, y0 + 1.68, lz); g.visible = false; this.group.add(g); return g; };
-      this.lamps = { go: lamp('pond-lamp-go', [0.25, 1.7, 0.4]), wait: lamp('pond-lamp-wait', [1.8, 0.22, 0.16]) };
+      const lamp = (name, tone) => { const p = new Parts(); p.get('glow').tint(...tone, 1).lathe([[0, -0.22], [0.17, -0.15], [0.22, 0], [0.17, 0.15], [0, 0.22]], 10); const g = p.toMeshes(mats, { name, layers: [] }); g.position.set(lx, y0 + 1.76, lz); g.visible = false; this.group.add(g); return g; };
+      this.lamps = { go: lamp('pond-lamp-go', [0.05, 1.05, 0.16]), wait: lamp('pond-lamp-wait', [1.25, 0.05, 0.04]) };
     }
     this.group.add(parts.toMeshes(mats, { name: 'pond-ring', layers: cast }));
     const sign = canvasBoard(512, 128, (ctx, w, h) => {
@@ -237,7 +237,14 @@ export class Pond {
        */
       camera: (cam, dt) => {
         const pond = P.ponds[st.stage], r0 = pond.rings[0].r, fast = Math.min(1, Math.max(0, st.v - 4.6) / 8);
-        if (st.mode === 'bridge') {
+        if (S.count > 0) {
+          // (not gone yet: from beside the jetty, high up — the runner, the lamp, the first pond and its beam in
+          // sight, the gate and its sign out of the way)
+          const w0 = waysOf()[0], ox = Math.cos(w0.in), oz = Math.sin(w0.in);
+          _t.set(this.wait.x - oz * 5.4 + ox * 2.2, P.level + 4.4, this.wait.z + ox * 5.4 + oz * 2.2);
+          if (!S.cam) S.cam = _t.clone(); else S.cam.lerp(_t, Math.min(1, dt * 3));
+          _t.set(pond.x + ox * 2.6, P.level + 0.5, pond.z + oz * 2.6);
+        } else if (st.mode === 'bridge') {
           const w = waysOf()[st.stage];
           _t.set(pose.x - w.dx * 7.5, P.level + 5.6, pose.z - w.dz * 7.5);
           if (!S.cam) S.cam = _t.clone(); else S.cam.lerp(_t, Math.min(1, dt * 3));

@@ -1190,7 +1190,7 @@ landing is closed all round — walls as thin as a rope, at the height of the pl
 *The Endless Pond*: **one sets off when one likes** — the runner waits at the end of the jetty, and goes on
 a jump while the lamp beside it is green. It is green when setting off at that moment leaves a way through
 the first pond on plain jumps, with room to spare on the tightest: a table in the rules, `POND.fair` in
-`pond/ring.js`, which `npm run test:pond` works out again and compares — before, one start in three could
+`pond/ring.js`, which `node tools/pond-test.mjs` works out again and compares — before, one start in three could
 not be run without the second jump. A low beam is lower, what an arm catches of a runner is narrower than
 the runner, and a foot may be further over the edge of a stone. The music of the climb plays on the ponds
 too, rising from pond to pond. *Between a Rock* again: **what there is to get good at is the kick**. A wall

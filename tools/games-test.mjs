@@ -55,6 +55,21 @@ try {
   // ---- the cleft: one walks to it, the bot climbs it, one is put back on the planks
   const way = CLEFT.way, mid = await at((way.a[0] + way.b[0]) / 2, (way.a[1] + way.b[1]) / 2), land = await at(gates.crack.x, gates.crack.z);
   check('the walkway and the landing of the cleft carry the player, over the water', Math.abs(mid.y - CLEFT.floor) < 0.02 && Math.abs(land.y - CLEFT.floor) < 0.02, `at ${mid.y.toFixed(2)} m and ${land.y.toFixed(2)} m`);
+  // (its ropes hold: a walker pushed every way from eight places of the walkway and of the landing — eight metres each
+  // time — never leaves the planks, except by the open end of the walkway, onto the sand; who swims underneath passes)
+  const ropes = await page.evaluate((floor) => {
+    const m = window.__mmf, col = m.world.collision, deck = m.extras.crack.deck, r = 0.35, out = { off: 0, tried: 0, where: '' };
+    for (const [sx, sz] of [[105.1, 105.2], [100.5, 108.2], [110.2, 101.8], [112.5, 100.5], [117.8, 99.8], [115, 102.2], [115, 104.5], [112, 102.4]]) for (let k = 0; k < 16; k++) {
+      const a = (k / 16) * Math.PI * 2, p = { x: sx, z: sz };
+      for (let i = 0; i < 160; i++) { p.x += Math.cos(a) * 0.05; p.z += Math.sin(a) * 0.05; col.resolve(p, r, floor); }
+      out.tried++;
+      if (deck.heightAt(p.x, p.z) === null && !(p.x < 99.6)) { out.off++; out.where = `${p.x.toFixed(1)}, ${p.z.toFixed(1)}`; }
+    }
+    const q = { x: 105.1, z: 107.2 }; for (let i = 0; i < 80; i++) { q.z -= 0.05; col.resolve(q, r, -0.6); }
+    out.swam = +(107.2 - q.z).toFixed(1);
+    return out;
+  }, CLEFT.floor);
+  check('nobody falls off them: a walker pushed every way stays on the planks — ropes on both sides of the walkway, the landing closed all round — and who swims underneath passes', ropes.tried === 128 && ropes.off === 0 && ropes.swam > 3.5, `${ropes.tried} pushes, ${ropes.off} off the planks${ropes.where ? ` (${ropes.where})` : ''}, ${ropes.swam} m swum under them`);
   await page.evaluate(() => { const a = window.__mmf; window.__told = {}; a.crackDone = (ms) => { window.__told.crack = ms; }; a.hollowDone = (ms, hits) => { window.__told.hollow = [ms, hits]; }; a.hillDone = (ms) => { window.__told.hill = ms; }; a.climbCleft(); a.cleftClimb().auto = true; });
   await frames(30);
   const during = await page.evaluate(() => { const a = window.__mmf, c = a.cleftClimb(); return { driven: a.player.driver === c, y: a.player.pos.y, line: c.line, keys: [...document.querySelectorAll('button')].some((b) => /keys/.test(b.textContent) && b.style.display !== 'none') }; });
