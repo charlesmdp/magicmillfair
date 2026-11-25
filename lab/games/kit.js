@@ -34,6 +34,7 @@ import { canvasBoard } from '../../src/world/zones/games/Boards.js';
 import { keysHelp } from '../../src/extras/help.js';
 import { Scores } from '../../src/net/Scores.js';
 import { BOARDS } from '../../server/scores.js';
+import { TUNES, tunePlayer } from './tunes.js';
 
 export const V = (x, y, z) => new THREE.Vector3(x, y, z);
 export const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -89,6 +90,7 @@ export function plug(app, game, o) {
   game.setBest?.(read());
   const scores = boardOf(app, game, o);
   let run = null, saved = false, told = false, eye = null;
+  const tune = TUNES[o.id] ? tunePlayer(app) : null; // its music while a run is on (tunes.js)
   const io = {
     play: (name, options) => app.audio?.play(name, options),
     note: (text, ms = 2600) => hud.note(text, ms),
@@ -101,6 +103,7 @@ export function plug(app, game, o) {
     if (!run) return;
     const s = run;
     run = null; saved = false;
+    tune?.stop();
     app.fair.fov = null;
     hud.setRun(null);
     keysHelp(app).clear();
@@ -117,6 +120,7 @@ export function plug(app, game, o) {
     player.driver = run;
     scores?.start(); // (the server notes when a run begins: a score only counts with that note)
     app.audio?.play('teleport');
+    tune?.play(o.id, run);
     keysHelp(app).set(o.keys(!!app.input.isTouch, run));
     // (the keys are said in full the first time one plays; after that they would only hide what comes, try after
     // try: the panel is shut again at once — its small button and the H key still show them)
@@ -140,6 +144,7 @@ export function plug(app, game, o) {
       app.fair.fov = run.camera(camera, dt);
       camera.updateMatrixWorld();
       hud.setRun(run.line);
+      tune?.tick();
       if (run.over && !saved) {
         saved = true;
         const score = Math.round(run.score || 0), best = read(), text = o.format ? o.format(score) : String(score);
