@@ -145,7 +145,13 @@ try {
   // (every board is on the page at once, a card each — those nobody is on when asked for; the line is on the card of its game)
   await office.check('#scores-empty');
   const line = await office.evaluate(() => ({ boards: document.querySelectorAll('#scores .board').length, row: document.querySelector('#scores .board[data-board="bell"] .line').textContent, others: document.querySelectorAll('#scores .board .line').length }));
+  await office.screenshot({ path: path.join(ROOT, 'tools/preview/admin-scores.png'), fullPage: true });
   await office.uncheck('#scores-empty');
+  // (the chat, read from the back office: its section opens and says what it holds)
+  await office.click('#tabs [data-tab="chat"]');
+  await office.waitForFunction(() => !!document.querySelector('#chatlog').children.length && /14 days/.test(document.getElementById('chat-keeps').textContent), null, { timeout: 20000 });
+  await office.screenshot({ path: path.join(ROOT, 'tools/preview/admin-chat.png'), fullPage: true });
+  await office.click('#tabs [data-tab="scores"]');
   await office.click('#scores .board[data-board="bell"] .line button');
   await office.waitForFunction(() => /Nobody on any board/.test(document.getElementById('scores').textContent), null, { timeout: 20000 });
   const struck = (await (await fetch(`${BASE}/api/scores?board=bell`)).json()).tops.all.length;
