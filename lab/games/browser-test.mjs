@@ -71,10 +71,10 @@ try {
       await new Promise((res) => { const t = a.frames + 12; const tick = () => (a.frames >= t ? res() : requestAnimationFrame(tick)); tick(); });
       const during = { driven: a.player.driver === g.run(), line: g.run()?.line || '', keys: [...document.querySelectorAll('button')].some((b) => /keys/.test(b.textContent) && b.style.display !== 'none') };
       g.leave(false);
-      return { during, run: !!g.run(), driver: !!a.player.driver, fov: a.fair.fov, told: window.__told[id] ?? null, x: a.player.pos.x, z: a.player.pos.z, keys: [...document.querySelectorAll('button')].some((b) => /keys/.test(b.textContent) && b.style.display !== 'none') };
+      return { during, run: !!g.run(), driver: !!a.player.driver, fov: a.fair.fov, up: a.engine.camera ? a.engine.camera.up.y : 1, told: window.__told[id] ?? null, x: a.player.pos.x, z: a.player.pos.z, keys: [...document.querySelectorAll('button')].some((b) => /keys/.test(b.textContent) && b.style.display !== 'none') };
     }, id);
     check(`${id}: while it is played the player is driven, the line of the run and the keys are shown`, left.during.driven && left.during.line.length > 3 && left.during.keys, left.during.line);
-    check(`${id}: left half-way it leaves nothing behind: the player free at the gate, the camera given back, no score told`, !left.run && !left.driver && left.fov === null && left.told === null && !left.keys && Math.hypot(left.x - built.gate.x, left.z - built.gate.z) < 1.5);
+    check(`${id}: left half-way it leaves nothing behind: the player free at the gate, the camera given back and upright, no score told`, !left.run && !left.driver && left.fov === null && left.up > 0.999 && left.told === null && !left.keys && Math.hypot(left.x - built.gate.x, left.z - built.gate.z) < 1.5, left.up > 0.999 ? '' : 'the camera is left on its side');
     // ---- played by its own bot to the end
     const again = await page.evaluate((id) => {
       const a = window.__mmf, g = a.labGames[id]; a.player.teleport(g.game.gate.x, g.game.gate.z, g.game.gate.yaw); g.start(); g.run().auto = true;

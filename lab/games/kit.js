@@ -88,7 +88,7 @@ export function plug(app, game, o) {
   const read = () => { try { return parseInt(localStorage.getItem(KEY), 10) || 0; } catch { return 0; } };
   game.setBest?.(read());
   const scores = boardOf(app, game, o);
-  let run = null, saved = false, told = false;
+  let run = null, saved = false, told = false, eye = null;
   const io = {
     play: (name, options) => app.audio?.play(name, options),
     note: (text, ms = 2600) => hud.note(text, ms),
@@ -102,6 +102,8 @@ export function plug(app, game, o) {
     hud.setRun(null);
     keysHelp(app).clear();
     s.drop(player, !!done);
+    // (a game may have turned the camera about its own axis — a view from straight above does —: it is given back upright)
+    if (eye) { eye.up.set(0, 1, 0); eye.updateMatrixWorld(); }
     if (!done) hud.note(o.left || 'Game left.', 2500);
     player.vel.set(0, 0, 0);
     app.rig.snap(player.pos, player.yaw + Math.PI);
@@ -131,6 +133,7 @@ export function plug(app, game, o) {
       game.update?.(dt, time, camera);
       if (!run) return;
       if (player.dead || player.driver !== run) { leave(false); return; }
+      eye = camera;
       app.fair.fov = run.camera(camera, dt);
       camera.updateMatrixWorld();
       hud.setRun(run.line);
