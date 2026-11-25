@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
-import { POND, waysOf, speedAt, driftAt, armAt, fireflyAt, support, startRun, stepRun, runPose, score, botInput, botRun } from '../src/world/zones/games/pond/ring.js';
+import { POND, waysOf, speedAt, driftAt, armAt, fireflyAt, support, startRun, stepRun, runPose, score, botInput, botRun, plainRun, fairStart, fairPeriod } from '../src/world/zones/games/pond/ring.js';
 import { course } from '../src/world/zones/games/boats/water.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -42,6 +42,22 @@ const whenArm = (stage, i, a, lead = 0) => { const arm = PS[stage].arms[i]; for 
   check('three circuits on the Great Pond, in its water, clear of one another and of the line of the regatta', PS.length === 3 && shallow > 0.3 && near > 2 && apart > 1, `water never less than ${shallow.toFixed(1)} m deep; ${near.toFixed(1)} m from the boats, ${apart.toFixed(1)} m from one another`);
   check('a line of stones leads from each pond to the next: a few strides of water', W[0].length > 3 && W[0].length < 12 && W[1].length > 3 && W[1].length < 14 && W[2].length === 0, `${W[0].length.toFixed(1)} m and ${W[1].length.toFixed(1)} m`);
   const bank = height(P.from[0], P.from[1]), e = runPose(startRun(0), {});
+  // ---- a fair moment to set off: the first pond can be run on plain jumps — one at a time, from the ground —
+  // from every moment its lamp is green, with room to spare on the tightest jump; the table that says which
+  // moments those are is the one the rules work out; one never waits long for green
+  {
+    const F = P.fair, period = fairPeriod();
+    let table = '', worst = Infinity;
+    for (let c = 0; c < period; c += F.every) { const r = plainRun(c); const fair = r.ok && r.tight >= F.spare - 1e-9; table += fair ? '1' : '0'; if (fair) worst = Math.min(worst, r.tight); }
+    const green = []; for (let c = 0; c < period; c += 0.05) green.push(fairStart(c));
+    const longestRed = Math.max(...green.map((g) => (g ? '1' : '0')).join('').repeat(2).split('1').map((q) => q.length)) * 0.05, share = green.filter(Boolean).length / green.length;
+    // (and from the green moments it is true: set off anywhere inside one, the plain runner gets through)
+    let through = 0, tried = 0; for (let c = 0.07; c < period; c += 0.31) if (fairStart(c)) { tried++; if (plainRun(c).ok) through++; }
+    check('the first pond can be run on plain jumps from every moment its lamp is green — the table of those moments is the one the rules work out — and green is never long in coming',
+      table === F.table && worst >= F.spare - 1e-9 && share > 0.3 && longestRed <= 2.5 && tried > 10 && through === tried,
+      `${Math.round(share * 100)} % of the time green, never more than ${longestRed.toFixed(1)} s of red, ${through}/${tried} starts on green get through, the tightest jump has ${worst.toFixed(2)} s of room${table === F.table ? '' : ` — TABLE: ${table}`}`);
+    check('a low beam is cleared by feet a third of a metre up — its top —, and what an arm catches of a runner is narrower than the runner', P.clear === 0.36 && P.body < 0.2 && P.edge >= 0.3);
+  }
   check('one starts on the first pond, on the stone nearest the bank one comes from', bank > P.level - 0.3 && Math.hypot(e.x - P.from[0], e.z - P.from[1]) < 4 && support(PS[0], 0, startRun(0).a, 0), `${Math.hypot(e.x - P.from[0], e.z - P.from[1]).toFixed(1)} m from the bank`);
 }
 {

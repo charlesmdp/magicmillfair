@@ -14,6 +14,7 @@ export const NEWS = [
       ['The chat is kept fourteen days', 'What is said in the chat is now kept two weeks for the administrators, to act on abuse — then deleted. The privacy page says exactly what.'],
       ['Red stars', 'On the map (M) the big attractions now wear a red star edged with gold; the slide is drawn red and white.'],
       ['Which room, at a glance', 'The settings list the rooms: yours first, the others with a button that takes you there.'],
+      ['The Endless Pond, at your moment', 'You set off when you like: a jump, while the lamp at the end of the jetty is green. The beams are kinder, too.'],
     ],
   },
   {

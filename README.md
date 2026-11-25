@@ -1186,7 +1186,14 @@ sponsor — for sale like the others from that moment, and not before (`LAB_BOAR
 from its gate; the one of the cleft stands on piles at the end of its planks) —, a star on the map, planks
 at the forks. These are courses: their scores are bounded in
 time, not played again by the referee. (*Between a Rock*: its walkway has a rope on both sides and its
-landing is closed all round — walls as thin as a rope, at the height of the planks: nobody falls off.) The files of the lab are the lab's: `src/extras/**`,
+landing is closed all round — walls as thin as a rope, at the height of the planks: nobody falls off.
+*The Endless Pond*: **one sets off when one likes** — the runner waits at the end of the jetty, and goes on
+a jump while the lamp beside it is green. It is green when setting off at that moment leaves a way through
+the first pond on plain jumps, with room to spare on the tightest: a table in the rules, `POND.fair` in
+`pond/ring.js`, which `npm run test:pond` works out again and compares — before, one start in three could
+not be run without the second jump. A low beam is lower, what an arm catches of a runner is narrower than
+the runner, and a foot may be further over the edge of a stone. The music of the climb plays on the ponds
+too, rising from pond to pond.) The files of the lab are the lab's: `src/extras/**`,
 `src/world/zones/games/{slide,pond,boats,hill,crack,hollow}/**`, `server/stats.js`, `public/opendata/**`,
 `public/opendate/**`, `lab/**` and its tests are not edited here.
 

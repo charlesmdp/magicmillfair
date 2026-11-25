@@ -13,13 +13,13 @@ import { LAYER } from '../../../../render/Shadows.js';
 import { ANIM } from '../../../../player/Character.js';
 import { canvasBoard } from '../Boards.js';
 import { formatTime } from '../course.js';
-import { POND, waysOf, startRun, stepRun, runPose, score, driftAt, armAt, fireflyAt, botInput } from './ring.js';
+import { POND, waysOf, startRun, stepRun, runPose, score, driftAt, armAt, fireflyAt, botInput, fairStart } from './ring.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const TAU = Math.PI * 2;
 const RED = [0.95, 0.1, 0.12], WHITE = [1.6, 1.6, 1.55], NAVY = [0.07, 0.07, 0.2], YELLOW = [1.6, 1.3, 0.12], GOLD = [1.5, 1.05, 0.2], CREAM = [1.3, 1.17, 0.9], TEAL = [0.12, 0.7, 0.78];
 const LAMP = [GOLD, [0.4, 1.3, 1.5], [1.5, 0.45, 1.2]]; // the lantern on the post of each pond
-const HEIGHTS = { low: [0.22, 0.48], high: [1.05, 1.32], wall: [0.12, 2.25] }; // from where to where an arm reaches, over what one runs on
+const HEIGHTS = { low: [0.14, 0.36], high: [1.05, 1.32], wall: [0.12, 2.25] }; // from where to where an arm reaches, over what one runs on
 const hash = (n) => { const s = Math.sin(n * 91.7 + 13.3) * 43758.5453; return s - Math.floor(s); };
 
 export class Pond {
@@ -95,6 +95,16 @@ export class Pond {
     const gx = b.x - ox * 0.3, gz = b.z - oz * 0.3, gy = Math.max(y0 + 0.3, this.data.heightAt(gx, gz));
     for (const sgn of [-1.0, 1.0]) for (let y = 0, k = 0; y < 2.8; y += 0.56, k++) paint.tint(...(k % 2 ? CREAM : TEAL), 1).cylinder(gx - oz * sgn, gy + y, gz + ox * sgn, 0.11, 0.11, 0.56, 8);
     this.gate = { x: gx + ox * 0.9, z: gz + oz * 0.9, y: this.data.heightAt(gx + ox * 0.9, gz + oz * 0.9), yaw: Math.atan2(-ox, -oz) }; // (one faces the ponds)
+    // ---- where one waits before setting off: the end of the jetty, a step from the first stone — and a lamp on a
+    // post beside it, green when the moment is a fair one (ring.js: fairStart), red when it is not
+    this.wait = { x: first.x + ox * (R + 1.45), z: first.z + oz * (R + 1.45), y: y0 + 0.3, yaw: Math.atan2(-ox, -oz) };
+    {
+      const lx = first.x + ox * (R + 1.2) - oz * 1.05, lz = first.z + oz * (R + 1.2) + ox * 1.05;
+      wet.tint(0.9, 0.9, 0.9, 1).cylinder(lx, y0 - 2.6, lz, 0.07, 0.06, 2.6 + 1.55, 6);
+      paint.tint(...NAVY, 1).cylinder(lx, y0 + 1.5, lz, 0.13, 0.13, 0.36, 8);
+      const lamp = (name, tone) => { const p = new Parts(); p.get('glow').tint(...tone, 1).lathe([[0, -0.15], [0.12, -0.1], [0.15, 0], [0.12, 0.1], [0, 0.15]], 8); const g = p.toMeshes(mats, { name, layers: [] }); g.position.set(lx, y0 + 1.68, lz); g.visible = false; this.group.add(g); return g; };
+      this.lamps = { go: lamp('pond-lamp-go', [0.25, 1.7, 0.4]), wait: lamp('pond-lamp-wait', [1.8, 0.22, 0.16]) };
+    }
     this.group.add(parts.toMeshes(mats, { name: 'pond-ring', layers: cast }));
     const sign = canvasBoard(512, 128, (ctx, w, h) => {
       ctx.fillStyle = '#12343b'; ctx.fillRect(0, 0, w, h);
@@ -134,6 +144,7 @@ export class Pond {
   /** Puts what moves where it is at `clock`; `caught`: the firefly this visitor has already caught on pond `stage` (not shown). */
   _place(clock, caught, stage) {
     const f = this._fly || (this._fly = {});
+    if (this.lamps) { const fair = fairStart(clock); this.lamps.go.visible = fair; this.lamps.wait.visible = !fair; }
     POND.ponds.forEach((pond, n) => {
       const pv = this.pivots[n];
       for (const r of pv.rafts) { r.g.rotation.y = -driftAt(r.ring, clock); r.g.position.y = Math.sin(clock * 1.3 + n) * 0.02; r.g.updateMatrixWorld(true); } // (about y an angle of the plan turns the other way)
@@ -155,7 +166,10 @@ export class Pond {
   open(player, io) {
     const P = POND, pose = {}, events = [], input = { jump: false, down: false, side: 0 };
     let st = startRun(this.clock());
-    const S = { count: 3.2, cam: null, look: V(0, 0, 0), fov: 62, was: { x: 0, y: 0 }, after: 0, shake: 0, acc: 0, yaw: null };
+    // (`count`: not gone yet — the runner waits on the jetty for as long as the player likes; `wait`: for how long
+    // they have; `lead`: the step from the jetty onto the first stone, once gone; `no`: the last jump asked on red)
+    const S = { count: 1, wait: 0, lead: 0, no: -9, cam: null, look: V(0, 0, 0), fov: 62, was: { x: 0, y: 0 }, after: 0, shake: 0, acc: 0, yaw: null };
+    const LEAD = 0.24;
     const _t = V(0, 0, 0);
     const session = {
       pond: this, over: false, ended: false, held: 0, stage: 0, time: 0, line: '', riding: false, anim: ANIM.idle, state: st, auto: false,
@@ -169,10 +183,12 @@ export class Pond {
         }
         S.was.x = mx; S.was.y = my;
         if (S.count > 0) {
-          const was = S.count;
-          S.count -= dt;
-          if (Math.ceil(S.count) !== Math.ceil(was) && S.count > 0 && S.count <= 3) io.play('tick');
-          if (S.count <= 0) { io.play('start'); st = session.state = startRun(this.clock()); }
+          // (the beam turns by the clock of the world: one picks one's moment — on a jump, while the lamp is green.
+          // Playing by itself, it goes at the first green.)
+          S.wait += dt;
+          const fair = fairStart(this.clock()), asked = S.wait > 0.4 && (session.auto ? fair : input.jump);
+          if (asked && fair) { S.count = 0; S.lead = LEAD; io.play('start'); st = session.state = startRun(this.clock()); }
+          else if (asked && S.wait - S.no > 0.6) { S.no = S.wait; io.play('fail', { volume: 0.35 }); io.note('Not yet — set off when the lamp is green.'); }
         } else if (session.auto) {
           // (playing by itself, it decides at every step of the run, as the checks do)
           S.acc += Math.min(dt, 0.25);
@@ -181,6 +197,13 @@ export class Pond {
         for (const e of events) this._tell(e, st, io, S);
         events.length = 0;
         runPose(st, pose);
+        if (S.count > 0) { pose.x = this.wait.x; pose.y = this.wait.y; pose.z = this.wait.z; pose.yaw = this.wait.yaw; }
+        else if (S.lead > 0) {
+          // (the step from the jetty onto the first stone: a small hop, while the legs find their pace)
+          S.lead = Math.max(0, S.lead - dt);
+          const k = S.lead / LEAD;
+          pose.x += (this.wait.x - pose.x) * k; pose.z += (this.wait.z - pose.z) * k; pose.y += (this.wait.y - pose.y) * k + 0.22 * Math.sin(Math.PI * (1 - k));
+        }
         const pond = P.ponds[st.stage];
         if (st.over) {
           // in the water: where they fell, then the game lets go
@@ -200,7 +223,7 @@ export class Pond {
         pl.speed = S.count > 0 || st.over ? 0 : st.v; pl.grounded = true;
         this._place(S.count > 0 ? this.clock() : st.t0 + st.clock, st.caught, st.stage);
         const left = P.fly.lily - (st.flies % P.fly.lily), lilies = `${st.lilies} lily pad${st.lilies === 1 ? '' : 's'}`;
-        session.line = S.count > 0 ? `${P.name} · ${Math.ceil(S.count) > 3 ? 'ready' : Math.ceil(S.count)}…`
+        session.line = S.count > 0 ? `${P.name} · ${fairStart(this.clock()) ? 'the lamp is green: jump to set off!' : 'wait for the green lamp…'}`
           : st.over ? `${P.name} · held ${formatTime(score(st))}${st.stage < 2 ? ` · pond ${st.stage + 1}` : ''}`
             : st.mode !== 'run' ? `On to ${P.ponds[st.stage + 1]?.name || 'the next pond'}…`
               : st.stage < 2 ? `Pond ${st.stage + 1} of 3 · ${Math.max(1, Math.ceil(pond.time - st.t))} s to the next · ${lilies}`

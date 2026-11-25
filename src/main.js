@@ -2012,6 +2012,9 @@ async function boot() {
         else { data.surfaceAt(p.x, p.z, sound.surf); const w = sound.surf; ear.surface = w[5] > 0.45 ? 'sand' : w[4] + w[6] > 0.5 ? 'stone' : 'grass'; }
       }
       ear.climb = run.state === 'running' ? Math.min(1, Math.max(0, (p.y - CLIMB.y) / CLIMB.height)) : null;
+      // (the music of the climb is that of the Endless Pond too: it rises from pond to pond, then with the time held)
+      const ponding = ear.climb === null ? app.pondRun?.() : null;
+      if (ponding && !ponding.over && ponding.state?.clock > 0 && ponding.state.mode) ear.climb = Math.min(1, 0.16 + ponding.state.stage * 0.3 + Math.min(0.24, ponding.state.t / 90));
       ear.game = fair.session ? fair.kind : null;
       // leaving the ground, coming back to it, lighting the jetpack
       if (mode === 'walk' && !player.dead && !player.seat) {
