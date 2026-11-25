@@ -6,6 +6,8 @@ export const NEWS = [
   {
     date: '25 November 2026',
     items: [
+      ['Five new paint jobs', 'Galaxy, Meltdown, Plasma, Mirror ball and Hazard stripes are in the item shop (O). The trails have left the shelves: whoever bought one keeps it.'],
+      ['A kinder chat', 'Slurs, strong insults, threats and addresses of sites now come out as ********. Swearing at the boulder is still allowed.'],
       ['Lie down', 'Hold X and your robot lies down, wherever it stands. On the beach the towels are for that: step up to one.'],
       ['The Endless Pond, easier to start', 'No more flowers in the way at its gate — and a step aside sets off as well as a jump, when the lamp is green.'],
       ['The boulder is in a hurry', 'On the island it now rolls down faster, and comes more often. Mind the hollows.'],

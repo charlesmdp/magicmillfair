@@ -29,6 +29,7 @@
 // same `pass` and `first` in its own record, `own:<device>` (see shop.js).
 import { randomId, sameSecret } from './token.js';
 import { cleanName } from './protocol.js';
+import { nameOk } from './decency.js';
 import { COLORS, sizeOf } from './items.js';
 import { cleanEmail, maskEmail, codeMail, mailLater, welcomeMail } from './mail.js';
 
@@ -53,7 +54,7 @@ export const isSecret = async (secret, kept) => !!kept && typeof secret === 'str
 /** A name for an account: 3 to 16 letters, digits, spaces, dashes or underscores; '' when it is not one. */
 export function accountName(text) {
   const s = typeof text === 'string' ? text.normalize('NFKC').replace(/\s+/g, ' ').trim() : '';
-  return /^[\p{L}\p{N}][\p{L}\p{N} _-]{1,14}[\p{L}\p{N}]$/u.test(s) ? s : '';
+  return /^[\p{L}\p{N}][\p{L}\p{N} _-]{1,14}[\p{L}\p{N}]$/u.test(s) && nameOk(s) ? s : '';
 }
 const keyOf = (name) => `acct:${name.toLowerCase()}`;
 /** Is that the name of an account (whatever its capitals)? */
@@ -225,7 +226,7 @@ export async function accountRoute(req, ctx, limited) {
     return said;
   }
   const name = accountName(body.name);
-  if (!name) return out(400, { error: 'A name is 3 to 16 letters or digits.' });
+  if (!name) return out(400, { error: typeof body.name === 'string' && !nameOk(body.name) ? 'That name cannot be worn here: pick another.' : 'A name is 3 to 16 letters or digits.' });
   const found = await store.get(keyOf(name));
 
   if (action === 'create') {

@@ -4,17 +4,17 @@
 // when — and whether it came from somebody kept out in silence, whom nobody else read. Nothing else: no
 // address, no browser, no account. What is said to a character (Billy) is not chat and never comes here.
 //
-//   GET    /api/chatlog?before=<n>&limit=<1…300>   an administrator → { lines: [{ n, t, room, name, text, to, muted }]
+//   GET    /api/chatlog?before=<n>&limit=<1…300>   an administrator → { lines: [{ n, t, room, name, text, to, muted, filtered }]
 //                                                  (the newest first), more: are there older ones, keeps: { lines, days } }
 //   DELETE /api/chatlog                            the owner → { ok } : everything kept is forgotten at once
 //
 // Kept: `chat` → { head, tail, n, ends: { <page>: when its last line was said } } and `chat:<page>` → the lines
-// of that page, [[n, t, room, name, text, flags], …] (flags: 1 nearby, 2 important, 4 muted). A page holds
+// of that page, [[n, t, room, name, text, flags], …] (flags: 1 nearby, 2 important, 4 muted, 8 the others read it with words hidden). A page holds
 // CHAT_KEEP.page lines; the oldest pages go when more than CHAT_KEEP.lines are kept, or when their last line is
 // older than CHAT_KEEP.days. The privacy page says so (src/app/legal.js): change both together.
 export const CHAT_KEEP = { lines: 5000, days: 14, page: 200 };
 
-const KEY = 'chat', DAY = 86_400_000, NEAR = 1, LOUD = 2, MUTED = 4;
+const KEY = 'chat', DAY = 86_400_000, NEAR = 1, LOUD = 2, MUTED = 4, HID = 8;
 const out = (status, body, headers = {}) => ({ status, body, headers });
 const pageKey = (p) => `${KEY}:${p}`;
 const text = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
@@ -33,7 +33,7 @@ async function append(ctx, room, lines) {
     if (!said) continue;
     if (page.length >= CHAT_KEEP.page) { await store.put(pageKey(meta.head), page); meta.head++; page = []; }
     const t = Number.isFinite(l.t) ? l.t : now;
-    page.push([++meta.n, t, text(room, 64), name, said, (l.near ? NEAR : 0) | (l.important ? LOUD : 0) | (l.muted ? MUTED : 0)]);
+    page.push([++meta.n, t, text(room, 64), name, said, (l.near ? NEAR : 0) | (l.important ? LOUD : 0) | (l.muted ? MUTED : 0) | (l.hid ? HID : 0)]);
     meta.ends[meta.head] = t;
   }
   await store.put(pageKey(meta.head), page);
@@ -84,7 +84,7 @@ export async function chatLogRoute(req, ctx, owner) {
       const [n, t, room, name, said, flags] = page[i];
       if (n >= before || t < oldest) continue;
       if (lines.length >= limit) { more = true; break; }
-      lines.push({ n, t, room, name, text: said, to: flags & LOUD ? 'important' : flags & NEAR ? 'nearby' : 'everyone', ...(flags & MUTED && { muted: true }) });
+      lines.push({ n, t, room, name, text: said, to: flags & LOUD ? 'important' : flags & NEAR ? 'nearby' : 'everyone', ...(flags & MUTED && { muted: true }), ...(flags & HID && { filtered: true }) });
     }
   }
   return out(200, { lines, more, keeps: { lines: CHAT_KEEP.lines, days: CHAT_KEEP.days } });

@@ -77,6 +77,7 @@
 // off on their own screen, and what they steer in a game (a boat) is shown to nobody.
 
 import { fitColor, fitKit, fitLook, mayLight, cleanWardrobe, FIREWORK } from './wardrobe.js';
+import { maskChat, nameOk } from './decency.js';
 
 export const MAX_FRAME = 2048; // bytes
 export const RATE = 40, BURST = RATE * 2; // messages per second, averaged over 2 s (token bucket)
@@ -99,10 +100,18 @@ export const int = (v, max) => (Number.isInteger(v) && v >= 0 && v <= max ? v : 
 /** Room id: [a-z0-9_-]{1,48}, 'main' when nothing usable is left. */
 export const cleanRoom = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 48) || 'main';
 
-/** Display name: no control characters or angle brackets, single spaces, at most 16 characters. */
-export function cleanName(name) {
+/** A name brought to its shape: no control characters or angle brackets, single spaces, at most 16 characters. */
+export function shapeName(name) {
   const s = typeof name === 'string' ? name.replace(/\s+/g, ' ').replace(/[\p{C}<>]/gu, '').replace(/ {2,}/g, ' ').trim() : '';
   return [...s].slice(0, 16).join('').trim() || 'Visitor';
+}
+/**
+ * Display name: in shape (see above) — and one that may be worn: no insult, no address of a site, no @
+ * (decency.js). What may not be is 'Visitor'.
+ */
+export function cleanName(name) {
+  const s = shapeName(name);
+  return nameOk(s) ? s : 'Visitor';
 }
 
 /** Chat line: one line, no control characters, single spaces, at most CHAT_MAX characters ('' when nothing is left). */
@@ -356,11 +365,13 @@ export class Room {
     p.chat = Math.min(CHAT_BURST, p.chat + (t - p.chatAt) / CHAT_EVERY);
     p.chatAt = t;
     if (p.chat < 1) return;
-    const text = cleanChat(m.m);
-    if (!text) return;
+    const said = cleanChat(m.m);
+    if (!said) return;
+    // (addresses of sites, slurs, strong insults, threats: ******** for everybody who reads it — decency.js)
+    const text = maskChat(said);
     p.chat -= 1;
-    // (the host is told what was said, for the administrators to read — chatlog.js; the relay itself keeps nothing)
-    this.io.said?.({ name: p.name, text, near: !!m.n && !(m.i && p.admin), important: !!(m.i && p.admin), muted: !!p.mute });
+    // (the host is told what was said — as it was typed —, for the administrators to read: chatlog.js; the relay itself keeps nothing)
+    this.io.said?.({ name: p.name, text: said, ...(text !== said && { hid: true }), near: !!m.n && !(m.i && p.admin), important: !!(m.i && p.admin), muted: !!p.mute });
     if (p.mute) return; // (kept out in silence: nobody hears)
     if (m.i && p.admin) this.broadcast(JSON.stringify({ t: 'c', id: p.id, m: text, i: 1 }), p); // (the "important" channel: an administrator's)
     else if (m.n) this.around(p, CHAT_NEAR, JSON.stringify({ t: 'c', id: p.id, m: text, n: 1 }));
@@ -463,7 +474,15 @@ export class Room {
   }
 
   _hello(p, m, asked = false) {
-    const name = cleanName(m.name), badge = m.ad === 1;
+    let name = cleanName(m.name);
+    const badge = m.ad === 1;
+    // (a name that may not be worn — an insult, the address of a site, an @: they keep the one they had, or
+    // are given a visitor's, and are told so)
+    if (name === 'Visitor' && shapeName(m.name) !== 'Visitor') {
+      name = p.joined ? p.name : `Visitor ${10 + (p.id % 90)}`;
+      this.io.send(p.conn, JSON.stringify({ t: 'name', rude: 1, name }));
+      m = { ...m, name };
+    }
     if (!p.dev) p.dev = cleanDevice(m.dev);
     // (the name of an account is its owner's alone: the host is asked, once for each name a visitor takes.
     // Meanwhile they are who they were; one who may not have that name is told, and keeps the one they had —

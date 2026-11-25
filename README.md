@@ -207,7 +207,15 @@ and how to talk to the whole oasis. The relay keeps nothing — a line is relaye
 at most, five in a row then one every two seconds), and nobody is shown what was said before they came —, but
 **the host notes each line for the administrators**: who said it, in which room, to whom, when; the last
 5,000 lines, fourteen days at the most (`server/chatlog.js`, read on the page `/admin`, *Chat*; the privacy
-page says so, and what is said to Billy is not chat: it is not there). A page left in the background still receives what
+page says so, and what is said to Billy is not chat: it is not there). **What may not be said is hidden**
+(`server/decency.js`, the same rules on both sides — the relay's are the ones that count): the address of a
+site, a slur, a strong insult thrown at somebody, a threat, a call to hurt oneself, a slogan of hate are
+replaced by `********` for everybody who reads the line (the administrators' log keeps it as it was typed,
+and says the others read it hidden); plain swearing is left alone. A **name** holds no `@`, no address, no
+"http", none of those words and no swear word either: one that may not be worn is refused (its bearer is
+told, and stays who they were — or a visitor), on the boards and for an account too. The words are not
+written in the code, only their fingerprints: `node tools/decency.mjs` prints those of words given to it.
+A page left in the background still receives what
 is said while it stays connected: the title of the tab counts the lines, and a mark in the log — *while you
 were away* — shows where the reading had stopped (the log holds the last 200 lines; a phone that went to
 sleep was disconnected, and what was said meanwhile is gone). What the game keeps is on your own device: your name,
@@ -1367,7 +1375,7 @@ notebook, with the rest. No new Durable Object class: such a room is a room like
 |---|---|
 | `npm run bake` | bakes the world, the statue and the textures again |
 | `npm run bake:statue` | sculpts the golden dog and its companions again (`-- --preview=dog.png` also draws them from six sides, `-- --cell=0.012` makes a finer mesh) |
-| `npm test` | 250 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password), the rooms that players make (bought, entered with a ticket, their own boards, asleep when unpaid, freed) |
+| `npm test` | 252 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password), the rooms that players make (bought, entered with a ticket, their own boards, asleep when unpaid, freed) |
 | `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (188 in all) |
 | `npm run test:update` | a delivery from end to end, in the real game: two builds, a visitor in the world, the owner at the back office (`/admin`: the switches, a word to every room, a line refused, somebody kept out, the figures, two games of the lab thrown on — fetched and built as the game runs, each played by its own bot, its time on its board; each with its stand, its panel for a sponsor, its star on the map and its planks at the forks —, the sky villages stage by stage), every page asked to refresh but never in the middle of a sentence, then the server replaced by the next version — the page says so, refreshes, comes back at the same spot and says what is new; and a plain build leaves nothing of the game on the page (14 checks) |
 | `node tools/extras-test.mjs`, `node tools/slide-test.mjs`, `node tools/pond-test.mjs`, `node tools/boats-test.mjs`, `node tools/hill-test.mjs`, `node tools/crack-test.mjs`, `node tools/hollow-test.mjs`, `node tools/games-test.mjs` | the lab's own checks of its extras and of each of its games — the last one plays them in the running game, in a browser (see `lab/INTEGRATION.md`) |

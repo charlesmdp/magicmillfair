@@ -347,6 +347,7 @@
       row.append(el('span', 'at', clock(l.t)), el('span', 'room', roomName(l.room)), el('b', 'who', l.name), el('span', 'what', l.text));
       if (l.to !== 'everyone') row.append(el('span', `tag ${l.to}`, l.to));
       if (l.muted) row.append(el('span', 'tag', 'kept out in silence'));
+      if (l.filtered) row.append(el('span', 'tag', 'the others read ********'));
       box.append(row);
     }
   }

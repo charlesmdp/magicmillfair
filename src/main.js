@@ -8,6 +8,7 @@ import { FreeCamera } from './player/FreeCamera.js';
 import { CharacterFactory, EMOTE_LIST, AVATAR_COLORS, emoteIndex, packLook } from './player/Character.js';
 import { HATS } from './player/Cosmetics.js';
 import { ITEMS, PAINTS, TRAILS, itemOf, packKit, PASS, SIZES, SIZE, SIZE_SCALE, sizeOf, FREE_COLORS } from '../server/items.js';
+import { nameOk } from '../server/decency.js';
 import { BOARDS as GAME_NAMES } from '../server/catalog.js';
 import { rankSponsors, dollars } from './app/thanks.js';
 import { oasisPicture, OASIS_ROBOT } from './ui/OasisPicture.js';
@@ -138,6 +139,7 @@ async function boot() {
   const returning = !!(store.get('mmf.name') || '').trim() && !params.has('welcome')
     && (!(import.meta.env.DEV || typeof __LAB__ !== 'undefined' || typeof __TEST__ !== 'undefined') || params.has('back'));
   let name = (store.get('mmf.name') || '').trim() || `Visitor ${10 + Math.floor(Math.random() * 90)}`;
+  if (!nameOk(name)) name = `Visitor ${10 + Math.floor(Math.random() * 90)}`; // (a name that may no longer be worn: server/decency.js)
   const me = factory.create(color);
   scene.add(me.root);
   const player = new PlayerController(me, world.collision, data, input);
@@ -317,7 +319,7 @@ async function boot() {
     // (the name of an account is its owner's alone: asked for by somebody else, the relay says which name is worn instead)
     presence.on('named', (e) => {
       name = e.name; store.set('mmf.name', name); hud.setName(name); world.games.setMe(account.name || name);
-      const line = `"${e.taken}" is the name of somebody's account — theirs alone. Sign in if it is yours (Settings); until then you are ${e.name}.`;
+      const line = e.rude ? `That name cannot be worn here (no insult, no address of a site, no @): you are ${e.name}.` : `"${e.taken}" is the name of somebody's account — theirs alone. Sign in if it is yours (Settings); until then you are ${e.name}.`;
       hud.note(line, 10000);
       hud.addChat('✦', 5, line, true);
     });
@@ -1836,7 +1838,7 @@ async function boot() {
     .on('sit', () => sitDown())
     .on('lie', () => sitDown(true))
     .on('gift', (to) => giftTo(to))
-    .on('name', (n) => { if (!n) return; name = n; presence?.setIdentity(name, color); store.set('mmf.name', name); world.games.setMe(account.name || name); keepProfile(); })
+    .on('name', (n) => { if (!n) return; if (!nameOk(n)) { hud.note('That name cannot be worn here (no insult, no address of a site, no @): pick another.', 6000); hud.setName(name); return; } name = n; presence?.setIdentity(name, color); store.set('mmf.name', name); world.games.setMe(account.name || name); keepProfile(); })
     .on('quality', (q) => {
       // a tier changes shaders, textures and shadow maps: simplest and safest is a clean restart at the same spot
       if (q === 'auto') store.del('mmf.quality'); else store.set('mmf.quality', q);

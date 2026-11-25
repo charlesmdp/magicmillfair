@@ -1434,6 +1434,38 @@ async function testChatLog({ port }) {
     [got?.lines?.slice(0, 2), nobody.status, page, older?.lines?.[0], wiped.status, after]);
 }
 
+// ------------------------------------------------------------- what may not be said, nor worn as a name (decency.js)
+async function testDecency({ port }) {
+  const { maskChat, nameOk } = await import('../server/decency.js');
+  const json = (res) => { try { return JSON.parse(res.body.toString()); } catch { return null; } };
+  // (the rules themselves, on examples mild enough to be written here — the list is fingerprints only)
+  const says = [['fuck, that was close', 0], ['putain de merde', 0], ['wtf damn shit bordel', 0], ['fuck you', 1], ['Go FUCK yourself!', 1], ['shut the fuck up', 1], ['quel connard', 1], ['bande de c0nnards', 1], ['coooonnard', 1], ['kys', 1], ['ferme ta gueule', 1],
+    ['see www.example.com now', 1], ['http://example.org/x', 1], ['cheap gold at example.com/buy', 1], ['join discord.gg/abcd', 1], ['so.fun, this game', 0], ['I was late. Top score though', 0], ['dispute, computer, salopette, en retard', 0], ['3.5 km/h', 0]];
+  const wrong = says.filter(([line, hides]) => (maskChat(line) !== line) !== !!hides).map(([line]) => line);
+  const names = [['Ada', 1], ['Visitor 42', 1], ['Computer', 1], ['Dr. No', 1], ['R2-D2', 1], ['L\u00e9a', 1], ['bob@home', 0], ['www.example', 0], ['example.com', 0], ['Https', 0], ['Fuck', 0], ['M e r d e', 0], ['xXconnardXx', 0], ['Sh1t', 0]];
+  const wrongNames = names.filter(([n, ok]) => nameOk(n) !== !!ok).map(([n]) => n);
+  check('decency: plain swearing passes in the chat; a strong insult, a threat, a slur — in the plural, spelt with digits, its letters stretched — and the address of a site are hidden; a name holds no @, no address, no insult, no swear word; ordinary words and names are left alone',
+    wrong.length === 0 && wrongNames.length === 0 && maskChat('quel connard, va voir example.com') === 'quel ********, va voir ********', [wrong, wrongNames]);
+  // through the relay: the others read the line with its words hidden — the administrators' log keeps it as it was typed;
+  // a name that may not be worn is not: its bearer is told, and is a visitor; an account cannot be called that either
+  const a = new Client(port, 'polite'), b = new Client(port, 'polite');
+  await a.hello('Ada Polite', 1);
+  await b.hello('Bob Polite', 2);
+  a.send({ t: 'c', m: 'gg — fuck you, see example.com' });
+  const heard = await b.wait((m) => m.t === 'c');
+  const c = new Client(port, 'polite');
+  await c.hello('xXconnardXx', 3);
+  const told = await c.wait((m) => m.t === 'name');
+  const joined = await b.wait((m) => m.t === 'join' && m.id === c.id);
+  let line = null;
+  for (let i = 0; i < 40 && !line; i++) { const r = json(await request(port, '/api/chatlog', { headers: { authorization: `Bearer ${ADMIN_KEY}` } })); line = r?.lines?.find((l) => /see example/.test(l.text)) || null; if (!line) await sleep(250); }
+  const made = await request(port, '/api/account', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'create', device: randomId(16), name: 'Connard 12', password: 'a good password' }), from: '127.0.0.79' });
+  for (const x of [a, b, c]) x.ws.close();
+  check('decency, through the relay: the others read a line with its insult and its address hidden, the log of the administrators keeps it as typed and says so; a name that may not be worn is refused — its bearer is told and is a visitor; no account is called that',
+    heard?.m === 'gg — ********, see ********' && told?.rude === 1 && /^Visitor \d+$/.test(told.name) && joined?.name === told.name && line?.text === 'gg — fuck you, see example.com' && line.filtered === true
+    && made.status === 400 && /cannot be worn/.test(json(made)?.error || ''), [heard, told, joined?.name, line, made.status, json(made)]);
+}
+
 // ------------------------------------------------------------- a thing one steers in a game (a boat): {t:'v'}
 async function testThings({ port }) {
   const a = new Client(port, 'pondside'), b = new Client(port, 'pondside'), far = new Client(port, 'pondside');
@@ -2558,6 +2590,7 @@ try {
     await section('shop', () => testShop(server));
     await section('accounts', () => testAccounts(server));
     await section('chatlog', () => testChatLog(server));
+    await section('decency', () => testDecency(server));
     await section('things', () => testThings(server));
     await section('cloudflare', () => testCloudflare(server, fx));
     await section('crowd', () => testCrowd(startWorker, fx.dist));
@@ -2583,6 +2616,7 @@ try {
     await section('shop', () => testShop(server));
     await section('accounts', () => testAccounts(server));
     await section('chatlog', () => testChatLog(server));
+    await section('decency', () => testDecency(server));
     await section('things', () => testThings(server));
     await section('crowd', () => testCrowd(startServer, fx.dist));
     await section('moderation', () => testModeration(startServer, fx.dist));
