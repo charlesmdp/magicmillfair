@@ -2,8 +2,15 @@
 // all read this.
 //
 // A tower stands in the sea, and a track of planks winds up round it like a giant spiral stair: six turns from
-// the foot to a bell. The legs run by themselves, faster as one climbs; one steers across the track (a rail on
-// each side: nobody falls off it), jumps — and again in the air, higher and further —, slides, dives back down.
+// the foot to a bell. One runs up it as the stick asks: pushed up, the legs run — a little faster as one climbs
+// —; let go, they stop within a quarter of a second; and nobody runs back down. One steers across the track (a
+// rail on each side: nobody falls off it), jumps — and again in the air, higher and further —, slides, dives
+// back down, ducks when standing. So one may stop before what moves, read it, and go: the clock is what that
+// costs — it starts with the first step of an attempt, not before: thinking at the foot is free.
+// A jump is as long as the run before it: in the air one keeps the speed one left the planks with, and the
+// stick adds only a little. From a standstill one jump crosses no hole and clears no hurdle: a step or two of
+// run-up does, and so does the second jump. A slide wants a run as well; who stands before a hung board ducks,
+// then goes — getting up takes a moment, and that moment takes one under it.
 // What is in the way never changes place: it is the same for everybody, and learnt run after run. Each turn
 // has its theme, and each is worse than the last:
 //   Mind the Gap          holes in the track, and hurdles: jumped
@@ -12,11 +19,12 @@
 //   Step Up               crates: one jumps onto the first, then again onto the higher one, and off
 //   Clockwork             what moves, by the clock of the world: mills (one arm low, one high), stompers
 //                         (two blocks side by side, never down together), hammers that swing across
-//   Roll Out the Barrel   barrels dropped from the gallery above roll down the track: jumped, or let by
-//   The Works             all of it at speed, and three narrow planks to the bell
-// One touch — or a hole — and the attempt is over: one is back at the foot within a second and the clock starts
-// again. The time that counts is the time of the attempt that reaches the bell. The inside of the track is the
-// shorter way round: who hugs the tower gains on who runs along the rail.
+//   Roll Out the Barrel   barrels dropped from the gallery above roll down the track: jumped, or let by — they
+//                         come at who stands still as well
+//   The Works             all of it, and three narrow planks to the bell
+// One touch — or a hole — and the attempt is over: one is back at the foot within a second, and the clock waits
+// there for the first step. The time that counts is the time of the attempt that reaches the bell. The inside
+// of the track is the shorter way round: who hugs the tower gains on who runs along the rail.
 //
 // Places on the track: `s` metres up it from the foot, measured along its middle, `u` metres across it from its
 // middle (to the right of who runs — the tower is on the left — when positive), `h` metres over its planks.
@@ -39,7 +47,11 @@ export const SPIRAL = {
   from: Math.PI, // where the foot is, about the tower (radians; 0 is east, π/2 south): west, facing the beach
   names: ['Mind the Gap', 'Duck!', 'Step Up', 'Clockwork', 'Roll Out the Barrel', 'The Works'],
   step: 1 / 120,
-  speed: [6, 7.6], // m/s along the middle of the track: at the foot, at the bell
+  speed: [6, 7.6], // m/s along the middle of the track, the stick full up: at the foot, at the bell
+  start: 0.3, stop: 0.25, // s from standing to that speed; and from it to standing, the stick let go
+  push: 5.5, // m/s²: all the stick adds in the air — there one keeps the speed one left the planks with
+  keep: 0.2, slow: 2, // s the speed one ran at is still that of a slide (the stick goes through its middle on its way down); m/s under which stick down is a duck, not a slide
+  stay: 0.6, // s one stays low after a duck: getting up takes a moment — time to go under what one ducked for
   side: 4.6, accel: 40, reach: 1.3, // across: m/s, m/s², and how far from the middle the rails let one go
   g: 22, jump: 7, again: 6.4, dive: -11, // m/s²; m/s up on a jump, on a second one in the air; down on a dive
   slide: 0.55, hold: 0.95, rest: 0.15, // s a slide lasts; at most, while the stick is held; and before the next
@@ -47,14 +59,14 @@ export const SPIRAL = {
   tall: 1.25, low: 0.6, along: 0.26, across: 0.2, // a runner: standing, sliding; half its length, half its width
   edge: 0.18, lip: 0.22, drop: 1, // m: how far over an edge a foot may be; the step one still gets up; how deep a hole takes one
   bar: { t: 0.15, low: 0.55, high: 0.85, hung: 1.45, top: 2.5 }, // what stands across: half its thickness; the top of a hurdle; the foot of a hung board, and its top; the top of a fence
-  ready: 6, fall: 0.5, back: 0.3, // s before the first attempt (time to read the keys; three, two, one); between the end of one and the foot; there before one runs again
+  fall: 0.5, back: 0.3, // s between the end of an attempt and the foot; there before the legs answer again
   cam: { back: 7.4, out: 3.9, up: 5.8, ahead: 2.8 }, // the camera: so far behind (m of arc), outside the middle of the track (beyond its rail), above; looking so far ahead
 };
 const S = SPIRAL;
 /** Metres of track a turn, along its middle; and from the foot to the bell. */
 export const TURN = TAU * S.r, LENGTH = S.turns * TURN;
 
-/** How fast the legs run at metre `s` (m/s, along the middle of the track). */
+/** How fast the legs run at metre `s`, the stick full up (m/s, along the middle of the track). */
 export const speedAt = (s) => lerp(S.speed[0], S.speed[1], clamp(s / LENGTH, 0, 1));
 /** How high the planks are at metre `s` (over the sea). */
 export const trackY = (s) => S.foot + (S.rise * s) / TURN;
@@ -69,8 +81,14 @@ export function spiralAt(s, u = 0, out = {}) {
  * line of sight that grazes the wall. (The camera rides `cam.back` behind and `cam.out` outside the middle.)
  */
 export function sightAhead(u = 0) { const cr = S.r + S.cam.out; return S.r * (-S.cam.back / cr + Math.acos(S.core / cr) + Math.acos(S.core / (S.r + u))); }
-/** The time nobody can beat (ms): the whole track along the inner rail, nothing in the way. */
+/** The time nobody can beat (ms): the whole track along the inner rail, the stick full up, nothing in the way. */
 export function fastest() { let t = 0; for (let s = 0; s < LENGTH; s += 0.05) t += 0.05 / (speedAt(s) * (S.r / (S.r - S.reach))); return Math.round(t * 1000); }
+/**
+ * Its line for the boards of scores: the time of the attempt that rings the bell (ms), the lower the better.
+ * No finish is faster than `min`; who stops and waits takes as long as it takes — a quarter of an hour at most
+ * is counted.
+ */
+export const BOARD = { order: 'asc', min: Math.floor(fastest() / 1000) * 1000, max: 900_000 };
 
 // ---------------------------------------------------------------------------
 // The course: what stands in the way, turn after turn. Every thing has { kind, s0, s1 } (where it begins and
@@ -202,23 +220,24 @@ export function floorAt(s, u) {
 }
 
 /**
- * A runner at the foot of the track, about to go: see stepRun. `t0`: the clock of the world then (s) — what moves
- * on the track moves by it.
+ * A runner at the foot of the track, standing: see stepRun. `t0`: the clock of the world then (s) — what moves
+ * on the track moves by it. The clock of the attempt (`clock`) waits for the first step (`going`).
  */
 export function startRun(t0 = 0) {
   return {
-    s: 0, u: 0, vu: 0, h: 0, vh: 0, air: false, jumps: 0, coyote: 0, slide: -1, slid: 0, v: S.speed[0], turn: 0,
-    clock: 0, total: 0, t0, n: 0, acc: 0, attempt: 1, outs: 0, best: 0, down: 0, why: '', wait: S.ready,
+    s: 0, u: 0, vu: 0, h: 0, vh: 0, air: false, jumps: 0, coyote: 0, slide: -1, slid: 0, duck: 0, v: 0, pace: 0, since: 9, turn: 0,
+    going: false, clock: 0, total: 0, t0, n: 0, acc: 0, attempt: 1, outs: 0, best: 0, down: 0, why: '', wait: 0,
     over: false, time: 0, want: { jump: 0, down: 0 },
   };
 }
 
 /**
- * Advances a run by `dt` seconds. `input`: { side (-1 towards the tower … 1 towards the rail), jump, down (true
- * on the frame they are asked), crouch (the stick is held down) }. `events`, when given, is filled with what
- * happened: { type: 'go' (attempt) | 'jump' | 'again' (the second jump) | 'dive' | 'land' | 'slide' | 'turn' (n)
- * | 'out' (why: 'hole' | 'low' | 'high' | 'fence' | 'crate' | 'mill' | 'stomp' | 'hammer' | 'barrel'; s, attempt)
- * | 'foot' (back at the foot: attempt) | 'top' (time, attempt) }.
+ * Advances a run by `dt` seconds. `input`: { side (-1 towards the tower … 1 towards the rail), run (0 … 1: how
+ * far the stick is pushed up — the legs go as fast as that, and stop when it is let go), jump, down (true on
+ * the frame they are asked), crouch (the stick is held down) }. `events`, when given, is filled with what
+ * happened: { type: 'go' (the first step of an attempt: its clock starts) | 'jump' | 'again' (the second jump)
+ * | 'dive' | 'land' | 'slide' | 'turn' (n) | 'out' (why: 'hole' | 'low' | 'high' | 'fence' | 'crate' | 'mill' |
+ * 'stomp' | 'hammer' | 'barrel'; s, attempt) | 'foot' (back at the foot: attempt) | 'top' (time, attempt) }.
  */
 export function stepRun(st, dt, input, events) {
   if (input?.jump) st.want.jump = S.buffer; // (asked a moment too early, it still goes off on landing)
@@ -232,35 +251,56 @@ function sub(st, dt, input, events) {
   st.n++; st.total += dt;
   const now = st.t0 + st.total;
   if (st.down > 0) {
-    // ---- the attempt is over: a moment — down the hole, or on one's back — then at the foot again
+    // ---- the attempt is over: a moment — down the hole, or on one's back — then at the foot again, standing
     st.down -= dt;
     if (st.why === 'hole') { st.vh -= S.g * dt; st.h += st.vh * dt; }
     if (st.down <= 0) {
-      Object.assign(st, { s: 0, u: 0, vu: 0, h: 0, vh: 0, air: false, jumps: 0, coyote: 0, slide: -1, slid: 0, clock: 0, turn: 0, wait: S.back, attempt: st.attempt + 1, v: S.speed[0] });
+      Object.assign(st, { s: 0, u: 0, vu: 0, h: 0, vh: 0, air: false, jumps: 0, coyote: 0, slide: -1, slid: 0, duck: 0, v: 0, pace: 0, since: 9, going: false, clock: 0, turn: 0, wait: S.back, attempt: st.attempt + 1 });
       st.want.jump = st.want.down = 0;
       events?.push({ type: 'foot', attempt: st.attempt });
     }
     return;
   }
-  if (st.wait > 0) { st.wait -= dt; st.want.jump = st.want.down = 0; if (st.wait <= 0) events?.push({ type: 'go', attempt: st.attempt }); return; }
-  st.clock += dt;
+  if (st.wait > 0) { st.wait -= dt; st.want.jump = st.want.down = 0; return; }
+  const run = clamp(input?.run || 0, 0, 1), crouch = !!input?.crouch, full = speedAt(st.s);
   // ---- what is asked: up, down
   if (st.want.jump > 0) {
     st.want.jump -= dt;
-    if (!st.air || st.coyote > 0) { st.vh = S.jump; st.air = true; st.jumps = 1; st.coyote = 0; st.want.jump = 0; if (st.slide > 0) st.slide = 0; events?.push({ type: 'jump' }); }
+    if (!st.air || st.coyote > 0) { st.vh = S.jump; st.air = true; st.jumps = 1; st.coyote = 0; st.want.jump = 0; st.duck = 0; if (st.slide > 0) st.slide = 0; events?.push({ type: 'jump' }); }
     else if (st.jumps < 2) { st.vh = Math.max(st.vh, S.again); st.jumps = 2; st.want.jump = 0; events?.push({ type: 'again' }); }
   }
   if (st.want.down > 0) {
     st.want.down -= dt;
-    if (!st.air) { if (st.slide <= -S.rest) { st.slide = S.slide; st.slid = 0; st.want.down = 0; events?.push({ type: 'slide' }); } }
-    else if (st.vh > S.dive) { st.vh = S.dive; st.want.down = 0; events?.push({ type: 'dive' }); }
+    if (!st.air) {
+      if (st.slide <= -S.rest) {
+        // (a slide goes at the speed one ran at a moment ago: the stick passes through its middle on its way
+        // down, and the legs have begun to stop — it is not held against them. Too slow for a slide: a duck)
+        const pace = st.since <= S.keep ? Math.max(st.v, st.pace) : st.v;
+        if (pace >= S.slow) { st.slide = S.slide; st.slid = 0; st.duck = 0; st.v = pace; events?.push({ type: 'slide' }); } else st.duck = S.stay;
+        st.want.down = 0;
+      }
+    } else if (st.vh > S.dive) { st.vh = S.dive; st.want.down = 0; events?.push({ type: 'dive' }); }
   }
   if (st.slide > 0) {
     st.slid += dt; st.slide -= dt;
-    if (st.slide <= 0 && input?.crouch && st.slid < S.hold) st.slide = dt; // (it goes on a little while the stick is held)
+    if (st.slide <= 0 && crouch && st.slid < S.hold) st.slide = dt; // (it goes on a little while the stick is held)
   } else if (st.slide > -S.rest) st.slide -= dt;
-  // ---- up the track, as fast as the tower asks — and the inside is the shorter way round
-  st.v = speedAt(st.s);
+  // ---- a duck: low for as long as the stick is down, when one stands or nearly — and a moment more
+  if (st.air) st.duck = 0;
+  else if (crouch && st.slide <= 0 && st.v < S.slow) st.duck = S.stay;
+  else if (st.duck > 0) st.duck -= dt;
+  // ---- up the track, as the stick asks — never back down it. On the planks the legs get to the speed asked
+  // in a moment and stop in less; a slide keeps the speed it began with; in the air one keeps one's own, and
+  // the stick only adds a little. The inside is the shorter way round.
+  const want = full * run;
+  if (st.air) { if (want > st.v) st.v = Math.min(want, st.v + S.push * dt); }
+  else if (st.slide > 0) { /* (as it began) */ }
+  else if (want > st.v) st.v = Math.min(want, st.v + (full / S.start) * dt);
+  else if (want < st.v) st.v = Math.max(want, st.v - (full / S.stop) * dt);
+  if (run >= 0.5) { st.pace = st.v; st.since = 0; } else if (st.since < 9) st.since += dt;
+  // (the clock of the attempt starts with its first step: thinking at the foot is free)
+  if (!st.going && st.v > 0) { st.going = true; events?.push({ type: 'go', attempt: st.attempt }); }
+  if (st.going) st.clock += dt;
   st.s += st.v * (S.r / (S.r + st.u)) * dt;
   // ---- across it: as one pushes, between the rails
   const wu = clamp(input?.side || 0, -1, 1) * S.side;
@@ -276,13 +316,13 @@ function sub(st, dt, input, events) {
     if (st.h <= G && st.vh <= 0) {
       st.h = G; st.vh = 0; st.air = false; st.jumps = 0; st.coyote = 0;
       events?.push({ type: 'land' });
-      if (input?.crouch && st.slide <= -S.rest) { st.slide = S.slide; st.slid = 0; events?.push({ type: 'slide' }); } // (the stick held down in the air: one lands sliding)
+      if (crouch && st.slide <= -S.rest && st.v >= S.slow) { st.slide = S.slide; st.slid = 0; events?.push({ type: 'slide' }); } // (the stick held down in the air: one lands sliding)
     } else if (st.h < -S.drop) return out(st, 'hole', events);
-  } else if (G < st.h - 1e-6) { st.air = true; st.vh = 0; st.jumps = 0; st.coyote = S.coyote; if (st.slide > 0) st.slide = 0; } // (off an edge)
+  } else if (G < st.h - 1e-6) { st.air = true; st.vh = 0; st.jumps = 0; st.coyote = S.coyote; st.duck = 0; if (st.slide > 0) st.slide = 0; } // (off an edge)
   else if (G > st.h + S.lip) return out(st, 'crate', events);
   else st.h = G;
   // ---- the bell
-  if (st.s >= LENGTH) { st.s = LENGTH; st.best = LENGTH; st.over = true; st.time = Math.round(st.clock * 1000); events?.push({ type: 'top', time: st.time, attempt: st.attempt }); return; }
+  if (st.s >= LENGTH) { st.s = LENGTH; st.best = LENGTH; st.over = true; st.time = Math.min(BOARD.max, Math.round(st.clock * 1000)); events?.push({ type: 'top', time: st.time, attempt: st.attempt }); return; }
   if (st.s > st.best) st.best = st.s;
   const turn = Math.min(S.turns - 1, Math.floor(st.s / TURN));
   if (turn !== st.turn) { st.turn = turn; events?.push({ type: 'turn', n: turn }); }
@@ -293,7 +333,7 @@ function sub(st, dt, input, events) {
 
 /** What the runner is touching at `now` ('' when nothing): one touch ends the attempt. */
 function touch(st, now) {
-  const s = st.s, u = st.u, h = st.h, top = h + (st.slide > 0 && !st.air ? S.low : S.tall), A = S.along, W = S.across;
+  const s = st.s, u = st.u, h = st.h, top = h + ((st.slide > 0 || st.duck > 0) && !st.air ? S.low : S.tall), A = S.along, W = S.across;
   for (const t of near(s)) {
     if (t.kind === 'hole' || t.kind === 'crate' || s + 2 < t.s0 || s - 2 > t.s1) continue;
     if (t.kind === 'low' || t.kind === 'high' || t.kind === 'fence') {
@@ -331,19 +371,28 @@ export const heightOf = (s) => (S.rise * s) / TURN;
 // ---------------------------------------------------------------------------
 // A runner that plays by itself — the proof that the bell can be reached. It does not know the course by heart:
 // it tries, a second and more ahead, what it could do — steer here or there, a key now or a little later, two
-// keys — on a copy of itself, with these very rules, and does what gets furthest. When nothing is in the way it
-// leans to the inside, the shorter way.
+// keys — on a copy of itself, with these very rules, and does what gets furthest. It runs with the stick full
+// up wherever that works, and leans to the inside, the shorter way, when nothing is in the way. Where nothing
+// it can do at a run lasts — something that moves has shut the way —, it lets go of the stick if standing
+// lasts, and stands (a hop over a barrel, a step aside) until a way opens: then it goes.
 
 const LANES = [-1.25, -0.85, -0.45, 0, 0.45, 0.85, 1.25];
 const SURE = 168, FAR = 264; // steps: a plan is kept while it lasts so long; it is judged on so long
+const LATE = 60, PATIENCE = 600; // steps: it stops only for what would end the attempt within so long; it stands no longer than this for a way to open
+const NEVER = Infinity; // (the step from which the stick is up, in a plan that stands)
 const copy = (st) => ({ ...st, want: { ...st.want }, bot: null });
-const _in = { side: 0, jump: false, down: false, crouch: false };
-/** How many steps (of `n`) a copy of `st` lasts with a plan: { u0 (steered to until step `at`), u (after), keys: [{ at, type }] }. */
+const _in = { side: 0, run: 0, jump: false, down: false, crouch: false };
+/**
+ * How many steps (of `n`) a copy of `st` lasts with a plan: { u0 (steered to until step `at`), u (after), keys:
+ * [{ at, type }], go (the stick is up from that step on: 0 at a run, NEVER standing) }. A key down is a push of
+ * the stick: it is not up on that step.
+ */
 function lasts(st, plan, n) {
   const q = copy(st);
   for (let k = 0; k < n; k++) {
     _in.side = clamp(((q.n < plan.at ? plan.u0 : plan.u) - q.u) * 5, -1, 1);
-    for (const key of plan.keys) if (key.at === q.n) { if (key.type === 'jump') q.want.jump = S.buffer; else q.want.down = S.buffer; }
+    _in.run = q.n >= plan.go ? 1 : 0;
+    for (const key of plan.keys) if (key.at === q.n) { if (key.type === 'jump') q.want.jump = S.buffer; else { q.want.down = S.buffer; _in.run = 0; } }
     sub(q, S.step, _in, null);
     if (q.over) return n + 1; // (the bell: nothing lasts longer)
     if (q.down > 0) return k;
@@ -351,16 +400,15 @@ function lasts(st, plan, n) {
   return n;
 }
 
-function think(st, B) {
-  const now = st.n, cur = { u0: B.u0, u: B.u, at: B.at, keys: B.keys };
-  const k0 = lasts(st, cur, FAR);
-  if (k0 >= SURE) {
-    // (all is well: with nothing planned, the inside if the inside does as well)
-    if (!B.keys.length && now >= B.at) for (const u of LANES) { if (u >= B.u - 0.05) break; if (lasts(st, { u0: u, u, at: 0, keys: [] }, FAR) >= k0) { B.u0 = B.u = u; break; } }
-    return;
-  }
+/**
+ * The plan that lasts longest from here among those tried — the stick up all along (`go` 0) or let go (NEVER) —,
+ * and how long: { plan, score }. `cur`, `k0`: the plan one has, if any, and how long it lasts; `deep`: how many
+ * keys at most; `wide`: from a standstill, a key is looked for further ahead, on a coarser grid.
+ */
+function search(st, B, go, cur, k0, deep, wide) {
+  const now = st.n;
   let best = cur, score = k0;
-  const tryPlan = (plan) => { const k = lasts(st, plan, FAR); if (k > score || (k === score && plan.keys.length < best.keys.length)) { score = k; best = plan; } return k; };
+  const tryPlan = (plan) => { plan.go = go; const k = lasts(st, plan, FAR); if (k > score || (k === score && best && plan.keys.length < best.keys.length)) { score = k; best = plan; } return k; };
   const lanes = LANES.slice().sort((a, b) => Math.abs(a - st.u) - Math.abs(b - st.u) || a - b);
   const held = st.n < B.at ? B.u0 : B.u;
   // ---- steering only
@@ -371,44 +419,75 @@ function think(st, B) {
     for (const u of lanes) for (const type of ['jump', 'down']) for (let at = from; at <= now + 132 && score < FAR; at += 6) tryPlan({ u0: held, u, at: B.keys[0].at, keys: [...B.keys, { at, type }] });
   }
   // ---- one key: now, or a little later; steering where one was until then, or at once
-  if (score < FAR) for (const type of ['jump', 'down']) for (let d = 0; d <= 96 && score < FAR; d += 6) for (const u of lanes) { tryPlan({ u0: u, u, at: 0, keys: [{ at: now + d, type }] }); if (Math.abs(u - held) > 0.2) tryPlan({ u0: held, u, at: now + d, keys: [{ at: now + d, type }] }); }
-  // ---- two keys
-  if (score < SURE) {
+  if (score < FAR) for (const type of ['jump', 'down']) for (let d = 0; d <= (wide ? 168 : 96) && score < FAR; d += wide ? 12 : 6) for (const u of lanes) { tryPlan({ u0: u, u, at: 0, keys: [{ at: now + d, type }] }); if (!wide && Math.abs(u - held) > 0.2) tryPlan({ u0: held, u, at: now + d, keys: [{ at: now + d, type }] }); }
+  // ---- two keys (from a standstill: only where one key gets somewhere — else the way is shut, and one waits)
+  if (score < SURE && deep >= 2 && (!wide || score >= 48)) {
     const two = [['jump', 'jump'], ['jump', 'down'], ['down', 'jump']], some = [held, ...lanes.filter((u) => Math.abs(u - held) > 0.2)];
-    for (const [a, b] of two) for (let d = 0; d <= 72 && score < FAR; d += 6) for (let g = 12; g <= 84 && score < FAR; g += 8) for (const u of some) {
+    for (const [a, b] of two) for (let d = 0; d <= (wide ? 96 : 72) && score < FAR; d += wide ? 12 : 6) for (let g = 12; g <= (wide ? 108 : 84) && score < FAR; g += wide ? 12 : 8) for (const u of some) {
       tryPlan({ u0: held, u, at: now + d, keys: [{ at: now + d, type: a }, { at: now + d + g, type: b }] });
     }
   }
   // ---- three keys: up the stairs and off them, a long jump and a slide
-  if (score < SURE) {
+  if (score < SURE && deep >= 3) {
     const three = [['jump', 'jump', 'jump'], ['jump', 'jump', 'down'], ['jump', 'down', 'jump'], ['down', 'jump', 'jump']];
     for (const [a, b, c] of three) for (let d = 0; d <= 60 && score < FAR; d += 6) for (let g = 12; g <= 72 && score < FAR; g += 10) for (let g2 = 12; g2 <= 72 && score < FAR; g2 += 10) for (const u of [held, ...lanes.slice(0, 3)]) {
       tryPlan({ u0: held, u, at: now + d, keys: [{ at: now + d, type: a }, { at: now + d + g, type: b }, { at: now + d + g + g2, type: c }] });
     }
   }
-  B.u0 = best.u0; B.u = best.u; B.at = best.at; B.keys = best.keys.map((k) => ({ ...k }));
+  return { plan: best, score };
+}
+const take = (B, plan) => { B.u0 = plan.u0; B.u = plan.u; B.at = plan.at; B.keys = plan.keys.map((k) => ({ ...k })); B.go = plan.go; };
+
+function think(st, B) {
+  const now = st.n, cur = { u0: B.u0, u: B.u, at: B.at, keys: B.keys, go: B.go };
+  const k0 = lasts(st, cur, FAR);
+  if (B.go !== NEVER) {
+    // ---- at a run
+    if (k0 >= SURE) {
+      // (all is well: with nothing planned, the inside if the inside does as well)
+      if (!B.keys.length && now >= B.at) for (const u of LANES) { if (u >= B.u - 0.05) break; if (lasts(st, { u0: u, u, at: 0, keys: [], go: 0 }, FAR) >= k0) { B.u0 = B.u = u; break; } }
+      return;
+    }
+    let found = search(st, B, 0, cur, k0, 3, false);
+    if (found.score < LATE && now >= B.rush) {
+      // (nothing lasts at a run, and the end is near: the stick is let go, if standing lasts — until a way opens)
+      const stand = search(st, B, NEVER, null, -1, 2, false);
+      if (stand.score >= SURE) { found = stand; B.stood = 0; B.stops++; }
+    }
+    take(B, found.plan);
+    return;
+  }
+  // ---- standing: is there a way now? It goes as soon as one lasts — or, having stood long enough, whatever
+  B.stood += 8;
+  const tired = B.stood > PATIENCE, way = search(st, B, 0, null, -1, tired || k0 < SURE ? 3 : 2, !tired);
+  if (way.score >= SURE) { take(B, way.plan); return; }
+  if (k0 >= SURE && !tired) return; // (not yet: it stands on)
+  // (standing does not last here either: what lasts longest, at a run or not — a hop where one stands, a step aside)
+  const stand = k0 >= SURE ? { plan: cur, score: k0 } : search(st, B, NEVER, cur, k0, 2, false);
+  if (tired || way.score >= stand.score) { take(B, way.plan); B.rush = now + 240; } else take(B, stand.plan);
 }
 
-/** The keys of the runner that plays by itself, for this step: { side, jump, down, crouch }. Call it before every step. */
-export function botInput(st, out = { side: 0, jump: false, down: false, crouch: false }) {
-  const B = st.bot || (st.bot = { u0: 0, u: 0, at: 0, keys: [], next: 0, attempt: 0 });
-  out.side = 0; out.jump = out.down = out.crouch = false;
+/** The keys of the runner that plays by itself, for this step: { side, run, jump, down, crouch }. Call it before every step. */
+export function botInput(st, out = { side: 0, run: 0, jump: false, down: false, crouch: false }) {
+  const B = st.bot || (st.bot = { u0: 0, u: 0, at: 0, keys: [], go: 0, next: 0, attempt: 0, stood: 0, rush: 0, stops: 0 });
+  out.side = 0; out.run = 0; out.jump = out.down = out.crouch = false;
   if (st.over || st.down > 0) return out;
-  if (B.attempt !== st.attempt) { B.attempt = st.attempt; B.u0 = B.u = 0; B.at = 0; B.keys = []; B.next = 0; }
+  if (B.attempt !== st.attempt) { B.attempt = st.attempt; B.u0 = B.u = 0; B.at = 0; B.keys = []; B.go = 0; B.next = 0; B.stood = 0; B.rush = 0; }
   if (st.wait > 0) return out;
-  if (st.n >= B.next) { B.next = st.n + 4; think(st, B); }
+  if (st.n >= B.next) { think(st, B); B.next = st.n + (B.go === NEVER ? 8 : 4); }
   out.side = clamp(((st.n < B.at ? B.u0 : B.u) - st.u) * 5, -1, 1);
+  out.run = st.n >= B.go ? 1 : 0;
   for (let i = B.keys.length - 1; i >= 0; i--) {
     const key = B.keys[i];
-    if (key.at <= st.n) { if (key.type === 'jump') out.jump = true; else out.down = true; B.keys.splice(i, 1); }
+    if (key.at <= st.n) { if (key.type === 'jump') out.jump = true; else { out.down = true; out.run = 0; } B.keys.splice(i, 1); } // (down is a push of the stick: it is not up on that step)
   }
   return out;
 }
 
-/** Runs with the bot from a start at `t0` (the clock of the world, s): { time (ms), attempts, outs, over, keys, clock (s it took in all) }. */
+/** Runs with the bot from a start at `t0` (the clock of the world, s): { time (ms), attempts, outs, over, keys, stops (times it stood to wait), clock (s it took in all) }. */
 export function botRun(t0 = 0, limit = 400) {
-  const st = startRun(t0), input = { side: 0, jump: false, down: false, crouch: false }, events = [];
+  const st = startRun(t0), input = { side: 0, run: 0, jump: false, down: false, crouch: false }, events = [];
   let keys = 0;
   for (let t = 0; t < limit && !st.over; t += S.step) { botInput(st, input); if (input.jump || input.down) keys++; stepRun(st, S.step, input, events); }
-  return { time: st.time, attempts: st.attempt, outs: st.outs, over: st.over, keys, clock: st.total, why: events.filter((e) => e.type === 'out').map((e) => `${e.why} at ${e.s.toFixed(0)} m`) };
+  return { time: st.time, attempts: st.attempt, outs: st.outs, over: st.over, keys, stops: st.bot.stops, clock: st.total, why: events.filter((e) => e.type === 'out').map((e) => `${e.why} at ${e.s.toFixed(0)} m`) };
 }

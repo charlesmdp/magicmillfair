@@ -1,57 +1,71 @@
 // Thin Crust: its rules. No renderer here: the game, its checks and the player that plays by itself all read this.
 //
-// A crater on an islet east of the pier, a pool of lava in it, and standing in the lava sixty-one columns of
-// basalt, six-sided, at three heights. One runs and jumps on their tops. A column warns — it glows, it trembles —
-// then sinks; some come back, fewer and fewer of them. Whoever touches the lava is out: the score is how long
-// one held.
+// A small volcano east of the pier; deep in its crater a pool of lava, and standing in the lava sixty-one columns
+// of basalt, six-sided. One runs and jumps on their tops. Heights are counted in levels: a jump climbs one level,
+// never two; any drop is fine. The lava only rises — one level at a time, in pulses, faster and faster — and a
+// column whose top it reaches is covered: whoever stands on it is out. Before each rise new columns come up out
+// of the lava: a glow shows where (the whiter, the higher it will stand), then they rise, to at least one level
+// above where the lava is about to be, sometimes two, three or four. No column ever goes down. So the field
+// becomes a relief of terraces and summits that keeps climbing: what matters is to be high enough and to have a
+// way on from where one is. The score is how long one held.
 //
-// A round leaves every ten seconds on the clock everybody shares, and what the columns do in a round is drawn
-// from its number: the same for everybody who takes that start, something else for the next one. Nothing in it
-// is unfair to begin with: for the first thirty-five seconds a column that warns always has a neighbour that
-// outlives it, no higher than one step. Then, to the minute, there is at least something to jump to — and
-// after the minute, less and less often even that.
+// A round leaves every ten seconds on the clock everybody shares, and what comes up in a round is drawn from its
+// number: the same for everybody who takes that start, something else for the next one.
 //
-// A round is made of figures, one after the other: columns here and there, the rim going round, a line that
-// crosses the field, a whole ring at once, one column in three — slowly at first, then faster than they come
-// back; and the oldest go of old age. What comes back is not always as high as it was.
+// What is fair in it: the columns of a pulse come as small hills — a stair up from ground that is dry, a summit,
+// lower steps round it, some of them missing. For the first eight rises (a minute) the stairs are sure: from
+// every column of the largest dry region one can walk, a step up at a time, to the largest region there will be
+// after the rise, in the time left once the columns are up. Later the hills are fewer and narrower, the notice
+// shorter, the stairs less and less sure; after the eighteenth rise nothing comes up any more. And there are lone
+// tall columns from early on — out of reach, or with no way on: to read the relief is the game.
 //
-// Places on the field: x metres east and z metres south of its middle; heights are counted from the lava.
-// Time is counted from the start of the round (before it: negative, and every column stands), and advances in
-// steps of 1/120 s whatever the frame rate.
+// Places on the field: x metres east and z metres south of its middle. Heights: metres over the lava as it is
+// when the round begins (a level is LAVA.lv of them). Time is counted from the start of the round (before it:
+// negative, and nothing moves), and advances in steps of 1/120 s whatever the frame rate.
 
 export const LAVA = {
   name: 'Thin Crust',
   at: { x: 188, z: 8 }, // the middle of the field: in the open sea, east of the head of the pier
-  level: 0.9, // the lava, metres above the sea
-  look: [-1, 0], // the way the camera looks, on the plan (x, z): west, at the pier over the rim — "up" on the stick goes that way
+  level: 0.9, // the lava as a round begins, metres above the sea
+  look: [-1, 0], // the way the camera looks, on the plan (x, z): west, towards the pier — "up" on the stick goes that way
   rings: 4, R: 1.45, // sixty-one columns: so many rings round the middle one; a column from its middle to a corner (m)
-  tops: [1.0, 1.9, 2.8], // how high a column stands over the lava, at each of its three heights (m)
+  lv: 0.9, // m: one level — the top of a column of level n stands n levels over the lava of the start
+  top: 22, // no column ever stands higher than so many levels: the crater holds that much lava, and no more
   every: 10, // s: a round leaves every so often
   step: 1 / 120,
   run: 6.3, accel: 46, air: 24, // m/s; how fast one gets there on a column, in the air (m/s²)
-  g: 22, jump: 7.42, // m/s², m/s up: a metre and a quarter — one step of the columns is jumped, two are not
+  g: 22, jump: 7.42, // m/s², m/s up: a metre and a quarter — one level is jumped, two are not
   stepUp: 0.3, coyote: 0.1, // m that the feet take without a jump; s after the edge during which a jump still counts
   burn: 0.15, // m over the lava: lower than that, one is in it
-  rise: 0.6, sink: 0.7, // s: a column takes so long to come up, to go down
-  grace: 2.5, // s: nothing warns before
-  fair: 35, reach: 60, end: 240, // s: until then a column that warns has a neighbour to step to; until then one to jump to; after the last, nothing rises again
+  first: 9, quickest: 3.5, quick: 120, // s: the first rise, and from one rise to the next to begin with; from one to the next in the end; when that is reached
+  surge: 0.8, // s: the lava takes so long to rise one level
+  settle: 0.3, notice: [2.6, 0.7, 0.14], // s: after a rise, before the glows; a glow lasts so long to begin with, never less than, and so much less rise after rise
+  rise: 0.7, // s: a column takes so long to come up
+  fair: 8, last: 18, // the first so many rises have a sure way on; after so many, nothing comes up any more
 };
 
-export const GONE = 0, RISING = 1, UP = 2, WARN = 3, SINKING = 4;
+/**
+ * The volcano that holds it (Lava.js builds it so). The crater opens by `flare` metres for each metre up; `rim`:
+ * its crest, metres above the sea, about — nowhere more than `low` under that at its lip, nor more than `tall` over
+ * it at the teeth of rock that stand on it; `foot`: where the cone meets the sea, metres from the middle, about;
+ * `within`: nothing of it is further out than that.
+ */
+export const CONE = { flare: 0.2, rim: LAVA.level + LAVA.top * LAVA.lv + 2.7, low: 1.65, tall: 5.4, foot: 26, within: 26.9 };
+
+export const UNDER = 0, GLOW = 1, RISING = 2, UP = 3;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 const S3 = Math.sqrt(3);
 
 // (numbers drawn from whole numbers only: the same on every device, to the last bit)
-const hash = (a, b = 0) => { let h = (Math.imul(a | 0, 0x9E3779B1) ^ Math.imul((b | 0) + 0x7F4A7C15, 0x85EBCA6B)) | 0; h ^= h >>> 15; h = Math.imul(h, 0x2C1B3C6D); h ^= h >>> 12; h = Math.imul(h, 0x297A2D39); h ^= h >>> 15; return (h >>> 0) / 4294967296; };
 const stream = (seed) => { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
 
 // ---------------------------------------------------------------------------------------------- the field
 
 /**
- * The columns: { q, r (its place in the comb), x, z (its middle), ring (how far from the middle one), turn (where
- * round its ring, 0 to 1), n (those that touch it), far (those one column further: { i, gap (true when a whole
- * column lies between), via (what the jump goes over: that column — or the two it passes between) }) }.
+ * The columns: { q, r (its place in the comb), x, z (its middle), ring (how far from the middle one), n (those
+ * that touch it), far (those one column further: { i, gap (true when a whole column lies between), via (what the
+ * jump goes over: that column — or the two it passes between) }) }.
  */
 export const CELLS = [];
 const KEY = new Map();
@@ -71,12 +85,9 @@ const KEY = new Map();
       const i = at(c.q + NEAR[a][0] + NEAR[b][0], c.r + NEAR[a][1] + NEAR[b][1]);
       if (i >= 0) c.far.push({ i, gap: a === b, via: (a === b ? [a] : [a, b]).map((k) => at(c.q + NEAR[k][0], c.r + NEAR[k][1])) });
     }
-    c.turn = 0;
   }
-  // (where each is round its ring, 0 to 1 from the east going by the south: counted, not measured with an angle)
-  const WALK = [[-1, 1], [-1, 0], [0, -1], [1, -1], [1, 0], [0, 1]];
-  for (let k = 1; k <= N; k++) { let q = k, r = 0, i = 0; for (const [dq, dr] of WALK) for (let s = 0; s < k; s++) { CELLS[at(q, r)].turn = i++ / (6 * k); q += dq; r += dr; } }
 }
+const N = CELLS.length;
 /** How far the field reaches from its middle (m): the corners of its outermost columns. */
 export const FIELD = S3 * LAVA.R * LAVA.rings + LAVA.R;
 
@@ -90,215 +101,235 @@ export function cellAt(x, z) {
   return i === undefined ? -1 : i;
 }
 
+// ---------------------------------------------------------------------------------------------- the lava
+
+/** When each rise begins (s from the start of a round): PULSES[k - 1] for the rise to level k. The same in every round. */
+export const PULSES = [];
+{ let t = LAVA.first; for (let k = 1; k <= LAVA.top; k++) { PULSES.push(t); t += lerp(LAVA.first, LAVA.quickest, clamp(t / LAVA.quick, 0, 1)); } }
+
+/** The board of scores: how long one held, ms — nobody holds longer than the lava takes to cover the highest a column may stand. */
+export const BOARD = { order: 'desc', min: 1000, max: Math.ceil(PULSES[LAVA.top - 1] + LAVA.surge) * 1000 };
+
+/**
+ * The pulse that follows the rise to level `k` (k ≥ 1): when its columns glow, begin to rise, are up; when the
+ * lava rises next (`at`), and the time left once they are up (`left`), s.
+ */
+export function pulseOf(k) {
+  const L = LAVA, glow = PULSES[k - 1] + L.surge + L.settle, rise = glow + Math.max(L.notice[1], L.notice[0] - L.notice[2] * (k - 1)), up = rise + L.rise, at = PULSES[k];
+  return { glow, rise, up, at, left: at - up };
+}
+
+/** How many rises have begun at `t`. */
+export function risesAt(t) { let k = 0; while (k < PULSES.length && t >= PULSES[k]) k++; return k; }
+
+/** How high the lava of a round is at `t`, in levels: whole between two rises; it stops once it has covered everything. */
+export function lavaAt(round, t) {
+  let k = 0;
+  while (k < round.high && t >= PULSES[k]) k++;
+  if (k === 0) return 0;
+  const u = (t - PULSES[k - 1]) / LAVA.surge;
+  return u >= 1 ? k : k - 1 + u * u * (3 - 2 * u);
+}
+
+// ---------------------------------------------------------------------------------------------- reading a relief
+
+/**
+ * The dry regions of a field of `levels` (one for each column) with the lava at level `lava`: columns that touch,
+ * both dry, no more than a level apart — ground one walks about on. { of (the region of each column; -1: covered),
+ * size (of each region), most (the largest; the first of them when several are as large; -1: nothing is dry) }.
+ */
+export function regionsOf(levels, lava) {
+  const of = new Int16Array(N).fill(-1), size = [], stack = [];
+  let most = -1;
+  for (let s = 0; s < N; s++) {
+    if (levels[s] <= lava || of[s] >= 0) continue;
+    const id = size.length;
+    let n = 0;
+    of[s] = id; stack.push(s);
+    while (stack.length) { const a = stack.pop(); n++; for (const b of CELLS[a].n) if (of[b] < 0 && levels[b] > lava && Math.abs(levels[b] - levels[a]) <= 1) { of[b] = id; stack.push(b); } }
+    size.push(n);
+    if (most < 0 || n > size[most]) most = id;
+  }
+  return { of, size, most };
+}
+
+/** What a move takes at a run (s): to the next column, up a level onto it, over a missing column, between two columns. */
+export const PACE = { step: 0.4, up: 0.5, gap: 0.85, between: 0.75 };
+
+/**
+ * How long the walk is (s, at a run) from each column to the nearest of the columns `to`, on a field of `levels`
+ * with the lava at `lava`: a step to a column that touches, no more than one level up (any drop is fine); and —
+ * with `jumps` — a jump over one missing column to a top no higher, or between two columns, one level up at most
+ * (what is jumped over no higher than where one leaves from). Infinity: no way.
+ */
+export function walks(levels, lava, to, jumps = true) {
+  const d = new Float64Array(N).fill(Infinity);
+  for (const c of to) d[c] = 0;
+  for (let changed = true; changed;) {
+    changed = false;
+    for (let a = 0; a < N; a++) {
+      const la = levels[a];
+      if (la <= lava) continue;
+      let best = d[a];
+      for (const b of CELLS[a].n) { const lb = levels[b]; if (lb > lava && lb <= la + 1) { const w = d[b] + (lb > la ? PACE.up : PACE.step); if (w < best) best = w; } }
+      if (jumps) for (const f of CELLS[a].far) {
+        const lb = levels[f.i];
+        if (lb <= lava || lb > la + (f.gap ? 0 : 1) || !f.via.every((m) => m < 0 || levels[m] <= la)) continue;
+        const w = d[f.i] + (f.gap ? PACE.gap : PACE.between);
+        if (w < best) best = w;
+      }
+      if (best < d[a] - 1e-12) { d[a] = best; changed = true; }
+    }
+  }
+  return d;
+}
+
+/**
+ * The way on, before a rise. `before`: the levels as they stood when the lava came to `lava`; `after`: as they
+ * stand once the columns of the pulse are up. From every column of the largest dry region, the walk to the
+ * largest region there will be once the lava is one level higher, and to any ground that stays dry.
+ * { from (the columns of that region), to (those of the region to come), on (s: the longest of the walks to it),
+ *   dry (s: the longest of the walks to ground that stays dry) }.
+ */
+export function wayOn(before, after, lava, jumps = true) {
+  const A = regionsOf(before, lava), B = regionsOf(after, lava + 1), from = [], to = [], safe = [];
+  for (let c = 0; c < N; c++) { if (A.most >= 0 && A.of[c] === A.most) from.push(c); if (B.most >= 0 && B.of[c] === B.most) to.push(c); if (after[c] > lava + 1) safe.push(c); }
+  const d = walks(after, lava, to, jumps), e = walks(after, lava, safe, jumps);
+  let on = 0, dry = 0;
+  for (const c of from) { on = Math.max(on, d[c]); dry = Math.max(dry, e[c]); }
+  return { from, to, on, dry };
+}
+
 // ---------------------------------------------------------------------------------------------- a round
 
-const TARGET = [[0, 61], [10, 61], [25, 50], [45, 34], [60, 20], [75, 10], [90, 5], [110, 3], [150, 2], [1e9, 2]];
-/** How many columns the round would have standing at `t`. */
-export function targetAt(t) {
-  for (let k = 1; k < TARGET.length; k++) if (t <= TARGET[k][0]) { const [t0, n0] = TARGET[k - 1], [t1, n1] = TARGET[k]; return Math.round(lerp(n0, n1, (t - t0) / (t1 - t0))); }
-  return 2;
-}
-/** For how long a column that begins to warn at `t` warns before it sinks (s). */
-export const warnTime = (t) => (t < 15 ? 1.4 : t < 60 ? 1.4 - 0.65 * ((t - 15) / 45) : Math.max(0.55, 0.75 - (t - 60) * 0.004));
-/** For how long a column may stand, at `t`, before it warns whatever else goes on (s). */
-const stayTime = (t) => (t < 12 ? Infinity : Math.max(2.2, 13 - (t - 12) * 0.17));
-/** While columns are picked at random: how often, about, any one of them warns (s). */
-const pickEvery = (t) => clamp(lerp(14, 4.5, (t - 8) / 45), 4.5, 14);
+const SUMMIT = [0.16, 0.4, 0.3, 0.14]; // how high a summit stands over the lava to come: one level, two, three, four
+const pick = (rnd, weights) => { let p = rnd(); for (let i = 0; i < weights.length; i++) { p -= weights[i]; if (p < 0) return i; } return weights.length - 1; };
 
-const DT = 0.25; // the round is written down every quarter of a second
-const DIRS = [[1, 0], [S3 / 2, 0.5], [0.5, S3 / 2], [0, 1], [-0.5, S3 / 2], [-S3 / 2, 0.5], [-1, 0], [-S3 / 2, -0.5], [-0.5, -S3 / 2], [0, -1], [0.5, -S3 / 2], [S3 / 2, -0.5]];
-const mod = (a, n) => ((a % n) + n) % n;
-
-/** See `escape` in makeRound (it is here for the checks to ask the same question of a finished round). */
-export function fairFor(lives, x, lx, wide) {
-  const L = LAVA, s = lx.sink, top = L.tops[lx.level];
-  const holds = (y, up) => { for (let k = lives[y].length - 1; k >= 0; k--) { const l = lives[y][k]; if (l.rise <= lx.warn && l.up <= s - 0.35 && l.sink >= s + 0.55 && L.tops[l.level] <= top + up) return true; } return false; };
-  // (what a jump goes over must not stand higher than where it leaves from, from a second before the column goes)
-  const low = (m) => m < 0 || lives[m].every((l) => l.rise > s + 0.2 || l.gone <= s - 1 || L.tops[l.level] <= top + 0.05);
-  for (const y of CELLS[x].n) if (holds(y, 0.95)) return true;
-  if (wide) for (const f of CELLS[x].far) if (f.via.every(low) && holds(f.i, f.gap ? 0.05 : 0.95)) return true;
-  return false;
+/**
+ * The columns that come up before the rise to level k + 1: a Map column → level. `tops`: the levels as they
+ * stand, `reg`: their dry regions. `sure`: a minute has not gone by — the hills are many and wide, each against
+ * dry ground; `more` (0 to 1): more of them still (asked when what was drawn left somebody without a way on).
+ */
+function hills(k, tops, reg, rnd, sure, more) {
+  const L = LAVA, plan = new Map(), base = k + 1; // (`base`: the lava to come)
+  const level = (c) => (plan.has(c) ? plan.get(c) : tops[c]), free = (c) => tops[c] <= k && !plan.has(c), put = (c, lv) => plan.set(c, Math.min(L.top, lv));
+  const late = sure ? 0 : clamp((k - L.fair) / (L.last - 1 - L.fair), 0, 1); // (0 to 1: how far from the minute to the last pulse)
+  const count = sure ? 2 + (rnd() < 0.5 ? 1 : 0) + (more > 0.3 ? 1 : 0) : rnd() < 1 - 0.55 * late ? (rnd() < 0.55 - 0.55 * late ? 2 : 1) : 0;
+  const keep = sure ? [0.66 + 0.34 * more, 0.36 + 0.6 * more] : [0.45 - 0.35 * late, 0.16 * (1 - late)], joined = sure ? 1 : 0.9 - 0.7 * late;
+  const order = reg.size.map((s, id) => id).sort((a, b) => (b === reg.most) - (a === reg.most) || reg.size[b] - reg.size[a] || a - b); // (the regions, the largest first)
+  for (let h = 0; h < count; h++) {
+    // ---- where its stair begins: against dry ground — the largest region, the next one, in turn — or, later, anywhere
+    const id = sure ? order[(h & 1) && order.length > 1 && reg.size[order[1]] > 1 ? 1 : 0] : rnd() < joined ? order[0] : rnd() < 0.5 ? order[Math.floor(rnd() * order.length)] : -1;
+    const feet = [];
+    for (let c = 0; c < N; c++) if (free(c) && (id < 0 || CELLS[c].n.some((a) => reg.of[a] === id))) feet.push(c);
+    if (!feet.length) continue;
+    // ---- the stair: one level over the lava to come, then a level higher at each step, to the summit
+    let c = feet[Math.floor(rnd() * feet.length)], lv = base + 1;
+    const high = 1 + pick(rnd, SUMMIT);
+    put(c, lv);
+    for (let s = 1; s < high; s++) {
+      const on = CELLS[c].n.filter(free);
+      if (!on.length) break;
+      c = on[Math.floor(rnd() * on.length)];
+      put(c, ++lv);
+    }
+    // ---- lower steps round the summit, some of them missing (round a summit of one level: a terrace)
+    const top = level(c), ring = [];
+    for (const x of CELLS[c].n) if (free(x) && rnd() < keep[0]) { put(x, Math.max(base + 1, top - 1)); ring.push(x); }
+    for (const x of ring) { const low = level(x) - 1; if (low > base) for (const y of CELLS[x].n) if (free(y) && rnd() < keep[1]) put(y, low); }
+  }
+  // ---- and lone tall columns: out in the lava, or against ground too low to climb them from
+  const lone = sure ? (k >= 2 && rnd() < 0.5 ? 1 : 0) : (rnd() < 0.4 + 0.5 * late ? 1 : 0) + (late > 0.4 && rnd() < 0.5 ? 1 : 0);
+  for (let i = 0; i < lone; i++) {
+    const out = [], any = [];
+    for (let c = 0; c < N; c++) if (free(c)) { any.push(c); if (CELLS[c].n.every((a) => level(a) <= k)) out.push(c); }
+    const pool = out.length && rnd() < 0.7 ? out : any;
+    if (!pool.length) break;
+    put(pool[Math.floor(rnd() * pool.length)], base + 2 + pick(rnd, [0.3, 0.4, 0.3]));
+  }
+  return plan;
 }
 
 const _rounds = new Map();
 /**
- * The round that leaves with start number `n`: { n, lives, acts }. `lives[c]`: what column `c` does, one life
- * after the other — { level (0, 1, 2), rise, up (it comes up between the two), warn, sink (it warns between the
- * two), gone (it goes down between the last two) }, in seconds from the start; Infinity for what never comes.
- * `acts`: what the round is made of, in turn ({ kind, from, to }) — for whoever wants to say it.
+ * The round that leaves with start number `n`: { n, cols, high, end, pulses }. `cols[c]`: the columns that stand
+ * at place `c`, one after the other, each higher than the last — { level, glow, rise, up }: it glows from `glow`,
+ * comes up between `rise` and `up` (s from the start; the first of them has always been there). `high`: the
+ * highest level any of them has — the lava stops there, at `end`. `pulses[k]`: what came before the rise to
+ * level k + 1 — { k, glow, rise, up, at, left, sure, cells } (see pulseOf).
  */
 export function makeRound(n) {
   const kept = _rounds.get(n);
   if (kept) return kept;
-  const L = LAVA, rnd = stream(Math.imul(n | 0, 2654435761) ^ 0x51ED270B), N = CELLS.length;
-  const lives = CELLS.map(() => []), last = (c) => lives[c][lives[c].length - 1];
-  // ---- how high each stands to begin with: knolls — a high column, a step round it — away from the middle,
-  // which is level: that is where everybody starts
-  const level = new Array(N).fill(0);
-  for (let k = 0, knolls = 6 + Math.floor(rnd() * 4); k < knolls; k++) {
-    const c = Math.floor(rnd() * N), high = rnd() < 0.7;
-    if (CELLS[c].ring < 2) continue;
-    for (const i of CELLS[c].n) if (CELLS[i].ring >= 2) level[i] = Math.max(level[i], 1);
-    level[c] = high ? 2 : Math.max(level[c], 1);
+  const L = LAVA, rnd = stream(Math.imul(n | 0, 2654435761) ^ 0x51ED270B), tops = new Int8Array(N), next = new Int8Array(N);
+  // ---- the relief of the start: knolls — a summit, steps round it — away from the middle, which is level and
+  // low: that is where everybody starts, and where nobody can stay
+  for (let tries = 0; tries < 200; tries++) {
+    tops.fill(1);
+    for (let i = 0, knolls = 5 + Math.floor(rnd() * 3); i < knolls; i++) {
+      const c = Math.floor(rnd() * N), p = rnd(), high = p < 0.2 ? 4 : p < 0.72 ? 3 : 2, wide = rnd(), far = CELLS[c].ring >= 2;
+      if (!far) continue;
+      tops[c] = Math.max(tops[c], high);
+      for (const x of CELLS[c].n) if (CELLS[x].ring >= 2 && (high === 2 ? wide < 0.5 : true)) tops[x] = Math.max(tops[x], Math.max(2, high - 1));
+      if (high === 4) for (const x of CELLS[c].n) for (const y of CELLS[x].n) if (CELLS[y].ring >= 2 && rnd() < 0.5) tops[y] = Math.max(tops[y], 2);
+    }
+    const way = wayOn(tops, tops, 0, false), dry = tops.reduce((s, v) => s + (v > 1 ? 1 : 0), 0);
+    if (way.from.includes(cellAt(0, 0)) && way.to.length >= 6 && dry >= 16 && dry <= 30 && way.on <= 0.4 * PULSES[0]) break;
   }
-  for (let c = 0; c < N; c++) lives[c].push({ level: level[c], rise: -1e9, up: -1e9, warn: Infinity, sink: Infinity, gone: Infinity });
-  let alive = N; // those that stand, or are to come back
-  // (how many are away in each quarter of a second to come: too low to stand on, gone, not up again yet)
-  const SLOTS = Math.ceil((L.end + 12) / DT), away = new Int16Array(SLOTS + 2), slot = (t) => clamp(Math.floor(t / DT), 0, SLOTS + 1);
-  const mark = (from, to, d) => { for (let b = from; b < to; b++) away[b] += d; };
-
-  const standing = (c, t) => { const l = last(c); return !!l && l.warn === Infinity && l.up <= t; };
-  /**
-   * Is there, for the life `lx` of column `x` that sinks, somewhere to go? A column within reach that is there to
-   * be seen when the warning begins (it stands, or is coming up), that is up before `x` goes and outlives it by
-   * half a second; no higher than a step. `wide`: or one a jump away, with nothing in the way higher than `x`.
-   */
-  const escape = (x, lx, wide) => fairFor(lives, x, lx, wide);
-  /** The life of column `x` that warns at `t` and has not begun to sink, if it has one. */
-  const warned = (x, t) => { for (let k = lives[x].length - 1; k >= 0; k--) { const l = lives[x][k]; if (l.warn !== Infinity && l.warn <= t && l.sink > t) return l; if (l.gone <= t) break; } return null; };
-  /** Column `c` begins to warn at `t`, if that is fair to who stands on it and on those round it. `back`: s before it comes back. */
-  const warn = (c, t, back) => {
-    const l = last(c);
-    if (!l || l.warn !== Infinity || l.up > t) return false;
-    const s = t + warnTime(t), from = slot(s + 0.5);
-    // (never too few to stand on: seven in ten of what the round has in mind to begin with, half of it later —
-    // for as long as it has much in mind)
-    if (t < 75) for (let b = from, to = slot(s + 3); b <= to; b++) if (N - away[b] - 1 < Math.round(targetAt(b * DT) * clamp(lerp(0.72, 0.5, (b * DT - 8) / 40), 0.5, 0.72))) return false;
-    l.warn = t; l.sink = s; l.gone = s + L.sink;
-    const wide = t >= L.fair;
-    let ok = escape(c, l, wide);
-    // (…and whoever is on a column round it that warns already must still have theirs)
-    if (ok) for (const x of wide ? CELLS[c].n.concat(CELLS[c].far.map((f) => f.i)) : CELLS[c].n) { const lx = warned(x, t); if (lx && !escape(x, lx, lx.warn >= L.fair)) { ok = false; break; } }
-    // (unfair — nowhere to go from it, or from a neighbour — it does not happen… until late, and then more and more)
-    if (!ok && (t < L.reach || rnd() >= Math.min(1, (t - L.reach) / 50))) { l.warn = l.sink = l.gone = Infinity; return false; }
-    alive--;
-    // ---- does it come back? Less and less: the round has a number of columns in mind, and the rim goes first
-    const over = alive + 1 - targetAt(t + 3), rise = l.gone + back;
-    if ((over > 0 && rnd() < Math.min(1, over / 6) * (0.45 + 0.2 * CELLS[c].ring)) || rise >= L.end) { mark(from, SLOTS + 2, 1); return true; }
-    let where = c, lv = l.level;
-    // (what comes back is not always as high as it was: the field changes under the feet)
-    if (t >= 12 && t < 45 && rnd() < 0.5) { const p = rnd(); lv = p < 0.5 ? 0 : p < 0.85 ? 1 : 2; }
-    if (t >= 45) {
-      // later it comes back somewhere else: by a column that stands, then anywhere
-      const free = (y) => { const ly = last(y); return y !== c && (!ly || (ly.gone !== Infinity && ly.gone <= rise - 0.2)); };
-      const near = t < 75 ? rnd() < 0.5 : rnd() < Math.max(0.2, 1 - (t - 75) / 50), other = t >= 75 || near;
-      if (other) {
-        const pool = [];
-        for (let y = 0; y < N; y++) if (free(y) && (!near || CELLS[y].n.some((z) => standing(z, t)) || (t >= 75 && CELLS[y].far.some((f) => standing(f.i, t))))) pool.push(y);
-        if (pool.length) where = pool[Math.floor(rnd() * pool.length)];
-      }
-      const p = rnd();
-      lv = p < 0.6 ? 0 : p < 0.9 ? 1 : 2;
+  const cols = Array.from(tops, (level) => [{ level, glow: -1e9, rise: -1e9, up: -1e9 }]);
+  const pulses = [{ k: 0, glow: -1e9, rise: -1e9, up: -1e9, at: PULSES[0], left: PULSES[0], sure: true, cells: [] }];
+  // ---- pulse after pulse: the lava is at level k; what comes up before it rises to k + 1
+  for (let k = 1; k < L.last; k++) {
+    const reg = regionsOf(tops, k), P = pulseOf(k), sure = k < L.fair;
+    if (reg.most < 0) break; // (nothing is dry any more: nothing comes)
+    let plan = null, least = Infinity;
+    for (let a = 0, tries = sure ? 60 : 1; a < tries; a++) {
+      const drawn = hills(k, tops, reg, rnd, sure, a / 59);
+      if (!sure) { plan = drawn; break; }
+      // (a way on for everybody of the largest region, with time to spare — or it is drawn again, more of it)
+      next.set(tops);
+      for (const [c, lv] of drawn) next[c] = lv;
+      const way = wayOn(tops, next, k, false), miss = way.to.length < 5 ? 1e9 : way.on - 0.7 * P.left;
+      if (miss < least) { least = miss; plan = drawn; }
+      if (miss <= 0) break;
     }
-    lives[where].push({ level: lv, rise, up: rise + L.rise, warn: Infinity, sink: Infinity, gone: Infinity });
-    alive++;
-    const again = slot(rise + L.rise - 0.15);
-    if (where === c) mark(from, again, 1); else { mark(from, SLOTS + 2, 1); mark(again, SLOTS + 2, -1); } // (the other one had been away for good)
-    return true;
-  };
-
-  // ---- the acts, one after the other
-  const acts = [], KINDS = ['pick', 'sweep', 'thirds', 'rings', 'rim'];
-  let act = null, was = '';
-  const next = (t) => {
-    if (t < 8) return { kind: 'teach', from: t, to: 8, back: 2.5 };
-    // (late in the round there are too few left for figures: they go one by one, of old age, and now and then a line crosses)
-    let kind = was;
-    if (t >= 75) kind = was === 'wait' && rnd() < 0.5 ? 'sweep' : 'wait';
-    else if (was === '') kind = rnd() < 0.5 ? 'pick' : 'rim'; // (the first thing after the lesson is a gentle one)
-    else while (kind === was) kind = KINDS[Math.floor(rnd() * KINDS.length)];
-    was = kind;
-    const a = { kind, from: t, to: t + 6, back: 3 };
-    if (kind === 'pick') { a.to = t + 5 + Math.floor(rnd() * 3); a.owed = 0; a.back = 0.3; }
-    else if (kind === 'sweep') { a.dir = DIRS[Math.floor(rnd() * DIRS.length)]; a.v = lerp(2.6, 5, clamp(t / 75, 0, 1)); a.to = t + Math.ceil((2 * FIELD + 2) / a.v / DT) * DT; a.back = 0.5; }
-    else if (kind === 'thirds' || kind === 'rings') {
-      // (early on the next lot goes when the last is back — a warning, down, away, up again, and a breath; later
-      // it goes as the last one sinks: one is kept on the move)
-      a.back = kind === 'thirds' ? 0.8 : 0.6;
-      const W = warnTime(t), slow = W + L.sink + a.back + L.rise + 0.4, fast = W + 0.25;
-      a.each = Math.ceil(lerp(slow, fast, clamp((t - 12) / 35, 0, 1)) / DT);
-      a.lots = kind === 'thirds' ? 3 : 4; a.turn = Math.floor(rnd() * a.lots);
-      a.to = t + a.each * a.lots * DT * (a.each * a.lots * DT < 7 ? 2 : 1); // (twice round when once is soon over)
-    } else if (kind === 'rim') { a.angle = Math.floor(rnd() * 12); a.to = t + 5; a.back = 4; }
-    else a.to = t + 5; // ('wait')
-    return a;
-  };
-  const ticks = Math.round((L.end - L.grace) / DT);
-  for (let i = 0; i <= ticks; i++) {
-    const t = L.grace + i * DT;
-    if (!act || t >= act.to) { if (act) acts.push({ kind: act.kind, from: act.from, to: act.to }); act = next(t); }
-    const k = Math.round((t - act.from) / DT), up = [];
-    for (let c = 0; c < N; c++) if (standing(c, t)) up.push(c);
-    if (act.kind === 'teach') {
-      // a few columns, one at a time, by the middle where everybody stands: this is how it goes
-      // (the first of them a step away from where anybody stands: seen before it is felt)
-      if (k % 7 === 0) { const pool = up.filter((c) => CELLS[c].ring === 2 || (k > 0 && CELLS[c].ring === 1)); if (pool.length) warn(pool[Math.floor(rnd() * pool.length)], t, act.back); }
-    } else if (act.kind === 'pick') {
-      // here and there, as it comes: each column in its turn, about every so often
-      act.owed += (up.length * DT) / pickEvery(t);
-      for (; act.owed >= 1 && up.length; act.owed -= 1) { const j = Math.floor(rnd() * up.length), c = up[j]; up.splice(j, 1); warn(c, t, act.back + rnd() * 0.7); }
-    } else if (act.kind === 'sweep') {
-      // a line crosses the field: what it passes warns, and is back soon after
-      const p = -FIELD - 1 + act.v * (t - act.from), [dx, dz] = act.dir;
-      for (const c of up) { const s = CELLS[c].x * dx + CELLS[c].z * dz; if (s > p - act.v * DT && s <= p) warn(c, t, act.back); }
-    } else if (act.kind === 'thirds' || act.kind === 'rings') {
-      // one column in three, all at once, then the next third; or a whole ring, then another (the middle one goes
-      // with the innermost). What could not go at once — it would not have been fair — is asked again for a second.
-      if (k % act.each < 4) {
-        const lot = mod(act.turn + Math.floor(k / act.each), act.lots), ring = [4, 2, 3, 1][lot];
-        for (const c of up) if (act.kind === 'thirds' ? mod(CELLS[c].q - CELLS[c].r, 3) === lot : CELLS[c].ring === ring || (ring === 1 && CELLS[c].ring === 0)) warn(c, t, act.back);
-      }
-    } else if (act.kind === 'rim') {
-      // the outermost that stand, going round
-      const far = up.reduce((m, c) => Math.max(m, CELLS[c].ring), 0), rim = up.filter((c) => CELLS[c].ring === far);
-      const turn = (c) => mod(CELLS[c].turn - act.angle / 12, 1);
-      rim.sort((a, b) => turn(a) - turn(b) || a - b);
-      for (const c of rim.slice(0, 2)) warn(c, t, act.back);
-    }
-    // ---- and nothing stands for ever: the oldest warn in their turn
-    const limit = stayTime(t);
-    if (limit !== Infinity) {
-      const old = [];
-      for (let c = 0; c < N; c++) if (standing(c, t)) { const age = t - Math.max(0, last(c).up); if (age > limit * (0.75 + 0.5 * hash(c, n))) old.push([age, c]); }
-      old.sort((a, b) => b[0] - a[0] || a[1] - b[1]);
-      for (const [, c] of old.slice(0, t > 45 ? 3 : 2)) warn(c, t, 0.5 + rnd() * 1.5);
-    }
+    const cells = [...plan.keys()].sort((a, b) => a - b);
+    for (const c of cells) { tops[c] = plan.get(c); cols[c].push({ level: tops[c], glow: P.glow, rise: P.rise, up: P.up }); }
+    pulses.push({ k, glow: P.glow, rise: P.rise, up: P.up, at: P.at, left: P.left, sure, cells });
   }
-  if (act) acts.push({ kind: act.kind, from: act.from, to: act.to });
-  // ---- the end: what still stands goes down, and nothing comes back
-  for (let c = 0; c < N; c++) { const l = last(c); if (l && l.warn === Infinity) { l.warn = Math.max(L.end, l.up); l.sink = l.warn + warnTime(L.end); l.gone = l.sink + L.sink; } }
-  const round = { n, lives, acts };
+  const high = tops.reduce((m, v) => Math.max(m, v), 0), round = { n, cols, high, end: PULSES[high - 1] + L.surge, pulses };
   if (_rounds.size > 24) _rounds.delete(_rounds.keys().next().value);
   _rounds.set(n, round);
   return round;
 }
 
+/** The level of the column that stands at each place of a round at `t` (`seen`: or that glows there already). */
+export function levelsAt(round, t, out = new Int8Array(N), seen = false) {
+  for (let c = 0; c < N; c++) { const list = round.cols[c]; let lv = list[0].level; for (let i = 1; i < list.length; i++) if ((seen ? list[i].glow : list[i].up) <= t) lv = list[i].level; out[c] = lv; }
+  return out;
+}
+
 /**
- * What column `c` of a round is doing at `t`: { state (GONE, RISING, UP, WARN, SINKING), top (m over the lava;
- * far below it when there is none), level, k (how far through the warning, the sinking, the rising: 0 to 1) }.
+ * What stands at place `c` of a round at `t`: { state (UNDER: covered; GLOW: one is about to come up there;
+ * RISING; UP), level (of the column that is there, or is coming), top (m over the lava of the start), k (how far
+ * through the glow, the rising: 0 to 1; once up: for how long, s) }. `lava`: the level of the lava then, when known.
  */
-export function columnAt(round, c, t, out = {}) {
-  const lives = round.lives[c], L = LAVA;
-  out.state = GONE; out.top = -9; out.level = 0; out.k = 0;
-  for (let i = lives.length - 1; i >= 0; i--) {
-    const l = lives[i];
-    if (t < l.rise) continue;
-    if (t >= l.gone) break;
-    const top = L.tops[l.level];
-    out.level = l.level;
-    if (t < l.up) { const k = (t - l.rise) / L.rise; out.state = RISING; out.k = k; out.top = -0.5 + (top + 0.5) * (1 - (1 - k) * (1 - k)); }
-    else if (t < l.warn) { out.state = UP; out.top = top; }
-    else if (t < l.sink) { out.state = WARN; out.k = (t - l.warn) / (l.sink - l.warn); out.top = top; }
-    else { const k = (t - l.sink) / L.sink; out.state = SINKING; out.k = k; out.top = top - (top + 0.5) * k * k; }
-    break;
-  }
+export function columnAt(round, c, t, out = {}, lava = lavaAt(round, t)) {
+  const list = round.cols[c], L = LAVA, pool = lava * L.lv;
+  let e = list[0];
+  for (let i = list.length - 1; i > 0; i--) if (t >= list[i].glow) { e = list[i]; break; }
+  out.level = e.level;
+  // (its head shows in the lava and swells a little — never so high that one could stand on it — then up it goes)
+  if (t < e.rise) { const k = (t - e.glow) / (e.rise - e.glow); out.state = GLOW; out.k = k; out.top = pool + 0.03 + 0.1 * k; }
+  else if (t < e.up) { const k = (t - e.rise) / (e.up - e.rise), from = pool + 0.13; out.state = RISING; out.k = k; out.top = from + (e.level * L.lv - from) * (1 - (1 - k) * (1 - k)); }
+  else { out.top = e.level * L.lv; out.state = out.top > pool ? UP : UNDER; out.k = t - e.up; }
   return out;
 }
 const _c = {};
-/** How high the top of column `c` is at `t` (m over the lava; -9 when there is none). */
-export const topAt = (round, c, t) => (c < 0 ? -9 : columnAt(round, c, t, _c).top);
-/** How many columns can be stood on at `t` (up, or warning). */
-export function standingAt(round, t) { let n = 0; for (let c = 0; c < CELLS.length; c++) { const s = columnAt(round, c, t, _c).state; if (s === UP || s === WARN) n++; } return n; }
+/** How high the top of the column at place `c` is at `t` (m over the lava of the start; far below beyond the field). */
+export const topAt = (round, c, t, lava) => (c < 0 ? -99 : columnAt(round, c, t, _c, lava).top);
+/** How many columns stand dry at `t`. */
+export function dryAt(round, t) { const lava = lavaAt(round, t); let n = 0; for (let c = 0; c < N; c++) { columnAt(round, c, t, _c, lava); if (_c.state === UP || (_c.state === RISING && _c.top > lava * LAVA.lv + LAVA.burn)) n++; } return n; }
 
 // ---------------------------------------------------------------------------------------------- a run
 
@@ -322,7 +353,7 @@ export function stepRun(st, dt, input, events) {
 function sub(st, dt, input, events) {
   const L = LAVA, R = st.round, [fx, fz] = L.look, rx = -fz, rz = fx; // (to the right of the way one looks: (-z, x) of it)
   st.clock += dt;
-  const t = st.clock;
+  const t = st.clock, lava = lavaAt(R, t), pool = lava * L.lv;
   if (st.want > 0) st.want -= dt;
   if (st.coyote > 0) st.coyote -= dt;
   // ---- across the field: as one pushes
@@ -336,7 +367,7 @@ function sub(st, dt, input, events) {
   // ---- a jump
   if (st.want > 0 && (st.ground || st.coyote > 0)) { st.vh = L.jump; st.ground = false; st.coyote = 0; st.want = 0; st.jumps++; events?.push({ type: 'jump' }); }
   // ---- the side of a column higher than the feet is a wall
-  const wall = (x, z) => topAt(R, cellAt(x, z), t) > st.h + L.stepUp;
+  const wall = (x, z) => topAt(R, cellAt(x, z), t, lava) > st.h + L.stepUp;
   let nx = st.x + st.vx * dt, nz = st.z + st.vz * dt;
   if (wall(nx, nz)) {
     if (!wall(nx, st.z)) { nz = st.z; st.vz = 0; } else if (!wall(st.x, nz)) { nx = st.x; st.vx = 0; } else { nx = st.x; nz = st.z; st.vx = 0; st.vz = 0; }
@@ -345,77 +376,117 @@ function sub(st, dt, input, events) {
   if (far > lim) { nx *= lim / far; nz *= lim / far; }
   st.x = nx; st.z = nz;
   // ---- up and down: on a column one goes where it goes; off it one falls
-  const top = topAt(R, cellAt(st.x, st.z), t);
+  const top = topAt(R, cellAt(st.x, st.z), t, lava);
   if (st.ground) {
     if (top >= st.h - 0.35) st.h = top; else { st.ground = false; st.coyote = L.coyote; st.vh = 0; }
   }
   if (!st.ground) {
     st.vh -= L.g * dt; st.h += st.vh * dt;
-    if (st.vh <= 0 && st.h <= top && st.h >= top - 0.45 && top > L.burn) { st.h = top; st.vh = 0; st.ground = true; events?.push({ type: 'land' }); }
+    if (st.vh <= 0 && st.h <= top && st.h >= top - 0.45 && top > pool + L.burn) { st.h = top; st.vh = 0; st.ground = true; events?.push({ type: 'land' }); }
   }
-  if (st.h <= L.burn) { st.h = Math.max(st.h, -0.2); st.over = true; st.time = Math.max(0, Math.round(t * 1000)); events?.push({ type: 'out', time: st.time }); }
+  // ---- the lava: whoever is down to it is out — in the air, or on a column it covers
+  if (st.h <= pool + L.burn) { st.h = Math.max(st.h, pool - 0.2); st.over = true; st.time = Math.max(0, Math.round(t * 1000)); events?.push({ type: 'out', time: st.time }); }
 }
 
 // ---------------------------------------------------------------------------------------------- a player that plays by itself
 
-const _b = {};
+const BOT = { step: 0.42, up: 0.5, gap: 1.1, between: 1.0 }; // s: what its moves take (it backs up before a jump over the lava)
 /**
- * Plays by itself — the proof that a round can be held. It knows nothing a player does not see: a column that
- * does not warn yet is as good as any other, one that has not begun to come up is not counted on. It stays where
- * it is while that is safe; when its column warns it goes to the neighbour that will hold longest — waiting at
- * the edge for one that is still coming up — or, with no neighbour left, jumps to a column further off. Returns
- * the input for stepRun. (`st.bot.every`: how often it looks about itself, s — a tenth of a second unless said;
- * the checks try a slower one.)
+ * It looks about itself: the level every column has or is about to have (a glow says how high), how soon it can
+ * be on each — a search from column to column, a step up at a time, over a missing one at a jump, waiting for
+ * those that are still coming up, never across what the lava will have covered by then — and where it is best to
+ * be: on ground that stays dry after the rise to come, of the largest region there will be then, high on it,
+ * with columns round it to go on to. It notes where it is going (`goal`) and the next column of the way (`next`).
+ */
+function look(st, B, here) {
+  const L = LAVA, R = st.round, t = st.clock, lv = B.lv, upAt = B.up, arr = B.arr, prev = B.prev, far = B.far, done = B.done, k = risesAt(t);
+  // (as far as it knows the rises go on, each when it is due: it does not know which is the last)
+  const cover = (level) => (level <= PULSES.length ? PULSES[level - 1] + 0.25 : Infinity);
+  for (let c = 0; c < N; c++) { const list = R.cols[c]; let e = list[0]; for (let i = list.length - 1; i > 0; i--) if (t >= list[i].glow) { e = list[i]; break; } lv[c] = e.level; upAt[c] = e.up; }
+  // just after a rise nothing glows yet: it waits where it is to see what comes — unless that is about to go under
+  if (k > 0 && t < PULSES[k - 1] + L.surge + L.settle + 0.05 && cover(lv[here]) > t + 1.2) { B.goal = here; B.next = here; B.jump = false; return; }
+  arr.fill(Infinity); done.fill(0);
+  arr[here] = t; prev[here] = -1;
+  for (;;) {
+    let a = -1;
+    for (let c = 0; c < N; c++) if (!done[c] && arr[c] < Infinity && (a < 0 || arr[c] < arr[a])) a = c;
+    if (a < 0) break;
+    done[a] = 1;
+    const la = lv[a], until = cover(la) + 0.1;
+    for (const b of CELLS[a].n) {
+      if (done[b] || lv[b] <= k || lv[b] > la + 1) continue;
+      const at = Math.max(arr[a] + (lv[b] > la ? BOT.up : BOT.step + 0.07 * Math.min(4, la - lv[b])), upAt[b] + 0.2);
+      if (at <= until && at <= cover(lv[b]) - 0.1 && at < arr[b]) { arr[b] = at; prev[b] = a; far[b] = 0; }
+    }
+    for (const f of CELLS[a].far) {
+      const b = f.i;
+      if (done[b] || lv[b] <= k || lv[b] > la + (f.gap ? 0 : 1) || !f.via.every((m) => m < 0 || lv[m] <= la)) continue;
+      const at = Math.max(arr[a] + (f.gap ? BOT.gap : BOT.between), upAt[b] + 0.2);
+      if (at <= until && at <= cover(lv[b]) - 0.1 && at < arr[b]) { arr[b] = at; prev[b] = a; far[b] = 1; }
+    }
+  }
+  const F = regionsOf(lv, k + 1), G = regionsOf(lv, k + 2);
+  let best = here, most = -Infinity;
+  for (let g = 0; g < N; g++) {
+    if (arr[g] === Infinity) continue;
+    const life = lv[g] - k, f = F.of[g], size = f >= 0 ? F.size[f] : 0, deep = G.of[g] >= 0 ? G.size[G.of[g]] : 0;
+    let room = 0;
+    for (const y of CELLS[g].n) if (lv[y] > k + 1 && Math.abs(lv[y] - lv[g]) <= 1) room++;
+    const v = (life >= 2 ? 1000 : 0) + (f >= 0 && f === F.most ? 40 * Math.min(size, 15) : 0) + 8 * Math.min(size, 15) + 25 * Math.min(life, 4) + 3 * Math.min(deep, 8) + 2 * room
+      - 6 * (arr[g] - t) - 0.3 * Math.sqrt(CELLS[g].x ** 2 + CELLS[g].z ** 2) + (g === B.goal ? 12 : 0);
+    if (v > most) { most = v; best = g; }
+  }
+  let c = best;
+  while (c !== here && prev[c] !== here) c = prev[c];
+  // (already stepping over to a column that stands and will stand a while yet, it goes on: no turning back on the edge)
+  const o = B.next;
+  if (o >= 0 && o !== c && o !== here && !B.jump && CELLS[here].n.includes(o) && upAt[o] <= t && lv[o] > k && lv[o] <= lv[here] + 1 && cover(lv[o]) > t + 1 && (st.x - CELLS[o].x) ** 2 + (st.z - CELLS[o].z) ** 2 < 1.8 * 1.8) return;
+  if (c !== B.next) B.back = false;
+  B.goal = best; B.next = c; B.jump = c !== here && far[c] === 1;
+}
+
+/**
+ * Plays by itself — the proof that a round can be held. It knows nothing a player does not see: the columns that
+ * stand, those that glow or are coming up, how soon the lava is due. See `look` for what it makes of it; here it
+ * goes where it decided, column after column: through the middle of the side two columns share, a jump where the
+ * way goes up, a wait short of the edge for a column that is not up yet, a few steps back and a run before a jump
+ * over the lava. Returns the input for stepRun. (`st.bot.every`: how often it looks about itself, s — a tenth of
+ * a second unless said; the checks try a slower one.)
  */
 export function botInput(st, out = { x: 0, y: 0, jump: false }) {
   const L = LAVA, R = st.round, t = st.clock, [fx, fz] = L.look, rx = -fz, rz = fx;
   out.x = 0; out.y = 0; out.jump = false;
   if (st.over) return out;
-  const B = st.bot || (st.bot = { goal: -1, think: -1e9, every: 0.1 }), here = cellAt(st.x, st.z);
-  /**
-   * How long column `y` holds once one is on it, `after` seconds from now at the soonest, as far as can be seen
-   * (0: it is not there, or too high, or will not be up within `wait` s).
-   */
-  const holds = (y, after, feet, up, wait = 0) => {
-    const lives = R.lives[y];
-    for (let k = lives.length - 1; k >= 0; k--) {
-      const l = lives[k];
-      if (l.rise > t) continue; // (not there yet: nobody knows it will be)
-      if (t >= l.gone || L.tops[l.level] > feet + up) return 0;
-      const at = Math.max(t + after, l.up);
-      if (at - t > Math.max(after, wait) + 1e-6) return 0;
-      return l.warn > t ? 8 : Math.max(0, Math.min(l.sink - at, 8));
-    }
-    return 0;
-  };
-  const room = (y) => { let n = 0; for (const z of CELLS[y].n) if (holds(z, 0.3, 9, 0) > 1.5) n++; return n; };
-  if (st.ground && here >= 0 && t >= B.think) {
-    B.think = t + (B.every || 0.1);
-    const feet = st.h, left = holds(here, 0, 9, 9), value = (y, after, up, wait) => { const h = holds(y, after, feet, up, wait); return h < 0.7 ? -1 : h + 0.3 * room(y) - 0.04 * Math.sqrt(CELLS[y].x ** 2 + CELLS[y].z ** 2); };
-    let best = here, most = (left < 0.7 ? -1 : left + 0.3 * room(here) - 0.04 * Math.sqrt(CELLS[here].x ** 2 + CELLS[here].z ** 2)) + 0.9;
-    // (having set off for a neighbour it goes there, unless another is far better: no dithering on the edge)
-    for (const y of CELLS[here].n) { const v = value(y, 0.5, 0.95, left - 0.2) + (y === B.goal && y !== here ? 2 : 0); if (v > most) { most = v; best = y; } }
-    // (a jump over a ditch, or between two columns: only with nothing better, and nothing higher than the feet in the way)
-    if (most < 3.2) for (const f of CELLS[here].far) { if (!f.via.every((m) => m < 0 || columnAt(R, m, t, _b).top <= feet + 0.05)) continue; const v = value(f.i, 0.95, f.gap ? 0.05 : 0.95, 0) - 0.8; if (v > most) { most = v; best = f.i; } }
-    B.goal = best;
-  }
-  const goal = B.goal >= 0 ? B.goal : here;
+  const B = st.bot || (st.bot = {}), here = cellAt(st.x, st.z);
+  if (!B.lv) Object.assign(B, { goal: -1, next: -1, jump: false, back: false, think: -1e9, every: B.every || 0.1, lv: new Int8Array(N), up: new Float64Array(N), arr: new Float64Array(N), prev: new Int16Array(N), far: new Uint8Array(N), done: new Uint8Array(N) });
+  if (st.ground && here >= 0 && t >= B.think) { B.think = t + B.every; look(st, B, here); }
+  const goal = B.next >= 0 ? B.next : here;
   if (goal < 0) return out;
-  let C = CELLS[goal], tx = C.x, tz = C.z;
-  const next = here >= 0 && goal !== here && CELLS[here].n.includes(goal);
-  if (next) {
-    const H = CELLS[here], ex = (H.x + C.x) / 2, ez = (H.z + C.z) / 2, top = columnAt(R, goal, t + 0.1, _b).top;
-    // (a neighbour that is still coming up: one waits for it short of the edge; and one goes to it through the
-    // middle of the side the two share, not across the corner of a third)
-    if (top < Math.min(0.45, st.h - 0.3)) { tx = H.x + (ex - H.x) * 0.55; tz = H.z + (ez - H.z) * 0.55; }
-    else if (cellAt(st.x + (C.x - st.x) * 0.3, st.z + (C.z - st.z) * 0.3) !== here && cellAt(st.x + (C.x - st.x) * 0.3, st.z + (C.z - st.z) * 0.3) !== goal) { tx = ex; tz = ez; }
+  const C = CELLS[goal], pool = lavaAt(R, t) * L.lv;
+  let tx = C.x, tz = C.z;
+  if (here >= 0 && goal !== here && !st.ground) {
+    // (in the air over ground, bound for a column that is not out of the lava yet: it comes down where it is)
+    if (!B.jump && topAt(R, goal, t + 0.1) < pool + 0.45 && topAt(R, here, t) > pool + 0.45) { tx = CELLS[here].x; tz = CELLS[here].z; }
+  } else if (here >= 0 && goal !== here) {
+    const H = CELLS[here];
+    if (B.jump) {
+      // (over the lava: from the middle of its column, at a run)
+      // (and not before the column it jumps to is up)
+      if (!B.back) { tx = H.x; tz = H.z; if ((st.x - H.x) ** 2 + (st.z - H.z) ** 2 < 0.09 && B.up[goal] <= t + 0.3) B.back = true; }
+    } else {
+      const ex = (H.x + C.x) / 2, ez = (H.z + C.z) / 2, top = topAt(R, goal, t + 0.1), px = st.x + (C.x - st.x) * 0.3, pz = st.z + (C.z - st.z) * 0.3, over = cellAt(px, pz);
+      // (a neighbour that is not out of the lava yet: one waits for it short of the edge; and one goes to it through
+      // the middle of the side the two share, not across the corner of a third)
+      if (top < pool + 0.45) { tx = H.x + (ex - H.x) * 0.5; tz = H.z + (ez - H.z) * 0.5; }
+      else if (over !== here && over !== goal) { tx = ex; tz = ez; }
+    }
   }
   const dx = tx - st.x, dz = tz - st.z, d = Math.sqrt(dx * dx + dz * dz);
   if (d > 0.12) { const k = Math.min(1, d / 0.5) / d; out.y = (dx * fx + dz * fz) * k; out.x = (dx * rx + dz * rz) * k; }
-  // ---- and a jump where the way goes up a step, or over the lava
-  if (st.ground && goal !== here && d > 0.4) {
+  // ---- and a jump where the way goes up a level, or leaves the column for the lava
+  if (st.ground && here >= 0 && goal !== here && d > 0.4) {
     const ahead = cellAt(st.x + (dx / d) * 0.5, st.z + (dz / d) * 0.5);
-    if (ahead !== here) { const top = columnAt(R, ahead, t + 0.08, _b).top; if (top > st.h + L.stepUp - 0.04 || (!next && (top < st.h - 1.3 || _b.state === SINKING))) out.jump = true; }
+    if (ahead !== here) { if (B.jump ? B.back : topAt(R, ahead, t + 0.08) > st.h + L.stepUp - 0.04) out.jump = true; }
   }
   return out;
 }
@@ -424,9 +495,9 @@ export function botInput(st, out = { x: 0, y: 0, jump: false }) {
 export function idleInput(st, out = { x: 0, y: 0, jump: false }) { out.x = 0; out.y = 0; out.jump = false; return out; }
 
 /** Plays round `n` with the bot (`every`: how often it looks about itself, s): { time (ms), jumps, over }. */
-export function botRun(n, limit = 300, every = 0.1) {
+export function botRun(n, limit = 200, every = 0.1) {
   const st = startRun(n, 0), input = { x: 0, y: 0, jump: false };
-  st.bot = { goal: -1, think: -1e9, every };
+  st.bot = { every };
   for (let t = 0; t < limit && !st.over; t += LAVA.step) { botInput(st, input); stepRun(st, LAVA.step, input, null); }
   return { time: st.time, jumps: st.jumps, over: st.over };
 }
