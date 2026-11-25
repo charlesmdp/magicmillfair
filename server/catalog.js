@@ -29,12 +29,13 @@ export const BOARDS = {
   sky: 'Mostly Up', race: 'Quadmania', wing: 'Flappy Robot', shoot: 'Bullseye Alley', mole: 'Whack-a-Mole', milk: 'Feed the Clown', bell: 'Ring the Bell',
   hoop: 'Buzzer Beater', stack: 'Stack It', geiger: 'Geiger Says', fish: 'Hook, Line & Sinker', scram: 'SCRAM!', cups: 'Shell Shock', run: 'Meltdown Run',
   slide: 'Mostly Down', pond: 'The Endless Pond', boats: 'The Little Regatta', hill: 'Uphill Battle', crack: 'Between a Rock', hollow: 'The Nuclear Cave',
+  waves: 'Wave Goodbye', lava: 'Thin Crust', hive: "The Bee's Knees", flip: 'Head Over Heels', spiral: 'A Turn for the Worse', cars: 'Round the Bend', golf: 'Par for the Course',
 };
 /**
  * The big attractions — those with a star on the map: their panel is shared by up to BOARD_PLACES sponsors,
  * shown turn by turn. Its places are 'board:<id>' and 'board:<id>-2' … '-5': each an auction of its own.
  */
-export const MAJOR_BOARDS = ['sky', 'race', 'wing', 'slide', 'pond', 'boats', 'hill', 'crack', 'hollow'], BOARD_PLACES = 5;
+export const MAJOR_BOARDS = ['sky', 'race', 'wing', 'slide', 'pond', 'boats', 'hill', 'crack', 'hollow', 'waves', 'lava', 'hive', 'flip', 'spiral', 'cars', 'golf'], BOARD_PLACES = 5;
 /** The place of a panel: 'slide-3' → ['slide', 3], 'slide' → ['slide', 1]; null when there is no such place. */
 export const boardPlace = (id) => {
   const m = /^([a-z]+)(?:-([2-9]))?$/.exec(typeof id === 'string' ? id : '');

@@ -13,6 +13,13 @@ export const EXTRAS = {
   hill: { name: 'Uphill Battle — up the slope while logs roll down it', load: () => import('./hill.js') },
   crack: { name: 'Between a Rock — up a cleft between two needles of rock, from wall to wall', load: () => import('./crack.js') },
   hollow: { name: 'The Nuclear Cave — a race flown under the ground, one lap against the clock', load: () => import('./hollow.js') },
+  waves: { name: 'Wave Goodbye — the sea comes in over a bank of sand: jump what comes', load: () => import('./waves.js') },
+  lava: { name: 'Thin Crust — basalt columns in a crater, and lava that only rises', load: () => import('./lava.js') },
+  hive: { name: "The Bee's Knees — four combs over the sea: the cell one stands on gives way", load: () => import('./hive.js') },
+  flip: { name: 'Head Over Heels — one runs by oneself, and turns gravity over', load: () => import('./flip.js') },
+  spiral: { name: 'A Turn for the Worse — a track wound round a tower, up to its bell', load: () => import('./spiral.js') },
+  cars: { name: 'Round the Bend — radio-controlled cars raced on a table, seen from above', load: () => import('./cars.js') },
+  golf: { name: 'Par for the Course — nine holes of crazy golf round the acid pond', load: () => import('./golf.js') },
   caves: { name: 'The caves are safe places: nearby chat only', load: () => import('./caves.js') },
   stats: { name: 'The game in figures: counters, the page /opendata', load: () => import('./stats.js') },
 };

@@ -36,6 +36,7 @@ import { keysHelp } from './extras/help.js'; // (the keys of a game, shown again
 import { countVisit } from './net/Visits.js';
 import { callApi, checkAdminKey, hasApi, noApi, sharedNow } from './net/api.js';
 import { formatTime } from './world/zones/games/course.js';
+import { formatScore as golfScore } from './world/zones/games/golf/score.js';
 import { buildGameSignposts } from './world/zones/games/Signposts.js';
 import { RemoteAvatars } from './net/RemoteAvatars.js';
 import { Benchmark } from './app/Benchmark.js';
@@ -932,7 +933,7 @@ async function boot() {
   // The big attractions — those with a star on the map — share their panel between up to five sponsors, shown
   // turn by turn (a few seconds each; while a place is left, "your brand here" has its turn too). Their places:
   // 'board:<id>' and 'board:<id>-2' … '-5' (server/catalog.js), all painted on the one panel of the stand.
-  const MAJOR_GAMES = ['sky', 'race', 'wing', 'slide', 'pond', 'boats', 'hill', 'crack', 'hollow'], rotors = [];
+  const MAJOR_GAMES = ['sky', 'race', 'wing', 'slide', 'pond', 'boats', 'hill', 'crack', 'hollow', 'waves', 'lava', 'hive', 'flip', 'spiral', 'cars', 'golf'], rotors = [];
   const gameOf = (id) => String(id).split(':')[1]?.replace(/-\d$/, '') || '';
   const addPlace = (sl) => {
     if (!sl.id.startsWith('board:') || !MAJOR_GAMES.includes(gameOf(sl.id))) { places.set(sl.id, { what: sl.what, spot: sl, set: sl.set }); return; }
@@ -1330,9 +1331,13 @@ async function boot() {
   // ---------- what is released, and new versions (app/Updates.js; the switches: RELEASE in app/config.js)
   // The extras of src/extras are loaded when their switch is on — as the game runs when it goes on later;
   // one that goes off again is only undone by loading the page again.
-  const EXTRA = ['slide', 'pond', 'boats', 'hill', 'crack', 'hollow', 'caves', 'stats'];
-  // (the games among them — each says, while one of its runs is on, which run: app.slideRide(), app.pondRun()…)
-  const LAB_GAMES = { slide: 'slideRide', pond: 'pondRun', boats: 'boatRace', hill: 'hillClimb', crack: 'cleftClimb', hollow: 'hollowFlight' };
+  const EXTRA = ['slide', 'pond', 'boats', 'hill', 'crack', 'hollow', 'waves', 'lava', 'hive', 'flip', 'spiral', 'cars', 'golf', 'caves', 'stats'];
+  // (the games among them — each says, while one of its runs is on, which run: app.slideRide(), app.pondRun()…;
+  // the seven with a gate are plugged in the same way, by src/extras/plug.js: app.wavesRun(), app.lavaRun()…)
+  const LAB_GAMES = {
+    slide: 'slideRide', pond: 'pondRun', boats: 'boatRace', hill: 'hillClimb', crack: 'cleftClimb', hollow: 'hollowFlight',
+    waves: 'wavesRun', lava: 'lavaRun', hive: 'hiveRun', flip: 'flipRun', spiral: 'spiralRun', cars: 'carsRun', golf: 'golfRun',
+  };
   const labBusy = () => Object.values(LAB_GAMES).some((run) => !!app[run]?.());
   const applyRelease = (release, before) => {
     const on = Object.fromEntries(EXTRA.map((k) => [k, release[k] === true]));
@@ -1347,8 +1352,9 @@ async function boot() {
   // of a sponsor, for sale like the others), the map a star, the forks of the paths a plank that points to it.
   // `at`: where the board stands from the gate of its game — metres to the right of one who looks the way the
   // gate looks (at the game), metres along that way, and how far the board is turned from facing those who
-  // arrive (the slide says itself where its board goes). `deck`: the gate is on planks over the sea — the board
-  // stands at their height, smaller, on piles.
+  // arrive (the slide says itself where its board goes — the combs and the golf too). `deck`: the gate is on planks
+  // over the sea — the board stands at their height, smaller, on piles; `level`: the gate is on the deck of the pier —
+  // the board stands on it. `format`: how a score is written, when it is not a time.
   const LAB_BOARD = {
     slide: { title: 'BEST TIMES', sub: 'from the top of the cliffs to the sea · fastest down' },
     pond: { title: 'LONGEST RUNS', sub: 'three ponds · who held the longest', at: [5.0, -1.4, -0.35] },
@@ -1356,6 +1362,13 @@ async function boot() {
     hill: { title: 'BEST TIMES', sub: 'from the arch to the bell · fastest up', at: [-6.4, -1.0, 0.35] },
     crack: { title: 'BEST TIMES', sub: 'up the cleft, from wall to wall · fastest', at: [-4.0, -0.85, Math.PI / 2], deck: true },
     hollow: { title: 'BEST TIMES', sub: 'one lap under the ground · fastest', at: [4.4, -1.6, -0.4] },
+    waves: { title: 'LONGEST RUNS', sub: 'a bank of sand, the sea of everybody · who held the longest', at: [4.4, -0.5, 0] },
+    lava: { title: 'LONGEST RUNS', sub: 'the lava only rises · who held the longest', at: [4.4, -0.5, 0], level: true },
+    hive: { title: 'LONGEST RUNS', sub: 'four combs over the sea · who held the longest', at: [4.4, -0.5, 0] },
+    flip: { title: 'BEST TIMES', sub: 'a thousand metres of girders · 3 s for each fall, a quarter of a second off for each spark', at: [4.4, -0.5, 0] },
+    spiral: { title: 'BEST TIMES', sub: 'nineteen turns up to the bell · fastest', at: [4.4, -0.5, 0] },
+    cars: { title: 'BEST TIMES', sub: 'three laps of the table · fastest', at: [4.4, -0.5, 0] },
+    golf: { title: 'FEWEST STROKES', sub: 'nine holes round the acid pond · the fewest strokes, then the fastest', at: [4.4, -0.5, 0], format: golfScore },
   };
   const labSigns = { group: null, key: null, planted: new Set() };
   /** What follows the building of the extras that were switched on. */
@@ -1367,8 +1380,8 @@ async function boot() {
       const o = LAB_BOARD[id], fx = Math.sin(gate.yaw), fz = Math.cos(gate.yaw);
       const spot = game.boardSpot || { x: gate.x - fz * o.at[0] + fx * o.at[1], z: gate.z + fx * o.at[0] + fz * o.at[1], yaw: gate.yaw + Math.PI + o.at[2] };
       if (id === 'slide') game.board?.mesh?.removeFromParent(); // (the plain board the slide hung for itself: this one takes its place)
-      const deck = o.deck && { y: gate.y, width: 2.7, pixels: 0.75, foot: gate.y - Math.min(world.data.heightAt(spot.x, spot.z), 0) + 0.6 };
-      fair.stands[id] = world.games.lateStand(id, spot.x, spot.z, spot.yaw, { title: `${GAME_NAMES[id].toUpperCase()} — ${o.title}`, sub: o.sub, format: formatTime, what: 'this game', ...deck });
+      const deck = o.deck ? { y: gate.y, width: 2.7, pixels: 0.75, foot: gate.y - Math.min(world.data.heightAt(spot.x, spot.z), 0) + 0.6 } : o.level ? { y: gate.y } : null;
+      fair.stands[id] = world.games.lateStand(id, spot.x, spot.z, spot.yaw, { title: `${GAME_NAMES[id].toUpperCase()} — ${o.title}`, sub: o.sub, format: o.format || formatTime, what: 'this game', ...deck });
       const slot = (world.sponsorSlots || []).find((q) => q.id === `board:${id}`);
       if (slot) { addPlace(slot); slot.offer?.(shop.open ? `from ${price(shop.least(slot.id))} · step up and bid` : ''); }
       added = true;
@@ -1422,14 +1435,15 @@ async function boot() {
   };
   hud.setAttractions(attractions());
   // (the games of the lab, when they are switched on — the slide, the three ponds, the regatta, the slope, the
-  // cleft, the cave: the server notes when a run begins — a time only counts with that note — and each game says
-  // when a run ends (app.slideDone(ms), app.pondDone(ms)…): the time goes on its board of scores)
+  // cleft, the cave, and the seven with a gate: the server notes when a run begins — a score only counts with that
+  // note — and each game says when a run ends (app.slideDone(ms), app.pondDone(ms)…): the score goes on its board)
   {
     const on = {};
     for (const id of Object.keys(LAB_GAMES)) {
       fair.boards[id] = new Scores(id);
-      GAMES[id] = [GAME_NAMES[id], formatTime];
-      app[`${id}Done`] = (ms) => scoreGame(id, GAME_NAMES[id], Math.round(ms), formatTime(ms));
+      const format = LAB_BOARD[id].format || formatTime;
+      GAMES[id] = [GAME_NAMES[id], format];
+      app[`${id}Done`] = (score) => scoreGame(id, GAME_NAMES[id], Math.round(score), format(score)); // (the seven with a gate tell a whole number)
     }
     world.zones.push({ update: () => { for (const id in LAB_GAMES) { const now = !!app[LAB_GAMES[id]]?.(); if (now && !on[id]) fair.boards[id].start(); on[id] = now; } } });
   }

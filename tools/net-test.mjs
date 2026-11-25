@@ -866,8 +866,8 @@ async function testRelease(start, dist) {
   const call = (target, body, key) => request(port, target, { method: body === undefined ? 'GET' : 'POST', headers: { ...(body !== undefined && { 'content-type': 'application/json' }), ...(key && { authorization: `Bearer ${key}` }) }, ...(body !== undefined && { body: typeof body === 'string' ? body : JSON.stringify(body) }) });
   try {
     const st = json(await call('/api/status'));
-    check('release: the status says what is released — the slide and the lab\'s five other games off, the caves and the figures on, the sky hidden — and which version is online',
-      st?.ok === true && st.release?.slide === false && ['pond', 'boats', 'hill', 'crack', 'hollow'].every((k) => st.release[k] === false) && st.release.caves === true && st.release.stats === true && st.release.sky === 'hidden' && st.release.userRooms === false && st.build === 'abc1234' && st.refresh === 0, st);
+    check('release: the status says what is released — the slide, the lab\'s five other games and the seven games with a gate off, the caves and the figures on, the sky hidden — and which version is online',
+      st?.ok === true && st.release?.slide === false && ['pond', 'boats', 'hill', 'crack', 'hollow', 'waves', 'lava', 'hive', 'flip', 'spiral', 'cars', 'golf'].every((k) => st.release[k] === false) && st.release.caves === true && st.release.stats === true && st.release.sky === 'hidden' && st.release.userRooms === false && st.build === 'abc1234' && st.refresh === 0, st);
     // the board of a game that is not released: as if it did not exist
     const shut = { run: await call('/api/run', { board: 'slide' }), board: await call('/api/scores?board=slide'), all: json(await call('/api/scores?board=all')) };
     // two visitors, in two rooms
@@ -916,6 +916,43 @@ async function testRelease(start, dist) {
         && low.boats.status === 400 && low.hollow.status === 400 && soon.status === 400 && longer?.day === 1 && after.boards.pond.tops.day.map((e) => e.name).join() === 'Longer,Lab pond'
         && unit.pond === 'time' && unit.hollow === 'time' && unit.bell === 'points' && named.pond === 'The Endless Pond' && named.crack === 'Between a Rock',
         [before.runs, on?.release, Object.fromEntries(ids.map((b) => [b, posted[b]?.day])), low.boats.status, low.hollow.status, soon.status, after.boards?.pond?.tops.day, unit.pond, named.pond]);
+    }
+    // the seven games with a gate: a switch each, and a board that waits for it — three scored by how long one
+    // held, three by a time, the golf by its strokes (a thousand for each, then the seconds of the round). The
+    // time of the machine may be well over what the run lasted (each fall adds to it), never a run shorter than
+    // the machine takes
+    {
+      const NEW = { waves: 30_000, lava: 40_000, hive: 30_000, flip: 90_000, spiral: 200_000, cars: 30_000, golf: 31_127 }, ids = Object.keys(NEW);
+      const note = (b, ago) => sign(SCORE_SECRET, { b, t: Date.now() - ago, n: randomId(9) });
+      let who = 200;
+      const post = (body) => request(port, '/api/scores', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), from: `127.0.0.${who++}` });
+      const before = { runs: [], all: json(await call('/api/scores?board=all')) };
+      for (const b of ids) before.runs.push((await call('/api/run', { board: b })).status);
+      const on = json(await call('/api/release', { set: Object.fromEntries(ids.map((b) => [b, true])) }, ADMIN_KEY));
+      const posted = {};
+      for (const b of ids) posted[b] = json(await post({ board: b, name: `New ${b}`, score: NEW[b], run: await note(b, NEW[b] + 2500) }));
+      // (the machine: twenty-two falls put a time at two and a half minutes, a hundred seconds after the start —
+      // believed; a time told a minute after the start is not: the machine takes longer than that)
+      const falls = json(await post({ board: 'flip', name: 'Clumsy', score: 150_000, run: await note('flip', 100_000) }));
+      const early = await post({ board: 'flip', name: 'Quick', score: 90_000, run: await note('flip', 60_000) });
+      // (too good to be true: a minute held on the sand ten seconds after the run began; longer in the crater than
+      // the lava leaves anybody; a comb left at once; nine holes in eight strokes; three laps in ten seconds)
+      const bad = {
+        waves: await post({ board: 'waves', name: 'Quick', score: 60_000, run: await note('waves', 10_000) }),
+        lava: await post({ board: 'lava', name: 'Quick', score: 99_000, run: await note('lava', 120_000) }),
+        hive: await post({ board: 'hive', name: 'Quick', score: 5_000, run: await note('hive', 60_000) }),
+        golf: await post({ board: 'golf', name: 'Quick', score: 8_050, run: await note('golf', 300_000) }),
+        cars: await post({ board: 'cars', name: 'Quick', score: 10_000, run: await note('cars', 60_000) }),
+        spiral: await post({ board: 'spiral', name: 'Quick', score: 200_000, run: await note('spiral', 100_000) }),
+      };
+      const after = json(await call('/api/scores?board=all')), desk = json(await call('/api/admin', null, ADMIN_KEY));
+      const unit = Object.fromEntries((desk?.boards || []).map((x) => [x.id, x.unit])), named = Object.fromEntries((desk?.boards || []).map((x) => [x.id, x.name]));
+      check('release: the seven games with a gate each have a switch and a board that waits for it; what is too good to be true is refused; the machine\'s time may carry its falls, never be told before the machine is through',
+        before.runs.every((st) => st === 400) && ids.every((b) => !(b in before.all.boards)) && ids.every((b) => on?.release?.[b] === true) && ids.every((b) => posted[b]?.day === 1 && after.boards[b]?.tops.day.some((e) => e.name === `New ${b}`))
+        && falls?.day === 2 && early.status === 400 && Object.values(bad).every((r) => r.status === 400)
+        && after.boards.waves.tops.day[0].score === 30_000 && after.boards.golf.tops.day[0].score === 31_127
+        && unit.waves === 'time' && unit.lava === 'time' && unit.hive === 'time' && unit.flip === 'time' && unit.cars === 'time' && unit.golf === 'strokes' && named.waves === 'Wave Goodbye' && named.hive === "The Bee's Knees" && named.golf === 'Par for the Course',
+        [before.runs, Object.fromEntries(ids.map((b) => [b, posted[b]?.day ?? posted[b]])), falls?.day ?? falls, early.status, Object.fromEntries(Object.entries(bad).map(([k, r]) => [k, r.status])), unit.golf, named.golf]);
     }
     // everybody is asked to refresh
     const t0 = Date.now();

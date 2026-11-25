@@ -24,14 +24,15 @@ are not offered to the game: `lab/oak/floor/` is one floor of the oak, tried aga
 the game is the jump from limb to limb with a ring of light that shows where it ends, the camera stays outside
 the tree; `node lab/oak/floor/test.mjs`).
 
-**Seven more games are being tried, and are not offered to the game yet**: `lab/games/` — Wave Goodbye (a bank
-of sand and the sea of everybody), Thin Crust (the lava rises, columns come up out of it), The Bee's Knees (four
-combs of wax that give way underfoot), Head Over Heels (a runner who turns gravity over in a machine of
-travelling girders), A Turn for the Worse (a track wound round a tower), Round the Bend (radio-controlled cars
-seen from above) and Par for the Course (nine holes of crazy golf round the acid pond). Every file of them is in
-that folder, only the lab page switches them on, each has its board of scores by its gate (the fair's own stand,
-built by the lab's plug), and `lab/games/README.md` says what each is, how it is checked, and what it takes to
-make one of them an extra like those of this page once its owner has tried it.
+**Seven more games are extras of the game, each behind a switch that is off as delivered** — Wave Goodbye
+(`waves`: a bank of sand and the sea of everybody), Thin Crust (`lava`: the lava rises, columns come up out of
+it), The Bee's Knees (`hive`: four combs of wax that give way underfoot), Head Over Heels (`flip`: a runner who
+turns gravity over in a machine of travelling girders), A Turn for the Worse (`spiral`: a track wound round a
+tower), Round the Bend (`cars`: radio-controlled cars seen from above) and Par for the Course (`golf`: nine holes
+of crazy golf round the acid pond). They were tried on this page first, then put in the game when their owner
+asked: their files are with the other games (`src/world/zones/games/<id>/`, `src/extras/<id>.js`,
+`tools/<id>-test.mjs`), the game keeps their boards of scores as it does for the six games above, and
+`lab/GAMES.md` says what each is and how it is checked.
 
 ## Switching them on in the game: one line
 

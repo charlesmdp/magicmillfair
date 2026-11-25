@@ -753,11 +753,11 @@ export const WAYS = {
 // of their own beside a few of the others, planted when the first of its games is there. `to`: the games a post
 // names, in the order of its planks (from the top) — each plank points straight at its game.
 export const GAME_SIGNPOSTS = [
-  { id: 'games-arrival', x: -116.1, z: -43.7, to: ['slide', 'hill', 'pond', 'boats', 'hollow', 'crack'] },
+  { id: 'games-arrival', x: -116.1, z: -43.7, to: ['slide', 'hill', 'pond', 'boats', 'hollow', 'crack', 'golf', 'cars'] },
   { id: 'games-plaza', x: -19.4, z: 2.5, to: ['slide', 'hollow', 'crack', 'pond', 'boats', 'hill'] },
   { id: 'games-pondside', x: -136.4, z: 7.5, to: ['pond', 'boats', 'hill'] },
-  { id: 'games-shore', x: 21.7, z: 53.8, to: ['hollow', 'crack'] },
-  { id: 'games-beach', x: 26.1, z: -82.1, to: ['slide'] },
+  { id: 'games-shore', x: 21.7, z: 53.8, to: ['hollow', 'crack', 'spiral', 'flip', 'lava'] },
+  { id: 'games-beach', x: 26.1, z: -82.1, to: ['slide', 'waves', 'hive'] },
 ];
 export const SIGNPOSTS = [
   // past the banner of the arrival, on the left of the lane: everything is ahead, the race is behind

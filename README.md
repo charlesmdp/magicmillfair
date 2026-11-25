@@ -1232,7 +1232,8 @@ framed, never listed, never kept.
 `lab/INTEGRATION.md`). The game switches them on through the switches above: **the caves are safe places**
 (nearby chat only), **the game in figures** (counters, the page `/opendata`, sums only — `server/stats.js`;
 the shop tells it what it sold and gave back, the relay how many are connected) and — each when its own
-switch goes on, all of them off as delivered — six games:
+switch goes on, all of them off as delivered — thirteen games, the six of the first table and the seven of the
+second (those have a gate one asks to play under, and are plugged in by `src/extras/plug.js`: see `lab/GAMES.md`):
 
 | Switch | Game | Where | Its score |
 |---|---|---|---|
@@ -1242,6 +1243,16 @@ switch goes on, all of them off as delivered — six games:
 | `hill` | **Uphill Battle**: up a slope while logs, barrels and boulders roll down it | between the Great Pond and the old tree | a time |
 | `crack` | **Between a Rock**: up a cleft between two needles of rock, from wall to wall | in the sea, at the south end of the bay | a time |
 | `hollow` | **The Nuclear Cave** (it was The Hollow Hill): a race flown under the ground, one lap, through what was buried there — atoms to take, rock to shave past | a mine at the foot of the sea cliff | a time |
+
+| Switch | Game | Where | Its score |
+|---|---|---|---|
+| `waves` | **Wave Goodbye**: a bank of sand, and the sea of everybody that comes in over it — one jumps what comes | off the north beach | how long one held |
+| `lava` | **Thin Crust**: basalt columns in a crater; the lava only rises, columns come up out of it | a volcano off the head of the pier | how long one held |
+| `hive` | **The Bee's Knees**: four combs of wax over the sea; the cell one stands on gives way | the north of the bay | how long one held |
+| `flip` | **Head Over Heels**: one runs by oneself in a machine of travelling girders, and one key turns gravity over | in the sea along the south side of the pier | the machine's time, 3 s more for each fall, a quarter of a second less for each spark |
+| `spiral` | **A Turn for the Worse**: a track wound round a tower, nineteen turns of obstacles up to its bell | a tower in the south of the bay | a time |
+| `cars` | **Round the Bend**: radio-controlled cars on a table, seen from above — three laps against three others | the meadow south of the acid pond | a time |
+| `golf` | **Par for the Course**: nine holes of crazy golf, each the valley in miniature | round the acid pond | its strokes, then the seconds of the round |
 
 With a switch off nothing of its game is loaded, built or drawn: the fair is the fair as it was. Switched on,
 a game is built at once on every screen, its board of scores exists from that moment (`BOARDS` in
@@ -1413,10 +1424,11 @@ notebook, with the rest. No new Durable Object class: such a room is a room like
 |---|---|
 | `npm run bake` | bakes the world, the statue and the textures again |
 | `npm run bake:statue` | sculpts the golden dog and its companions again (`-- --preview=dog.png` also draws them from six sides, `-- --cell=0.012` makes a finer mesh) |
-| `npm test` | 257 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password), the rooms that players make (bought, entered with a ticket, their own boards, asleep when unpaid, freed) |
-| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (188 in all) |
+| `npm test` | 258 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving), the accounts (and the code mailed to set a new password), the rooms that players make (bought, entered with a ticket, their own boards, asleep when unpaid, freed) |
+| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (196 in all) |
 | `npm run test:update` | a delivery from end to end, in the real game: two builds, a visitor in the world, the owner at the back office (`/admin`: the switches, a word to every room, a line refused, somebody kept out, the figures, two games of the lab thrown on — fetched and built as the game runs, each played by its own bot, its time on its board; each with its stand, its panel for a sponsor, its star on the map and its planks at the forks —, the sky villages stage by stage), every page asked to refresh but never in the middle of a sentence, then the server replaced by the next version — the page says so, refreshes, comes back at the same spot and says what is new; and a plain build leaves nothing of the game on the page (14 checks) |
 | `node tools/extras-test.mjs`, `node tools/slide-test.mjs`, `node tools/pond-test.mjs`, `node tools/boats-test.mjs`, `node tools/hill-test.mjs`, `node tools/crack-test.mjs`, `node tools/hollow-test.mjs`, `node tools/games-test.mjs` | the lab's own checks of its extras and of each of its games — the last one plays them in the running game, in a browser (see `lab/INTEGRATION.md`) |
+| `node tools/waves-test.mjs`, `node tools/lava-test.mjs`, `node tools/hive-test.mjs`, `node tools/flip-test.mjs`, `node tools/spiral-test.mjs`, `node tools/cars-test.mjs`, `node tools/golf-test.mjs`, `node tools/tunes-test.mjs`, `node tools/play-test.mjs` | the checks of the seven games with a gate — the rules of each (its bot plays it; the line of its board is held against `server/scores.js`), their music, and the seven played in the running game, in a browser, each switched on the way the game does it (see `lab/GAMES.md`) |
 | `npm run test:load` | a crowd at the door, with the real rules: 600 connections arrive in twenty seconds and walk (everybody gets in, rooms of about fifty, the lists say what is true, a state reaches the neighbours in time), 230 more follow one link (that room holds 200, never one more; the relay refuses whoever comes without asking; the owner still gets in), then most leave (the rooms that have emptied are offered a livelier one, nobody is moved or cut off) — 11 checks; `-- --cloudflare` plays it against the real Worker in the local Workers runtime, `-- --visitors=400` changes the crowd |
 | `npm run sim:rooms` | a whole day at the door, simulated with the real rules: the size of every room through the day as a picture (`tools/preview/rooms-<scenario>.png`), next to what the old door did; `-- --peak=800`, `-- --rules=open:40,start:15,low:6` try other days and other numbers |
 | `npm run test:shop` | the shop in the real game, on the Node server with test keys and a stand-in for Stripe: a hat bought and worn, the panel of a game sponsored, filled in (with a logo) and approved by the administrator, the stand of the gondolas, a plaque for a companion (bought at a bare plate, engraved with a picture, approved), an account made and signed in to on its card, the payment form inside the game (and Stripe's page when it cannot be shown); and a newcomer: the padlocks of the welcome card and the free day of the jetpack, the Game Pass bought as a subscription, what it lends (black, the largest size, a hat that was never bought), its end and the end of the free day; the window of the Trading Post; and a room of one's own: its card and its payment, its settings from a form, its password asked for at the door, a score on its board and on the world's, a visitor put out (30 checks) |

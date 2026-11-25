@@ -10,19 +10,9 @@ import { BOARDS } from '../server/scores.js';
 import { parseBody } from '../server/api.js';
 import { bearerKey, sameSecret } from '../server/token.js';
 import { unpackGeo } from '../server/visitors.js';
-// (the games being tried, lab/games: each says the line of its board in its rules)
-import { BOARD as waves } from './games/waves/rules.js';
-import { BOARD as lava } from './games/lava/rules.js';
-import { BOARD as hive } from './games/hive/rules.js';
-import { BOARD as flip } from './games/flip/rules.js';
-import { BOARD as spiral } from './games/spiral/rules.js';
-import { BOARD as cars } from './games/cars/rules.js';
-import { BOARD as golf } from './games/golf/rules.js';
 
 // (the boards the new games would write to, once the game asks for them: see lab/INTEGRATION.md)
 BOARDS.slide ||= { order: 'asc', min: 30_000, max: 3600_000 };
-// (and those of the games being tried: the lab's own server keeps their boards, as the page asks — lab/games/kit.js)
-for (const [id, board] of Object.entries({ waves, lava, hive, flip, spiral, cars, golf })) BOARDS[id] ||= board;
 
 export class Room extends GameRoom {
   async api(request, url) {

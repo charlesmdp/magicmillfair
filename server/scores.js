@@ -35,7 +35,8 @@ import { cleanName } from './protocol.js';
  * board id → what a score is. order 'asc': a time in ms, the lower the better, and the run lasted about that
  * long (or `length` ms at least, where the time is not that of the whole run); order 'desc': points, and the
  * game lasts `length` ms (never less), plus `each` ms for every point where points take time to make.
- * min / max: what is believed.
+ * min / max: what is believed. `added` (order 'asc'): how much of a time may be penalties put on the clock — a
+ * run cannot have lasted less than its time less that much.
  */
 export const BOARDS = {
   sky: { order: 'asc', min: 100_000, max: 6 * 3600_000 }, // the climb: a bot that never misses needs about 150 s
@@ -63,6 +64,19 @@ export const BOARDS = {
   hill: { order: 'asc', min: 18_000, max: 600_000, release: 'hill' }, // Uphill Battle: from the arch to the bell (run flat out with nothing in the way: 18.3 s)
   crack: { order: 'asc', min: 7000, max: 1800_000, release: 'crack' }, // Between a Rock: forty metres of cleft
   hollow: { order: 'asc', min: 15_000, max: 600_000, release: 'hollow' }, // The Nuclear Cave: one lap of the cave
+  // …and the seven games with a gate (src/extras/plug.js), each behind its own switch. Three are scored by how
+  // long one held (as the pond is), three by a time; the golf by its strokes — a thousand for each — then by the
+  // seconds of the round (`unit`: the back office writes it "31 strokes (2:07)"). The figures are those the
+  // checks of each game print (tools/<id>-test.mjs holds them against this table).
+  waves: { order: 'desc', min: 2500, max: 900_000, each: 1, unit: 'time', release: 'waves' }, // Wave Goodbye
+  lava: { order: 'desc', min: 1000, max: 98_000, each: 1, unit: 'time', release: 'lava' }, // Thin Crust: nobody holds longer than the lava takes to cover the highest column
+  hive: { order: 'desc', min: 6000, max: 90_000, each: 1, unit: 'time', release: 'hive' }, // The Bee's Knees: the bees see to it that no comb lasts longer
+  // Head Over Heels: the time the machine takes is the same for all (`length`); one's time is that, 3 s more for
+  // each fall, a quarter of a second less for each spark — so a time may be well over what the run lasted (`added`)
+  flip: { order: 'asc', min: 67_000, max: 600_000, length: 84_000, added: 600_000, release: 'flip' },
+  spiral: { order: 'asc', min: 144_000, max: 900_000, release: 'spiral' }, // A Turn for the Worse: from the first step to the bell
+  cars: { order: 'asc', min: 16_000, max: 180_000, release: 'cars' }, // Round the Bend: three laps of the table
+  golf: { order: 'asc', min: 9000, max: 63_999, unit: 'strokes', release: 'golf' }, // Par for the Course: nine holes, seven strokes a hole at most
   run: { order: 'desc', min: 1, max: 60_000, length: 2_000, each: 12 }, // the arcade cabinet: metres run (52 a second at the fastest), and 25 for an isotope now and then
 };
 export const KEPT = { all: 200, month: 100, week: 100, day: 100 }, SHOWN = 10;
@@ -178,6 +192,6 @@ export function runFits(note, { board, score }, at = Date.now()) {
   const elapsed = at - note.t;
   if (elapsed < 0 || elapsed > rule.max + 3600_000) return 'expired';
   // (a run may well have lasted longer than its clock says — the game stops while its tab is hidden — never less)
-  if (rule.order === 'asc') return elapsed >= Math.max(score - SLACK, (rule.length || 0) - 2000) ? '' : 'the time does not match the run';
+  if (rule.order === 'asc') return elapsed >= Math.max(score - SLACK - (rule.added || 0), (rule.length || 0) - 2000) ? '' : 'the time does not match the run';
   return elapsed >= (rule.length || 0) + (rule.each || 0) * score - 2000 ? '' : 'too soon';
 }

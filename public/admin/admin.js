@@ -55,6 +55,13 @@
     hill: ['Uphill Battle', 'Up a long slope while logs, barrels and boulders roll down it — a start every ten seconds.'],
     crack: ['Between a Rock', 'Up a cleft between two needles of rock in the sea, from wall to wall.'],
     hollow: ['The Nuclear Cave', 'A race flown under the ground: one lap of a great cave where waste was buried, against the clock.'],
+    waves: ['Wave Goodbye', 'A bank of sand off the north beach, and the sea that comes in: one jumps what comes, for as long as one can.'],
+    lava: ['Thin Crust', 'A volcano off the head of the pier: basalt columns, and lava that only rises — a round every ten seconds.'],
+    hive: ["The Bee's Knees", 'Four combs over the sea: the wax one stands on gives way, and the bees take it apart too.'],
+    flip: ['Head Over Heels', 'A machine along the pier: one runs by oneself and turns gravity over — a thousand metres, a start every ten seconds.'],
+    spiral: ['A Turn for the Worse', 'A track wound round a tower in the bay: nineteen turns of obstacles, up to its bell.'],
+    cars: ['Round the Bend', 'Radio-controlled cars raced on a table by the acid pond, seen from above: three laps against three others.'],
+    golf: ['Par for the Course', 'Nine holes of crazy golf round the acid pond, each the valley in miniature.'],
     caves: ['The caves are safe places', 'In a cave, only those nearby hear what is said.'],
     stats: ['The game in figures', 'The counters, and the page /opendata.'],
     stars: ['Stars on the map', 'On: the big attractions wear a red star and their name on the map (M). Off: the map names its places only.'],
@@ -174,6 +181,7 @@
   let boards = null;
   const scoreText = (unit, score) => {
     if (unit === 'time') { const s = score / 1000, m = Math.floor(s / 60); return `${m}:${(s - m * 60).toFixed(2).padStart(5, '0')}`; }
+    if (unit === 'strokes') { const s = score % 1000; return `${Math.floor(score / 1000)} strokes (${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')})`; } // (the golf: strokes × 1000 + seconds)
     return unit === 'ms' ? `${score} ms` : score.toLocaleString('en-US');
   };
   // (every board at once, a card each: the first five of the period chosen — the rest behind "Show all")
