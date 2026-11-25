@@ -947,7 +947,9 @@ try {
           // twelve floors dropped just right, then one beside the tower
           const v = bot.at === undefined ? 0 : G.at - bot.at, floors = +(s.line.match(/(\d+) floor/) || [0, 0])[1];
           bot.at = G.at;
-          if (floors < 12 ? Math.abs(G.at + v - G.goal) < 0.04 : Math.abs(G.at - G.goal) > 2.05) input._clicks++;
+          // (not on the first two steps: until the game has moved, what it says of the floor is where the one that slides
+          // while nobody plays happened to be — a drop then would be a drop beside the tower)
+          if (n > 1 && (floors < 12 ? Math.abs(G.at + v - G.goal) < 0.04 : Math.abs(G.at - G.goal) > 2.05)) input._clicks++;
         } else if (booth.id === 'geiger') {
           // the lamps that light while the sequence is shown are written down, then clicked in that order; after six rounds, the wrong ones
           const lit = [0, 1, 2, 3].map((k) => named(new RegExp(`:lit${k}$`))[0]), stage = +(s.line.match(/round (\d+)/) || [0, 1])[1];

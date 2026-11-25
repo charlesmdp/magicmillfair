@@ -330,7 +330,7 @@ export class Hollow {
     for (const side of [-0.45, 0.45]) { let prev = null; for (let z = mz + 0.2; z > M.z - 2.6; z -= 0.8) { const p = V(M.x + side, this.data.heightAt(M.x + side, z) + 0.09, z); if (prev) iron.tint(0.32, 0.3, 0.3, 1).rod(prev, p, 0.035, 4, { caps: false }); prev = p; } }
     for (let z = mz - 0.2; z > M.z - 2.4; z -= 0.7) { const y = this.data.heightAt(M.x, z); timber.tint(0.8, 0.75, 0.7, 1).beam(V(M.x - 0.75, y + 0.04, z), V(M.x + 0.75, y + 0.04, z), 0.16, 0.08); }
     // (drums left by the mouth: what the cave is for)
-    for (const [dx, dz, lie] of [[-2.35, -0.5, false], [-2.98, -0.2, false], [-2.75, -1.3, true]]) {
+    for (const [dx, dz, lie] of [[-2.35, -0.5, false], [-2.98, -0.2, false], [-2.8, -1.15, false]]) {
       const x = M.x + dx, z = mz + dz, y = this.data.heightAt(x, z) - 0.06 + (lie ? 0.3 : 0), pitch = lie ? Math.PI / 2 : 0;
       iron.tint(0.95, 0.74, 0.08, 1).place(x, y, z, dx * 7, pitch, 0).cylinder(0, 0, 0, 0.3, 0.3, 0.95, 10).pop();
       black.tint(0.03, 0.03, 0.03, 1).place(x, y, z, dx * 7, pitch, 0).cylinder(0, 0.3, 0, 0.312, 0.312, 0.06, 10).cylinder(0, 0.64, 0, 0.312, 0.312, 0.06, 10).pop();
