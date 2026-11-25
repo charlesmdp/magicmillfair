@@ -785,6 +785,24 @@ export const SIGNPOSTS = [
 // rock, its foot `lift` above the grass. How it leans and bends is the rock's own business (it reads the cliff).
 export const THANKS_WALL = { x: -268.05, z: -82.2, yaw: 70 * DEG, width: 28, height: 10, lift: 1.3 };
 
+// Ten things left over from the world before, by the paths (zones/games/Relics.js: what each is and says).
+// (x, z): a wish — the nearest free ground is taken (dry, level, off the path, clear of the trees and of what
+// is built) — or, `fixed`, the very spot (on the verge of the lane, at the corner of the deck: chosen by eye);
+// `face`: the point it looks at; `sea`: it is turned so that its right hand points at the nearest sea (the
+// arrow of the road sign).
+export const RELICS = [
+  { id: 'barrel', x: -117.5, z: -39.6, fixed: true, face: [-113, -40] },
+  { id: 'billboard', x: -120, z: -70, face: [-113, -68] },
+  { id: 'sunflower', x: -119.5, z: -95, face: [-116.3, -97.4] },
+  { id: 'geiger', x: -229.5, z: -86.5, face: [-223, -86] },
+  { id: 'hatch', x: -63.5, z: -30.5, face: [-61.4, -24.9] },
+  { id: 'vendor', x: -22, z: 5, face: [-17.9, 0.6] },
+  { id: 'news', x: 5, z: -4.5, face: [0, 3] },
+  { id: 'clock', x: 9, z: 44.5, face: [6.4, 47.6] },
+  { id: 'tally', x: -45.5, z: -93.5, face: [-41.6, -91.2] },
+  { id: 'sign', x: 23.9, z: -89.6, fixed: true, sea: true, face: [24, -84] },
+];
+
 // What stands on the way for visitors to read (zones/games/Notices.js): the banner and the rules where one
 // arrives; the boards of what is new, by the poppy field; the booth of the sponsors, at the Trading Post; and
 // the arcade cabinet at the top of the ramp of the pier (in the frame of the pier), its board of scores across the walk.

@@ -12,6 +12,7 @@ import { Race } from './Race.js';
 import { Wing } from './Wing.js';
 import { buildNotices } from './Notices.js';
 import { buildThanksWall } from './ThanksWall.js';
+import { buildRelics } from './Relics.js';
 import { CLIMB, ACID, BOULDER, ISLAND, islandPath, islandAt, ISLAND_LENGTH, SEA_REACH, SHARK, PONDS } from '../../layout/layout.js';
 import { climbCourse, stoneDepth, formatTime } from './course.js';
 import { canvasBoard, drawScores, drawSponsor } from './Boards.js';
@@ -75,6 +76,7 @@ export class GamesZone {
     this.wing = new Wing(this).build(); // the theatre of the plaza
     this.notices = buildNotices(this); // what is new, who sponsors what, and the arcade cabinet of the pier
     this.thanks = buildThanksWall(this); // every sponsor, cut into the cliff by the acid pond
+    this.relics = buildRelics(this); // ten things left over from the world before, by the paths
     this.group.updateMatrixWorld(true);
     return this;
   }

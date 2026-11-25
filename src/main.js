@@ -1125,6 +1125,22 @@ async function boot() {
       .then((i) => { if (i === null) return; const acts = placeActions(ids[i]); if (acts.length) acts[0].run(); else hud.note(shop.open ? 'That one is taken.' : 'The shop is not open yet. Come back soon!', 4000); });
   };
   world.actionSources.push((p) => (world.pier.sponsorBooth && near(p, world.pier.sponsorBooth, 2.6) ? { label: 'The gondolas and their sponsors', run: chooseGondola } : null));
+  {
+    // ten things left over from the world before (zones/games/Relics.js): looked at, each has a word to say —
+    // and which ones were looked at is remembered, to say when all of them were
+    const relics = world.games.relics, seen = new Set((store.get('mmf.relics') || '').split(',').filter((id) => relics.list.some((q) => q.id === id)));
+    world.actionSources.unshift((p) => { // (before the flowers at its foot)
+      const q = relics.near(p.pos.x, p.pos.z);
+      if (!q || Math.abs(p.pos.y - q.y) > 2.5) return null;
+      return { label: `Look at ${q.label}`, run: () => {
+        const first = !seen.has(q.id), all = relics.list.length;
+        seen.add(q.id);
+        if (first) store.set('mmf.relics', [...seen].join(','));
+        hud.note(`${q.text}${!first ? '' : seen.size >= all ? ` — That was the last of the ${all} relics of the world before. Now you know.` : ` — Relic ${seen.size} of ${all}.`}`, 12000);
+        audio.play('tick');
+      } };
+    });
+  }
   const photographer = new Photographer(engine);
   /** A photograph of a game as it stands right now: from in front of it, a little to the side. */
   const photoOf = (key) => {

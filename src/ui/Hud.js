@@ -1120,6 +1120,7 @@ export class Hud {
 
   note(text, ms = 2600) {
     this.noteEl.textContent = text;
+    this.noteEl.classList.toggle('long', String(text).length > 64); // (a few lines to read: it wraps)
     this.noteEl.classList.add('show');
     clearTimeout(this._tn);
     this._tn = setTimeout(() => this.noteEl.classList.remove('show'), ms);

@@ -300,6 +300,9 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border-radius: 
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .note { position: absolute; left: 50%; bottom: calc(96px + var(--safe-b)); transform: translateX(-50%); opacity: 0; transition: opacity 0.4s; pointer-events: none !important; }
 .note.show { opacity: 1; }
+/* (a few lines to read: it wraps, and stands above the prompts rather than under them) */
+.note.long { display: block; width: max-content; max-width: min(560px, calc(100vw - 28px)); bottom: calc(200px + var(--safe-b)); white-space: normal; text-align: center; line-height: 1.4; border-radius: 16px; padding: 10px 16px; }
+.touch .note.long { bottom: calc(222px + var(--safe-b)); }
 /* a list to choose from (the sky villages) */
 .chooser { position: absolute; inset: 0; display: none; place-items: center; grid-template-rows: minmax(0, 1fr); background: rgba(8, 14, 10, 0.6); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 16; padding: 12px; }
 .chooser.on { display: grid; }

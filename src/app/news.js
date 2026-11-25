@@ -7,6 +7,7 @@ export const NEWS = [
     date: '25 November 2026',
     items: [
       ['A wall of thanks', 'Cut into the cliff above the poppies, in the north-west: every sponsor of the fair, the most generous first. Thanks to them, the game is free.'],
+      ['Ten relics of before', 'Here and there by the paths, something is left of the world before the oasis: a road sign, a vending machine, a clock that stopped… Walk up and look. There are ten.'],
       ['Sponsors on the big wheel', 'A sponsored gondola now carries its banner for all to see, with its number — and the Trading Post shows which one is whose.'],
       ['Your name, yours alone', 'Make an account and its name is reserved: nobody else can play, chat or score under it.'],
       ['Straight in', 'You chose a name and a colour once: the fair remembers, and lets you in without asking again. The settings change them.'],
