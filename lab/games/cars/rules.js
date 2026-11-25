@@ -5,10 +5,18 @@
 // straight past the stand with a pad that kicks, a fast sweep with sand on its outside, a flick right and left, a
 // ramp to fly off, a hairpin, a patch of oil, a second hairpin the other way and a third back to the straight —
 // boards all round, so that nobody leaves the tarmac for long. One stands at the stand, the remote in hand, and
-// looks down at the whole of it: the stick says where the car should go ON THE PICTURE — up is away from the
-// stand —, the car turns its nose that way and pulls; let go and it brakes. The nose turns faster than the tyres
-// can follow: thrown into a bend the car slides, and what slides is lost. The jump is a short boost, which comes
-// back by itself.
+// looks down at the whole of it. The remote is that of a real radio-controlled car, and it speaks to the CAR, not
+// to the picture: up is the throttle — the car goes the way its nose points —, down brakes and then backs it up,
+// left and right turn it to its own left and right. Let go of everything and it rolls to a stop.
+//
+// The nose turns faster than the tyres can follow: thrown into a bend at speed the tail steps out and the car
+// slides — a drift —, held with the throttle and caught with the wheel turned the other way. While it slides, it
+// builds sparks under its tyres (yellow, then orange, then blue); once it straightens up they are let go as a short
+// burst of speed, the stronger the longer the slide. The jump is a short boost, which comes back by itself.
+//
+// Fire: a hoop of fire stands over the lip of the ramp (it is only seen: one flies through it), and a few jets
+// beside the track burst on the clock of the race — the same for every car — once the first lap is under way;
+// driven through while it burns, a car loses much of its speed and is blackened for a moment.
 //
 // A race is three laps from a standing start, against the clock and against three cars that drive by themselves;
 // one starts last. Sixteen gates across the track are passed in their order, or the lap does not count. The score
@@ -25,19 +33,21 @@ export const CARS = {
   rise: 0.6, // its top stands so far over the highest ground under it: the grass of the meadow is tall
   gate: { x: -243.5, z: -45.9, yaw: Math.PI }, // where one asks to play: on the grass before the stand, looking at the table (a heading of the valley: 0 looks south)
   stand: { z: -47.25, w: 2.8, d: 1.5, up: 0.5 }, // the stand against the table, where one's robot is while one drives: its middle, its size, its height over the grass
-  view: Math.PI, // "up" on the stick and on the picture: north, away from the stand
+  view: Math.PI, // "up" on the picture: north, away from the stand (the camera turns it for a phone held upright)
   step: 1 / 120,
   laps: 3, limit: 180, // a race; the second after which it is called off
   gates: 16,
   road: 1.15, wall: 1.45, body: 0.2, // half the tarmac; the boards, from the centre line; a car, as the boards and the other cars feel it
-  top: 7.5, accel: 9.5, brake: 7.5, coast: 3.2, // m/s flat out; m/s² from rest; lost when the stick is let go; lost over the top speed with the stick full
-  grip: 13, slide: 0.55, over: 1.8, turn: 5.5, // m/s² the tyres hold across — and the share of it lost once the car slides; how much faster the nose turns than they can follow; rad/s at most
+  top: 7.5, accel: 9.5, brake: 7.5, coast: 3.2, reverse: 3, // m/s flat out; m/s² from rest; m/s² of the brake; lost when the stick is let go (and over the top speed); m/s backwards at most
+  grip: 13, slide: 0.55, over: 1.8, turn: 5.5, wheel: 0.5, lag: 12, // m/s² the tyres hold across — and the share of it lost once the car slides; how much faster the nose can turn than they follow; rad/s at most; the tightest circle at a crawl (m); how quickly the nose answers the wheel (1/s)
+  drift: { on: 2, off: 0.8, yaw: 1.15, heat: [0.3, 0.75, 1.3], time: [0.35, 0.6, 0.9], top: [9, 10, 11], accel: 16 }, // a slide: begins over so many m/s across, ends under; the tail swings so much more; seconds of slide for yellow, orange and blue sparks; the burst each lets go: so long, up to so fast, so hard
   boost: { time: 0.9, top: 10.5, accel: 17, back: 4 }, // the jump: so long, so fast; the seconds before it is there again
   pad: { kick: 3.2, top: 11 }, cap: 11.5, // the pad on the straight: m/s more, up to so much; nothing ever goes faster than the cap
   verge: { top: 0.6, grip: 0.7, drag: 5 }, sand: { top: 0.45, grip: 0.6, drag: 9 }, // off the tarmac, in the sand: the share of the speed and of the grip left, m/s² lost
   oil: { time: 0.7, grip: 1.2, spin: 10 }, // on oil: so long without the tyres, the nose going round (rad/s)
   ramp: { length: 1.4, high: 0.3 }, g: 9.8,
   bounce: 0.45, rub: 0.25, // off a board: the share of the speed given back; what rubbing along it costs
+  fire: { every: 3.2, burst: 0.8, warn: 0.7, from: 15, keep: 0.55, time: 1.2 }, // the jets: a burst every so many seconds, so long, glowing so long before; quiet before the second `from`; what a burst leaves of the speed; how long the car stays black
 };
 
 const C = CARS, STEP = C.step, TAU = Math.PI * 2;
@@ -125,6 +135,23 @@ export const SAND = stretch(6.5 + 5.1 * Math.sin(0.61), 0.8 + 5.1 * Math.cos(0.6
 export const RAMP = stretch(-2.5, -5.9, C.ramp.length, -1.1, 1.1);
 /** The oil, before the second hairpin, on the side one would cut it from. */
 export const OIL = stretch(-4.4, -1.9, 1.1, -0.95, -0.15);
+/**
+ * The jets of fire, standing on the boards of a straight: each burns across its own side of the tarmac, from the
+ * board to a little short of the middle — the other side stays clear. `side`: 1 on the left of the way one goes.
+ */
+const jet = (x, z, side) => ({ ...stretch(x, z, 0.9, side > 0 ? 0.25 : -C.wall, side > 0 ? C.wall : -0.25), side });
+export const JETS = [jet(2.6, 5.9, 1), jet(0.2, -5.9, 1), jet(-6, 1.9, -1)];
+/**
+ * Where jet `j` is in its round (s since its last burst began), on the clock of the race — the same for every car;
+ * -1 while the jets are still quiet. It burns for the first C.fire.burst of a round, and glows C.fire.warn before.
+ */
+export function jetTime(st, j) {
+  const F = C.fire;
+  if (st.clock < F.from) return -1;
+  const t = st.clock - F.from + (j * F.every) / JETS.length + hash(st.seed, 20 + j) * 0.8;
+  return t - Math.floor(t / F.every) * F.every;
+}
+export const jetOn = (st, j) => { const t = jetTime(st, j); return t >= 0 && t < C.fire.burst; };
 /** Is the place (s: samples along the lap, l) on this stretch? */
 export const inZone = (zone, s, l) => { let d = s - zone.k0; d -= Math.floor(d / M) * M; return d < zone.n && l >= zone.l0 && l <= zone.l1; };
 /** How high the ramp stands at (s, l): 0 anywhere else. */
@@ -151,9 +178,9 @@ export const SHORTEST = GATE.reduce((sum, _, j) => { const a = gateEnds(j), b = 
 export const BOARD = { order: 'asc', min: Math.floor((C.laps * SHORTEST) / C.cap) * 1000, max: C.limit * 1000 };
 
 // ---- the line a car that drives by itself follows: the one that bends least between the edges of the tarmac
-// (clear of the sand and of the oil), and how fast each place of it can be taken
+// (clear of the sand, of the oil and of the jets), and how fast each place of it can be taken
 const ROOM = C.road - 0.33, LO = new Float64Array(M).fill(-ROOM), HI = new Float64Array(M).fill(ROOM);
-for (const zone of [SAND, OIL]) for (let n = -3; n < zone.n + 3; n++) { const k = (((zone.k0 + n) % M) + M) % M; if (zone.l1 < 0.3) LO[k] = Math.max(LO[k], zone.l1 + 0.3); else HI[k] = Math.min(HI[k], zone.l0 - 0.3); }
+for (const zone of [SAND, OIL, ...JETS]) for (let n = -3; n < zone.n + 3; n++) { const k = (((zone.k0 + n) % M) + M) % M; if (zone.l1 < 0.3) LO[k] = Math.max(LO[k], zone.l1 + 0.3); else HI[k] = Math.min(HI[k], zone.l0 - 0.3); }
 const OFF = new Float64Array(M), SPEED = new Float64Array(M), FREE = new Uint8Array(M);
 {
   // (found on every fourth sample: each in its turn is put where the line bends least between its four
@@ -204,9 +231,9 @@ export const RACING = { off: OFF, speed: SPEED, lo: LO, hi: HI };
 export const ACE = { name: 'you', pace: 1, top: 1, wander: 0, boost: true, delay: 0 };
 /** The three rivals, as they stand on the grid: the best in front. */
 export const RIVALS = [
-  { name: 'Blue', pace: 0.87, top: 0.95, wander: 0.1, boost: false, delay: 0.06 },
-  { name: 'Yellow', pace: 0.81, top: 0.925, wander: 0.2, boost: false, delay: 0.2 },
-  { name: 'White', pace: 0.75, top: 0.9, wander: 0.3, boost: false, delay: 0.32 },
+  { name: 'Blue', pace: 0.93, top: 0.97, wander: 0.1, boost: false, delay: 0.06 },
+  { name: 'Yellow', pace: 0.86, top: 0.94, wander: 0.2, boost: false, delay: 0.2 },
+  { name: 'Pink', pace: 0.8, top: 0.91, wander: 0.3, boost: false, delay: 0.32 },
 ];
 
 /** Puts a car on the track: `s` metres along the lap from the line, `l` to the left of the centre line, going at `v` the way of the lap. */
@@ -219,18 +246,20 @@ export function putCar(c, s, l = 0, v = 0) {
 }
 
 /**
- * A race on the grid: car 0 is one's own, last; the three rivals before it. `seed`: what the rivals stray by.
- * A car: where it is (x, z; y over the tarmac), how it goes (vx, vz, vy), where its nose points (yaw), along the
- * lap (k, s, l), `slip` (m/s it slides across), `air`, `boost` (s left of it) and `charge` (0 … 1: 1, it is there),
- * `oil` (s left without tyres), `gate` (the gates passed, in their order, since the start), `done`, `time` (ms)
- * and `rank`. The race: `clock` (s since the green light), `view` (the heading of "up" on the stick), `over`,
- * `time` (ms) and `place` once one's own car is home — or `out`, called off.
+ * A race on the grid: car 0 is one's own, last; the three rivals before it. `seed`: what the rivals stray by, and
+ * when the jets burn. A car: where it is (x, z; y over the tarmac), how it goes (vx, vz, vy), where its nose points
+ * (yaw) and how fast it turns (wr, rad/s), along the lap (k, s, l), `slip` (m/s it slides across), `drift` (it
+ * slides), `heat` (s of the slide so far) and `level` (its sparks: 0 none, 1 yellow, 2 orange, 3 blue), `turbo` (s
+ * left of the burst a slide let go), `air`, `boost` (s left of it) and `charge` (0 … 1: 1, it is there), `oil` (s
+ * left without tyres), `scorch` (s left black from a jet), `gate` (the gates passed, in their order, since the
+ * start), `done`, `time` (ms) and `rank`. The race: `clock` (s since the green light), `view` (the way "up" on the
+ * picture looks: the camera's), `over`, `time` (ms) and `place` once one's own car is home — or `out`, called off.
  */
 export function startRace(seed = 1) {
   const cars = [];
   for (let i = 0; i < 4; i++) {
     const slot = i === 0 ? 3 : i - 1, skill = i === 0 ? ACE : RIVALS[i - 1];
-    cars.push(putCar({ skill, top: i === 0 ? 1 : skill.top, phase: hash(seed, i) * TAU, slip: 0, drift: false, airT: 0, boost: 0, charge: 1, guard: 0, oil: 0, slick: 0, spin: 0, wrong: 0, gate: 0, done: false, time: 0, rank: 0, walls: 0 }, -(0.9 + 0.9 * slot), slot % 2 ? -0.5 : 0.5));
+    cars.push(putCar({ skill, top: i === 0 ? 1 : skill.top, phase: hash(seed, i) * TAU, slip: 0, drift: false, heat: 0, level: 0, turbo: 0, turboTop: 0, wr: 0, airT: 0, boost: 0, charge: 1, scorch: 0, stuck: 0, backing: 0, guard: 0, oil: 0, slick: 0, spin: 0, wrong: 0, gate: 0, done: false, time: 0, rank: 0, walls: 0 }, -(0.9 + 0.9 * slot), slot % 2 ? -0.5 : 0.5));
   }
   return { seed, view: C.view, cars, clock: 0, acc: 0, want: false, over: false, out: false, time: 0, place: 0, finished: 0 };
 }
@@ -243,10 +272,11 @@ const progress = (c) => { if (c.done) return 1e6 - c.rank; let d = GATE[c.gate %
 export function placeOf(st, i = 0) { const mine = progress(st.cars[i]); let n = 1; for (let j = 0; j < st.cars.length; j++) if (j !== i && progress(st.cars[j]) > mine) n++; return n; }
 
 /**
- * Advances a race by `dt` seconds. `input`: one's stick — { x (-1 … 1, to the right of the picture), y (-1 … 1,
- * up the picture), jump (true on the frame it is asked) }. `events`: { type: 'gate' (car, gate, time) | 'lap'
- * (car, lap: the one that begins) | 'finish' (car, time, place) | 'wall' | 'bump' (car, with, speed) | 'boost' |
- * 'pad' | 'oil' | 'jump' | 'land' | 'drift' | 'wrong' (car) | 'out' }.
+ * Advances a race by `dt` seconds. `input`: one's remote — { x (-1 … 1: the wheel, to the car's right), y (-1 … 1:
+ * up the throttle, down the brake and then backwards), jump (true on the frame it is asked) }. `events`: { type:
+ * 'gate' (car, gate, time) | 'lap' (car, lap: the one that begins) | 'finish' (car, time, place) | 'wall' | 'bump'
+ * (car, with, speed) | 'spark' (car, level: the sparks of a slide grow) | 'turbo' (car, level: let go) | 'fire' (car,
+ * jet) | 'boost' | 'pad' | 'oil' | 'jump' | 'land' | 'drift' | 'wrong' (car) | 'out' }.
  */
 export function stepRace(st, dt, input, events) {
   if (input?.jump) st.want = true;
@@ -255,19 +285,16 @@ export function stepRace(st, dt, input, events) {
   return st;
 }
 
-const _cmd = { dx: 0, dz: 1, m: 0, boost: false };
+const _cmd = { steer: 0, throttle: 0, boost: false };
+const dead = (v) => { v = clamp(v || 0, -1, 1); return Math.abs(v) < 0.12 ? 0 : v; };
 function sub(st, input, events) {
-  const cars = st.cars, FX = Math.sin(st.view), FZ = Math.cos(st.view), RX = -FZ, RZ = FX;
+  const cars = st.cars;
   st.clock += STEP;
   for (let i = 0; i < cars.length; i++) {
     const c = cars[i];
-    if (i === 0 && !c.done) {
-      // one's own: the stick, read on the picture
-      const ix = clamp(input?.x || 0, -1, 1), iy = clamp(input?.y || 0, -1, 1), il = Math.hypot(ix, iy);
-      if (il < 0.14) { _cmd.m = 0; _cmd.dx = Math.sin(c.yaw); _cmd.dz = Math.cos(c.yaw); } else { _cmd.m = Math.min(1, il); _cmd.dx = (FX * iy + RX * ix) / il; _cmd.dz = (FZ * iy + RZ * ix) / il; }
-      _cmd.boost = st.want;
-    } else botDrive(st, i, _cmd);
-    drive(c, i, _cmd, events);
+    if (i === 0 && !c.done) { _cmd.steer = dead(input?.x); _cmd.throttle = dead(input?.y); _cmd.boost = st.want; } // one's own: the remote, as the car feels it
+    else botDrive(st, i, _cmd);
+    drive(st, c, i, _cmd, events);
   }
   st.want = false;
   // ---- car against car: they push each other apart and trade what they close at
@@ -301,37 +328,61 @@ function hold(c, i, events) {
   if (out > 1.2) { c.walls++; events?.push({ type: 'wall', car: i, speed: out }); }
 }
 
-/** A car for one step: its nose turns the way `cmd` says, it pulls or brakes, its tyres hold what they can. */
-function drive(c, i, cmd, events) {
-  const dt = STEP;
+/** How fast the nose can turn (rad/s) at `a` m/s along it: tight at a crawl, never more than the tyres allow by far. */
+const rateAt = (a, drift) => Math.min(C.turn, a / C.wheel, (C.over * C.grip) / Math.max(a, 0.5)) * (drift ? C.drift.yaw : 1);
+
+/**
+ * A car for one step: the wheel turns its nose (backwards the other way round), the throttle pulls it along its
+ * nose, the brake stops it and then backs it up; its tyres hold what they can across, the rest slides.
+ */
+function drive(st, c, i, cmd, events) {
+  const dt = STEP, D = C.drift;
   c.s0 = c.s;
   if (c.boost > 0) c.boost -= dt; else if (c.charge < 1) c.charge = Math.min(1, c.charge + dt / C.boost.back);
+  if (c.turbo > 0) c.turbo -= dt;
   if (c.guard > 0) c.guard -= dt;
   if (c.slick > 0) c.slick -= dt;
+  if (c.scorch > 0) c.scorch -= dt;
   if (cmd.boost && c.charge >= 1 && !c.done) { c.boost = C.boost.time; c.charge = 0; events?.push({ type: 'boost', car: i }); }
-  const speed = Math.hypot(c.vx, c.vz);
+  const speed = Math.hypot(c.vx, c.vz), t = cmd.throttle;
   if (c.air) { c.vy -= C.g * dt; c.y += c.vy * dt; c.airT += dt; c.slip = 0; } else {
     // what is under the wheels
     const free = c.oil > 0, v0x = c.vx, v0z = c.vz;
     const surf = inZone(SAND, c.s, c.l) ? C.sand : Math.abs(c.l) > C.road ? C.verge : null;
     let grip = C.grip * (surf ? surf.grip : 1);
-    // the nose: on oil it goes round by itself; else it turns the way one points, faster than the tyres follow
-    if (c.oil > 0) { c.oil -= dt; c.yaw = wrap(c.yaw + c.spin * dt); grip = C.oil.grip; } else if (cmd.m > 0) {
-      const d = wrap(Math.atan2(cmd.dx, cmd.dz) - c.yaw), rate = Math.min(C.turn, (C.over * C.grip) / Math.max(speed, 0.5));
-      c.yaw = wrap(c.yaw + clamp(d * 14, -rate, rate) * dt);
+    let fx = Math.sin(c.yaw), fz = Math.cos(c.yaw), along = c.vx * fx + c.vz * fz;
+    // the nose: on oil it goes round by itself; else the wheel turns it — to the car's own left or right, the other
+    // way round when it backs up — and the tyres pushing on make it turn a little even against a board
+    if (c.oil > 0) { c.oil -= dt; c.wr = c.spin; c.yaw = wrap(c.yaw + c.spin * dt); grip = C.oil.grip; c.drift = false; c.heat = 0; c.level = 0; } else {
+      const back = along < -0.05 || (t < 0 && along < 0.3) ? -1 : 1, want = -cmd.steer * back * rateAt(Math.max(Math.abs(along), 0.6 * Math.abs(t)), c.drift);
+      c.wr += (want - c.wr) * Math.min(1, C.lag * dt);
+      c.yaw = wrap(c.yaw + c.wr * dt);
     }
-    const fx = Math.sin(c.yaw), fz = Math.cos(c.yaw);
-    let along = c.vx * fx + c.vz * fz;
+    fx = Math.sin(c.yaw); fz = Math.cos(c.yaw); along = c.vx * fx + c.vz * fz;
     const lx = c.vx - fx * along, lz = c.vz - fz * along, across = Math.hypot(lx, lz);
-    // along the nose: towards the speed the stick asks for
-    const share = surf ? surf.top : 1, top = C.top * c.top * share, lim = c.boost > 0 ? Math.max(top, C.boost.top * share) : top, want = cmd.m * lim;
-    if (along < want) along += Math.min((c.boost > 0 ? C.boost.accel : C.accel) * (c.boost > 0 ? 1 : Math.min(1.3, 1 - along / lim)) * (c.oil > 0 ? 0.3 : 1) * dt, want - along);
-    else { let drag = C.coast + (1 - cmd.m) * (C.brake - C.coast); if (surf && along > top) drag = Math.max(drag, surf.drag); along -= Math.min(drag * dt, along - want); }
-    // across it: the tyres take away what they can hold, the rest slides
-    const held = grip * (1 - C.slide * clamp((across - 1.2) / 1.3, 0, 1)) * dt, keep = across > held ? (across - held) / across : 0;
+    // along the nose: the throttle pulls towards the speed it asks for; the brake stops, then backs up; let go, it rolls to a stop
+    const share = surf ? surf.top : 1, top = C.top * c.top * share, boost = c.boost > 0, turbo = c.turbo > 0;
+    const lim = Math.max(top, boost ? C.boost.top * share : 0, turbo ? c.turboTop * share : 0), push = boost ? C.boost.accel : turbo ? D.accel : C.accel * Math.min(1.3, 1 - along / lim);
+    if (t > 0 && along < t * lim) along += Math.min(push * (c.oil > 0 ? 0.3 : 1) * dt, t * lim - along);
+    else if (t < 0 && along > 0.3) along -= Math.min(C.brake * -t * dt, along);
+    else if (t < 0 && along > t * C.reverse) along -= Math.min(C.accel * 0.6 * dt, along - t * C.reverse);
+    else { let drag = C.coast; if (surf && along > top) drag = Math.max(drag, surf.drag); const goal = t > 0 ? t * lim : t < 0 ? t * C.reverse : 0; along += clamp(goal - along, -drag * dt, drag * dt); }
+    // across it: the tyres take away what they can hold, the rest slides — the more so with the throttle open and
+    // the wheel turned into the bend; straightened up, or turned the other way, the tyres bite again
+    const into = clamp(cmd.steer * Math.sign(lx * fz - lz * fx), 0, 1);
+    const held = grip * (1 - C.slide * clamp((across - 1.2) / 1.3, 0, 1) * (0.6 + 0.4 * Math.max(0, t)) * (0.45 + 0.55 * into)) * dt, keep = across > held ? (across - held) / across : 0;
     c.vx = fx * along + lx * keep; c.vz = fz * along + lz * keep; c.slip = across * keep;
     if (free) { c.vx = v0x * (1 - 0.25 * dt); c.vz = v0z * (1 - 0.25 * dt); c.slip = 0; } // (on oil nothing grips and nothing pulls: it goes on the way it went)
-    if (!c.drift && c.slip > 2) { c.drift = true; events?.push({ type: 'drift', car: i }); } else if (c.drift && c.slip < 0.8) c.drift = false;
+    // the slide: it heats the tyres — yellow, orange, blue sparks —, and straightening up lets them go as a burst
+    if (!free) {
+      if (!c.drift && c.slip > D.on && speed > 3) { c.drift = true; c.heat = 0; c.level = 0; events?.push({ type: 'drift', car: i }); }
+      else if (c.drift && c.slip < D.off) {
+        c.drift = false;
+        if (c.level) { c.turbo = D.time[c.level - 1]; c.turboTop = D.top[c.level - 1]; events?.push({ type: 'turbo', car: i, level: c.level }); }
+        c.heat = 0; c.level = 0;
+      }
+      if (c.drift && !surf) { c.heat += dt; const lv = c.heat >= D.heat[2] ? 3 : c.heat >= D.heat[1] ? 2 : c.heat >= D.heat[0] ? 1 : 0; if (lv > c.level) { c.level = lv; events?.push({ type: 'spark', car: i, level: lv }); } }
+    }
   }
   const now = Math.hypot(c.vx, c.vz);
   if (now > C.cap) { c.vx *= C.cap / now; c.vz *= C.cap / now; }
@@ -344,13 +395,18 @@ function drive(c, i, cmd, events) {
     if (c.vy > 0.8) events?.push({ type: 'jump', car: i });
   } else { c.climb = clamp((h - c.y) / dt, 0, (C.ramp.high / C.ramp.length) * now); c.y = h; }
   if (c.air) return;
-  // ---- the pad kicks; the oil takes the tyres away
+  // ---- the pad kicks; the oil takes the tyres away; a jet that burns takes the speed
   if (c.guard <= 0 && inZone(PAD, c.s, c.l)) {
     const fx = Math.sin(c.yaw), fz = Math.cos(c.yaw), v = Math.min(C.pad.top, Math.max(now, c.vx * fx + c.vz * fz + C.pad.kick));
     c.guard = 0.6;
     if (v > now) { c.vx = fx * v; c.vz = fz * v; events?.push({ type: 'pad', car: i }); }
   }
   if (c.oil <= 0 && c.slick <= 0 && now > 1.5 && inZone(OIL, c.s, c.l)) { c.oil = C.oil.time; c.slick = 2; c.spin = (c.l > (OIL.l0 + OIL.l1) / 2 ? 1 : -1) * C.oil.spin; events?.push({ type: 'oil', car: i }); }
+  if (c.scorch <= 0) for (let j = 0; j < JETS.length; j++) if (inZone(JETS[j], c.s, c.l) && jetOn(st, j)) {
+    c.vx *= C.fire.keep; c.vz *= C.fire.keep; c.scorch = C.fire.time; c.boost = 0; c.turbo = 0; c.drift = false; c.heat = 0; c.level = 0;
+    events?.push({ type: 'fire', car: i, jet: j });
+    break;
+  }
   // (one's own car, the wrong way round the lap for a good second: it is told)
   if (i === 0 && !c.done) { if (c.vx * TX[c.k] + c.vz * TZ[c.k] < -1.5) { c.wrong += dt; if (c.wrong > 1) { c.wrong = -4; events?.push({ type: 'wrong', car: i }); } } else if (c.wrong > 0) c.wrong = 0; }
 }
@@ -374,14 +430,30 @@ function gates(st, c, i, events) {
 }
 
 // ---------------------------------------------------------------------------------------------------------
-// A car that drives by itself — the proof that the lap can be driven, and the three rivals. It aims at a place
-// of its line a little way ahead, goes as fast as that line allows where it is — braking in time for what comes —,
-// passes a car in its way on the side where there is room, and boosts where a straight is long enough.
+// A car that drives by itself — the proof that the lap can be driven, and the three rivals. It holds a remote as
+// one does: it aims at a place of its line a little way ahead and turns the wheel to bring its nose round to it,
+// takes the throttle up to what that line allows where it is — braking in time for what comes —, passes a car in
+// its way on the side where there is room, boosts where a straight is long enough, and backs up when it is stuck.
 
-/** What car `i` does by itself: cmd.dx, cmd.dz (where its nose should point, in the world), cmd.m (0 … 1: how hard it pulls; 0 brakes), cmd.boost. */
+/**
+ * The wheel and the throttle that bring car `c` towards (dx, dz) — a heading in the world, a place `dist` metres
+ * away — pulling `go` (0 … 1), or braking when `go` is negative. Stuck for a moment, it backs up, turning.
+ */
+function steerTo(c, dx, dz, dist, go, cmd) {
+  const d = wrap(Math.atan2(dx, dz) - c.yaw), along = c.vx * Math.sin(c.yaw) + c.vz * Math.cos(c.yaw), speed = Math.hypot(c.vx, c.vz);
+  if (c.backing > 0) { c.backing -= STEP; cmd.throttle = -0.8; cmd.steer = d >= 0 ? 1 : -1; return cmd; }
+  if (speed < 0.5 && go > 0) { if ((c.stuck += STEP) > 0.6) { c.stuck = 0; c.backing = 0.7; } } else if (speed > 1) c.stuck = 0;
+  // (the turn that would bring it onto the place it aims at, as the wheel gives it at this speed)
+  const v = Math.max(along, 1), rate = rateAt(Math.max(Math.abs(along), 0.6 * Math.abs(go)), c.drift), turn = (2 * v * Math.sin(d)) / Math.max(dist, 0.3) + 0.08 * (2 * v * Math.sin(d) / Math.max(dist, 0.3) - c.wr);
+  cmd.steer = clamp(-turn / Math.max(rate, 0.3), -1, 1);
+  cmd.throttle = go < 0 ? (along > 0.5 ? -1 : 0) : Math.abs(d) > 1.9 ? 0.4 : go;
+  return cmd;
+}
+
+/** What car `i` does by itself: cmd.steer, cmd.throttle (as one's remote: -1 … 1), cmd.boost. */
 function botDrive(st, i, cmd, skill) {
   const c = st.cars[i], S = skill || c.skill, speed = Math.hypot(c.vx, c.vz);
-  cmd.m = 0; cmd.boost = false; cmd.dx = Math.sin(c.yaw); cmd.dz = Math.cos(c.yaw);
+  cmd.steer = 0; cmd.throttle = 0; cmd.boost = false;
   if (st.clock < S.delay) return cmd;
   const pace = c.done ? 0.5 : S.pace, j = (c.k + Math.round((0.9 + speed * 0.2) / DS)) % M;
   let off = OFF[j] + (S.wander ? S.wander * Math.sin(c.k * 0.045 + st.clock * 0.4 + c.phase) : 0);
@@ -403,35 +475,38 @@ function botDrive(st, i, cmd, skill) {
   }
   off = clamp(off, LO[j], HI[j]);
   const tx = PX[j] + NX[j] * off - c.x, tz = PZ[j] + NZ[j] * off - c.z, tl = Math.hypot(tx, tz) || 1;
-  cmd.dx = tx / tl; cmd.dz = tz / tl;
-  cmd.m = speed > may + 0.3 ? 0 : clamp(may / (C.top * c.top), 0.2, 1);
+  steerTo(c, tx, tz, tl, speed > may + 0.3 ? -1 : clamp(may / (C.top * c.top), 0.2, 1), cmd);
   cmd.boost = !!S.boost && !c.done && c.charge >= 1 && !c.air && speed > 3 && FREE[c.k] > (pass ? 0 : 1);
   return cmd;
 }
-/** The stick that says `cmd`, as the picture is turned. */
-function stickOf(st, cmd, out) {
-  const FX = Math.sin(st.view), FZ = Math.cos(st.view);
-  out.x = (cmd.dx * -FZ + cmd.dz * FX) * cmd.m; out.y = (cmd.dx * FX + cmd.dz * FZ) * cmd.m; out.jump = cmd.boost;
-  return out;
-}
-const _bot = { dx: 0, dz: 1, m: 0, boost: false };
-/** One's own car, driven by itself: the stick and the jump. */
-export function botInput(st, out = { x: 0, y: 0, jump: false }) { return stickOf(st, botDrive(st, 0, _bot, ACE), out); }
-/** Who never touches the stick. */
+/** The remote that says `cmd`. */
+function stickOf(cmd, out) { out.x = cmd.steer; out.y = cmd.throttle; out.jump = cmd.boost; return out; }
+const _bot = { steer: 0, throttle: 0, boost: false };
+/** One's own car, driven by itself: the remote and the jump. */
+export function botInput(st, out = { x: 0, y: 0, jump: false }) { return stickOf(botDrive(st, 0, _bot, ACE), out); }
+/** Who never touches the remote. */
 export function idleInput(st, out = { x: 0, y: 0, jump: false }) { out.x = 0; out.y = 0; out.jump = false; return out; }
-/** A driver with a keyboard: what the car that drives by itself would do, but eight ways only, the stick full or let go. */
+/** A driver with a keyboard: what the car that drives by itself would do, but with keys — each pressed or not. */
 export function keysInput(st, out = { x: 0, y: 0, jump: false }) {
   botInput(st, out);
-  const m = Math.hypot(out.x, out.y), a = Math.round(Math.atan2(out.x, out.y) / (Math.PI / 4)) * (Math.PI / 4), go = m > 0.5 ? 1 : 0;
-  out.x = Math.round(Math.sin(a)) * go; out.y = Math.round(Math.cos(a)) * go;
+  // (it taps, as fingers do — a key held or not for a tenth of a second at a time, for a share of the time that
+  // says how much it means; what was not given is carried on)
+  const c = st.cars[0], beat = Math.floor(st.clock * 10);
+  if (c.tapAt !== beat) {
+    const x = (c.tapX || 0) + out.x, y = (c.tapY || 0) + out.y;
+    c.tapAt = beat; c.keyX = Math.abs(x) > 0.5 ? Math.sign(x) : 0; c.keyY = Math.abs(y) > 0.5 ? Math.sign(y) : 0; c.tapX = x - c.keyX; c.tapY = y - c.keyY;
+  }
+  out.x = c.keyX; out.y = c.keyY;
   return out;
 }
-/** A clumsy driver: the stick always full, at the middle of the road a little way ahead and a little beside it; never lifts, hammers the boost. */
+/** A clumsy driver: the throttle always full, the wheel hard over at the middle of the road a little way ahead and a little beside it; never brakes, hammers the boost (it backs up when stuck, as anybody would). */
 export function clumsyInput(st, out = { x: 0, y: 0, jump: false }) {
   const c = st.cars[0], j = (c.k + 9) % M, off = 0.55 * Math.sin(st.clock * 1.3 + st.seed);
   const tx = PX[j] + NX[j] * off - c.x, tz = PZ[j] + NZ[j] * off - c.z, tl = Math.hypot(tx, tz) || 1;
-  _bot.dx = tx / tl; _bot.dz = tz / tl; _bot.m = 1; _bot.boost = true;
-  return stickOf(st, _bot, out);
+  steerTo(c, tx, tz, tl, 1, _bot);
+  if (_bot.throttle > 0) { _bot.throttle = 1; _bot.steer = Math.abs(_bot.steer) > 0.25 ? Math.sign(_bot.steer) : _bot.steer; }
+  _bot.boost = true;
+  return stickOf(_bot, out);
 }
 
 /**

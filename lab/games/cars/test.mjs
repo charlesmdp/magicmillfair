@@ -1,21 +1,23 @@
 // Checks of Round the Bend, without a browser: the table stands in the meadow inside its rectangle, its top level
 // over ground that is not quite, the arch on grass one can walk on; the lap holds together — its length, its
 // bends, its boards, nothing of it off the table, no two stretches sharing a board — and its gates are in their
-// order; the stick says where the car goes on the picture; the car pulls, brakes, slides when thrown into a bend,
-// bounces off the boards and off the others, flies off the ramp, is kicked by the pad, loses its tyres on the oil,
-// is slowed by the sand; a gate out of its turn does not count; the car that drives by itself finishes its three
-// laps, the rivals too, in a spread of times, a clumsy driver later; the same race at 30 and 144 frames a second.
+// order; the remote speaks to the car — up is its throttle whichever way it faces, left and right are its own,
+// down brakes and then backs it up —; the car pulls, slides when thrown into a bend at speed (not at a crawl), lets
+// go a burst once it straightens up — the stronger the longer the slide —, bounces off the boards and off the others,
+// flies off the ramp, is kicked by the pad, loses its tyres on the oil, is slowed by the sand and by the jets of fire,
+// which burn for everybody at once; a gate out of its turn does not count; the car that drives by itself finishes its
+// three laps, the rivals too, in a spread of times, a clumsy driver later; the same race at 30 and 144 frames a second.
 // usage: node lab/games/cars/test.mjs
 import { check, done, ground } from '../check.mjs';
-import { CARS, TRACK, GATE, PAD, SAND, RAMP, OIL, RACING, RIVALS, SHORTEST, BOARD, gateEnds, flight, inZone, rampAt, putCar, startRace, stepRace, placeOf, lapsDone, lapOf, botInput, idleInput, clumsyInput, keysInput, raceRun } from './rules.js';
+import { CARS, TRACK, GATE, PAD, SAND, RAMP, OIL, JETS, RACING, RIVALS, SHORTEST, BOARD, gateEnds, jetTime, jetOn, flight, inZone, rampAt, putCar, startRace, stepRace, placeOf, lapsDone, lapOf, botInput, idleInput, clumsyInput, keysInput, raceRun } from './rules.js';
 
 const C = CARS, T = TRACK, M = T.m, DS = T.ds, LIM = C.wall - C.body, TAU = Math.PI * 2;
 const wrap = (a) => { a %= TAU; return a > Math.PI ? a - TAU : a < -Math.PI ? a + TAU : a; };
 const fmt = (ms) => `${(ms / 1000).toFixed(2)} s`;
-/** The stick that pushes towards (dx, dz) of the world, as the picture is turned. */
-const towards = (st, dx, dz, out) => { const FX = Math.sin(st.view), FZ = Math.cos(st.view), l = Math.hypot(dx, dz) || 1; out.y = (dx * FX + dz * FZ) / l; out.x = (dx * -FZ + dz * FX) / l; return out; };
-/** … and the way the lap goes where one's car is. */
-const along = (st, out) => { const k = st.cars[0].k; return towards(st, T.tx[k], T.tz[k], out); };
+/** The remote of one who follows the lap where one's car is, in the lane it is in (or at `l`): the throttle at `t`, the wheel turned towards a place a little way ahead. */
+const along = (st, out, l = null, t = 1) => { const c = st.cars[0], j = (c.k + 6) % M, w = l ?? c.l, d = wrap(Math.atan2(T.x[j] + T.nx[j] * w - c.x, T.z[j] + T.nz[j] * w - c.z) - c.yaw); out.x = Math.max(-1, Math.min(1, -3 * d)); out.y = t; return out; };
+/** Turns one's car (standing) to face `yaw`. */
+const face = (st, yaw) => { const c = st.cars[0]; c.yaw = yaw; c.vx = 0; c.vz = 0; c.wr = 0; return st; };
 /** A race with one's car alone on the track: `s` metres along the lap from the line, `l` to the left of the centre line, going at `v`. */
 const alone = (s, l = 0, v = 0) => { const st = startRace(1); st.cars.length = 1; putCar(st.cars[0], s, l, v); return st; };
 /** Runs `st` for `secs` (or until `stop(st, seen)`); `drive(st, input, t)` holds the stick. Returns the events, each with its second. */
@@ -61,20 +63,37 @@ const height = await ground();
   check('the pad on the straight before the sweep, the sand on the outside of the sweep, the ramp on a straight with room to come down, the oil before the hairpin', flat(PAD, 1, 3) && flat(RAMP, 3, 5) && flat(OIL, 1, 1) && sandy.every((c) => c > 0 && 1 / c > 5) && SAND.l1 < 0 && SAND.l0 >= -C.road && inZone(PAD, PAD.k0 + 1, -0.6) && !inZone(PAD, PAD.k0 + 1, 0.5) && rampAt(RAMP.k0 + RAMP.n - 0.01, 0) > C.ramp.high * 0.98 && rampAt(RAMP.k0 + RAMP.n + 0.01, 0) === 0, `pad ${(PAD.k0 * DS).toFixed(0)} m, sand ${(SAND.k0 * DS).toFixed(0)} to ${((SAND.k0 + SAND.n) * DS).toFixed(0)} m, ramp ${(RAMP.k0 * DS).toFixed(0)} m, oil ${(OIL.k0 * DS).toFixed(0)} m along the lap`);
 }
 {
-  // ---- the stick
-  const nose = (view, x, y, secs = 0.8) => { const st = alone(STRAIGHT + 3); st.view = view; run(st, secs, (q, i) => { i.x = x; i.y = y; }); return st.cars[0].yaw; };
-  const want = [[0, 1, Math.PI, 'up: north'], [1, 0, Math.PI / 2, 'right: east'], [0, -1, 0, 'down: south'], [-1, 0, -Math.PI / 2, 'left: west']];
-  const off = want.map(([x, y, a]) => Math.abs(wrap(nose(C.view, x, y) - a)));
-  check('the stick says where the car should go on the picture: its nose turns that way, whatever way it was going', off.every((d) => d < 0.12), want.map((w, n) => `${w[3]} (${(off[n] * 57.3).toFixed(0)}° off)`).join(' · '));
-  const turned = Math.abs(wrap(nose(Math.PI / 2, 0, 1) - Math.PI / 2)), right = Math.abs(wrap(nose(Math.PI / 2, 1, 0) - 0));
-  check('… and when the picture is turned a quarter (a phone held upright), up is still up on it', turned < 0.12 && right < 0.12, 'up: east · right: south');
+  // ---- the remote: it speaks to the car, not to the picture
+  // (on the straight past the stand, the car stood facing every way — and the picture turned a quarter, as on a
+  // phone held upright, which changes nothing): up alone sends it the way its nose points
+  const ways = [0, 1, 2, 3, 4, 5, 6, 7].map((n) => (n * TAU) / 8 + 0.2);
+  const ahead = ways.map((yaw, n) => { const st = face(alone(STRAIGHT + 3), yaw); st.view = n % 2 ? Math.PI / 2 : Math.PI; run(st, 0.3, (q, i) => { i.x = 0; i.y = 1; }); const c = st.cars[0]; return { off: Math.abs(wrap(Math.atan2(c.vx, c.vz) - yaw)), turned: Math.abs(wrap(c.yaw - yaw)), v: speedOf(c) }; });
+  check('up on the remote: the car goes the way its nose points, whichever way it faces on the picture', ahead.every((a) => a.off < 0.02 && a.turned < 1e-9 && a.v > 2), `faced 8 ways: off its nose by ${(Math.max(...ahead.map((a) => a.off)) * 57.3).toFixed(1)}° at most, ${ahead[0].v.toFixed(1)} m/s after 0.3 s`);
+  // (rolling along the lap, or the other way round — then the picture shows its left on the right): the wheel to the left takes it to ITS left
+  const sides = [];
+  for (const [at, back] of [[STRAIGHT, 0], [STRAIGHT, 1], [RAMP.k0 * DS - 5, 0], [RAMP.k0 * DS - 5, 1]]) for (const x of [-1, 1]) {
+    const st = alone(at), c = st.cars[0], yaw = c.yaw + back * Math.PI; face(st, yaw); c.vx = 3 * Math.sin(yaw); c.vz = 3 * Math.cos(yaw);
+    const x0 = c.x, z0 = c.z; run(st, 0.35, (q, i) => { i.x = x; i.y = 0.6; });
+    const left = (c.x - x0) * Math.cos(yaw) - (c.z - z0) * Math.sin(yaw), turn = wrap(c.yaw - yaw);
+    sides.push(x < 0 ? left > 0.1 && turn > 0.3 : left < -0.1 && turn < -0.3);
+  }
+  check('left and right on the remote are the car\'s own: it turns to its left or its right, whether it goes up, down or across the picture', sides.every(Boolean), `${sides.filter(Boolean).length} of ${sides.length} turns the right way (east and west, nose along the lap and against it)`);
+  {
+    const st = alone(STRAIGHT, 0, 6), c = st.cars[0], yaw = c.yaw, from = c.s;
+    run(st, 3, (q, i) => { i.x = 0; i.y = -1; }, (q) => c.vx * Math.sin(c.yaw) + c.vz * Math.cos(c.yaw) <= 0.3);
+    const stop = (((c.s - from) % M) + M) % M * DS;
+    let back = 0; run(st, 1.6, (q, i) => { i.x = 0; i.y = -1; back = Math.min(back, c.vx * Math.sin(c.yaw) + c.vz * Math.cos(c.yaw)); });
+    const rolled = alone(STRAIGHT, 0, 6), r = rolled.cars[0], f2 = r.s; run(rolled, 4, null, (q) => speedOf(q.cars[0]) < 1e-3);
+    const roll = (((r.s - f2) % M) + M) % M * DS;
+    check('down brakes it to a stand and then backs it up, its nose still the same way; let go of everything, it rolls to a stop', stop < 36 / (2 * C.brake) + 0.1 && stop > 2 && back < -0.9 * C.reverse && back >= -C.reverse - 1e-9 && Math.abs(wrap(c.yaw - yaw)) < 1e-9 && speedOf(r) < 1e-3 && roll > stop * 1.8 && roll < 36 / (2 * C.coast) + 0.3, `from 6 m/s: braked in ${stop.toFixed(1)} m (down to a walk), then backwards at ${(-back).toFixed(1)} m/s; let go, it rolled ${roll.toFixed(1)} m`);
+  }
   // flat out, and let go
   const st = alone(STRAIGHT, 0.5), c = st.cars[0]; let most = 0;
   run(st, 1.6, (q, i) => { along(q, i); most = Math.max(most, speedOf(q.cars[0])); });
   const v = speedOf(c), from = c.s;
-  run(st, 2, null, (q) => speedOf(q.cars[0]) < 0.01);
+  run(st, 4, null, (q) => speedOf(q.cars[0]) < 0.01);
   const stop = (c.s - from + M) % M * DS;
-  check('it pulls to its top speed and no further; the stick let go, it brakes to a stand', v > 0.85 * C.top && most <= C.top + 1e-9 && speedOf(c) < 0.01 && stop < (v * v) / (2 * C.brake) + 0.1 && stop > 2, `${v.toFixed(1)} m/s after 1.6 s (flat out: ${C.top}); stopped in ${stop.toFixed(1)} m`);
+  check('it pulls to its top speed and no further; let go, it rolls to a stand', v > 0.85 * C.top && most <= C.top + 1e-9 && speedOf(c) < 0.01 && stop < (v * v) / (2 * C.coast) + 0.1 && stop > 2, `${v.toFixed(1)} m/s after 1.6 s (flat out: ${C.top}); stopped in ${stop.toFixed(1)} m`);
   // the boost
   const plain = alone(STRAIGHT, 0.5), quick = alone(STRAIGHT, 0.5); let fastest = 0;
   run(plain, C.boost.time, (q, i) => along(q, i));
@@ -85,17 +104,30 @@ const height = await ground();
 }
 {
   // ---- sliding, the boards, the others
-  const slide = (v) => { const st = alone(STRAIGHT, 0, v), c = st.cars[0]; let slip = 0, lead = 0; const seen = run(st, 0.3, (q, i) => { i.x = 0; i.y = 1; slip = Math.max(slip, c.slip); lead = Math.max(lead, Math.abs(wrap(c.yaw - Math.atan2(c.vx, c.vz)))); }); return { slip, lead, left: speedOf(c), drift: seen.some((e) => e.type === 'drift') }; };
-  const fast = slide(7.4), slow = slide(2.5);
-  check('thrown into a bend at speed the car slides — its nose turns faster than its tyres follow — and the speed it had is not all kept; slowly, it holds', fast.slip > 2.5 && fast.lead > 0.35 && fast.drift && fast.left < 7.4 * 0.96 && slow.slip < 1 && !slow.drift, `at 7.4 m/s: ${fast.slip.toFixed(1)} m/s across, the nose ${(fast.lead * 57.3).toFixed(0)}° ahead, ${fast.left.toFixed(1)} m/s left; at 2.5 m/s: ${slow.slip.toFixed(1)} m/s across`);
+  // (into the fast sweep: the wheel hard over at its mouth; then — as one holds a slide — the wheel kept so that
+  // the nose stays some way inside the way the car goes, for `hold` seconds; then straightened up)
+  const SWEEP = 10.5, slide = (v, hold = 0, aim = 0.5, t = 1) => {
+    const st = alone(SWEEP - 3, -0.3, v), c = st.cars[0]; let slip = 0, lead = 0, since = -1, caught = 0, burst = 0, level = 0;
+    const seen = run(st, 3, (q, i) => {
+      const ld = wrap(c.yaw - Math.atan2(c.vx, c.vz));
+      i.y = since < 0 ? t : 1; i.x = since < 0 ? (c.s * DS > SWEEP ? -1 : 0) : since < hold ? Math.max(-1, Math.min(1, 2 * (ld - aim) - 0.5)) : Math.max(-1, Math.min(1, 3 * ld));
+      slip = Math.max(slip, c.slip); lead = Math.max(lead, Math.abs(ld));
+      if (since >= 0) since += C.step; if (since > hold && c.drift) caught = since - hold; if (c.turbo > 0) burst = Math.max(burst, speedOf(c));
+    }, (q, ev) => { if (since < 0 && ev.some((e) => e.type === 'drift')) since = 0; const t = ev.find((e) => e.type === 'turbo'); if (t && !level) level = t.level; return level > 0 && c.turbo <= 0; });
+    return { slip, lead, drift: since >= 0, caught, level, burst, sparks: seen.filter((e) => e.type === 'spark').map((e) => e.level), turbo: seen.filter((e) => e.type === 'turbo').length };
+  };
+  const quick = slide(7.4), crawl = slide(2.5, 0, 0.5, 2.5 / C.top), short = slide(7.4, 0.25), long = slide(7.4, 1.1);
+  check('thrown into a bend at speed the tail steps out and the car slides; at a crawl it holds', quick.drift && quick.slip > 2.5 && quick.lead > 0.35 && !crawl.drift && crawl.slip < 1, `at 7.4 m/s: ${quick.slip.toFixed(1)} m/s across, the nose ${(quick.lead * 57.3).toFixed(0)}° inside the way it goes; at 2.5 m/s: ${crawl.slip.toFixed(1)} m/s across`);
+  check('a slide is held with the wheel and caught by straightening up — it grips again at once, it is not ice', short.drift && long.drift && short.caught < 0.5 && long.caught < 0.5, `caught ${short.caught.toFixed(2)} s and ${long.caught.toFixed(2)} s after straightening up`);
+  check('the sparks grow while it slides — yellow, orange, blue —, and straightening up lets go a burst, the stronger the longer the slide', short.turbo === 1 && long.turbo === 1 && long.level > short.level && long.level >= 2 && long.burst > short.burst + 0.5 && short.burst > C.top && long.sparks.join() === Array.from({ length: long.level }, (_, n) => n + 1).join() && long.burst <= C.drift.top[2] + 1e-9, `${short.level} (${short.burst.toFixed(1)} m/s) after a short slide, ${long.level} (${long.burst.toFixed(1)} m/s) after a long one; flat out ${C.top}`);
   let out = 0, hits = 0, back = 0;
   for (let j = 0; j < 8; j++) for (const side of [-1, 1]) {
-    const st = alone((j * T.length) / 8 + 1.3), c = st.cars[0], k = c.k, seen = run(st, 1.5, (q, i) => { towards(q, T.nx[k] * side, T.nz[k] * side, i); out = Math.max(out, Math.abs(c.l)); });
+    const st = alone((j * T.length) / 8 + 1.3), c = st.cars[0], k = c.k, seen = (face(st, Math.atan2(T.nx[k] * side, T.nz[k] * side)), run(st, 1.5, (q, i) => { i.x = 0; i.y = 1; out = Math.max(out, Math.abs(c.l)); }));
     const hit = seen.find((e) => e.type === 'wall');
     if (hit) { hits++; if (hit.speed > 1.2) back++; }
   }
   const flatOut = alone(STRAIGHT, 0, 7.4), fc = flatOut.cars[0]; let after = 0;
-  const bang = run(flatOut, 0.6, (q, i) => { i.x = 0; i.y = 1; out = Math.max(out, Math.abs(fc.l)); }, (q, seen) => { if (seen.some((e) => e.type === 'wall')) { after = fc.vx * T.nx[fc.k] + fc.vz * T.nz[fc.k]; return true; } return false; });
+  const bang = run(flatOut, 0.6, (q, i) => { i.x = -1; i.y = 1; out = Math.max(out, Math.abs(fc.l)); }, (q, seen) => { if (seen.some((e) => e.type === 'wall')) { after = fc.vx * T.nx[fc.k] + fc.vz * T.nz[fc.k]; return true; } return false; });
   check('the boards stop a car, wherever it is driven at them, and it bounces off', out <= LIM + 1e-9 && hits === 16 && back === 16 && bang.some((e) => e.type === 'wall') && after < -0.5, `16 of 16 runs at a board ended on it, never further than ${out.toFixed(3)} m from the centre line (the boards at ${C.wall}, a car ${C.body} wide to them); at speed it comes back at ${(-after).toFixed(1)} m/s`);
   const two = startRace(1); two.cars.length = 2; two.cars[1].skill = { ...RIVALS[0], delay: 1e9 };
   putCar(two.cars[0], STRAIGHT, 0.4, 6); putCar(two.cars[1], STRAIGHT + 1.5, 0.4, 0);
@@ -105,15 +137,29 @@ const height = await ground();
 {
   // ---- what lies on the tarmac
   const lip = (RAMP.k0 + RAMP.n) * DS, fly = (v, push = 1) => { const st = alone(RAMP.k0 * DS - 3, 0, v), c = st.cars[0]; let high = 0, was = null, kept = true; const seen = run(st, 2.5, (q, i) => { if (c.air) { i.x = 0; i.y = -1; high = Math.max(high, c.y); if (was && (Math.abs(was[0] - c.vx) > 1e-9 || Math.abs(was[1] - c.vz) > 1e-9)) kept = false; was = [c.vx, c.vz]; } else { along(q, i); i.x *= push; i.y *= push; } }, (q, ev) => ev.some((e) => e.type === 'land') || (c.s * DS > lip + 1 && !c.air)); const up = seen.find((e) => e.type === 'jump'), down = seen.find((e) => e.type === 'land'); return { up, down, high, kept, far: (c.s * DS - lip), v: speedOf(c) }; };
-  const big = fly(7.4), small = fly(0.8, 0.1);
+  const big = fly(7.4), small = fly(0.8, 0.15);
   const air = big.up && big.down ? big.down.at - big.up.at : 0;
   check('off the lip of the ramp the car flies: nothing steers it or slows it in the air; at a crawl it only drops off', big.up && big.down && Math.abs(air - flight(big.v)) < 0.04 && big.high > C.ramp.high && big.kept && big.far > 2.5 && big.far < 4.5 && !small.up, `at ${big.v.toFixed(1)} m/s: ${air.toFixed(2)} s in the air, ${big.far.toFixed(1)} m, ${big.high.toFixed(2)} m high`);
   const kick = (l) => { const st = alone(PAD.k0 * DS - 2, l, 7.4), seen = run(st, 0.6, (q, i) => along(q, i)); return { v: Math.max(speedOf(st.cars[0])), pad: seen.filter((e) => e.type === 'pad').length }; };
   const on = kick(-0.6), beside = kick(0.5);
   check('the pad kicks whoever drives over it — once —, up to its own top; beside it, nothing', on.pad === 1 && on.v > C.top + 1 && on.v <= C.pad.top && beside.pad === 0 && beside.v <= C.top + 1e-9, `${on.v.toFixed(1)} m/s after it, ${beside.v.toFixed(1)} beside it`);
-  const slick = (l) => { const st = alone(OIL.k0 * DS - 1.5, l, 6), c = st.cars[0]; let round = 0, was = c.yaw, way = null, swerve = 0; const seen = run(st, 0.25 + C.oil.time, (q, i) => { if (c.oil > 0) { i.x = 0; i.y = 1; round += Math.abs(wrap(c.yaw - was)); const a = Math.atan2(c.vx, c.vz); way ??= a; swerve = Math.max(swerve, Math.abs(wrap(a - way))); } else along(q, i); was = c.yaw; }); return { oil: seen.filter((e) => e.type === 'oil').length, round, swerve }; };
+  const slick = (l) => { const st = alone(OIL.k0 * DS - 1.5, l, 6), c = st.cars[0]; let round = 0, was = c.yaw, way = null, swerve = 0; const seen = run(st, 0.25 + C.oil.time, (q, i) => { if (c.oil > 0) { i.x = 1; i.y = 1; round += Math.abs(wrap(c.yaw - was)); const a = Math.atan2(c.vx, c.vz); way ??= a; swerve = Math.max(swerve, Math.abs(wrap(a - way))); } else along(q, i); was = c.yaw; }); return { oil: seen.filter((e) => e.type === 'oil').length, round, swerve }; };
   const oily = slick(-0.55), dry = slick(0.5);
   check('on the oil the tyres are gone for a moment: the nose goes round by itself and the car slides on the way it was going, whatever the stick says', oily.oil === 1 && oily.round > 5 && oily.swerve < 0.3 && dry.oil === 0, `the nose turns ${(oily.round / TAU).toFixed(1)} times round, the way it goes changes by ${(oily.swerve * 57.3).toFixed(0)}° with the stick hard over`);
+  // the jets of fire: on the clock of the race, the same for every car in it
+  const burn = (when, ls) => {
+    const st = startRace(3), J = JETS[0], mid = J.side * 0.7;
+    while (!(jetTime(st, 0) >= when && jetTime(st, 0) < when + 0.02)) st.clock += 0.01;
+    st.cars.length = ls.length; st.cars.forEach((c, n) => { c.skill = { ...RIVALS[0], delay: 1e9 }; putCar(c, J.k0 * DS - 0.6 - ls[n][0], ls[n][1] * mid, 6); });
+    const seen = run(st, 0.5, (q, i) => { i.x = 0; i.y = 0; });
+    return { hit: st.cars.map((c, n) => seen.some((e) => e.type === 'fire' && e.car === n)), v: st.cars.map(speedOf), black: st.cars.map((c) => c.scorch) };
+  };
+  const lit = burn(0.05, [[0, 1], [1, 1], [0.5, -1]]), cold = burn(C.fire.burst + 0.3, [[0, 1], [1, 1]]);
+  const quiet = startRace(1); let early = false; for (; quiet.clock < C.fire.from; quiet.clock += 0.05) early ||= JETS.some((_, j) => jetOn(quiet, j));
+  const pattern = (seed) => { const st = startRace(seed); let p = ''; for (st.clock = C.fire.from; st.clock < C.fire.from + 10; st.clock += 0.1) p += JETS.map((_, j) => +jetOn(st, j)).join(''); return p; };
+  const firstLap = raceRun(1).laps[1];
+  check('the jets of fire burn on the clock of the race, for every car at once: who drives through a burst loses speed and is blackened; the other side of the tarmac stays clear', lit.hit.join() === 'true,true,false' && lit.v[0] < lit.v[2] * C.fire.keep + 0.2 && lit.v[1] < lit.v[2] * C.fire.keep + 0.2 && lit.black[0] > 0 && lit.black[1] > 0 && cold.hit.join() === 'false,false' && pattern(4) === pattern(4) && pattern(4) !== pattern(5), `two cars rolling through a burst from 6 m/s: ${lit.v[0].toFixed(1)} and ${lit.v[1].toFixed(1)} m/s left; beside them ${lit.v[2].toFixed(1)}; between two bursts nothing`);
+  check('… and they are quiet while the first lap is driven, so that one learns the track first', !early && firstLap < C.fire.from && JETS.length >= 3, `${JETS.length} jets, quiet for the first ${C.fire.from} s (the first lap of the car that drives by itself: ${firstLap.toFixed(1)} s)`);
   const drag = (s, l) => { const st = alone(s, l, 7); run(st, 0.3, (q, i) => along(q, i)); return speedOf(st.cars[0]); };
   const sand = drag(SAND.k0 * DS + 0.5, -0.8), road = drag(SAND.k0 * DS + 0.5, 0.4);
   const verge = alone(STRAIGHT, C.road + 0.07); run(verge, 1.5, (q, i) => along(q, i));
@@ -132,7 +178,7 @@ const height = await ground();
   check('a gate out of its turn does not count: the line crossed twice is not a lap, nor is a gate reached across the infield', first === 1 && again === 1 && three === 3 && c.gate === 3 && lapsDone(c) === 0 && c.s > GATE[12], `after the line twice: ${again} gate; lifted from gate 3 to gate 12 and driven on through two more: ${c.gate} gates`);
   const rev = alone(-2), r = rev.cars[0];
   run(rev, 3, (q, i) => along(q, i), (q) => q.cars[0].s * DS > 1.5 && q.cars[0].s < M / 2);
-  const wrong = run(rev, 6, (q, i) => { i.x = -1; i.y = 0; }, (q) => q.cars[0].s > M / 2 && q.cars[0].s * DS < T.length - 6); // back over the line, the wrong way
+  const wrong = run(rev, 6, (q, i) => { i.x = 0; i.y = -1; }, (q) => q.cars[0].s > M / 2 && q.cars[0].s * DS < T.length - 6); // backed up over the line, the wrong way
   const behind = r.s * DS - T.length;
   run(rev, 4, (q, i) => along(q, i), (q) => q.cars[0].s * DS > 3 && q.cars[0].s < M / 2);
   check('nor is going back over the line and forwards again — and who goes the wrong way is told', r.gate === 1 && behind < -5 && wrong.some((e) => e.type === 'wrong'), `${(-behind).toFixed(1)} m back over the line and on again: ${r.gate} gate`);
@@ -152,10 +198,10 @@ const height = await ground();
   check('the rivals finish too, in a spread of times: the best a few seconds behind what the track allows, the last a good eight', runs.every((r) => r.state.cars.every((c) => c.done && c.time > 0)) && runs.filter((r) => r.state.cars[1].time < r.state.cars[2].time && r.state.cars[2].time < r.state.cars[3].time).length >= 10 && mean[0] > best * 1.05 && mean[0] < best * 1.12 && mean[1] > mean[0] + 1500 && mean[2] > mean[1] + 1500 && mean[2] < best * 1.3 && rivals.every((t) => new Set(t).size > 6), RIVALS.map((r, i) => `${r.name} ${fmt(Math.min(...rivals[i]))} to ${fmt(Math.max(...rivals[i]))}`).join(' · ') + ` (the best of one's own car: ${fmt(best)})`);
   check('the car that drives by itself gets past them from the back of the grid, most of the time', wins >= 8 && runs.every((r) => r.place <= 2), `first in ${wins} races of ${runs.length}, never worse than second; ${fmt(best)} to ${fmt(worst)}`);
   const clumsy = [1, 2, 3, 4].map((s) => raceRun(s, clumsyInput)), keys = [1, 2, 3, 4].map((s) => raceRun(s, keysInput));
-  check('a clumsy driver — the stick always full, never lifting — finishes too, off the boards, later', clumsy.every((r, i) => r.over && r.time > runs[i].time + 1500 && r.events.wall >= 5) && Math.max(...clumsy.map((r) => r.time)) < 60000, `${clumsy.map((r) => `${fmt(r.time)} (${r.events.wall} boards, place ${r.place})`).join(' · ')}`);
-  check('a driver with a keyboard — eight ways only, all or nothing — finishes too, between the two', keys.every((r, i) => r.over && r.time > runs[i].time && r.time < 50000), `${keys.map((r) => `${fmt(r.time)} (place ${r.place})`).join(' · ')}`);
+  check('a clumsy driver — the throttle always full, the wheel hard over, never lifting — finishes too, off the boards, later', clumsy.every((r, i) => r.over && r.time > runs[i].time + 1500 && r.events.wall >= 5) && Math.max(...clumsy.map((r) => r.time)) < 60000, `${clumsy.map((r) => `${fmt(r.time)} (${r.events.wall} boards, place ${r.place})`).join(' · ')}`);
+  check('a driver with a keyboard — each key pressed or not, tapped — finishes too, between the two', keys.every((r, i) => r.over && r.time > runs[i].time && r.time < 50000), `${keys.map((r) => `${fmt(r.time)} (place ${r.place})`).join(' · ')}`);
   const idle = raceRun(1, idleInput);
-  check('who never touches the stick has no time: the race is called off at its limit, the rivals long home', idle.over && idle.state.out && idle.time === 0 && idle.events.out === 1 && Math.abs(idle.state.clock - C.limit) < 0.01 && idle.state.cars.slice(1).every((c) => c.done) && idle.state.cars[0].gate === 0, `called off at ${idle.state.clock.toFixed(0)} s`);
+  check('who never touches the remote has no time: the race is called off at its limit, the rivals long home', idle.over && idle.state.out && idle.time === 0 && idle.events.out === 1 && Math.abs(idle.state.clock - C.limit) < 0.01 && idle.state.cars.slice(1).every((c) => c.done) && idle.state.cars[0].gate === 0, `called off at ${idle.state.clock.toFixed(0)} s`);
   const a = raceRun(7), b = raceRun(7), c = raceRun(8), same = (x, y) => x.time === y.time && x.state.cars.every((car, i) => car.time === y.state.cars[i].time && car.x === y.state.cars[i].x);
   check('the same race for the same seed, another for another', same(a, b) && !same(a, c));
   const at = (dt) => { const st = startRace(5), input = { x: 0, y: 0, jump: false }; let acc = 0; for (let t = 0; t < 200 && !st.over; t += dt) { acc += dt; while (acc >= C.step && !st.over) { acc -= C.step; botInput(st, input); stepRace(st, C.step, input, null); } } return [st.time, st.place, ...st.cars.map((car) => car.x.toFixed(9))].join(); };
@@ -176,7 +222,7 @@ const height = await ground();
     if (!st.over) astray++;
     if (st.time) { home++; quickest = Math.min(quickest, st.time); }
   }
-  check('forty players that push the stick and the jump at random: none ever beyond the boards or over the cap, every race has an end', astray === 0 && home >= 10 && quickest > best, `${home} of 40 got home, the quickest in ${fmt(quickest)}; nothing ever faster than ${fastest.toFixed(1)} m/s (the cap: ${C.cap})`);
+  check('forty players that push the remote and the jump at random: none ever beyond the boards or over the cap, every race has an end', astray === 0 && home >= 10 && quickest > best, `${home} of 40 got home, the quickest in ${fmt(quickest)}; nothing ever faster than ${fastest.toFixed(1)} m/s (the cap: ${C.cap})`);
   // what nobody goes under: from each gate to the next at least the gap between the two lines (measured here point by point)
   let shortest = 0;
   for (let j = 0; j < 16; j++) { const p = gateEnds(j), q = gateEnds((j + 1) % 16); let least = Infinity; for (let u = 0; u <= 60; u++) for (let v = 0; v <= 60; v++) least = Math.min(least, Math.hypot(p[0] + (p[2] - p[0]) * (u / 60) - q[0] - (q[2] - q[0]) * (v / 60), p[1] + (p[3] - p[1]) * (u / 60) - q[1] - (q[3] - q[1]) * (v / 60))); shortest += least; }

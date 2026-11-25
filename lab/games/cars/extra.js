@@ -19,7 +19,7 @@ export function attach(app) {
     leave: 'Leave the track',
     left: 'You left the track.',
     keys: (touch) => (touch
-      ? 'Stick: steer — the car goes where you point on the screen · the arrow is a short boost, which comes back · three laps, the gates in their order · yellow pad: a kick · sand and oil: slow and slippery · orange ramp: a jump'
-      : 'W A S D or arrows: steer — the car goes where you point on the screen · Space: a short boost, which comes back · three laps, the gates in their order · yellow pad: a kick · sand and oil: slow and slippery · orange ramp: a jump · E: leave · H: these keys again'),
+      ? 'Stick up: go forward, the way the car faces · Stick down: brake, then reverse · Stick left / right: turn the car to its left / right · Arrow button: a boost that comes back · Fast into a bend: drift; straighten up for a burst · Fire jets: drive past on their far side'
+      : 'W or ↑: go forward, the way the car faces · S or ↓: brake, then reverse · A D or ← →: turn the car to its left / right · Space: a boost that comes back · Fast into a bend: drift; straighten up for a burst · E: leave · H: these keys again'),
   });
 }

@@ -13,7 +13,7 @@ the spiral), the combs got a floor more, and two were added (the cars, the golf)
 | `hive` | **The Bee's Knees** — four combs of wax over the sea: the cell one sets foot on gives way | the north of the bay: combs at (84, -84), the gate on the beach at (43.5, -79.5) | `node lab/games/hive/test.mjs` (29) |
 | `flip` | **Head Over Heels** — one runs on the spot in a machine of travelling girders, and one key turns gravity over | a tall frame in the sea along the south side of the pier; the gate on the south beach at (41.1, 42.8) | `node lab/games/flip/test.mjs` (36) |
 | `spiral` | **A Turn for the Worse** — a track wound round a tower: obstacles worse every turn, one touch and it is the foot again | a tower in the south of the bay, at (168, 84); the gate on the south beach at (52, 71) | `node lab/games/spiral/test.mjs` (33) |
-| `cars` | **Round the Bend** — radio-controlled cars raced on a table, seen from above | the meadow north of the acid pond: a table at (-243.5, -55.8), the arch at (-243.5, -45.9) | `node lab/games/cars/test.mjs` (34) |
+| `cars` | **Round the Bend** — radio-controlled cars raced on a table, seen from above | the meadow north of the acid pond: a table at (-243.5, -55.8), the arch at (-243.5, -45.9) | `node lab/games/cars/test.mjs` (39) |
 | `golf` | **Par for the Course** — nine holes of crazy golf round the acid pond | round the acid pond (-236, -82); the gate at (-225.5, -75.6) | `node lab/games/golf/test.mjs` (42) |
 
 `node lab/games/browser-test.mjs` plays all seven in the running game, in a headless browser: before a game is
@@ -221,20 +221,31 @@ would be a choice of rules). The fourth turn asks one to read what moves on the 
 
 ### Round the Bend (`cars`)
 
+*Reworked after its owner drove it ("the up arrow should make it go forward; drift, brighter colours, fire").*
+
 A table stands in the meadow north of the acid pond ((-243.5, -55.8), 27 × 15.6 m), and on it a circuit of
-some eighty metres for radio-controlled cars, **seen from straight above** by a camera that does not move:
-red and white kerbs, tyre walls, cones, a chequered line, a yellow pad that kicks, a patch of sand, an orange
-ramp, a patch of oil. One asks to play under an arch at (-243.5, -45.9); one's robot stands on a little deck
-by the table and drives the red car (a white ring and an arrow over it). **The stick says where the car should
-go on the screen** — it turns towards that heading and accelerates; the jump key is a short boost that comes
-back. It slides when thrown into a bend, bounces off the walls and off the others, goes straight on over oil.
+some eighty metres for radio-controlled cars, **seen from straight above** by a camera that does not move: a
+toy track in bright colours — a striped green infield, kerbs and tyre walls of six colours, bunting round the
+table, a pad that glows, a patch of sand, a ramp under a hoop of fire, a patch of oil. One asks to play under an
+arch at (-243.5, -45.9); one's robot stands on a little deck by the table and drives the red car (a white ring
+and an arrow over it).
+
+**The car is driven as a radio-controlled car is**: stick up (W, the up arrow) and it goes forward the way it
+faces; left and right are the car's own left and right; stick down brakes, then reverses. Thrown into a bend
+at speed **it drifts**: the tail steps out, throttle and turning into the bend keep it sliding, straightening
+up makes it grip again — and lets go a burst of speed, the stronger the longer the slide (the sparks under the
+tyres say how much: yellow, orange, blue), with flames out of the exhaust; skid marks stay on the tarmac a
+while. The jump key is a boost that comes back. Three jets of fire beside the straights burn every 3.2 s from
+the fifteenth second of a race, on one side of the road only: through a burst one keeps half one's speed.
 Three laps over sixteen gates (no corner is cut), a count of three, against the clock and against three cars
-that drive by themselves (Blue, Yellow, White). The cars are seen only by who races.
+that drive by themselves (Blue, Yellow, Pink). The cars are seen only by who races: another visitor sees the
+robot standing at the table, not the race.
 
-Its bot: 35.2 to 36.3 s over twelve races, first every time; the rivals 38.7, 41.6 and 44.1 s on average; a
-clumsy driver 37 to 40 s. For the game's boards: `cars: { order: 'asc', min: 16_000, max: 180_000 }`.
+Its bot: 34.8 s, first every time; the rivals 38, 40.6 and 43.3 s; a clumsy driver 37 to 42 s. For the game's
+boards: `cars: { order: 'asc', min: 16_000, max: 180_000 }`.
 
-What to look at first: the cars are small at this framing; the table is only seen (one walks through it).
+What nobody has felt yet: the drift under a hand (it was only simulated). The rivals keep to a line that never
+drifts nor meets a jet. The table is only seen (one walks through it).
 
 ### Par for the Course (`golf`)
 
