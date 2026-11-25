@@ -4,13 +4,16 @@
 // nobody runs back down, the clock starts with the first step —; each thing in the way is got past by its move
 // and ends the attempt without it, at a run and from a standstill; who only runs is back at the foot within a
 // second; what moves is the same for everybody, can be got past whatever the moment one arrives — or waited
-// for — and leaves nowhere to stand for ever; a runner that plays by itself reaches the bell; each turn has
-// more in the way than the last.
+// for — and leaves nowhere to stand for ever; each new kind of thing (planks that give way, springboards, stairs
+// three high, bars that go up and down, the wind, belts, sliding doors, cannons, planks a foot wide, boards on a
+// cable, rams, hammers in a row) is got past by its move and ends the attempt without it; nothing asks for a
+// move timed to less than a quarter of a second; the landings, and where a touch puts one back; a runner that
+// plays by itself reaches the bell; each turn has as much in the way as the last, and something new.
 // usage: node lab/games/spiral/test.mjs
 import { check, done, ground } from '../check.mjs';
 import { BOUNDS, pierToWorld, PIER } from '../../../src/world/layout/layout.js';
 import { CLEFT } from '../../../src/world/zones/games/crack/cleft.js';
-import { SPIRAL, BOARD, TURN, LENGTH, course, speedAt, trackY, spiralAt, sightAhead, fastest, floorAt, millAngle, stompAt, hammerAt, barrelAt, startRun, stepRun, botInput, botRun, heightOf } from './rules.js';
+import { SPIRAL, BOARD, TURN, LENGTH, LANDINGS, course, speedAt, trackY, slopeAt, spiralAt, sightAhead, fastest, floorAt, millAngle, stompAt, hammerAt, barrelAt, startRun, stepRun, botInput, botRun, heightOf, liftAt, gustAt, doorAt, cannonAt, ramAt } from './rules.js';
 
 const S = SPIRAL, C = S.at, H = S.half, TAU = Math.PI * 2;
 const height = await ground();
@@ -48,7 +51,8 @@ const press = (...list) => { const left = list.map(([key, at, d]) => ({ key, s: 
 /** Steers to `u`. */
 const steer = (u, then) => (st, input) => { input.side = Math.max(-1, Math.min(1, (u - st.u) * 5)); then?.(st, input); };
 /** Is metre `s` of the track bare planks, with nothing within a stride of it? */
-const clear = (s) => floorAt(s, 0) === 0 && !things.some((t) => t.kind !== 'barrels' && s > t.s0 - 1.2 && s < t.s1 + 1.2);
+const STRETCH = new Set(['barrels', 'wind', 'belt', 'trolley']); // (what lies along a stretch: one may start in it)
+const clear = (s) => floorAt(s, 0) === 0 && !things.some((t) => !STRETCH.has(t.kind) && s > t.s0 - 1.2 && s < t.s1 + 1.2);
 /** A bare place to start from, `least` metres or more before metre `s`. */
 const before = (s, least = 5) => { let from = s - least; while (!clear(from)) from -= 0.25; return from; };
 /** For how long (s) pressing `key` gets a runner from `from` past `to`: a press tried at every step of two seconds. */
@@ -62,7 +66,10 @@ const windowOf = (key, from, to, u = 0) => { let n = 0; for (let k = 0; k < 240;
   check('the tower stands in the sea, on the bed of the bay', shallow < -4 && out === 0, `${(-shallow).toFixed(1)} to ${(-deep).toFixed(1)} m of water under its plinth, all of it within the bay`);
   const cleft = Math.hypot(C.x - CLEFT.at.x, C.z - CLEFT.at.z) - (S.r + H), corner = [pierToWorld(PIER.length, PIER.headWidth / 2), pierToWorld(PIER.length - PIER.headLength, PIER.headWidth / 2)];
   const pier = Math.min(...corner.map(([x, z]) => Math.hypot(C.x - x, C.z - z))) - (S.r + H);
-  check('clear of the cliffs, of the cleft of Between a Rock and of the pier', land - (S.r + H) > 15 && cleft > 35 && pier > 25, `from its rail: ${(land - S.r - H).toFixed(0)} m to the nearest land, ${cleft.toFixed(0)} m to the cleft, ${pier.toFixed(0)} m to the pier`);
+  // (and the cliffs nowhere lean over it: within 45 m of its rail, how high the land gets, and how near the land that is higher than the foot of the tower comes)
+  let tall = -99, tallAt = 0;
+  for (let k = 0; k < 360; k++) for (let d = 0; d <= 45; d += 1) { const a = (k / 360) * TAU, h = height(C.x + Math.cos(a) * (S.r + H + d), C.z + Math.sin(a) * (S.r + H + d)); if (h > tall) { tall = h; tallAt = d; } }
+  check('clear of the cliffs — all 146 m of it —, of the cleft of Between a Rock and of the pier', land - (S.r + H) > 15 && cleft > 35 && pier > 25 && tallAt > 30, `from its rail: ${(land - S.r - H).toFixed(0)} m to the nearest land (the cliffs within 45 m are ${tall.toFixed(0)} m high at most, ${tallAt} m off), ${cleft.toFixed(0)} m to the cleft, ${pier.toFixed(0)} m to the pier`);
   const g = S.gate, gh = height(g.x, g.z); let sea = 99, hump = -9;
   for (let k = 0; k < 72; k++) for (let d = 1; d < sea; d += 0.5) { const a = (k / 72) * TAU; if (height(g.x + Math.cos(a) * d, g.z + Math.sin(a) * d) < 0) { sea = d; break; } }
   for (let f = 0.15; f <= 1; f += 0.01) hump = Math.max(hump, height(g.x + (C.x - S.r - g.x) * f, g.z + (C.z - g.z) * f));
@@ -70,8 +77,15 @@ const windowOf = (key, from, to, u = 0) => { let n = 0; for (let k = 0; k < 240;
 }
 {
   // ---- the track
-  const slope = S.rise / TURN, head = 1.8 + (S.jump * S.jump + S.again * S.again) / (2 * S.g) + S.tall, room = S.rise - 0.24 - 0.26;
-  check('six turns round the tower, a slope one runs up, room under the turn above for the highest jump', S.turns === 6 && slope < 0.15 && head < room - 0.5 && Math.abs(trackY(LENGTH) - S.foot - S.turns * S.rise) < 1e-6, `${LENGTH.toFixed(0)} m of track, ${(S.turns * S.rise).toFixed(0)} m up, ${(slope * 100).toFixed(0)} % ; a head at ${head.toFixed(1)} m at most, ${room.toFixed(1)} m of room`);
+  // (the highest a head gets: on what is there — the planks, a crate — with both jumps; over a hole thrown by a springboard, with the second jump at its top)
+  const springs = things.filter((t) => t.kind === 'spring'), jumps = (S.jump * S.jump + S.again * S.again) / (2 * S.g), thrown = (S.spring.up * S.spring.up + S.again * S.again) / (2 * S.g);
+  let slope = 0, roomy = 99, worst = 99;
+  for (let s = 0; s < LENGTH; s += 0.25) {
+    slope = Math.max(slope, slopeAt(s));
+    const room = trackY(s + TURN) - trackY(s) - 0.24 - 0.26, head = Math.max(...[-1.2, 0, 1.2].map((u) => Math.max(0, floorAt(s, u)))) + (springs.some((t) => s > t.s0 - 1 && s < t.s1 + 14) ? thrown : jumps) + S.tall;
+    roomy = Math.min(roomy, room); worst = Math.min(worst, room - head);
+  }
+  check('nineteen turns round the tower, the bell 146 m over the foot; a slope one runs up, room under the turn above for the highest head', S.turns === 19 && heightOf(LENGTH) > 145 && heightOf(LENGTH) < 147 && slope < 0.15 && worst > 0.4 && Math.abs(trackY(LENGTH) - S.foot - S.turns * S.rise) < 1e-6, `${LENGTH.toFixed(0)} m of track, ${heightOf(LENGTH).toFixed(1)} m up, ${(slope * 100).toFixed(1)} % at the steepest; ${roomy.toFixed(1)} m of room at the least, ${worst.toFixed(2)} m over the highest head`);
   const p0 = spiralAt(0), p1 = spiralAt(TURN), q = spiralAt(10, 1), f = spiralAt(10.01, 1);
   const right = { x: Math.cos(q.yaw) * -1, z: Math.sin(q.yaw) }; // (to the right of who runs with heading `yaw`)
   check('it winds round once a turn, the tower on the left of who runs', Math.hypot(p0.x - p1.x, p0.z - p1.z) < 1e-6 && Math.abs(p1.y - p0.y - S.rise) < 1e-6 && Math.abs(Math.hypot(q.x - C.x, q.z - C.z) - (S.r + 1)) < 1e-6 && (f.x - q.x) * Math.sin(q.yaw) + (f.z - q.z) * Math.cos(q.yaw) > 0 && (q.x - C.x) * right.x + (q.z - C.z) * right.z > 0);
@@ -83,10 +97,10 @@ const windowOf = (key, from, to, u = 0) => { let n = 0; for (let k = 0; k < 240;
 }
 {
   // ---- the stick: the legs run when it is up, stop when it is let go, and the clock waits for the first step
-  const stops = [5, 309].map((s0) => { const st = runner(s0); let t = 0; while (st.v > 0 && t < 2) { stepRun(st, S.step, { run: 0 }); t += S.step; } const at = st.s; go(st, 999, still, 3); return { t, d: at - s0, moved: st.s - at, v: speedAt(s0) }; });
+  const stops = [5, 309].map((s0) => { const st = runner(s0); let t = 0; while (st.v > 0 && t < 2) { stepRun(st, S.step, { run: 0 }); t += S.step; } const at = st.s; go(st, 1e9, still, 3); return { t, d: at - s0, moved: st.s - at, v: speedAt(s0) }; });
   const starts = [5, 309].map((s0) => { const st = stander(s0); let t = 0; while (st.v < speedAt(st.s) - 1e-3 && t < 2) { stepRun(st, S.step, { run: 1 }); t += S.step; } return { t, d: st.s - s0 }; });
-  const half = stander(5); go(half, 999, (st, input) => { input.run = 0.5; }, 2);
-  const back = stander(5); go(back, 999, (st, input) => { input.crouch = true; }, 2);
+  const half = stander(5); go(half, 1e9, (st, input) => { input.run = 0.5; }, 2);
+  const back = stander(5); go(back, 1e9, (st, input) => { input.crouch = true; }, 2);
   check('who lets go of the stick stops: within a quarter of a second, and stays; nobody runs back down',
     stops.every((r) => r.t <= S.stop + 0.011 && r.d > 0.3 && r.d < 1 && r.moved === 0) && starts.every((r) => Math.abs(r.t - S.start) < 0.011 && r.d < 1.2) && Math.abs(half.v - speedAt(half.s) / 2) < 1e-3 && back.s === 5 && back.v === 0 && back.duck > 0,
     `from ${stops.map((r) => r.v.toFixed(1)).join(' and ')} m/s: stopped in ${stops.map((r) => r.t.toFixed(2)).join(' and ')} s, ${stops.map((r) => r.d.toFixed(2)).join(' and ')} m further; from standing, at full speed in ${starts[0].t.toFixed(2)} s and ${starts[0].d.toFixed(2)} m; half the stick, half the speed; stick down while standing: a duck, on the spot`);
@@ -130,7 +144,7 @@ const windowOf = (key, from, to, u = 0) => { let n = 0; for (let k = 0; k < 240;
   const planks = things.filter((t) => t.kind === 'hole' && t.s0 > 5.5 * TURN && (t.u0 > -H || t.u1 < H) && t.s1 - t.s0 > 3), p = planks[0], mid = planks.find((t) => t.s0 === p.s0 && t !== p);
   const edge = [p, mid].map((t) => (t.u0 > -H ? t.u0 : t.u1)).sort((x, y) => x - y), centre = (edge[0] + edge[1]) / 2;
   const onIt = go(runner(p.s0 + 0.5, centre), p.s1 - 0.5), offIt = go(runner(p.s0 + 0.5, centre - 1.4), p.s1 - 0.5);
-  check('the planks before the bell: on one, one runs; beside it, there is nothing', !onIt.out && offIt.out === 'hole' && Number.isFinite(floorAt(p.s0 + 1, centre)) && floorAt(p.s0 + 1, centre - 1.4) === -Infinity, `${(edge[1] - edge[0]).toFixed(1)} m wide`);
+  check('the planks of The Works: on one, one runs; beside it, there is nothing', !onIt.out && offIt.out === 'hole' && Number.isFinite(floorAt(p.s0 + 1, centre)) && floorAt(p.s0 + 1, centre - 1.4) === -Infinity, `${(edge[1] - edge[0]).toFixed(1)} m wide`);
   // (down in the air: a dive; the stick held: one lands sliding)
   const bare = before(high.s, 5.4), far = go(runner(bare), bare + 4.8, press(['jump', bare + 0.5, 0])), short = go(runner(bare), bare + 4.8, press(['jump', bare + 0.5, 0], ['down', bare + 1.6, 0]));
   const landAt = (r) => { let s = 0; const q = runner(bare); go(q, bare + 4.8, (st, input) => { r(st, input); if (!s && st.jumps === 0 && !st.air && st.s > bare + 1) s = st.s; }); return s; };
@@ -142,7 +156,7 @@ const windowOf = (key, from, to, u = 0) => { let n = 0; for (let k = 0; k < 240;
   // ---- the same things met from a standstill: a jump is as long as the run before it, and nothing is shut for who stopped
   const jumpNow = (st, input) => { if (st.n === 0) input.jump = true; }, twice = (st, input) => { if (st.n === 0 || (st.air && st.jumps === 1 && st.vh <= 0)) input.jump = true; };
   const gaps = things.filter((t) => t.kind === 'hole' && t.u0 <= -H && t.u1 >= H && t.s1 < 5.5 * TURN); // (every hole right across the track, but the last ones, between the planks)
-  let hop = 0; go(stander(5), 999, (st, input) => { if (st.n === 0) input.jump = true; else if (!st.air && !hop) hop = st.s - 5; }, 1); // (how far one jump takes who stood, the stick up)
+  let hop = 0; go(stander(5), 1e9, (st, input) => { if (st.n === 0) input.jump = true; else if (!st.air && !hop) hop = st.s - 5; }, 1); // (how far one jump takes who stood, the stick up)
   let shut = 0, short = 0, long = 0, late = 0;
   for (const g of gaps) {
     const edge = g.s0 - 0.05, far = g.s1 + 0.3, crossed = (r) => r.out !== 'hole' && r.st.s >= g.s1 - S.edge;
@@ -188,68 +202,193 @@ const windowOf = (key, from, to, u = 0) => { let n = 0; for (let k = 0; k < 240;
   let abreast = 0, least = 99;
   for (const r of rolls) for (let n = 1; n < 400; n++) { const a = barrelAt(r, n, n * r.every + r.off + 2, {}), b = barrelAt(r, n + 1, n * r.every + r.off + 2, {}); if (a.alive && b.alive) { least = Math.min(least, Math.abs(a.s - b.s)); if (Math.abs(a.s - b.s) < 2 * r.r + 1 && a.u !== b.u) abreast++; } }
   check('barrels roll down one behind the other, never two abreast; under a hung board they pass', abreast === 0 && least > 5 && rolls.every((r) => 2 * r.r <= S.bar.high), `${least.toFixed(1)} m apart at the least`);
-  // (each of them met at thirty moments: the runner that plays by itself is put a little before it)
+  // (each of them met at many moments — thirty for the old kinds, ten for the new —: the runner that plays by itself is put a little before it)
+  const OLD = [...mills, ...stomps, ...hammers.filter((t) => !t.form), ...rolls], NEW = things.filter((t) => ['lift', 'door', 'cannon', 'ram', 'trolley'].includes(t.kind) || (t.kind === 'hammer' && t.form));
+  const spanOf = (m) => (m.kind === 'mill' ? TAU / m.turn : m.kind === 'barrels' || m.kind === 'trolley' ? m.every : m.period);
   let met = 0; const stopped = [];
-  for (const m of [...mills, ...stomps, ...hammers, ...rolls]) {
-    const from = before(m.s0, 5);
-    const span = m.kind === 'mill' ? TAU / m.turn : m.kind === 'barrels' ? m.every : m.period;
-    for (let k = 0; k < 30; k++) {
-      const st = runner(from, 0, 40 + (k * span * 3.1) / 30), input = { side: 0, run: 0, jump: false, down: false, crouch: false }, events = [];
+  for (const m of [...OLD, ...NEW]) {
+    const from = before(m.s0, 5), span = spanOf(m), n = OLD.includes(m) ? 30 : 10;
+    for (let k = 0; k < n; k++) {
+      const st = runner(from, 0, 40 + (k * span * 3.1) / n), input = { side: 0, run: 0, jump: false, down: false, crouch: false }, events = [];
       let out = '';
-      for (let t = 0; t < 12 && st.s < m.s1 + 0.8 && !out; t += S.step) { botInput(st, input); stepRun(st, S.step, input, events); out = events.find((e) => e.type === 'out')?.why || ''; }
+      for (let t = 0; t < 14 && st.s < m.s1 + 0.8 && !out; t += S.step) { botInput(st, input); stepRun(st, S.step, input, events); out = events.find((e) => e.type === 'out')?.why || ''; }
       met++;
-      if (out) stopped.push(`${m.kind} at ${m.s0.toFixed(0)} m (${out})`);
+      if (out || st.s < m.s1 + 0.8) stopped.push(`${m.kind} at ${m.s0.toFixed(0)} m (${out || 'not past it'})`);
     }
   }
-  check('each thing that moves is got past whatever the moment one comes to it', stopped.length === 0, stopped.length ? stopped.slice(0, 4).join(', ') : `${mills.length} mills, ${stomps.length} stompers, ${hammers.length} hammers, ${rolls.length} runs of barrels, thirty moments each: ${met} times past`);
+  check('each thing that moves is got past whatever the moment one comes to it', stopped.length === 0, stopped.length ? `${stopped.length} of ${met}: ${stopped.slice(0, 4).join(', ')}` : `${OLD.length} of the first turns, thirty moments each, and ${NEW.length} of the new ones (bars, doors, cannons, rams, cables, hammers in a row), ten each: ${met} times past`);
   // (and met from a standstill right before it, by the tower, in the middle, by the rail: the runner that plays by itself lets go of the stick when the way is shut, and waits for its moment)
-  let from0 = 0, waits = 0, longest = 0; const held = [];
-  for (const m of [...mills, ...stomps, ...hammers, ...rolls]) {
-    const from = m.kind === 'mill' ? m.s - m.arm - 0.3 : m.kind === 'barrels' ? before(m.s0, 3) : m.s0 - S.along - 0.1;
-    const span = m.kind === 'mill' ? TAU / m.turn : m.kind === 'barrels' ? m.every : m.period;
-    for (const u of m.kind === 'barrels' ? [0] : [-1.3, 0, 1.3]) for (let k = 0; k < 12; k++) {
-      const st = stander(from, u, 40 + (k * span * 3.1) / 12), input = { side: 0, run: 0, jump: false, down: false, crouch: false }, events = [];
+  let from0 = 0, waits = 0, longest = 0, where = ''; const held = [];
+  for (const m of [...OLD, ...NEW]) {
+    const from = m.kind === 'mill' ? m.s - m.arm - 0.3 : m.kind === 'barrels' || m.kind === 'trolley' ? before(m.s0, 3) : m.s0 - S.along - 0.1;
+    const span = spanOf(m), n = OLD.includes(m) ? 12 : 6;
+    for (const u of m.kind === 'barrels' || m.kind === 'trolley' ? [0] : [-1.3, 0, 1.3]) for (let k = 0; k < n; k++) {
+      const st = stander(from, u, 40 + (k * span * 3.1) / n), input = { side: 0, run: 0, jump: false, down: false, crouch: false }, events = [];
       let out = '', t = 0, stood = 0;
       for (; t < 30 && st.s < m.s1 + 0.8 && !out; t += S.step) { botInput(st, input); if (!input.run && st.v === 0) stood += S.step; stepRun(st, S.step, input, events); out = events.find((e) => e.type === 'out')?.why || ''; }
-      from0++; if (st.bot.stops) waits++; longest = Math.max(longest, stood);
+      from0++; if (st.bot.stops) waits++; if (stood > longest) { longest = stood; where = `${m.kind} at ${m.s0.toFixed(0)} m`; }
       if (out || st.s < m.s1 + 0.8) held.push(`${m.kind} at ${m.s0.toFixed(0)} m, ${u} across, moment ${k} (${out || 'not past it after 30 s'})`);
     }
   }
-  check('and by one who had stopped right before it: the runner that plays by itself waits for its moment, then goes', held.length === 0 && waits > 0 && longest < 6, held.length ? `${held.length} of ${from0}: ${held.slice(0, 4).join(', ')}` : `across the track, twelve moments each: ${from0} times past, ${waits} of them after letting go of the stick to wait — ${longest.toFixed(1)} s at the longest`);
+  globalThis.WAITED = `${longest.toFixed(1)} s (${where})`;
+  check('and by one who had stopped right before it: the runner that plays by itself waits for its moment — three seconds at most —, then goes', held.length === 0 && waits > 0 && longest < 3.5, held.length ? `${held.length} of ${from0}: ${held.slice(0, 4).join(', ')}` : `across the track, at many moments: ${from0} times past, ${waits} of them after letting go of the stick to wait — ${globalThis.WAITED} at the longest`);
   // (what moves leaves nowhere to stand for ever: within a mill, under a stomper, in the swing of a hammer, one is caught within one of its turns)
   let spots = 0, safe = 0;
-  for (const m of mills) for (let ds = -1.5; ds <= 1.5; ds += 0.5) for (const u of [-1.3, -0.65, 0, 0.65, 1.3]) { if (Math.hypot(ds, u) > m.arm) continue; spots++; if (go(stander(m.s + ds, u, 40), 999, still, TAU / m.turn + 0.1).out !== 'mill') safe++; }
-  for (const m of stomps) for (const ds of [0.1, 0.8, 1.5]) for (const u of [-1.3, -0.65, -0.1, 0, 0.1, 0.65, 1.3]) { spots++; if (go(stander(m.s0 + ds, u, 40), 999, still, m.period + 0.1).out !== 'stomp') safe++; }
-  for (const m of hammers) for (const u of [-1.3, -0.65, 0, 0.65, 1.3]) { spots++; if (go(stander(m.s, u, 40), 999, still, m.period + 0.1).out !== 'hammer') safe++; }
+  for (const m of mills) for (let ds = -1.5; ds <= 1.5; ds += 0.5) for (const u of [-1.3, -0.65, 0, 0.65, 1.3]) { if (Math.hypot(ds, u) > m.arm) continue; spots++; if (go(stander(m.s + ds, u, 40), 1e9, still, TAU / m.turn + 0.1).out !== 'mill') safe++; }
+  for (const m of stomps) for (const ds of [0.1, 0.8, 1.5]) for (const u of [-1.3, -0.65, -0.1, 0, 0.1, 0.65, 1.3]) { spots++; if (go(stander(m.s0 + ds, u, 40), 1e9, still, m.period + 0.1).out !== 'stomp') safe++; }
+  for (const m of hammers) for (const u of [-1.3, -0.65, 0, 0.65, 1.3]) { spots++; if (go(stander(m.s, u, 40), 1e9, still, m.period + 0.1).out !== 'hammer') safe++; }
   check('what moves leaves nowhere to stand for ever: within a mill, under a stomper, in the swing of a hammer, one is caught within one turn of it', safe === 0 && spots > 80, `${spots} places stood on: ${spots - safe} caught`);
   // (the barrels: they come at who stands still as well — wherever across the track, ducking or not)
   let stoodAt = 0, bowled = 0, worst = 0, sum = 0;
   for (const r of rolls) for (const f of [0.12, 0.5, 0.9]) for (const u of [-1.3, -0.65, 0, 0.65, 1.3]) for (const t0 of [40, 53.7, 91.3]) for (const crouch of [false, true]) {
     let s0 = r.s0 + (r.s1 - r.s0) * f; while (things.some((t) => t.kind === 'high' && Math.abs(t.s - s0) < 0.6)) s0 += 0.7; // (not under a hung board: nobody stands there)
-    const res = go(stander(s0, u, t0), 999, (st, input) => { input.run = 0; input.crouch = crouch; }, 90);
+    const res = go(stander(s0, u, t0), 1e9, (st, input) => { input.run = 0; input.crouch = crouch; }, 90);
     stoodAt++; if (res.out === 'barrel') { bowled++; worst = Math.max(worst, res.t); sum += res.t; }
   }
   check('standing still in the turn of the barrels does not save one: wherever one stands, a barrel comes', bowled === stoodAt && worst < 60, `${stoodAt} times stood among them, on both stretches: bowled over every time — after ${(sum / Math.max(1, bowled)).toFixed(1)} s on average, ${worst.toFixed(1)} s at the longest`);
 }
 {
+  // ---- the new kinds, one after the other: their move gets one past, nothing else does
+  const kind = (k, f) => things.filter((t) => t.kind === k && (f === undefined || t.form === f));
+  const holeAt = (s0) => things.find((t) => t.kind === 'hole' && Math.abs(t.s0 - s0) < 1e-6);
+  /** Does pressing `key` at some step of the first `n` get runner `make()` past metre `to`? */
+  const someKey = (make, to, key, n = 60) => { for (let k = 0; k < n; k++) { let i = 0; if (!go(make(), to, (st, input) => { if (i++ === k) input[key] = true; }).out) return true; } return false; };
+  // (planks that give way)
+  const cr = kind('crumble').filter((t) => !t.form), c0 = cr[0]; let c1 = c0; while (cr.some((t) => Math.abs(t.s0 - c1.s1) < 1e-6)) c1 = cr.find((t) => Math.abs(t.s0 - c1.s1) < 1e-6);
+  const across = go(runner(before(c0.s0)), c1.s1 + 1), stop = go(runner(before(c0.s0)), c1.s1 + 1, (st, input) => { if (st.s > c0.s0 + 2) input.run = 0; }, 4);
+  check('planks that give way: who keeps running is over them — who stops on one goes down with it', !across.out && stop.out === 'hole' && stop.at < c0.s0 + 3.5, `${Math.round(c1.s1 - c0.s0)} planks of a metre; each holds ${S.crumble} s from the first foot set on it`);
+  // (springboards: the hole behind one is too long for any jump — taken at its very edge, by the tower, at full speed, with both jumps)
+  const sp = kind('spring')[0], gap = holeAt(sp.s1 + 0.3);
+  const thrown = go(runner(before(sp.s0)), gap.s1 + 2), stepOn = go(stander(sp.s0 - 0.5), gap.s1 + 2, null, 4);
+  let crossed = 0, best = 0;
+  for (let k1 = 0; k1 < 8; k1++) for (let g = 4; g < 90; g += 2) {
+    const r = go(runner(sp.s1 + 0.02, -S.reach), gap.s1 + 2, (st, input) => { input.side = -1; if (st.n === k1 || st.n === k1 + g) input.jump = true; });
+    if (!r.out) crossed++; else best = Math.max(best, r.at - gap.s0);
+  }
+  check('a springboard (gold): who runs onto it — or steps on it from a standstill — is thrown over the hole behind it; no jump, nor two, gets one across', !thrown.out && !stepOn.out && crossed === 0 && thrown.seen.some((e) => e.type === 'spring'), `a hole of ${(gap.s1 - gap.s0).toFixed(1)} m; two jumps from its edge, at full speed by the tower, get ${best.toFixed(1)} m at the best`);
+  // (stairs three high: two jumps do not get one onto the top, three do; off it, a jump)
+  const top = kind('crate', 'stack')[0], mid = things.find((t) => t.kind === 'crate' && Math.abs(t.s1 - top.s0) < 1e-6), low = things.find((t) => t.kind === 'crate' && Math.abs(t.s1 - mid.s0) < 1e-6), pit = holeAt(top.s1);
+  const from = before(low.s0, 3.5), keys = (...at) => (st, input) => { if (at.includes(st.n)) input.jump = true; };
+  let two = 0, three = null;
+  for (let a = 0; a < 40; a += 2) for (let b = a + 6; b < a + 90; b += 3) { const r = go(runner(from), top.s0 + 0.5, keys(a, b)); if (!r.out && r.st.h >= top.top - 1e-6) two++; }
+  for (let a = 0; a < 40 && !three; a += 2) for (let b = a + 10; b < a + 80 && !three; b += 4) for (let c = b + 10; c < b + 80 && !three; c += 4) { const r = go(runner(from), top.s0 + 0.6, keys(a, b, c)); if (!r.out && r.st.h >= top.top - 1e-6) three = [a, b, c]; }
+  const walk = three && go(go(runner(from), top.s0 + 0.6, keys(...three)).st, pit.s1 + 2), leap = three && go(go(runner(from), top.s0 + 0.6, keys(...three)).st, pit.s1 + 2, (st, input) => { if (st.s > top.s1 - 1.4 && !st.air && st.h > 2) input.jump = true; });
+  check('stairs three high (a gold band): two jumps do not get one onto the top — three do —, and off it a jump: who walks off goes down the hole behind', two === 0 && !!three && walk.out === 'hole' && !leap.out, `${low.top}, ${mid.top} then ${top.top} m; a hole of ${(pit.s1 - pit.s0).toFixed(1)} m behind`);
+  // (bars that go up and down: met low, a jump; met high, a slide; and nothing else)
+  const lf = kind('lift')[0], eta = 3 / speedAt(lf.s), when = (y) => { for (let t = 40; ; t += 0.01) if (Math.abs(liftAt(lf, t + eta) - y) < 1e-9 && Math.abs(liftAt(lf, t + eta - 0.25) - y) < 1e-9 && Math.abs(liftAt(lf, t + eta + 0.25) - y) < 1e-9) return t; };
+  const tLow = when(lf.lo), tHigh = when(lf.hi), atLift = (t0) => () => runner(lf.s - 3, 0, t0);
+  const liftOk = go(atLift(tLow)(), lf.s + 0.6).out === 'lift' && someKey(atLift(tLow), lf.s + 0.6, 'jump') && !someKey(atLift(tLow), lf.s + 0.6, 'down') && go(atLift(tHigh)(), lf.s + 0.6).out === 'lift' && someKey(atLift(tHigh), lf.s + 0.6, 'down') && !someKey(atLift(tHigh), lf.s + 0.6, 'jump');
+  check('a bar that goes up and down (yellow and black while low, red and white while high): low, it is jumped — high, slid under; run into, it ends the attempt', liftOk, `its foot from ${lf.lo} to ${lf.hi} m, every ${lf.period} s`);
+  // (the wind: in a gust, who does not steer against it is pushed into the hole by the rail)
+  const wd = kind('wind')[0], pit2 = things.find((t) => t.kind === 'hole' && t.s0 > wd.s0 && t.u0 >= 0), gust = Math.ceil(40 / wd.period) * wd.period - wd.phase * wd.period;
+  const blown = go(runner(wd.s0 + 0.5, -1, gust), pit2.s1 + 0.5), held = go(runner(wd.s0 + 0.5, -1, gust), pit2.s1 + 0.5, steer(-1));
+  check('the wind (streamers show it): in a gust, who does not steer against it is pushed into the hole by the rail — who does, is not', blown.out === 'hole' && !held.out && gustAt(wd, gust + 0.5) === 1, `${wd.push} m/s across in a gust, ${Math.round(wd.period * 0.37 * 10) / 10} s long, every ${wd.period} s`);
+  // (belts: who stands on one is carried back into the hole behind it; who runs, gets up it)
+  const bt = kind('belt')[0], hurdle = things.find((t) => t.kind === 'low' && t.s > bt.s0);
+  const carried = go(stander(bt.s0 + 3), 1e9, still, 6), ran = go(runner(bt.s0 + 0.3), hurdle.s - 1.5);
+  check('a belt (black, its slats running down): who stands on it is carried back down into the hole behind it — who runs gets up it', carried.out === 'hole' && !ran.out && ran.st.s >= hurdle.s - 1.5, `${bt.v} m/s down, ${(bt.s1 - bt.s0).toFixed(0)} m long; up it at ${((hurdle.s - 1.5 - bt.s0 - 0.3) / ran.t).toFixed(1)} m/s`);
+  // (sliding doors: who runs straight on meets the wall, at some moments; who steers to the door goes through, at every moment)
+  const dr = kind('door')[0]; let walled = 0, through = 0;
+  for (let k = 0; k < 24; k++) {
+    const t0 = 40 + (k * dr.period) / 24;
+    if (go(runner(dr.s - 4, 0, t0), dr.s + 0.6).out === 'door') walled++;
+    const aim = (st, input) => { const eta = Math.max(0, dr.s - st.s) / Math.max(1, st.v), u = doorAt(dr, st.t0 + st.total + eta); input.side = Math.max(-1, Math.min(1, (u - st.u) * 5)); };
+    if (!go(runner(dr.s - 4, 0, t0), dr.s + 0.6, aim).out) through++;
+  }
+  check('a wall with a sliding door (navy): who runs straight on meets the wall — who steers to the door goes through, whenever one comes', walled > 6 && through === 24, `straight on: into the wall at ${walled} moments of 24; steering to the door: through at ${through}`);
+  // (cannon balls: met as one crosses, a low one is jumped, a high one slid under)
+  const ballOk = kind('cannon').slice(0, 2).map((cn) => {
+    const eta = 3 / speedAt(cn.s); let t0 = 40; while (Math.abs(cannonAt(cn, t0 + eta)) > 0.05) t0 += 0.001;
+    const make = () => runner(cn.s - 3, 0, t0), key = cn.high ? 'down' : 'jump', other = cn.high ? 'jump' : 'down';
+    return go(make(), cn.s + 0.6).out === 'cannon' && someKey(make, cn.s + 0.6, key) && !someKey(make, cn.s + 0.6, other);
+  });
+  check('cannon balls shot across from the tower: a low one (black and yellow) is jumped, a high one (red and white) slid under — met without, they end the attempt', ballOk.every(Boolean) && kind('cannon').some((c) => c.high) && kind('cannon').some((c) => !c.high), `${kind('cannon').length} cannons, a ball each every ${Math.min(...kind('cannon').map((c) => c.period))} to ${Math.max(...kind('cannon').map((c) => c.period))} s, ${kind('cannon')[0].v} m/s`);
+  // (planks a foot wide: on one, one runs; beside it, nothing)
+  const rp = kind('hole', 'rope'), ra = rp[0], rb = rp.find((t) => t !== ra && Math.abs(t.s0 - ra.s0) < 1e-6), rc = (ra.u1 + rb.u0) / 2;
+  const onRope = go(runner(ra.s0 + 0.3, rc), ra.s1 - 0.3), offRope = go(runner(ra.s0 + 0.3, rc + 0.6), ra.s1 - 0.3);
+  check('planks a foot wide over nothing: on one, one runs — a step beside it, and one is down', !onRope.out && offRope.out === 'hole', `${(rb.u0 - ra.u1).toFixed(2)} m wide, ${kind('hole', 'rope').length / 2} of them`);
+  // (boards on a cable: who stands under the cable is swept off — ducking, the board goes over)
+  const tr = kind('trolley')[0], under = tr.s0 + 3;
+  const swept = go(stander(under, 0, 40), 1e9, still, 3 * tr.every), ducked = go(stander(under, 0, 40), 1e9, (st, input) => { input.run = 0; input.crouch = true; }, 3 * tr.every);
+  check('boards on a cable (red and white) come down the track: who stands up under it is swept off — who ducks lets them by', swept.out === 'trolley' && !ducked.out, `one every ${tr.every} s at ${tr.v} m/s`);
+  // (rams: who runs straight on meets one, at some moments)
+  const rm = kind('ram')[0]; let rammed = 0;
+  for (let k = 0; k < 24; k++) if (go(runner(rm.s - 3.5, 0, 40 + (k * rm.period) / 24), rm.s + 0.8).out === 'ram') rammed++;
+  check('rams (navy, a yellow and black face) shoot across from the tower or from the rail: who runs straight on meets one at some moments — the moment is read, or waited for', rammed > 4 && rammed < 24 && Math.max(...Array.from({ length: 200 }, (_, k) => ramAt(rm, (k * rm.period) / 200))) > 2 * H, `into it at ${rammed} moments of 24`);
+  // (to the bell, on planks a foot wide that give way: who keeps running rings it; who stops goes down)
+  const last = kind('crumble', 'rope').filter((t) => t.s1 > LENGTH - 12), lc = (last[0].u0 + last[0].u1) / 2;
+  const rung = go(runner(last[0].s0 + 0.1, lc), LENGTH + 1), halt = go(runner(last[0].s0 + 0.1, lc), LENGTH + 1, (st, input) => { if (st.s > last[0].s0 + 3) input.run = 0; }, 4);
+  check('the last planks, a foot wide and giving way: who keeps running rings the bell — who stops goes down', rung.st.over && halt.out === 'hole', `${last.length} m of them before the bell`);
+}
+{
+  // ---- nothing asks for a move timed to less than a quarter of a second: each hole, hurdle and hung board right across the track, met at a run
+  const win = (t) => {
+    // (from as far back as six metres, with nothing in between — planks that give way aside)
+    const key = t.kind === 'high' ? 'down' : 'jump', ok = (s) => floorAt(s, 0) === 0 && !things.some((q) => !STRETCH.has(q.kind) && q.kind !== 'crumble' && s > q.s0 - 1.2 && s < q.s1 + 1.2);
+    let from = t.s0 - 1.3; while (from > t.s0 - 6 && ok(from - 0.25)) from -= 0.25;
+    let n = 0;
+    for (let k = 0; k < 240; k++) {
+      let i = 0; const st = runner(from), events = [], input = { side: 0, run: 1, jump: false, down: false, crouch: false };
+      let ok = true;
+      for (let q = 0; q < 600; q++) {
+        input.jump = input.down = false; if (i++ === k) input[key] = true; input.run = input.down ? 0 : 1;
+        stepRun(st, S.step, input, events);
+        if (events.some((e) => e.type === 'out')) { ok = false; break; }
+        events.length = 0;
+        if (st.s > t.s1 + 0.4 && !st.air) break;
+      }
+      if (ok) n++;
+    }
+    return n * S.step;
+  };
+  const spring = new Set(things.filter((t) => t.kind === 'spring').map((t) => (t.s1 + 0.3).toFixed(3)));
+  const wind = things.filter((t) => ['wind', 'belt', 'trolley', 'barrels'].includes(t.kind)); // (where something else comes at one as well)
+  const side = things.filter((q) => (q.kind === 'hole' && (q.u0 > -H || q.u1 < H)) || q.kind === 'crate'); // (a gap between two planks is crossed steering, a hole behind a crate jumped from its top: neither is met straight on)
+  const all = things.filter((t) => ['hole', 'low', 'high'].includes(t.kind) && t.u0 <= -H && t.u1 >= H && !spring.has(t.s0.toFixed(3)) && !wind.some((w) => t.s0 < w.s1 && t.s1 > w.s0) && !side.some((q) => Math.abs(q.s1 - t.s0) < 0.1 || Math.abs(q.s0 - t.s1) < 0.1));
+  const ws = all.map((t) => ({ t, w: win(t) })).sort((a, b) => a.w - b.w);
+  globalThis.TIGHTEST = `${ws[0].w.toFixed(2)} s (a ${ws[0].t.kind} at ${ws[0].t.s0.toFixed(0)} m)`;
+  check('nothing asks for a move timed to less than a quarter of a second: every hole, hurdle and hung board right across the track, met straight on at a run, leaves that long to press the key', ws[0].w >= 0.25, `${ws.length} of them: ${globalThis.TIGHTEST} at the tightest, ${ws[Math.floor(ws.length / 2)].w.toFixed(2)} s for half of them or less`);
+}
+{
+  // ---- the landings, and where a touch puts one back
+  const level = LANDINGS.every((a) => slopeAt(a + 0.5) < 1e-6 && slopeAt(a + S.land - 0.5) < 1e-6), empty = LANDINGS.every((a) => !things.some((t) => t.s1 > a - 0.25 && t.s0 < a + S.land + 0.25));
+  const apart = LANDINGS.map((a, i) => (i ? (a - LANDINGS[i - 1]) / TURN : a / TURN));
+  check('a landing every three turns: level, and nothing on it', LANDINGS.length === 6 && level && empty && apart.every((d) => d > 2.8 && d < 3.2), `at ${LANDINGS.map((a) => `${heightOf(a).toFixed(0)} m`).join(', ')} up, ${S.land} m long`);
+  const L = LANDINGS[1], hit = things.find((t) => t.kind === 'low' && t.s > L);
+  const touch = (mode) => {
+    const keep = S.back; S.back = mode;
+    const st = runner(L - 3), r = go(st, hit.s + 2), at = st.clock, input = { side: 0, run: 0, jump: false, down: false, crouch: false };
+    let t = 0; while (st.down > 0 || st.wait > 0) { stepRun(st, S.step, input); t += S.step; }
+    for (let k = 0; k < 60; k++) { stepRun(st, S.step, input); t += S.step; }
+    S.back = keep;
+    return { why: r.out, s: st.s, clock: st.clock, at, t, going: st.going };
+  };
+  const land = touch('landing'), foot = touch('foot');
+  check("back: 'landing' — a touch puts one back at the last landing reached, and the clock runs on; back: 'foot' (the rule) — at the foot, and the clock waits for the first step",
+    S.back === 'foot' && land.why === 'low' && Math.abs(land.s - (L + S.land / 2)) < 1e-6 && land.going && Math.abs(land.clock - land.at - land.t) < 1e-6 && foot.why === 'low' && foot.s === 0 && foot.clock === 0 && !foot.going,
+    `a hurdle ${(hit.s - L).toFixed(0)} m past the landing at ${heightOf(L).toFixed(0)} m: 'landing' puts one back on it, the clock ${land.at.toFixed(1)} s then ${land.clock.toFixed(1)} s after ${land.t.toFixed(1)} s; 'foot' puts one at the foot, the clock at 0`);
+}
+{
   // ---- the runner that plays by itself
-  const runs = []; for (let k = 0; k < 12; k++) runs.push(botRun(k * 7.3));
-  check('a runner that plays by itself reaches the bell at its first attempt, whenever it starts', runs.every((r) => r.over && r.attempts === 1 && r.time > fastest() && r.time < globalThis.SLOWEST * 1000 && r.time <= r.clock * 1000 + 1), `${runs.map((r) => (r.time / 1000).toFixed(1)).join(' · ')} s from the first step; ${Math.round(runs.reduce((a, r) => a + r.keys, 0) / runs.length)} keys pressed; the stick let go to wait ${runs.reduce((a, r) => a + r.stops, 0)} times in all`);
+  const runs = [0, 7.3, 14.6].map((t0) => botRun(t0, 600));
+  check('a runner that plays by itself reaches the bell at its first attempt, whenever it starts', runs.every((r) => r.over && r.attempts === 1 && r.time > fastest() && r.time < globalThis.SLOWEST * 1000 && r.time <= r.clock * 1000 + 1), `${runs.map((r) => (r.time / 1000).toFixed(1)).join(' · ')} s from the first step; ${Math.round(runs.reduce((a, r) => a + r.keys, 0) / runs.length)} keys pressed; the stick let go to wait ${runs.reduce((a, r) => a + r.stops, 0)} times in all; its tightest key ${globalThis.TIGHTEST}, its longest wait ${globalThis.WAITED}`);
+  globalThis.BOT = runs;
   // (the same runner on slower legs: every jump is shorter, every slide too — and still nothing on the way is shut)
-  const legs = S.speed.slice(), slower = [0.75, 0.5].map((k) => { S.speed = legs.map((v) => v * k); const r = botRun(11, 600); S.speed = legs; return { k, ...r }; });
+  const legs = S.speed.slice(), slower = [0.75, 0.5].map((k) => { S.speed = legs.map((v) => v * k); const r = botRun(11, 900); S.speed = legs; return { k, ...r }; });
   check('nothing on the way needs the full speed: on legs that never go faster than three quarters of it, than half of it, the same runner reaches the bell at its first attempt', slower.every((r) => r.over && r.attempts === 1), slower.map((r) => `at ${Math.round(r.k * 100)} %: ${r.over ? `${(r.time / 1000).toFixed(1)} s` : `not there — ${r.why.slice(0, 3).join(', ')}`}`).join(' · '));
-  const at = (dt) => { const st = startRun(3), input = { side: 0, run: 0, jump: false, down: false, crouch: false }; let acc = 0; for (let t = 0; t < 120 && !st.over; t += dt) { acc += dt; while (acc >= S.step && !st.over) { acc -= S.step; botInput(st, input); stepRun(st, S.step, input, null); } } return st.time; };
-  check('the same run at 30 and at 144 frames a second', at(1 / 30) === at(1 / 144) && at(1 / 30) > 0);
-  // ---- each turn worse than the last
-  const count = turns.map((t) => t.things.reduce((n, x) => n + (x.kind === 'barrels' ? Math.ceil((x.s1 - x.s0) / (x.every * x.v)) : 1), 0));
-  const kinds = turns.map((t) => [...new Set(t.things.map((x) => x.kind))]), seenKinds = new Set(), fresh = kinds.map((list) => { const novel = list.filter((k) => !seenKinds.has(k)); for (const k of list) seenKinds.add(k); return novel; });
+  const at = (dt) => { const st = startRun(3), input = { side: 0, run: 0, jump: false, down: false, crouch: false }; let acc = 0; for (let t = 0; t < 400 && !st.over; t += dt) { acc += dt; while (acc >= S.step && !st.over) { acc -= S.step; botInput(st, input); stepRun(st, S.step, input, null); } } return st.time; };
+  const a30 = at(1 / 30), a144 = at(1 / 144);
+  check('the same run at 30 and at 144 frames a second', a30 === a144 && a30 > 0, `the bell in ${(a30 / 1000).toFixed(2)} s both times`);
+  // ---- each turn worse than the last, and each with something new
+  const count = turns.map((t) => t.things.reduce((n, x) => n + (x.kind === 'barrels' || x.kind === 'trolley' ? Math.ceil((x.s1 - x.s0) / (x.every * x.v)) : 1), 0));
+  const kinds = turns.map((t) => [...new Set(t.things.map((x) => (x.form ? `${x.kind} (${x.form})` : x.kind)))]), seenKinds = new Set(), fresh = kinds.map((list) => { const novel = list.filter((k) => !seenKinds.has(k)); for (const k of list) seenKinds.add(k); return novel; });
   const firstAt = Math.min(...things.map((t) => t.s0));
-  check('each turn has at least as much in the way as the one before, and the first five each bring something new', count.every((n, i) => i === 0 || n >= count[i - 1]) && count[5] > count[0] * 2 && fresh.slice(0, 5).every((f) => f.length > 0) && firstAt > 12,
-    `${count.join(', ')} things (the barrels on the track at once counted); new: ${fresh.map((f, i) => `${i + 1}: ${f.join(' ') || '—'}`).join(' · ')}; nothing in the first ${firstAt} m`);
+  check('each turn has at least as much in the way as the one before, and every one but the sixth brings something new', count.every((n, i) => i === 0 || n >= count[i - 1]) && count[5] > count[0] * 2 && fresh.every((f, i) => i === 5 || f.length > 0) && firstAt > 12,
+    `${count.join(', ')} things (the barrels and the boards on the track at once counted); new: ${fresh.map((f, i) => `${i + 1}: ${f.join(' ') || '—'}`).join(' · ')}; nothing in the first ${firstAt} m`);
   // ---- its line for the boards of scores
   const late = startRun(0); Object.assign(late, { s: LENGTH - 0.05, going: true, clock: 3600 }); stepRun(late, 0.1, { run: 1 });
-  check('its board: the time of the attempt that rings the bell, the lower the better — from the time nobody can beat to a quarter of an hour, the most that is counted',
-    BOARD.order === 'asc' && BOARD.min === Math.floor(fastest() / 1000) * 1000 && BOARD.max === 900_000 && runs.every((r) => r.time >= BOARD.min && r.time <= BOARD.max) && late.over && late.time === BOARD.max,
+  check('its board: the time of the attempt that rings the bell, the lower the better — from the time nobody can beat (along the tower, thrown by the springboards) to a quarter of an hour, the most that is counted',
+    BOARD.order === 'asc' && BOARD.min === Math.floor(fastest() / 1000) * 1000 && BOARD.max === 900_000 && [...runs, ...slower].every((r) => r.time >= BOARD.min && r.time <= BOARD.max) && late.over && late.time === BOARD.max,
     `${(fastest() / 1000).toFixed(1)} s at the least; an attempt of an hour is told as ${late.time / 1000} s`);
   console.log(`      for the board of scores: spiral: { order: '${BOARD.order}', min: ${BOARD.min}, max: ${BOARD.max} }`);
 }

@@ -12,7 +12,7 @@ the spiral), the combs got a floor more, and two were added (the cars, the golf)
 | `lava` | **Thin Crust** — the lava only rises, columns come up out of it: one keeps to the summits, and keeps a way on | a small volcano east of the head of the pier, at (188, 8); the gate on the deck of the pier head at (142.4, 13.3) | `node lab/games/lava/test.mjs` (35) |
 | `hive` | **The Bee's Knees** — four combs of wax over the sea: the cell one sets foot on gives way | the north of the bay: combs at (84, -84), the gate on the beach at (43.5, -79.5) | `node lab/games/hive/test.mjs` (29) |
 | `flip` | **Head Over Heels** — one runs on the spot in a machine of travelling girders, and one key turns gravity over | a tall frame in the sea along the south side of the pier; the gate on the south beach at (41.1, 42.8) | `node lab/games/flip/test.mjs` (44) |
-| `spiral` | **A Turn for the Worse** — a track wound round a tower: obstacles worse every turn, one touch and it is the foot again | a tower in the south of the bay, at (168, 84); the gate on the south beach at (52, 71) | `node lab/games/spiral/test.mjs` (33) |
+| `spiral` | **A Turn for the Worse** — a track wound round a tower: obstacles worse every turn, one touch and it is the foot again | a tower in the south of the bay, at (168, 84); the gate on the south beach at (52, 71) | `node lab/games/spiral/test.mjs` (48) |
 | `cars` | **Round the Bend** — radio-controlled cars raced on a table, seen from above | the meadow south of the acid pond: a table at (-243.5, -55.8), the arch at (-243.5, -45.9) | `node lab/games/cars/test.mjs` (39) |
 | `golf` | **Par for the Course** — nine holes of crazy golf round the acid pond | round the acid pond (-236, -82); the gate at (-225.5, -75.6) | `node lab/games/golf/test.mjs` (51) |
 
@@ -211,39 +211,50 @@ the course.
 
 ### A Turn for the Worse (`spiral`)
 
+*Reworked twice after its owner tried it: first "no more running by itself (keep the camera)", then "a hundred
+metres higher, and new obstacles".*
+
 A striped helter-skelter stands on a stone plinth in the sea, in the south of the bay ((168, 84); one asks to
 play on the sand of the south beach, at (52, 71)), and a track of planks winds up round it like a giant spiral
-stair: six turns of sixty metres from the foot to a bell, forty-six metres higher. **One runs as the stick
-asks** (its owner asked for that after trying legs that ran by themselves): pushed up, the legs run — a little
-faster as one climbs —; let go, they stop within a quarter of a second; nobody runs back down. One steers across
-the track (a rail on each side: nobody falls off it), jumps — as far as the run before it, and again in the
-air, higher and further —, slides, dives back down, ducks when standing. So one may stop before what moves,
-read it, and go: the clock is what that costs, and it starts with the first step of an attempt. **What is in the way never changes place**: it is
-the same for everybody, and learnt run after run. Each turn has its theme, and each is worse than the last:
+stair: **nineteen turns, 1146 m of track, from the foot to a bell 146 m higher** — it stands well over the big
+wheel. **One runs as the stick asks**: pushed up, the legs run — a little faster as one climbs —; let go, they
+stop within a quarter of a second; nobody runs back down. One steers across the track (a rail on each side),
+jumps — as far as the run before it, and again in the air —, slides, dives back down, ducks when standing. So
+one may stop before what moves, read it, and go: the clock is what that costs, and it starts with the first
+step of an attempt.
 
-| Turn | | What is in the way |
-|---|---|---|
-| 1 | Mind the Gap | holes in the track, hurdles: jumped |
-| 2 | Duck! | boards hung across, slid under; fences across two thirds of the width, gone round |
-| 3 | Step Up | crates: one jumps onto the first, then again onto the higher one, and off |
-| 4 | Clockwork | what moves by the clock of the world: mills, stompers, hammers that swing across |
-| 5 | Roll Out the Barrel | barrels dropped from the gallery above roll down the track |
-| 6 | The Works | all of it at speed, and three narrow planks to the bell |
+**What is in the way never changes place** — it is the same for everybody, and learnt run after run — and
+every turn has its theme: yellow and black is jumped, red and white is slid under, navy is gone round.
 
-Yellow and black is jumped, red and white is slid under, navy is gone round. **One touch — or a hole — and the
-attempt is over**: one is back at the foot within a second and the clock starts again; the session goes on,
-attempt after attempt, until one reaches the bell or leaves. The line of the run says the attempt, the turn and
-one's best height so far. The time that counts is the time of the attempt that reaches the bell — and the
-inside of the track is the shorter way round: who hugs the tower gains on who runs along the rail (without
-that every finish would take exactly the same time).
+| Turn | | Turn | |
+|---|---|---|---|
+| 1 | Mind the Gap — holes, hurdles | 11 | Gusts — a wind that pushes one towards the holes, shown by streamers |
+| 2 | Duck! — hung boards, fences | 12 | Against the Grain — belts that carry one back |
+| 3 | Step Up — crates | 13 | Sliding Doors — walls, each with one door that slides |
+| 4 | Clockwork — mills, stompers, hammers | 14 | Cannonade — balls across, jumped or slid under |
+| 5 | Roll Out the Barrel — barrels | 15 | Tightrope — planks a foot wide, never in line |
+| 6 | The Works — a mix, then narrow planks | 16 | Low Bridge — boards that come down a cable |
+| 7 | Give Way — planks that drop after one sets foot on them | 17 | Pistons — rams from the tower or the rail, in waves |
+| 8 | Spring Tide — springboards over holes no jump crosses | 18 | Clock of Hammers — rows of four, a beat apart |
+| 9 | Three High — a stair of crates, a hole behind | 19 | The Last Straw — a mix, then planks a foot wide that give way, to the bell |
+| 10 | Up and Down — bars that go low and high, in rhythm | | |
 
-The bot reaches the bell at its first attempt (51.8 s in the running game). For the game's boards:
-`spiral: { order: 'asc', min: 46000, max: 900000 }` (46 s is the fastest finish there can be: all along the tower
-at a run).
+**One touch — or a hole — and the attempt is over**: one is back at the foot within a second, and the clock
+waits there for the first step. That is its owner's rule, and the default. Because a clean climb now takes
+some three minutes, the other way is built too, behind one constant: six landings (a short level stretch with
+nothing in the way, a painted line and a flag) are there in both cases, and with `SPIRAL.back = 'landing'` a
+touch puts one back at the last landing reached while the clock runs on (the line of the run then counts the
+falls). The inside of the track is the shorter way round: who hugs the tower gains on who runs along the rail.
 
-What its owner should look at first: back to the foot every time means some forty seconds of easy turns before
-each try at the last one — it may tire before it thrills (a checkpoint a turn, or a way to practise one turn,
-would be a choice of rules). The fourth turn asks one to read what moves on the fly.
+The bot reaches the bell at its first attempt in 161 to 163 s (138 keys, three waits); the tightest moment it
+has to act in is 0.29 s wide, half of them 0.41 s or more; the longest wait for something that moves is 2 s.
+The fastest finish there can be is 144.9 s. For the game's boards:
+`spiral: { order: 'asc', min: 144000, max: 900000 }`.
+
+What its owner should look at first: three minutes without a touch, from the foot every time — the bot does
+it, a person may well find it more discouraging than thrilling; `'landing'` is there to be tried. What nobody
+has seen: the 'landing' way in the running game (it is checked in the rules only), and play beyond the sixth
+turn in a picture taken while playing.
 
 ### Round the Bend (`cars`)
 
