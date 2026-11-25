@@ -44,8 +44,8 @@ export function attach(app) {
     run = pond.open(player, io);
     player.driver = run;
     app.audio?.play('teleport');
-    keysHelp(app).set(app.input.isTouch ? 'The legs run by themselves · the arrow jumps (again in the air: further) · stick down: slide, or dive · stick aside: to the next ring, outwards or inwards · three ponds: 15 s, 20 s, then as long as you can'
-      : 'The legs run by themselves · Space jumps (again in the air: further) · S: slide, or dive · A / D: to the next ring, outwards or inwards · three ponds: 15 s, 20 s, then as long as you can · E: leave · H: these keys again');
+    keysHelp(app).set(app.input.isTouch ? 'You set off when you like: the arrow, while the lamp is green · then the legs run by themselves · the arrow jumps (again in the air: further) · stick down: slide, or dive · stick aside: to the next ring, outwards or inwards · three ponds: 15 s, 20 s, then as long as you can'
+      : 'You set off when you like: Space, while the lamp is green · then the legs run by themselves · Space jumps (again in the air: further) · S: slide, or dive · A / D: to the next ring, outwards or inwards · three ponds: 15 s, 20 s, then as long as you can · E: leave · H: these keys again');
   };
   world.actionSources.push((p) => {
     if (run) return run.over ? null : { label: 'Leave the pond', run: () => leave(false) };

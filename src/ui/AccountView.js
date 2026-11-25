@@ -27,7 +27,7 @@ export class AccountView {
       <div class="sheet" role="dialog" aria-modal="true" aria-label="Your account">
         <button type="button" class="x" aria-label="Close">×</button>
         <div class="head"><div class="badge" aria-hidden="true"></div><div><h2>Your account</h2><p class="lead">Keep what is yours, on every device you play from.</p></div></div>
-        <ul class="perks"><li>What you bought</li><li>Your days in a row</li><li>Your robot</li></ul>
+        <ul class="perks"><li>Your name, reserved</li><li>What you bought</li><li>Your days in a row</li><li>Your robot</li></ul>
         <div class="tabs" role="tablist"><button type="button" role="tab" data-mode="login">Sign in</button><button type="button" role="tab" data-mode="create">Create an account</button></div>
         <form novalidate>
           <h3 class="card-title"></h3>
@@ -46,7 +46,7 @@ export class AccountView {
           <code></code>
           <div class="done-row"><button type="button" class="copy">Copy it</button><button type="button" class="ok">I have written it down</button></div>
         </div>
-        <p class="small">A name and a password: nothing else is needed, and nobody has to make one to play. The password itself is never kept — only a print of it that cannot be read back.</p>
+        <p class="small">A name and a password: nothing else is needed, and nobody has to make one to play. The name of an account is reserved: only who is signed in to it can wear it in the oasis. The password itself is never kept — only a print of it that cannot be read back.</p>
       </div>`;
     root.append(this.el);
     const $ = (s) => this.el.querySelector(s);
@@ -137,7 +137,9 @@ export class AccountView {
     if (key === 'name') {
       // (only a name that is being chosen is weighed: one that exists already is whatever it is)
       const ok = NAME.test(v.trim());
-      this._hint('name', !v || this.mode !== 'create' ? '' : ok ? 'That will do nicely.' : '3 to 16 letters or digits (spaces, - and _ in the middle).', ok);
+      // (making an account reserves its name: said before anything is typed, and again once the name will do)
+      if (this.mode === 'create' && !v) { const row = this.inputs.name.closest('.f'); row.querySelector('small').textContent = 'It becomes yours alone: nobody else can play, chat or score under it.'; row.classList.remove('bad', 'good'); return false; }
+      this._hint('name', !v || this.mode !== 'create' ? '' : ok ? 'That will do nicely — if it is free, it is yours alone from now on.' : '3 to 16 letters or digits (spaces, - and _ in the middle).', ok);
       return ok;
     }
     if (key === 'password') {

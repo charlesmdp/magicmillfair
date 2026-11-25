@@ -545,6 +545,8 @@ export class Presence {
     else if (m.t === 'quiet') { const to = cleanRoom(m.to); if (to && to !== this.room) this._emit('quiet', { to, label: roomLabel(to), n: Number.isFinite(m.n) ? Math.max(0, Math.floor(m.n)) : 0 }); } // (this room has gone quiet: another has room)
     else if (m.t === 'admin') { this.admin = !!m.ok; this.owner = this.admin && !!m.owner; this._emit('admin', { ok: this.admin, owner: this.owner, out: !!m.out }); }
     else if (m.t === 'gift') this._emit('gift', { by: cleanName(m.by || '') });
+    // (the name asked for is somebody's account: the relay says which name is worn instead — the page follows)
+    else if (m.t === 'name') { const taken = cleanName(m.taken || ''); this.name = cleanName(m.name, this.name); this._persist(); this._emit('named', { taken, name: this.name }); }
     else if (m.t === 'promoted') { if (typeof m.key === 'string' && m.key) this._emit('promoted', { key: m.key, by: cleanName(m.by || '') }); else this._emit('promoted', { id: m.id }); }
     else if (m.t === 'who') { if (Array.isArray(m.list)) this._emit('who', { list: m.list, now: m.now }); }
     else if (m.t === 'join') {

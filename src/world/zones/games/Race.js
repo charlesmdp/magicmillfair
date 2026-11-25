@@ -54,6 +54,9 @@ void main() {
 }
 `;
 
+/** One can ask for a start until that long before it leaves (seconds): the time to be put on the grid. */
+const JOIN = 0.6;
+
 export class Race {
   constructor(zone) {
     this.zone = zone;
@@ -65,10 +68,11 @@ export class Race {
   }
 
   /**
-   * The start a visitor who asks now would leave with: the first one far enough ahead to get on the quad and
-   * see the lights. { name ('Red'…), tone (its colour), wait (seconds until it), at (when, on the clock) }.
+   * The start a visitor who asks now would leave with: the one that is counted down, until its very last
+   * second (JOIN) — one is put on the grid at once, the lights that are left go out, and off it goes.
+   * { name ('Red'…), tone (its colour), wait (seconds until it), at (when, on the clock) }.
    */
-  nextStart(now = this.clock(), least = 3.2) {
+  nextStart(now = this.clock(), least = JOIN) {
     const every = RACE.every * 1000, n = Math.ceil((now + least * 1000) / every), name = RACE.starts[((n % RACE.starts.length) + RACE.starts.length) % RACE.starts.length];
     return { n, name, tone: START_TONES[name] || '#f2c14e', at: n * every, wait: (n * every - now) / 1000 };
   }
@@ -493,7 +497,7 @@ export class Race {
         // the start that leaves next — or that left less than a second ago (its GO stays up that long)
         const now = this.clock(), every = RACE.every * 1000, n = Math.ceil((now - 900) / every), wait = (n * every - now) / 1000, key = `${n}|${Math.ceil(wait)}`;
         if (key === state.key) return;
-        Object.assign(state, { key, name: named(n), tone: START_TONES[named(n)] || '#f2c14e', wait, open: wait >= 3.2, next: [1, 2].map((k) => ({ name: named(n + k), tone: START_TONES[named(n + k)] || '#f2c14e', wait: wait + k * RACE.every })) });
+        Object.assign(state, { key, name: named(n), tone: START_TONES[named(n)] || '#f2c14e', wait, open: wait >= JOIN, next: [1, 2].map((k) => ({ name: named(n + k), tone: START_TONES[named(n + k)] || '#f2c14e', wait: wait + k * RACE.every })) });
         board.redraw();
       };
     }

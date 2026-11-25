@@ -555,9 +555,11 @@ export class PierZone {
     g.tint(0.85, 0.85, 0.85, 1);
     g.box(-1.2, -3.42, -0.9, 1.2, -3.3, 0.9);
     // A banner on both ends of each tub: its sponsor's, or an invitation to be it. One sheet for the 24, one
-    // mesh whose corners follow the cars.
+    // mesh whose corners follow the cars. A free car has a small invitation on the end of its tub; a sponsored
+    // one carries a board half as wide again as the car, from under its floor to above its rim — what is read
+    // from the walk of the pier. Each says the number of its car: the booth of the sponsors names them so.
     const banners = (() => {
-      const COLS = 6, CW = 256, CH = 96, ROWS = Math.ceil(N / COLS), canvas = document.createElement('canvas');
+      const COLS = 6, CW = 320, CH = 120, STUB = 46, ROWS = Math.ceil(N / COLS), canvas = document.createElement('canvas');
       canvas.width = COLS * CW; canvas.height = ROWS * CH;
       const ctx = canvas.getContext('2d'), tex = new THREE.CanvasTexture(canvas), state = new Array(N).fill(null);
       tex.colorSpace = THREE.SRGBColorSpace;
@@ -566,7 +568,16 @@ export class PierZone {
         ctx.translate((i % COLS) * CW, Math.floor(i / COLS) * CH);
         ctx.beginPath(); ctx.rect(0, 0, CW, CH); ctx.clip();
         ctx.clearRect(0, 0, CW, CH);
-        drawSponsor(ctx, CW, CH, state[i], { what: `gondola ${i + 1}` });
+        if (state[i]) {
+          // its sponsor's panel and, on a stub at its end, the number of the car: "Gondola 7" at the booth is this one
+          drawSponsor(ctx, CW - STUB, CH, state[i], { what: `gondola ${i + 1}` });
+          const x = CW - STUB;
+          ctx.fillStyle = '#7a1420'; ctx.fillRect(x, 0, STUB, CH);
+          ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 4; ctx.strokeRect(x + 2, 4, STUB - 6, CH - 8);
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillStyle = '#f2c14e'; ctx.font = '700 13px system-ui, sans-serif'; ctx.fillText('No.', x + STUB / 2 - 1, CH * 0.3);
+          ctx.fillStyle = '#f6e7b8'; ctx.font = `800 ${i + 1 > 9 ? 27 : 34}px Georgia, 'Times New Roman', serif`; ctx.fillText(String(i + 1), x + STUB / 2 - 1, CH * 0.58);
+        } else drawSponsor(ctx, CW, CH, null, { what: `gondola ${i + 1}` });
         ctx.restore();
         tex.needsUpdate = true;
       };
@@ -585,17 +596,25 @@ export class PierZone {
       const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
       mesh.name = 'big-wheel-banners';
       pivot.add(mesh);
-      const X = TUB.x + 0.012, Z = TUB.z - 0.04, Y0 = TUB.floor + 0.06, Y1 = TUB.rim - 0.03;
-      /** The banners of car `i`, hung at (0, y, z) in the frame of the wheel. */
-      const move = (i, y, z) => {
-        // (seen from the shore, then from the end of the pier: each reads from left to right)
-        pos.set([-X, y + Y0, z + Z, -X, y + Y0, z - Z, -X, y + Y1, z - Z, -X, y + Y1, z + Z], i * 24);
-        pos.set([X, y + Y0, z - Z, X, y + Y0, z + Z, X, y + Y1, z + Z, X, y + Y1, z - Z], i * 24 + 12);
+      const X = TUB.x + 0.012;
+      const SMALL = { z: TUB.z - 0.04, y0: TUB.floor + 0.06, y1: TUB.rim - 0.03 }, BIG = { z: 1.6, y0: TUB.floor - 0.08, y1: TUB.floor - 0.08 + 1.2 };
+      /** The banners of car `i`, hung at (0, y, z) in the frame of the wheel; `swing`: how far the car leans (radians). */
+      const move = (i, y, z, swing = 0) => {
+        const s = state[i] ? BIG : SMALL, c = Math.cos(swing), n = Math.sin(swing), o = i * 24;
+        // (the four corners under the bar the car hangs from, leaning with it: low −z, low +z, high +z, high −z)
+        const ya = y + s.y0 * c + s.z * n, za = z + s.y0 * n - s.z * c, yb = y + s.y0 * c - s.z * n, zb = z + s.y0 * n + s.z * c;
+        const yc = y + s.y1 * c - s.z * n, zc = z + s.y1 * n + s.z * c, yd = y + s.y1 * c + s.z * n, zd = z + s.y1 * n - s.z * c;
+        // (each faces away from the car and reads from left to right: one towards the shore, one towards the
+        // end of the pier — wound the other way round they faced into the tub, and nobody ever saw them)
+        pos[o] = -X; pos[o + 1] = ya; pos[o + 2] = za; pos[o + 3] = -X; pos[o + 4] = yb; pos[o + 5] = zb; pos[o + 6] = -X; pos[o + 7] = yc; pos[o + 8] = zc; pos[o + 9] = -X; pos[o + 10] = yd; pos[o + 11] = zd;
+        pos[o + 12] = X; pos[o + 13] = yb; pos[o + 14] = zb; pos[o + 15] = X; pos[o + 16] = ya; pos[o + 17] = za; pos[o + 18] = X; pos[o + 19] = yd; pos[o + 20] = zd; pos[o + 21] = X; pos[o + 22] = yc; pos[o + 23] = zc;
       };
-      return { mesh, move, flush: () => { geo.attributes.position.needsUpdate = true; }, set: (i, sponsor) => { if (i >= 0 && i < N) { state[i] = sponsor || null; paint(i); } } };
+      return { mesh, move, flush: () => { geo.attributes.position.needsUpdate = true; }, has: (i) => !!state[i], set: (i, sponsor) => { if (i >= 0 && i < N) { state[i] = sponsor || null; paint(i); } } };
     })();
     /** Gondola `n` (1 to 24) shows its sponsor ({ title, subtitle, logo }), or is free again (null). */
     this.setGondola = (n, sponsor) => banners.set(n - 1, sponsor);
+    /** Does gondola `n` show a sponsor? */
+    this.gondolaShown = (n) => banners.has(n - 1);
     this.gondolas = N;
     const gondolas = new THREE.InstancedMesh(g.build(), mat, N);
     gondolas.name = 'big-wheel-gondolas';
@@ -612,12 +631,12 @@ export class PierZone {
     let angle = clock();
     const place = () => {
       for (let i = 0; i < N; i++) {
-        const a = angle + (i / N) * Math.PI * 2;
+        const a = angle + (i / N) * Math.PI * 2, swing = Math.sin(a * 2 + i) * 0.035;
         // a touch of swing as each car goes round
-        m.makeRotationX(Math.sin(a * 2 + i) * 0.035);
+        m.makeRotationX(swing);
         m.setPosition(0, Math.sin(a) * R, Math.cos(a) * R);
         gondolas.setMatrixAt(i, m);
-        banners.move(i, Math.sin(a) * R, Math.cos(a) * R);
+        banners.move(i, Math.sin(a) * R, Math.cos(a) * R, swing);
       }
       gondolas.instanceMatrix.needsUpdate = true;
       banners.flush();
@@ -629,6 +648,20 @@ export class PierZone {
       place();
     });
     this.wheelPivot = pivot;
+    /**
+     * Where to stand to photograph gondola `n` as it is right now, banner first: { from, at } (in the world) —
+     * a few metres before the wheel on the side of the shore, level with the car.
+     */
+    this.gondolaView = (n) => {
+      // (the wheel is put where the clock says first: far from the pier nothing moves it, and the photograph is taken at once)
+      angle = clock();
+      wheel.rotation.x = -angle;
+      place();
+      const a = angle + ((n - 1) / N) * Math.PI * 2, y = Math.sin(a) * R, z = Math.cos(a) * R;
+      pivot.updateWorldMatrix(true, false);
+      const from = pivot.localToWorld(new THREE.Vector3(-5.7, y - 2.2, z + 0.9)), at = pivot.localToWorld(new THREE.Vector3(-1.4, y - 2.45, z));
+      return { from: from.toArray(), at: at.toArray() };
+    };
     {
       // the stand where a gondola is sponsored (the kiosk by the steps): its sign, and where one asks
       const sign = canvasBoard(512, 128, (ctx, w, hh) => {

@@ -108,8 +108,8 @@ try {
     foreign: [...document.querySelectorAll('script[src], link[href], img[src]')].map((n) => n.src || n.href).filter((u) => !u.startsWith(location.origin)),
   }));
   check('the back office: /admin opens with the owner\'s key and no other; the page is fenced in (nothing from elsewhere, never framed); it says which version is online, how many are connected, and shows every switch as it stands',
-    desk.url === '/admin/' && /script-src 'self'/.test(fence) && /frame-ancestors 'none'/.test(fence) && /not recognised/.test(refusedKey.text) && refusedKey.shut && /owner/.test(desk.who) && desk.tabs === 'Releases,Rooms,High scores,Sponsors & plaques,Kept out,Figures,Administrators'
-    && desk.build === ONE && desk.here === '1' && desk.old === '0' && desk.switches.includes('The game in figures=true') && desk.switches.includes('Mostly Down — the water slide=false') && desk.switches.includes('The sky villages=Hidden') && !desk.foreign.length, JSON.stringify({ fence, refusedKey, desk }));
+    desk.url === '/admin/' && /script-src 'self'/.test(fence) && /frame-ancestors 'none'/.test(fence) && /not recognised/.test(refusedKey.text) && refusedKey.shut && /owner/.test(desk.who) && desk.tabs === 'Releases,Rooms,High scores,Chat,Sponsors & plaques,Kept out,Figures,Administrators'
+    && desk.build === ONE && desk.here === '1' && desk.old === '0' && desk.switches.includes('The game in figures=true') && desk.switches.includes('Stars on the map=true') && desk.switches.includes('Mostly Down — the water slide=false') && desk.switches.includes('The sky villages=Hidden') && !desk.foreign.length, JSON.stringify({ fence, refusedKey, desk }));
   const throwSwitch = (title) => office.evaluate((title) => [...document.querySelectorAll('#switches .switch')].find((s) => s.querySelector('b').textContent === title).querySelector('.toggle').click(), title);
 
   // ---- a word to every room, said from there
@@ -135,17 +135,25 @@ try {
     usual === '200,50,20,8' && ruled?.open === 40 && ruled.max === 200 && unruled?.open === 50, JSON.stringify({ usual, ruled, unruled }));
   const posted = await fetch(`${BASE}/api/scores`, { method: 'POST', headers: { 'content-type': 'application/json', origin: BASE }, body: JSON.stringify({ board: 'bell', name: 'Cheater', score: 9999, run: await sign(SCORE_SECRET, { b: 'bell', t: Date.now() - 6000, n: randomId(9) }) }) });
   await office.click('#tabs [data-tab="scores"]');
-  await office.waitForFunction(() => document.getElementById('board').options.length > 5, null, { timeout: 20000 });
-  await office.selectOption('#board', 'bell');
-  await office.selectOption('#period', 'day'); // (posted without an account: it is on the list of the day, and on no other)
+  await office.waitForFunction(() => document.querySelectorAll('#period button').length === 4 && !!document.querySelector('#scores').children.length, null, { timeout: 20000 });
+  await office.click('#period [data-period="day"]'); // (posted without an account: it is on the list of the day, and on no other)
   // (a great score that came with no game: the server did not believe it — it waits here, with the reason; the owner takes it)
   await office.waitForFunction(() => /Cheater/.test(document.getElementById('flagged').textContent), null, { timeout: 20000 });
-  const doubted = await office.evaluate(() => ({ board: /Nobody on this list/.test(document.getElementById('scores').textContent), row: document.querySelector('#flagged .item').textContent }));
+  const doubted = await office.evaluate(() => ({ board: /Nobody on any board/.test(document.getElementById('scores').textContent), row: document.querySelector('#flagged .item').textContent }));
   await office.click('#flagged .item button');
   await office.waitForFunction(() => /Cheater/.test(document.getElementById('scores').textContent), null, { timeout: 20000 });
-  const line = await office.evaluate(() => ({ boards: document.getElementById('board').options.length, row: document.querySelector('#scores .item').textContent }));
-  await office.click('#scores .item button');
-  await office.waitForFunction(() => /Nobody on this list/.test(document.getElementById('scores').textContent), null, { timeout: 20000 });
+  // (every board is on the page at once, a card each — those nobody is on when asked for; the line is on the card of its game)
+  await office.check('#scores-empty');
+  const line = await office.evaluate(() => ({ boards: document.querySelectorAll('#scores .board').length, row: document.querySelector('#scores .board[data-board="bell"] .line').textContent, others: document.querySelectorAll('#scores .board .line').length }));
+  await office.screenshot({ path: path.join(ROOT, 'tools/preview/admin-scores.png'), fullPage: true });
+  await office.uncheck('#scores-empty');
+  // (the chat, read from the back office: its section opens and says what it holds)
+  await office.click('#tabs [data-tab="chat"]');
+  await office.waitForFunction(() => !!document.querySelector('#chatlog').children.length && /14 days/.test(document.getElementById('chat-keeps').textContent), null, { timeout: 20000 });
+  await office.screenshot({ path: path.join(ROOT, 'tools/preview/admin-chat.png'), fullPage: true });
+  await office.click('#tabs [data-tab="scores"]');
+  await office.click('#scores .board[data-board="bell"] .line button');
+  await office.waitForFunction(() => /Nobody on any board/.test(document.getElementById('scores').textContent), null, { timeout: 20000 });
   const struck = (await (await fetch(`${BASE}/api/scores?board=bell`)).json()).tops.all.length;
   await office.click('#tabs [data-tab="bans"]');
   await office.fill('#ban-ip', '203.0.113.9');
@@ -167,7 +175,7 @@ try {
   await office.waitForFunction(() => /No sponsor yet/.test(document.getElementById('sponsors').textContent), null, { timeout: 20000 });
   check('the back office: a word said to every room is read in the game; the rooms are listed with who is in them; a great score that came with no game waits for the owner, who takes it — then refuses the line; somebody is kept out and let back in; the figures are set',
     /The fair/.test(word.chat || '') && /Fireworks at nine, on the pier!/.test(word.chat) && /heard in 1 room/.test(word.note) && roomsSeen.length === 1 && /fair/.test(roomsSeen[0]) && /1 visitor/.test(roomsSeen[0])
-    && posted.status === 200 && doubted.board && /Cheater/.test(doubted.row) && /no game came with it/.test(doubted.row) && line.boards >= 14 && /Cheater/.test(line.row) && /9,999/.test(line.row) && struck === 0 && /Mallory/.test(keptOut) && /address 203\.0\.113\.9/.test(keptOut),
+    && posted.status === 200 && doubted.board && /Cheater/.test(doubted.row) && /no game came with it/.test(doubted.row) && line.boards >= 14 && line.others === 1 && /Cheater/.test(line.row) && /9,999/.test(line.row) && struck === 0 && /Mallory/.test(keptOut) && /address 203\.0\.113\.9/.test(keptOut),
     JSON.stringify({ word, roomsSeen, posted: posted.status, doubted, line, struck, keptOut: keptOut.slice(0, 80) }));
   await office.click('#tabs [data-tab="releases"]');
   await office.screenshot({ path: path.join(ROOT, 'tools/preview/admin-releases.png'), fullPage: true });
@@ -220,6 +228,27 @@ try {
     && climbed.during.on && climbed.during.busy && climbed.free && climbed.day.length === 1 && climbed.day[0].name === 'Traveller' && climbed.day[0].score > 9000 && climbed.day[0].score < 90000
     && others.pond === 404 && others.run === 400,
     JSON.stringify({ extras: labOn.extras, lap, flown, climbed, others }));
+  // ---- and each got what every game of the fair has: a stand by its gate — the four lists, under the panel of
+  // a sponsor that is for sale from that moment —, a star on the map, planks at the forks; a game still off has
+  // none of it
+  const dressed = await page.evaluate(async () => {
+    const m = window.__mmf, w = m.world, out = { stands: {}, slots: {} };
+    for (const id of ['hill', 'hollow', 'pond']) {
+      const st = w.games.stands?.[id], gate = m.extras[id]?.gate, p = st?.board.mesh.position;
+      out.stands[id] = st ? { far: +Math.hypot(p.x - gate.x, p.z - gate.z).toFixed(1), dry: w.data.heightAt(p.x, p.z) > 0.5, first: st.lists?.day?.[0]?.name || '' } : null;
+      out.slots[id] = (w.sponsorSlots || []).some((q) => q.id === `board:${id}`);
+    }
+    out.stars = (m.hud.attractions || []).map((a) => a.id).join();
+    out.planks = [...new Set((m.labSigns || []).flatMap((p) => p.arms.map((a) => a.to)))].sort().join();
+    out.posts = (m.labSigns || []).map((p) => p.id).join();
+    return out;
+  });
+  check('the two games got what every game of the fair has, as the game runs: a stand by the gate with the time just made on it, a panel for a sponsor over it, a star on the map, planks at the forks — and the game that is still off has none of it',
+    dressed.stands.hill && dressed.stands.hollow && !dressed.stands.pond && dressed.stands.hill.far > 2 && dressed.stands.hill.far < 12 && dressed.stands.hollow.far > 2 && dressed.stands.hollow.far < 12
+    && dressed.stands.hill.dry && dressed.stands.hollow.dry && dressed.stands.hill.first === 'Traveller' && dressed.stands.hollow.first === 'Traveller'
+    && dressed.slots.hill && dressed.slots.hollow && !dressed.slots.pond
+    && dressed.stars === 'climb,race,wing,hill,hollow' && dressed.planks === 'hill,hollow' && dressed.posts === 'games-arrival,games-plaza,games-pondside,games-shore',
+    JSON.stringify(dressed));
   await page.evaluate(([x, z]) => { const m = window.__mmf; m.player.teleport(x, z, 1.2); m.rig.snap(m.player.pos, 1.2 + Math.PI); }, [first.x, first.z]);
   await frames(6);
 

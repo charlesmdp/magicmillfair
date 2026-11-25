@@ -92,12 +92,20 @@
 
     <section class="card" data-tab="scores">
       <h2>High scores</h2>
-      <p class="hint">Every board, by period. Refusing a line takes that name off the four lists of its board. A visitor without an account is on the list of the day only.</p>
-      <div class="row"><select id="board" aria-label="Board"></select><select id="period" aria-label="Period"><option value="day" selected>Today</option><option value="week">This week</option><option value="month">This month</option><option value="all">All time</option></select></div>
-      <div id="scores" class="list"></div>
+      <p class="hint">Every board at once: the first five of each game for the period chosen (the rest behind "Show all"). Refusing a line takes that name off the four lists of its board. A visitor without an account is on the list of the day only.</p>
+      <div class="row wrap"><div class="stages" id="period" role="tablist" aria-label="Period"><button type="button" data-period="day">Today</button><button type="button" data-period="week">This week</button><button type="button" data-period="month">This month</button><button type="button" data-period="all" class="on">All time</button></div><label class="tick"><input type="checkbox" id="scores-empty"> Show the boards nobody is on</label></div>
+      <div id="scores" class="boards"></div>
       <h3>Scores the server did not believe</h3>
       <p class="hint">A score at a booth, in the flying theatre or at the arcade that would enter the first five of a list is played again by the server, from what the page wrote down while it was played. One that does not come out the same is not put on the board — its author still sees it there, and is told nothing: it waits here for you, with the reason. <b>Take it</b> puts it on the board after all; <b>Let it go</b> forgets it. (Nothing of the game itself is kept.)</p>
       <div id="flagged" class="list"></div>
+    </section>
+
+    <section class="card" data-tab="chat">
+      <h2>Chat</h2>
+      <p class="hint">What was said in the rooms, the newest first: the lines for everybody, those said to who stood nearby, the "important" ones — and the lines of those kept out in silence, which nobody else read. <span id="chat-keeps"></span> What is said to Billy is not chat and is not here.</p>
+      <div class="row wrap"><input type="search" id="chat-find" placeholder="Find a name, a word, a room…" aria-label="Find in the lines below" /><label class="tick"><input type="checkbox" id="chat-live" checked> Follow as it comes</label><button type="button" class="ghost small" id="chat-forget" hidden>Forget everything kept</button></div>
+      <div id="chatlog" class="chatlog"></div>
+      <div class="row"><button type="button" class="ghost" id="chat-more" hidden>Older lines</button></div>
     </section>
 
     <section class="card" data-tab="sponsors">

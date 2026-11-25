@@ -4,6 +4,9 @@
 // places like the others, paid once and kept. Both hosts answer through shopRoute() (see routes.js).
 //
 //   GET    /api/shop?device=…                          → { mode, prices, owned, slots, pass, trial, now, pk? }
+//                                                      (slots: what each place shows; with it, for a sponsor's
+//                                                      place, `pays`: { amount, monthly, total } in cents — what
+//                                                      its sponsor pays, for the wall of thanks: see paysOf)
 //                                                      (pk: Stripe's publishable key, where the payment form can
 //                                                      be shown inside the game)
 //                                                      (pass: null | { since, until?, gift? } — the Game Pass;
@@ -18,7 +21,8 @@
 //   POST   /api/sponsor   { slot, device, title, subtitle, url, logo }   the holder of a place says what to show
 //   GET    /api/logo?slot=…                            the picture of a place (draft=1: the one awaiting approval)
 //   GET    /api/sponsors                               the administrator: every place, drafts included
-//   POST   /api/sponsors  { slot, approve } | { slot, set: { title, subtitle, url, logo, bg } }   (bg: the colour of the panel, #rrggbb)
+//   POST   /api/sponsors  { slot, approve } | { slot, set: { title, subtitle, url, logo, bg, paid } }   (bg: the colour of the panel, #rrggbb;
+//                                                      paid: what a sponsor entered by hand has paid, in cents — 0: not said)
 //   DELETE /api/sponsors?slot=…                        the administrator frees a place
 //
 // Who is who: a visitor is the random name their browser gave itself (`device`, see src/net/device.js); one who
@@ -49,10 +53,12 @@ import { describe, publicPrices, nextBid, AUCTION, CURRENCY } from './catalog.js
 import { createCheckout, createPortal, verifyWebhook, refundPayment, endSubscription } from './stripe.js';
 import { noteSale, noteRefund } from './stats.js';
 import { readRelease } from './release.js';
+import { BOARDS as SCORE_BOARDS } from './scores.js';
 import { accountOf, addItem, holderOf, itemsOf, passLive, sameOwner } from './accounts.js';
 import { quietOnes } from './bans.js';
 import { PASS, TRIAL, itemOf } from './items.js';
 import { userRoomsOn, roomOfAccount, openRoom, sleepRoom } from './urooms.js';
+import { cleanEmail, mailLater, passMail } from './mail.js';
 
 const out = (status, body, headers = {}) => ({ status, body, headers });
 const DEVICE = /^[A-Za-z0-9_-]{16,64}$/;
@@ -132,6 +138,21 @@ const shown = (id, s) => ({ title: s.title || '', subtitle: s.subtitle || '', ur
 /** What awaits approval, as it is told: its picture is an address (`keep`: no new picture — the one already shown stays). */
 const draftOf = (id, s) => (s.draft ? { ...s.draft, logo: s.draft.logo > 0 ? logoUrl(id, s.draft.logo, true) : null, ...(s.draft.logo === -1 && { keep: true }) } : null);
 
+const MONTH = 30.4375 * 86_400_000;
+/**
+ * What the sponsor of a place pays, for the wall of thanks: { amount (cents: the bid, or the price of a month),
+ * monthly, total (cents put in so far) } — or null: a plaque for a companion (no sponsor's), or a place the
+ * administrator filled by hand without saying what was paid. A bid counts for what was bid; a place held by
+ * the month counts every month begun since it was taken. Amounts only: who pays is said nowhere.
+ */
+export function paysOf(id, s, now) {
+  const what = describe(id);
+  if (!s || !what || what.kind !== 'slot' || what.plaque) return null;
+  if (what.auction && s.pay && s.bid > 0) return { amount: s.bid, monthly: false, total: s.bid };
+  if (!what.auction && s.sub) return { amount: what.amount, monthly: true, total: what.amount * (1 + Math.max(0, Math.floor((now - (s.at || now)) / MONTH))) };
+  return s.paid > 0 ? { amount: s.paid, monthly: false, total: s.paid } : null;
+}
+
 /** What was paid for becomes theirs (called from the webhook; safe to call twice). `customer`: who pays, at Stripe. */
 export async function grant(ctx, item, device, sub = null, customer = null, account = '') {
   const what = describe(item);
@@ -163,6 +184,18 @@ export async function grant(ctx, item, device, sub = null, customer = null, acco
   slots[item] = { ...(slots[item] || { state: 'paid', logo: 0 }), by: device, sub: typeof sub === 'string' ? sub : null, at: ctx.now() };
   await ctx.store.put('slots', slots);
   return true;
+}
+
+/**
+ * A word of thanks, by e-mail, to whoever has just taken the Game Pass — where the host sends e-mail and an
+ * address is known: the one of their account or, failing that, the one they gave at the payment (used for
+ * this message and kept nowhere). It leaves without anybody waiting for it; once per payment (the caller sees to it).
+ */
+async function thankForPass(ctx, o, site) {
+  if (!ctx.mail) return;
+  const acct = await accountOf(ctx.store, o.metadata?.device);
+  const to = acct?.email || cleanEmail(o.customer_details?.email || o.customer_email || '');
+  if (to) mailLater(ctx, { to, ...passMail(site || '', acct?.name || '', { perks: PASS.perks, cents: PASS.price }) });
 }
 
 /** A word for a visitor who is not there: they are told the next time their browser asks about the shop. */
@@ -266,6 +299,7 @@ export async function shopRoute(req, ctx) {
       // (what somebody kept out in silence had put up is shown to them alone)
       view[id] = s.state === 'live' && (me.has(s.by) || !(await hidden(s))) ? { state: 'live', ...shown(id, s) } : { state: 'taken' };
       if (describe(id)?.auction) Object.assign(view[id], { bid: s.bid || 0, next: nextBid(s.bid || 0) }); // (what it went for, what beats it)
+      if (view[id].state === 'live') { const pays = paysOf(id, s, now); if (pays) view[id].pays = pays; } // (what its sponsor pays: with what they show, never without)
       if (mine && me.has(s.by)) Object.assign(view[id], { mine: true, paid: true, draft: draftOf(id, s) });
     }
     // (what happened while they were away — outbid, refunded — is said once)
@@ -334,6 +368,8 @@ export async function shopRoute(req, ctx) {
     if (!what || !DEVICE.test(device || '')) return out(400, { error: 'Nothing of that name is sold.' });
     // (a sky village is only for hire once the sky is open: the owner's switch)
     if (what.item.startsWith('village:') && (await readRelease(ctx)).release.sky !== 'open') return out(400, { error: 'Nothing of that name is sold.' });
+    // (…and the panel of a game that waits for its switch, once that game is on: its board does not exist before)
+    if (what.item.startsWith('board:')) { const sw = SCORE_BOARDS[what.item.slice(6)]?.release; if (sw && !(await readRelease(ctx)).release[sw]) return out(400, { error: 'Nothing of that name is sold.' }); }
     if (what.kind === 'own' && (await ownedBy(ctx, device)).includes(what.item)) return out(409, { error: 'You already have it.' });
     if (what.kind === 'pass') { const holder = await holderOf(ctx.store, device); if (passLive(holder.pass, now) && !holder.pass.gift) return out(409, { error: 'You already have the pass.' }); }
     let extra = {};
@@ -370,9 +406,10 @@ export async function shopRoute(req, ctx) {
     const o = event.data?.object || {};
     if (event.type === 'checkout.session.completed' && (o.payment_status === 'paid' || o.payment_status === 'no_payment_required')) {
       // (the figures: what came in, once — a bid that comes too late is given back at once, and counted as given back)
-      if (describe(o.metadata?.item) && (await firstTime(ctx, o.id))) await noteSale(ctx.store, { cents: Number.isInteger(o.amount_total) ? o.amount_total : 0, pass: describe(o.metadata.item).kind === 'pass' }, now).catch(() => {});
-      if (describe(o.metadata?.item)?.auction) await takeBid(ctx, cfg, o.metadata.item, o.metadata?.device, o.amount_total, o.payment_intent);
-      else await grant(ctx, o.metadata?.item, o.metadata?.device, o.subscription, o.customer, o.metadata?.account);
+      const sold = describe(o.metadata?.item), fresh = sold ? await firstTime(ctx, o.id) : false; // (fresh: Stripe says it for the first time)
+      if (fresh) await noteSale(ctx.store, { cents: Number.isInteger(o.amount_total) ? o.amount_total : 0, pass: sold.kind === 'pass' }, now).catch(() => {});
+      if (sold?.auction) await takeBid(ctx, cfg, o.metadata.item, o.metadata?.device, o.amount_total, o.payment_intent);
+      else if ((await grant(ctx, o.metadata?.item, o.metadata?.device, o.subscription, o.customer, o.metadata?.account)) && fresh && sold.kind === 'pass') await thankForPass(ctx, o, req.site);
     } else if (event.type === 'invoice.paid' && o.billing_reason === 'subscription_cycle') {
       // a month more of something held by the month (where Stripe is asked to tell of these): money in, nothing new sold
       if (Number.isInteger(o.amount_paid) && o.amount_paid > 0 && (await firstTime(ctx, o.id))) await noteSale(ctx.store, { cents: o.amount_paid }, now).catch(() => {});
@@ -456,6 +493,8 @@ export async function shopRoute(req, ctx) {
         const s = (slots[id] ||= { by: 'admin', sub: null, at: now, logo: 0 });
         Object.assign(s, { state: 'live', title, subtitle: cleanText(body.set.subtitle, 40), url: describe(id).plaque ? '' : cleanUrl(body.set.url), draft: null });
         if (body.set.bg !== undefined) s.bg = cleanColor(body.set.bg); // (the colour behind it: the administrator's choice, never the sponsor's)
+        // (what a sponsor who paid some other way has paid, for the wall of thanks: the administrator's word)
+        if (body.set.paid !== undefined) { const paid = Math.round(Number(body.set.paid)); if (paid > 0 && paid <= 100_000_000) s.paid = paid; else delete s.paid; }
         if (body.set.logo) {
           const logo = cleanLogo(body.set.logo);
           if (!logo) return out(400, { error: 'The picture must be a PNG, a JPEG or a WebP of at most 90 KB.' });
@@ -494,7 +533,7 @@ export async function shopRoute(req, ctx) {
       ...taken,
       // (the money given back — and what was kept, or could not be given back: `kept`, `ok: false`)
       refunds: ((await ctx.store.get('refunds')) || []).slice(-30).reverse().map(({ by, ...r }) => r),
-      slots: Object.fromEntries(Object.entries(slots).map(([id, s]) => [id, { state: s.state, by: s.by, sub: !!s.sub, at: s.at, ...(s.bid && { bid: s.bid }), ...shown(id, s), draft: draftOf(id, s) }])),
+      slots: Object.fromEntries(Object.entries(slots).map(([id, s]) => [id, { state: s.state, by: s.by, sub: !!s.sub, at: s.at, ...(s.bid && { bid: s.bid }), ...(s.paid && { paid: s.paid }), ...shown(id, s), draft: draftOf(id, s) }])),
     });
   }
   return null;

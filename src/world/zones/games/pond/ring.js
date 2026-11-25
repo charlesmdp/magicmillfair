@@ -29,9 +29,14 @@ export const POND = {
   g: 20, jump: 5.6, again: 5.0, dive: -9, // m/s²; m/s up on a jump, on a second one in the air; down on a dive
   slide: 0.45, rest: 0.2, // s a slide lasts (a jump ends it), and before the next
   swap: 0.26, hop: 0.26, // s a step to another ring takes, and how high it goes (m)
-  edge: 0.2, // m: how far over the edge of a stone a foot may still be
-  beam: 0.13, body: 0.22, // half the thickness of an arm; half a runner's
-  clear: 0.5, over: 1.34, // m: how high the feet must be to clear a low arm; and to go over a high one
+  edge: 0.3, // m: how far over the edge of a stone a foot may still be
+  beam: 0.13, body: 0.14, // half the thickness of an arm; half of what an arm catches of a runner (less than what is drawn: a graze is not a fall)
+  clear: 0.36, over: 1.34, // m: how high the feet must be to clear a low arm (its top); and to go over a high one
+  // The first pond is run on jumps alone — and whether that can be done depends on where its beam is when one
+  // sets off. For each fifth of a second of the beam's turn: '1' when setting off then leaves a way through on
+  // plain jumps, with room to spare on the tightest (plainRun below; the checks work the table out again and
+  // compare). The runner waits on the jetty, a lamp shows which it is, and one sets off on a jump when it is green.
+  fair: { every: 0.2, spare: 0.12, table: '1100000000111111100000011111111100000011111100000000111111100000011111' },
   fly: { every: 9, high: 1.0, near: 0.75, lily: 3, most: 3 }, // a firefly moves every so many s; how high it hangs; how near one catches it; how many make a lily pad; lily pads kept at most
   safe: 1.2, // s after being put back by a lily pad during which nothing can happen
   grace: 1.0, // s on coming onto a pond during which nothing can happen either (an arm may be right there)
@@ -266,6 +271,48 @@ export function runPose(st, out = {}) {
   out.yaw = -st.a; // (the way angles grow: (-sin a, cos a))
   out.r = r;
   return out;
+}
+
+// ---------------------------------------------------------------------------------------------- a fair moment to set off
+
+const _copy = (q) => ({ ...q, want: { ...q.want }, bot: null });
+const _coast = (q, until) => { while (!q.over && q.mode === 'run' && q.clock < until - 1e-9) stepRun(q, POND.step, null, null); return q; };
+const _fall = (st) => { const d = _coast(_copy(st), st.clock + 2.5); return d.over ? d.clock : 0; };
+/** The moments a single jump gets over what would end the run at `end`: [{ at, q (the run once landed) }]. */
+function _jumps(st, end, one = false) {
+  const out = [];
+  for (let at = end - 0.02; at >= Math.max(st.clock, end - 1.0); at -= 0.03) {
+    const q = _coast(_copy(st), at);
+    if (q.over || q.h > 0 || q.mode !== 'run') continue;
+    stepRun(q, POND.step, { jump: true, down: false, side: 0 }, null);
+    _coast(q, Math.max(end + 0.05, at + 0.6));
+    if (!q.over) { out.push({ at, q }); if (one) break; }
+  }
+  return out;
+}
+/**
+ * The first pond run by somebody who only ever jumps — once at a time, from the ground: no second jump in the
+ * air, no slide. Setting off at `clock`: { ok: do they hold its fifteen seconds, tight: the room there is, in
+ * seconds, on the jump that has the least (each jump is chosen so that the next one is still possible) }.
+ */
+export function plainRun(clock) {
+  let st = startRun(clock), tight = Infinity;
+  for (let guard = 0; guard < 200 && st.mode === 'run' && !st.over; guard++) {
+    const end = _fall(st);
+    if (!end) { _coast(st, st.clock + 0.4); continue; }
+    const good = _jumps(st, end).filter(({ q }) => { const next = q.mode === 'run' ? _fall(q) : 0; return !next || _jumps(q, next, true).length > 0; });
+    if (!good.length) return { ok: false, tight: 0 };
+    tight = Math.min(tight, good.length * 0.03);
+    st = good[good.length >> 1].q;
+  }
+  return { ok: !st.over, tight };
+}
+/** How long the beam of the first pond takes to come round (s): the table of POND.fair covers one turn of it. */
+export const fairPeriod = () => TAU / Math.abs(POND.ponds[0].arms[0].turn);
+/** Is `clock` a fair moment to set off on the first pond (see POND.fair)? This fifth of a second and the next must be. */
+export function fairStart(clock) {
+  const F = POND.fair, n = F.table.length, period = fairPeriod(), i = Math.floor((((clock % period) + period) % period) / F.every) % n;
+  return F.table[i] === '1' && F.table[(i + 1) % n] === '1';
 }
 
 /** What a run is worth: how long one held, in ms (the ways between the ponds are not counted). */

@@ -47,35 +47,34 @@ const trefoil = (ctx, x, y, r, ink) => {
 };
 
 /**
- * A face of the easel of the arrival, (x0, 0, w, h) on the canvas: planks, "GET LIFE ADVICE" painted by hand, an
- * arrow — ahead and to the right on its front, a turn round on its back (the life coach is then behind whoever
- * reads it) — and who to ask, how far.
+ * A face of an easel, (x0, 0, w, h) on the canvas: planks, two lines painted by hand (`lines`), an arrow — turned
+ * by `turn` radians from straight ahead (to the right of whoever reads it when positive), or a turn round when
+ * the place is behind them (`turn`: null) — and a line under it (`under`).
  */
-function drawAdvice(ctx, x0, w, h, back, metres) {
-  const n = 4, ph = h / n, cx = x0 + w / 2;
-  for (let k = 0; k < n; k++) paintPlank(ctx, x0, k * ph, w, ph, `advice${back ? 'b' : 'a'}${k}`);
+function drawEasel(ctx, x0, w, h, { lines, turn, under, seed }) {
+  const n = 4, ph = h / n, cx = x0 + w / 2, back = turn === null;
+  for (let k = 0; k < n; k++) paintPlank(ctx, x0, k * ph, w, ph, `${seed}${x0}${k}`);
   ctx.fillStyle = 'rgba(30, 16, 6, 0.6)';
   for (let k = 1; k < n; k++) ctx.fillRect(x0, k * ph - 1.5, w, 3);
   // (the nails that hold each plank to the frame)
   for (let k = 0; k < n; k++) for (const nx of [x0 + 11, x0 + w - 11]) { ctx.fillStyle = 'rgba(28, 20, 14, 0.75)'; ctx.beginPath(); ctx.arc(nx, (k + 0.5) * ph, 2.6, 0, 7); ctx.fill(); }
   const fit = (text, size, room) => Math.min(size, (size * room) / Math.max(1, wordsWidth(text, size)));
-  paintWords(ctx, 'GET LIFE', cx, 80, fit('GET LIFE', 58, w - 50), { align: 'center', seed: 'advice' });
-  paintWords(ctx, 'ADVICE', cx, 162, fit('ADVICE', 70, w - 50), { align: 'center', seed: 'advice' });
+  paintWords(ctx, lines[0], cx, 80, fit(lines[0], 58, w - 50), { align: 'center', seed });
+  paintWords(ctx, lines[1], cx, 162, fit(lines[1], 70, w - 50), { align: 'center', seed });
   // the arrow, with the same brush
-  const lines = back
+  const strokes = back
     ? [[[-34, 58], [-34, -18], ...Array.from({ length: 9 }, (_, i) => { const a = Math.PI + (i * Math.PI) / 8; return [34 * Math.cos(a), -18 + 34 * Math.sin(a)]; }), [34, 44]], [[9, 24], [34, 60], [59, 24]]]
     : [[[0, 62], [0, -50]], [[-36, -16], [0, -60], [36, -16]]];
   ctx.save();
   ctx.translate(cx, 258);
-  if (!back) ctx.rotate(0.36);
+  if (!back) ctx.rotate(turn);
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   for (const [style, width, dx, dy] of [['rgba(30, 16, 6, 0.55)', 19, 2.5, 3.5], ['#ffd76a', 15, 0, 0]]) {
     ctx.strokeStyle = style; ctx.lineWidth = width;
-    for (const line of lines) { ctx.beginPath(); line.forEach(([px, py], i) => (i ? ctx.lineTo(px + dx, py + dy) : ctx.moveTo(px + dx, py + dy))); ctx.stroke(); }
+    for (const line of strokes) { ctx.beginPath(); line.forEach(([px, py], i) => (i ? ctx.lineTo(px + dx, py + dy) : ctx.moveTo(px + dx, py + dy))); ctx.stroke(); }
   }
   ctx.restore();
-  const under = back ? 'ASK BILLY · BEHIND YOU' : `ASK BILLY · ${metres}`;
-  paintWords(ctx, under, cx, h - 20, fit(under, 25, w - 30), { align: 'center', color: '#ffd76a', weight: 0.15, seed: 'advice' });
+  paintWords(ctx, under, cx, h - 20, fit(under, 25, w - 30), { align: 'center', color: '#ffd76a', weight: 0.15, seed });
 }
 
 /** A board of what is new: the day its changes went live, and what they were — each a few words and one line. */
@@ -388,17 +387,27 @@ export function buildNotices(zone) {
     const bx = Math.cos(st.yaw), bz = -Math.sin(st.yaw);
     for (const s of [-1, 1]) zone.colliders.push({ type: 'circle', x: st.x + bx * s * (W / 2 + 0.1), z: st.z + bz * s * (W / 2 + 0.1), r: 0.2 });
   }
-  // ---- beside whoever arrives, on the left of the lane: an easel — two frames of planks leaning on each other,
-  // "GET LIFE ADVICE" and an arrow painted on both. Low (it hides nothing of the boards behind) and near (it is
-  // read without a step). Its two faces are one mesh and one picture; its wood goes with the rest.
-  const ad = NOTICES.advice, ady = zone.ground(ad.x, ad.z);
-  {
+  // ---- the easels: two frames of planks leaning on each other, a few words and an arrow painted on both. Low
+  // (they hide nothing of what is behind) and read without a step. One beside whoever arrives, on the left of the
+  // lane: PLAY ON THE BEACH! — its arrow shows the way one walks. One in a flower bed of the rock garden: GET LIFE
+  // ADVICE — Billy is on his deck. The two faces of an easel are one mesh and one picture; its wood goes with the
+  // rest. Each face has the arrow that is true from where it is read: a turn round when the place is behind.
+  const easels = [
+    { name: 'notice-beach', at: NOTICES.beach, to: NOTICES.beach.to, far: NOTICES.beach.far, lines: ['PLAY ON', 'THE BEACH!'], under: 'GAMES · THE PIER', behind: 'THE BEACH', words: 'PLAY ON THE BEACH! · GAMES · THE PIER' },
+    { name: 'notice-advice', at: NOTICES.advice, to: WAYS.billy.at, far: WAYS.billy.at, lines: ['GET LIFE', 'ADVICE'], under: 'ASK BILLY', behind: 'ASK BILLY', words: 'GET LIFE ADVICE · ASK BILLY' },
+  ];
+  for (const easel of easels) {
+    const ad = easel.at, ady = zone.ground(ad.x, ad.z);
     const W = 1.0, L = 1.3, FOOT = 0.14, LEAN = 0.21, sin = Math.sin(LEAN), cos = Math.cos(LEAN), reach = (FOOT + L + 0.03) * sin;
-    const far = Math.hypot(WAYS.billy.at[0] - ad.x, WAYS.billy.at[1] - ad.z), metres = `${Math.round(far / 10) * 10} M`;
+    const far = Math.hypot(easel.far[0] - ad.x, easel.far[1] - ad.z), metres = `${Math.round(far / 10) * 10} M`;
+    // (which way the arrow of a face turns: whoever reads the front looks the way its back looks, and the other way round)
+    const tx = easel.to[0] - ad.x, tz = easel.to[1] - ad.z, nx = Math.sin(ad.yaw), nz = Math.cos(ad.yaw);
+    const turnOf = (fx, fz) => { const a = Math.atan2(tx * -fz + tz * fx, tx * fx + tz * fz); return Math.abs(a) > 2.0 ? null : a; };
+    const face = (turn) => ({ lines: easel.lines, turn, under: turn === null ? `${easel.behind} · BEHIND YOU` : `${easel.under} · ${metres}`, seed: easel.name });
     const canvas = document.createElement('canvas');
     canvas.width = 600; canvas.height = 390;
     const ctx = canvas.getContext('2d');
-    drawAdvice(ctx, 0, 300, 390, false, metres); drawAdvice(ctx, 300, 300, 390, true, metres);
+    drawEasel(ctx, 0, 300, 390, face(turnOf(-nx, -nz))); drawEasel(ctx, 300, 300, 390, face(turnOf(nx, nz)));
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.anisotropy = 4;
@@ -414,12 +423,13 @@ export function buildNotices(zone) {
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     geometry.setIndex(idx);
-    const easel = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ map: texture, toneMapped: false }));
-    easel.position.set(ad.x, ady, ad.z);
-    easel.rotation.y = ad.yaw;
-    easel.name = 'notice-advice';
-    easel.userData.words = `GET LIFE ADVICE · ASK BILLY · ${metres}`;
-    meshes.push(easel);
+    const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ map: texture, toneMapped: false }));
+    mesh.position.set(ad.x, ady, ad.z);
+    mesh.rotation.y = ad.yaw;
+    mesh.name = easel.name;
+    mesh.userData.words = `${easel.words} · ${metres}`;
+    mesh.userData.turns = [turnOf(-nx, -nz), turnOf(nx, nz)]; // (the arrow of its front, of its back: radians to the right, or null — a turn round)
+    meshes.push(mesh);
     wood.place(ad.x, ady, ad.z, ad.yaw);
     for (const s of [1, -1]) {
       // (a frame, leaning: its two stiles from the ground to the top, the board its planks are nailed to, a rail above)
@@ -535,7 +545,7 @@ export function buildNotices(zone) {
   return {
     signposts: signs.posts, // (the wooden signposts: [{ id, x, z, arms: [{ to, text, under, far, yaw }] }])
     news: newsAt, // (where one stands to read each board, the newest first: [{ x, z, date }])
-    welcome: { x: wl.x, z: wl.z }, rules: front(ru, 2.2), story: front(st, 2.2), advice: front(ad, 2),
+    welcome: { x: wl.x, z: wl.z }, rules: front(ru, 2.2), story: front(st, 2.2), beach: front(NOTICES.beach, 2), advice: front(NOTICES.advice, 2),
     arcade: { ...front({ x: cx, z: cz, yaw: cyaw }, 1.2), yaw: cyaw + Math.PI, reach: 1.8, board: runBoard },
     ads: { ...front(a, 2.4), reach: 2.6, set(rows) { state.rows = rows; ads.redraw(); } },
     update(pos, time = 0) {

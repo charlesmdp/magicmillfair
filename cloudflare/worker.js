@@ -29,6 +29,8 @@ import { stripeConfig } from '../server/stripe.js';
 import { restMailer } from '../server/mail.js';
 import { route, addBan } from '../server/routes.js';
 import { knock, roomRules, settle, wardrobeOf, newCrowd, noteCrowd } from '../server/door.js';
+import { mayBeNamed } from '../server/accounts.js';
+import { noteChat } from '../server/chatlog.js';
 import { noteRoom, staleRooms, packDirectory, readDirectory } from '../server/rooms.js';
 import { isUserRoom } from '../server/urooms.js';
 import { randomId, sameSecret, bearerKey } from '../server/token.js';
@@ -100,7 +102,15 @@ export class Room extends DurableObject {
       save: (p) => { try { p.conn.serializeAttachment({ id: p.id, name: p.name, color: p.color, kit: p.kit, joined: p.joined, state: p.state, ip: p.ip, ua: p.ua, dev: p.dev, sid: p.sid, build: p.build, admin: p.admin ? p.rank || 'owner' : false, key: p.key, cc: p.cc, city: p.city, since: p.since, badge: !!p.badge, wear: p.wear, wdev: p.wdev, want: p.want, look: p.look, mute: !!p.mute, ...(p.host && { host: true }), ...(p.tdev && { tdev: p.tdev }) }); } catch { /* closing */ } },
       // what a browser may be seen wearing: the notebook knows (asked again when the browser says something was bought)
       wardrobe: (dev) => this.notebook('/wardrobe', { dev }).then((r) => (r && 'wear' in r ? r.wear : undefined)),
-      wake: () => this.arm(),
+      // …and under which name: the name of an account is for who is signed in to it (the notebook knows the accounts)
+      named: (dev, name) => this.notebook('/named', { dev, name }).then((r) => !(r && r.mine === false)),
+      // what is said in the chat is kept a while for the administrators (chatlog.js): handed to the notebook, a
+      // few lines at a time
+      said: (line) => {
+        (this.saidLines ||= []).push({ ...line, t: Date.now() });
+        if (this.saidLines.length >= 40) this.tellSaid(); else this.saidTimer ||= setTimeout(() => this.tellSaid(), 1500);
+      },
+      wake: () => { this.report(); this.arm(); }, // (somebody came in once their name was looked up; something waits to be flushed)
       // whose key: the owner's (the secret ADMIN_KEY), or that of an administrator who was named (the notebook knows them)
       admin: (key) => (sameSecret(key, (env.ADMIN_KEY || '').trim()) ? { rank: 'owner', id: '' } : looksNamed(key) ? this.notebook('/admin-key', { key }).then((r) => r?.who || null) : false),
       promote: (who) => this.notebook('/promote', who).then((r) => r?.made || null),
@@ -154,6 +164,14 @@ export class Room extends DurableObject {
   async alarm() { await this.ctx.storage.delete('blastAt'); }
 
   /** Asks the notebook something only the rooms and the Worker may ask (a path that is not reachable from outside). */
+  /** The lines of chat that wait go to the notebook. */
+  tellSaid() {
+    clearTimeout(this.saidTimer); this.saidTimer = null;
+    const lines = this.saidLines || [];
+    this.saidLines = [];
+    if (lines.length && this.name) this.notebook('/said', { room: this.name, lines });
+  }
+
   async notebook(path, body) {
     try { return await (await this.env.ROOMS.get(this.env.ROOMS.idFromName(NOTEBOOK)).fetch(new Request(`https://notebook${path}`, { method: 'POST', body: JSON.stringify(body) }))).json(); } catch { return null; }
   }
@@ -196,6 +214,7 @@ export class Room extends DurableObject {
       // e-mails leave through Cloudflare's Email Service: with its binding (EMAIL) where the Worker has one,
       // through its REST API with three secrets otherwise (see server/mail.js)
       mail,
+      later: (work) => this.ctx.waitUntil(work), // (a message that leaves while its request is answered: mail.js)
       flags: { npc: !!env.ANTHROPIC_API_KEY, admin: !!env.ADMIN_KEY, shop: stripe.mode || 'off', mail: !!mail },
       // the secret that signs the notes of the runs: given, or drawn once and kept here
       secret: async () => {
@@ -226,6 +245,8 @@ export class Room extends DurableObject {
       return Response.json(await knock(ctx, { room: q.get('room') || '', pass: q.get('pass') || '', ip: q.get('ip') || '', dev: q.get('dev') || '', ticket: q.get('ticket') || '' }));
     }
     if (url.pathname === '/wardrobe') return Response.json({ wear: await wardrobeOf(ctx, ((await request.json().catch(() => null)) || {}).dev || '') });
+    if (url.pathname === '/said') { const b = (await request.json().catch(() => null)) || {}; await noteChat(ctx, String(b.room || ''), Array.isArray(b.lines) ? b.lines : []); return Response.json({ ok: true }); }
+    if (url.pathname === '/named') { const b = (await request.json().catch(() => null)) || {}; return Response.json({ mine: await mayBeNamed(store, String(b.dev || ''), String(b.name || '')) }); }
     if (url.pathname === '/ban') return Response.json({ added: await addBan({ store, now: () => Date.now() }, (await request.json().catch(() => null)) || {}) });
     if (url.pathname === '/admin-key') return Response.json({ who: await adminOf(store, '', ((await request.json().catch(() => null)) || {}).key) });
     if (url.pathname === '/promote') return Response.json({ made: await nameAdmin(store, (await request.json().catch(() => null)) || {}, Date.now()) });
@@ -319,7 +340,7 @@ export class Room extends DurableObject {
   // Reached through the Worker below: a WebSocket handshake, a head count, or the notebook.
   async fetch(request) {
     const url = new URL(request.url);
-    if (url.pathname.startsWith('/api/') || ['/limit', '/knock', '/ban', '/admin-key', '/promote', '/room', '/wardrobe'].includes(url.pathname)) return this.api(request, url);
+    if (url.pathname.startsWith('/api/') || ['/limit', '/knock', '/ban', '/admin-key', '/promote', '/room', '/wardrobe', '/named', '/said'].includes(url.pathname)) return this.api(request, url);
     if (url.pathname === '/hush') {
       // the notebook says who is kept out in silence from now on, or no longer (not reachable from outside)
       const w = (await request.json().catch(() => null)) || {};

@@ -166,7 +166,11 @@ export class Room {
    *   ban({ ip, dev, name, hours, quiet })   optional: keep someone out from now on (0 hours: for good; quiet: in silence)
    *   wardrobe(dev)                    optional: what that browser has ({ m, left }, see wardrobe.js; null: nothing
    *                                    is sold, everything is everybody's), or a promise of it
-   *   wake()                           optional: something is waiting to be flushed that no message brought
+   *   said({ name, text, near, important, muted })   optional: a line of chat was said here (for the host's log)
+   *   named(dev, name)                 optional: may that browser be seen under that name? false when it is the
+   *                                    name of an account it is not signed in to (accounts.js) — or a promise of it
+   *   wake()                           optional: something happened that no message brought (somebody came in
+   *                                    once their name was looked up, a state waits to be flushed)
    *   fired(at)                        optional: the big red button went off at `at` (relay clock): a host that
    *                                    forgets its rooms keeps it, and gives it back by setting room.blastAt
    */
@@ -355,6 +359,8 @@ export class Room {
     const text = cleanChat(m.m);
     if (!text) return;
     p.chat -= 1;
+    // (the host is told what was said, for the administrators to read — chatlog.js; the relay itself keeps nothing)
+    this.io.said?.({ name: p.name, text, near: !!m.n && !(m.i && p.admin), important: !!(m.i && p.admin), muted: !!p.mute });
     if (p.mute) return; // (kept out in silence: nobody hears)
     if (m.i && p.admin) this.broadcast(JSON.stringify({ t: 'c', id: p.id, m: text, i: 1 }), p); // (the "important" channel: an administrator's)
     else if (m.n) this.around(p, CHAT_NEAR, JSON.stringify({ t: 'c', id: p.id, m: text, n: 1 }));
@@ -456,9 +462,28 @@ export class Room {
     }).catch(() => {});
   }
 
-  _hello(p, m) {
+  _hello(p, m, asked = false) {
     const name = cleanName(m.name), badge = m.ad === 1;
     if (!p.dev) p.dev = cleanDevice(m.dev);
+    // (the name of an account is its owner's alone: the host is asked, once for each name a visitor takes.
+    // Meanwhile they are who they were; one who may not have that name is told, and keeps the one they had —
+    // or, arriving, is given a visitor's)
+    if (!asked && this.io.named && name !== p.named) {
+      const n = (p.naming = (p.naming || 0) + 1);
+      Promise.resolve().then(() => this.io.named(p.dev, name)).catch(() => true).then((mine) => {
+        if (this.players.get(p.conn) !== p || p.naming !== n) return; // (gone — or another name was asked for meanwhile)
+        if (mine !== false) p.named = name;
+        else {
+          const kept = p.joined ? p.name : `Visitor ${10 + (p.id % 90)}`;
+          p.named = kept;
+          this.io.send(p.conn, JSON.stringify({ t: 'name', taken: name, name: kept }));
+          m = { ...m, name: kept };
+        }
+        this._hello(p, m, true);
+        this.io.wake?.(); // (no message brought this: the host is told that something happened here)
+      });
+      return;
+    }
     // (put out of this room by its owner less than an hour ago: not back yet)
     if (!p.joined && this.outs && !p.admin && (this.outs.get(p.tdev || p.dev) || 0) > this.io.now()) {
       this.io.send(p.conn, '{"t":"kicked","ban":false,"host":true}');

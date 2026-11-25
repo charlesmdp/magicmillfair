@@ -4,11 +4,33 @@
 // a board each (see zones/games/Notices.js), the others stay here as the history of the place.
 export const NEWS = [
   {
+    date: '25 November 2026',
+    items: [
+      ['A wall of thanks', 'Cut into the cliff above the poppies, in the north-west: every sponsor of the fair, the most generous first. Thanks to them, the game is free.'],
+      ['Sponsors on the big wheel', 'A sponsored gondola now carries its banner for all to see, with its number — and the Trading Post shows which one is whose.'],
+      ['Your name, yours alone', 'Make an account and its name is reserved: nobody else can play, chat or score under it.'],
+      ['Straight in', 'You chose a name and a colour once: the fair remembers, and lets you in without asking again. The settings change them.'],
+      ['A word in your inbox', 'Give your account an e-mail and the fair writes to say welcome. It says thank you for the Game Pass, too — and nothing else, ever.'],
+      ['The chat is kept fourteen days', 'What is said in the chat is now kept two weeks for the administrators, to act on abuse — then deleted. The privacy page says exactly what.'],
+      ['Red stars', 'On the map (M) the big attractions now wear a red star edged with gold; the slide is drawn red and white.'],
+      ['Which room, at a glance', 'The settings list the rooms: yours first, the others with a button that takes you there.'],
+      ['Between a Rock, sharper', 'You hold a wall by yourself now. Kick the moment you touch it: a sharp kick goes higher, and they add up. No more stones out of nowhere.'],
+      ['The Endless Pond, at your moment', 'You set off when you like: a jump, while the lamp at the end of the jetty is green. The beams are kinder, too.'],
+    ],
+  },
+  {
     date: '24 November 2026',
     items: [
+      ['Stars on the map', 'The big map (M) marks the big attractions with a gold star and their name.'],
+      ['Play on the beach!', 'The easel where you arrive points to the games of the beach now. Billy\'s own stands in the flower bed by the house.'],
+      ['Which room am I in?', 'The settings name the room you are in — and a list there takes you to another.'],
+      ['A camera that stays behind', 'A new switch in the settings: the camera always follows the way your robot faces. Off unless you ask.'],
+      ['Emotes, in order', 'Behind the smile: gestures, cheers, then the animals of light — with their pictures back.'],
+      ['A race joined to the last second', 'Quadmania: the start you are offered is the start you get. Its name no longer changes while you read it.'],
+      ['Who makes this', 'The terms and the privacy page now say who is behind the game, and where to write.'],
       ['The keys, any time', 'In a game, press H — or the small "keys" button under its line — and its keys are shown again, a line each.'],
       ['The arcade, with a finger', 'Meltdown Run hears a touch screen now: the top of its picture jumps, the bottom ducks, the ✕ of its frame walks away.'],
-      ['Get life advice', 'An easel where you arrive, planks at the mill and by the pond: they lead to Billy — who now follows what the two of you were saying.'],
+      ['Get life advice', 'An easel and planks at the mill and by the pond lead to Billy — who now follows what the two of you were saying.'],
       ['A referee at the booths', 'A score that would enter the first five of a board is played again by the fair, move for move, before anybody else sees it.'],
       ['Nearby first', 'The chat opens on "Nearby": those within twenty metres read you. The button left of the line (or Tab) talks to the whole oasis.'],
       ['Scores belong to accounts', 'Without one you are on the board of the day. With one — free: a name, a password — the week, the month and all time are yours too. Every board starts again.'],

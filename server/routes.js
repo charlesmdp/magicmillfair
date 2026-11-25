@@ -26,6 +26,7 @@
 //        secret(): the signing secret of this deployment, flags: { npc, admin, shop, mail }, now(): ms,
 //        stripe: what is configured for payments (stripe.js),
 //        mail: async ({ to, subject, text, html }) → sends an e-mail, or null where none can be sent (mail.js),
+//        later(promise): optional — what goes on once the answer is given (an e-mail leaving), where the host must be told,
 //        build(): the version of the files the host serves, push(message): tells every room (release.js),
 //        here(): how many visitors are connected (stats.js),
 //        directory(), keep(), tell(room, message), maxPlayers: the rooms and their door (door.js) }
@@ -42,6 +43,7 @@ import { accountRoute, visitRecord, accountOf, isAccountName } from './accounts.
 import { localDay, visit } from './visits.js';
 import { readRelease, releaseNews, releaseRoute } from './release.js';
 import { doorRoute } from './door.js';
+import { chatLogRoute } from './chatlog.js';
 import { banned, addBan, bansRoute, anyQuiet, keptOut } from './bans.js';
 import { statsRoute } from './stats.js';
 import { BOARDS as GAME_NAMES, PRICES } from './catalog.js';
@@ -131,6 +133,9 @@ export async function route(req, ctx) {
   // who is kept out — by address, by browser, by account; told so, or in silence (bans.js)
   const kept = await bansRoute(req, ctx);
   if (kept) return kept;
+  // what was said in the chat lately, for the administrators (chatlog.js)
+  const said = await chatLogRoute(req, ctx, owner);
+  if (said) return said;
 
   if (path === '/api/visit') {
     if (method !== 'POST') return out(405, { error: 'Method not allowed.' }, { Allow: 'POST' });

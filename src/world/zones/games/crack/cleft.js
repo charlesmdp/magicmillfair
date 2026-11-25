@@ -4,14 +4,17 @@
 // Two needles of rock stand in the sea before the cliff at the south end of the bay, and between them a cleft:
 // forty metres from the planks at its foot to the top. One goes up it from wall to wall. It is played like any
 // game of walls:
-//   · left and right: one walks on a ledge, steers a little in the air, and holds on to a wall;
+//   · left and right: one walks on a ledge and steers a little in the air;
 //   · the jump: off the planks or a ledge it is a jump; off a wall it is a kick, which carries across to the
 //     other wall and up — more than a metre and a half where the cleft is narrow, hardly a metre at the top;
-//   · on a wall one slides: slowly while one holds towards it, faster with nothing held, fast where water runs
-//     down the rock; "down" lets go.
+//   · a wall one touches is held, by itself: one slides down it slowly — fast where water runs down the rock —
+//     and "down", or holding away from it, lets go;
+//   · the skill is the kick: given at once — within a fifth of a second of catching the wall — it is a sharp
+//     kick, which carries higher; sharp kicks in a row are a streak, and the fast way up.
 // Ledges of rock jut from the walls: one stands on them, and they stop what comes down their wall. For stones
 // come down, by the clock of the world — along a wall or down the middle, more of them the higher one is — and a
-// stone knocks one off: for a moment one holds nothing, and falls. There is no net: who falls catches a wall
+// stone knocks one off: for a moment one holds nothing, and falls. They come down the walls only, never the
+// middle, and a mark shows on which wall the next one is: one is on the other wall when it passes. There is no net: who falls catches a wall
 // again, or lands on a ledge, or goes back to the planks. The clock runs from the first jump to the top.
 //
 // Places: `x` metres across from the middle of the cleft (to the right, as one looks into it from the sea),
@@ -30,7 +33,8 @@ export const CLEFT = {
   walk: 4.2, grip: 40, // m/s on a ledge; and how fast one gets there (m/s²)
   jump: 9.2, kick: [6.2, 9.2], // m/s up off a ledge; across and up off a wall
   air: 10, most: 6.6, lock: 0.22, // steering in the air (m/s²), never faster across than `most`; for so long after a kick nothing steers against it
-  slide: { hold: 0.9, free: 2.8, wet: 5.5, drop: 8 }, // m/s down a wall: holding towards it; nothing held; where water runs; letting go
+  slide: { hold: 0.9, free: 0.9, wet: 5.5, drop: 8 }, // m/s down a wall: it is held by itself (pushing towards it changes nothing); where water runs; letting go
+  sharp: 0.2, bonus: 1.12, // a kick given within so long of catching a wall is a sharp one: so much more speed upwards
   brake: 30, // m/s²: how hard a wall brakes a fall
   away: 0.14, // s of holding away from a wall before one lets go of it
   coyote: 0.1, buffer: 0.13, // s after leaving a wall or a ledge during which the jump still goes; and before touching one
@@ -46,7 +50,7 @@ export const CLEFT = {
   // under the next ledge: the wall across, from which one kicks up onto that ledge, is dry — one can wait there.
   wet: [{ side: -1, y0: 16.4, y1: 18.8 }, { side: 1, y0: 21.8, y1: 24.4 }, { side: -1, y0: 27.2, y1: 29.8 }, { side: 1, y0: 32.2, y1: 34.6 }, { side: -1, y0: 36.6, y1: 38.4 }],
   // the stones: one every so many seconds; how fast; how big; none below `low`, half of them none below `mid`
-  rocks: { every: 1.9, speed: 10, r: 0.34, from: 47, low: 13, mid: 26 },
+  rocks: { every: 1.7, speed: 8.5, r: 0.34, from: 47, low: 13, mid: 26 },
 };
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -76,7 +80,7 @@ export function ledgeBox(l, out = {}) {
  * the stones stop. One leaves the top every `rocks.every` seconds.
  */
 export function rockAt(n, clock, out = {}) {
-  const R = CLEFT.rocks, age = clock - n * R.every, lane = hash(n) < 0.31 ? -1 : hash(n) < 0.62 ? 1 : 0;
+  const R = CLEFT.rocks, age = clock - n * R.every, lane = hash(n) < 0.5 ? -1 : 1; // (down a wall, never down the middle: the other wall is always safe)
   let stop = hash(n, 3) < 0.5 ? R.mid : R.low;
   if (lane) for (const l of CLEFT.ledges) if (l.side === lane && l.y > stop) stop = l.y + R.r; // (it breaks on the first ledge of its wall)
   const y = R.from - R.speed * age;
@@ -92,12 +96,13 @@ export function rocks(clock, each, out = {}) {
 
 /** A climber on the planks at the foot of the cleft: see stepClimb. `t0`: the clock of the world then (s). */
 export function startClimb(t0 = 0) {
-  return { x: 0, y: 0, vx: 0, vy: 0, wall: 0, on: -1, ground: true, face: 1, stun: 0, lock: 0, away: 0, coyote: 0, last: 0, want: 0, clock: 0, acc: 0, t0, started: false, go: 0, over: false, time: 0, top: 0, hits: 0, kicks: 0, falls: 0, wet: false };
+  // (`held`: for how long the wall has been held; `streak`: sharp kicks in a row; `sharps`: sharp kicks in all; `most`: the longest streak)
+  return { x: 0, y: 0, vx: 0, vy: 0, wall: 0, on: -1, ground: true, face: 1, stun: 0, lock: 0, away: 0, coyote: 0, last: 0, want: 0, clock: 0, acc: 0, t0, started: false, go: 0, over: false, time: 0, top: 0, hits: 0, kicks: 0, falls: 0, wet: false, held: 9, streak: 0, sharps: 0, most: 0 };
 }
 
 /**
  * Advances a climb by `dt` seconds. `input`: { x (-1 left … 1 right), y (-1: let go of the wall), jump (true on
- * the frame it is asked) }. `events`: { type: 'go' | 'jump' | 'kick' | 'cling' (wet) | 'land' (ledge: its number,
+ * the frame it is asked) }. `events`: { type: 'go' | 'jump' | 'kick' (sharp, streak) | 'cling' (wet) | 'land' (ledge: its number,
  * -1 the planks; fell: how far) | 'bonk' | 'hit' (a stone) | 'top' (time) }.
  */
 export function stepClimb(st, dt, input, events) {
@@ -128,6 +133,7 @@ function sub(st, dt, input, events) {
   } else if (st.wall) {
     // ---- on a wall: one slides — slowly holding towards it, faster with nothing held, fast where it is wet
     const side = st.wall;
+    st.held += dt;
     st.wet = wetAt(side, st.y + 0.8);
     const target = iy < -0.5 ? C.slide.drop : st.wet ? C.slide.wet : ix * side > 0.3 ? C.slide.hold : C.slide.free;
     st.vy += clamp(-target - st.vy, -C.g * dt, C.brake * dt);
@@ -166,7 +172,7 @@ function sub(st, dt, input, events) {
         if (st.x * side < reach || st.vx * side < 0) continue; // (not the wall one has just kicked off)
         st.x = side * reach;
         if (st.stun > 0) { if (st.vx * side > 0) st.vx = -st.vx * 0.3; continue; }
-        st.wall = side; st.vx = 0; st.away = 0; st.face = side; if (st.vy > 0) st.vy *= 0.4;
+        st.wall = side; st.vx = 0; st.away = 0; st.face = side; st.held = 0; if (st.vy > 0) st.vy *= 0.4;
         st.wet = wetAt(side, st.y + 0.8);
         events?.push({ type: 'cling', wet: st.wet });
       }
@@ -177,7 +183,7 @@ function sub(st, dt, input, events) {
     rocks(st.t0 + st.clock, (r) => {
       if (st.stun > 0 || Math.abs(r.x - st.x) > C.rocks.r + C.body || r.y < st.y - C.rocks.r || r.y > st.y + C.tall + C.rocks.r) return;
       const away = st.wall ? -st.wall : Math.sign(st.x - r.x) || 1;
-      Object.assign(st, { wall: 0, ground: false, on: -1, stun: C.stun, vx: away * 2.4, vy: Math.min(st.vy, -2.5), coyote: 0 });
+      Object.assign(st, { wall: 0, ground: false, on: -1, stun: C.stun, vx: away * 2.4, vy: Math.min(st.vy, -2.5), coyote: 0, streak: 0 });
       st.hits++;
       events?.push({ type: 'hit', n: r.n });
     }, _r);
@@ -192,7 +198,14 @@ function sub(st, dt, input, events) {
 function leap(st, side, events) {
   const C = CLEFT;
   if (!st.started) { st.started = true; st.go = st.clock; events?.push({ type: 'go' }); }
-  if (side) { st.vx = -side * C.kick[0]; st.vy = C.kick[1]; st.lock = C.lock; st.face = -side; events?.push({ type: 'kick' }); }
+  if (side) {
+    // (given at once, it is a sharp kick: higher — and one more of a streak; given late, the streak is over)
+    const sharp = st.wall === side && st.held <= C.sharp;
+    st.streak = sharp ? st.streak + 1 : 0;
+    if (sharp) { st.sharps++; if (st.streak > st.most) st.most = st.streak; }
+    st.vx = -side * C.kick[0]; st.vy = C.kick[1] * (sharp ? C.bonus : 1); st.lock = C.lock; st.face = -side;
+    events?.push({ type: 'kick', sharp, streak: st.streak });
+  }
   else { st.vy = C.jump; st.y += st.vy * C.step; events?.push({ type: 'jump' }); }
   Object.assign(st, { wall: 0, ground: false, on: -1, want: 0, coyote: 0, away: 0 });
   st.kicks++;
