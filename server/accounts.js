@@ -58,6 +58,8 @@ export function accountName(text) {
 const keyOf = (name) => `acct:${name.toLowerCase()}`;
 /** Is that the name of an account (whatever its capitals)? */
 export const isAccountName = async (store, name) => !!accountName(name) && !!(await store.get(keyOf(accountName(name))));
+/** The names the fair gives to who has not chosen one ("Visitor 42"): never the name of an account. */
+const GUEST_NAME = /^visitor \d+$/i;
 const goodPassword = (p) => typeof p === 'string' && p.length >= 8 && p.length <= 100;
 /** The look of a robot, as an account keeps it (anything else is dropped). */
 function cleanProfile(p) {
@@ -80,6 +82,20 @@ export async function accountOf(store, device) {
   if (!link?.acct) return null;
   const acct = await store.get(`acct:${link.acct}`);
   return acct && acct.devices?.includes(device) ? acct : null;
+}
+
+/**
+ * May this browser be seen under that name — over its robot, in the chat? Yes, unless it is the name of an
+ * account the browser is not signed in to: the name of an account is its owner's alone (the relay asks, for
+ * each name a visitor takes). Nothing is kept for it: the accounts are the list.
+ */
+export async function mayBeNamed(store, device, name) {
+  const n = accountName(name);
+  if (!n || GUEST_NAME.test(n)) return true;
+  const acct = await store.get(keyOf(n));
+  if (!acct) return true;
+  const mine = await accountOf(store, device);
+  return !!mine && mine.name.toLowerCase() === acct.name.toLowerCase();
 }
 
 /** Do these two browsers belong to the same visitor (the same browser, or two attached to one account)? */
@@ -214,6 +230,7 @@ export async function accountRoute(req, ctx, limited) {
 
   if (action === 'create') {
     if (!goodPassword(body.password)) return out(400, { error: 'The password needs at least 8 characters.' });
+    if (GUEST_NAME.test(name)) return out(400, { error: 'That name is kept for visitors without an account. Pick another.' });
     if (found) return out(409, { error: 'That name is taken.' });
     // (an address is only kept where it can be of use: on a host that sends e-mail)
     const email = ctx.mail && body.email ? cleanEmail(body.email) : '';

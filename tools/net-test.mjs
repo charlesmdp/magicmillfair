@@ -1398,6 +1398,23 @@ async function testAccounts({ port }) {
     guest?.account === null && badName.status === 400 && shortPw.status === 400 && made.status === 200 && /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/.test(json(made).recovery) && json(made).account.name === who
     && dup.status === 409 && me.account?.name === who && me.account.profile.name === 'bAda/b' && me.account.profile.hat === 'crown' && me.account.profile.trail === 'none' && me.account.profile.evil === undefined && !JSON.stringify(me).includes('correct horse'),
     [guest, badName.status, shortPw.status, made.status, dup.status, me]);
+  // the name of an account is its owner's alone, in the world too: somebody else who takes it is given a visitor's
+  // name and told; who is signed in to the account wears it; a name kept for visitors makes no account
+  {
+    const thief = new Client(port, 'names', { dev: b }), owner = new Client(port, 'names', { dev: a });
+    await thief.hello(who.toUpperCase(), 1, b);
+    const told = await thief.wait((m) => m.t === 'name'), seenAs = thief.msgs.find((m) => m.t === 'welcome');
+    await owner.hello(who, 2, a);
+    const ownerTold = owner.msgs.find((m) => m.t === 'name'), card = seenAs && (owner.msgs.find((m) => m.t === 'welcome')?.peers || []).find((q) => q.id === thief.id);
+    thief.send({ t: 'hello', name: who, color: 1, v: 2, dev: b });
+    const again = await thief.wait((m) => m.t === 'name' && m !== told, 1500);
+    thief.ws.close(); owner.ws.close();
+    // (asked from an address of its own, on either server: it does not count against what the checks below may try)
+    const kept = await request(port, '/api/account', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'create', device: randomId(16), name: 'Visitor 42', password: 'correct horse' }), from: '127.0.0.78' });
+    check('accounts: the name of an account is reserved — somebody else who takes it in the world is given a visitor\'s name and told, at the door and on changing name; its owner wears it; "Visitor 42" makes no account',
+      told?.taken === cleanName(who.toUpperCase()) && /^Visitor \d+$/.test(told.name) && card?.name === told.name && !ownerTold && again?.taken === who && again.name === told.name && kept.status === 400,
+      [told, card, ownerTold, again, kept.status]);
+  }
   // another browser: what it bought as a guest joins the account when it signs in; what is bought from then on is the account's
   await hook(paid('hat:cap', b));
   const wrong = await acct({ action: 'login', device: b, name: who, password: 'wrong horse' });

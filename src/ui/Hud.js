@@ -1227,10 +1227,12 @@ export class Hud {
   }
 
   /**
-   * The big attractions, for the map: [{ id, name, x, z, line: [[x, z], …] | undefined }] — a gold star and the
-   * name of each; `line`: what is drawn of it on the ground (the slide: a ribbon of water).
+   * The big attractions, for the map: [{ id, name, x, z, line: [[x, z], …] | undefined }] — a red star edged with
+   * gold and the name of each; `line`: what is drawn of it on the ground (the slide: a ribbon of red and white).
    */
   setAttractions(list) { this.attractions = list || []; }
+  /** The stars and their names, shown or not (the owner's switch): what is drawn on the ground stays. */
+  setStars(on) { this.starsOff = !on; }
 
   /** The whole valley, with the places, the big attractions, the other visitors and oneself. */
   drawBigMap(x, z, heading, others) {
@@ -1267,28 +1269,33 @@ export class Hud {
     // (names never lie on one another: the larger places are written first, where they are; a name that would
     // cover another is moved up or down by a line or two — or left out, if there is no room at all)
     const size = Math.max(mega ? 9 : 11, Math.round(w / (mega ? 86 : 62))), placed = [];
-    // the big attractions (the map of the valley only): what is drawn of them on the ground, a gold star, their
-    // name in gold beside it — written first: the names of the places make room for them
-    const stars = mega ? [] : this.attractions || [], starred = new Set(stars.map((s) => s.id));
-    if (stars.length) {
+    // the big attractions (the map of the valley only): what is drawn of them on the ground, a red star edged
+    // with gold, their name in gold beside it — written first: the names of the places make room for them
+    const drawn = mega ? [] : this.attractions || [], stars = this.starsOff ? [] : drawn, starred = new Set(stars.map((s) => s.id));
+    if (drawn.length) {
       const R = Math.max(7, Math.round(w / 105));
-      ctx.lineCap = 'round';
-      for (const s of stars) {
+      for (const s of drawn) {
         if (!s.line || s.line.length < 2) continue;
-        for (const [width, color] of [[Math.max(4, R * 0.62), 'rgba(255, 255, 255, 0.95)'], [Math.max(2, R * 0.34), '#35a9e6']]) {
-          ctx.beginPath();
-          s.line.forEach(([lx, lz], i) => (i ? ctx.lineTo(X(lx), Z(lz)) : ctx.moveTo(X(lx), Z(lz))));
-          ctx.lineWidth = width; ctx.strokeStyle = color; ctx.stroke();
-        }
+        // (the slide: a ribbon striped red and white, like its flume, with a dark edge so that it reads on the sand)
+        const wide = Math.max(5, R * 0.74), path = () => { ctx.beginPath(); s.line.forEach(([lx, lz], i) => (i ? ctx.lineTo(X(lx), Z(lz)) : ctx.moveTo(X(lx), Z(lz)))); };
+        ctx.lineCap = 'round';
+        path(); ctx.lineWidth = wide + 3; ctx.strokeStyle = 'rgba(46, 14, 10, 0.9)'; ctx.stroke();
+        path(); ctx.lineWidth = wide; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+        ctx.lineCap = 'butt'; ctx.setLineDash([wide * 1.15, wide * 1.15]);
+        path(); ctx.lineWidth = wide; ctx.strokeStyle = '#e0252b'; ctx.stroke();
+        ctx.setLineDash([]);
       }
+      ctx.lineCap = 'round';
       ctx.font = `700 ${size}px Georgia, 'Times New Roman', serif`;
       for (const s of stars) {
         const px = X(s.x), pz = Z(s.z);
         ctx.beginPath();
         for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + (i * Math.PI) / 5, r = i % 2 ? R * 0.45 : R; if (i) ctx.lineTo(px + Math.cos(a) * r, pz + Math.sin(a) * r); else ctx.moveTo(px + Math.cos(a) * r, pz + Math.sin(a) * r); }
         ctx.closePath();
-        ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(40, 26, 4, 0.9)'; ctx.stroke();
-        ctx.fillStyle = '#ffd24a'; ctx.fill();
+        // (red, with a border of gold — and a dark line round the gold, so that it stands out on any ground)
+        ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(40, 14, 4, 0.92)'; ctx.stroke();
+        ctx.lineWidth = 3.6; ctx.strokeStyle = '#ffd24a'; ctx.stroke();
+        ctx.fillStyle = '#e0252b'; ctx.fill();
         // its name: to the right of the star — to the left when the edge is near —, moved by a line if another is there
         const half = ctx.measureText(s.name).width / 2 + 5, right = px + R + 4 + half * 2 < w - 4;
         const tx = right ? px + R + 4 + half : px - R - 4 - half;

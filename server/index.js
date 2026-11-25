@@ -25,6 +25,7 @@ import { restMailer } from './mail.js';
 import { route, addBan } from './routes.js';
 import { isUserRoom } from './urooms.js';
 import { knock, roomRules, settle, wardrobeOf } from './door.js';
+import { mayBeNamed } from './accounts.js';
 import { newDirectory, noteRoom } from './rooms.js';
 import { adminOf, looksNamed, nameAdmin } from './admins.js';
 import { geoFromHeaders } from './visitors.js';
@@ -305,6 +306,8 @@ const io = {
   ban: (who) => { addBan(api, who).catch((err) => console.error('[ban]', err.message)); },
   // what a browser may be seen wearing: asked again when it says something was bought (wardrobe.js)
   wardrobe: (dev) => wardrobeOf(api, dev),
+  // …and under which name: the name of an account is for who is signed in to it (accounts.js)
+  named: (dev, name) => mayBeNamed(store, dev, name),
 };
 
 function census() {

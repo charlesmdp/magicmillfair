@@ -131,6 +131,7 @@ async function boot() {
   // (the size of the robot: the choice of who holds the Game Pass; 0 is everybody's)
   let size = Math.max(0, SIZES.indexOf(sizeOf(store.get('mmf.size'))));
   let disguise = 0; // a bush (1), a tree (2): a secret word of the chat
+  const returning = !!(store.get('mmf.name') || '').trim(); // (a name was chosen on an earlier visit)
   let name = (store.get('mmf.name') || '').trim() || `Visitor ${10 + Math.floor(Math.random() * 90)}`;
   const me = factory.create(color);
   scene.add(me.root);
@@ -308,6 +309,13 @@ async function boot() {
     presence.on('kicked', ({ ban }) => hud.banner(ban ? 'The administrator has banned you from the fair.' : 'The administrator has put you out of this room. Reload the page to come back in.'));
     // something was given by an administrator: the shop is asked again (it says what, in the chat)
     presence.on('gift', () => { refreshShop().then(() => { audio.play('victory'); hud.note('A gift from the fair has just arrived: look in the item shop!', 7000); }); });
+    // (the name of an account is its owner's alone: asked for by somebody else, the relay says which name is worn instead)
+    presence.on('named', (e) => {
+      name = e.name; store.set('mmf.name', name); hud.setName(name); world.games.setMe(account.name || name);
+      const line = `"${e.taken}" is the name of somebody's account — theirs alone. Sign in if it is yours (Settings); until then you are ${e.name}.`;
+      hud.note(line, 10000);
+      hud.addChat('✦', 5, line, true);
+    });
     let limitTold = 0; // (said once in a while: the page tries again by itself)
     presence.on('limit', ({ of, max }) => {
       if (Date.now() - limitTold < 10 * 60_000) return;
@@ -1156,6 +1164,7 @@ async function boot() {
   const applyRelease = (release, before) => {
     const on = Object.fromEntries(EXTRA.map((k) => [k, release[k] === true]));
     if (EXTRA.some((k) => on[k])) import('./extras/index.js').then(({ loadExtras }) => loadExtras(app, on)).then(() => extrasBuilt()).catch((err) => console.error('[extras]', err));
+    hud.setStars(release.stars !== false); // (the stars of the map: the owner's switch)
     // (the rooms that players make: their card in the shop and their corner of "Who is here" come and go with the switch)
     if (!before || before.userRooms !== release.userRooms) queueMicrotask(() => refreshMine(release.userRooms === true));
     // (the sky is built with the world: another stage of it is another world)
@@ -1498,9 +1507,9 @@ async function boot() {
         kind, eyebrow: 'Ten minutes in the oasis', title: 'Shall we remember you?',
         lead: 'You have been here a while — long enough to have a best score, a favourite bench, maybe a grudge against a boulder. An account keeps all of it, wherever you play from.',
         perks: [
+          'Your name becomes yours alone: nobody else can play, chat or score under it',
           'Your scores count for the week, the month and all time — not only for today',
           'What you buy, your days in a row and your animals of light follow you to any device',
-          'Your robot keeps its name and its colours, even when this browser forgets everything',
           'A name and a password: no e-mail needed, no newsletter, no small print with teeth',
         ],
         fine: 'Free, and done in less time than the queue for the big wheel.',
@@ -2018,6 +2027,12 @@ async function boot() {
     rig.snap(player.pos, resume.yaw || 0);
     hud.splash.classList.add('done');
     hud.hud.classList.add('on');
+  } else if (returning && !params.has('welcome')) {
+    // somebody who has been here: their name, their colour, their size are chosen — straight into the world, as
+    // they were (the settings change any of it; ?welcome at the end of the address shows the card again)
+    hud.splash.classList.add('done');
+    hud.hud.classList.add('on');
+    setTimeout(() => hud.note(`Welcome back, ${name}! Your robot is as you left it — the settings (the cog) change it.`, 5200), 500);
   } else {
     const who = await hud.welcome({ name, color, touch, size: shopKnown && shop.hasPass ? size : 0, pass: shopKnown && shop.hasPass });
     name = who.name; color = who.color >= FREE_COLORS && !shop.hasPass ? who.color - FREE_COLORS : who.color;
@@ -2038,7 +2053,7 @@ async function boot() {
   hud.setCameraMode(false);
   startPresence();
   canvas.focus();
-  setTimeout(() => hud.note(touch ? 'Drag on the left to walk, on the right to look around' : 'Drag the mouse to look around · double-click to capture it', 5200), 2600);
+  setTimeout(() => hud.note(touch ? 'Drag on the left to walk, on the right to look around' : 'Drag the mouse to look around · double-click to capture it', 5200), returning && !params.has('welcome') ? 6200 : 2600);
 }
 
 boot().catch((err) => {
