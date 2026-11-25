@@ -1,7 +1,10 @@
-// Twenty things left over from before. The oasis is all that is left of the planet, and here and there
+// Twenty-five things left over from before. The oasis is all that is left of the planet, and here and there
 // something says so: a road sign that sends the evacuation into the sea, a vending machine under the ivy, a
 // scarecrow in a hazmat suit, a bus stop where the next bus is always four minutes away… — and, where nobody
-// goes, a fallout shelter whose periscope turns to look at who found it. Each is looked at (the prompt of the
+// goes, a fallout shelter whose periscope turns to look at who found it. Twenty stand by the paths and in the
+// woods; five are where one has to go and look: at the top of the tower of those who watch the climb, in a
+// hollow half-way up the island of the boulder, on the sand of the secret cove, on the beach at the foot of the
+// stairs to the golden statues, in the grotto behind the waterfall. Each is looked at (the prompt of the
 // game says "Look at…") and has a line or two to say. Who has looked at them all is told so — and may, from
 // then on, raise a small mushroom cloud over their head (the game: the emotes).
 //
@@ -36,6 +39,12 @@ export const RELIC_WORDS = {
   car: { r: 1.9, label: 'the car', text: 'A car, with a tree through its roof. The tree is forty years old. It had right of way.' },
   phone: { r: 0.55, label: 'the telephone', text: 'A public telephone. Now and then it rings. Nobody dares to pick up: whoever is calling has been very patient, and may want something.' },
   forecast: { r: 0.8, label: 'the weather board', text: '"TODAY: radiation mild, with sunny spells. TOMORROW: same." Somebody chalks it up again every morning. It has never once been wrong.' },
+  // (the five one has to go and find)
+  telescope: { r: 0.4, label: 'the coin telescope', text: 'A coin telescope — the kind that showed you a car park for a coin. This one asks for nothing: it is jammed for good, pointing at where the rest of the world used to be. Clear day. Nothing to report.' },
+  gnome: { r: 0.3, label: 'the garden gnome', text: 'A garden gnome in a gas mask, tucked into the rock where the boulder cannot get him. He has watched it roll past more times than he can count. He is not coming out.' },
+  bottle: { r: 0.35, label: 'the bottle', text: 'A message in a bottle, washed up where nobody comes. It says: "If you find this, send help." On the back, in another hand: "We are the help. Sorry."' },
+  postcards: { r: 0.45, label: 'the postcard rack', text: 'A rack of postcards, bleached white by forty summers. Every one of them says WISH YOU WERE HERE. It has stopped being a wish: there is nowhere else left to be.' },
+  tins: { r: 0.9, label: 'the stack of tins', text: 'Tins, stacked higher than you by somebody who meant to outlast everything. Hundreds of them. All peaches. There is no tin opener — there never was one: that is the sad part.' },
   bunker: { r: 1.7, label: 'the mound', text: 'A fallout shelter, sealed from the inside — and so well hidden that you may be the first to find it. The periscope turns to look at you. Somebody is still down there, waiting for it all to be over. Nobody has had the heart to tell them.' },
 };
 
@@ -180,7 +189,7 @@ function seaward(data, x, z) {
 }
 
 /**
- * Builds the ten relics into `zone` (GamesZone). Returns { list: [{ id, x, y, z, yaw, r, settled, label, text }],
+ * Builds the relics into `zone` (GamesZone). Returns { list: [{ id, x, y, z, yaw, r, settled, under, label, text }],
  * mesh (the one that carries the pictures), near(x, z) → the relic one stands by, or null }.
  */
 export function buildRelics(zone) {
@@ -204,7 +213,8 @@ export function buildRelics(zone) {
       }
     }
     if (!Number.isFinite(wx) || !Number.isFinite(wz)) continue;
-    const [x, z, settled] = wish.fixed ? [wx, wz, true] : settle(zone, taken, { x: wx, z: wz, field: wish.field }, say.r), y = zone.ground(x, z);
+    // (`y`: it stands on something built, or under the rock — the deck of a tower, the floor of a cave —, not on the ground of the map)
+    const [x, z, settled] = wish.fixed ? [wx, wz, true] : settle(zone, taken, { x: wx, z: wz, field: wish.field }, say.r), y = wish.y ?? zone.ground(x, z);
     // which way it faces: a point it looks at — or, for the road sign, so that its right hand points at the sea
     const sea = wish.sea ? seaward(zone.data, x, z) : null;
     const yaw = sea ? Math.atan2(-sea[1], sea[0]) : look ? Math.atan2(look[0] - x, look[1] - z) : 0;
@@ -356,6 +366,70 @@ export function buildRelics(zone) {
       for (const lx of [-0.5, 0.5]) wood.tint(0.7, 0.65, 0.6, 1).cylinder(lx, -0.3, 0, 0.045, 0.04, 2.1, 6);
       wood.tint(0.5, 0.45, 0.4, 1).box(-0.66, 0.78, -0.03, 0.66, 1.8, 0.0);
       face('forecast', 0, 1.29, 1.24, 0.96, 0.012);
+    } else if (wish.id === 'telescope') {
+      // a coin telescope on its pedestal: a foot, a post, the brass box that took the coins, and the head — two
+      // barrels side by side, a lens at the end of each
+      metal.tint(0.28, 0.3, 0.33, 1).cylinder(0, 0, 0, 0.21, 0.17, 0.08, 10).cylinder(0, 0.08, 0, 0.07, 0.06, 1.05, 8);
+      metal.tint(0.78, 0.62, 0.16, 1).box(-0.11, 0.6, 0.05, 0.11, 0.86, 0.14);
+      metal.tint(0.05, 0.05, 0.06, 1).box(-0.018, 0.75, 0.14, 0.018, 0.8, 0.146);
+      metal.tint(0.84, 0.85, 0.88, 1).box(-0.2, 1.12, -0.2, 0.2, 1.36, 0.24);
+      for (const sx of [-0.1, 0.1]) {
+        metal.tint(0.74, 0.76, 0.8, 1).rod(V(sx, 1.25, 0.24), V(sx, 1.25, 0.46), 0.078, 10);
+        metal.tint(0.1, 0.16, 0.24, 1).rod(V(sx, 1.25, 0.46), V(sx, 1.25, 0.47), 0.062, 10);
+        metal.tint(0.1, 0.1, 0.11, 1).rod(V(sx, 1.25, -0.27), V(sx, 1.25, -0.2), 0.046, 8);
+      }
+      metal.tint(0.75, 0.12, 0.1, 1).box(-0.2, 1.36, -0.2, 0.2, 1.39, 0.24);
+    } else if (wish.id === 'gnome') {
+      // a garden gnome, a big one: boots, a blue coat with its belt, a white beard, a red hat — and a gas mask
+      // with its two round glasses and its filter
+      metal.tint(0.16, 0.12, 0.1, 1).box(-0.14, 0, -0.06, -0.02, 0.08, 0.13).box(0.02, 0, -0.06, 0.14, 0.08, 0.13);
+      metal.tint(0.16, 0.36, 0.7, 1).lathe([[0, 0.07], [0.18, 0.07], [0.21, 0.2], [0.18, 0.4], [0.11, 0.49], [0, 0.49]], 10);
+      metal.tint(0.12, 0.1, 0.09, 1).cylinder(0, 0.25, 0, 0.2, 0.2, 0.04, 10);
+      metal.tint(0.9, 0.72, 0.2, 1).box(-0.035, 0.245, 0.185, 0.035, 0.295, 0.21);
+      metal.tint(0.93, 0.76, 0.62, 1).lathe([[0, 0.47], [0.1, 0.49], [0.13, 0.59], [0.1, 0.69], [0, 0.71]], 10);
+      metal.tint(0.96, 0.96, 0.94, 1).box(-0.1, 0.34, 0.07, 0.1, 0.52, 0.16).box(-0.06, 0.26, 0.09, 0.06, 0.34, 0.15);
+      metal.tint(0.17, 0.19, 0.18, 1).box(-0.09, 0.5, 0.07, 0.09, 0.65, 0.145).rod(V(0, 0.54, 0.13), V(0, 0.5, 0.25), 0.05, 8);
+      metal.tint(0.5, 0.52, 0.5, 1).rod(V(0, 0.5, 0.25), V(0, 0.49, 0.28), 0.058, 8);
+      metal.tint(0.55, 0.78, 0.84, 1).rod(V(-0.045, 0.61, 0.14), V(-0.045, 0.61, 0.152), 0.032, 8).rod(V(0.045, 0.61, 0.14), V(0.045, 0.61, 0.152), 0.032, 8);
+      metal.tint(0.85, 0.12, 0.1, 1).lathe([[0, 0.67], [0.14, 0.67], [0.105, 0.79], [0.05, 0.97], [0, 1.1]], 10);
+    } else if (wish.id === 'bottle') {
+      // a great green bottle the sea left standing in the sand, leaning; the paper rolled in its neck; the sand it
+      // dug itself into, a shell or two
+      stone.tint(1.0, 0.93, 0.74, 1).lathe([[0, 0.08], [0.2, 0.06], [0.4, -0.06]], 10);
+      metal.place(0.02, 0.0, 0, 0, 0, 0.3);
+      metal.tint(0.1, 0.44, 0.26, 1).lathe([[0, 0], [0.13, 0.0], [0.15, 0.06], [0.15, 0.36], [0.11, 0.46], [0.052, 0.54], [0.048, 0.68], [0.058, 0.69], [0.058, 0.72], [0, 0.72]], 10);
+      metal.tint(0.97, 0.94, 0.84, 1).cylinder(0, 0.62, 0, 0.03, 0.03, 0.22, 6);
+      metal.pop();
+      metal.tint(0.97, 0.9, 0.85, 1).lathe([[0, 0.05], [0.06, 0.05], [0.04, 0.09], [0, 0.1]], 6);
+      for (const [lx, lz, k] of [[0.3, 0.16, 0.05], [-0.26, 0.2, 0.04], [0.12, 0.3, 0.035]]) { metal.place(lx, 0.02, lz); metal.tint(0.98, 0.86, 0.8, 1).lathe([[0, 0], [k, 0], [k * 0.6, k * 0.5], [0, k * 0.6]], 6); metal.pop(); }
+    } else if (wish.id === 'postcards') {
+      // a rack that turns, on its foot: four faces of wire, eight cards on each — every one bleached nearly
+      // white, a ghost of a sky left on some — and a little red cap
+      metal.tint(0.2, 0.2, 0.22, 1).cylinder(0, -0.2, 0, 0.3, 0.26, 0.26, 10).cylinder(0, 0.06, 0, 0.035, 0.035, 1.76, 6);
+      metal.tint(0.75, 0.12, 0.1, 1).lathe([[0, 1.8], [0.31, 1.8], [0.27, 1.88], [0, 1.97]], 8);
+      for (let f = 0; f < 4; f++) {
+        metal.place(0, 0, 0, (f * Math.PI) / 2 + 0.3);
+        metal.tint(0.32, 0.32, 0.35, 1).box(-0.2, 0.55, 0.2, 0.2, 1.72, 0.212);
+        for (let row = 0; row < 4; row++) for (let col = 0; col < 2; col++) {
+          const k = f * 8 + row * 2 + col, pale = 0.9 + ((k * 37) % 7) * 0.012, x0 = -0.18 + col * 0.19, y0 = 0.61 + row * 0.28;
+          metal.tint(pale + 0.03, pale, pale - 0.06, 1).box(x0, y0, 0.212, x0 + 0.17, y0 + 0.23, 0.222);
+          if (k % 3 !== 1) metal.tint(0.78, 0.86, 0.9, 1).box(x0 + 0.012, y0 + 0.1, 0.222, x0 + 0.158, y0 + 0.218, 0.225);
+        }
+        metal.pop();
+      }
+    } else if (wish.id === 'tins') {
+      // a larder for the end of the world: tins in rows, one fewer each row up, each with its band of paper —
+      // and two that rolled off
+      let k = 0;
+      for (let row = 0; row < 7; row++) {
+        for (let i = 0, n = 8 - row; i < n; i++, k++) {
+          const lx = (i - (n - 1) / 2) * 0.21, lz = ((k * 13) % 5) * 0.012 - 0.03, y0 = row * 0.2;
+          metal.tint(0.72, 0.74, 0.77, 1).cylinder(lx, y0, lz, 0.095, 0.095, 0.195, 10);
+          metal.tint(...(k % 5 === 3 ? [0.9, 0.52, 0.22] : [0.98, 0.74, 0.3]), 1).cylinder(lx, y0 + 0.04, lz, 0.099, 0.099, 0.115, 10);
+        }
+      }
+      metal.tint(0.72, 0.74, 0.77, 1).rod(V(1.02, 0.095, 0.3), V(1.2, 0.095, 0.36), 0.095, 10).rod(V(-1.0, 0.095, 0.45), V(-0.83, 0.095, 0.55), 0.095, 10);
+      metal.tint(0.98, 0.74, 0.3, 1).rod(V(1.058, 0.095, 0.312), V(1.162, 0.095, 0.348), 0.099, 10).rod(V(-0.966, 0.095, 0.47), V(-0.864, 0.095, 0.53), 0.099, 10);
     } else if (wish.id === 'bunker') {
       // a mound the grass has taken back; in it a round steel hatch, ajar; a pipe to breathe by; and the tube of a
       // periscope (its head is a part of its own: it turns to look at who comes — see below)
@@ -376,9 +450,9 @@ export function buildRelics(zone) {
     if (wish.id === 'billboard') for (const lx of [-1.45, 1.45]) zone.colliders.push({ type: 'circle', x: x + lx * c, z: z - lx * s, r: 0.2 });
     else if (wish.id === 'busstop') zone.colliders.push({ type: 'circle', x: x - 0.9 * c, z: z + 0.9 * s, r: 0.16 }, { type: 'box', x: x + 0.4 * c, z: z - 0.4 * s, hw: 0.75, hl: 0.26, yaw });
     else if (wish.id === 'car') zone.colliders.push({ type: 'box', x, z, hw: 0.92, hl: 1.95, yaw });
-    else zone.colliders.push({ type: 'circle', x, z, r: wish.id === 'bunker' ? 1.5 : r * 0.8 });
+    else zone.colliders.push({ type: 'circle', x, z, r: wish.id === 'bunker' ? 1.5 : r * 0.8, ...(wish.y !== undefined && { y0: y - 1, y1: y + 3 }) }); // (up a tower, down a cave: only at its own height)
     taken.built.push({ type: 'circle', x, z, r: say.r });
-    list.push({ id: wish.id, x, y, z, yaw, r, settled, label: say.label, text: say.text });
+    list.push({ id: wish.id, x, y, z, yaw, r, settled, under: !!wish.under, label: say.label, text: say.text });
   }
   zone._add(parts, 'relics');
   // ---- the one picture, and the one mesh that carries it

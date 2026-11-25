@@ -76,7 +76,7 @@ export class GamesZone {
     this.wing = new Wing(this).build(); // the theatre of the plaza
     this.notices = buildNotices(this); // what is new, who sponsors what, and the arcade cabinet of the pier
     this.thanks = buildThanksWall(this); // every sponsor, cut into the cliff by the acid pond
-    this.relics = buildRelics(this); // ten things left over from the world before, by the paths
+    this.relics = buildRelics(this); // twenty-five things left over from the world before, by the paths
     this.group.updateMatrixWorld(true);
     return this;
   }

@@ -787,12 +787,14 @@ export const SIGNPOSTS = [
 // rock, its foot `lift` above the grass. How it leans and bends is the rock's own business (it reads the cliff).
 export const THANKS_WALL = { x: -268.05, z: -82.2, yaw: 70 * DEG, width: 28, height: 10, lift: 1.3 };
 
-// Twenty things left over from the world before (zones/games/Relics.js: what each is and says), all over the
-// valley. (x, z): a wish — the nearest free ground is taken (dry, level, off the path, clear of the trees and
+// Twenty-five things left over from the world before (zones/games/Relics.js: what each is and says), all over
+// the valley. (x, z): a wish — the nearest free ground is taken (dry, level, off the path, clear of the trees and
 // of what is built) — or, `fixed`, the very spot (chosen by eye); `by`: [a path, how far along it (0 … 1), how
 // many metres to its side] — it stands on the verge of that path and looks at it; `face`: the point it looks
 // at; `sea`: it is turned so that its right hand points at the nearest sea (the arrow of the road sign);
-// `field`: it belongs in a field (the scarecrow). The last one is where nobody goes: it is meant to be found.
+// `field`: it belongs in a field (the scarecrow). The twentieth is where nobody goes: it is meant to be found.
+// The last five are where one has to go and look. `y`: it stands on something built, or under the rock — not on
+// the ground of the map; `under`: there is a roof over it, of cloth or of rock.
 export const RELICS = [
   { id: 'barrel', x: -117.5, z: -39.6, fixed: true, face: [-113, -40] },
   { id: 'billboard', x: -120, z: -70, face: [-113, -68] },
@@ -814,6 +816,16 @@ export const RELICS = [
   { id: 'phone', by: ['lane', 0.3, 4.6] }, // (a few steps down the road from the bus stop, on the same side — it stood behind a wall of the gate, where nobody could see it)
   { id: 'forecast', by: ['shore', 0.3, 3] },
   { id: 'bunker', x: 52, z: 112, face: [40, 104] }, // (in the woods of the south-east shore, sixty metres from any path)
+  // at the top of the tower of those who watch the climb, by the rail, on the side of the stones: it looks at them
+  (() => { const T = CLIMB.tower, a = Math.atan2(CLIMB.x - T.x, CLIMB.z - T.z); return { id: 'telescope', x: T.x + Math.sin(a) * 4.75, z: T.z + Math.cos(a) * 4.75, y: CLIMB.y + T.pitch * T.turns, fixed: true, under: true, face: [CLIMB.x, CLIMB.z] }; })(),
+  // half-way up the island of the boulder, at the back of the hollow in the rock there: it looks out at the path
+  (() => { const p = islandPath(0.5), d = ISLAND.width / 2 + 2.0; return { id: 'gnome', x: p.x - p.nx * d, z: p.z - p.nz * d, fixed: true, face: [p.x, p.z] }; })(),
+  // on the sand of the secret cove, a few steps from the water
+  { id: 'bottle', x: COVE.x + COVE.sea[0] * 3.5, z: COVE.z + COVE.sea[1] * 3.5, face: [COVE.x - COVE.sea[0] * 6, COVE.z - COVE.sea[1] * 6] },
+  // on the beach of the Golden Cove, by the foot of the stairs that go up to the statues
+  { id: 'postcards', x: 200.4, z: -265.2, face: [199.5, -259] },
+  // in the grotto behind the waterfall, against the wall of its great chamber, across from the table
+  { id: 'tins', x: -295.0, z: 128.0, y: CAVES[0].nodes[2][3], fixed: true, under: true, face: [-297.5, 123.5] },
 ];
 
 // What stands on the way for visitors to read (zones/games/Notices.js): the banner and the rules where one

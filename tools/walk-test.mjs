@@ -872,17 +872,29 @@ try {
       !!wall.sheet && wall.sheet[0] <= 2048 && wall.above.length === 9 && wall.above.every((d) => d > 0.2 && d < 3) && wall.lean > 15 && wall.lean < 40 && wall.foot > 0.8 && wall.foot < 3 && wall.faces > 0.85 && wall.pond > 15 && wall.pond < 45
       && wall.shown?.title === 'THANKS TO THOSE COMPANIES, THE GAME IS FREE FOR YOU!' && wall.shown.rows.length === 0 && wall.shown.ghosts === 3 && wall.shown.cols === 1, JSON.stringify(wall));
   }
-  // --- the relics of the world before: twenty things all over the valley. Each is walked up to: the game offers to
-  // look at it, looking says its line — and the last, that they were all found: a mushroom cloud goes up, and is
-  // theirs to raise from then on; the browser remembers which were found
+  // --- the relics of the world before: twenty-five things all over the valley — twenty by the paths and in the
+  // woods, five where one has to go and look (the top of the tower of those who watch the climb, a hollow of the
+  // island, the secret cove, the beach of the golden statues, the grotto behind the waterfall). Each is walked up
+  // to: the game offers to look at it, looking says its line — and the last, that they were all found: a
+  // mushroom cloud goes up, and is theirs to raise from then on; the browser remembers which were found
   {
     const relics = await page.evaluate(async () => {
       const m = window.__mmf, R = m.world.games.relics, d = m.world.data, trees = m.world.forest.colliders();
-      const out = { ids: R.list.map((q) => q.id).sort().join(','), bad: [], looks: [], quads: 0 };
+      const out = { ids: R.list.map((q) => q.id).sort().join(','), bad: [], looks: [], quads: 0, off: [] };
+      // (where one stands to look at a relic: before it — or behind it, when before it there is nothing to stand
+      // on at its height: the telescope at the rail of the tower looks out over the drop)
+      // (what one walks on at (x, z), about the height y: the floor of a cave when one is under the rock there —
+      // the hill over it is another place —, else the ground or the deck)
+      const col = m.world.collision, standAt = (x, z, y) => { const c = col.caveAt(x, z, y + 0.5); return c ? c.floorAt(x, z) : col.spawnHeight(x, z); };
+      const spot = (q) => { for (const k of [1, -1]) { const x = q.x + k * Math.sin(q.yaw) * (q.r + 1), z = q.z + k * Math.cos(q.yaw) * (q.r + 1); if (Math.abs(standAt(x, z, q.y) - q.y) < 1) return [x, z, k]; } return [q.x + Math.sin(q.yaw) * (q.r + 1), q.z + Math.cos(q.yaw) * (q.r + 1), 1]; };
       const cloud = () => document.querySelector('.emotes [data-mushroom]').textContent;
       const frames = (n) => new Promise((res) => { const target = m.frames + n, tick = () => (m.frames >= target ? res() : requestAnimationFrame(tick)); tick(); });
       for (const q of R.list) {
-        const wet = d.waterAt(q.x, q.z) > q.y - 0.2, tree = trees.some(([x, z, r]) => Math.hypot(x - q.x, z - q.z) < r + 0.3), close = R.list.some((o) => o !== q && Math.hypot(o.x - q.x, o.z - q.z) < 15);
+        // (one that is under a roof — of cloth, at the top of the tower; of rock, in the grotto — is not under the
+        // trees and the water of the map: those are over the roof)
+        const wet = !q.under && d.waterAt(q.x, q.z) > q.y - 0.2, tree = !q.under && trees.some(([x, z, r]) => Math.hypot(x - q.x, z - q.z) < r + 0.3), close = R.list.some((o) => o !== q && Math.hypot(o.x - q.x, o.z - q.z) < 15);
+        // (each stands on what one walks on there: the ground, the deck of the tower, the floor of the cave)
+        if (Math.abs(standAt(q.x, q.z, q.y) - q.y) > 0.2) out.off.push([q.id, +(standAt(q.x, q.z, q.y) - q.y).toFixed(2)]);
         let road = false;
         for (const p of d.meta.paths) if (p.kind === 'asphalt' || p.id === 'race') for (const s of p.samples) if (Math.hypot(s[0] - q.x, s[1] - q.z) < p.width / 2) road = true;
         if (!q.settled || wet || tree || road || close) out.bad.push([q.id, q.settled, wet, tree, road, close]);
@@ -897,8 +909,8 @@ try {
         out.hidden = [];
         for (const q of R.list) {
           const first = (from, to) => { const dir = to.clone().sub(from), far = dir.length(); rc.set(from, dir.normalize()); rc.near = 0; rc.far = far; const h = rc.intersectObjects(groups, true).find((k) => k.object.visible && k.object.isMesh && !(ofFair(k.object) && Math.hypot(k.point.x - q.x, k.point.z - q.z) < q.r + 1.6 && k.point.y < q.y + 7)); return h ? [h.distance, far] : null; };
-          const ex = q.x + Math.sin(q.yaw) * (q.r + 1), ez = q.z + Math.cos(q.yaw) * (q.r + 1);
-          const over = first(new T.Vector3(q.x, q.y + 0.6, q.z), new T.Vector3(q.x, q.y + 40, q.z)), sight = first(new T.Vector3(ex, d.heightAt(ex, ez) + 1.5, ez), new T.Vector3(q.x, q.y + 0.9, q.z));
+          const [ex, ez] = spot(q);
+          const over = q.under ? null : first(new T.Vector3(q.x, q.y + 0.6, q.z), new T.Vector3(q.x, q.y + 40, q.z)), sight = first(new T.Vector3(ex, standAt(ex, ez, q.y) + 1.5, ez), new T.Vector3(q.x, q.y + 0.9, q.z));
           if (over || (sight && sight[0] < sight[1] - q.r - 0.3)) out.hidden.push(q.id);
         }
       }
@@ -906,7 +918,9 @@ try {
       out.quads = mesh ? mesh.geometry.index.count / 6 : 0;
       localStorage.removeItem('mmf.relics');
       const note = document.querySelector('.note'), look = async (q) => {
-        m.player.teleport(q.x + Math.sin(q.yaw) * (q.r + 1), q.z + Math.cos(q.yaw) * (q.r + 1), q.yaw + Math.PI);
+        const [sx, sz, side] = spot(q);
+        m.player.teleport(sx, sz, side > 0 ? q.yaw + Math.PI : q.yaw);
+        if (Math.abs(m.player.pos.y - q.y) > 1) m.player.pos.y = standAt(sx, sz, q.y); // (under the rock: on the floor of the cave, not on the hill over it)
         m.player.vel.set(0, 0, 0);
         await frames(4);
         const asked = [...document.querySelectorAll('.prompt.on span')].map((e) => e.textContent)[0] || '';
@@ -922,10 +936,10 @@ try {
       out.kept = (localStorage.getItem('mmf.relics') || '').split(',').sort().join(',');
       return out;
     });
-    check('twenty relics of the world before stand all over the valley — on dry ground, off the road, out of the trees, far from one another, none behind a wall; walked up to, each is offered to be looked at and says its line, counting; the last says they were all found — a mushroom cloud goes up, and the emote that was locked is theirs —, the browser remembers which, one looked at again says its line and no more; the periscope of the hidden shelter looks at who comes',
-      relics.ids === 'barrel,billboard,bunker,busstop,car,clock,dish,forecast,geiger,hatch,mailbox,meter,news,phone,scarecrow,sign,sunflower,tally,trolley,vendor' && relics.bad.length === 0 && relics.hidden.length === 0 && relics.quads === 16
-      && relics.looks.length === 20 && relics.looks.every((l, i) => l.asked && l.said && (i < 19 ? l.tail === ` — Relic ${i + 1} of 20.` : /the last of the 20 relics/.test(l.tail) && /mushroom cloud is yours/.test(l.tail)))
-      && /find the 20 relics \(0 found\)/.test(relics.locked) && relics.refused === 0 && relics.clouds === 1 && relics.unlocked === '☢ Mushroom cloud' && relics.scope < 0.05
+    check('twenty-five relics of the world before stand all over the valley — on dry ground, off the road, out of the trees, far from one another, none behind a wall, each on what one walks on there (the top of the tower and the grotto among them); walked up to, each is offered to be looked at and says its line, counting; the last says they were all found — a mushroom cloud goes up, and the emote that was locked is theirs —, the browser remembers which, one looked at again says its line and no more; the periscope of the hidden shelter looks at who comes',
+      relics.ids === 'barrel,billboard,bottle,bunker,busstop,car,clock,dish,forecast,geiger,gnome,hatch,mailbox,meter,news,phone,postcards,scarecrow,sign,sunflower,tally,telescope,tins,trolley,vendor' && relics.bad.length === 0 && relics.hidden.length === 0 && relics.off.length === 0 && relics.quads === 16
+      && relics.looks.length === 25 && relics.looks.every((l, i) => l.asked && l.said && (i < 24 ? l.tail === ` — Relic ${i + 1} of 25.` : /the last of the 25 relics/.test(l.tail) && /mushroom cloud is yours/.test(l.tail)))
+      && /find the 25 relics \(0 found\)/.test(relics.locked) && relics.refused === 0 && relics.clouds === 1 && relics.unlocked === '☢ Mushroom cloud' && relics.scope < 0.05
       && relics.again.asked && relics.again.said && relics.again.tail === '' && relics.kept === relics.ids, JSON.stringify(relics));
   }
   // --- the fair: the four booths of the pier, played by a bot through the pointer; the race, driven by a bot

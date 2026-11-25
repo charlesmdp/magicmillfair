@@ -8,7 +8,12 @@
 //   name=play:seconds        the game is started and plays by itself (session.auto); the picture is taken so
 //                            many seconds later, through the game's own camera, with the line of the run
 //   name=gate                the player standing at the gate, seen from behind
-// The first id is the game that is played. Pictures go to lab/games/shots/ (not kept in the repository).
+//   name=at:x,z,yaw          the player put at (x, z) — on what one walks on there: the ground, a deck, the floor
+//                            of a cave —, looking the way `yaw` says (degrees, as above), seen from behind
+//   name=js:<code>           `code` is run in the page (window.__mmf is the game) before the picture is taken, and
+//                            a second later: a window opened, a card shown ("js:__mmf.pitch('pass', true)")
+// The first id is the game that is played ("-": none, the game as it is delivered). Pictures go to
+// lab/games/shots/ (not kept in the repository).
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,8 +22,8 @@ import { stubOutside } from './lib/outside.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2), opt = Object.fromEntries(args.filter((a) => a.startsWith('--')).map((a) => a.slice(2).split(/=(.*)/s).slice(0, 2)));
-const plain = args.filter((a) => !a.startsWith('--')), ids = (plain[0] || '').split(',').filter(Boolean), shots = plain.slice(1).map((a) => { const [name, v = 'gate'] = a.split(/=(.*)/s); return { name, v }; });
-if (!ids.length || !shots.length) { console.log('usage: node tools/game-shots.mjs <id>[,<id>…] name=x,y,z,yaw,pitch | name=play:seconds | name=gate …'); process.exit(1); }
+const plain = args.filter((a) => !a.startsWith('--')), none = plain[0] === '-', ids = none ? [] : (plain[0] || '').split(',').filter(Boolean), shots = plain.slice(1).map((a) => { const [name, v = 'gate'] = a.split(/=(.*)/s); return { name, v }; });
+if ((!ids.length && !none) || !shots.length) { console.log('usage: node tools/game-shots.mjs <id>[,<id>…] name=x,y,z,yaw,pitch | name=play:seconds | name=gate | name=at:x,z,yaw | name=js:code …   ("-" for no game)'); process.exit(1); }
 const OUT = path.resolve(opt.out || path.join(ROOT, 'lab/games/shots'));
 fs.mkdirSync(OUT, { recursive: true });
 const [W, H] = (opt.size || '1280x720').split('x').map(Number);
@@ -41,7 +46,7 @@ try {
   await page.click('.go', { timeout: 180000 });
   await page.waitForFunction(() => window.__mmf && window.__mmf.input.enabled, null, { timeout: 60000 });
   const frames = (n) => page.evaluate((n) => new Promise((res) => { const app = window.__mmf, t = app.frames + n; const tick = () => (app.frames >= t ? res() : requestAnimationFrame(tick)); tick(); }), n);
-  await page.evaluate((ids) => import('/src/extras/index.js').then(({ loadExtras }) => loadExtras(window.__mmf, Object.fromEntries(ids.map((id) => [id, true])))).then(() => window.__mmf.extrasBuilt()), ids);
+  if (ids.length) await page.evaluate((ids) => import('/src/extras/index.js').then(({ loadExtras }) => loadExtras(window.__mmf, Object.fromEntries(ids.map((id) => [id, true])))).then(() => window.__mmf.extrasBuilt()), ids);
   await frames(6);
   const id = ids[0];
   for (const s of shots) {
@@ -50,15 +55,24 @@ try {
       await page.evaluate((id) => { const a = window.__mmf, g = a.labGames[id]; a.setMode?.('walk', true); if (!g.run()) { a.player.teleport(g.game.gate.x, g.game.gate.z, g.game.gate.yaw); g.start(); } const r = g.run(); if (r) r.auto = true; }, id);
       await page.waitForTimeout(secs * 1000);
       await frames(2);
+    } else if (s.v.startsWith('at:')) {
+      const [x, z, yaw = 0] = s.v.slice(3).split(',').map(Number);
+      await page.evaluate(([id, x, z, yaw]) => { const a = window.__mmf, r = (-yaw * Math.PI) / 180 + Math.PI; a.labGames?.[id]?.leave(false); a.setMode?.('walk', true); a.player.teleport(x, z, r); a.rig.snap(a.player.pos, r + Math.PI); }, [id, x, z, yaw]);
+      await frames(10);
+    } else if (s.v.startsWith('js:')) {
+      const said = await page.evaluate((code) => { const v = (0, eval)(code); return v === undefined ? null : JSON.stringify(v); }, s.v.slice(3));
+      await page.waitForTimeout(1000);
+      await frames(4);
+      if (said) console.log(`${s.name} says: ${said}`); // (what the code answered: a figure to read, a state to check)
     } else if (s.v === 'gate') {
       await page.evaluate((id) => { const a = window.__mmf, g = a.labGames[id]; g.leave(false); a.setMode?.('walk', true); const t = g.game.gate; a.player.teleport(t.x - Math.sin(t.yaw) * 3, t.z - Math.cos(t.yaw) * 3, t.yaw); a.rig.snap(a.player.pos, t.yaw + Math.PI); }, id);
       await frames(8);
     } else {
-      await page.evaluate(([id, c]) => { const a = window.__mmf; a.labGames[id]?.leave(false); a.setCam(...c); }, [id, s.v.split(',').map(Number)]);
+      await page.evaluate(([id, c]) => { const a = window.__mmf; a.labGames?.[id]?.leave(false); a.setCam(...c); }, [id, s.v.split(',').map(Number)]);
       await frames(8);
     }
     await page.screenshot({ path: path.join(OUT, `${s.name}.png`) });
-    const info = await page.evaluate((id) => { const a = window.__mmf, r = a.labGames[id]?.run(), p = a.engine.perf; return { line: r ? r.line : '', calls: p.calls, tris: p.triangles }; }, id);
+    const info = await page.evaluate((id) => { const a = window.__mmf, r = a.labGames?.[id]?.run(), p = a.engine.perf, q = a.player.pos; return { line: r ? r.line : '', calls: p.calls, tris: p.triangles, at: [+q.x.toFixed(1), +q.y.toFixed(1), +q.z.toFixed(1)] }; }, id);
     console.log(`${s.name}: ${JSON.stringify(info)}`);
   }
   if (logs.length) console.log([...new Set(logs)].slice(0, 20).join('\n'));
