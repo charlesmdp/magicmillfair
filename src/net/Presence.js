@@ -340,6 +340,17 @@ export class Presence {
   }
 
   /**
+   * A thing of ours in a game that is not our avatar — a boat of the regatta: `kind` (0..15: which game), `run`
+   * (a whole number: the start we left with) and up to eight numbers, handed on to those near enough as the
+   * event 'thing' ({ id, peer, kind, run, d }). A few times a second is plenty: the relay hands on eight a second
+   * at the most. False when it could not be sent.
+   */
+  sendThing(kind, run, numbers) {
+    if (!this._tr || !Number.isInteger(kind) || kind < 0 || kind > 15 || !Number.isInteger(run) || run < 0 || !Array.isArray(numbers) || !numbers.length || numbers.length > 8 || !numbers.every(Number.isFinite)) return false;
+    return this._tr.send({ t: 'v', k: kind, n: run, d: numbers.map((v) => Math.round(v * 100) / 100) }) !== false;
+  }
+
+  /**
    * One chat line for the room. Returns the text as sent ('' when empty, or when lines come too fast: the
    * relay would not pass them on either). Nothing is stored anywhere: who is not there does not get it.
    */
@@ -541,6 +552,7 @@ export class Presence {
     } else if (m.t === 'leave') {
       if (this._leave(m.id)) this._changed();
     } else if (m.t === 'e' && this.peers.has(m.id) && int(m.e, 31, -1) >= 0) this._emit('emote', { id: m.id, emote: m.e });
+    else if (m.t === 'v') { if (this.peers.has(m.id) && Number.isInteger(m.k) && Number.isInteger(m.n) && Array.isArray(m.d) && m.d.length <= 8 && m.d.every(Number.isFinite)) this._emit('thing', { id: m.id, peer: this.peers.get(m.id), kind: m.k, run: m.n, d: m.d }); }
     else if (m.t === 'n' && mode === 'online') {
       // the big red button went off (for everybody), or it is too soon (for who pressed it)
       const wait = Number.isFinite(m.wait) ? Math.max(0, m.wait) : 0;
