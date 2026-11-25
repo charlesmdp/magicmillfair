@@ -133,7 +133,10 @@ async function boot() {
   // (the size of the robot: the choice of who holds the Game Pass; 0 is everybody's)
   let size = Math.max(0, SIZES.indexOf(sizeOf(store.get('mmf.size'))));
   let disguise = 0; // a bush (1), a tree (2): a secret word of the chat
-  const returning = !!(store.get('mmf.name') || '').trim(); // (a name was chosen on an earlier visit)
+  // (a name was chosen on an earlier visit: no card again — ?welcome shows it all the same. The tools load the page
+  // again and again and expect the card each time: on their pages it is only skipped when the address says so, ?back)
+  const returning = !!(store.get('mmf.name') || '').trim() && !params.has('welcome')
+    && (!(import.meta.env.DEV || typeof __LAB__ !== 'undefined' || typeof __TEST__ !== 'undefined') || params.has('back'));
   let name = (store.get('mmf.name') || '').trim() || `Visitor ${10 + Math.floor(Math.random() * 90)}`;
   const me = factory.create(color);
   scene.add(me.root);
@@ -2056,7 +2059,7 @@ async function boot() {
     rig.snap(player.pos, resume.yaw || 0);
     hud.splash.classList.add('done');
     hud.hud.classList.add('on');
-  } else if (returning && !params.has('welcome')) {
+  } else if (returning) {
     // somebody who has been here: their name, their colour, their size are chosen — straight into the world, as
     // they were (the settings change any of it; ?welcome at the end of the address shows the card again)
     hud.splash.classList.add('done');
@@ -2082,7 +2085,7 @@ async function boot() {
   hud.setCameraMode(false);
   startPresence();
   canvas.focus();
-  setTimeout(() => hud.note(touch ? 'Drag on the left to walk, on the right to look around' : 'Drag the mouse to look around · double-click to capture it', 5200), returning && !params.has('welcome') ? 6200 : 2600);
+  setTimeout(() => hud.note(touch ? 'Drag on the left to walk, on the right to look around' : 'Drag the mouse to look around · double-click to capture it', 5200), returning ? 6200 : 2600);
 }
 
 boot().catch((err) => {

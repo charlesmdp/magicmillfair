@@ -118,6 +118,20 @@ try {
   const closed = await page.evaluate(() => !document.querySelector('.bigmap').classList.contains('on'));
   console.log(`large map: opened ${open}, closed ${closed}`);
   if (!open || !closed) { failed = true; console.log('FAIL: the large map did not open and close'); }
+  // who has been here — a name, a colour chosen — is not shown the card again: straight into the world, as they
+  // were (the tools' pages ask for it with ?back; ?welcome shows the card all the same)
+  {
+    const again = await context.newPage();
+    await again.goto(`${page.url().split('?')[0]}?q=low&back=1`);
+    await again.waitForFunction(() => window.__mmf?.ready && document.querySelector('.splash')?.classList.contains('done'), null, { timeout: 240000 });
+    const back = await again.evaluate(() => ({ card: document.querySelector('.card')?.classList.contains('ready'), hud: document.querySelector('.hud').classList.contains('on'), name: window.__mmf.hud.nameInput?.value ?? null, walking: window.__mmf.state?.mode ?? null }));
+    await again.goto(`${page.url().split('?')[0]}?q=low&back=1&welcome=1`);
+    await again.waitForSelector('.card.ready', { timeout: 240000 });
+    const asked = await again.evaluate(() => !document.querySelector('.splash').classList.contains('done'));
+    await again.close();
+    console.log(`back again: ${JSON.stringify({ back, asked })}`);
+    if (back.card || !back.hud || !asked) { failed = true; console.log('FAIL: a visitor who comes back is shown the card again (or ?welcome no longer shows it)'); }
+  }
   // the two cards that make an offer in full (an account, the Game Pass): shown when asked for, they say what
   // they offer, keep the page from doing anything else meanwhile, and Escape closes them. The emotes behind the
   // smile come with the pictures of the animals; the map stars the big attractions; the settings have the

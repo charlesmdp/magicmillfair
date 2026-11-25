@@ -5,7 +5,7 @@
 // WHO: the lines below say who makes and runs the game (a company, its registration number, its address) and
 // the mailbox people can write to. Left empty, the pages say how to reach the maker without them.
 export const LEGAL = {
-  updated: '24 November 2026',
+  updated: '25 November 2026',
   maker: 'MY BIG LEO',
   operator: 'It is made and run by MY BIG LEO, a company registered in France (SIREN 880 338 827), 14 rue Charles V, Paris, France.',
   contact: 'atomicoasisgame@gmail.com',
