@@ -2304,7 +2304,6 @@ async function boot() {
     hud.setName(name);
     store.set('mmf.name', name); store.set('mmf.color', String(color));
   }
-  updates.welcomeBack(); // (back from a new version: what is new, once)
   // an address may lead straight to a sky village: ?village=its-name (or its number)
   const invited = params.get('village') ? sky.find(params.get('village')) : null;
   if (invited) travel(invited, `Welcome to ${invited.name}`);

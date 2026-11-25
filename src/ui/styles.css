@@ -857,18 +857,6 @@ button.pill.players { pointer-events: auto; }
 #ui .update-text { min-width: 0; }
 #ui .update-now { flex: none; padding: 7px 12px; border: 0; border-radius: 9px; background: linear-gradient(180deg, #ffe14d, #ffb62e); color: #2a1a00; font: 800 12.5px/1 system-ui, sans-serif; white-space: nowrap; }
 #ui .update-now:hover { filter: brightness(1.08); }
-#ui .update-news { position: absolute; right: calc(14px + var(--safe-r)); bottom: calc(14px + var(--safe-b)); z-index: 29; width: min(360px, calc(100% - 28px)); padding: 14px 16px 14px; border-radius: 16px; background: linear-gradient(180deg, #1b1840, #141230); border: 1px solid rgba(242, 193, 78, 0.5); box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5); color: #f6f1e4; pointer-events: auto; transform: translateY(140%); opacity: 0; transition: transform 0.4s ease, opacity 0.4s ease; }
-#ui .update-news.on { transform: none; opacity: 1; }
-#ui .update-head { display: flex; flex-direction: column; gap: 1px; margin-bottom: 8px; }
-#ui .update-head small { font: 700 10.5px/1.2 system-ui, sans-serif; letter-spacing: 0.1em; text-transform: uppercase; color: #a8f08f; }
-#ui .update-head b { font: 600 22px/1.1 Georgia, 'Times New Roman', serif; color: #ffe9a6; }
-#ui .update-head i { font-style: normal; font-size: 12px; color: #b9b1d6; }
-#ui .update-news ul { margin: 0 0 10px; padding: 0; list-style: none; display: grid; gap: 7px; max-height: 42vh; overflow-y: auto; }
-#ui .update-news li { display: flex; flex-direction: column; padding-left: 16px; position: relative; }
-#ui .update-news li::before { content: '✦'; position: absolute; left: 0; top: 0; color: #f2c14e; font-size: 11px; }
-#ui .update-news li b { font: 700 13.5px/1.25 system-ui, sans-serif; }
-#ui .update-news li span { font-size: 12.5px; line-height: 1.35; color: #cfc7e6; }
-#ui .update-close { width: 100%; padding: 8px 10px; border: 0; border-radius: 10px; background: #f2c14e; color: #2a1d05; font: 800 13px/1 system-ui, sans-serif; }
 
 /* ---- the window of the Trading Post: the games on cards, each with its photograph and its sponsor (ui/SponsorsView.js) */
 #ui .trading { position: absolute; inset: 0; z-index: 18; display: none; pointer-events: auto; overflow: hidden; color: #fff; background: radial-gradient(120% 90% at 20% 0%, #5a2a8f 0%, #2a1764 42%, #120c36 100%); }

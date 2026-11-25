@@ -5,9 +5,10 @@
 //   - the version online is no longer this page's, a switch went off, or the owner asked everybody to refresh:
 //     a bar says so, counts down, and the page loads itself again — at a safe moment only: never in the middle
 //     of a game, a race, a timed climb, a payment or a sentence (`safe`); the visitor comes back at the same
-//     spot, in the same room (`leave` keeps what it takes);
-//   - back from a new version: what is new, once, from app/news.js.
-import { NEWS } from './news.js';
+//     spot, in the same room (`leave` keeps what it takes).
+// What a new version brought is not put in the visitor's way: the boards by the poppy field say it
+// (app/news.js; zones/games/Notices.js) — a card used to, in a corner of the screen, each time something was
+// delivered; the owner asked for the boards alone.
 
 const POLL_MS = 4 * 60_000; // the status is read again this often (and when the page is looked at again)
 const COUNT = 45; // seconds between "a new version is ready" and the refresh
@@ -15,12 +16,11 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 const mem = {
   get(k, session) { try { return (session ? sessionStorage : localStorage).getItem(k); } catch { return null; } },
   set(k, v, session) { try { (session ? sessionStorage : localStorage).setItem(k, v); } catch { /* private mode */ } },
-  del(k, session) { try { (session ? sessionStorage : localStorage).removeItem(k); } catch { /* private mode */ } },
 };
 
 export class Updates {
   /**
-   * @param root where the bar and the card are laid (the interface of the game)
+   * @param root where the bar is laid (the interface of the game)
    * @param o build: this page's version ('' when it has none: nothing is compared); status(): asks the server
    *   again, resolves to what it says ({ release, build, refresh, time }) or null; now(): the server's clock (ms);
    *   safe(): may the page load itself again right now?; leave(): keeps where the visitor is, then reloads;
@@ -39,8 +39,6 @@ export class Updates {
     this.bar.innerHTML = '<span class="update-dot" aria-hidden="true"></span><span class="update-text"></span><button type="button" class="update-now">Refresh now</button>';
     this.bar.querySelector('.update-now').onclick = () => this._go();
     root.append(this.bar);
-    this.card = el('div', 'update-news');
-    root.append(this.card);
   }
 
   /** Starts listening: `first` is what the server said when the page opened (null: no server, nothing to follow). */
@@ -99,38 +97,8 @@ export class Updates {
 
   _go() {
     clearTimeout(this.timer);
-    if (this.pending === 'version') { mem.set('mmf.reloaded', this.live, true); mem.set('mmf.updated', '1', true); }
+    if (this.pending === 'version') mem.set('mmf.reloaded', this.live, true);
     this.pending = null;
     this.leave();
-  }
-
-  /**
-   * Back from a new version (and only then): what is new, once — the latest day of app/news.js, unless it was
-   * already shown. Call when the visitor is in the world again.
-   */
-  welcomeBack() {
-    if (mem.get('mmf.updated', true) !== '1') return false;
-    mem.del('mmf.updated', true);
-    const day = NEWS[0];
-    if (!day || mem.get('mmf.news') === day.date) return false;
-    mem.set('mmf.news', day.date);
-    this.showNews(day);
-    return true;
-  }
-
-  showNews(day = NEWS[0]) {
-    const card = this.card;
-    card.textContent = '';
-    const head = el('div', 'update-head');
-    head.append(el('small', '', 'The fair was updated'), el('b', '', 'What’s new'), el('i', '', day.date));
-    const list = el('ul');
-    for (const [title, line] of day.items.slice(0, 6)) { const li = el('li'); li.append(el('b', '', title), el('span', '', line)); list.append(li); }
-    const close = el('button', 'update-close', 'Got it');
-    close.type = 'button';
-    const shut = () => { card.classList.remove('on'); clearTimeout(this.newsTimer); };
-    close.onclick = shut;
-    card.append(head, list, close);
-    card.classList.add('on');
-    this.newsTimer = setTimeout(shut, 40_000);
   }
 }

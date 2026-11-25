@@ -65,10 +65,10 @@ try {
   const ready = () => page.waitForFunction(() => window.__mmf && window.__mmf.ready && window.__mmf.player && window.__mmf.input.enabled && window.__mmf.presence, null, { timeout: 240000 });
   const frames = (n) => page.evaluate((n) => { const app = window.__mmf; const target = app.frames + n; return new Promise((res) => { const tick = () => (app.frames >= target ? res() : requestAnimationFrame(tick)); tick(); }); }, n);
   const state = () => page.evaluate(() => {
-    const m = window.__mmf, bar = document.querySelector('.update-bar'), news = document.querySelector('.update-news');
+    const m = window.__mmf, bar = document.querySelector('.update-bar'), news = document.querySelector('.update-news'); // (the card of what is new: there is none any more — the boards say it)
     return {
       build: m.version, x: +m.player.pos.x.toFixed(1), z: +m.player.pos.z.toFixed(1), room: m.presence.room, mode: m.presence.mode, online: m.presence.mode === 'online',
-      bar: bar.classList.contains('on') ? bar.querySelector('.update-text').textContent : '', news: news.classList.contains('on') ? news.textContent : '',
+      bar: bar.classList.contains('on') ? bar.querySelector('.update-text').textContent : '', news: news ? news.textContent || 'a card' : '',
       extras: Object.keys(m.extras || {}).sort().join(), figures: !!document.querySelector('.open-figures'), release: m.updates.release, live: m.updates.live,
       splash: !document.querySelector('.splash')?.classList.contains('done'),
     };
@@ -311,21 +311,21 @@ try {
   await page.click('.update-now');
   await page.waitForFunction(() => window.__mmf && window.__mmf.version && !window.__mmf.version.includes('aaaaaaa'), null, { timeout: 240000 });
   await ready();
-  await page.waitForFunction(() => document.querySelector('.update-news.on'), null, { timeout: 30000 }).catch(() => {});
-  await frames(10);
+  await frames(40);
   const two = await state();
-  check('a delivery cuts every connection: reaching the relay again, the page learns that a new version is online and says so; refreshed, it is version two — same spot, same room — and says what is new',
-    told.build.includes(ONE) && told.live === TWO && /A new version of the fair is ready/.test(told.bar) && two.build.includes(TWO) && !two.build.includes(ONE) && Math.hypot(two.x - first.x, two.z - first.z) < 1.5 && two.room === 'fair' && !two.splash && !two.bar && /What’s new/.test(two.news),
-    JSON.stringify({ cut, told: { build: told.build, live: told.live, bar: told.bar }, two: { build: two.build, x: two.x, z: two.z, room: two.room, bar: two.bar, news: two.news.slice(0, 60) } }));
-  await page.screenshot({ path: path.join(ROOT, 'tools/preview/update-news.png') });
-  // (what is new is said once)
+  // (what is new is on the boards by the poppy field: nothing is put in a corner of the screen for it)
+  const boards = await page.evaluate(() => { const g = window.__mmf.world.games.group; return [0, 1, 2].filter((k) => g.getObjectByName(`notice-news${k}`)).length; });
+  check('a delivery cuts every connection: reaching the relay again, the page learns that a new version is online and says so; refreshed, it is version two — same spot, same room — and no card of what is new is put in the way: the boards by the poppy field say it',
+    told.build.includes(ONE) && told.live === TWO && /A new version of the fair is ready/.test(told.bar) && two.build.includes(TWO) && !two.build.includes(ONE) && Math.hypot(two.x - first.x, two.z - first.z) < 1.5 && two.room === 'fair' && !two.splash && !two.bar && !two.news && boards === 3,
+    JSON.stringify({ cut, told: { build: told.build, live: told.live, bar: told.bar }, two: { build: two.build, x: two.x, z: two.z, room: two.room, bar: two.bar, news: two.news.slice(0, 60), boards } }));
+  // (and an ordinary visit afterwards is an ordinary visit)
   await page.reload();
   await page.waitForSelector('.card.ready', { timeout: 240000 });
   await page.click('.go');
   await ready();
   await frames(10);
   const again = await state();
-  check('what is new is said once: an ordinary visit afterwards has neither the card nor the bar', !again.news && !again.bar && again.build.includes(TWO), JSON.stringify({ news: again.news, bar: again.bar }));
+  check('an ordinary visit afterwards has neither a card nor the bar', !again.news && !again.bar && again.build.includes(TWO), JSON.stringify({ news: again.news, bar: again.bar }));
   check('no error in the page', logs.length === 0, logs.slice(0, 4).join(' | '));
 } catch (err) {
   check('test run', false, String(err && err.stack ? err.stack : err).slice(0, 600));
