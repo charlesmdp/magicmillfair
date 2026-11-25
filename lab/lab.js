@@ -6,19 +6,21 @@ import { EXTRAS, loadExtras } from '../src/extras/index.js';
 
 // What only the lab has: tried here, not offered to the game.
 const TRIALS = {
-  // five games being tried (lab/games): nothing of them is in the game
+  // seven games being tried (lab/games): nothing of them is in the game
   waves: { name: 'Wave Goodbye — the sea comes in over a bar of sand: jump what comes', load: () => import('./games/waves/extra.js') },
   lava: { name: 'Thin Crust — basalt columns that sink into the lava of a crater', load: () => import('./games/lava/extra.js') },
   hive: { name: "The Bee's Knees — three combs over the sea: the cell one stands on gives way", load: () => import('./games/hive/extra.js') },
   flip: { name: 'Head Over Heels — one runs by oneself, and turns gravity over', load: () => import('./games/flip/extra.js') },
   spiral: { name: 'A Turn for the Worse — a track wound round a tower: one touch and it is the foot again', load: () => import('./games/spiral/extra.js') },
+  cars: { name: 'Round the Bend — radio-controlled cars raced on a table, seen from above', load: () => import('./games/cars/extra.js') },
+  golf: { name: 'Par for the Course — nine holes of crazy golf round the acid pond', load: () => import('./games/golf/extra.js') },
   oak: { name: 'Out on a Limb — one floor to try', load: () => import('./oak/floor/extra.js') },
   oak0: { name: 'Out on a Limb — the Great Oak (the first trial, set aside)', load: () => import('./oak/extra.js') },
 };
 const ORDER = [...Object.keys(TRIALS).filter((id) => !/^oak/.test(id)), ...Object.keys(EXTRAS), 'oak', 'oak0']; // (the panel: what is being tried first)
 Object.assign(EXTRAS, TRIALS);
 
-const KEY = 'mmf.lab.3', NAMES = { waves: '★ Wave Goodbye (les vagues)', lava: '★ Thin Crust (la lave)', hive: '★ The Bee’s Knees (nid d’abeille)', flip: '★ Head Over Heels (gravité)', spiral: '★ A Turn for the Worse (spirale)', slide: 'Toboggan', pond: 'The Endless Pond (trois étangs)', boats: 'Bateaux télécommandés', hill: 'Uphill Battle (la pente aux rondins)', crack: 'Between a Rock (la fissure entre deux aiguilles)', hollow: 'The Hollow Hill (course volante dans la grotte)', oak: 'Chêne : un étage à essayer', oak0: 'Chêne (premier essai, mis de côté)', caves: 'Grottes : chat de proximité', stats: 'Compteurs et page des chiffres' };
+const KEY = 'mmf.lab.3', NAMES = { waves: '★ Wave Goodbye (les vagues)', lava: '★ Thin Crust (la lave)', hive: '★ The Bee’s Knees (nid d’abeille)', flip: '★ Head Over Heels (gravité)', spiral: '★ A Turn for the Worse (spirale)', cars: '★ Round the Bend (voitures télécommandées)', golf: '★ Par for the Course (mini-golf)', slide: 'Toboggan', pond: 'The Endless Pond (trois étangs)', boats: 'Bateaux télécommandés', hill: 'Uphill Battle (la pente aux rondins)', crack: 'Between a Rock (la fissure entre deux aiguilles)', hollow: 'The Hollow Hill (course volante dans la grotte)', oak: 'Chêne : un étage à essayer', oak0: 'Chêne (premier essai, mis de côté)', caves: 'Grottes : chat de proximité', stats: 'Compteurs et page des chiffres' };
 const read = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { return {}; } };
 const query = new URLSearchParams(location.search), saved = read(), on = {};
 for (const id of Object.keys(EXTRAS)) on[id] = query.has(id) ? !/^(0|off|no|false)$/i.test(query.get(id)) : id === 'oak0' ? saved[id] === true : saved[id] !== false; // (the first trial of the oak only when asked for)

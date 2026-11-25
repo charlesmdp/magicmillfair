@@ -18,7 +18,8 @@
 //
 // The sea is the same for everybody — it goes by the clock of the world — and it has a mood that everybody
 // shares, on a cycle of two and a half minutes: it lies flat for a moment (the lull), builds, goes wild, ends on
-// three great ones, and begins again. One starts whenever one likes; what counts is how long one held.
+// three great ones while the wild sea goes on, and begins again. One starts whenever one likes — who wants a long
+// run waits for the lull, who jumps into the wild sea is thrown about at once; what counts is how long one held.
 //
 // Places: `s` metres out from the beach (the bank lies from `back` to `front`), `u` metres across (to the right
 // of who looks out to sea when positive). Time advances in steps of 1/120 s whatever the frame rate.
@@ -31,16 +32,17 @@ export const WAVES = {
   step: 1 / 120,
   run: 6.5, accel: 60, air: 28, // m/s; how fast one gets there on the sand and in the air (m/s²)
   g: 22, jump: 7.4, again: 7.0, // m/s², m/s up: a jump (a metre and a quarter), and the second one in the air
-  far: 50, end: 2, reach: 2.5, // m out: where the waves rise out of the sea, where they die; m beyond the bank that a crest goes on, each side
+  far: 50, end: 4, reach: 2.5, // m out: where the waves rise out of the sea, where they die; m beyond the bank that a crest goes on, each side
   swell: 0.3, // far out a wave is this much lower than at the front edge of the bank
   loss: 1 / 3, // of its height: what a wave loses crossing the bank
   knee: 0.35, // m: lower than this where one is, a wave only wets
   clear: 0.8, // feet this high, as a share of the height of the crest, are over it
   thick: [0.3, 0.12], // m: how far each side of its crest a wave reaches: so much, and so much per metre of height
-  carry: 1.8, slow: 0.4, // m one is carried per metre of wave; s: how fast that push dies away
+  carry: 1.8, // m one is carried per metre of wave
+  fling: 12, slow: [0.25, 0.6], // m/s: how fast the tallest fling one at first; s: how fast the push dies away, at the least and at the most
   lying: 0.75, // a wave that finds one down already carries one this share as far
   down: [0.85, 0.22], // s without control after a hit: so much, and so much per metre of wave
-  wash: [0.5, 0.55, 1.5], // the backwash: it begins so long after the hit, lasts so long, pulls seaward this fast (m/s, for a wave of 1.5 m and more)
+  wash: [0.55, 1.5], // the backwash, once the push is spent: it lasts so long, and pulls seaward this fast (m/s, for a wave of 1.5 m and more)
   off: 0.25, // m behind the back edge: carried so far, one is off the bank
   close: 0.2, // m: over a crest by less than this is a narrow escape
   grace: 2.5, // s: one gets ready — what comes by in that time does not count
@@ -48,8 +50,8 @@ export const WAVES = {
   // ---- the mood of the sea, by the second of its cycle: flat until `lull`, building until `wild`, wild until
   // `greats`, then the great ones
   cycle: 150, lull: 13, wild: 100, greats: 130,
-  pause: [2.0, 0.85], // s between one wave (or one set) and the next: when the sea begins to build, when it is wild
-  tall: [0.5, 2], // from so wild on (0 … 1), a wall or a breaker comes after so many small ones at the most
+  pause: [2.0, 0.78], // s between one wave (or one set) and the next: when the sea begins to build, when it is wild
+  tall: [0.5, 1], // from so wild on (0 … 1), a wall or a breaker comes after so many small ones (a set counts for one) at the most
   kinds: {
     roller: { h: [0.95, 1.15], v: 7.2 }, // h: m tall at the front edge of the bank; v: m/s
     sweeper: { h: [1.0, 1.25], tall: [1.6, 1.85], v: 6.6, k: [0.42, 0.62] }, // k: m further out per metre across (its angle); tall: the ones of a wild sea
@@ -58,9 +60,10 @@ export const WAVES = {
     great: { h: 4.6, v: 4.4, gap: 1.9, floor: 0.75, edge: 1.4, every: 5.5, last: 3, quiet: [2.2, 1.0], after: 1.5 }, // gap: half the width of its gap; the cycle ends on `last` of them, `every` s apart
   },
   set: [0.9, 0.74], // s between the rollers of a set: building, wild
-  // the runner that plays by itself: how far ahead it looks (s), how often it thinks again (s), how far off its
-  // timing may be (s), where it stands between waves, what it takes for one jump and for two (m, feet)
-  bot: { sight: 2.2, far: 3.4, think: 0.1, react: 0.4, two: 0, late: 0.12, home: 12.5, hop: 1.0, twice: 2.05 },
+  // the runner that plays by itself: how far ahead it looks (s; `far`: for a great one), how often it thinks
+  // again (s), how long a wave that becomes the next one takes it to take in (s), how far off its timing may be
+  // (s), where it stands between waves, what it takes on with one jump and with two (m, feet)
+  bot: { sight: 2.2, far: 3.4, think: 0.1, react: 0.3, late: 0.1, home: 12.5, hop: 1.0, twice: 1.9 },
 };
 
 /** Its line for the boards of scores: how long one held (ms), the longer the better. */
@@ -100,7 +103,7 @@ const _seas = new Map(), _m = {};
  *     `low` times that (`inv`: the other way round), going from one to the other over `edge` metres;
  *     dir (a wall: which end is the low one), gap (a great one: where its gap is), born, dies }
  */
-function seaOf(c) {
+export function seaOf(c) {
   let sea = _seas.get(c);
   if (sea) return sea;
   const W = WAVES, K = W.kinds, rnd = row(c), t0 = c * W.cycle, pick = (r) => r[0] + (r[1] - r[0]) * rnd();
@@ -204,7 +207,7 @@ export function heightAt(w, s, u) {
 export function startRun(t0 = 0, u = 0) {
   return {
     s: WAVES.start, u, vs: 0, vu: 0, h: 0, vh: 0, twice: false, clock: 0, acc: 0, t0, want: 0,
-    down: 0, wash: 0, washV: 0, hits: 0, cleared: 0, last: '', over: false, time: 0, cause: '',
+    down: 0, slow: WAVES.slow[0], wash: 0, washV: 0, hits: 0, cleared: 0, last: '', over: false, time: 0, cause: '',
     near: [], nearAt: -1e9, seen: new Set(), margin: new Map(),
   };
 }
@@ -239,7 +242,7 @@ function sub(st, dt, input, events) {
   if (st.down > 0) {
     // ---- down: carried by the push of the wave, which dies away; then the backwash
     st.down -= dt;
-    const k = Math.exp(-dt / W.slow);
+    const k = Math.exp(-dt / st.slow);
     st.vs *= k; st.vu *= k;
     if (st.down <= 0) events?.push({ type: 'up' });
   } else {
@@ -253,9 +256,9 @@ function sub(st, dt, input, events) {
       else if (!st.twice) { st.vh = W.again; st.twice = true; st.want = 0; events?.push({ type: 'again' }); }
     }
   }
-  if (st.wash > 0) { st.wash -= dt; if (st.wash <= W.wash[1]) st.s += st.washV * dt; }
+  if (st.wash > 0) { st.wash -= dt; if (st.wash <= W.wash[0]) st.s += st.washV * dt; }
   st.s += st.vs * dt; st.u += st.vu * dt;
-  if (st.h > 0) { st.vh -= W.g * dt; st.h += st.vh * dt; if (st.h <= 0) { st.h = 0; st.vh = 0; events?.push({ type: 'land' }); } }
+  if (st.h > 0) { st.h += st.vh * dt - 0.5 * W.g * dt * dt; st.vh -= W.g * dt; if (st.h <= 0) { st.h = 0; st.vh = 0; events?.push({ type: 'land' }); } }
   // ---- the edges of the bank: one does not run off it — only a wave takes one off, and only off the back
   const side = W.half - W.edge;
   if (Math.abs(st.u) > side) { st.u = clamp(st.u, -side, side); st.vu = 0; }
@@ -288,11 +291,13 @@ function sub(st, dt, input, events) {
     const over = st.h - H * W.clear;
     if (over >= 0) { const m = st.margin.get(w.id); if (m === undefined || over < m) st.margin.set(w.id, over); continue; }
     // ---- caught: knocked down and carried the way the wave goes, the further the taller it stands here
-    const push = W.carry * H * (st.down > 0 ? W.lying : 1), n = Math.hypot(1, w.k);
-    st.vs = Math.min(st.vs, 0) - push / W.slow / n; st.vu += (push / W.slow) * (w.k / n);
+    const push = W.carry * H * (st.down > 0 ? W.lying : 1), n = Math.hypot(1, w.k), slow = clamp(push / W.fling, W.slow[0], W.slow[1]);
+    if (st.down <= 0) { st.vs = Math.min(st.vs, 0); st.vu = 0; st.slow = slow; } else st.slow = Math.max(st.slow, slow);
+    st.vs -= push / st.slow / n; st.vu += (push / st.slow) * (w.k / n);
     if (st.vh > 2) st.vh = 2;
-    st.down = Math.max(st.down, W.down[0] + W.down[1] * H);
-    st.wash = W.wash[0] + W.wash[1]; st.washV = W.wash[2] * Math.min(1, H / 1.5);
+    // (down until the push is spent and the backwash has had its moment)
+    st.wash = 2.5 * st.slow + W.wash[0]; st.washV = W.wash[1] * Math.min(1, H / 1.5);
+    st.down = Math.max(st.down, W.down[0] + W.down[1] * H, st.wash - 0.15);
     st.hits++; st.last = w.kind; st.seen.add(w.id); st.margin.delete(w.id);
     events?.push({ type: 'hit', kind: w.kind, H, push });
   }
@@ -324,10 +329,11 @@ export function ahead(st, within = 2.5, list = []) {
 
 /**
  * A runner that plays by itself — the proof that the sea can be held, and a fair picture of somebody good at
- * it rather than of a machine: it sees the waves a few seconds ahead, thinks again ten times a second, and its
- * timing is a little off. For the next wave it picks the nearest place that asks for the least — round it,
- * a hop, two jumps —, counting a little of the wave after that; it jumps so as to be at the top over the crest;
- * between waves it goes back to the front part of the bank, where there is room to be thrown back.
+ * it rather than of a machine: it deals with one wave at a time, sees it two seconds ahead, takes a moment to
+ * take in the next, and its timing is a little off. For the wave that comes it picks the nearest place that
+ * asks for the least — round it, a hop, two jumps —, and jumps so as to be at the top over the crest; between
+ * waves it goes back to the front part of the bank, where there is room to be thrown back. A sea that leaves
+ * it the time, it holds; a wild one is too quick for it.
  * Returns the input for stepRun.
  */
 export function botInput(st, out = { x: 0, y: 0, jump: false }) {
@@ -343,15 +349,13 @@ export function botInput(st, out = { x: 0, y: 0, jump: false }) {
   if (!first) bot.id = -1; else if (first.w.id !== bot.id) { bot.id = first.w.id; bot.hold = st.clock + B.react; }
   if (st.clock >= bot.next && st.clock >= bot.hold) {
     bot.next = st.clock + B.think;
-    const second = B.two > 0 && list[1] && list[1].t - list[0].t < 1.6 ? list[1] : null;
     bot.s = B.home; bot.u = clamp(st.u, -W.half + 2, W.half - 2);
     if (first) {
       let best = 1e9;
       for (const cs of [B.home, st.s, 10.5, 8.5]) for (let cu = -W.half + 0.5; cu <= W.half - 0.49; cu += 0.6) {
         const dist = Math.hypot(cs - st.s, cu - st.u), t = (crestAt(first.w, now, cu) - cs) / first.w.v;
         if (dist > 0.4 && dist / W.run > t - 0.12) continue; // (not there in time)
-        let cost = asks(first.w, cs, cu) + dist * 0.1 + (B.home - cs) * 0.22 + Math.abs(cu) * 0.02;
-        if (second) cost += B.two * asks(second.w, cs, cu);
+        const cost = asks(first.w, cs, cu) + dist * 0.1 + (B.home - cs) * 0.22 + Math.abs(cu) * 0.02;
         if (cost < best) { best = cost; bot.s = cs; bot.u = cu; }
       }
       if (best >= 1e9) { bot.s = st.s; bot.u = st.u; }

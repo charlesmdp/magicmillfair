@@ -19,7 +19,7 @@ export const GOLF = {
   name: 'Par for the Course',
   acid: { x: -236, z: -82, r: 4.2 }, // the pond (ACID of the layout: the checks compare them)
   gate: { x: -225.5, z: -75.6, yaw: -1.87 }, // where one asks to play, south-east of the pond, looking at it (a heading of the valley: 0 looks south)
-  stand: { x: -222.4, z: -72.6, yaw: 1.1 }, // the board of scores: behind the gate, clear of where the acid sends back those it dissolved
+  stand: { x: -225.2, z: -71.3, yaw: 1.27 }, // the board of scores: on the left of the gate (as one looks through it), facing those who come; not on the right, where the acid puts back those it dissolved
   step: 1 / 120,
   ball: 0.085, cup: 0.19, // their radius (m): a ball one sees from above the whole hole
   take: 2.4, // m/s: the fastest ball the cup takes, when it crosses its very middle
@@ -316,7 +316,7 @@ function mapOf(H) {
   let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
   for (const bed of H.beds) { x0 = Math.min(x0, bed.x0); x1 = Math.max(x1, bed.x1); z0 = Math.min(z0, bed.z0); z1 = Math.max(z1, bed.z1); }
   const i0 = Math.floor(x0 / CELL) - 1, j0 = Math.floor(z0 / CELL) - 1, nx = Math.ceil(x1 / CELL) + 2 - i0, nz = Math.ceil(z1 / CELL) + 2 - j0, N = nx * nz;
-  const ok = new Uint8Array(N), dist = new Float32Array(N).fill(Infinity), next = new Int32Array(N).fill(-1), leap = new Uint8Array(N);
+  const ok = new Uint8Array(N), dist = new Float64Array(N).fill(Infinity), next = new Int32Array(N).fill(-1), leap = new Uint8Array(N);
   for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
     const x = (i + i0) * CELL, z = (j + j0) * CELL;
     if (!bedAt(H, x, z, 99)) continue;

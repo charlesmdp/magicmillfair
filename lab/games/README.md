@@ -1,20 +1,32 @@
-# Five games being tried
+# Seven games being tried
 
-Five games made in the lab, for their owner to try and judge. **Nothing of them is in the game**: every file is in
-this folder, and only the lab page switches them on (`lab/lab.js`: "NOUVEAU · …", and a button that takes one to
-each). They borrow the *mechanics* of games one knows — never their look, their names or their levels.
+Seven games made in the lab, for their owner to try and judge. **Nothing of them is in the game**: every file is in
+this folder, and only the lab page switches them on (`lab/lab.js`: "★ …", and an arrow that takes one to each).
+They borrow the *mechanics* of games one knows — never their look, their names or their levels. Five were made
+first; their owner tried them, four were reworked after what was said (the waves, the lava, the gravity runner,
+the spiral), the combs got a floor more, and two were added (the cars, the golf).
 
 | Switch | What it is | Where it stands | Its checks |
 |---|---|---|---|
-| `waves` | **Wave Goodbye** — the sea comes in over a bar of sand: one is drawn out, and jumps what comes, for as long as one can | the north beach: a bar from (47, -60) to (103, -39) | `node lab/games/waves/test.mjs` (21) |
-| `lava` | **Thin Crust** — basalt columns that warn, then sink into the lava of a crater: the last ground standing | an islet east of the head of the pier, at (188, 8); the gate on the deck of the pier head at (142.4, 13.3) | `node lab/games/lava/test.mjs` (24) |
-| `hive` | **The Bee's Knees** — three combs of wax over the sea: the cell one sets foot on gives way | the north of the bay: combs at (84, -84), the gate on the beach at (43.5, -79.5) | `node lab/games/hive/test.mjs` (28) |
-| `flip` | **Head Over Heels** — one runs by oneself along a line of girders, and one key turns gravity over | along the south side of the pier, over the sea: (54, 44) to (211, 61); the gate on the south beach at (41.1, 42.8) | `node lab/games/flip/test.mjs` (26) |
-| `spiral` | **A Turn for the Worse** — a track wound round a tower: obstacles worse every turn, one touch and it is the foot again | a tower in the south of the bay, at (168, 84); the gate on the south beach at (52, 71) | `node lab/games/spiral/test.mjs` (24) |
+| `waves` | **Wave Goodbye** — a bank of sand off the beach and the sea of everybody: one runs, jumps, is thrown back by what catches one, for as long as one can | the north beach: a bank at about (57, -56), the arch at (40.4, -62.4) | `node lab/games/waves/test.mjs` (35) |
+| `lava` | **Thin Crust** — the lava only rises, columns come up out of it: one keeps to the summits, and keeps a way on | a small volcano east of the head of the pier, at (188, 8); the gate on the deck of the pier head at (142.4, 13.3) | `node lab/games/lava/test.mjs` (34) |
+| `hive` | **The Bee's Knees** — four combs of wax over the sea: the cell one sets foot on gives way | the north of the bay: combs at (84, -84), the gate on the beach at (43.5, -79.5) | `node lab/games/hive/test.mjs` (29) |
+| `flip` | **Head Over Heels** — one runs on the spot in a machine of travelling girders, and one key turns gravity over | a tall frame in the sea along the south side of the pier; the gate on the south beach at (41.1, 42.8) | `node lab/games/flip/test.mjs` (36) |
+| `spiral` | **A Turn for the Worse** — a track wound round a tower: obstacles worse every turn, one touch and it is the foot again | a tower in the south of the bay, at (168, 84); the gate on the south beach at (52, 71) | `node lab/games/spiral/test.mjs` (33) |
+| `cars` | **Round the Bend** — radio-controlled cars raced on a table, seen from above | the meadow north of the acid pond: a table at (-243.5, -55.8), the arch at (-243.5, -45.9) | `node lab/games/cars/test.mjs` (34) |
+| `golf` | **Par for the Course** — nine holes of crazy golf round the acid pond | round the acid pond (-236, -82); the gate at (-225.5, -75.6) | `node lab/games/golf/test.mjs` (42) |
 
-`node lab/games/browser-test.mjs` plays all five in the running game, in a headless browser: before a game is
-attached nothing of it is in the world; attached it is built, offered at its gate, played to the end by its own
-bot, its score told and kept, the player let go at the gate; left half-way it leaves nothing behind.
+`node lab/games/browser-test.mjs` plays all seven in the running game, in a headless browser: before a game is
+attached nothing of it is in the world; attached it is built, its board of scores by its gate, offered there,
+played to the end by its own bot, its score told, kept and on its board, the player let go at the gate; left
+half-way it leaves nothing behind.
+
+**Each has its board of scores, as the games of the fair have**: the stand is the fair's own (today, this week,
+this month, all time, under a marquee of bulbs — `GamesZone.scoreStand`), its lists are kept as the game keeps
+them (by the server when it knows the board — the lab's own server does: `lab/worker.js` —, in this browser
+otherwise), and a score goes there the way the game puts one (`app.scoreGame`: the note that says where one
+stands, the line in the chat). All of that is done by the plug of this folder (`kit.js`), from the line each
+game says in its rules (`BOARD`); no file of the game is changed.
 
 **What the checks prove is that each game can be played — a bot does it — not that it is a pleasure to play.**
 That is the owner's to say, game by game.
@@ -53,37 +65,46 @@ It becomes an extra like the others — a switch, off to begin with:
    `src/extras/<id>.js` (with `kit.js` beside it, or what it uses of it), its checks to `tools/<id>-test.mjs`, and a
    line in `EXTRAS` (`src/extras/index.js`) — all of it the lab's, to do when its owner says so;
 2. the game's own session then adds the switch (`RELEASE` in `src/app/config.js`, `EXTRA` in `src/main.js`), the
-   board of scores (the line each `test.mjs` prints, in `server/scores.js`; its name in `server/catalog.js`) and
-   `app.<id>Done = (ms) => scoreGame('<id>', …)` — the plug calls it when a run ends.
+   board of scores on its server (the line each `test.mjs` prints, in `server/scores.js`; its name in
+   `server/catalog.js`) and, if it wants to keep that board itself, `app.<id>Done = (score) => scoreGame('<id>', …)`
+   — the plug then tells it the score instead of putting it on the board itself. Until `server/scores.js` knows a
+   board, the game's own server refuses its scores: they are kept in the browser only.
 
 ## The games, one by one
 
 ### Wave Goodbye (`waves`)
 
-A bar of sand runs sixty metres out from the north beach. The sea comes in over it, wave after wave, **the same
-for everybody** (it goes by the clock of the world): every wave at the same speed, on the beats of one rhythm,
-some two beats running. One wades in **whenever one likes**; the backwash draws one out, slowly (0.42 m/s), and
-one jumps what comes — left and right along the crest, a jump, a second one in the air. A wave that catches one
-carries one back to the beach, under the arch, where one can wade in again at once. The score is how long one
-held.
+*Rebuilt after its owner tried the first one ("c'est nul : more fun, better physics, movement, bigger waves").*
 
-What makes a run harder as it goes is where one stands, not the sea: a wave loses height as it runs up the sand,
-and one lower than the knees only wets (it has no white crest: **a white crest says "jump"**). So by the
-beach one hops knee-high rollers and a low breaker now and then; twenty-seven metres out the ripples matter
-too, and everything stands taller with every metre — until, in the last ten metres, the sea asks for more than
-two jumps can give. Nobody holds for ever. A crest is never level: it stands higher at one end, and a great one
-(one every twenty seconds or so, said before it comes) can only be jumped at its low end. What comes two beats
-running is small; the great ones come alone. Stakes say how far out one is; a golden float marks one's best.
+A bank of sand sixteen metres wide and nine deep lies off the north beach, a lagoon behind it, a neck of sand
+to the beach (the arch at (40.4, -62.4)). The sea comes in over it, **the same for everybody** — it goes by
+the clock of the world — and one jumps in **whenever one likes**. One runs anywhere on the bank (6.5 m/s),
+jumps (1.25 m), jumps again in the air (2.4 m), steers in the air. Five kinds of wave, seen coming for five to
+eight seconds: a roller (a metre, fast: a hop; they also come by twos and threes), a sweeper (its crest at an
+angle: it crosses the bank from one side to the other), a wall (2.6 to 3.5 m, one low end: two jumps, or a hop
+at the low end), a breaker (as tall, over half to two thirds of the width: one runs round it), and a great one
+(4.6 m, slow, announced by a horn and by the sea drawing back: only through its one gap).
 
-The wader that plays by itself holds 124 to 146 s (52 to 60 m out); who stands there is carried off in 3 to
-9 s; who only hammers the jump in seven. For the game's boards: `waves: { order: 'desc', min: 2500, max: 300_000 }`.
+**A wave that catches one does not end the run**: it knocks one down and carries one towards the lagoon — 1.8 m
+for every metre of wave —, head over heels; the backwash pulls a little seaward; one is up after a second or
+so. Off the back of the bank, it is over: the score is how long one held. So where one stands is what one has
+left: far forward there is room to be thrown back, but the waves stand tallest on the front edge and lose a
+third crossing the bank.
 
-To tune: `WAVES` in `rules.js` — `drift` (how fast one is drawn out), `grow` (how tall the sea stands, metre by
-metre), `beat` and `sets` (its rhythm), `kinds` (how tall, how lopsided), `knee`, `clear`.
+The sea has a mood everybody shares, on a cycle of two and a half minutes: flat for thirteen seconds, building
+to a hundred, wild to a hundred and thirty, then three great ones; the arch says where it is ("the sea:
+building, wild in 45 s"). Who jumps into the wild sea is out in seconds; who wants a long run waits for the
+lull.
 
-What it adds to the world (only when it is on): the bar, its stakes, the arch, the waves (one group, `waves`;
-the sand and the water are two materials of its own) — and, so that one can walk out on the bar at any time,
-one `collision.addPlatform` (the waves only matter to who has waded in under the arch).
+A bot with a person's limits (one wave at a time, a third of a second to take in the next) holds 115 s from
+the lull (the middle of three hundred runs; nine in ten are lost in the wild part, one in a hundred holds a
+whole cycle) and 61 s from any moment; who stands still is carried off in 6 s. For the game's boards:
+`waves: { order: 'desc', min: 2500, max: 900_000 }`.
+
+What it adds to the world (only when it is on): the bank and its neck, the arch, the waves, foam and spray
+(one group, `waves`) and one `collision.addPlatform`, so that one can walk out on the bank at any time.
+What its maker could not see again after the last changes to its look: the whiter crests, the darker wet sand,
+the runner lifted onto the water as it tumbles — to be looked at first.
 
 ### Thin Crust (`lava`)
 
@@ -197,3 +218,51 @@ at a run).
 What its owner should look at first: back to the foot every time means some forty seconds of easy turns before
 each try at the last one — it may tire before it thrills (a checkpoint a turn, or a way to practise one turn,
 would be a choice of rules). The fourth turn asks one to read what moves on the fly.
+
+### Round the Bend (`cars`)
+
+A table stands in the meadow north of the acid pond ((-243.5, -55.8), 27 × 15.6 m), and on it a circuit of
+some eighty metres for radio-controlled cars, **seen from straight above** by a camera that does not move:
+red and white kerbs, tyre walls, cones, a chequered line, a yellow pad that kicks, a patch of sand, an orange
+ramp, a patch of oil. One asks to play under an arch at (-243.5, -45.9); one's robot stands on a little deck
+by the table and drives the red car (a white ring and an arrow over it). **The stick says where the car should
+go on the screen** — it turns towards that heading and accelerates; the jump key is a short boost that comes
+back. It slides when thrown into a bend, bounces off the walls and off the others, goes straight on over oil.
+Three laps over sixteen gates (no corner is cut), a count of three, against the clock and against three cars
+that drive by themselves (Blue, Yellow, White). The cars are seen only by who races.
+
+Its bot: 35.2 to 36.3 s over twelve races, first every time; the rivals 38.7, 41.6 and 44.1 s on average; a
+clumsy driver 37 to 40 s. For the game's boards: `cars: { order: 'asc', min: 16_000, max: 180_000 }`.
+
+What to look at first: the cars are small at this framing; the table is only seen (one walks through it).
+
+### Par for the Course (`golf`)
+
+Nine holes of crazy golf round the acid pond (inside x -255 … -213, z -99 … -72; the gate at (-225.5, -75.6),
+the first tee six metres on), each a bed of felt with a timber kerb, its tee, its cup and flag, its number and
+par on a stake, each with one idea, harder as one goes:
+
+| | | par |
+|---|---|---|
+| 1 | Warm-up — a straight lane | 2 |
+| 2 | Round the Corner — played off a slanted cushion | 2 |
+| 3 | The Hump — a ridge across: too soft and the ball rolls back | 3 |
+| 4 | The Windmill — a door between two piers, sails by the clock of the world | 3 |
+| 5 | The Mushrooms — four bumpers that kick | 3 |
+| 6 | Down the Drain — a funnel into a pipe that drops onto a raised green | 3 |
+| 7 | Sliding Doors — three walls that slide at different paces | 3 |
+| 8 | The Plank — no kerb, a deck over the acid | 4 |
+| 9 | The Acid Test — a ramp over the acid to an island green | 4 |
+
+The ball is putted: the stick aims (a line of dots shows the way), a gauge swings up and down by itself, the
+jump key hits at the strength it shows (stick back slows the gauge). The ball rolls with friction, comes back
+off the cushions, is taken by the cup when it goes slowly enough; in the acid or off the bed it comes back
+where it was hit from, a stroke more. Seven strokes at most a hole, then on. The whole round is one session;
+the score is the strokes, time breaking ties: `strokes × 1000 + seconds`, written "31 strokes (2:07)".
+
+Its bot aims by playing the putt forward with the rules, and holes every one of the nine in one (9 strokes,
+53 s) — which no person will; clumsy bots take 14 to 21 strokes. For the game's boards:
+`golf: { order: 'asc', min: 9000, max: 63999 }`.
+
+What its maker could not see: the line of dots and the gauge in a picture (the bot hits at once), the swing of
+the putter. The meadow's grass pokes through the felt in places.

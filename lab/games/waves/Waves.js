@@ -17,8 +17,8 @@ const POOL = 14, ACROSS = 31; // waves drawn at once; points along a crest
 // a wave cut across, from its back to its front: [metres towards the sea (times its size), share of its height;
 // what a crest that curls adds to each]
 const PROFILE = [[2.6, 0, 0, 0], [1.5, 0.3, 0, 0], [0.6, 0.78, 0, 0], [0, 1, -0.1, 0], [-0.38, 0.93, -0.3, -0.08], [-0.3, 0.62, -0.05, -0.1], [-0.55, 0.26, 0, 0], [-1.05, 0, 0, 0]];
-const SEA = [0.14, 0.52, 0.6], GREEN = [0.2, 0.7, 0.68], LIGHT = [0.5, 0.92, 0.86], DEEP = [0.07, 0.34, 0.4], FOAM = [1.05, 1.06, 1.05];
-const FS = 14, FU = 23, SPRAY = 96; // the foam on the sand: points out and across; drops of spray at once
+const SEA = [0.14, 0.52, 0.6], GREEN = [0.1, 0.5, 0.52], LIGHT = [0.4, 0.85, 0.8], DEEP = [0.03, 0.22, 0.28], FOAM = [1.5, 1.52, 1.5];
+const FS = 14, FU = 23, SPRAY = 160; // the foam on the sand: points out and across; drops of spray at once
 const BODY = 0.55; // m: the middle of the runner, which a tumble turns about
 const mix = (a, b, t, out) => { out[0] = a[0] + (b[0] - a[0]) * t; out[1] = a[1] + (b[1] - a[1]) * t; out[2] = a[2] + (b[2] - a[2]) * t; return out; };
 const smooth = (x) => { const t = clamp(x, 0, 1); return t * t * (3 - 2 * t); };
@@ -62,7 +62,7 @@ export class Waves {
     const ss = [-2, -1, 0, 1.1, 2.2, 3.3, ...off.slice(0, 5).map((d) => eb - d), eb + 0.4, eb + 1.05, 8.5, 10.5, 12.5, ef - 1.05, ef - 0.4, ...off.map((d) => ef + d)].sort((p, q) => p - q);
     const right = [0, 0.9, 1.7, 2.5, 3.6, 5.5, eu - 1.05, eu - 0.4, ...off.map((d) => eu + d)], us = [...right.slice(1).map((u) => -u).reverse(), ...right];
     const sand = new MeshBuilder(), grain = (p) => 0.93 + 0.1 * Math.abs(Math.sin(p.x * 12.9898 + p.z * 78.233) * 43758.5453 % 1); // (no two metres of sand quite alike)
-    const tone = (p) => (p.y > 0.2 ? [0.78, 0.67, 0.46] : p.y > 0.02 ? [0.62, 0.52, 0.36] : p.y > -0.3 ? [0.5, 0.44, 0.31] : [0.4, 0.4, 0.3]).map((c) => c * grain(p));
+    const tone = (p) => (p.y > 0.2 ? [0.56, 0.47, 0.32] : p.y > 0.02 ? [0.5, 0.42, 0.29] : p.y > -0.3 ? [0.44, 0.39, 0.28] : [0.38, 0.37, 0.28]).map((c) => c * grain(p)); // (wet sand: the sea is over it all the time — and the foam shows on it)
     const rows = ss.map((s) => us.map((u) => this.at(s, u, sandAt(s, u)))), n = V(0, 0, 0), a = V(0, 0, 0), b = V(0, 0, 0);
     const ids = rows.map((row, i) => row.map((p, j) => {
       a.subVectors(rows[Math.min(rows.length - 1, i + 1)][j], rows[Math.max(0, i - 1)][j]); b.subVectors(row[Math.min(row.length - 1, j + 1)], row[Math.max(0, j - 1)]);
@@ -80,8 +80,8 @@ export class Waves {
     this.group.add(bank);
     // ---- the wet sand round the bank: under the sea as a rule — it shows when the sea draws back before a great one
     const wet = new MeshBuilder(), up = V(0, 1, 0), ring = (k, share) => { const t = (k / 40) * Math.PI * 2, c = Math.cos(t), sn = Math.sin(t), wob = 1 + 0.07 * Math.sin(3 * t + 1) + 0.05 * Math.sin(7 * t); return this.at(11.5 + c * (c > 0 ? 15.5 : 8.5) * wob * share, sn * (W.half + 7.5) * wob * share, 0).clone(); };
-    const mid = wet.vert(this.at(11.5, 0, 0).clone(), up, 0, 0, [0.56, 0.48, 0.34, 1]), inner = [], outer = [];
-    for (let k = 0; k < 40; k++) { const p = ring(k, 0.72), q = ring(k, 1); inner.push(wet.vert(p, up, p.x, p.z, [0.52, 0.45, 0.32, 1])); outer.push(wet.vert(q, up, q.x, q.z, [0.4, 0.38, 0.29, 1])); }
+    const mid = wet.vert(this.at(11.5, 0, 0).clone(), up, 0, 0, [0.46, 0.4, 0.28, 1]), inner = [], outer = [];
+    for (let k = 0; k < 40; k++) { const p = ring(k, 0.72), q = ring(k, 1); inner.push(wet.vert(p, up, p.x, p.z, [0.44, 0.39, 0.28, 1])); outer.push(wet.vert(q, up, q.x, q.z, [0.36, 0.35, 0.27, 1])); }
     for (let k = 0; k < 40; k++) { const l = (k + 1) % 40; wet.idx.push(mid, inner[l], inner[k], inner[k], inner[l], outer[l], inner[k], outer[l], outer[k]); }
     this.apron = new THREE.Mesh(wet.build(), this.sandMaterial);
     this.apron.name = 'waves-apron'; this.apron.matrixAutoUpdate = false; this.apron.position.y = -0.35; this.apron.updateMatrix();
@@ -117,7 +117,7 @@ export class Waves {
     this.mark.visible = false; this.markAt = { s: 0, u: 0 };
     this.group.add(this.mark);
     // ---- the waves: a few of them, shaped every frame where the clock says
-    this.waveMaterial = surfaceMaterial({ name: 'waves-wave', rough: 0.2, spec: 0.6, side: THREE.DoubleSide, emissive: [0.05, 0.2, 0.2] }); // (water lets the light through: its shaded side is never grey)
+    this.waveMaterial = surfaceMaterial({ name: 'waves-wave', rough: 0.35, spec: 0.45, side: THREE.DoubleSide, emissive: [0.03, 0.12, 0.13] }); // (water lets the light through: its shaded side is never grey)
     const sheet = (rowsN, colsN, material, name) => {
       const geo = new THREE.BufferGeometry(), index = [];
       for (const [key, size] of [['position', 3], ['normal', 3], ['uv', 2], ['color', 4]]) geo.setAttribute(key, new THREE.BufferAttribute(new Float32Array(rowsN * colsN * size).fill(key === 'color' ? 1 : 0), size));
@@ -131,7 +131,7 @@ export class Waves {
     this.pool = [];
     for (let k = 0; k < POOL; k++) this.pool.push(sheet(ACROSS, PROFILE.length, this.waveMaterial, `waves-wave${k}`));
     // ---- the foam a wave leaves on the sand: a sheet over the bank, white where a crest went by a moment ago
-    this.foam = sheet(FS, FU, surfaceMaterial({ name: 'waves-foam', fade: true, rough: 0.9, spec: 0.05, emissive: [0.3, 0.32, 0.32], polygonOffset: 1 }), 'waves-foam');
+    this.foam = sheet(FS, FU, surfaceMaterial({ name: 'waves-foam', fade: true, rough: 0.9, spec: 0.05, emissive: [0.45, 0.47, 0.47], polygonOffset: 1 }), 'waves-foam');
     const fp = this.foam.geometry.attributes.position.array, fn = this.foam.geometry.attributes.normal.array, fc = this.foam.geometry.attributes.color.array;
     this.foamAt = [];
     for (let i = 0; i < FS; i++) for (let j = 0; j < FU; j++) {
@@ -144,7 +144,7 @@ export class Waves {
     const drops = new THREE.BufferGeometry();
     this.drops = { pos: new Float32Array(SPRAY * 3).fill(-99), vel: new Float32Array(SPRAY * 3), life: new Float32Array(SPRAY), next: 0, live: 0 };
     drops.setAttribute('position', new THREE.BufferAttribute(this.drops.pos, 3));
-    this.spray = new THREE.Points(drops, new THREE.PointsMaterial({ color: 0xffffff, size: 0.22, sizeAttenuation: true, transparent: true, opacity: 0.9, depthWrite: false }));
+    this.spray = new THREE.Points(drops, new THREE.PointsMaterial({ color: 0xffffff, size: 0.13, sizeAttenuation: true, transparent: true, opacity: 0.9, depthWrite: false }));
     this.spray.name = 'waves-spray'; this.spray.frustumCulled = false; this.spray.visible = false; this.spray.matrixAutoUpdate = false;
     this.group.add(this.spray);
     this.group.updateMatrixWorld(true);
@@ -177,12 +177,13 @@ export class Waves {
       if (H > tallest) tallest = H;
       // (a white crest says: this one matters — lower than the knees it is only a swell; a tall one is streaked
       // with white down its face, the more as it breaks on the bank)
-      const white = clamp((H - W.knee * 0.8) / (W.knee * 0.5), 0, 1), breaking = clamp((W.front + 4 - sc) / 5, 0, 1), face = white * Math.min(0.85, 0.12 + 0.3 * curl + 0.5 * breaking * curl);
+      const white = clamp((H - W.knee * 0.8) / (W.knee * 0.5), 0, 1), breaking = clamp((W.front + 4 - sc) / 5, 0, 1), streak = 0.55 + 0.9 * Math.abs(Math.sin(i * 12.9898 + w.id * 78.233) * 43758.5453 % 1);
+      const face = white * Math.min(0.9, (0.1 + 0.25 * curl + 0.5 * breaking * curl) * streak);
       for (let j = 0; j < P; j++) {
         const q = PROFILE[j], s = sc + (q[0] + q[2] * curl) * size, k = (i * P + j) * 3, k4 = (i * P + j) * 4;
         pos[k] = W.from.x + fx * s - fz * u; pos[k + 2] = W.from.z + fz * s + fx * u;
         pos[k + 1] = under(s, u) - 0.12 + (q[1] + q[3] * curl) * (H + 0.12);
-        if (j === 0) mix(SEA, GREEN, 0.1, c); else if (j === 1) mix(SEA, GREEN, 0.55, c); else if (j === 2) mix(GREEN, LIGHT, 0.45, c);
+        if (j === 0) mix(SEA, GREEN, 0.1, c); else if (j === 1) mix(SEA, GREEN, 0.55, c); else if (j === 2) mix(mix(GREEN, LIGHT, 0.45, c), FOAM, 0.45 * white, c);
         else if (j === 3 || j === 4) mix(LIGHT, FOAM, white, c); else if (j === 5) mix(mix(GREEN, DEEP, 0.6 * curl, c), FOAM, face * 0.5, c);
         else if (j === 6) mix(mix(GREEN, DEEP, 0.3 * curl, c), FOAM, face, c); else mix(GREEN, FOAM, 0.2 + 0.6 * white * breaking, c);
         col[k4] = c[0]; col[k4 + 1] = c[1]; col[k4 + 2] = c[2]; col[k4 + 3] = j === 5 ? 1 - 0.3 * curl : 1;
@@ -201,6 +202,18 @@ export class Waves {
     geo.position.needsUpdate = geo.normal.needsUpdate = geo.color.needsUpdate = true;
     mesh.visible = true;
     return true;
+  }
+
+  /** How high the water of the waves stands over a place at `clock` (m over what it runs on there). */
+  water(s, u, clock) {
+    let y = 0;
+    for (const w of this.list) {
+      const H = heightAt(w, s, u);
+      if (H < 0.05) continue;
+      const d = (s - crestAt(w, clock, u)) / (0.55 + 0.42 * H), k = d < 0 ? 1 + d / 1.05 : 1 - d / 2.6; // (its face on the side of the beach, its long back towards the sea)
+      if (k > 0 && H * k > y) y = H * k;
+    }
+    return y;
   }
 
   /** Throws `n` drops up from a place; `bx`, `bz`: the way the water goes (m/s). */
@@ -227,7 +240,7 @@ export class Waves {
       // (a tall one breaks on the front edge of the bank: spray all along it, rings on the water at its corners)
       if (w.h >= 2 && crest <= W.front + 0.5 && crest > W.front - 2 && !this.broke.has(w.id)) {
         this.broke.add(w.id);
-        for (let u = -W.half; u <= W.half; u += 1.6) { const H = heightAt(w, W.front, u); if (H > 1.2) { const p = this.at(W.front + 0.3, u + 0.8, TOP + H * 0.5, this._q || (this._q = V(0, 0, 0))); this._spray(p.x, p.y, p.z, 3, H, -this.fx * 3, -this.fz * 3, 1.6); } }
+        for (let u = -W.half; u <= W.half; u += 1.6) { const H = heightAt(w, W.front, u); if (H > 1.2) { const p = this.at(W.front + 0.3, u + 0.8, TOP + H * 0.5, this._q || (this._q = V(0, 0, 0))); this._spray(p.x, p.y, p.z, 5, H, -this.fx * 3, -this.fz * 3, 1.6); } }
         for (const side of [-1, 1]) { const p = this.at(W.front + 1.5, side * (W.half + 1.5), 0, this._q); this.world.ripples?.splash(time, p.x, 0, p.z, w.h); }
         run?.io.play('splash', { volume: Math.min(0.6, w.h * 0.13) });
       }
@@ -331,7 +344,7 @@ export class Waves {
           const h = S.hit; h.t += dt;
           const k = clamp(h.t / Math.max(0.3, h.T - 0.4), 0, 1), e = 1 - (1 - k) * (1 - k);
           pitch = -TAU * h.turns * e; roll = Math.sin(k * Math.PI) * 0.5 * h.side;
-          y += Math.abs(Math.sin(e * Math.PI * h.turns)) * 0.28 * Math.min(1.6, h.H);
+          y += Math.max(Math.abs(Math.sin(e * Math.PI * h.turns)) * 0.28 * Math.min(1.6, h.H), this.water(st.s, st.u, st.t0 + st.clock) * 0.9); // (one rides the water that carries one: the tumble is seen on the wave, not behind it)
           anim = k < 1 ? ANIM.jump : ANIM.sit;
         } else {
           if (speed > 1) { const wx = this.fx * st.vs - this.fz * st.vu, wz = this.fz * st.vs + this.fx * st.vu; yaw = Math.atan2(wx, wz); }
@@ -356,9 +369,9 @@ export class Waves {
       },
       /** The camera: fixed behind the bank and above it, looking out at what comes; it leans a little the way the runner goes. */
       camera: (cam, dt) => {
-        this.at(-2.6, st.u * 0.32, 7.3, _t);
+        this.at(-2.3, st.u * 0.32, 8.2, _t);
         if (!S.cam) S.cam = _t.clone(); else S.cam.lerp(_t, Math.min(1, dt * 4));
-        this.at(13.2, st.u * 0.55, 0.7, _t);
+        this.at(12.8, st.u * 0.55, 0.7, _t);
         S.look.lerp(_t, S.look.lengthSq() ? Math.min(1, dt * 5) : 1);
         cam.position.copy(S.cam);
         // (a great one makes the ground tremble as it comes; a hit jolts)
@@ -391,7 +404,7 @@ export class Waves {
       // (the wave breaks on the runner: spray, a thud, and head over heels — twice over for a tall one)
       const p = this.at(st.s, st.u, TOP + st.h + 0.5);
       io.play('splash', { volume: Math.min(1, 0.45 + e.H * 0.2) }); io.play(e.H >= 1.7 ? 'whack' : 'hit', { volume: 0.8 });
-      this._spray(p.x, p.y, p.z, 12 + Math.round(e.H * 8), e.H, -this.fx * 4, -this.fz * 4);
+      this._spray(p.x, p.y, p.z, 20 + Math.round(e.H * 12), e.H, -this.fx * 4, -this.fz * 4, 0.9);
       S.jolt = Math.min(1, 0.3 + e.H * 0.25);
       if (S.hit && st.down > 0 && S.hit.t < S.hit.T) { S.hit.T = S.hit.t + st.down; S.hit.turns += 1; S.hit.H = Math.max(S.hit.H, e.H); }
       else S.hit = { t: 0, T: st.down, turns: e.H >= 1.7 ? 2 : 1, H: e.H, side: Math.random() < 0.5 ? -1 : 1 };

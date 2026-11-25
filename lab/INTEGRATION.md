@@ -24,12 +24,14 @@ are not offered to the game: `lab/oak/floor/` is one floor of the oak, tried aga
 the game is the jump from limb to limb with a ring of light that shows where it ends, the camera stays outside
 the tree; `node lab/oak/floor/test.mjs`).
 
-**Five more games are being tried, and are not offered to the game yet**: `lab/games/` — Wave Goodbye (the sea
-comes in over a bar of sand), Thin Crust (basalt columns that sink into lava), The Bee's Knees (combs of wax
-that give way underfoot), Head Over Heels (a runner who turns gravity over), A Turn for the Worse (a track
-wound round a tower). Every file of them is in that folder, only the lab page switches them on, and
-`lab/games/README.md` says what each is, how it is checked, and what it takes to make one of them an extra like
-those of this page once its owner has tried it.
+**Seven more games are being tried, and are not offered to the game yet**: `lab/games/` — Wave Goodbye (a bank
+of sand and the sea of everybody), Thin Crust (the lava rises, columns come up out of it), The Bee's Knees (four
+combs of wax that give way underfoot), Head Over Heels (a runner who turns gravity over in a machine of
+travelling girders), A Turn for the Worse (a track wound round a tower), Round the Bend (radio-controlled cars
+seen from above) and Par for the Course (nine holes of crazy golf round the acid pond). Every file of them is in
+that folder, only the lab page switches them on, each has its board of scores by its gate (the fair's own stand,
+built by the lab's plug), and `lab/games/README.md` says what each is, how it is checked, and what it takes to
+make one of them an extra like those of this page once its owner has tried it.
 
 ## Switching them on in the game: one line
 
