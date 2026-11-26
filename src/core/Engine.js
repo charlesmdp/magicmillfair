@@ -176,6 +176,7 @@ export class Engine {
   }
 
   start(fn) {
+    this._fn = fn;
     const loop = () => {
       this._raf = requestAnimationFrame(loop);
       this.beginFrame();
@@ -185,5 +186,8 @@ export class Engine {
     this._raf = requestAnimationFrame(loop);
   }
 
-  stop() { cancelAnimationFrame(this._raf); }
+  stop() { cancelAnimationFrame(this._raf); this._raf = 0; }
+  /** Nothing drawn, nothing moved until resume() (another tab of this browser plays: app/OneTab.js). */
+  pause() { if (this._raf) this.stop(); }
+  resume() { if (!this._raf && this._fn) { this._last = performance.now(); this.start(this._fn); } }
 }

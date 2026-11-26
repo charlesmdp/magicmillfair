@@ -56,7 +56,9 @@ npm run dev
 ```
 
 Open `http://localhost:5173`. This command starts the site **and** the multiplayer relay: open the address
-in two tabs (or on a phone on the same network, with the "Network" address that is printed) to see each other.
+in two browsers (or on a phone on the same network, with the "Network" address that is printed) to see each other.
+Two tabs of one browser are one visitor — only the last one plays (`src/app/OneTab.js`) —, unless the address
+says `?tabs=many`: `http://localhost:5173/?tabs=many` in two tabs, and they see each other.
 
 ### Putting it online with Cloudflare (automatic)
 
@@ -1056,8 +1058,18 @@ in memory, and forgets them when they leave (on Cloudflare, a room that everybod
 Nobody is seen twice: a page gives itself a name when it opens, and says it with its hello — when its
 line drops without the relay noticing (a laptop that slept, a change of network) and it connects again,
 the relay lets the connection it had before go at once, instead of showing a ghost beside the visitor
-until it times out. (Two tabs of one browser are two pages: both stay.)
-Without a reachable relay, the same interface works between the tabs of one browser. The protocol is
+until it times out. (Two tabs of one browser are two pages for the relay — but the game itself sees to it that
+only one of them is in a room: one browser, one visitor, below.)
+**One browser, one visitor** (`src/app/OneTab.js`): the tabs of one browser speak to each other (a
+BroadcastChannel, nothing through the network), and only the one that came into the world last plays. The others
+step aside: their place in the room let go (nobody sees them twice), silent, nothing drawn, a card that says the
+game is open in another tab, with **Play here** — a click (or Enter) takes the game back, and the other tab steps
+aside in turn. Which is the last is counted on a clock of their own, so "Play here" always wins, even in a tab
+that stayed open while the computer slept. A page that starts in the background — reloaded by itself for a new
+version, or opened behind the others — first asks whether another tab plays, and steps aside if one does: it
+does not take the game from the tab one is looking at. When the tab that plays is closed, the others say so.
+With `?tabs=many` in the address every tab plays, as before (to try the game in several tabs at once).
+Without a reachable relay, the same interface works between the tabs of one browser (with `?tabs=many`). The protocol is
 described at the top of `server/protocol.js`, the client interface in `src/net/Presence.js`. The same relay
 runs under Node (`server/index.js`) and on Cloudflare (`cloudflare/worker.js`).
 

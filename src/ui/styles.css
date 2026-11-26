@@ -478,6 +478,15 @@ button.pill.players { cursor: pointer; font: inherit; color: inherit; }
 button.pill.players:hover { border-color: rgba(242, 193, 78, 0.7); }
 .banner { position: absolute; left: 50%; top: calc(64px + var(--safe-t)); transform: translateX(-50%); display: none; max-width: min(92vw, 560px); padding: 12px 18px; border-radius: 14px; background: rgba(122, 20, 32, 0.94); border: 1px solid rgba(246, 231, 184, 0.6); color: #f6e7b8; font-size: 14.5px; text-align: center; z-index: 17; }
 .banner.on { display: block; }
+/* another tab of this browser plays: this one says so, over everything (app/OneTab.js) */
+.elsewhere { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(8, 10, 26, 0.72); backdrop-filter: blur(3px); z-index: 60; }
+.elsewhere[hidden] { display: none; }
+.elsewhere .sheet { max-width: 420px; padding: 24px 24px 22px; border-radius: 18px; background: #16123a; border: 1px solid rgba(242, 193, 78, 0.55); color: #f6f1e4; text-align: center; box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45); }
+.elsewhere h2 { margin: 0 0 10px; font: 700 22px/1.2 Georgia, 'Times New Roman', serif; color: #f2c14e; }
+.elsewhere p { margin: 0 0 18px; font-size: 15px; line-height: 1.45; color: #d9d2f0; }
+.elsewhere .play-here { min-width: 160px; padding: 12px 22px; border: 0; border-radius: 999px; background: #f2c14e; color: #1b1440; font: 700 16px/1 system-ui, sans-serif; cursor: pointer; }
+.elsewhere .play-here:hover { background: #ffd56a; }
+.elsewhere .play-here:focus-visible { outline: 3px solid #fff3b0; outline-offset: 3px; }
 .chat .say .line { display: flex; gap: 6px; align-items: stretch; }
 .chat .say .line input { flex: 1 1 auto; min-width: 0; }
 .chat .say .chan { flex: none; padding: 0 11px; border-radius: 12px; border: 1px solid var(--line); background: rgba(8, 13, 10, 0.82); font-size: 12.5px; white-space: nowrap; }

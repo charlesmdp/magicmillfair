@@ -46,6 +46,7 @@ import { FEATURES, SKY_STAGES, skyAsked } from './app/config.js';
 import { Updates } from './app/Updates.js';
 import { PASS_LINES, ACCOUNT_LINES, ACCOUNT_PERKS, passDue, accountDue } from './app/pitches.js';
 import { Soundscape } from './audio/Soundscape.js';
+import { oneTab } from './app/OneTab.js';
 import { Blast } from './world/effects/Blast.js';
 import { BLAST_EVERY } from '../server/protocol.js';
 
@@ -231,8 +232,35 @@ async function boot() {
     name: presence.room, label: presence.label, several: /^Room (?!1$)/.test(presence.label) || (roster.rooms || []).some((r) => r.name !== presence.room),
     rooms: roster.rooms || [], own: mine.on || presence.inOwn ? { room: mine.room, price: price(mine.price || 5900), life: mine.life ? price(mine.life) : '', here: presence.inOwn ? { host: presence.host } : null } : null,
   } : null);
+  // One browser, one visitor (app/OneTab.js): of two tabs of this browser, the one that came into the world last
+  // plays; the other lets its place in the room go, falls silent, stops drawing and says so — until "Play here".
+  // (?tabs=many in the address: every tab plays, to try the game in several tabs at once)
+  let inputWas = null; // (what the controls were when the tab stepped aside: walking, or the free camera — given back as it was)
+  const tab = oneTab({
+    many: new URLSearchParams(location.search).get('tabs') === 'many',
+    away: () => {
+      inputWas = input.enabled;
+      presence?.sleep();
+      audio.setAway(true);
+      hud.elsewhere(true);
+      input.enabled = false;
+      engine.pause();
+    },
+    back: () => {
+      hud.elsewhere(false);
+      audio.setAway(false);
+      engine.resume();
+      if (inputWas !== null) { input.enabled = inputWas; inputWas = null; }
+      presence?.wake();
+    },
+    told: (what) => hud.elsewhere(true, what),
+  });
+  hud.on('playhere', () => tab.play());
+  app.tab = tab;
   const startPresence = () => {
+    tab.start(); // (this tab comes into the world: any other tab of this browser steps aside — unless this page started in the background and another plays)
     presence = new Presence({ name, color, kit: packKit(kit), ...(backTo && { back: backTo }) });
+    if (!tab.playing) presence.sleep(); // (a page in the background asks first whether another tab plays: nothing is sent meanwhile)
     // which room: said when one is entered — and when the one that was asked for could not be
     presence.on('room', (e) => {
       // (the address follows the room, when it names one: a friend who is given this address joins the right room)
@@ -1570,8 +1598,9 @@ async function boot() {
     now: sharedNow,
     safe: () => !busyNow(),
     leave: () => {
-      // (in the world: one comes back at the same spot, in the same room — as after a change of quality)
-      if (input.enabled && !SHOT) store.set('mmf.resume', JSON.stringify({ x: player.pos.x, y: +player.pos.y.toFixed(2), z: player.pos.z, yaw: rig.yaw, room: presence?.room || '' }), true);
+      // (in the world: one comes back at the same spot, in the same room — as after a change of quality; so too a tab
+      // that stepped aside for another of this browser, its controls held while it waits: see OneTab)
+      if ((input.enabled || inputWas) && !SHOT) store.set('mmf.resume', JSON.stringify({ x: player.pos.x, y: +player.pos.y.toFixed(2), z: player.pos.z, yaw: rig.yaw, room: presence?.room || '' }), true);
       location.reload();
     },
     apply: applyRelease,

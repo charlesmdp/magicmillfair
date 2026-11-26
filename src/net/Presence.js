@@ -233,6 +233,7 @@ export class Presence {
 
   // Enters a room: the door is asked which, then its relay is dialled (the transport keeps retrying by itself).
   async _enter(ask) {
+    if (this._asleep) return; // (another tab plays: see sleep())
     const turn = ++this._turn;
     const a = await this._askDoor(ask);
     if (turn !== this._turn || this._disposed || this.kicked || !this._dial) return;
@@ -425,6 +426,37 @@ export class Presence {
     this._flush(t);
   }
 
+  /**
+   * Another tab of this browser plays (app/OneTab.js): this one lets its place in the room go — nobody sees it, it
+   * sees nobody, nothing is sent — until wake(). Status 'away' meanwhile.
+   */
+  sleep() {
+    if (this._asleep || this._disposed) return;
+    this._asleep = true;
+    this._turn++; // (a question to the door on its way is forgotten)
+    clearTimeout(this._timer);
+    clearTimeout(this._again);
+    for (const tr of [this._ws, this._bc]) if (tr) tr.close();
+    this._ws = this._bc = this._tr = null;
+    for (const id of [...this.peers.keys()]) this._leave(id);
+    this.id = 0;
+    this.mode = this.kicked ? 'offline' : 'away';
+    this._changed();
+  }
+  /** …this tab has the game again: back into the room it was in (the door is asked again, as after a drop). */
+  wake() {
+    if (!this._asleep || this._disposed) return;
+    this._asleep = false;
+    this.mode = 'offline';
+    this._changed();
+    if (this.kicked) return; // (put out, or kept out: everything stays stopped — see _out)
+    if (this._pending) return; // (the password of a room is being asked: the prompt that is open goes on — unlock(), giveUp())
+    // (the room asked for: the one it was in — set at each welcome —, or, before any, the one its address asked for)
+    if (this._dial) this._enter({ want: this._want, back: this._back, not: this._not });
+    this._fallback(this._dial ? FALLBACK_MS : 0);
+  }
+  get asleep() { return !!this._asleep; }
+
   dispose() {
     this._disposed = true;
     this._turn++;
@@ -469,7 +501,7 @@ export class Presence {
   _fallback(delay) {
     clearTimeout(this._timer);
     this._timer = setTimeout(() => {
-      if (this._tr || this._disposed) return;
+      if (this._tr || this._disposed || this._asleep) return;
       try {
         this._bc = new BroadcastTransport(this.room, this._handlers('local'));
         this._bc.open(); // throws where BroadcastChannel is missing

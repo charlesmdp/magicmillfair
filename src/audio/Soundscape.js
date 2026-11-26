@@ -52,8 +52,18 @@ export class Soundscape {
     this.last = -1;
     this.timer = 0;
     this.disposed = false;
-    this._visibility = () => this._hide(document.hidden);
+    this._away = false; // (another tab of this browser plays: this one is silent — see setAway)
+    this._visibility = () => this._hide(document.hidden || this._away);
   }
+
+  /** Another tab of this browser plays (app/OneTab.js): silent, as a page in the background is — or no longer. */
+  setAway(on) {
+    if (this._away === !!on) return; // (unchanged: no dip in the sound)
+    this._away = !!on;
+    if (typeof document !== 'undefined') this._hide(document.hidden || this._away);
+  }
+  /** Is it silent because another tab of this browser plays? */
+  get away() { return this._away; }
 
   /** True while nothing can be heard: not unlocked yet, both levels at zero, or the browser holds the sound back. */
   get muted() { return !this.master || !(this.levels.sound > 0 || this.levels.music > 0) || (!this.offline && this.ctx.state !== 'running'); }
@@ -174,7 +184,7 @@ export class Soundscape {
       s.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
       s.connect(ctx.destination);
       s.start(0);
-      if (typeof document !== 'undefined') { document.addEventListener('visibilitychange', this._visibility); this.hidden = document.hidden; }
+      if (typeof document !== 'undefined') { document.addEventListener('visibilitychange', this._visibility); this.hidden = document.hidden || this._away; }
     }
     if (this.levels.sound > 0) this._prepare();
   }

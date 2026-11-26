@@ -1,5 +1,6 @@
-// Development: the Vite dev server plus the presence relay, so that several tabs or devices on the local
-// network see each other while you work. (Plain `npm run dev:vite` starts Vite alone.)
+// Development: the Vite dev server plus the presence relay, so that several browsers or devices on the local
+// network see each other while you work — or several tabs of one browser, with ?tabs=many in the address (one
+// browser is otherwise one visitor: src/app/OneTab.js). (Plain `npm run dev:vite` starts Vite alone.)
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

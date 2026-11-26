@@ -271,6 +271,7 @@ export class Hud {
       </div>
       <div class="flash" aria-hidden="true"></div>
       <div class="banner" role="alert"></div>
+      <div class="elsewhere" hidden><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="elsewhere-title"><h2 id="elsewhere-title">Open in another tab</h2><p>Atomic Oasis is open in another tab of this browser: you are playing there. One of you is enough — here, everything is paused.</p><button class="play-here" type="button">Play here</button></div></div>
       <div class="panel" role="dialog" aria-label="Settings">
         <h2>Settings</h2>
         <div class="room-box" hidden>
@@ -470,6 +471,20 @@ export class Hud {
     document.addEventListener('visibilitychange', () => { if (!document.hidden) { this._away = 0; document.title = this._title || document.title; } });
     this.rosterEl.onclick = (e) => { if (e.target === this.rosterEl) this.closeRoster(); };
     this.bannerEl = h.querySelector('.banner');
+    // (another tab of this browser plays: this one says so, and takes the game back on a click — app/OneTab.js)
+    this.elsewhereEl = h.querySelector('.elsewhere');
+    this.elsewhereEl.querySelector('.play-here').onclick = () => this.emit('playhere');
+    // (while it is shown, the keys are its own: Enter or Space play here, the others do nothing to the paused game —
+    // nor to the shop or a card left open under it. Listened to from the start, before any of theirs, so that it is
+    // the first to hear a key and the others never do)
+    this._elsewhereKeys = (e) => {
+      if (this.elsewhereEl.hidden) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || /^F\d+$/.test(e.key)) return; // (the browser's own: reload, full screen…)
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (e.type === 'keydown' && (e.key === 'Enter' || e.key === ' ') && !e.repeat) this.emit('playhere');
+    };
+    for (const type of ['keydown', 'keyup']) addEventListener(type, this._elsewhereKeys, true);
     this.sightEl = h.querySelector('.sight');
     this.gaugeEl = h.querySelector('.gauge');
     // prevent clicks on the interface from reaching the 3D view
@@ -820,7 +835,7 @@ export class Hud {
     wear.textContent = badge ? 'Take my ADMIN badge off' : 'Wear the ADMIN badge (everybody around sees it)';
     wear.classList.toggle('on', badge);
     box.querySelector('.lead').textContent = mode === 'online' ? (admin ? `You are ${owner ? 'the owner' : 'an administrator'}: you also see where each visitor connects from, can put them out, and can name other administrators.` : 'Everyone in this room.')
-      : mode === 'local' ? 'No server here: only the tabs of this browser see each other.' : 'Offline: nobody else can be seen.';
+      : mode === 'local' ? 'No server here: nobody else can be seen.' : 'Offline: nobody else can be seen.';
     list.textContent = '';
     // the rooms: the one one is in, and those one may change to (a click — the page is not loaded again)
     const roomsEl = box.querySelector('.rooms');
@@ -1115,6 +1130,23 @@ export class Hud {
     this.bannerEl.classList.toggle('on', !!text);
   }
 
+  /**
+   * Another tab of this browser plays (on) — or this one does again: the card that says so, over everything.
+   * `what`: 'playing' (another tab plays) or 'closed' (the tab that played was closed).
+   */
+  elsewhere(on, what = 'playing') {
+    const card = this.elsewhereEl, was = !card.hidden;
+    card.querySelector('p').textContent = what === 'closed'
+      ? 'Atomic Oasis was closed in the other tab of this browser. Here, everything is paused: carry on from this tab.'
+      : 'Atomic Oasis is open in another tab of this browser: you are playing there. One of you is enough — here, everything is paused.';
+    card.hidden = !on;
+    if (on && !was) {
+      this.input.exitLock(); // (the pointer is let go: the card is to be clicked — and the keys are its own: see _elsewhereKeys)
+      card.querySelector('.play-here').focus({ preventScroll: true });
+    }
+  }
+  get away() { return !this.elsewhereEl.hidden; }
+
   // ---------- hats, the bouquet, dying
   setHat() { /* (the hats are in the shop now: see ShopView.js) */ }
   setHolding(on) { if (on !== this._holding) { this._holding = on; this.emotes.classList.toggle('holding', on); } }
@@ -1255,8 +1287,8 @@ export class Hud {
     this.hud.querySelector('.net-info').textContent = mode === 'online'
       ? (where ? `Connected, in ${room.label}: the fair has several rooms just now. "Who is here" lists them — you change with a click, or copy a link for a friend to join you.` : 'Connected: everyone who opens this address sees each other.')
       : mode === 'local'
-        ? 'Local mode: only the tabs of this browser see each other (no presence server found).'
-        : 'Offline.';
+        ? 'Local mode: no presence server found, so nobody else can be seen.'
+        : mode === 'away' ? 'Paused: you are playing in another tab of this browser.' : 'Offline.';
   }
 
   /**

@@ -125,12 +125,45 @@ try {
     await again.goto(`${page.url().split('?')[0]}?q=low&back=1`);
     await again.waitForFunction(() => window.__mmf?.ready && document.querySelector('.splash')?.classList.contains('done'), null, { timeout: 240000 });
     const back = await again.evaluate(() => ({ card: document.querySelector('.card')?.classList.contains('ready'), hud: document.querySelector('.hud').classList.contains('on'), name: window.__mmf.hud.nameInput?.value ?? null, walking: window.__mmf.state?.mode ?? null }));
+    // (one browser, one visitor — app/OneTab.js: this second tab came into the world, so the first one steps aside —
+    // its place in the room let go, silent, nothing drawn, the card that says so —; "Play here" takes the game back,
+    // and the other tab steps aside in turn; when the tab that plays goes, the one aside says so)
+    const side = (p) => p.evaluate(async () => {
+      const a = window.__mmf, f0 = a.frames;
+      await new Promise((r) => setTimeout(r, 700));
+      return { away: a.hud.away, card: !document.querySelector('.elsewhere').hidden, words: document.querySelector('.elsewhere p').textContent, asleep: !!a.presence?.asleep, input: a.input.enabled, still: a.frames === f0, playing: a.tab.playing, mute: a.audio.away, status: a.presence?.mode };
+    });
+    const plays = (p) => p.evaluate(async () => {
+      const a = window.__mmf, f0 = a.frames;
+      for (let i = 0; i < 100 && a.frames < f0 + 4; i++) await new Promise((r) => setTimeout(r, 100)); // (a few frames drawn: it moves again)
+      return { away: a.hud.away, asleep: !!a.presence?.asleep, input: a.input.enabled, moving: a.frames >= f0 + 4, playing: a.tab.playing, mute: a.audio.away };
+    });
+    await page.waitForFunction(() => window.__mmf.hud.away, null, { timeout: 15000 }).catch(() => {});
+    const aside = await side(page), playsThere = await plays(again);
+    // (Enter on the card of the first tab: it takes the game back, the second steps aside)
+    await page.bringToFront();
+    await page.keyboard.press('Enter');
+    await again.waitForFunction(() => window.__mmf.hud.away, null, { timeout: 15000 }).catch(() => {});
+    const takenBack = await plays(page), asideThere = await side(again);
+    // (a click on the card of the second: it plays again; then it goes back to the welcome card — the first says so)
+    await again.bringToFront();
+    await again.click('.elsewhere .play-here');
+    await page.waitForFunction(() => window.__mmf.hud.away, null, { timeout: 15000 }).catch(() => {});
     await again.goto(`${page.url().split('?')[0]}?q=low&back=1&welcome=1`);
     await again.waitForSelector('.card.ready', { timeout: 240000 });
     const asked = await again.evaluate(() => !document.querySelector('.splash').classList.contains('done'));
+    await page.waitForFunction(() => /was closed/.test(document.querySelector('.elsewhere p').textContent), null, { timeout: 15000 }).catch(() => {});
+    const closed = await side(page);
     await again.close();
+    await page.bringToFront();
+    await page.click('.elsewhere .play-here');
+    const taken = await plays(page);
     console.log(`back again: ${JSON.stringify({ back, asked })}`);
     if (back.card || !back.hud || !asked) { failed = true; console.log('FAIL: a visitor who comes back is shown the card again (or ?welcome no longer shows it)'); }
+    console.log(`two tabs: ${JSON.stringify({ aside, playsThere, takenBack, asideThere, closed, taken })}`);
+    const steppedAside = (s) => s.away && s.card && s.asleep && !s.input && s.still && !s.playing && s.mute && s.status === 'away';
+    const playing = (s) => !s.away && !s.asleep && s.input && s.moving && s.playing && !s.mute;
+    if (!steppedAside(aside) || !/you are playing there/.test(aside.words) || !playing(playsThere) || !playing(takenBack) || !steppedAside(asideThere) || !steppedAside(closed) || !/was closed/.test(closed.words) || !playing(taken)) { failed = true; console.log('FAIL: two tabs of one browser are one visitor — the one that came last plays, the other steps aside (silent, still, out of the room) until "Play here" (a click or Enter), and says so when the one that plays goes'); }
   }
   // the two cards that make an offer in full (an account, the Game Pass): shown when asked for, they say what
   // they offer, keep the page from doing anything else meanwhile, and Escape closes them. The emotes behind the
