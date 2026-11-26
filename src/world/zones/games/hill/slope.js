@@ -1,4 +1,4 @@
-// Uphill Battle: its rules. No renderer here: the game, its checks and the climber that plays by itself all read
+// Jump the Logs: its rules. No renderer here: the game, its checks and the climber that plays by itself all read
 // this.
 //
 // A long open slope between the Great Pond and the old tree. One runs up it as fast as one can while things
@@ -17,7 +17,7 @@
 // right of who climbs when positive). Time advances in steps of 1/120 s whatever the frame rate.
 
 export const HILL = {
-  name: 'Uphill Battle',
+  name: 'Jump the Logs',
   from: { x: -133, z: 89 }, yaw: 0.14, // the middle of the start line, and the way up (a heading of the valley: 0 looks south)
   length: 66, half: 4.6, // m up the slope; m to each side
   every: 10, starts: ['Red', 'Blue', 'Green', 'Yellow', 'Purple', 'Orange'], // a start every so many seconds, each with its name

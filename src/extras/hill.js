@@ -1,4 +1,4 @@
-// Uphill Battle as an extra: plugged into the running game from outside, through what the game exposes
+// Jump the Logs as an extra: plugged into the running game from outside, through what the game exposes
 // (window.__mmf), so that no file of the game is changed and the game without it is exactly the game as it was.
 // See index.js (the switches) and lab/INTEGRATION.md (its board of scores).
 import { Hill } from '../world/zones/games/hill/Hill.js';
@@ -40,7 +40,7 @@ export function attach(app) {
     if (climb) return climb.over ? null : { label: 'Leave the climb', run: () => leave(false) };
     if (!hill.near(p.pos.x, p.pos.z)) return null;
     const next = hill.nextStart();
-    return { label: `Climb ${HILL.name} — ${next.name} start in ${Math.max(1, Math.ceil(next.wait))} s`, run: start };
+    return { label: `Play ${HILL.name} — ${next.name} start in ${Math.max(1, Math.ceil(next.wait))} s`, run: start };
   });
   world.zones.push({
     update: (dt, time, camera) => {

@@ -1,4 +1,4 @@
-// The Little Regatta: its rules. No renderer here: the game, its checks and the boats that sail by themselves
+// Harbor Heaven: its rules. No renderer here: the game, its checks and the boats that sail by themselves
 // all read this.
 //
 // Radio-controlled boats race on the Great Pond: three laps of a course of gates — two buoys each — that turns
@@ -22,7 +22,7 @@ import { PONDS } from '../../../layout/layout.js';
 import { sin, cos, hypot, rngOf } from '../core.js';
 
 export const REGATTA = {
-  name: 'The Little Regatta',
+  name: 'Harbor Heaven',
   laps: 3,
   level: PONDS[0].level, // the water
   // the gates, in the order they are taken: the middle of each (the first is the start, and the line)

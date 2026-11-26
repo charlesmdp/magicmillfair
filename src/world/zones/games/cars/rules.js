@@ -1,4 +1,4 @@
-// Round the Bend: its rules. No renderer here: the game, its checks and the cars that drive by themselves all read
+// Karting Simulator: its rules. No renderer here: the game, its checks and the cars that drive by themselves all read
 // this.
 //
 // A table stands in the meadow by the acid pond, and on it a circuit of tarmac for radio-controlled cars: a long
@@ -27,7 +27,7 @@
 // valley: 0 looks south. Time advances in steps of 1/120 s whatever the frame rate.
 
 export const CARS = {
-  name: 'Round the Bend',
+  name: 'Karting Simulator',
   at: { x: -243.5, z: -55.8 }, // the middle of the table, in the meadow
   half: { x: 13.5, z: 7.8 }, // half its width, half its depth
   rise: 0.6, // its top stands so far over the highest ground under it: the grass of the meadow is tall

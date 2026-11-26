@@ -48,9 +48,9 @@ try {
   const gates = await page.evaluate(() => { const e = window.__mmf.extras, g = (o) => o.gate || o.stand; return Object.fromEntries(Object.keys(e).filter((k) => g(e[k])).map((k) => [k, { x: g(e[k]).x, z: g(e[k]).z }])); });
   const labels = {};
   for (const k of ['hill', 'crack', 'hollow']) { await at(gates[k].x, gates[k].z); await frames(2); labels[k] = (await offered()).join(' | '); }
-  check('at its gate each game offers itself', /Climb Uphill Battle/.test(labels.hill) && /Climb Between a Rock/.test(labels.crack) && /Fly The Nuclear Cave/.test(labels.hollow), labels);
+  check('at its gate each game offers itself', /Play Jump the Logs/.test(labels.hill) && /Climb Bouncy Rock/.test(labels.crack) && /Fly The Nuclear Cave/.test(labels.hollow), labels);
   const away = await at(0, 0); await frames(2);
-  check('and away from them, none does', !(await offered()).some((l) => /Uphill|Between a Rock|Nuclear Cave/.test(l)), `at ${away.x.toFixed(0)}, ${away.z.toFixed(0)}`);
+  check('and away from them, none does', !(await offered()).some((l) => /Uphill|Bouncy Rock|Nuclear Cave/.test(l)), `at ${away.x.toFixed(0)}, ${away.z.toFixed(0)}`);
 
   // ---- the cleft: one walks to it, the bot climbs it, one is put back on the planks
   const way = CLEFT.way, mid = await at((way.a[0] + way.b[0]) / 2, (way.a[1] + way.b[1]) / 2), land = await at(gates.crack.x, gates.crack.z);
@@ -132,7 +132,8 @@ try {
   await page.waitForFunction(() => !window.__mmf.boatRace(), null, { timeout: 240000 });
   const sailed = await page.evaluate(() => ({ told: window.__told.boats, driver: !!window.__mmf.player.driver }));
   check('the regatta leaves with the next named start, is sailed by its bot in the running game, and its time told; another visitor\'s boat is shown while it races with the same start — one of another start is not —, and no longer once nothing is heard of it',
-    /start \w+ leaves in \d+…/.test(asked.line) && asked.wait > -1 && asked.wait <= 10.5 && guest.same === 1 && guest.shown.split(',').sort().join() === 'false,true' && /with 1 other skipper/.test(guest.line) && guest.left === 0
+    // (read the moment the start came — a slow frame or two after asking —, the line is already the race's)
+    (/start \w+ leaves in \d+…/.test(asked.line) || (asked.wait < 1 && /^Lap 1\/3/.test(asked.line))) && asked.wait > -1 && asked.wait <= 10.5 && guest.same === 1 && guest.shown.split(',').sort().join() === 'false,true' && /with 1 other skipper/.test(guest.line) && guest.left === 0
     && sailed.told?.[0] > 40000 && sailed.told[0] < 70000 && sailed.told[1] >= 1 && !sailed.driver,
     JSON.stringify({ asked, guest, sailed }));
   check('nothing was reported wrong by the browser', errors.length === 0, errors.slice(0, 3).join(' | '));

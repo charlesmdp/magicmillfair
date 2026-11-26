@@ -914,7 +914,7 @@ async function testRelease(start, dist) {
       check('release: the lab\'s five other games — the three ponds, the regatta, the slope, the cleft, the cave — each have a switch and a board that waits for it; a time too good to be true is refused, and the ponds are scored by how long one held',
         before.runs.every((s) => s === 400) && ids.every((b) => !(b in before.all.boards)) && ids.every((b) => on?.release?.[b] === true) && ids.every((b) => posted[b]?.day === 1 && after.boards[b]?.tops.day.some((e) => e.name === `Lab ${b}`))
         && low.boats.status === 400 && low.hollow.status === 400 && soon.status === 400 && longer?.day === 1 && after.boards.pond.tops.day.map((e) => e.name).join() === 'Longer,Lab pond'
-        && unit.pond === 'time' && unit.hollow === 'time' && unit.bell === 'points' && named.pond === 'The Endless Pond' && named.crack === 'Between a Rock',
+        && unit.pond === 'time' && unit.hollow === 'time' && unit.bell === 'points' && named.pond === 'The Endless Pond' && named.crack === 'Bouncy Rock',
         [before.runs, on?.release, Object.fromEntries(ids.map((b) => [b, posted[b]?.day])), low.boats.status, low.hollow.status, soon.status, after.boards?.pond?.tops.day, unit.pond, named.pond]);
     }
     // the seven games with a gate: a switch each, and a board that waits for it — three scored by how long one
@@ -951,7 +951,7 @@ async function testRelease(start, dist) {
         before.runs.every((st) => st === 400) && ids.every((b) => !(b in before.all.boards)) && ids.every((b) => on?.release?.[b] === true) && ids.every((b) => posted[b]?.day === 1 && after.boards[b]?.tops.day.some((e) => e.name === `New ${b}`))
         && falls?.day === 2 && early.status === 400 && Object.values(bad).every((r) => r.status === 400)
         && after.boards.waves.tops.day[0].score === 30_000 && after.boards.golf.tops.day[0].score === 31_127
-        && unit.waves === 'time' && unit.lava === 'time' && unit.hive === 'time' && unit.flip === 'time' && unit.cars === 'time' && unit.golf === 'strokes' && named.waves === 'Wave Goodbye' && named.hive === "The Bee's Knees" && named.golf === 'Par for the Course',
+        && unit.waves === 'time' && unit.lava === 'time' && unit.hive === 'time' && unit.flip === 'time' && unit.cars === 'time' && unit.golf === 'strokes' && named.waves === 'Big Tsunami' && named.hive === "Bee Fly" && named.golf === 'Balthazar Golf',
         [before.runs, Object.fromEntries(ids.map((b) => [b, posted[b]?.day ?? posted[b]])), falls?.day ?? falls, early.status, Object.fromEntries(Object.entries(bad).map(([k, r]) => [k, r.status])), unit.golf, named.golf]);
     }
     // everybody is asked to refresh

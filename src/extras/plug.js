@@ -1,5 +1,5 @@
-// What plugs one of the games with a gate into the running game — Wave Goodbye, Thin Crust, The Bee's Knees, Head
-// Over Heels, A Turn for the Worse, Round the Bend, Par for the Course (src/world/zones/games/<id>: see gates.js
+// What plugs one of the games with a gate into the running game — Big Tsunami, No Touch Lava!, Bee Fly, Head
+// Over Heels, Spiral of Death, Karting Simulator, Balthazar Golf (src/world/zones/games/<id>: see gates.js
 // there). Each is an extra behind a switch of its own (index.js; RELEASE in src/app/config.js): nothing of it is
 // loaded while its switch is off, and the game without it is the game as it was.
 //

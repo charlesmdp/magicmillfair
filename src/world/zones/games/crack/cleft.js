@@ -1,4 +1,4 @@
-// Between a Rock: its rules. No renderer here: the game, its checks and the climber that plays by itself all
+// Bouncy Rock: its rules. No renderer here: the game, its checks and the climber that plays by itself all
 // read this.
 //
 // Two needles of rock stand in the sea before the cliff at the south end of the bay, and between them a cleft:
@@ -21,7 +21,7 @@
 // `y` metres up from the planks. Time advances in steps of 1/120 s whatever the frame rate.
 
 export const CLEFT = {
-  name: 'Between a Rock',
+  name: 'Bouncy Rock',
   at: { x: 115, z: 106.5 }, // the middle of the cleft at its foot: one looks into it from the north, over the water
   floor: 1.3, // m above the sea: the planks one starts from
   height: 40,

@@ -1,4 +1,4 @@
-// Checks of Wave Goodbye, without a browser: the bank of sand lies just off the north beach, over shallow sea, a
+// Checks of Big Tsunami, without a browser: the bank of sand lies just off the north beach, over shallow sea, a
 // lagoon behind it, clear of the pier and of the game that hangs to the north; the sea is the same for
 // everybody, and has a mood that goes round in two and a half minutes; every kind of wave can be passed by its
 // move; a wave that catches one carries one back, the further the taller it stood, and only off the back of the

@@ -1,4 +1,4 @@
-// The Bee's Knees: what is seen of it and how it is played. Its rules are in rules.js; here it is built — four
+// Bee Fly: what is seen of it and how it is played. Its rules are in rules.js; here it is built — four
 // round combs of wax in their hoops of dark timber, hung over the sea from a great crook under a skep of straw,
 // the bees, the arch on the sand where one asks to play — and a run is played: a session that drives the player
 // (see PlayerController.driver). The wax one has broken is one's own: a comb is whole again for the next run.

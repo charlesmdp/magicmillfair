@@ -1,4 +1,4 @@
-// The Little Regatta: what is seen of it and how it is raced. Its rules are in water.js; here it is built — the
+// Harbor Heaven: what is seen of it and how it is raced. Its rules are in water.js; here it is built — the
 // buoys of the gates, the banner of the line, the four boats, the stand on the bank one steers from, the
 // board — and a race is run.
 //

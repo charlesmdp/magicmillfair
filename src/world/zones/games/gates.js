@@ -1,5 +1,5 @@
-// What the seven games with a gate share to build themselves — Wave Goodbye, Thin Crust, The Bee's Knees, Head
-// Over Heels, A Turn for the Worse, Round the Bend, Par for the Course: the arch one asks to play under, a small
+// What the seven games with a gate share to build themselves — Big Tsunami, No Touch Lava!, Bee Fly, Head
+// Over Heels, Spiral of Death, Karting Simulator, Balthazar Golf: the arch one asks to play under, a small
 // sign on a stake, the clock everybody shares and the starts counted on it. Each of them has a folder of its own
 // here, and three files elsewhere:
 //

@@ -1,4 +1,4 @@
-// Par for the Course: its rules. No renderer here: the game, its checks and the player that plays by itself all
+// Balthazar Golf: its rules. No renderer here: the game, its checks and the player that plays by itself all
 // read this.
 //
 // Nine holes of crazy golf on a little walk round the pond of acid of the north-western meadow, each the valley
@@ -20,7 +20,7 @@
 import { scoreOf, formatScore } from './score.js';
 
 export const GOLF = {
-  name: 'Par for the Course',
+  name: 'Balthazar Golf',
   acid: { x: -236, z: -82, r: 4.2 }, // the pond (ACID of the layout: the checks compare them)
   gate: { x: -225.5, z: -75.6, yaw: -1.87 }, // where one asks to play, south-east of the pond, looking at it (a heading of the valley: 0 looks south)
   stand: { x: -225.2, z: -71.3, yaw: 1.27 }, // the board of scores: on the left of the gate (as one looks through it), facing those who come; not on the right, where the acid puts back those it dissolved

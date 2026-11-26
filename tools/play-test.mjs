@@ -18,13 +18,13 @@ const check = (name, ok, detail = '') => { results.push(!!ok); console.log(`${ok
 // run in the page, given the id): what brings the end of a run by the bot nearer, where a whole run would take
 // minutes; `also` (optional): a check of its own, once it is built.
 const SPECS = {
-  waves: { offer: /Wave Goodbye/, score: (ms) => ms > 2000 && ms < 900000 },
-  lava: { offer: /Thin Crust/, score: (ms) => ms > 3000 && ms < 900000 },
+  waves: { offer: /Big Tsunami/, score: (ms) => ms > 2000 && ms < 900000 },
+  lava: { offer: /No Touch Lava!/, score: (ms) => ms > 3000 && ms < 900000 },
   hive: { offer: /Bee/, score: (ms) => ms > 3000 && ms < 900000 },
-  flip: { offer: /Head Over Heels/, score: (ms) => ms > 10000 && ms < 900000 },
-  spiral: { offer: /Turn for the Worse/, score: (ms) => ms > 20000 && ms < 900000 },
-  cars: { offer: /Round the Bend/, score: (ms) => ms > 5000 && ms < 900000 },
-  golf: { offer: /Par for the Course/, score: (n) => n > 0 },
+  flip: { offer: /Mostly Up & Down/, score: (ms) => ms > 10000 && ms < 900000 },
+  spiral: { offer: /Spiral of Death/, score: (ms) => ms > 20000 && ms < 900000 },
+  cars: { offer: /Karting Simulator/, score: (ms) => ms > 5000 && ms < 900000 },
+  golf: { offer: /Balthazar Golf/, score: (n) => n > 0 },
 };
 const asked = process.argv.slice(2).filter((a) => SPECS[a]), ids = asked.length ? asked : Object.keys(SPECS);
 

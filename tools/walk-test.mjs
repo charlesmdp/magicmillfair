@@ -574,7 +574,14 @@ try {
   {
     await place(-32, -164, 0);
     await frames(3);
-    await walk(46, true);
+    // (in at a run until well inside — so many frames carried one less far on a page that drew them faster, and
+    // the walker stopped short of the chamber now and then: it walks until it is in, or for twenty seconds)
+    await page.keyboard.down('ShiftLeft');
+    await page.keyboard.down('KeyW');
+    await page.waitForFunction(() => window.__mmf.player.pos.z < -187, null, { timeout: 20000, polling: 'raf' }).catch(() => {});
+    await page.keyboard.up('KeyW');
+    await page.keyboard.up('ShiftLeft');
+    await frames(2);
     const c1 = await page.evaluate(() => { const p = window.__mmf.player; return { x: p.pos.x, y: p.pos.y, z: p.pos.z, cave: p.cave?.name || null, cam: window.__mmf.engine.camera.position.y }; });
     await page.evaluate(() => { window.__mmf.rig.yaw += Math.PI / 2; });
     await walk(34, true);
@@ -767,8 +774,11 @@ try {
       // (which way a newcomer looks, and how far to the side of that a thing stands: 0 straight ahead, 180 behind)
       const fx = -Math.sin(s.yaw), fz = -Math.cos(s.yaw), off = (x, z) => Math.round((Math.acos(((x - s.x) * fx + (z - s.z) * fz) / Math.hypot(x - s.x, z - s.z)) * 180) / Math.PI);
       const inside = (poly, x, z) => { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, zi] = poly[i], [xj, zj] = poly[j]; if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) c = !c; } return c; };
+      // (the little clouds take a new picture seven times a second of the game's clock: forty frames drawn fast are less
+      // than that — they are watched until they move, for three seconds at the most)
       const puff = g.getObjectByName('notice-puff0'), before = puff.material.map.offset.x;
-      await new Promise((r) => { let k = 0; const tick = () => (++k > 40 ? r() : requestAnimationFrame(tick)); tick(); });
+      let moved = false;
+      await new Promise((r) => { const t0 = performance.now(); let k = 0; const tick = () => { if (puff.material.map.offset.x !== before) moved = true; return ++k > 40 && (moved || performance.now() - t0 > 3000) ? r() : requestAnimationFrame(tick); }; tick(); });
       const flowers = n.news.map((b) => [0, 1, 2, 3, 4, 5, 6, 7].some((k) => /poppy|cornflower/.test(m.world.scatter.flowerNear(b.x - 9 + (k % 4) * 3, b.z - 14 + Math.floor(k / 4) * 5, 6) || '')));
       return {
         banner: { there: !!g.getObjectByName('notice-welcome'), ahead: off(n.welcome.x, n.welcome.z), far: +Math.hypot(n.welcome.x - s.x, n.welcome.z - s.z).toFixed(1) },
@@ -778,7 +788,7 @@ try {
         beach: { there: !!g.getObjectByName('notice-beach'), words: g.getObjectByName('notice-beach')?.userData.words || '', turns: g.getObjectByName('notice-beach')?.userData.turns || [], left: (L.NOTICES.beach.x - s.x) * fz - (L.NOTICES.beach.z - s.z) * fx > 0, far: +Math.hypot(L.NOTICES.beach.x - s.x, L.NOTICES.beach.z - s.z).toFixed(1) },
         advice: { there: !!g.getObjectByName('notice-advice'), words: g.getObjectByName('notice-advice')?.userData.words || '', turns: g.getObjectByName('notice-advice')?.userData.turns || [], garden: inside(L.ROCK_GARDEN.outline, L.NOTICES.advice.x, L.NOTICES.advice.z), path: +Math.min(...L.PATHS.find((q) => q.id === 'garden').points.map(([qx, qz]) => Math.hypot(qx - L.NOTICES.advice.x, qz - L.NOTICES.advice.z))).toFixed(1), billy: Math.round(Math.hypot(L.WAYS.billy.at[0] - L.POND_DECK.x, L.WAYS.billy.at[1] - L.POND_DECK.z)) },
         planks: n.signposts.filter((p) => p.arms.some((a) => a.to === 'billy')).map((p) => `${p.id}: ${p.arms.find((a) => a.to === 'billy').text}`),
-        puffs: { moved: puff.material.map.offset.x !== before, frames: Math.round(1 / puff.material.map.repeat.x) },
+        puffs: { moved, frames: Math.round(1 / puff.material.map.repeat.x) },
         news: n.news.map((b) => ({ date: b.date, behind: off(b.x, b.z), far: Math.round(Math.hypot(b.x - s.x, b.z - s.z)) })), boards: [0, 1, 2].map((k) => !!g.getObjectByName(`notice-news${k}`)), days: N.NEWS.slice(0, 3).map((d) => d.date), old: !!g.getObjectByName('notice-news'), flowers,
       };
     });

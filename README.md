@@ -1259,20 +1259,20 @@ second (those have a gate one asks to play under, and are plugged in by `src/ext
 |---|---|---|---|
 | `slide` | **Mostly Down**, the water slide | from the cliffs to the sea | a time |
 | `pond` | **The Endless Pond**: three circuits, fifteen seconds, twenty, then as long as one can | the east bank of the Great Pond | how long one held |
-| `boats` | **The Little Regatta**: radio-controlled boats, three laps against three that sail by themselves — and against whoever took the same start | the Great Pond | a time |
-| `hill` | **Uphill Battle**: up a slope while logs, barrels and boulders roll down it | between the Great Pond and the old tree | a time |
-| `crack` | **Between a Rock**: up a cleft between two needles of rock, from wall to wall | in the sea, at the south end of the bay | a time |
+| `boats` | **Harbor Heaven**: radio-controlled boats, three laps against three that sail by themselves — and against whoever took the same start | the Great Pond | a time |
+| `hill` | **Jump the Logs**: up a slope while logs, barrels and boulders roll down it | between the Great Pond and the old tree | a time |
+| `crack` | **Bouncy Rock**: up a cleft between two needles of rock, from wall to wall | in the sea, at the south end of the bay | a time |
 | `hollow` | **The Nuclear Cave** (it was The Hollow Hill): a race flown under the ground, one lap, through what was buried there — atoms to take, rock to shave past | a mine at the foot of the sea cliff | a time |
 
 | Switch | Game | Where | Its score |
 |---|---|---|---|
-| `waves` | **Wave Goodbye**: a bank of sand, and the sea of everybody that comes in over it — one jumps what comes | off the north beach | how long one held |
-| `lava` | **Thin Crust**: basalt columns in a crater; the lava only rises, columns come up out of it | a volcano off the head of the pier | how long one held |
-| `hive` | **The Bee's Knees**: four combs of wax over the sea; the cell one stands on gives way | the north of the bay | how long one held |
-| `flip` | **Head Over Heels**: one runs by oneself in a machine of travelling girders, and one key turns gravity over | in the sea along the south side of the pier | the machine's time, 3 s more for each fall, a quarter of a second less for each spark |
-| `spiral` | **A Turn for the Worse**: a track wound round a tower, nineteen turns of obstacles up to its bell — a landing every 23 m up is a save: a fall puts one back on the last one reached | a tower in the south of the bay | a time, falls and all |
-| `cars` | **Round the Bend**: radio-controlled cars on a table, seen from above — three laps against three others | the meadow south of the acid pond | a time |
-| `golf` | **Par for the Course**: nine holes of crazy golf, each the valley in miniature | round the acid pond | its strokes, then the seconds of the round |
+| `waves` | **Big Tsunami**: a bank of sand, and the sea of everybody that comes in over it — one jumps what comes | off the north beach | how long one held |
+| `lava` | **No Touch Lava!**: basalt columns in a crater; the lava only rises, columns come up out of it | a volcano off the head of the pier | how long one held |
+| `hive` | **Bee Fly**: four combs of wax over the sea; the cell one stands on gives way | the north of the bay | how long one held |
+| `flip` | **Mostly Up & Down**: one runs by oneself in a machine of travelling girders, and one key turns gravity over | in the sea along the south side of the pier | the machine's time, 3 s more for each fall, a quarter of a second less for each spark |
+| `spiral` | **Spiral of Death**: a track wound round a tower, nineteen turns of obstacles up to its bell — a landing every 23 m up is a save: a fall puts one back on the last one reached | a tower in the south of the bay | a time, falls and all |
+| `cars` | **Karting Simulator**: radio-controlled cars on a table, seen from above — three laps against three others | the meadow south of the acid pond | a time |
+| `golf` | **Balthazar Golf**: nine holes of crazy golf, each the valley in miniature | round the acid pond | its strokes, then the seconds of the round |
 
 With a switch off nothing of its game is loaded, built or drawn: the fair is the fair as it was. Switched on,
 a game is built at once on every screen, its board of scores exists from that moment (`BOARDS` in
@@ -1282,7 +1282,7 @@ has**: a stand by its gate with the four lists (today, the week, the month, all 
 sponsor — for sale like the others from that moment, and not before (`LAB_BOARD` says where each stand goes
 from its gate; the one of the cleft stands on piles at the end of its planks) —, a star on the map, planks
 at the forks. These are courses: their scores are bounded in
-time, not played again by the referee. (*Between a Rock*: its walkway has a rope on both sides and its
+time, not played again by the referee. (*Bouncy Rock*: its walkway has a rope on both sides and its
 landing is closed all round — walls as thin as a rope, at the height of the planks: nobody falls off.
 *The Endless Pond*: **one sets off when one likes** — the runner waits at the end of the jetty, and goes on
 a jump while the lamp beside it is green. It is green when setting off at that moment leaves a way through
@@ -1290,12 +1290,12 @@ the first pond on plain jumps, with room to spare on the tightest: a table in th
 `pond/ring.js`, which `node tools/pond-test.mjs` works out again and compares — before, one start in three could
 not be run without the second jump. A low beam is lower, what an arm catches of a runner is narrower than
 the runner, and a foot may be further over the edge of a stone. The music of the climb plays on the ponds
-too, rising from pond to pond. *Between a Rock* again: **what there is to get good at is the kick**. A wall
+too, rising from pond to pond. *Bouncy Rock* again: **what there is to get good at is the kick**. A wall
 one touches is held by itself — nothing to hold down —; a kick given within a fifth of a second of catching
 a wall is a *sharp* kick, which carries higher, rings, and counts in a streak shown on the screen; the game
 says so at the first walls. And nothing is left to luck: stones come down the walls only, never the middle,
 on the top quarter of the climb, each announced by a mark on its wall — one is on the other wall. The music
-of the climb rises with the climber. *The Little Regatta*: **a start every ten seconds**, each with its name
+of the climb rises with the climber. *Harbor Heaven*: **a start every ten seconds**, each with its name
 (Alpha, Bravo…), on the clock everybody shares — one joins the next until its last moment, and friends who
 take the same one race together: the race is where that clock says, so that every screen of one start is at
 the same step, against the same three boats that sail by themselves (2 % slower than they were, a little
@@ -1305,7 +1305,7 @@ better or worse from one start to the next). Each visitor's game says where its 
 160 m, nothing kept, nothing from who is kept out in silence) — and the others' boats are drawn where they
 were said to be, a little further for the time gone by, in colours of their own; from the bank one sees
 whoever is racing. Boats of visitors do not push each other: each is where its owner's screen says.
-*Uphill Battle* is **a slog now, three times as long**: one climbs slower than one steps aside, something is
+*Jump the Logs* is **a slog now, three times as long**: one climbs slower than one steps aside, something is
 let go at the top every four tenths of a second, the barrels come down almost to the line and the boulders
 to a fifth of the slope, and what hits one carries one further back. The slope is not rushed any more — its
 bot took eleven seconds, it takes about thirty-three, hit half a dozen times on the way —: it is read. Its

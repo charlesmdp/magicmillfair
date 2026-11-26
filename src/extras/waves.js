@@ -1,4 +1,4 @@
-// Wave Goodbye as an extra: plugged into the running game from outside, through what the game exposes (plug.js), so
+// Big Tsunami as an extra: plugged into the running game from outside, through what the game exposes (plug.js), so
 // that the game without it is exactly the game as it was. Its switch: RELEASE in src/app/config.js (off as it is
 // delivered); its board of scores: main.js (LAB_GAMES, LAB_BOARD) and server/scores.js.
 import { plug } from './plug.js';

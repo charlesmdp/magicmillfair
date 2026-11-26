@@ -1,4 +1,4 @@
-// Checks of Uphill Battle, without a browser: the slope is open ground — no tree on it, no water, an even climb;
+// Checks of Jump the Logs, without a browser: the slope is open ground — no tree on it, no water, an even climb;
 // what rolls is the same for everybody and gets worse towards the top; a log is jumped, the rest is kept out of
 // the way of; what hits carries one back down, never to the start; the climbs leave together on the shared
 // clock; a bot gets to the bell.

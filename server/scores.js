@@ -60,23 +60,23 @@ export const BOARDS = {
   // The Endless Pond is scored by how long one held, in ms (the more the better: `unit` says it is a time, and
   // a run cannot be over sooner than it claims to have lasted); the others are times, the less the better
   pond: { order: 'desc', min: 1000, max: 3600_000, each: 1, unit: 'time', release: 'pond' },
-  boats: { order: 'asc', min: 37_000, max: 1800_000, release: 'boats' }, // The Little Regatta: three laps
-  hill: { order: 'asc', min: 18_000, max: 600_000, release: 'hill' }, // Uphill Battle: from the arch to the bell (run flat out with nothing in the way: 18.3 s)
-  crack: { order: 'asc', min: 7000, max: 1800_000, release: 'crack' }, // Between a Rock: forty metres of cleft
+  boats: { order: 'asc', min: 37_000, max: 1800_000, release: 'boats' }, // Harbor Heaven: three laps
+  hill: { order: 'asc', min: 18_000, max: 600_000, release: 'hill' }, // Jump the Logs: from the arch to the bell (run flat out with nothing in the way: 18.3 s)
+  crack: { order: 'asc', min: 7000, max: 1800_000, release: 'crack' }, // Bouncy Rock: forty metres of cleft
   hollow: { order: 'asc', min: 15_000, max: 600_000, release: 'hollow' }, // The Nuclear Cave: one lap of the cave
   // …and the seven games with a gate (src/extras/plug.js), each behind its own switch. Three are scored by how
   // long one held (as the pond is), three by a time; the golf by its strokes — a thousand for each — then by the
   // seconds of the round (`unit`: the back office writes it "31 strokes (2:07)"). The figures are those the
   // checks of each game print (tools/<id>-test.mjs holds them against this table).
-  waves: { order: 'desc', min: 2500, max: 900_000, each: 1, unit: 'time', release: 'waves' }, // Wave Goodbye
-  lava: { order: 'desc', min: 1000, max: 98_000, each: 1, unit: 'time', release: 'lava' }, // Thin Crust: nobody holds longer than the lava takes to cover the highest column
-  hive: { order: 'desc', min: 6000, max: 90_000, each: 1, unit: 'time', release: 'hive' }, // The Bee's Knees: the bees see to it that no comb lasts longer
-  // Head Over Heels: the time the machine takes is the same for all (`length`); one's time is that, 3 s more for
+  waves: { order: 'desc', min: 2500, max: 900_000, each: 1, unit: 'time', release: 'waves' }, // Big Tsunami
+  lava: { order: 'desc', min: 1000, max: 98_000, each: 1, unit: 'time', release: 'lava' }, // No Touch Lava!: nobody holds longer than the lava takes to cover the highest column
+  hive: { order: 'desc', min: 6000, max: 90_000, each: 1, unit: 'time', release: 'hive' }, // Bee Fly: the bees see to it that no comb lasts longer
+  // Mostly Up & Down: the time the machine takes is the same for all (`length`); one's time is that, 3 s more for
   // each fall, a quarter of a second less for each spark — so a time may be well over what the run lasted (`added`)
   flip: { order: 'asc', min: 67_000, max: 600_000, length: 84_000, added: 600_000, release: 'flip' },
-  spiral: { order: 'asc', min: 144_000, max: 900_000, release: 'spiral' }, // A Turn for the Worse: from the first step to the bell
-  cars: { order: 'asc', min: 16_000, max: 180_000, release: 'cars' }, // Round the Bend: three laps of the table
-  golf: { order: 'asc', min: 9000, max: 63_999, unit: 'strokes', release: 'golf' }, // Par for the Course: nine holes, seven strokes a hole at most
+  spiral: { order: 'asc', min: 144_000, max: 900_000, release: 'spiral' }, // Spiral of Death: from the first step to the bell
+  cars: { order: 'asc', min: 16_000, max: 180_000, release: 'cars' }, // Karting Simulator: three laps of the table
+  golf: { order: 'asc', min: 9000, max: 63_999, unit: 'strokes', release: 'golf' }, // Balthazar Golf: nine holes, seven strokes a hole at most
   run: { order: 'desc', min: 1, max: 60_000, length: 2_000, each: 12 }, // the arcade cabinet: metres run (52 a second at the fastest), and 25 for an isotope now and then
 };
 export const KEPT = { all: 200, month: 100, week: 100, day: 100 }, SHOWN = 10;

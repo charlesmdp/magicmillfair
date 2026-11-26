@@ -29,8 +29,8 @@ export const nextBid = (bid = 0) => (bid > 0 ? bid + Math.max(100, Math.ceil(bid
 export const BOARDS = {
   sky: 'Mostly Up', race: 'Quadmania', wing: 'Flappy Robot', shoot: 'Bullseye Alley', mole: 'Whack-a-Mole', milk: 'Feed the Clown', bell: 'Ring the Bell',
   hoop: 'Buzzer Beater', stack: 'Stack It', geiger: 'Geiger Says', fish: 'Hook, Line & Sinker', scram: 'SCRAM!', cups: 'Shell Shock', run: 'Meltdown Run',
-  slide: 'Mostly Down', pond: 'The Endless Pond', boats: 'The Little Regatta', hill: 'Uphill Battle', crack: 'Between a Rock', hollow: 'The Nuclear Cave',
-  waves: 'Wave Goodbye', lava: 'Thin Crust', hive: "The Bee's Knees", flip: 'Head Over Heels', spiral: 'A Turn for the Worse', cars: 'Round the Bend', golf: 'Par for the Course',
+  slide: 'Mostly Down', pond: 'The Endless Pond', boats: 'Harbor Heaven', hill: 'Jump the Logs', crack: 'Bouncy Rock', hollow: 'The Nuclear Cave',
+  waves: 'Big Tsunami', lava: 'No Touch Lava!', hive: "Bee Fly", flip: 'Mostly Up & Down', spiral: 'Spiral of Death', cars: 'Karting Simulator', golf: 'Balthazar Golf',
 };
 /**
  * The big attractions — those with a star on the map: their panel is shared by up to BOARD_PLACES sponsors,

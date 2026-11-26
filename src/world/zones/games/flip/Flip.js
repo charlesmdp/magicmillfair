@@ -1,4 +1,4 @@
-// Head Over Heels: what is seen of it and how it is run. Its rules are in rules.js; here it is built — a machine
+// Mostly Up & Down: what is seen of it and how it is run. Its rules are in rules.js; here it is built — a machine
 // on piles in the sea, along the south side of the pier: two striped towers, beams between them above and below,
 // and between the beams the girders of the course, which come out of the right tower and go into the left one
 // as the runner runs on the spot (the flying theatre does the same with its scenery). Every girder is a magnet,

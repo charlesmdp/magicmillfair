@@ -1,4 +1,4 @@
-// Between a Rock as an extra: plugged into the running game from outside, through what the game exposes
+// Bouncy Rock as an extra: plugged into the running game from outside, through what the game exposes
 // (window.__mmf), so that no file of the game is changed and the game without it is exactly the game as it was.
 // See index.js (the switches) and lab/INTEGRATION.md (its board of scores).
 import { Cleft } from '../world/zones/games/crack/Cleft.js';

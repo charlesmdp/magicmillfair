@@ -1,4 +1,4 @@
-// A Turn for the Worse: its rules. No renderer here: the game, its checks and the runner that plays by itself
+// Spiral of Death: its rules. No renderer here: the game, its checks and the runner that plays by itself
 // all read this.
 //
 // A tower stands in the sea, and a track of planks winds up round it like a giant spiral stair: nineteen turns
@@ -56,7 +56,7 @@ const frac = (v) => v - Math.floor(v);
 const hash = (n, k = 0) => { const s = Math.sin(n * 127.1 + k * 311.7 + 74.7) * 43758.5453; return s - Math.floor(s); };
 
 export const SPIRAL = {
-  name: 'A Turn for the Worse',
+  name: 'Spiral of Death',
   at: { x: 168, z: 84 }, // the middle of the tower, in the south of the bay
   gate: { x: 52, z: 71 }, // where one asks to run: on the sand of the south beach, the tower in sight
   core: 5.2, // m: the radius of the tower itself

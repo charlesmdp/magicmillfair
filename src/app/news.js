@@ -4,6 +4,12 @@
 // a board each (see zones/games/Notices.js), the others stay here as the history of the place.
 export const NEWS = [
   {
+    date: '26 November 2026',
+    items: [
+      ['Three games, new names', 'Uphill Battle is now Jump the Logs, Between a Rock is Bouncy Rock, and The Little Regatta is Harbor Heaven. The same games, the same boards of scores.'],
+    ],
+  },
+  {
     date: '25 November 2026',
     items: [
       ['What is in the Game Pass, at a glance', 'In the item shop (O) its banner now says what is inside — every hat, the Jetpack Lite, four sizes, sixteen more colours, your own weather soon — without being opened.'],
@@ -14,8 +20,8 @@ export const NEWS = [
       ['The telephone, where it can be found', 'One of the relics stood behind a wall by the gate, where nobody could see it. The public telephone is now by the road, a few steps down from the bus stop, under a blue hood.'],
       ['The Nuclear Cave', 'The Hollow Hill has a new name, and a reason for it: drums, glowing pools, and green atoms that lead you into the rings. You are thinner in there, a knock costs less, and shaving past the rock fills your burst.'],
       ['Ten more relics', 'More things are left over from the world before, all over the valley. The vending machine went to the Lost Temple, the scratched stone to Lookout Hill — and one of them is very well hidden.'],
-      ['Uphill Battle, in four stretches', 'Quiet at the foot — a log now and then —, then barrels, then boulders, then everything at once near the bell. Lines across the slope say where each begins.'],
-      ['Speedboats on the pond', 'The boats of The Little Regatta have a pointed hull, a cockpit and a wing now.'],
+      ['Jump the Logs, in four stretches', 'Quiet at the foot — a log now and then —, then barrels, then boulders, then everything at once near the bell. Lines across the slope say where each begins.'],
+      ['Speedboats on the pond', 'The boats of Harbor Heaven have a pointed hull, a cockpit and a wing now.'],
       ['Sponsoring, made simple', 'Say what your place should show, then pay: it is up the moment you are back — where you stood. The fair cheers every new sponsor in the chat.'],
       ['Five sponsors per attraction', 'The games with a star on the map share their panel between five sponsors, turn by turn. The Trading Post lists them first, with new pictures.'],
       ['The wall counts clicks', 'Under each sponsor: its site, and how often it was opened from the fair. Step up to the wall to open them.'],
@@ -34,9 +40,9 @@ export const NEWS = [
       ['The chat is kept fourteen days', 'What is said in the chat is now kept two weeks for the administrators, to act on abuse — then deleted. The privacy page says exactly what.'],
       ['Red stars', 'On the map (M) the big attractions now wear a red star edged with gold; the slide is drawn red and white.'],
       ['Which room, at a glance', 'The settings list the rooms: yours first, the others with a button that takes you there.'],
-      ['Uphill Battle, uphill for good', 'Three times as long, and far more comes rolling down: nobody rushes the slope any more. Read it, step aside, jump the logs.'],
-      ['The Little Regatta, together', 'A start every ten seconds, each with its name: take the same one as your friends and you race side by side. The boats that sail by themselves got a little slower.'],
-      ['Between a Rock, sharper', 'You hold a wall by yourself now. Kick the moment you touch it: a sharp kick goes higher, and they add up. No more stones out of nowhere.'],
+      ['Jump the Logs, uphill for good', 'Three times as long, and far more comes rolling down: nobody rushes the slope any more. Read it, step aside, jump the logs.'],
+      ['Harbor Heaven, together', 'A start every ten seconds, each with its name: take the same one as your friends and you race side by side. The boats that sail by themselves got a little slower.'],
+      ['Bouncy Rock, sharper', 'You hold a wall by yourself now. Kick the moment you touch it: a sharp kick goes higher, and they add up. No more stones out of nowhere.'],
       ['The Endless Pond, at your moment', 'You set off when you like: a jump, while the lamp at the end of the jetty is green. The beams are kinder, too.'],
     ],
   },

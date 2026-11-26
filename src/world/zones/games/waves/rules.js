@@ -1,4 +1,4 @@
-// Wave Goodbye: its rules. No renderer here: the game, its checks and the runner that plays by itself all read this.
+// Big Tsunami: its rules. No renderer here: the game, its checks and the runner that plays by itself all read this.
 //
 // A bank of sand lies just off the beach, sixteen metres wide and nine deep, a lagoon behind it. The sea comes in
 // over it, wave after wave, and one holds the bank: one runs where one likes, jumps, jumps again in the air.
@@ -25,7 +25,7 @@
 // of who looks out to sea when positive). Time advances in steps of 1/120 s whatever the frame rate.
 
 export const WAVES = {
-  name: 'Wave Goodbye',
+  name: 'Big Tsunami',
   from: { x: 47, z: -60 }, yaw: 1.2217, // the root, at the water's edge, and the way out to sea (0 looks south: this is east, a little south)
   back: 6, front: 15, half: 8, // the bank: from so far to so far out; so far to each side of its middle
   edge: 0.35, // m: how near its edges one runs

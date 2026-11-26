@@ -1,4 +1,4 @@
-// Checks of The Little Regatta, without a browser: the course lies on water deep enough, clear of the bank, of the
+// Checks of Harbor Heaven, without a browser: the course lies on water deep enough, clear of the bank, of the
 // deck and of The Endless Pond; a boat is driven as it should be — it gathers way, turns, slides, bounces off
 // the bank and the buoys, has its burst —; the gates are taken in order, between their buoys; the boats that
 // sail by themselves get round three laps without running aground, the better ones sooner; it is the same race

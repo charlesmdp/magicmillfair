@@ -1,4 +1,4 @@
-// Between a Rock: what is seen of it and how it is climbed. Its rules are in cleft.js; here it is built — two
+// Bouncy Rock: what is seen of it and how it is climbed. Its rules are in cleft.js; here it is built — two
 // needles of layered rock standing in the sea before the cliff, the cleft between them, their ledges under
 // grass and ferns, the creepers, the trees on their heads, the fall that comes down the cliff behind, the water
 // that runs down the walls, the stones that come down, the planks at the foot and the walkway to them from the

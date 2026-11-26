@@ -1,4 +1,4 @@
-// Thin Crust: its rules. No renderer here: the game, its checks and the player that plays by itself all read this.
+// No Touch Lava!: its rules. No renderer here: the game, its checks and the player that plays by itself all read this.
 //
 // A small volcano east of the pier; deep in its crater a pool of lava, and standing in the lava sixty-one columns
 // of basalt, six-sided. One runs and jumps on their tops. Heights are counted in levels: a jump climbs one level,
@@ -27,7 +27,7 @@
 // negative, and nothing moves), and advances in steps of 1/120 s whatever the frame rate.
 
 export const LAVA = {
-  name: 'Thin Crust',
+  name: 'No Touch Lava!',
   at: { x: 188, z: 8 }, // the middle of the field: in the open sea, east of the head of the pier
   level: 0.9, // the lava as a round begins, metres above the sea
   look: [-1, 0], // the way the camera looks, on the plan (x, z): west, towards the pier — "up" on the stick goes that way

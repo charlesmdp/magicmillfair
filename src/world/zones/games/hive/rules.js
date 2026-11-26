@@ -1,4 +1,4 @@
-// The Bee's Knees: its rules. No renderer here: the game, its checks and the player that plays by itself all read
+// Bee Fly: its rules. No renderer here: the game, its checks and the player that plays by itself all read
 // this.
 //
 // Four round combs of wax hang one above the other over the sea, in the north of the bay. One runs on them, and
@@ -18,7 +18,7 @@
 // whatever the frame rate.
 
 export const HIVE = {
-  name: "The Bee's Knees",
+  name: "Bee Fly",
   at: { x: 84, z: -84 }, // the middle of the combs, over the sea
   gate: { x: 43.5, z: -79.5, yaw: 1.68 }, // where one asks to play, on the sand between the last parasol of the beach and its lounge, looking out at the combs (a heading of the valley: 0 looks south)
   view: -Math.PI / 2, // the way the camera looks, and "up" on the stick: west, back towards the beach and the valley

@@ -1,4 +1,4 @@
-// Checks of Thin Crust, without a browser: the volcano stands in the open sea, clear of the pier, and its crater
+// Checks of No Touch Lava!, without a browser: the volcano stands in the open sea, clear of the pier, and its crater
 // holds the lava it shows; the field is sixty-one columns, one level of which is jumped and two are not; the lava
 // rises in pulses, faster and faster — twice a double rise, said ahead — and never goes down; no column ever goes down, a new one comes up out of the
 // lava after a glow, at least one level above the lava to come; a round is the same for everybody and not the next

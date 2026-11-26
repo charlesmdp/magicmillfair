@@ -1,4 +1,4 @@
-// Checks of Between a Rock, without a browser: two needles stand in the sea before the cliff, their planks over
+// Checks of Bouncy Rock, without a browser: two needles stand in the sea before the cliff, their planks over
 // the water, the walkway from the sand; the cleft widens with height, its ledges leave room to pass and its wet
 // stretches are never where one needs to wait; one walks, steers a little, holds on to a wall and slides —
 // slowly while holding towards it —, kicks from wall to wall; nobody climbs a single wall; stones come down by

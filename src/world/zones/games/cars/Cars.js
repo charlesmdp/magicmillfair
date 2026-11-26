@@ -1,4 +1,4 @@
-// Round the Bend: what is seen of it and how it is played. Its rules are in rules.js; here it is built — a table in
+// Karting Simulator: what is seen of it and how it is played. Its rules are in rules.js; here it is built — a table in
 // the meadow with a toy circuit on it for radio-controlled cars: a bright infield, kerbs red and white, walls of
 // coloured tyres, a glowing pad, the sand, the oil, the ramp with its hoop of fire, the jets of fire beside the
 // track, bunting round the table, a stand to drive from and the arch where one asks to play — and a race is played:

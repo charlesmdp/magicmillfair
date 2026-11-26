@@ -1,4 +1,4 @@
-// Checks of Head Over Heels, without a browser: the machine stands in the sea, clear of the pier, its gate on dry
+// Checks of Mostly Up & Down, without a browser: the machine stands in the sea, clear of the pier, its gate on dry
 // sand; the course is a thousand metres long, in fourteen stretches, and one runs it more than two and a half
 // times as fast at the end; gravity turns over only while one's feet are on something; a girder in the way
 // pushes one back and out at the left end — unless one frees oneself in time; out, one drops back in near one's

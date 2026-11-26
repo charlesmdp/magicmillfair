@@ -1,4 +1,4 @@
-// Checks of Par for the Course, without a browser: the nine beds lie in their rectangle of the meadow, half a metre
+// Checks of Balthazar Golf, without a browser: the nine beds lie in their rectangle of the meadow, half a metre
 // over it, clear of each other and of the pond (but for the two over the acid), and so do the path, the bunting,
 // the benches and the kiosk; the arch and the stand on ground one can walk; a ball rolls and stops where the
 // friction says, bounces off a cushion, is taken by the cup when slow and not when fast, rolls back down a step too

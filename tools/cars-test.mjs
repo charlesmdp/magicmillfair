@@ -1,4 +1,4 @@
-// Checks of Round the Bend, without a browser: the table stands in the meadow inside its rectangle, its top level
+// Checks of Karting Simulator, without a browser: the table stands in the meadow inside its rectangle, its top level
 // over ground that is not quite, the arch on grass one can walk on; the lap holds together — its length, its
 // bends, its boards, nothing of it off the table, no two stretches sharing a board — and its gates are in their
 // order; the remote speaks to the car — up is its throttle whichever way it faces, left and right are its own,

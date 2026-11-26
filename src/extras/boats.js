@@ -1,4 +1,4 @@
-// The Little Regatta as an extra: plugged into the running game from outside, through what the game exposes
+// Harbor Heaven as an extra: plugged into the running game from outside, through what the game exposes
 // (window.__mmf), so that no file of the game is changed and the game without it is exactly the game as it was.
 // See index.js (the switches) and lab/INTEGRATION.md (its board of scores).
 import { Boats } from '../world/zones/games/boats/Boats.js';

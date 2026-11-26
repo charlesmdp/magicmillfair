@@ -1,4 +1,4 @@
-// Checks of A Turn for the Worse, without a browser: the tower stands in the sea, clear of the cliffs, of the
+// Checks of Spiral of Death, without a browser: the tower stands in the sea, clear of the cliffs, of the
 // cleft and of the pier, and its gate on dry sand; the track is a slope one can run and leaves room under the
 // turn above; the camera sees far enough past the tower; the legs do what the stick asks — who lets go stops,
 // nobody runs back down, the clock starts with the first step —; each thing in the way is got past by its move
@@ -70,7 +70,7 @@ const windowOf = (key, from, to, u = 0) => { let n = 0; for (let k = 0; k < 240;
   // (and the cliffs nowhere lean over it: within 45 m of its rail, how high the land gets, and how near the land that is higher than the foot of the tower comes)
   let tall = -99, tallAt = 0;
   for (let k = 0; k < 360; k++) for (let d = 0; d <= 45; d += 1) { const a = (k / 360) * TAU, h = height(C.x + Math.cos(a) * (S.r + H + d), C.z + Math.sin(a) * (S.r + H + d)); if (h > tall) { tall = h; tallAt = d; } }
-  check('clear of the cliffs — all 146 m of it —, of the cleft of Between a Rock and of the pier', land - (S.r + H) > 15 && cleft > 35 && pier > 25 && tallAt > 30, `from its rail: ${(land - S.r - H).toFixed(0)} m to the nearest land (the cliffs within 45 m are ${tall.toFixed(0)} m high at most, ${tallAt} m off), ${cleft.toFixed(0)} m to the cleft, ${pier.toFixed(0)} m to the pier`);
+  check('clear of the cliffs — all 146 m of it —, of the cleft of Bouncy Rock and of the pier', land - (S.r + H) > 15 && cleft > 35 && pier > 25 && tallAt > 30, `from its rail: ${(land - S.r - H).toFixed(0)} m to the nearest land (the cliffs within 45 m are ${tall.toFixed(0)} m high at most, ${tallAt} m off), ${cleft.toFixed(0)} m to the cleft, ${pier.toFixed(0)} m to the pier`);
   const g = S.gate, gh = height(g.x, g.z); let sea = 99, hump = -9;
   for (let k = 0; k < 72; k++) for (let d = 1; d < sea; d += 0.5) { const a = (k / 72) * TAU; if (height(g.x + Math.cos(a) * d, g.z + Math.sin(a) * d) < 0) { sea = d; break; } }
   for (let f = 0.15; f <= 1; f += 0.01) hump = Math.max(hump, height(g.x + (C.x - S.r - g.x) * f, g.z + (C.z - g.z) * f));

@@ -1,4 +1,4 @@
-// Wave Goodbye: what is seen of it and how it is played. Its rules are in rules.js; here it is built — the bank
+// Big Tsunami: what is seen of it and how it is played. Its rules are in rules.js; here it is built — the bank
 // of sand off the beach and the neck that joins it, the poles that say how tall a wave stands, the arch on the
 // sand where one jumps in, the waves, the foam they leave, the spray — and a run is played: a session that
 // drives the player (see PlayerController.driver). The sea is drawn from the clock of the world: everybody

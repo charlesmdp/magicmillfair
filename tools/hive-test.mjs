@@ -1,4 +1,4 @@
-// Checks of The Bee's Knees, without a browser: the combs hang over the sea, clear of the pier, of the island, of
+// Checks of Bee Fly, without a browser: the combs hang over the sea, clear of the pier, of the island, of
 // the beach lounge and of the sand bar of the waves, and the arch is on dry sand; a comb is round and whole and
 // nobody leaves it sideways; a cell one touches drops after its time and not before, whoever is still on it, and
 // does not come back; one falls from comb to comb and into the sea; a jump, a jump granted a moment late; the

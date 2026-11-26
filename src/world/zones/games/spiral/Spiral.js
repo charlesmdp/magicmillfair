@@ -1,4 +1,4 @@
-// A Turn for the Worse: what is seen of it and how it is run. Its rules are in rules.js; here the tower is built
+// Spiral of Death: what is seen of it and how it is run. Its rules are in rules.js; here the tower is built
 // — a striped tower on a rock in the sea, the gallery of planks that winds up round it nineteen times, its rails
 // and its bulbs, what stands in the way and what moves, a pointed roof and a bell — and a run is a session that
 // drives the player (see PlayerController.driver): the legs do what the stick asks — up, they run; let go, they

@@ -1,4 +1,4 @@
-// Thin Crust: what is seen of it and how it is played. Its rules are in rules.js; here it is built — a small
+// No Touch Lava!: what is seen of it and how it is played. Its rules are in rules.js; here it is built — a small
 // volcano of dark rock in the sea east of the pier, its crater, the lava deep in it, the sixty-one columns of
 // basalt, an arch on the head of the pier where one asks to play — and a round is run: a session that drives the
 // player (see PlayerController.driver). The lava and the columns are drawn from the round and its clock:

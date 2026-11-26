@@ -1,4 +1,4 @@
-// Par for the Course: what is seen of it and how it is played. Its rules are in rules.js; here the nine beds are
+// Balthazar Golf: what is seen of it and how it is played. Its rules are in rules.js; here the nine beds are
 // built — felt raised half a metre over the meadow on a painted timber skirt, in a kerb striped in the hole's
 // colour, each with its tee, its cup and flag and a painted plate of its number, name and par — and each dressed
 // as the place of the valley it takes after: the swan pond, the temple stairs and their waterfall, the mill, the

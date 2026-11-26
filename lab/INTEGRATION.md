@@ -7,9 +7,9 @@ on over the game as it stands, each on its own, and with every switch off the ga
 |---|---|---|---|
 | `slide` | **Mostly Down**, the water slide | `src/world/zones/games/slide/`, `src/extras/slide.js` | `node tools/slide-test.mjs` |
 | `pond` | **The Endless Pond**, three circuits on the Great Pond: fifteen seconds, twenty, then as long as one can | `src/world/zones/games/pond/`, `src/extras/pond.js` | `node tools/pond-test.mjs` (29) |
-| `boats` | **The Little Regatta**, radio-controlled boats racing on the Great Pond | `src/world/zones/games/boats/`, `src/extras/boats.js` | `node tools/boats-test.mjs` (18) |
-| `hill` | **Uphill Battle**, up a long slope while logs, barrels and boulders roll down it | `src/world/zones/games/hill/`, `src/extras/hill.js` | `node tools/hill-test.mjs` (12) |
-| `crack` | **Between a Rock**, up a cleft between two needles of rock, from wall to wall | `src/world/zones/games/crack/`, `src/extras/crack.js` | `node tools/crack-test.mjs` (27) |
+| `boats` | **Harbor Heaven**, radio-controlled boats racing on the Great Pond | `src/world/zones/games/boats/`, `src/extras/boats.js` | `node tools/boats-test.mjs` (18) |
+| `hill` | **Jump the Logs**, up a long slope while logs, barrels and boulders roll down it | `src/world/zones/games/hill/`, `src/extras/hill.js` | `node tools/hill-test.mjs` (12) |
+| `crack` | **Bouncy Rock**, up a cleft between two needles of rock, from wall to wall | `src/world/zones/games/crack/`, `src/extras/crack.js` | `node tools/crack-test.mjs` (27) |
 | `hollow` | **The Nuclear Cave** (it was The Hollow Hill), a race flown under the ground, one lap against the clock | `src/world/zones/games/hollow/`, `src/extras/hollow.js` | `node tools/hollow-test.mjs` (32) |
 | `caves` | The caves are safe places: nearby chat only | `src/extras/caves.js` | `node tools/extras-test.mjs` (15, with the next) |
 | `stats` | The game in figures: counters, the page `/opendata`, a line in the settings | `src/extras/stats.js`, `server/stats.js`, `public/opendata/`, `public/opendate/` | the same |
@@ -24,11 +24,11 @@ are not offered to the game: `lab/oak/floor/` is one floor of the oak, tried aga
 the game is the jump from limb to limb with a ring of light that shows where it ends, the camera stays outside
 the tree; `node lab/oak/floor/test.mjs`).
 
-**Seven more games are extras of the game, each behind a switch that is off as delivered** — Wave Goodbye
-(`waves`: a bank of sand and the sea of everybody), Thin Crust (`lava`: the lava rises, columns come up out of
-it), The Bee's Knees (`hive`: four combs of wax that give way underfoot), Head Over Heels (`flip`: a runner who
-turns gravity over in a machine of travelling girders), A Turn for the Worse (`spiral`: a track wound round a
-tower), Round the Bend (`cars`: radio-controlled cars seen from above) and Par for the Course (`golf`: nine holes
+**Seven more games are extras of the game, each behind a switch that is off as delivered** — Big Tsunami
+(`waves`: a bank of sand and the sea of everybody), No Touch Lava! (`lava`: the lava rises, columns come up out of
+it), Bee Fly (`hive`: four combs of wax that give way underfoot), Mostly Up & Down (`flip`: a runner who
+turns gravity over in a machine of travelling girders), Spiral of Death (`spiral`: a track wound round a
+tower), Karting Simulator (`cars`: radio-controlled cars seen from above) and Balthazar Golf (`golf`: nine holes
 of crazy golf round the acid pond). They were tried on this page first, then put in the game when their owner
 asked: their files are with the other games (`src/world/zones/games/<id>/`, `src/extras/<id>.js`,
 `tools/<id>-test.mjs`), the game keeps their boards of scores as it does for the six games above, and
@@ -122,7 +122,7 @@ run ends in the water (`pond`: 0, 1 or 2, the one reached). For the game's board
 max: 3600_000 }` in `BOARDS`, and `app.pondDone = (ms) => scoreGame('pond', POND.name, ms, formatTime(ms))`.
 The regatta keeps out of the three circuits (`REGATTA.keepOut`).
 
-## The Little Regatta
+## Harbor Heaven
 
 Radio-controlled boats on the Great Pond, on the principle of the quad race: three laps of fourteen gates (two
 buoys each), from before the circuit of The Endless Pond, west along the deck, through the neck of the pond into
@@ -136,7 +136,7 @@ The boats are seen only by who races: each visitor has a race of their own (show
 message of the game's network, which an extra cannot add). The extra calls `app.boatsDone?.(ms, place)`; for the
 game's boards `boats: { order: 'asc', min: 37_000, max: 1800_000 }` (the checks print the rule).
 
-## Uphill Battle
+## Jump the Logs
 
 A long open slope between the Great Pond and the old tree, sixty-six metres between two ropes, from an arch to a
 bell. One runs up it; things come down it: logs lie across (jumped, or gone round), barrels wander from side to
@@ -151,7 +151,7 @@ same logs coming at them. The action at the gate says which start is next and in
 The extra calls `app.hillDone?.(ms)`. For the game's boards: `hill: { order: 'asc', min: 9000, max: 600_000 }`
 (the checks print the rule).
 
-## Between a Rock
+## Bouncy Rock
 
 Two needles of layered rock stand in the sea before the cliff at the south end of the bay, and between them a
 cleft: forty metres from the planks at its foot to a bell at the top. It is played like any game of walls:

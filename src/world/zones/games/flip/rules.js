@@ -1,4 +1,4 @@
-// Head Over Heels: its rules. No renderer here: the game, its checks and the runner that plays by itself all
+// Mostly Up & Down: its rules. No renderer here: the game, its checks and the runner that plays by itself all
 // read this.
 //
 // A machine stands in the sea along the south side of the pier: a tall frame in which painted girders travel
@@ -36,7 +36,7 @@ const under = (level) => BASE + RISE * level, over = (level) => under(level) + T
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 export const FLIP = {
-  name: 'Head Over Heels',
+  name: 'Mostly Up & Down',
   along: 60, side: 34, // where the left end of the machine stands, in the frame of the pier (pierToWorld): ten metres off the south edge of its head
   window: 46, place: 15, // m: how much of the course the machine shows; where one runs in it, from its left end
   length: 1000, // m, from the start to the arch of the end

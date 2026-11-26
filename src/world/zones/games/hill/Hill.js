@@ -1,4 +1,4 @@
-// Uphill Battle: what is seen of it and how it is climbed. Its rules are in slope.js; here it is built — the
+// Jump the Logs: what is seen of it and how it is climbed. Its rules are in slope.js; here it is built — the
 // ropes along the slope, the arch of the start and the bell at the top, the lines where the barrels and the
 // boulders are stopped, what rolls — and a climb is run: a session that drives the player (see
 // PlayerController.driver). What rolls is drawn from the clock of the world: everybody sees the same.

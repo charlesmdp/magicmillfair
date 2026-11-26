@@ -8,13 +8,13 @@ They borrow the *mechanics* of games one knows — never their look, their names
 
 | Switch | What it is | Where it stands | Its checks |
 |---|---|---|---|
-| `waves` | **Wave Goodbye** — a bank of sand off the beach and the sea of everybody: one runs, jumps, is thrown back by what catches one, for as long as one can | the north beach: a bank at about (57, -56), the arch at (40.4, -62.4) | `node tools/waves-test.mjs` (36) |
-| `lava` | **Thin Crust** — the lava only rises, columns come up out of it: one keeps to the summits, and keeps a way on | a small volcano east of the head of the pier, at (188, 8); the gate on the deck of the pier head at (142.4, 13.3) | `node tools/lava-test.mjs` (36) |
-| `hive` | **The Bee's Knees** — four combs of wax over the sea: the cell one sets foot on gives way | the north of the bay: combs at (84, -84), the gate on the beach at (43.5, -79.5) | `node tools/hive-test.mjs` (30) |
-| `flip` | **Head Over Heels** — one runs on the spot in a machine of travelling girders, and one key turns gravity over | a tall frame in the sea along the south side of the pier; the gate on the south beach at (41.1, 42.8) | `node tools/flip-test.mjs` (45) |
-| `spiral` | **A Turn for the Worse** — a track wound round a tower: obstacles worse every turn, up to the bell | a tower in the south of the bay, at (168, 84); the gate on the south beach at (52, 71) | `node tools/spiral-test.mjs` (52) |
-| `cars` | **Round the Bend** — radio-controlled cars raced on a table, seen from above | the meadow south of the acid pond: a table at (-243.5, -55.8), the arch at (-243.5, -45.9) | `node tools/cars-test.mjs` (40) |
-| `golf` | **Par for the Course** — nine holes of crazy golf round the acid pond | round the acid pond (-236, -82); the gate at (-225.5, -75.6) | `node tools/golf-test.mjs` (52) |
+| `waves` | **Big Tsunami** — a bank of sand off the beach and the sea of everybody: one runs, jumps, is thrown back by what catches one, for as long as one can | the north beach: a bank at about (57, -56), the arch at (40.4, -62.4) | `node tools/waves-test.mjs` (36) |
+| `lava` | **No Touch Lava!** — the lava only rises, columns come up out of it: one keeps to the summits, and keeps a way on | a small volcano east of the head of the pier, at (188, 8); the gate on the deck of the pier head at (142.4, 13.3) | `node tools/lava-test.mjs` (36) |
+| `hive` | **Bee Fly** — four combs of wax over the sea: the cell one sets foot on gives way | the north of the bay: combs at (84, -84), the gate on the beach at (43.5, -79.5) | `node tools/hive-test.mjs` (30) |
+| `flip` | **Mostly Up & Down** — one runs on the spot in a machine of travelling girders, and one key turns gravity over | a tall frame in the sea along the south side of the pier; the gate on the south beach at (41.1, 42.8) | `node tools/flip-test.mjs` (45) |
+| `spiral` | **Spiral of Death** — a track wound round a tower: obstacles worse every turn, up to the bell | a tower in the south of the bay, at (168, 84); the gate on the south beach at (52, 71) | `node tools/spiral-test.mjs` (52) |
+| `cars` | **Karting Simulator** — radio-controlled cars raced on a table, seen from above | the meadow south of the acid pond: a table at (-243.5, -55.8), the arch at (-243.5, -45.9) | `node tools/cars-test.mjs` (40) |
+| `golf` | **Balthazar Golf** — nine holes of crazy golf round the acid pond | round the acid pond (-236, -82); the gate at (-225.5, -75.6) | `node tools/golf-test.mjs` (52) |
 
 `node tools/play-test.mjs` plays all seven in the running game, in a headless browser: with its switch off
 nothing of a game is in the world; switched on the way the game does it, it is built, its board of scores by its
@@ -56,7 +56,7 @@ far=30,26,-78,-115,-28 gate=gate a=play:8` (its top says how).
 
 ## Trying them
 
-- **In the game**: on the page `/admin`, the switch of the game ("Wave Goodbye", "Thin Crust"…). Every browser is
+- **In the game**: on the page `/admin`, the switch of the game ("Big Tsunami", "No Touch Lava!"…). Every browser is
   told at once; switched off again, the game is gone at the next load of the page.
 - **On the lab page**, without touching what is online: `npx vite --config lab/vite.config.js`, then `/lab/` —
   its panel lists them first ("★ …"), with an arrow that takes one to each. `node lab/tools/static-site.mjs
@@ -66,7 +66,7 @@ far=30,26,-78,-115,-28 gate=gate a=play:8` (its top says how).
 
 ## The games, one by one
 
-### Wave Goodbye (`waves`)
+### Big Tsunami (`waves`)
 
 *Rebuilt after its owner tried the first one ("c'est nul : more fun, better physics, movement, bigger waves").*
 
@@ -100,7 +100,7 @@ What it adds to the world (only when it is on): the bank and its neck, the arch,
 What its maker could not see again after the last changes to its look: the whiter crests, the darker wet sand,
 the runner lifted onto the water as it tumbles — to be looked at first.
 
-### Thin Crust (`lava`)
+### No Touch Lava! (`lava`)
 
 *Reworked after its owner tried it ("the lava only rises, columns come up, one keeps to the summits").*
 
@@ -133,7 +133,7 @@ boards: `lava: { order: 'desc', min: 1000, max: 98_000 }`.
 What it does not do: two visitors who took different starts stand in the same crater with different columns
 under them (each browser draws its own round) — only those who leave together see the same thing.
 
-### The Bee's Knees (`hive`)
+### Bee Fly (`hive`)
 
 Four round combs of wax, fifty-five cells each, hang one above the other over the sea in the north of the bay
 (25, 19, 13 and 7 m up — the fourth was asked for by its owner after trying three), from a great crook of
@@ -157,7 +157,7 @@ What it does not do: the broken cells are each player's own — another visitor 
 and falling through solid wax, and friends do not break each other's cells (reading the place of the other
 robots could do it: not tried). Runs differ by seed, so the board has some luck in it.
 
-### Head Over Heels (`flip`)
+### Mostly Up & Down (`flip`)
 
 *Reworked twice after its owner tried it: first "four or five times as long, more room, a rhythm that quickens",
 then "300 m more, more kinds of obstacle, and players who get in each other's way".*
@@ -203,7 +203,7 @@ the girders round them. Runners who leave together start in the same spot and ar
 once they have parted. A runner of another start is solid where one sees it, though it is at another metre of
 the course.
 
-### A Turn for the Worse (`spiral`)
+### Spiral of Death (`spiral`)
 
 *Reworked twice after its owner tried it: first "no more running by itself (keep the camera)", then "a hundred
 metres higher, and new obstacles".*
@@ -255,7 +255,7 @@ What nobody has seen: a person falling and being put back on a landing in the ru
 and the bot that plays in the browser never falls), and play beyond the sixth turn in a picture taken while
 playing.
 
-### Round the Bend (`cars`)
+### Karting Simulator (`cars`)
 
 *Reworked after its owner drove it ("the up arrow should make it go forward; drift, brighter colours, fire").*
 
@@ -283,7 +283,7 @@ boards: `cars: { order: 'asc', min: 16_000, max: 180_000 }`.
 What nobody has felt yet: the drift under a hand (it was only simulated). The rivals keep to a line that never
 drifts nor meets a jet. The table is only seen (one walks through it).
 
-### Par for the Course (`golf`)
+### Balthazar Golf (`golf`)
 
 *Reworked after its owner played it ("make it belong to our world, a little harder, and aim straight at the start").*
 
