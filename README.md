@@ -452,6 +452,7 @@ fireworks: the item shop says so and lets everything be put on. With a key, the 
 | A gondola of the big wheel (twenty-four) | $29 a month — or $199 once, for good: the buyer chooses | the red kiosk by the steps of the wheel: "The gondolas and their sponsors" — pick a gondola, then "By the month" or "For good" (the administrator is offered both as well, with "Fill this place in": they were only ever offered that last one, and the owner of the fair could not buy a gondola of their own wheel) |
 | The panel on the roof of a beach hut by the pier (twenty-six, numbered from the north) | $14.50 a month — or $99.50 once, for good: the buyer chooses (half what a gondola costs) | on the sand by the hut itself: "Sponsor beach hut 5 · $14.50 a month" or "Buy beach hut 5 for good · $99.50, once" — or the Trading Post: "Choose a beach hut" |
 | A plaque for a companion, round the plinth of the golden dog (seventy-two) | $20, once, for good | step up to a bare plate: "The upper plate, for your companion · $20" |
+| A plaque on the wall of the companions, in the cliff round the dog (324 more, no. 73 to 396 — while the switch `plaqueWall` is on) | $20, once, for good | climb the library stair to a gallery and step up to a bare plate, as round the plinth |
 | A sky village (fifty) | $19 to $9,999 a month | at the sign or the board of the village: "Hire …" |
 
 **Sponsoring a game is an auction.** The panel over the scores of each game goes to the highest bidder. The
@@ -717,6 +718,19 @@ it the plate reads "being engraved…" to everybody else, while its holder sees 
 *awaiting approval*. Its holder can change it later (the change is approved again). The pictures of the
 plates are fetched only when the plates are painted, by whoever climbs up there.
 
+**The wall of the companions.** When the plinth is full — or before —, the owner throws the switch
+`plaqueWall` (off as delivered): 324 more plates, `plaque:73` … `plaque:396` (`PLAQUE_WALL` in
+`sponsors.js`: four galleries of 36, 39, 42 and 45 columns of two), the same price, paid once, engraved and
+approved the same way. Where everything stands is plain numbers in `src/world/layout/plaquewall.js` (the
+server counts the plates from `sponsors.js`): never change them once a plate of the wall is paid for — the
+plates would move. While the switch is off the server refuses them (`shop.js`), nothing of the wall is
+built — nor even downloaded —, and the plates paid for keep what they hold; switched on, the page builds it
+as the game runs (`PlacesZone.buildWall`, `zones/places/PlaqueWall.js`, loaded then and only then); off again,
+it goes at once, and whoever stood on it is put back at the foot of its stair. 324 plates cannot each have a
+cell of their own in one picture: the bare plates share one, the plates that are somebody's but not yet
+engraved two more, and the engraved ones nearest to whoever looks get a cell each (sixty at once; twenty-eight
+on a phone) — the others, too far to be read, show an engraved plate. Far away, the plates are plain bronze.
+
 **Who owns what.** A purchase belongs to the browser that made it (the random name it gave itself, kept in
 its storage) — or, for who has signed in, to their account (see *Accounts*). A guest who clears the
 storage of the browser, or plays on another device, loses sight of what they bought: the administrator can
@@ -804,6 +818,10 @@ mountain, under the rock, out at sea.
   A plate that is nobody's yet is bare bronze; step up to one to take it. With a bouquet in hand, it can be
   laid under a plate that carries a name. (All the plates are one mesh painted from one picture, which is
   only made when somebody comes up to the ledge and is thrown away when they have gone.)
+  When its switch is on, **the wall of the companions** rises in the cliff round the dog: four wooden galleries,
+  one over the other like the shelves of a library, their back walls carrying 324 more plates, a lamp here and
+  there; a sign at the foot of the stair on the ledge, and the stair itself, steep, flight after flight along
+  the rock — each flight just inside the gallery it leaves, a landing on each gallery — up to the highest.
 - **The island**: a rock 35 m high, about 80 m off the beach (swim across from the north end of the cove).
   A path winds two and a quarter times round it up to a flat top with a ring of standing stones. Along the
   way: nine hollows cut in the rock on the inner side and, on the outer side, eight timber walkways out over
@@ -1024,7 +1042,8 @@ Building blocks added with the places and the games (`zones/places/PlacesZone.js
   swimmer, wings on: `character.setWings(true)`).
 - **Polished metal**: `surfaceMaterial({ metal: true, color })` shows the sky, the horizon and the ground
   in the colour of the metal (the gold of the statue, `zones/places/GoldenDog.js`; the plates round its
-  plinth are `zones/places/Plaques.js`).
+  plinth are `zones/places/Plaques.js`; the wall of the companions round it, `zones/places/PlaqueWall.js`,
+  where its galleries, its stair and its plates stand: `layout/plaquewall.js`).
 
 ### Multiplayer
 
@@ -1235,13 +1254,14 @@ booth: they keep their bounds in time (see *Known limits*).
 **The switches.** The code of a novelty is delivered switched off; the owner switches it on, and every
 browser is told at once — no new delivery. The switches are one small object, `RELEASE` in
 `src/app/config.js` (what each is worth where nothing was decided: the slide and the lab's five other games
-off, the caves and the figures on, the stars of the map on, the boards of what is new up, the sky villages hidden, players' rooms off); every future switch goes there. The server keeps what the
+off, the caves and the figures on, the stars of the map on, the boards of what is new up, the wall of the companions off, the sky villages hidden, players' rooms off); every future switch goes there. The server keeps what the
 owner decided (`server/release.js`, one key in the notebook), says it with `/api/status` and `/api/release`,
 and **tells every room** when it changes (a message of the relay, `{t:'r'}`: a browser that does not know
 it ignores it). On the visitor's side (`src/app/Updates.js`): a switch that goes **on** is applied as the
 game runs — the extras of `src/extras` are loaded then, and only then: nothing of them is downloaded
-before; a switch that goes **off**, or a change of stage of the sky, asks the page to load itself again.
-A browser with no server behind it has nothing switched on.
+before; a switch that goes **off**, or a change of stage of the sky, asks the page to load itself again
+(not the stars of the map, the boards of what is new nor the wall of the companions: those come and go as
+the game runs, either way). A browser with no server behind it has nothing switched on.
 
 **New versions.** A build writes which version it is in `version.json` (its commit); the server reads the
 file it serves and says so with its status. A page compares: when the relay is reached again (a delivery

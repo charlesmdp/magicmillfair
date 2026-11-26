@@ -507,6 +507,75 @@ try {
     && plateAsks[0] === 'Approve "Milou"' && plateAsks[1] === 'Refuse it' && plateLive.plate.title === 'Milou' && !plateLive.plate.pending && plateLive.painted && plateLive.neighbour === null
     && platePic.status === 200 && platePic.headers.get('content-type') === 'image/jpeg',
     JSON.stringify({ engraving, plateOthers, plateAsks, plateLive, pic: platePic.status }));
+  // ---- the wall of the companions (switch plaqueWall): off, its plates are not sold; on, a visitor climbs to a bare
+  // plate on a gallery, buys it ($20, once) and has it engraved — the form waits for the wall to be built, back from
+  // the payment page —; the administrator approves it standing there; off again, it is no longer sold
+  {
+    const flipWall = async (on) => (await fetch(`${BASE}/api/release`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${ADMIN_KEY}` }, body: JSON.stringify({ set: { plaqueWall: on } }) })).json();
+    const checkout = async (item, dev) => (await fetch(`${BASE}/api/checkout`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ item, device: dev }) })).status;
+    const shut = await checkout('plaque:150', device);
+    await flipWall(true);
+    const ctxW = await browser.newContext({ viewport: { width: 960, height: 560 }, deviceScaleFactor: 1 });
+    await ctxW.route('https://checkout.stripe.test/**', (route) => route.fulfill({ contentType: 'text/html', body: '<title>pay</title>the payment page' }));
+    await ctxW.addInitScript(() => { localStorage.setItem('mmf.name', 'Climber'); });
+    const pw = await ctxW.newPage();
+    pw.on('pageerror', (e) => logs.push(e.message));
+    const enterW = async (query = '') => {
+      await pw.goto(`${BASE}/?q=${opt.q || 'low'}${query}`);
+      await pw.waitForFunction(() => document.querySelector('.card.ready') || (window.__mmf && window.__mmf.ready && document.querySelector('.splash.done')), null, { timeout: 240000 });
+      if (await pw.evaluate(() => !document.querySelector('.splash.done'))) await pw.click('.go');
+      await pw.waitForFunction(() => window.__mmf && window.__mmf.ready && window.__mmf.player && window.__mmf.shop.open, null, { timeout: 60000 });
+    };
+    const atWall = (pg, n) => pg.evaluate((n) => { const m = window.__mmf, w = m.world.places.wall.where(n), yaw = Math.atan2(w.x - w.sx, w.z - w.sz); m.player.teleport(w.sx, w.sz, yaw); m.rig.snap(m.player.pos, yaw + Math.PI); m.rig.yaw = yaw + Math.PI; m.rig.pitch = -0.04; m.rig.distance = 2.4; return { y: +m.player.pos.y.toFixed(2), row: w.row }; }, n);
+    const promptsOf = (pg) => pg.evaluate(() => [...document.querySelectorAll('.prompt.on span')].map((e) => e.textContent));
+    await enterW();
+    await pw.waitForFunction(() => window.__mmf.world.places.wall?.on, null, { timeout: 60000 });
+    const deviceW = await pw.evaluate(() => localStorage.getItem('mmf.device'));
+    const spot = await atWall(pw, 150);
+    await pw.waitForFunction(() => [...document.querySelectorAll('.prompt.on span')].some((e) => /for your companion/.test(e.textContent)), null, { timeout: 30000 });
+    const bareW = await promptsOf(pw);
+    await pw.keyboard.press('KeyE');
+    await pw.waitForSelector('.chooser.on', { timeout: 20000 });
+    const offerW = await pw.evaluate(() => ({ title: document.querySelector('.chooser h2').textContent, lead: document.querySelector('.chooser .lead').textContent, buy: document.querySelector('.chooser .list button').textContent }));
+    asked.length = 0;
+    await Promise.all([pw.waitForURL('https://checkout.stripe.test/**', { timeout: 20000 }), pw.click('.chooser .list button')]);
+    const askedW = asked[0];
+    await pay('plaque:150', deviceW);
+    await enterW('&paid=plaque%3A150');
+    // (back from the payment page: the wall is built as the page opens, and the form waits for it)
+    await pw.waitForSelector('.chooser.on .fields', { timeout: 90000 });
+    const formW = await pw.evaluate(() => document.querySelector('.chooser h2').textContent);
+    await pw.locator('.chooser .fields input').nth(0).fill('Bella');
+    await pw.locator('.chooser .fields input').nth(1).fill('The kindest of them all');
+    await pw.click('.chooser .fields .save');
+    await pw.waitForFunction(() => window.__mmf.world.places.wall?.peek(150)?.pending, null, { timeout: 30000 });
+    const mineW = await pw.evaluate(() => ({ plate: window.__mmf.world.places.wall.peek(150), shown: window.__mmf.world.places.wall.shown(150) }));
+    // (the administrator, in the main page — the wall came to it as the game ran: no refresh —, approves it on the gallery)
+    await page.waitForFunction(() => window.__mmf.world.places.wall?.on, null, { timeout: 60000 });
+    await page.evaluate((key) => window.__mmf.adminKey(key), ADMIN_KEY); // (what awaits approval is asked for again)
+    await atWall(page, 150);
+    await page.waitForFunction(() => [...document.querySelectorAll('.prompt.on span')].some((e) => /^Approve "Bella"/.test(e.textContent)), null, { timeout: 30000 });
+    const asksW = await prompts();
+    await page.keyboard.press('KeyE');
+    await page.waitForFunction(() => window.__mmf.shop.slots['plaque:150']?.state === 'live' && window.__mmf.world.places.wall.peek(150)?.title === 'Bella', null, { timeout: 20000 });
+    await frames(20);
+    const liveW = await page.evaluate(() => { const w = window.__mmf.world.places.wall; return { plate: w.peek(150), shown: w.shown(150), painted: w.painted, neighbour: w.peek(151) }; });
+    await page.screenshot({ path: path.join(ROOT, 'tools/preview/shop-wall-plaque.png') });
+    // (off again: gone in both pages, and no longer sold)
+    await flipWall(false);
+    await pw.waitForFunction(() => !window.__mmf.world.places.wall.on, null, { timeout: 30000 });
+    await page.waitForFunction(() => !window.__mmf.world.places.wall.on, null, { timeout: 30000 });
+    const shutAgain = await checkout('plaque:151', deviceW), held = (await (await fetch(`${BASE}/api/shop`)).json()).slots['plaque:150'];
+    await ctxW.close();
+    check('the wall of the companions: not sold while its switch is off; on, at a bare plate on a gallery, "… for your companion · $20", paid once; back from the payment page what goes on it is asked for at once (the wall is built meanwhile)',
+      shut === 400 && Math.abs(spot.y - 51.6) < 0.05 && bareW[0] === 'The upper plate, for your companion · $20' && bareW[1] === 'The lower plate, for your companion · $20' && offerW.title === 'A plaque for a companion' && /wall of the companions/.test(offerW.lead) && /^Buy it · \$20/.test(offerW.buy)
+      && askedW?.get('metadata[item]') === 'plaque:150' && askedW.get('line_items[0][price_data][unit_amount]') === '2000' && askedW.get('mode') === 'payment' && formW === 'Their plaque',
+      JSON.stringify({ shut, spot, bareW, offerW, asked: String(askedW).slice(0, 160), formW }));
+    check('…its holder sees it as it will be, awaiting approval; the administrator approves it on the gallery and it is engraved for all; switched off again, the wall goes from every page and its plates are no longer sold — the plate paid for is kept',
+      mineW.plate?.title === 'Bella' && mineW.plate.pending === true && asksW[0] === 'Approve "Bella"' && asksW[1] === 'Refuse it' && liveW.plate?.title === 'Bella' && !liveW.plate.pending && liveW.painted && liveW.shown >= 4 && liveW.neighbour === null
+      && shutAgain === 400 && held?.state === 'live' && held.title === 'Bella',
+      JSON.stringify({ mineW, asksW, liveW, shutAgain, held }));
+  }
   // ---- an account: made from the settings; what was bought, and the look, follow to another browser
   await page.keyboard.press('Escape');
   await frames(3);

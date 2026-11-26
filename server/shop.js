@@ -252,7 +252,7 @@ async function thankSponsor(ctx, o, site, sold) {
   if (!ctx.mail) return;
   const acct = await accountOf(ctx.store, o.metadata?.device);
   const to = acct?.email || cleanEmail(o.customer_details?.email || o.customer_email || '');
-  if (to) mailLater(ctx, { to, ...sponsorMail(site || '', acct?.name || '', { place: placeOf(sold), cents: Number.isInteger(o.amount_total) ? o.amount_total : 0, monthly: !!sold.monthly, auction: !!sold.auction, plaque: !!sold.plaque, life: !!sold.life }) });
+  if (to) mailLater(ctx, { to, ...sponsorMail(site || '', acct?.name || '', { place: placeOf(sold), cents: Number.isInteger(o.amount_total) ? o.amount_total : 0, monthly: !!sold.monthly, auction: !!sold.auction, plaque: !!sold.plaque, wall: !!sold.wall, life: !!sold.life }) });
 }
 
 /**
@@ -418,6 +418,7 @@ export async function shopRoute(req, ctx) {
     if (!what || !DEVICE.test(device || '') || itemOf(what.item)?.retired) return out(400, { error: 'Nothing of that name is sold.' }); // (what is retired is no longer sold)
     // (a sky village is only for hire once the sky is open: the owner's switch)
     if (what.item.startsWith('village:') && (await readRelease(ctx)).release.sky !== 'open') return out(400, { error: 'Nothing of that name is sold.' });
+    if (what.wall && !(await readRelease(ctx)).release.plaqueWall) return out(400, { error: 'Nothing of that name is sold.' }); // (the wall of the companions, while its switch is off)
     // (…and the panel of a game that waits for its switch, once that game is on: its board does not exist before)
     if (what.item.startsWith('board:')) { const sw = SCORE_BOARDS[what.game || what.item.slice(6)]?.release; if (sw && !(await readRelease(ctx)).release[sw]) return out(400, { error: 'Nothing of that name is sold.' }); }
     if (what.kind === 'own' && (await ownedBy(ctx, device)).includes(what.item)) return out(409, { error: 'You already have it.' });

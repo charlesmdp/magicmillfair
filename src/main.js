@@ -1161,7 +1161,7 @@ async function boot() {
       // a plaque for a companion: paid once; its holder has it engraved (and may change it); the administrator may fill one in
       if (view?.mine) out.push({ label: view.draft ? 'Change what you sent for your plaque' : view.state === 'live' ? 'Change your plaque' : 'Have your plaque engraved', run: () => fillPlace(id) });
       else if (who.admin && shop.open) out.push({ label: `Fill the ${row} plaque in (administrator)`, run: () => fillPlace(id) });
-      else if (!view && shop.open) out.push({ label: `The ${row} plate, for your companion · ${price(cents)}`, run: () => offer(id, 'A plaque for a companion', `${price(cents)}, once, and this plate is theirs for as long as the fair stands: their name, a few words and their picture if you like, at the feet of the best dog ever. You write it right after paying; it is engraved as soon as the fair has looked at it.`, cents, false) });
+      else if (!view && shop.open) out.push({ label: `The ${row} plate, for your companion · ${price(cents)}`, run: () => offer(id, 'A plaque for a companion', `${price(cents)}, once, and this plate is theirs for as long as the fair stands: their name, a few words and their picture if you like, ${place.wall ? 'on the wall of the companions, round the best dog ever' : 'at the feet of the best dog ever'}. You write it right after paying; it is engraved as soon as the fair has looked at it.`, cents, false) });
       return out;
     }
     if (view?.mine || (who.admin && shop.open)) out.push({ label: view?.mine ? (view.draft ? 'Change what you sent' : 'Set up your panel') : 'Fill this place in (administrator)', run: () => fillPlace(id) });
@@ -1204,15 +1204,12 @@ async function boot() {
   world.actionSources.push((p) => { for (const sl of world.sponsorSlots || []) if (byRoll(p, sl)) return { label: `The sponsors of ${GAME_NAMES[gameOf(sl.id)] || 'this game'}`, run: () => openRoll(sl.id) }; return null; });
   world.actionSources.push((p) => { for (const sl of world.sponsorSlots || []) if (byRoll(p, sl)) return placeActions(sl.id)[0] || null; return null; });
   // the plaques of the companions: the two plates in front of whoever stands by the plinth (the upper, then the lower)
-  const plaqueActions = (p) => {
-    if (!plaques || Math.abs(p.pos.y - plaques.y) > 2.5) return [];
-    const col = plaques.columnAt(p.pos.x, p.pos.z);
-    if (col === null) return [];
-    const two = plaques.ids(col), out = [];
+  const plateActions = (two, where) => {
+    const out = [];
     // (with flowers in hand: they can be left under a plate that has a name on it)
     const named = two.find((q) => shop.slots[q.id]?.state === 'live');
     if (look.bouquet && named) out.push({ label: `Lay your bouquet for ${shop.slots[named.id].title}`, run: () => {
-      const w = plaques.where(named.n);
+      const w = where(named.n);
       look.bouquet = false; look.kinds = undefined;
       audio.play('pick');
       world.sparks.glitter(w.x, w.y, w.z, 0.9, 50);
@@ -1221,8 +1218,41 @@ async function boot() {
     for (const q of two) out.push(...placeActions(q.id, q.row));
     return out;
   };
+  const plaqueActions = (p) => {
+    if (!plaques || Math.abs(p.pos.y - plaques.y) > 2.5) return [];
+    const col = plaques.columnAt(p.pos.x, p.pos.z);
+    return col === null ? [] : plateActions(plaques.ids(col), (n) => plaques.where(n));
+  };
   world.actionSources.push((p) => plaqueActions(p)[0] || null);
   world.actionSources.push((p) => plaqueActions(p)[1] || null);
+  // …and on the wall of the companions, in the cliff round the dog (PlacesZone.buildWall, PlaqueWall.js): built — and
+  // loaded — the first time its switch is on; its plates are places like those of the plinth (plaque:73 and on),
+  // offered on its galleries while it is on. Off, it goes at once (whoever stands on it is put back at the foot of
+  // its stair); the plates keep what they hold.
+  let plateWall = null, walling = null, wallWanted = false;
+  const setWall = (on) => {
+    if (!on && plateWall.on && plateWall.holds(player.pos.x, player.pos.z, player.pos.y)) { plateWall.setOn(false); player.teleport(plateWall.foot.x, plateWall.foot.z, rig.yaw); return; }
+    plateWall.setOn(on);
+  };
+  const plaqueWall = (on) => {
+    wallWanted = !!on;
+    if (plateWall) { setWall(wallWanted); return Promise.resolve(plateWall); }
+    if (!wallWanted) return Promise.resolve(null);
+    return (walling ||= world.places.buildWall().then((w) => {
+      plateWall = w;
+      for (let n = w.first; n < w.first + w.count; n++) places.set(`plaque:${n}`, { what: 'a plaque on the wall of the companions', plaque: n, wall: true, set: (sp) => w.set(n, sp) });
+      setWall(wallWanted); // (the switch may have moved while it was being built)
+      applySponsors();
+      return w;
+    }).catch((err) => { walling = null; console.error('[wall]', err); return null; }));
+  };
+  const wallActions = (p) => {
+    const col = plateWall?.on ? plateWall.columnAt(p.pos.x, p.pos.z, p.pos.y) : null;
+    return col ? plateActions(plateWall.ids(col), (n) => plateWall.where(n)) : [];
+  };
+  world.actionSources.push((p) => wallActions(p)[0] || null);
+  world.actionSources.push((p) => wallActions(p)[1] || null);
+  Object.assign(app, { plaqueWall });
   // the golden dog above its cove: say hello at the foot of the plinth, and it answers
   world.actionSources.push((p) => {
     const c = world.places.crokmou;
@@ -1418,7 +1448,11 @@ async function boot() {
     });
     if (hutList.length) extras.push({ title: 'The beach huts', text: `${hutList.length} huts on the sand either side of the pier, a panel on each roof · ${freeH} free${shop.open ? ` · ${hutTerms()}` : ''}`, act: { label: 'Choose a beach hut', run: chooseHut } });
     if (places.has('tarp:shoot')) { const v = shop.slots['tarp:shoot'], act = placeActions('tarp:shoot')[0]; extras.push({ title: 'The backdrop of Bullseye Alley', text: v?.state === 'live' ? `Held by ${v.title}.` : `The whole wall behind the targets${shop.open && !v ? ` · ${price(shop.prices.tarp)} a month` : v ? ' · taken' : ''}`, act: act ? { label: act.label.length > 34 ? 'Take the backdrop' : act.label, run: act.run } : null }); }
-    if (plaques?.count) { const taken = Array.from({ length: plaques.count }, (_, k) => `plaque:${k + 1}`).filter((id) => shop.slots[id]).length; extras.push({ title: 'A plaque for a companion', text: `${plaques.count} brass plates round the golden dog, ${taken} of them taken${shop.open ? ` · ${price(shop.prices.plaque)}, once` : ''}. They are chosen on the spot: swim north along the cliffs to the Golden Cove, then climb.`, act: null }); }
+    if (plaques?.count) {
+      // (with the wall of the companions when it is on: its plates go on from the plinth's)
+      const more = plateWall?.on ? plateWall.count : 0, taken = Array.from({ length: plaques.count + more }, (_, k) => `plaque:${k + 1}`).filter((id) => shop.slots[id]).length;
+      extras.push({ title: 'A plaque for a companion', text: `${plaques.count} brass plates round the golden dog${more ? ` and ${more} more on the wall of the companions round it` : ''}, ${taken} of them taken${shop.open ? ` · ${price(shop.prices.plaque)}, once` : ''}. They are chosen on the spot: swim north along the cliffs to the Golden Cove, then climb.`, act: null });
+    }
     sponsorsView.open({ cards, wheel: { cards: cars, of: gondolas.length }, beach: { cards: huts, of: hutList.length }, extras, note: shop.open ? '' : 'The shop is not open yet: sponsoring starts soon. Meanwhile, here is every game and who sponsors it.' });
     audio.play('pick');
   };
@@ -1444,6 +1478,7 @@ async function boot() {
     if (EXTRA.some((k) => on[k])) import('./extras/index.js').then(({ loadExtras }) => loadExtras(app, on)).then(() => extrasBuilt()).catch((err) => console.error('[extras]', err));
     hud.setStars(release.stars !== false); // (the stars of the map: the owner's switch)
     world.games.notices.setNews(release.newsBoards !== false); // (the boards of what is new by the poppy field: taken away, or put back, at once)
+    plaqueWall(release.plaqueWall === true); // (the wall of the companions: built the first time, then shown or taken away at once)
     // (the rooms that players make: their card in the shop and their corner of "Who is here" come and go with the switch)
     if (!before || before.userRooms !== release.userRooms) queueMicrotask(() => refreshMine(release.userRooms === true));
     // (the sky is built with the world: another stage of it is another world)
@@ -1957,7 +1992,7 @@ async function boot() {
         // (a place whose words were not given before paying: they are asked for right away)
         if (place && !kept && !shop.slots[paid].draft && shop.slots[paid].state !== 'live') { const ask = () => { if (state.mode === 'walk') fillPlace(paid); else setTimeout(ask, 900); }; ask(); }
         // (what goes on a plaque is asked for right away — the plate itself is a swim and a climb away —, once they are in the world)
-        if (plate && !shop.slots[paid].draft && shop.slots[paid].state !== 'live') { const ask = () => { if (state.mode === 'walk') fillPlace(paid); else setTimeout(ask, 900); }; ask(); }
+        if (plate && !shop.slots[paid].draft && shop.slots[paid].state !== 'live') { let waits = 0; const ask = () => { if (state.mode === 'walk' && places.has(paid)) fillPlace(paid); else if (++waits < 200) setTimeout(ask, 900); }; ask(); }
         // (what can be worn is put on at once)
         if (itemOf(paid) && WEARABLE.includes(paid.split(':')[0])) { equip(paid, true); shopView.refresh(shopItems()); }
       }

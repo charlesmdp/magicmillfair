@@ -384,6 +384,74 @@ try {
       && !platesGone.painted && !platesGone.mesh, JSON.stringify({ plates, platesGone }));
   }
 
+  // --- the wall of the companions (switch plaqueWall, off as the fair is delivered): built — and loaded — once it is
+  // on; then, from the ledge, a walker climbs its library stair flight after flight to the highest gallery and walks
+  // along it to its last column, at any frame rate; in front of each column, its two plates; their picture is made
+  // for who comes near and thrown away behind them; off, it goes at once, and whoever stood on it is put back at
+  // the foot of its stair
+  {
+    const before = await page.evaluate(() => ({ wall: !!window.__mmf.world.places.wall, built: !!window.__mmf.world.places.group.getObjectByName('companions') }));
+    await page.evaluate(() => window.__mmf.plaqueWall(true));
+    const climb = await page.evaluate(async () => {
+      const app = window.__mmf, { player, input, world } = app, P = await import('/src/world/layout/plaquewall.js'), wall = world.places.wall;
+      const out = { on: wall.on, count: wall.count, first: wall.first, runs: [] };
+      const mid = (f) => (f.lo + f.hi) / 2, along = (e, a0, a1) => { const n = Math.max(1, Math.ceil(Math.abs(a1 - a0))); return Array.from({ length: n + 1 }, (_, i) => P.point(a0 + ((a1 - a0) * i) / n, e)); };
+      const last = P.WALL.to - (0.5 * (P.WALL.to - P.WALL.from)) / P.COLUMNS[3], path = [...along(0.86, 100, P.FLIGHTS[0].a0 - 1)];
+      for (const f of P.FLIGHTS) {
+        const L = P.LANDINGS[f.g], next = P.FLIGHTS[f.g + 1], a = (L.a0 + L.a1) / 2;
+        path.push(...along(mid(f), f.a0 - 0.5, f.a1 + 1), P.point(a, mid(f)), P.point(a, next ? mid(next) : mid(P.DECKS[f.g])));
+        if (next) path.push(...along(mid(next), a, L.a1 - 0.5)); else path.push(...along(mid(P.DECKS[f.g]), a, last));
+      }
+      for (const dt of [1 / 30, 1 / 60]) {
+        const go = (dx, dz) => { input.move.x = dx; input.move.y = -dz; input.run = false; input.jump = false; player.update(dt, 0, true); };
+        const [sx, sz] = path[0];
+        player.teleport(sx, sz, 0);
+        for (let f = 0; f < 20; f++) go(0, 0);
+        let top = player.pos.y, fell = 0, frames = 0;
+        for (const q of path) {
+          for (let f = 0; f < 400 && Math.hypot(q[0] - player.pos.x, q[1] - player.pos.z) > 0.45; f++, frames++) {
+            const dx = q[0] - player.pos.x, dz = q[1] - player.pos.z, l = Math.hypot(dx, dz);
+            go(dx / l, dz / l);
+            top = Math.max(top, player.pos.y); fell = Math.max(fell, top - player.pos.y);
+          }
+        }
+        input.move.x = 0; input.move.y = 0;
+        for (let f = 0; f < 10; f++) go(0, 0);
+        const end = path[path.length - 1], col = wall.columnAt(player.pos.x, player.pos.z, player.pos.y);
+        out.runs.push({ dt: Math.round(1 / dt), y: +player.pos.y.toFixed(2), left: +Math.hypot(end[0] - player.pos.x, end[1] - player.pos.z).toFixed(2), fell: +fell.toFixed(2), secs: +(frames * dt).toFixed(1), col, ids: col ? wall.ids(col).map((q) => `${q.id} ${q.row}`).join() : '' });
+      }
+      // in front of plate 200: its column, its two plates; the picture made, the plates drawn
+      const w = wall.where(200);
+      player.teleport(w.sx, w.sz, 0);
+      const col = wall.columnAt(player.pos.x, player.pos.z, player.pos.y);
+      out.at200 = { y: +player.pos.y.toFixed(2), want: w.sy, ids: col ? wall.ids(col).map((q) => q.n).join() : '' };
+      return out;
+    });
+    await frames(12);
+    const near = await page.evaluate(() => { const m = window.__mmf, w = m.world.places.wall, g = m.world.places.group; return { painted: w.painted, plates: !!g.getObjectByName('companions:plates')?.visible, shown: w.group.visible }; });
+    await page.evaluate(() => window.__mmf.player.teleport(98, 0, 0));
+    await frames(8);
+    const far = await page.evaluate(() => { const w = window.__mmf.world.places.wall; return { painted: w.painted }; });
+    // off, with somebody on a gallery: put back at the foot of the stair; nothing of it is there any more
+    const off = await page.evaluate(async () => {
+      const m = window.__mmf, w = m.world.places.wall, p = w.where(150);
+      m.player.teleport(p.sx, p.sz, 0);
+      const on = +m.player.pos.y.toFixed(2);
+      await m.plaqueWall(false);
+      const out = { on, at: [+m.player.pos.x.toFixed(2), +m.player.pos.y.toFixed(2), +m.player.pos.z.toFixed(2)], foot: [+w.foot.x.toFixed(2), +w.foot.z.toFixed(2)], shown: w.group.visible, walkable: m.world.collision.walkable(p.sx, p.sz), ground: +m.world.collision.groundAt(p.sx, p.sz, 60).toFixed(2), column: w.columnAt(p.sx, p.sz, p.sy) };
+      m.player.teleport(98, 0, 0);
+      return out;
+    });
+    check('the wall of the companions comes when its switch is on (not before): from the ledge a walker climbs its stair, flight after flight, to the highest gallery and along it to its last column — at 30 and at 60 frames a second, never falling —; in front of each column, its two plates; its picture made near it, thrown away far from it',
+      !before.wall && !before.built && climb.on && climb.count === 324 && climb.first === 73
+      && climb.runs.length === 2 && climb.runs.every((r) => Math.abs(r.y - 58.2) < 0.05 && r.left < 0.6 && r.fell < 0.5 && r.col?.g === 3 && /plaque:3\d\d upper,plaque:3\d\d lower/.test(r.ids))
+      && Math.abs(climb.at200.y - climb.at200.want) < 0.05 && climb.at200.ids.split(',').includes('200') && near.painted && near.plates && near.shown && !far.painted,
+      JSON.stringify({ before, climb, near, far }));
+    check('switched off as the game runs: whoever stood on a gallery is put back at the foot of the stair; the wall is no longer drawn, walked on or offered',
+      Math.abs(off.on - 51.6) < 0.05 && Math.hypot(off.at[0] - off.foot[0], off.at[2] - off.foot[1]) < 0.5 && off.at[1] < 45.2 && !off.shown && !off.walkable && off.ground < 51 && off.column === null,
+      JSON.stringify(off));
+  }
+
   // --- the sky villages: carried there from the Sky Gate, and back through the ring
   {
     const g = await page.evaluate(() => {

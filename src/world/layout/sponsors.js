@@ -59,6 +59,11 @@ export const sponsorId = (s) => (s.id || s.name).toLowerCase().replace(/[^a-z0-9
 // The plaques of the companions, round the plinth of the golden dog (zones/places/Plaques.js): how many there
 // are — two rows of thirty-six. (Here because the server counts them too: see server/catalog.js.)
 export const PLAQUE_COUNT = 72;
+// …and on the wall of the companions, in the cliff round the dog (layout/plaquewall.js, shown and sold while the
+// switch `plaqueWall` is on): how many columns of two plates each of its four galleries has, from the lowest. The
+// plates go on from no. 73: never change this once one of them is paid for — they would move.
+export const PLAQUE_WALL = [36, 39, 42, 45];
+export const PLAQUE_WALL_COUNT = 2 * PLAQUE_WALL.reduce((a, b) => a + b, 0); // 324: plaque:73 to plaque:396
 
 // The beach huts on the sand, either side of the pier (zones/pier/PierZone.js: _beach): how many there are,
 // numbered from the north to the south. Each carries a panel on its roof that a sponsor can hold. (Here because

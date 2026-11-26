@@ -257,6 +257,12 @@ export const NORTH = {
   // (the dog, and with it a cat, a snake and a bird; the tablet of the plinth is for every pet — `memorial`, two
   // lines, and `kin` under them — and names the dog, who keeps watch for them all)
   statue: { x: 225.5, z: -335, yaw: -0.3, height: 15, name: 'CROKMOU', plaque: 'BEST DOG EVER', memorial: ['TO EVERY PET', 'WE EVER LOVED'], kin: 'Dogs, cats, birds, snakes — the best of us.' },
+  // the wall of the companions, in the cliff round the dog (layout/plaquewall.js): four galleries, decks at `levels`
+  // (m), `depth` m deep, their back walls `margin` m short of the rock, from angle `from` to `to` round the ledge
+  // (degrees, its own: 0 east, 90 south, 180 west); two rows of plates on each, at `rows` m over the deck; a wall of
+  // stone under the lowest, at `base` (a distance out: 1, the rim of the ledge); and the stair: from the floor of
+  // the ledge (`foot` m) at angle `at`, flights of `flight` degrees and landings of `landing`, `width` m wide.
+  wall: { from: 120, to: 308, levels: [48.3, 51.6, 54.9, 58.2], depth: 1.4, margin: 1.0, rows: [1.3, 0.74], base: 0.965, stair: { at: 136, flight: 20, landing: 8, width: 1.2, foot: 44.6 } },
 };
 // Where the capes are rock, the land stands high right at the water: sea cliffs, fluted and green, of about
 // `height` metres (more or less along the coast). They only exist outside the playable valley.
@@ -881,7 +887,7 @@ export const ZONES = [
   { id: 'north', name: 'Echo Cave', x: -34, z: -190, r: 17 },
   { id: 'south', name: 'Hollow of the Old Tree', x: -126, z: 201, r: 16 },
   { id: 'sea', name: "The Smugglers' Den", x: 150, z: -217, r: 17, hidden: true }, // (nor is this one)
-  { id: 'golden', name: NORTH.name, x: 212, z: -296, r: 52, hidden: true }, // (nor this)
+  { id: 'golden', name: NORTH.name, x: 212, z: -296, r: 56, hidden: true }, // (nor this; as far as the top of the wall of the companions)
 ];
 
 // The playable area (closed polygon). On land it is the foot of the mountains; at sea, how far one can swim.

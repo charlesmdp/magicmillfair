@@ -66,6 +66,7 @@
     stats: ['The game in figures', 'The counters, and the page /opendata.'],
     stars: ['Stars on the map', 'On: the big attractions wear a red star and their name on the map (M). Off: the map names its places only.'],
     newsBoards: ['The boards of what is new', 'On: three wooden boards by the poppy field say what changed lately (src/app/news.js). Off: they are taken away, posts and roofs with them — at once, in every browser, without a refresh.'],
+    plaqueWall: ['The wall of the companions', 'On: 324 more plaques (no. 73 to 396), $20 each, paid once, on four wooden galleries in the cliff round the golden dog, and a library stair up to them. Off: none of it — the 72 plates round the plinth stay; the plates already paid for are kept, and come back with it. Without a refresh, either way.'],
     sky: ['The sky villages', 'Hidden: nothing of them. Soon: their gate is there, closed. Open: everything.'],
     userRooms: ['Rooms made by players', 'Off: nothing of them — no card in the shop, no path that answers. On: an account can buy a room of its own ($59 a month): reached by its link only, fifty visitors, a password if its owner wants one, its own boards of scores.'],
     freeRooms: ['Rooms by address', 'Off: only the common rooms exist (you still get in anywhere). On: any name written in the address (?room=a-name) is a room of its own, free.'],
@@ -249,7 +250,7 @@
     if (type === 'hut') return `Beach hut ${rest} (by the pier)`;
     if (type === 'tarp') return 'The backdrop of Bullseye Alley';
     if (type === 'village') return `The sky village "${rest}"`;
-    if (type === 'plaque') return `Plaque no. ${rest}`;
+    if (type === 'plaque') return `Plaque no. ${rest}${+rest > 72 ? ' (the wall of the companions)' : ''}`;
     return id;
   };
   async function showSponsors() {

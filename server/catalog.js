@@ -11,13 +11,15 @@
 //   hut:<n>         the panel on the roof of a beach hut (1 to 26, from the north to the south): by the month — or
 //                   for good, paid once — for half what a gondola costs
 //   village:<id>    a sky village, by the month: ten prices, the higher the village the dearer
-//   plaque:<n>      a plaque for a companion, round the plinth of the golden dog (1 to 72): paid once, for good
+//   plaque:<n>      a plaque for a companion, round the plinth of the golden dog (1 to 72) — or on the wall of the
+//                   companions, in the cliff round it (73 to 396: sold only while the switch `plaqueWall` is on):
+//                   paid once, for good
 //   pass            the Game Pass, by the month (items.js: what it gives)
 //   room            a room of one's own, by the month — or for good, paid once (urooms.js) — sold only while the
 //                   switch `userRooms` is on
 //
 // The first are things a visitor owns; the others are places ("slots") that one sponsor holds at a time.
-import { SPONSORS, sponsorId, VILLAGE_PRICES, PLAQUE_COUNT, HUT_COUNT } from '../src/world/layout/sponsors.js';
+import { SPONSORS, sponsorId, VILLAGE_PRICES, PLAQUE_COUNT, PLAQUE_WALL_COUNT, HUT_COUNT } from '../src/world/layout/sponsors.js';
 import { ITEMS, itemOf, PASS } from './items.js';
 import { SKY_TIERS } from './sky-tiers.js';
 
@@ -71,7 +73,11 @@ export function describe(item) {
   if (item === 'tarp:shoot') return { item, kind: 'slot', amount: PRICES.tarp, monthly: true, name: 'Atomic Oasis — the backdrop of Bullseye Alley' };
   if (type === 'gondola' && /^[1-9]\d?$/.test(id || '') && +id <= GONDOLAS) return { item, kind: 'slot', amount: PRICES.gondola, monthly: true, name: `Atomic Oasis — gondola ${id} of the big wheel` };
   if (type === 'hut' && /^[1-9]\d?$/.test(id || '') && +id <= HUT_COUNT) return { item, kind: 'slot', amount: PRICES.hut, monthly: true, name: `Atomic Oasis — beach hut ${id} by the pier` };
-  if (type === 'plaque' && /^[1-9]\d?$/.test(id || '') && +id <= PLAQUE_COUNT) return { item, kind: 'slot', plaque: true, amount: PRICES.plaque, monthly: false, name: `Atomic Oasis — a plaque for a companion, at the feet of the golden dog (no. ${id})` };
+  if (type === 'plaque' && /^[1-9]\d{0,2}$/.test(id || '') && +id <= PLAQUE_COUNT + PLAQUE_WALL_COUNT) {
+    // (after the plinth, the wall of the companions: `wall`, sold only while its switch is on — shop.js)
+    const wall = +id > PLAQUE_COUNT;
+    return { item, kind: 'slot', plaque: true, ...(wall && { wall: true }), amount: PRICES.plaque, monthly: false, name: wall ? `Atomic Oasis — a plaque for a companion, on the wall of the companions by the golden dog (no. ${id})` : `Atomic Oasis — a plaque for a companion, at the feet of the golden dog (no. ${id})` };
+  }
   if (type === 'village' && VILLAGES.has(id)) { const v = VILLAGES.get(id); return { item, kind: 'slot', amount: VILLAGE_PRICES[v.tier] * 100, monthly: true, name: `Atomic Oasis — the sky village ${v.name}` }; }
   return null;
 }

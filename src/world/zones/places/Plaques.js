@@ -8,7 +8,8 @@
 import * as THREE from 'three';
 import { loadImage } from '../../../net/Shop.js';
 
-const CELL_W = 256, CELL_H = 128, COLS = 8;
+export const CELL_W = 256, CELL_H = 128;
+const COLS = 8;
 const SERIF = "Georgia, 'Times New Roman', serif";
 const NEAR = 150, FAR = 230; // metres from the plinth: the picture is made within the first, dropped beyond the second
 /** The plates: their size, how far above the foot of the plinth each row is centred, the part of the round left to the tablet. */
@@ -37,7 +38,7 @@ const engrave = (ctx, text, x, y) => { ctx.fillStyle = 'rgba(255, 246, 205, 0.6)
  * One plate, painted in its cell (256 × 128). `what`: null (nobody's yet), { taken } (somebody's, not engraved
  * yet), or { title, subtitle, pending } with `picture` (an image, or null).
  */
-function drawPlate(ctx, what, picture) {
+export function drawPlate(ctx, what, picture) {
   const w = CELL_W, h = CELL_H, free = !what, blank = !what || what.taken;
   // the metal: dull bronze while it is nobody's, polished brass once it is somebody's
   const g = ctx.createLinearGradient(0, 0, w * 0.4, h);

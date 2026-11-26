@@ -185,7 +185,8 @@ export class PlacesZone {
     this._cull = distanceCuller(this.group, [
       [/^temple:(slate|matte|paint|granite)$/, Infinity], [/^temple:/, 420 * k], [/^stairway:rock$/, Infinity], [/^stairway:/, 420 * k],
       [/^terraces:rock$/, 600 * k], [/^terraces:/, 260 * k], [/^glade:/, 240 * k], [/^cove:/, 260 * k], [/^seafall/, Infinity],
-      [/^golden:(rock|granite)$/, 700 * k], [/^golden:/, 300 * k], // (the dog itself is a landmark: never hidden)
+      // (the dog itself is a landmark: never hidden; its plates show themselves — their picture is made near them, Plaques.js)
+      [/^golden:(rock|granite)$/, 700 * k], [/^golden:plaques$/, Infinity], [/^golden:/, 300 * k],
       [/^cave-\w+:cave$/, 170 * k], [/^cave-/, 80 * k], [/^island:/, 340 * k], [/^camp/, 230 * k], [/^beach:/, 280 * k], [/^deck:(woodDeck|woodWet)$/, 520 * k], [/^deck:/, 240 * k],
     ]);
     return this;
@@ -1121,8 +1122,21 @@ export class PlacesZone {
     this._add('deck', parts);
   }
 
+  /**
+   * The wall of the companions round the golden dog (PlaqueWall.js): built — and only then loaded — the first time it
+   * is asked for (its switch is on), the same one after. Resolves to it.
+   */
+  buildWall() {
+    return (this._walling ||= import('./PlaqueWall.js').then(({ buildPlaqueWall }) => {
+      const wall = buildPlaqueWall(this);
+      this.group.add(wall.group);
+      this.wall = wall;
+      return wall;
+    }));
+  }
+
   update(dt, time, camera) {
     for (const a of this.animated) a(dt, time);
-    if (camera) { this._cull(camera.position); this.plaques?.update(camera.position); }
+    if (camera) { this._cull(camera.position); this.plaques?.update(camera.position); this.wall?.update(camera.position); }
   }
 }

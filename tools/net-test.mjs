@@ -964,7 +964,7 @@ async function testRelease(start, dist) {
   try {
     const st = json(await call('/api/status'));
     check('release: the status says what is released — the slide, the lab\'s five other games and the seven games with a gate off, the caves and the figures on, the sky hidden — and which version is online',
-      st?.ok === true && st.release?.slide === false && ['pond', 'boats', 'hill', 'crack', 'hollow', 'waves', 'lava', 'hive', 'flip', 'spiral', 'cars', 'golf'].every((k) => st.release[k] === false) && st.release.caves === true && st.release.stats === true && st.release.sky === 'hidden' && st.release.userRooms === false && st.release.newsBoards === true && st.build === 'abc1234' && st.refresh === 0, st);
+      st?.ok === true && st.release?.slide === false && ['pond', 'boats', 'hill', 'crack', 'hollow', 'waves', 'lava', 'hive', 'flip', 'spiral', 'cars', 'golf'].every((k) => st.release[k] === false) && st.release.caves === true && st.release.stats === true && st.release.sky === 'hidden' && st.release.userRooms === false && st.release.newsBoards === true && st.release.plaqueWall === false && st.build === 'abc1234' && st.refresh === 0, st);
     // the board of a game that is not released: as if it did not exist
     const shut = { run: await call('/api/run', { board: 'slide' }), board: await call('/api/scores?board=slide'), all: json(await call('/api/scores?board=all')) };
     // two visitors, in two rooms
@@ -1274,6 +1274,20 @@ async function testShop({ port }) {
   const openPanel = await aside({ item: 'board:hill', device: bob, bid: 300 });
   await post('/api/release', { set: { hill: false } }, { authorization: `Bearer ${ADMIN_KEY}` });
   check('shop: the panel of a game that waits for its switch is sold once that game is on, not before', shutPanel.status === 400 && openPanel.status === 200 && /^https:\/\/checkout\.stripe\.test\//.test(json(openPanel)?.url || ''), [shutPanel.status, openPanel.status, openPanel.body?.toString().slice(0, 120)]);
+  // (the plates of the wall of the companions: sold while its switch is on, not before nor after — as plaques, paid once)
+  {
+    const wallAside = (body) => request(port, '/api/checkout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), from: '127.0.0.76' });
+    const shutWall = await wallAside({ item: 'plaque:73', device: bob });
+    await post('/api/release', { set: { plaqueWall: true } }, { authorization: `Bearer ${ADMIN_KEY}` });
+    stripe.asked.length = 0;
+    const openWall = await wallAside({ item: 'plaque:73', device: bob }), wallForm = stripe.asked[0]?.form, lastWall = await wallAside({ item: 'plaque:396', device: bob }), pastWall = await wallAside({ item: 'plaque:397', device: bob });
+    await post('/api/release', { set: { plaqueWall: false } }, { authorization: `Bearer ${ADMIN_KEY}` });
+    const shutAgain = await wallAside({ item: 'plaque:200', device: bob }), drum = await wallAside({ item: 'plaque:70', device: bob });
+    check('shop: a plate of the wall of the companions is sold while its switch is on — not before, not after —, as a plaque: $20, paid once; nothing past no. 396; the plates round the plinth are sold either way',
+      shutWall.status === 400 && openWall.status === 200 && wallForm?.get('mode') === 'payment' && wallForm.get('line_items[0][price_data][unit_amount]') === '2000' && wallForm.get('metadata[item]') === 'plaque:73' && /wall of the companions/.test(wallForm.get('line_items[0][price_data][product_data][name]') || '')
+      && lastWall.status === 200 && pastWall.status === 400 && shutAgain.status === 400 && drum.status === 200,
+      [shutWall.status, openWall.status, wallForm?.toString().slice(0, 200), lastWall.status, pastWall.status, shutAgain.status, drum.status]);
+  }
   // the payment form inside the game: where the publishable key was given, Stripe is asked for a form to embed
   stripe.asked.length = 0;
   const inGame = await post('/api/checkout', { item: 'hat:cowboy', device: ann, embed: true });
@@ -1917,6 +1931,15 @@ function testShopLogic() {
       && same(paysOf('board:sky', { bid: 500, pay: 'pi_x' }, t0), { amount: 500, monthly: false, total: 500 }) && paysOf('board:sky', { by: 'admin' }, t0) === null
       && paysOf('tarp:shoot', { paid: 5000 }, t0)?.total === 5000 && paysOf('plaque:3', { paid: 2000, sub: 'sub_y' }, t0) === null && paysOf('nothing:1', { paid: 1 }, t0) === null,
       [paysOf('gondola:3', { sub: 'sub_x', at: t0 }, t0 + 65 * day), paysOf('board:sky', { bid: 500, pay: 'pi_x' }, t0), paysOf('tarp:shoot', { paid: 5000 }, t0)]);
+  }
+  {
+    // (a plaque on the wall of the companions: after the 72 of the plinth, 324 more — the same price, paid once — server/catalog.js)
+    const w73 = describeItem('plaque:73'), w396 = describeItem('plaque:396'), d72 = describeItem('plaque:72');
+    check('shop logic: the plaques go on from the plinth to the wall of the companions — no. 73 to 396, the same price, paid once, marked as on the wall (its switch decides whether they are sold) —; nothing past it, nor a number written otherwise',
+      w73?.kind === 'slot' && w73.plaque && w73.wall === true && w73.amount === PRICES.plaque && w73.monthly === false && w73.name === 'Atomic Oasis — a plaque for a companion, on the wall of the companions by the golden dog (no. 73)'
+      && w396?.wall === true && d72?.plaque && !d72.wall && /at the feet of the golden dog/.test(d72.name) && forLife(w73) === null
+      && ['plaque:0', 'plaque:397', 'plaque:073', 'plaque:1000', 'plaque:x', 'plaque:'].every((id) => describeItem(id) === null),
+      [w73, w396?.name, d72?.name]);
   }
   {
     // (a beach hut: a place of its own, by the month or for good, for half what a gondola costs — server/catalog.js)
