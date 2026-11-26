@@ -511,14 +511,29 @@ try {
     // the pass in the shop: what it gives, what it costs; the button leads to Stripe, by the month
     await p3.click('.shop-icon');
     await p3.waitForSelector('.shop.on', { timeout: 20000 });
+    // (what is inside is on the banner of the pass itself, read without opening it: five lines, each in sight, none cut off)
+    const inside3 = await p3.evaluate(() => {
+      const c = document.querySelector('.shop .card[data-item="pass"]'), box = c.getBoundingClientRect(), list = c.querySelector('.inside');
+      const lines = [...(list?.querySelectorAll('i') || [])].map((i) => { const r = i.getBoundingClientRect(), b = i.querySelector('b'); return { what: b.textContent, more: i.querySelector('span')?.textContent || '', seen: r.width > 0 && r.height > 0 && r.top >= box.top - 1 && r.bottom <= box.bottom + 1 && r.left >= box.left - 1 && r.right <= box.right + 1, cut: b.scrollWidth > b.clientWidth + 1 }; });
+      return { head: list?.querySelector('em')?.textContent || '', shown: !!list && getComputedStyle(list).display !== 'none' && list.getClientRects().length > 0, lines, picked: document.querySelector('.shop .card.picked')?.dataset.item || '' };
+    });
+    await p3.screenshot({ path: path.join(ROOT, 'tools/preview/shop-pass-banner.png') });
+    // (…and on a phone: the five lines in a column beside the ticket, the price under them)
+    await p3.setViewportSize({ width: 390, height: 760 });
+    await frames3(4);
+    const phone3 = await p3.evaluate(() => { const c = document.querySelector('.shop .card[data-item="pass"]'), box = c.getBoundingClientRect(), foot = c.querySelector('.foot').getBoundingClientRect(); return [...c.querySelectorAll('.inside i')].map((i) => { const r = i.getBoundingClientRect(), b = i.querySelector('b'); return r.width > 0 && r.top >= box.top - 1 && r.bottom <= foot.top + 2 && r.right <= box.right + 1 && b.scrollWidth <= b.clientWidth + 1; }); });
+    await p3.screenshot({ path: path.join(ROOT, 'tools/preview/shop-pass-banner-phone.png') });
+    await p3.setViewportSize({ width: 960, height: 560 });
+    await frames3(4);
     const tag0 = await card3('pass'), liteTag = await card3('jetlite'), offer3 = await pick3('pass');
     asked.length = 0;
     await Promise.all([p3.waitForURL('https://checkout.stripe.test/**', { timeout: 20000 }), p3.click('.shop .detail .acts .buy')]);
     const form3 = asked[0];
-    check('the Game Pass has its own shelf: what it gives, a word from who makes the game, $19 a month — paid on Stripe as a subscription',
-      tag0 === '$19 a month' && liteTag === 'Free today' && offer3.acts.join() === 'Get the pass · $19 a month' && offer3.perks === 5 && /guy on a couch/.test(offer3.why)
+    check('the Game Pass has its own shelf, and its banner says what is inside without being opened — five lines, each in sight, none cut off —; opened: what it gives, a word from who makes the game, $19 a month — paid on Stripe as a subscription',
+      inside3.shown && inside3.head === 'What is inside' && inside3.lines.length === 5 && inside3.lines.every((l) => l.seen && !l.cut) && phone3.length === 5 && phone3.every(Boolean) && inside3.lines.map((l) => l.what).join() === 'Every hat,The Jetpack Lite,Four sizes,16 more colours,Your own weather' && inside3.picked !== 'pass'
+      && tag0 === '$19 a month' && liteTag === 'Free today' && offer3.acts.join() === 'Get the pass · $19 a month' && offer3.perks === 5 && /guy on a couch/.test(offer3.why)
       && form3?.get('mode') === 'subscription' && form3.get('line_items[0][price_data][unit_amount]') === '1900' && form3.get('line_items[0][price_data][recurring][interval]') === 'month' && form3.get('metadata[item]') === 'pass' && form3.get('metadata[device]') === dev3,
-      JSON.stringify({ tag0, liteTag, offer3, form: form3?.toString().slice(0, 220) }));
+      JSON.stringify({ inside3, phone3, tag0, liteTag, offer3, form: form3?.toString().slice(0, 220) }));
     // Stripe says it was paid; back in the game: black, the largest size, a hat that was never bought
     const paid3 = await pay('pass', dev3, 'sub_pass_shop', null, 'cus_shop');
     await p3.goto(`${BASE}/?q=${opt.q || 'low'}&paid=pass&welcome`); // (back from the payment page one is in the world at once: the card is asked for here, to pick on it)

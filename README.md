@@ -463,7 +463,9 @@ card and its last words — *Atomic Oasis is not made by a multinational, but by
 long as it runs, its holder wears every hat of the shop (the cards say *With your pass*; a hat that is
 bought stays after the pass), flies with the light jetpack, picks the size of the robot among four, and its colour
 among thirty-two instead of sixteen. One line of the card is a promise: the weather of where
-one lives, with its day and its night, is to come. The card of the shop then reads *Look after it, or stop
+one lives, with its day and its night, is to come. Its banner, at the top of the shop, says *What is inside* without being
+opened: the five, in a few words each (`PASS.summary`) — two columns beside its ticket, a word more under
+each; a column of five on a phone. The card of the shop then reads *Look after it, or stop
 it*: it opens Stripe's customer portal (payment method, invoices, cancelling). When Stripe says the
 subscription has ended, the pass goes, the robot takes back a colour of the first sixteen and its normal
 size, and a word is left for the next visit. The pass is kept with the account when there is one, with

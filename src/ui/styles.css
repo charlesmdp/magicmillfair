@@ -736,19 +736,29 @@ body.dead #view { filter: grayscale(1) contrast(1.15) brightness(0.72); }
 /* the Game Pass: one banner across the shop — its ticket on the left, what it gives beside it */
 .shelf-pass h3 { background: #5ef08a; color: #06361a; }
 .shelf.shelf-pass .row { display: block; }
-.shop .card.passcard { aspect-ratio: auto; width: 100%; height: 92px; background: linear-gradient(100deg, #241057 0%, #5b25c4 42%, #e8742a 100%); }
-.shop .card.passcard canvas { left: 6px; top: 4px; width: 134px; height: 84px; }
+.shop .card.passcard { aspect-ratio: auto; width: 100%; height: 124px; container-type: inline-size; background: linear-gradient(100deg, #241057 0%, #5b25c4 42%, #e8742a 100%); }
+.shop .card.passcard canvas { left: 6px; top: 27px; width: 112px; height: 70px; }
 .shop .card.passcard .rar { left: auto; right: 10px; }
-.shop .card.passcard .pitch { position: absolute; left: 156px; right: 190px; top: 50%; transform: translateY(-50%); display: grid; grid-template-columns: repeat(2, max-content); gap: 3px 24px; font: 700 13.5px/1.3 system-ui, sans-serif; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
-.shop .card.passcard .pitch i { font-style: normal; white-space: nowrap; }
-.shop .card.passcard .pitch i::before { content: '✓ '; color: #5ef08a; font-weight: 900; }
-.shop .card.passcard .foot { left: auto; right: 0; top: 0; bottom: 0; width: 190px; padding: 0 14px 0 0; background: none; flex-direction: column; align-items: flex-end; justify-content: center; gap: 8px; }
-.shop .card.passcard .foot b { font-size: 20px; }
+/* (what is inside: two columns of what it gives, a word more under each) */
+.shop .card.passcard .inside { position: absolute; left: 128px; right: 128px; top: 50%; transform: translateY(-50%); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 12px; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55); }
+.shop .card.passcard .inside i:last-child:nth-child(even) { grid-column: 1 / -1; } /* (the fifth, alone on its line: the whole of it) */
+.shop .card.passcard .inside em { grid-column: 1 / -1; font: 800 10px/1 system-ui, sans-serif; letter-spacing: 0.14em; text-transform: uppercase; font-style: normal; color: #ffe9a6; }
+.shop .card.passcard .inside i { position: relative; display: flex; flex-direction: column; min-width: 0; padding-left: 17px; font-style: normal; }
+.shop .card.passcard .inside i::before { content: '✓'; position: absolute; left: 1px; top: 0; color: #5ef08a; font: 900 13px/1.2 system-ui, sans-serif; }
+.shop .card.passcard .inside b { font: 800 13px/1.2 system-ui, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shop .card.passcard .inside span { font: 600 11px/1.25 system-ui, sans-serif; color: #fff8ec; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shop .card.passcard .foot { left: auto; right: 0; top: 0; bottom: 0; width: 128px; padding: 0 14px 0 0; background: none; flex-direction: column; align-items: flex-end; justify-content: center; gap: 8px; }
+.shop .card.passcard .foot b { font-size: 17px; }
+/* (a narrower banner — the shop in a smaller window —: the words more go, then the two columns become one) */
+@container (max-width: 570px) { .shop .card.passcard .inside span { display: none; } .shop .card.passcard .inside { gap: 6px 12px; } }
+@container (max-width: 520px) { .shop .card.passcard .inside { grid-template-columns: 1fr; gap: 1px; } .shop .card.passcard .inside b { font-size: 12px; } }
 .shop .card.passcard .price { padding: 6px 11px; font-size: 14px; }
 @media (max-width: 760px) {
-  .shop .card.passcard { height: 150px; }
+  .shop .card.passcard { height: 168px; }
   .shop .card.passcard canvas { width: 118px; height: 74px; top: 8px; }
-  .shop .card.passcard .pitch { left: 134px; right: 8px; top: 24px; transform: none; grid-template-columns: 1fr; gap: 1px; font-size: 11.5px; }
+  .shop .card.passcard .inside { left: 132px; right: 8px; top: 10px; transform: none; grid-template-columns: 1fr; gap: 2px; }
+  .shop .card.passcard .inside span { display: none; }
+  .shop .card.passcard .inside b { font-size: 12px; }
   .shop .card.passcard .foot { left: 12px; right: 0; top: auto; bottom: 0; width: auto; padding: 0 10px 10px 0; flex-direction: row; align-items: center; justify-content: space-between; }
   .shop .card.passcard .foot b { font-size: 17px; }
   .shop .card.passcard .price { padding: 5px 9px; font-size: 12.5px; }

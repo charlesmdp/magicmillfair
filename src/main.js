@@ -1588,7 +1588,7 @@ async function boot() {
         act: held ? null : `Get the pass · ${price(shop.prices.pass || PASS.price)} a month`,
         manage: held && shop.pass.managed ? 'Look after it, or stop it' : null,
         blurb: held ? (gift ? `A gift of the fair: yours until ${new Date(shop.pass.until).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.` : 'It is yours. Thank you — truly.') : 'One pass, by the month, and the fair opens a little wider.',
-        perks: PASS.perks, why: PASS.why, pitch: ['Every hat', 'Jetpack Lite', 'Four sizes', '16 more colours'],
+        perks: PASS.perks, why: PASS.why, inside: PASS.summary, // (inside: what its banner says it gives, in a few words each)
         fine: held ? (gift ? 'When the gift ends, nothing is charged: the pass simply stops.' : 'Paid by the month on Stripe. Stop whenever you like: it lasts until the end of the month you paid for.') : 'Paid by the month on Stripe; stop whenever you like. What you bought before stays yours, pass or no pass.',
       });
     }
@@ -1811,11 +1811,13 @@ async function boot() {
   /** Called while one walks about: the clock of the visit, and the card that is due — once nothing else is going on. */
   const playClock = (dt) => {
     played += dt;
-    if (!pitchAuto || busyNow() || hud.rosterOpen || hud.bigMapOpen || hud.pitching) return;
-    if (pitchQueue.length && played >= pitchQueue[0].at) { cardAt = played; pitch(pitchQueue.shift().kind); return; }
+    if (!pitchAuto) return;
     // (the Game Pass: when one of its six times has come — a minute and a half into a visit at the least, never
     // within four minutes of another card; who comes back after a while gets the last one that is due)
-    if (played >= 90 && played - cardAt >= 240 && played - passLook >= 15) {
+    const queued = pitchQueue.length && played >= pitchQueue[0].at, look = played >= 90 && played - cardAt >= 240 && played - passLook >= 15;
+    if ((!queued && !look) || busyNow() || hud.rosterOpen || hud.bigMapOpen || hud.pitching) return; // (whether the game is busy is asked only when a card could come)
+    if (queued) { cardAt = played; pitch(pitchQueue.shift().kind); return; }
+    {
       passLook = played;
       const k = passDue(Number(store.get(FIRST)), Number(store.get(PASS_SEEN) || 0), Date.now());
       if (k >= 0 && pitchWanted.pass()) { cardAt = played; pitch('pass', false, k); }
