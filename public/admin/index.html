@@ -136,6 +136,12 @@
     <section class="card" data-tab="sponsors">
       <h2>Sponsors</h2>
       <p class="hint">What a sponsor sends is shown at once. Take down what should not be there: with the money back (a bid in full; of a place paid by the month, the month that is running) or without. A place paid by the month stops being charged either way.</p>
+      <form id="notify-form" class="row" hidden>
+        <label>E-mail me each new sponsor at <input id="notify-email" type="email" maxlength="120" placeholder="you@example.com" autocomplete="email"></label>
+        <button type="submit" class="small">Save</button>
+        <button type="button" class="ghost small" id="notify-test">Send a test</button>
+      </form>
+      <p class="hint" id="notify-said" hidden></p>
       <p class="hint" id="sponsors-total"></p>
       <div id="sponsors" class="list"></div>
       <h3>Plaques of the companions — awaiting your approval</h3>

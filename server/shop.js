@@ -58,7 +58,7 @@ import { accountOf, addItem, holderOf, itemsOf, passLive, sameOwner } from './ac
 import { quietOnes } from './bans.js';
 import { PASS, TRIAL, itemOf } from './items.js';
 import { userRoomsOn, roomOfAccount, openRoom, sleepRoom } from './urooms.js';
-import { cleanEmail, mailLater, passMail, sponsorMail } from './mail.js';
+import { cleanEmail, mailLater, passMail, sponsorMail, ownerSaleMail } from './mail.js';
 import { maskWords } from './decency.js';
 
 const out = (status, body, headers = {}) => ({ status, body, headers });
@@ -283,7 +283,48 @@ async function completed(ctx, cfg, o, site) {
     : await grant(ctx, o.metadata?.item, o.metadata?.device, o.subscription, o.customer, o.metadata?.account, sold.life ? (Number.isInteger(o.amount_total) && o.amount_total > 0 ? o.amount_total : sold.amount) : 0);
   if (got && fresh && sold.kind === 'pass') await thankForPass(ctx, o, site);
   if (got && fresh && sold.kind === 'slot') await thankSponsor(ctx, o, site, sold).catch(() => {});
+  // (the owner is told too — and of a place paid for that could not be given, somebody having it already, which is for
+  // the owner to sort out; a bid that came too late is given back by itself)
+  if (fresh && sold.kind === 'slot' && (got || !sold.auction)) await tellOwner(ctx, o, sold, !got).catch(() => {});
   return got;
+}
+
+/**
+ * The owner is told of a new sponsor (or a plaque bought), by e-mail — at the address they gave in the back office
+ * (/api/notify), where the host sends e-mail. Once per payment (the caller sees to it). Nothing of the buyer's address.
+ * `lost`: paid for, but not given (somebody had the place already). The links of the message go to the site the owner
+ * saved the address from — never to the one a buyer's request says it is.
+ */
+async function tellOwner(ctx, o, sold, lost = false) {
+  const kept = ctx.mail ? (await ctx.store.get('notify')) || {} : {}, to = cleanEmail(kept.email || '');
+  if (!to) return;
+  const acct = await accountOf(ctx.store, o.metadata?.device);
+  mailLater(ctx, { to, ...ownerSaleMail(kept.site || '', { place: placeOf(sold), cents: Number.isInteger(o.amount_total) ? o.amount_total : 0, monthly: !!sold.monthly, auction: !!sold.auction, plaque: !!sold.plaque, life: !!sold.life, account: acct?.name || '', lost }) });
+}
+
+/**
+ * GET | POST /api/notify — the owner alone: the address the owner is told of new sponsors at → { email, mail (can
+ * this server send e-mail at all) }. POST { email } keeps it ('' forgets it); POST { test: true } sends a test to it.
+ */
+export async function notifyRoute(req, ctx) {
+  if (req.path !== '/api/notify') return null;
+  if (!req.owner) return out(403, { error: 'Only the owner.' });
+  const kept = cleanEmail((await ctx.store.get('notify'))?.email || '');
+  if (req.method === 'POST') {
+    const b = req.body || {};
+    if (b.test === true) {
+      if (!ctx.mail) return out(501, { error: 'This server sends no e-mail.' });
+      if (!kept) return out(400, { error: 'No address to send it to.' });
+      try { await ctx.mail({ to: kept, ...ownerSaleMail(req.site || '', { test: true }) }); } catch (err) { return out(502, { error: `It could not be sent: ${String(err?.message || err).slice(0, 120)}` }); }
+      return out(200, { ok: true, sent: true, email: kept, mail: true });
+    }
+    const email = b.email ? cleanEmail(b.email) : '';
+    if (b.email && !email) return out(400, { error: 'That does not look like an e-mail address.' });
+    await ctx.store.put('notify', { email, site: req.site || '' }); // (the owner's own request: the site the links of the messages go to)
+    return out(200, { ok: true, email, mail: !!ctx.mail });
+  }
+  if (req.method !== 'GET' && req.method !== 'HEAD') return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD, POST' });
+  return out(200, { email: kept, mail: !!ctx.mail });
 }
 
 async function firstTime(ctx, id) {

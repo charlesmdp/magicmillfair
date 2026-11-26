@@ -1693,6 +1693,12 @@ async function testPaid({ port }) {
   check('paid, without Stripe having to say so: the payment page comes back with its name in the address; asked, the server asks Stripe — not paid yet: nothing; paid: what was bought is given, once; a page that does not exist gives nothing',
     page.status === 200 && /[?&]cs=\{CHECKOUT_SESSION_ID\}/.test(back) && /[?&]paid=hat%3Abeanie/.test(back) && json(early)?.ok === false && json(done)?.ok === true && json(done).given === true && json(done).item === 'hat:beanie'
     && has.join() === 'hat:beanie' && json(again)?.ok === true && none.status === 404 && junk.status === 404, [page.status, back, json(early), json(done), has, json(again), none.status, junk.status]);
+  // the owner is told of each new sponsor at the address they give in the back office — only the owner sets it, or reads it
+  const ownerKey = { 'content-type': 'application/json', authorization: `Bearer ${ADMIN_KEY}` };
+  const notifyNobody = await request(port, '/api/notify', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'evil@example.org' }), from: '127.0.0.84' });
+  const notifyBad = await request(port, '/api/notify', { method: 'POST', headers: ownerKey, body: JSON.stringify({ email: 'not an address' }), from: '127.0.0.84' });
+  const notifySet = json(await request(port, '/api/notify', { method: 'POST', headers: ownerKey, body: JSON.stringify({ email: 'Owner@Example.org' }), from: '127.0.0.84' }));
+  const notifyRead = json(await request(port, '/api/notify', { headers: ownerKey, from: '127.0.0.84' }));
   // a sponsor: what the panel shows goes up right after the payment, the whole fair is told — by name —, and the sponsor is thanked by e-mail
   const ear = new Client(port, 'main');
   await ear.hello('Ear', 1);
@@ -1712,6 +1718,32 @@ async function testPaid({ port }) {
     bidPage.status === 200 && json(took)?.given === true && mine?.mine === true && filled.status === 200 && json(filled).state === 'live' && shown?.title === 'Acme Robots' && shown.subtitle === 'quel ********, ce robot' && shown.url === 'https://example.org/acme'
     && /Acme Robots/.test(heard?.m || '') && /the board of Shell Shock/.test(heard.m) && /gods of the (Atomic|nuclear) [Oo]asis/.test(heard.m) && changed.status === 200 && cheers === 1 && (mails === null || (mails.length === 1 && /\$7/.test(mails[0].text) && /refunded in full/.test(mails[0].text))),
     [bidPage.status, json(took), mine, filled.status, shown, heard, cheers, mails?.map((m) => m.subject)]);
+  {
+    // (…and the owner is told: once, with the place and what was paid — nothing of the buyer's address)
+    const again = await request(port, '/api/checkout/confirm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ session: bid }), from: '127.0.0.84' }); // (said twice: told once)
+    const toOwner = CF || !fs.existsSync(MAIL_FILE) ? null : fs.readFileSync(MAIL_FILE, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((m) => m.to === 'owner@example.org');
+    const sale = toOwner?.filter((m) => /^New sponsor — the board of Shell Shock — \$7/.test(m.subject)) || [];
+    check('the owner is told of each new sponsor at the address they set in the back office (they alone can set it or read it): once per payment, with the place and what was paid, nothing of the buyer\'s address',
+      notifyNobody.status === 403 && notifyBad.status === 400 && notifySet?.email === 'owner@example.org' && notifyRead?.email === 'owner@example.org' && json(again)?.ok === true
+      && (toOwner === null || (sale.length === 1 && /back office/.test(sale[0].text) && sale[0].text.includes(`http://127.0.0.1:${port}/admin#sponsors`) && !/buyer@example\.org/.test(sale[0].text + sale[0].html))),
+      [notifyNobody.status, notifyBad.status, notifySet, notifyRead, toOwner?.map((m) => m.subject)]);
+    // (two payment pages opened together for the same beach hut: the first is given; the second is paid and cannot be —
+    // the owner is told to refund it; the links of the message are the owner's, whatever the buyer's request said it was)
+    const from = (target, body, headers = {}) => request(port, target, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body), from: '127.0.0.85' });
+    await from('/api/checkout', { item: 'hut:17', device: randomId(16) });
+    const firstId = `cs_test_${stripe.asked.length}`;
+    await from('/api/checkout', { item: 'hut:17', device: randomId(16) });
+    const secondId = `cs_test_${stripe.asked.length}`;
+    pay(firstId); pay(secondId);
+    const gave = json(await from('/api/checkout/confirm', { session: firstId })), lost = json(await from('/api/checkout/confirm', { session: secondId }, { 'x-forwarded-host': 'evil.example', 'x-forwarded-proto': 'https' }));
+    await sleep(300);
+    const toOwner2 = CF || !fs.existsSync(MAIL_FILE) ? null : fs.readFileSync(MAIL_FILE, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((m) => m.to === 'owner@example.org');
+    const refund = toOwner2?.filter((m) => /^To refund — beach hut 17 by the pier was paid for, but somebody had it/.test(m.subject)) || [];
+    check('a place paid for twice (two payment pages open together): the first is given, the second is not — and the owner is told to refund it, with links to the back office of their own site, never to the one the buyer\'s request named',
+      gave?.given === true && lost?.ok === true && lost.given === false
+      && (toOwner2 === null || (refund.length === 1 && /refund them in Stripe/.test(refund[0].text) && !/evil\.example/.test(refund[0].text + refund[0].html) && refund[0].text.includes(`http://127.0.0.1:${port}/admin#sponsors`))),
+      [gave, lost, toOwner2?.map((m) => m.subject)]);
+  }
   // a big attraction has five places on its panel, each an auction of its own; a stall of the pier has one
   const second = await post('/api/checkout', { item: 'board:sky-2', device: dog, bid: 500 }), secondId = `cs_test_${stripe.asked.length}`, sixth = await post('/api/checkout', { item: 'board:sky-6', device: dog, bid: 500 }), stall = await post('/api/checkout', { item: 'board:cups-2', device: dog, bid: 500 });
   pay(secondId);

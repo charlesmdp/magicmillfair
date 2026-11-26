@@ -36,7 +36,7 @@ import { BOARDS, PERIODS, addScore, cleanScore, removeScore, runFits, topsOf, to
 import { replayable, replay, agrees } from './replay.js';
 import { randomId, sign, verify } from './token.js';
 import { cleanName } from './protocol.js';
-import { shopRoute } from './shop.js';
+import { shopRoute, notifyRoute } from './shop.js';
 import { adminOf, listAdmins, removeAdmin } from './admins.js';
 import { cleanGeo, noteVisit, visitorsReport } from './visitors.js';
 import { accountRoute, visitRecord, accountOf, isAccountName } from './accounts.js';
@@ -136,6 +136,9 @@ export async function route(req, ctx) {
   // what was said in the chat lately, for the administrators (chatlog.js)
   const said = await chatLogRoute(req, ctx, owner);
   if (said) return said;
+  // where the owner is told of new sponsors (shop.js)
+  const told = await notifyRoute(req, ctx);
+  if (told) return told;
 
   if (path === '/api/visit') {
     if (method !== 'POST') return out(405, { error: 'Method not allowed.' }, { Allow: 'POST' });

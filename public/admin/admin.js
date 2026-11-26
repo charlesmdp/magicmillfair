@@ -253,12 +253,25 @@
     if (type === 'plaque') return `Plaque no. ${rest}${+rest > 72 ? ' (the wall of the companions)' : ''}`;
     return id;
   };
+  let notifyKept = '', notifyMail = false; // (the address new sponsors are told to, as saved; can this server send e-mail)
   async function showSponsors() {
-    const res = await api('/api/sponsors');
+    // (and, for the owner, the address they are told of new sponsors at — and whether this server sends e-mail at all:
+    // both asked before anything is emptied, so that two refreshes at once cannot mix their rows)
+    const [res, n] = await Promise.all([api('/api/sponsors'), me.owner ? api('/api/notify') : null]);
     if (!res.ok) return;
     for (const src of blobs.splice(0)) URL.revokeObjectURL(src);
     const { slots, refunds } = res.body, live = $('sponsors'), wait = $('plaques'), done = $('engraved'), back = $('refunds');
     live.textContent = wait.textContent = done.textContent = back.textContent = '';
+    if (n?.ok) {
+      $('notify-form').hidden = false;
+      notifyKept = n.body.email || '';
+      notifyMail = !!n.body.mail;
+      if (document.activeElement !== $('notify-email')) $('notify-email').value = notifyKept;
+      notifyTest();
+      const told = $('notify-said');
+      told.hidden = notifyMail;
+      told.textContent = 'This server sends no e-mail yet: the three secrets of the e-mails are to be set where it runs (the README says how, under "E-mails").';
+    }
     // (what they have put in: each place, and all of them together — a place paid by the month, every month begun)
     const paying = Object.values(slots).filter((s) => s.pays);
     // (of the places held now: a place let go — taken down, a subscription ended — is no longer counted here; the
@@ -366,6 +379,20 @@
     showSponsors();
   };
   $('sponsor-edit-cancel').onclick = () => $('sponsor-edit').close();
+  // (the owner is told of each new sponsor at this address: kept on the server, never shown to anybody else)
+  $('notify-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const email = $('notify-email').value.trim();
+    if (said(await api('/api/notify', { method: 'POST', body: { email } }), email ? `Each new sponsor will be told to ${email}.` : 'No e-mail for new sponsors any more.')) showSponsors();
+  };
+  // (the test goes to the address that is saved: while the field says another one, it waits for Save)
+  const notifyTest = () => {
+    const b = $('notify-test'), typed = $('notify-email').value.trim().toLowerCase(), other = !!notifyKept && typed !== notifyKept;
+    b.disabled = !notifyKept || !notifyMail || other;
+    b.title = other ? 'Save the address first' : '';
+  };
+  $('notify-email').addEventListener('input', notifyTest);
+  $('notify-test').onclick = async () => { const res = await api('/api/notify', { method: 'POST', body: { test: true } }); said(res, `Sent to ${res.body?.email || notifyKept}: look in that mailbox (and in its spam, the first time).`); };
 
   // ---------------------------------------------------------------------------------------------- who is kept out
   async function showBans() {

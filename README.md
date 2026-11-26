@@ -1105,11 +1105,17 @@ account for a quarter of an hour, and an address may try ten a minute. A **recov
 when the account is made, and sets a new password (*Forgot the password*). Without an e-mail address, lose
 both and the account is lost — the administrator cannot read a password either.
 
-**E-mails.** The game sends three kinds of e-mail, and only where it has been given the means: **a
+**E-mails.** The game sends a few kinds of e-mail, and only where it has been given the means: **a
 welcome** to whoever makes an account with an address; **a word of thanks** to whoever takes the Game
 Pass — what it gives, how to stop it — at the address of their account or, failing that, at the one they
-gave at the payment (used for that message and kept nowhere); and **a code** to set a new password. No
-newsletter. The first two are in the colours of the fair, with a twin in plain text, and everything is in
+gave at the payment (used for that message and kept nowhere), and to whoever pays for the place of a
+sponsor; **a code** to set a new password; and, to the owner, **a line for each new sponsor** (or plaque
+bought): the place, what was paid and the name of the buyer's account — nothing of the buyer's address —, at
+the address the owner gives in the back office (*Sponsors*: *E-mail me each new sponsor at*, *Save*; *Send
+a test* tries it, at the address saved; empty, nothing is sent; only the owner sees or sets it) — and a line
+when a place was paid for but could not be given, somebody having it already (two payment pages open at once):
+*To refund*, in Stripe. The links of these messages go to the back office of the site the owner saved the
+address from, never to the one a buyer's request names. No newsletter. The first two are in the colours of the fair, with a twin in plain text, and everything is in
 the message itself: tables and inline styles, the sign of the fair as a character — no picture, no font
 and no script from anywhere, no link that counts who clicked (`welcomeMail`, `passMail` in
 `server/mail.js`). They leave while the request that caused them is answered (nobody waits for a mail

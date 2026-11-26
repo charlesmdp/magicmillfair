@@ -216,3 +216,36 @@ ${tip ? para(esc(tip)) : ''}`,
   });
   return { subject: 'Your Game Pass is on — thank you', text, html };
 }
+
+/**
+ * To the owner of the fair — at the address they gave in the back office (shop.js, /api/notify) —: a place has just
+ * been paid for. `place`: what it is, in words; `cents`: what was paid; `monthly`, `auction`, `plaque`, `life` as for
+ * sponsorMail; `account`: the name of the buyer's account, if they have one. Nothing of the buyer's address: the
+ * payment itself is in Stripe. `test`: the message sent to try the address. `lost`: paid for, but not given —
+ * somebody had the place already —: to be refunded in Stripe.
+ */
+export function ownerSaleMail(site, { place = '', cents = 0, monthly = false, auction = false, plaque = false, life = false, account = '', test = false, lost = false } = {}) {
+  const where = siteOf(site), back = where ? `${where.replace(/\/$/, '')}/admin#sponsors` : '';
+  const sum = cents > 0 ? `$${(cents / 100).toFixed(2).replace(/\.00$/, '')}${monthly ? ' a month' : ''}` : '';
+  // (a place bought for good is already named so — "…, for good" —: the sum only says that it was paid once)
+  const what = test ? 'This is a test: this address will be told of every new sponsor.'
+    : lost ? `Paid, but not given: ${place}${sum ? ` — ${sum}` : ''}. Somebody else had it already.`
+      : plaque ? `A plaque has just been bought: ${place}${sum ? ` — ${sum}, once` : ''}.`
+        : `New sponsor: ${place}${sum ? ` — ${sum}${auction ? ', the highest bid' : life ? ', once' : ''}` : ''}.`;
+  const who = test ? '' : account ? `Their account: ${account}.` : 'They have no account (a guest).';
+  const next = test ? '' : lost ? 'Nothing was given to them, and nothing was given back: refund them in Stripe (and, if it is paid by the month, cancel the subscription there).'
+    : plaque ? 'What goes on it is sent from the game, and waits for your approval in the back office.'
+      : 'What their place shows goes up as soon as they say it (it may already be there). You can change it, or take it down, in the back office.';
+  const subject = test ? 'Atomic Oasis: new sponsors will be told here' : lost ? `To refund — ${place} was paid for, but somebody had it` : plaque ? `A plaque was bought — ${place}` : `New sponsor — ${place}${sum ? ` — ${sum}` : ''}`;
+  const why = 'You get this message because this address was given in the back office of Atomic Oasis, to be told of new sponsors. Remove it there to stop.';
+  const text = [what, ...(who ? ['', who] : []), ...(next ? ['', next] : []), ...(back ? ['', `The back office: ${back}`] : []), '', why].join('\n');
+  const html = dressed({
+    title: subject, preview: what, site: back || site, button: 'Open the back office',
+    body: `<h1 style="margin:0 0 14px;font:700 24px/1.25 Georgia,'Times New Roman',serif;color:${INK}">${esc(test ? 'It works' : lost ? 'Paid, but not given' : plaque ? 'A plaque was bought' : 'A new sponsor')}</h1>
+${para(`<b>${esc(what)}</b>`)}
+${who ? para(esc(who)) : ''}
+${next ? para(esc(next)) : ''}`,
+    why,
+  });
+  return { subject, text, html };
+}
