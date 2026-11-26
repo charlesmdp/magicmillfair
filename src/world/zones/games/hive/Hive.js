@@ -126,6 +126,12 @@ export class Hive {
     const g = H.gate, gy = this.data.heightAt(g.x, g.z);
     this.gate = { x: g.x, y: gy, z: g.z, yaw: g.yaw };
     this.boardSpot = { x: g.x + 0.2, z: g.z - 4.2, yaw: g.yaw + Math.PI }; // (its stand: on the other side of the arch than the kit would put it, clear of the parasols on the sand)
+    {
+      // (the board of its five sponsors: across the arch from its stand, as in a mirror — beside the stand it would
+      // stand among the chairs of the Beach Lounge, or in the arch)
+      const b = this.boardSpot, fx = Math.sin(g.yaw), fz = Math.cos(g.yaw), vx = b.x - g.x, vz = b.z - g.z, d = vx * fx + vz * fz;
+      this.rollSpot = { x: g.x + 2 * d * fx - vx, z: g.z + 2 * d * fz - vz };
+    }
     gateArch(this.group, paint, g.x, gy, g.z, g.yaw, H.name.toUpperCase(), 'THE WAX YOU STAND ON GIVES WAY · HOW LONG CAN YOU HOLD?', { tone: [1.45, 0.92, 0.12], ink: '#2a1c0a' });
     this.group.add(parts.toMeshes(mats, { name: 'hive-frame', layers: [LAYER.STATIC_CASTER] }));
     // ---- the bees

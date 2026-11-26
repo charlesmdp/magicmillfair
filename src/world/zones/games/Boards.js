@@ -36,15 +36,8 @@ const rounded = (ctx, x, y, w, h, r) => { ctx.beginPath(); if (ctx.roundRect) ct
 const MEDALS = [['#ffe27a', '#d99a12', '#5a3a00'], ['#f4f6fa', '#9aa3b2', '#2c3340'], ['#f0b98a', '#b0622a', '#42200a']]; // gold, silver, bronze: light, dark, ink
 const RIBBONS = { day: ['#e9573f', '#b3261e'], week: ['#2bb3a3', '#14756b'], month: ['#8e6bd8', '#5a3aa6'], all: ['#f6c945', '#c98a10'] };
 
-/**
- * The scoreboard of a game, in the manner of a fairground marquee: a frame of light bulbs, the name of the
- * game in gold, four lists (today, this week, this month, all time) with medals for the first three.
- * `lists`: { day, week, month, all }, each [{ name, score }] best first (null while they have not been
- * fetched); `format(score)` writes a score (a time, points); `me`: the visitor's own name, picked out.
- * `room`: { name, lists } in a room a player made — the board then shows the room on the left and the world
- * on the right, each today and of all time.
- */
-export function drawScores(ctx, w, h, { title, sub, lists, format, me, room = null }) {
+/** The night behind a board of the fair, rays fanning out from its title, a frame of gold with a bulb every few fingers. */
+function marquee(ctx, w, h) {
   // the night behind, rays fanning out from the title
   const sky = ctx.createLinearGradient(0, 0, 0, h);
   sky.addColorStop(0, '#1b1440'); sky.addColorStop(0.55, '#141a3a'); sky.addColorStop(1, '#0c1226');
@@ -66,6 +59,18 @@ export function drawScores(ctx, w, h, { title, sub, lists, format, me, room = nu
   const nx = Math.round((w - 60) / 46), ny = Math.round((h - 60) / 46);
   for (let k = 0; k <= nx; k++) { bulb(30 + (k * (w - 60)) / nx, 13, k); bulb(30 + (k * (w - 60)) / nx, h - 13, k + 1); }
   for (let k = 1; k < ny; k++) { bulb(13, 30 + (k * (h - 60)) / ny, k); bulb(w - 13, 30 + (k * (h - 60)) / ny, k + 1); }
+}
+
+/**
+ * The scoreboard of a game, in the manner of a fairground marquee: a frame of light bulbs, the name of the
+ * game in gold, four lists (today, this week, this month, all time) with medals for the first three.
+ * `lists`: { day, week, month, all }, each [{ name, score }] best first (null while they have not been
+ * fetched); `format(score)` writes a score (a time, points); `me`: the visitor's own name, picked out.
+ * `room`: { name, lists } in a room a player made — the board then shows the room on the left and the world
+ * on the right, each today and of all time.
+ */
+export function drawScores(ctx, w, h, { title, sub, lists, format, me, room = null }) {
+  marquee(ctx, w, h);
   // the name of the game, in gold on its shadow, a star on either side
   ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
   const text = shrink(ctx, title, w - 250, 66, 900, SERIF), tw = ctx.measureText(text).width;
@@ -123,6 +128,76 @@ export function drawScores(ctx, w, h, { title, sub, lists, format, me, room = nu
       ctx.fillText(fit(ctx, e.name, pw - 96 - sw), x0 + 66, y + 1);
     });
   });
+}
+
+/**
+ * The board of the five sponsors of a big attraction, beside its board of scores, in the same manner: who they
+ * are, the one who put in the most first — the one whose panel is over the board of scores is marked —, and the
+ * places still free. `rows`: up to five, in that order: { state: 'live' | 'pending' | 'taken' | 'free', title,
+ * subtitle, logo (an image ready to be drawn, or null), figure (what was bid: "$12", or ''), mine (the visitor's
+ * own), top (on the panel), offer (what a free place goes for: "from $1 · step up and bid", or '') }.
+ * Drawn on a sheet of 640 × 904 (scale it for another size).
+ */
+export function drawSponsorList(ctx, w, h, rows = []) {
+  marquee(ctx, w, h);
+  ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+  const head = shrink(ctx, 'OUR SPONSORS', w - 170, 56, 900, SERIF), tw = ctx.measureText(head).width;
+  ctx.lineJoin = 'round'; ctx.lineWidth = 9; ctx.strokeStyle = '#5a0d16'; ctx.strokeText(head, w / 2, 76);
+  const tg = ctx.createLinearGradient(0, 48, 0, 104);
+  tg.addColorStop(0, '#fff3b8'); tg.addColorStop(0.5, '#f6c945'); tg.addColorStop(1, '#d08a12');
+  ctx.fillStyle = tg; ctx.fillText(head, w / 2, 76);
+  const star = (x, y, r) => { ctx.beginPath(); for (let k = 0; k < 10; k++) { const a = (k / 10) * Math.PI * 2 - Math.PI / 2, q = k % 2 ? r * 0.45 : r; ctx.lineTo(x + Math.cos(a) * q, y + Math.sin(a) * q); } ctx.closePath(); ctx.fill(); };
+  ctx.fillStyle = '#f6c945';
+  for (const g of [-1, 1]) star(w / 2 + g * (tw / 2 + 34), 76, 16);
+  ctx.fillStyle = '#d9d2f0';
+  ctx.fillText(shrink(ctx, 'THE HIGHEST BID IS ON THE PANEL ABOVE', w - 110, 18, 700, SANS), w / 2, 122);
+  const N = 5, top = 146, gap = 10, rh = (h - 40 - top - gap * (N - 1)) / N, x0 = 34, x1 = w - 34;
+  for (let i = 0; i < N; i++) {
+    const r = rows[i] || { state: 'free', offer: '' }, y0 = top + i * (rh + gap), cy = y0 + rh / 2, free = r.state === 'free';
+    // the row: gold for the one on the panel, dark for the others, dashed for a free place
+    if (r.top) { ctx.fillStyle = 'rgba(74, 52, 8, 0.62)'; rounded(ctx, x0, y0, x1 - x0, rh, 16); ctx.fill(); ctx.strokeStyle = '#f6c945'; ctx.lineWidth = 3; ctx.stroke(); }
+    else if (!free) { ctx.fillStyle = 'rgba(8, 10, 28, 0.62)'; rounded(ctx, x0, y0, x1 - x0, rh, 16); ctx.fill(); ctx.strokeStyle = r.mine ? 'rgba(110, 240, 140, 0.8)' : 'rgba(255, 255, 255, 0.18)'; ctx.lineWidth = r.mine ? 2.5 : 1.5; ctx.stroke(); }
+    else { ctx.save(); ctx.setLineDash([10, 8]); ctx.strokeStyle = 'rgba(255, 233, 166, 0.45)'; ctx.lineWidth = 2; rounded(ctx, x0, y0, x1 - x0, rh, 16); ctx.stroke(); ctx.restore(); }
+    // its rank: a medal for the first three that are held
+    const bx = x0 + 34;
+    if (!free && i < 3) {
+      const [light, dark, ink] = MEDALS[i], mg = ctx.createRadialGradient(bx - 5, cy - 6, 2, bx, cy, 21);
+      mg.addColorStop(0, light); mg.addColorStop(1, dark);
+      ctx.fillStyle = mg; ctx.beginPath(); ctx.arc(bx, cy, 20, 0, 7); ctx.fill();
+      ctx.fillStyle = ink; ctx.font = `900 22px ${SANS}`; ctx.textAlign = 'center'; ctx.fillText(String(i + 1), bx, cy + 1);
+    } else { ctx.fillStyle = free ? 'rgba(255, 255, 255, 0.35)' : 'rgba(255, 255, 255, 0.6)'; ctx.font = `700 22px ${SANS}`; ctx.textAlign = 'center'; ctx.fillText(String(i + 1), bx, cy + 1); }
+    // its logo, or its initials, or a plus for a free place
+    const S = Math.min(84, rh - 26), lx = x0 + 70, ly = cy - S / 2;
+    if (free) {
+      ctx.save(); ctx.setLineDash([6, 6]); ctx.strokeStyle = 'rgba(255, 233, 166, 0.5)'; ctx.lineWidth = 2; rounded(ctx, lx, ly, S, S, 12); ctx.stroke(); ctx.restore();
+      ctx.fillStyle = 'rgba(255, 233, 166, 0.7)'; ctx.font = `300 54px ${SANS}`; ctx.textAlign = 'center'; ctx.fillText('+', lx + S / 2, cy + 2);
+    } else if (r.logo) {
+      ctx.fillStyle = '#f6f1e6'; rounded(ctx, lx, ly, S, S, 12); ctx.fill();
+      const iw = r.logo.width || 1, ih = r.logo.height || 1, q = Math.min((S * 0.86) / iw, (S * 0.86) / ih);
+      try { ctx.drawImage(r.logo, lx + (S - iw * q) / 2, ly + (S - ih * q) / 2, iw * q, ih * q); } catch { /* a broken picture: the frame alone */ }
+    } else {
+      let hh = 0;
+      for (const c of String(r.title || '?')) hh = (hh * 31 + c.charCodeAt(0)) >>> 0;
+      ctx.fillStyle = `hsl(${hh % 360}, 52%, 40%)`; rounded(ctx, lx, ly, S, S, 12); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = `800 32px ${SANS}`; ctx.textAlign = 'center';
+      ctx.fillText(String(r.title || '?').trim().split(/\s+/).slice(0, 2).map((w2) => [...w2][0] || '').join('').toUpperCase(), lx + S / 2, cy + 1);
+    }
+    // its words, and on the right what it put in
+    const tx = lx + S + 18;
+    let right = x1 - 18;
+    if (r.figure) {
+      ctx.font = `800 28px ${SANS}`; ctx.textAlign = 'right'; ctx.fillStyle = '#ffd95e';
+      ctx.fillText(r.figure, right, r.top || r.mine ? cy - 12 : cy);
+      if (r.top || r.mine) { ctx.font = `800 13px ${SANS}`; ctx.fillStyle = r.mine ? '#6ef08c' : '#f6c945'; ctx.fillText(r.mine ? 'YOURS' : '★ ON THE PANEL', right, cy + 20); }
+      right -= Math.max(ctx.measureText(r.figure).width, 96) + 16;
+    }
+    ctx.textAlign = 'left';
+    const name = free ? 'Your brand here' : r.state === 'taken' ? 'A new sponsor' : r.title || '';
+    const line = free ? r.offer || 'a place for a sponsor' : r.state === 'taken' ? 'coming soon' : r.state === 'pending' ? `${r.subtitle ? `${r.subtitle} · ` : ''}awaiting approval` : r.subtitle || '';
+    ctx.font = `800 30px ${SANS}`; ctx.fillStyle = free ? 'rgba(255, 243, 184, 0.75)' : r.top ? '#fff3b8' : '#ffffff';
+    ctx.fillText(fit(ctx, name, right - tx), tx, line ? cy - 14 : cy);
+    if (line) { ctx.font = `600 20px ${SANS}`; ctx.fillStyle = free ? 'rgba(217, 210, 240, 0.7)' : '#d9d2f0'; ctx.fillText(fit(ctx, line, right - tx), tx, cy + 20); }
+  }
 }
 
 /** Is this colour (#rrggbb) a dark one? (what is written on it is then written in a light ink) */

@@ -503,7 +503,7 @@ export class Race {
     }
 
     // the board of the best times: beside the board of the starts, the same way round
-    { const [px, pz] = off(A0 + MAT + 1.2, B0 - 2.05); this.board = zone.scoreStand('race', px, pz, out, { title: RACE.name.toUpperCase(), sub: `${RACE.laps} laps of the track on a quad · best times`, format: formatTime, width: 3.0, pixels: 0.85 }); }
+    { const [px, pz] = off(A0 + MAT + 1.2, B0 - 2.05); this.board = zone.scoreStand('race', px, pz, out, { title: RACE.name.toUpperCase(), sub: `${RACE.laps} laps of the track on a quad · best times`, format: formatTime, width: 3.0, pixels: 0.85, roll: 1, rollBack: 0.8 }); } // (its five sponsors: on the right, away from the mast, a little back, off the path)
     return this;
   }
 

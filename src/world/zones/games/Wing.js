@@ -211,7 +211,7 @@ export class Wing {
     const spot = at(FLYER + 1.0, 0, 3.4);
     this.spot = { x: spot.x, z: spot.z, r: 3.2, yaw: yaw + Math.PI };
     const bp = at(HALF + WALL + 2.6, 0, 1.3);
-    this.board = zone.scoreStand(this.id, bp.x, bp.z, yaw - 0.5, { title: `${WING.name.toUpperCase()} — BEST FLIGHTS`, sub: 'columns flown past in one flight', format: (n) => `${n}`, width: 3.0, pixels: 0.85 });
+    this.board = zone.scoreStand(this.id, bp.x, bp.z, yaw - 0.5, { title: `${WING.name.toUpperCase()} — BEST FLIGHTS`, sub: 'columns flown past in one flight', format: (n) => `${n}`, width: 3.0, pixels: 0.85, roll: 1 }); // (its five sponsors: on the right, away from the stage)
     this.view = { pos: at(0.4, FLOOR + 2.5, 11.6), look: at(0.2, FLOOR + 2.55, 0), fov: 44 };
     // the ring of light round the flyer: what must not touch a column, nor the foam
     this.ring = new THREE.Mesh(new THREE.RingGeometry(BODY - 0.035, BODY, 40), new THREE.MeshBasicMaterial({ color: 0xfff3b0, transparent: true, opacity: 0.9, depthTest: false, toneMapped: false }));

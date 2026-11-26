@@ -15,7 +15,7 @@ import { buildThanksWall } from './ThanksWall.js';
 import { buildRelics } from './Relics.js';
 import { CLIMB, ACID, BOULDER, ISLAND, islandPath, islandAt, ISLAND_LENGTH, SEA_REACH, SHARK, PONDS } from '../../layout/layout.js';
 import { climbCourse, stoneDepth, formatTime } from './course.js';
-import { canvasBoard, drawScores, drawSponsor } from './Boards.js';
+import { canvasBoard, drawScores, drawSponsor, drawSponsorList } from './Boards.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const mmss = formatTime;
@@ -165,6 +165,7 @@ export class GamesZone {
     this.scores = null; // not asked yet
     const stand = this.scoreStand('sky', gx + 4.6, gz - 0.7, sign.mesh.rotation.y + 0.35, {
       title: `${C.name.toUpperCase()} — BEST CLIMBS`, sub: `${C.height} m of stones · no jetpack · fastest to the top`, format: mmss, what: 'this game',
+      roll: -1, // (the board of its five sponsors: on the left — the gate is on the right)
     });
     this.board = stand.board;
     this.world.noFly.push({ x: C.x, z: C.z, r: C.r + 12 }); // (wide enough that nobody flies in from outside)
@@ -175,8 +176,13 @@ export class GamesZone {
    * its entrance. Returns { board, panel, setScores(lists, room), setSponsor(sponsor) } (`room`: { name, lists }
    * in a room a player made: the board then shows both); the place is added to
    * world.sponsorSlots under `board:<id>` (walk up to it to sponsor the game).
+   * A big attraction — five sponsors on its panel — has a second board beside it that lists the five (`roll`: +1
+   * on the right of who reads the board, -1 on the left; `rollBack`: so far behind; `rollAt`: { x, z } where it
+   * stands instead; `piles`: its posts go down to the bottom of the sea): stand.roll, { mesh, at, rows, setRows }.
    */
-  scoreStand(id, x, z, yaw, { title, sub, format, what = 'this game', width = 3.4, y = this.ground(x, z), pixels = 1, foot = 0.3 }) {
+  scoreStand(id, x, z, yaw, o) {
+    const { title, sub, format, what = 'this game', width = 3.4, pixels = 1, foot = 0.3, roll = 0, rollBack = 0, rollAt = null, piles = false } = o;
+    const given = o.y !== undefined, y = given ? o.y : this.ground(x, z); // (given: on planks or on the pier — not on the ground)
     const k = width / 3.4;
     const state = { lists: null, room: null, sponsor: null, offer: '' };
     // (`pixels`: a smaller board is drawn on a smaller sheet — the same drawing, scaled)
@@ -212,10 +218,41 @@ export class GamesZone {
         paint.tint(1.6, 1.25, 0.3, 1).tri(c, p(i - 1, 0.13 * k), p(i, 0.32 * k)).tri(c, p(i, 0.32 * k), p(i + 1, 0.13 * k));
       }
     }
+    // ---- the board of the five sponsors, beside the board of scores and the same way round (a big attraction)
+    let list = null;
+    if (roll || rollAt) {
+      const rw = 2.1 * k, d = width / 2 + 0.45 + rw / 2, nx = Math.sin(yaw), nz = Math.cos(yaw), rows = { list: [] };
+      const rx = rollAt ? rollAt.x : x + ax * roll * d - nx * rollBack, rz = rollAt ? rollAt.z : z + az * roll * d - nz * rollBack;
+      const feet = [-1, 1].map((s) => this.ground(rx + ax * s * (rw / 2 + 0.09), rz + az * s * (rw / 2 + 0.09))), hi = Math.max(...feet), lo = Math.min(...feet);
+      // (on the ground: never buried where the ground rises, never more than half a metre up where it falls away)
+      const ry = given ? y : Math.max(hi, Math.min(y, hi + 0.5)), rfoot = piles ? Math.max(foot, ry - Math.min(lo, 0) + 0.6) : given ? foot : ry - lo + 0.3;
+      // (drawn on a sheet of 640 × 904, a little smaller than the board of scores' own: five rows read well enough)
+      const sheet = canvasBoard(Math.round(512 * pixels), Math.round(724 * pixels), (ctx) => { ctx.save(); ctx.scale(0.8 * pixels, 0.8 * pixels); drawSponsorList(ctx, 640, 904, rows.list); ctx.restore(); }, rw, 3.0 * k, { both: true });
+      sheet.mesh.position.set(rx, ry + 0.75 + 1.5 * k, rz);
+      sheet.mesh.rotation.y = yaw;
+      sheet.mesh.name = `sponsors-${id}`;
+      this.group.add(sheet.mesh);
+      const rtop = ry + 0.75 + 3.0 * k + 0.2;
+      for (const s of [-1, 1]) {
+        const px = rx + ax * s * (rw / 2 + 0.09), pz = rz + az * s * (rw / 2 + 0.09);
+        pw.tint(1.1, 1.0, 0.85, 1).box(px - 0.07, ry - rfoot, pz - 0.07, px + 0.07, rtop, pz + 0.07, { tile: 1 });
+        paint.tint(1.0, 0.75, 0.12, 1).place(px, rtop, pz).lathe([[0.0, -0.02], [0.13, 0.1], [0.0, 0.26]], 8).pop();
+      }
+      this.colliders.push({ type: 'box', x: rx, z: rz, hw: rw / 2 + 0.2, hl: 0.14, yaw });
+      list = {
+        mesh: sheet.mesh, at: { x: rx, y: ry, z: rz, hw: rw / 2 + 0.2 },
+        /** What it lists now (for the checks). */
+        get rows() { return rows.list; },
+        setRows: (r) => { rows.list = r || []; sheet.redraw(); },
+        reach: { x: rx + nx * 1.3, z: rz + nz * 1.3, reach: 2.2 },
+      };
+    }
     this._add(post, `stand-${id}`);
     this.colliders.push({ type: 'box', x, z, hw: width / 2 + 0.2, hl: 0.14, yaw });
     const stand = {
-      id, board, panel,
+      id, board, panel, roll: list,
+      /** Who is on the panel now (for the checks). */
+      get sponsor() { return state.sponsor; },
       /** What the board shows now: its four lists (for the checks). */
       get lists() { return state.lists; },
       setScores: (lists, room = null) => { state.lists = lists; state.room = room; board.redraw(); },
@@ -224,7 +261,7 @@ export class GamesZone {
       /** What the empty panel says about taking it ("from $1 · step up and bid"), or nothing. */
       setOffer: (text) => { if (text !== state.offer) { state.offer = text; if (!state.sponsor) panel.redraw(); } },
     };
-    (this.world.sponsorSlots ||= []).push({ id: `board:${id}`, what, x: x + Math.sin(yaw) * 1.4, y, z: z + Math.cos(yaw) * 1.4, reach: 3.2, set: stand.setSponsor, offer: stand.setOffer });
+    (this.world.sponsorSlots ||= []).push({ id: `board:${id}`, what, x: x + Math.sin(yaw) * 1.4, y, z: z + Math.cos(yaw) * 1.4, reach: 3.2, set: stand.setSponsor, offer: stand.setOffer, ...(list && { roll: list.setRows, rollAt: list.reach }) });
     (this.stands ||= {})[id] = stand;
     return stand;
   }
@@ -237,6 +274,7 @@ export class GamesZone {
     if (this.stands?.[id]) return this.stands[id];
     const stand = this.scoreStand(id, x, z, yaw, o);
     this.world.collision.addBox(x, z, (o.width || 3.4) / 2 + 0.2, 0.14, yaw);
+    if (stand.roll) this.world.collision.addBox(stand.roll.at.x, stand.roll.at.z, stand.roll.at.hw, 0.14, yaw); // (the board of its five sponsors)
     return stand;
   }
 

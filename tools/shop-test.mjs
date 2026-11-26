@@ -419,6 +419,49 @@ try {
       && row?.figure === '$14.50' && row.unit === 'a month',
       JSON.stringify({ count, offered, bare, filled, held, board, post5, list, ways, row }));
   }
+  // ---- a big attraction has five places on its panel: the one who bid the most has the panel over the board of
+  // scores and keeps it — it no longer turns —; the board of the five beside it lists them, the most first, and the
+  // places still free; at that board, who they are, and the way to join them
+  {
+    const adminSet = (slot, set) => fetch(`${BASE}/api/sponsors`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${ADMIN_KEY}` }, body: JSON.stringify({ slot, set }) }).then((r) => r.status);
+    const read = () => page.evaluate(() => { const st = window.__mmf.world.games.stands.sky; return { panel: st.sponsor?.title || '', rows: st.roll.rows.map((r) => `${r.state}|${r.title}|${r.figure}|${r.top ? 'top' : ''}`) }; });
+    await pay('board:sky-2', 'skyAlphaDevice0001', null, { amount: 500, pay: 'pi_shoptest_five_1' });
+    await pay('board:sky-3', 'skyBravoDevice0002', null, { amount: 1200, pay: 'pi_shoptest_five_2' });
+    const filled = [await adminSet('board:sky-2', { title: 'Alpha Robots', subtitle: 'second best, trying harder', url: 'https://alpha.example/' }), await adminSet('board:sky-3', { title: 'Bravo Robots', subtitle: 'friendly machines', url: 'https://bravo.example/' })];
+    await page.evaluate(() => window.__mmf.refreshShop());
+    await page.waitForFunction(() => window.__mmf.world.games.stands.sky.sponsor?.title === 'Bravo Robots' && window.__mmf.world.games.stands.sky.roll.rows.filter((r) => r.state === 'live').length === 2, null, { timeout: 30000 });
+    const first = await read();
+    await page.waitForTimeout(7000); // (the panel used to turn every six seconds)
+    const later = await read();
+    // (at the board of scores: a bid for the first free place, and the site of the one on the panel)
+    await page.evaluate(() => { const m = window.__mmf, s = m.world.sponsorSlots.find((q) => q.id === 'board:sky'); m.setMode?.('walk', true); m.player.teleport(s.x, s.z, 0); });
+    await frames(8);
+    const atBoard = await prompts();
+    // (a third sponsor bids more than the two: the panel is theirs)
+    await pay('board:sky-4', 'skyCharlieDevice03', null, { amount: 2000, pay: 'pi_shoptest_five_3' });
+    filled.push(await adminSet('board:sky-4', { title: 'Charlie Robots', subtitle: 'the new one', url: 'https://charlie.example/' }));
+    await page.evaluate(() => window.__mmf.refreshShop());
+    await page.waitForFunction(() => window.__mmf.world.games.stands.sky.sponsor?.title === 'Charlie Robots', null, { timeout: 30000 });
+    const third = await read();
+    // (at the board of the five: who they are, and the way to join them)
+    await page.evaluate(() => { const m = window.__mmf, s = m.world.sponsorSlots.find((q) => q.id === 'board:sky'), r = s.rollAt; m.player.teleport(r.x, r.z, 0); });
+    await frames(8);
+    const atRoll = await prompts();
+    await page.keyboard.press('KeyE');
+    await page.waitForSelector('.chooser.on .list.thanks .sp', { timeout: 20000 });
+    const list = await page.evaluate(() => ({ title: document.querySelector('.chooser h2').textContent, rows: [...document.querySelectorAll('.chooser .list.thanks .sp')].map((b) => `${b.querySelector('.name').textContent}|${b.querySelector('.figure')?.textContent || ''}`) }));
+    await page.screenshot({ path: path.join(ROOT, 'tools/preview/shop-five.png') });
+    await page.keyboard.press('Escape');
+    await frames(3);
+    check('a big attraction: the highest of its five bids has the panel over the board of scores and keeps it; the board beside it lists the five, the most first, the free places with what they go for; a higher bid takes the panel; at the board of the five, who they are — a list with their sites — and the way to join them',
+      filled.every((st) => st === 200) && first.panel === 'Bravo Robots' && first.rows.join() === 'live|Bravo Robots|$12|top,live|Alpha Robots|$5|,free|||,free|||,free|||' && later.panel === 'Bravo Robots'
+      && atBoard.includes('Sponsor this game · from $1') && atBoard.includes('Visit Bravo Robots')
+      && third.panel === 'Charlie Robots' && third.rows.slice(0, 3).join() === 'live|Charlie Robots|$20|top,live|Bravo Robots|$12|,live|Alpha Robots|$5|'
+      && atRoll[0] === 'The sponsors of Mostly Up' && atRoll[1] === 'Sponsor this game · from $1' && list.title === 'The sponsors of Mostly Up' && list.rows.join() === 'Charlie Robots|$20,Bravo Robots|$12,Alpha Robots|$5',
+      JSON.stringify({ filled, first, later, atBoard, third, atRoll, list }));
+    for (const slot of ['board:sky-2', 'board:sky-3', 'board:sky-4']) await fetch(`${BASE}/api/sponsors?slot=${slot}`, { method: 'DELETE', headers: { authorization: `Bearer ${ADMIN_KEY}` } });
+    await page.evaluate(() => window.__mmf.refreshShop());
+  }
   const atPlate = (n) => page.evaluate((n) => { const m = window.__mmf, q = m.world.places.plaques, w = q.where(n), yaw = Math.atan2(w.x - w.sx, w.z - w.sz); m.player.teleport(w.sx, w.sz, yaw); m.player.pos.y = q.y; m.rig.snap(m.player.pos, yaw + Math.PI); m.rig.yaw = yaw + Math.PI; m.rig.pitch = -0.04; m.rig.distance = 2.4; return { count: q.count, column: q.columnAt(w.sx, w.sz), row: w.row }; }, n);
   const plates = await atPlate(3);
   await frames(10);

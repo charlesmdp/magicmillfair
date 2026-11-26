@@ -942,28 +942,38 @@ async function boot() {
   };
   // every place that can be sponsored: id → { what, cents, limits, set(sponsor | null) }
   const places = new Map();
-  // The big attractions — those with a star on the map — share their panel between up to five sponsors, shown
-  // turn by turn (a few seconds each; while a place is left, "your brand here" has its turn too). Their places:
-  // 'board:<id>' and 'board:<id>-2' … '-5' (server/catalog.js), all painted on the one panel of the stand.
+  // The big attractions have up to five sponsors: the highest bid has the panel over the board of scores, and the
+  // board beside it lists the five (GamesZone.scoreStand: `roll`). Their places: 'board:<id>' and
+  // 'board:<id>-2' … '-5' (server/catalog.js).
   const MAJOR_GAMES = ['sky', 'race', 'wing', 'slide', 'pond', 'boats', 'hill', 'crack', 'hollow', 'waves', 'lava', 'hive', 'flip', 'spiral', 'cars', 'golf'], rotors = [];
   const gameOf = (id) => String(id).split(':')[1]?.replace(/-\d$/, '') || '';
+  /** What a place of a panel weighs: what was bid for it (or what was said to be paid for a place filled by hand); -1 when it is free. */
+  const weightOf = (id) => { const v = shop.slots[id]; return v ? v.bid || v.pays?.amount || 0 : -1; };
+  /** Where the next bid on a big attraction goes: its first free place, or the one that went for the least. */
+  const targetOf = (rot) => rot.ids.find((k) => !shop.slots[k]) || rot.ids.slice().sort((a, b) => (shop.slots[a]?.bid || 0) - (shop.slots[b]?.bid || 0))[0];
   const addPlace = (sl) => {
     if (!sl.id.startsWith('board:') || !MAJOR_GAMES.includes(gameOf(sl.id))) { places.set(sl.id, { what: sl.what, spot: sl, set: sl.set }); return; }
-    const ids = [sl.id, ...[2, 3, 4, 5].map((n) => `${sl.id}-${n}`)], rotor = { ids, frames: new Map(), k: 0, current: sl.id, spot: sl };
+    // (a big attraction: five places. The one who put in the most has the panel over the board, and keeps it; the
+    // board beside it lists the five, the most first, and the places still free)
+    const ids = [sl.id, ...[2, 3, 4, 5].map((n) => `${sl.id}-${n}`)], rotor = { ids, frames: new Map(), current: sl.id, spot: sl, listed: '' };
     rotor.show = () => {
-      const live = ids.filter((id) => rotor.frames.get(id));
-      // (each sponsor twice for one turn of the invitation, while a place is left)
-      const turns = live.length && live.length < ids.length ? [...live, ...live, ''] : live, id = turns.length ? turns[rotor.k % turns.length] : '';
-      rotor.current = id || sl.id;
-      if (rotor.shown === id && id) return;
-      rotor.shown = id;
-      sl.set(id ? rotor.frames.get(id) : null);
+      const order = ids.slice().sort((a, b) => weightOf(b) - weightOf(a) || ids.indexOf(a) - ids.indexOf(b));
+      const top = order.find((id) => rotor.frames.get(id)) || '';
+      rotor.current = top || sl.id;
+      if (rotor.shown !== top) { rotor.shown = top; sl.set(top ? rotor.frames.get(top) : null); }
+      if (!sl.roll) return;
+      const offer = shop.open ? `from ${price(shop.least(targetOf(rotor)))} · step up and bid` : '';
+      const rows = order.map((id) => {
+        const v = shop.slots[id], f = rotor.frames.get(id), w = weightOf(id);
+        return { id, state: !v && !f ? 'free' : f?.pending ? 'pending' : f ? 'live' : 'taken', title: f?.title || '', subtitle: f?.subtitle || '', logo: f?.logo || null, figure: w > 0 ? price(w) : '', mine: !!v?.mine, top: !!top && id === top, offer };
+      });
+      const key = JSON.stringify(rows.map((r) => [r.state, r.title, r.subtitle, r.logo?.src || '', r.figure, r.mine, r.top, r.offer]));
+      if (key !== rotor.listed) { rotor.listed = key; sl.roll(rows); }
     };
-    for (const id of ids) places.set(id, { what: sl.what, spot: sl, rotor, set: (sp) => { rotor.frames.set(id, sp || null); rotor.shown = undefined; rotor.show(); } });
+    for (const id of ids) places.set(id, { what: sl.what, spot: sl, rotor, set: (sp) => { rotor.frames.set(id, sp || null); if (rotor.shown === id) rotor.shown = undefined; rotor.show(); } });
     rotors.push(rotor);
   };
   for (const sl of world.sponsorSlots || []) addPlace(sl);
-  { let since = 0; world.zones.push({ update: (dt) => { since += dt; if (since < 6) return; since = 0; for (const r of rotors) { r.k++; r.show(); } } }); }
   for (let n = 1; n <= (world.pier.gondolas || 0); n++) places.set(`gondola:${n}`, { what: `gondola ${n} of the big wheel`, set: (sp) => world.pier.setGondola(n, sp) });
   for (let n = 1; n <= (world.pier.huts || 0); n++) places.set(`hut:${n}`, { what: `beach hut ${n}`, set: (sp) => world.pier.setHut(n, sp) });
   for (const v of sky.villages) places.set(`village:${v.id}`, { what: `the sky village ${v.name}`, village: v, set: (sp) => { if (sp) sky.setSponsor(v.index, { name: sp.title, motto: sp.subtitle, url: sp.url }); } });
@@ -1006,6 +1016,7 @@ async function boot() {
       else if (place.plaque) place.set(live ? { title: view.title, subtitle: view.subtitle, logo: view.logo } : view ? { taken: true, mine: !!view.mine } : null); // (its picture is fetched when the plate is painted)
       else place.set(live ? { title: view.title, subtitle: view.subtitle, url: view.url, bg: view.bg || '', logo: await loadImage(view.logo) } : null);
     }
+    for (const r of rotors) r.show(); // (a bid may change without anything painted changing: who has the panel, the board of the five)
     hud.setVillages(sky.villages, data.meta.size, villageLabel);
     world.games.notices.ads.set(adRows()); // (the board of the booth of the sponsors)
     feedThanks();
@@ -1038,7 +1049,7 @@ async function boot() {
     hud.setFireworks(shop.owns('fireworks'));
     for (const text of shop.notes.splice(0)) hud.addChat('✦', 5, text, true); // (outbid, refunded: said once)
     // (the empty panel over a board says how to take it)
-    for (const sl of world.sponsorSlots || []) sl.offer?.(shop.open ? `from ${price(shop.least(sl.id))} · step up and bid` : '');
+    for (const sl of world.sponsorSlots || []) { const rot = places.get(sl.id)?.rotor; sl.offer?.(shop.open ? `from ${price(shop.least(rot ? targetOf(rot) : sl.id))} · step up and bid` : ''); }
     shopView.stale('board:');
     shopView.refresh(shopItems());
     await applySponsors();
@@ -1109,9 +1120,9 @@ async function boot() {
   const bidFor = async (id) => {
     if (!shop.open) { hud.note('The shop is not open yet. Come back soon!', 5200); return; }
     const rot = places.get(id)?.rotor;
-    if (rot && id === rot.ids[0]) id = rot.ids.find((k) => !shop.slots[k]) || rot.ids.slice().sort((a, b) => (shop.slots[a]?.bid || 0) - (shop.slots[b]?.bid || 0))[0];
+    if (rot && id === rot.ids[0]) id = targetOf(rot);
     const place = places.get(id), view = shop.slots[id], least = shop.least(id);
-    const shared = rot ? ` Up to ${rot.ids.length} sponsors share the panel of this game, each shown in turn — ${rot.ids.filter((k) => !shop.slots[k]).length} of the places are free.` : '';
+    const shared = rot ? ` Up to ${rot.ids.length} sponsors: the highest bid has the panel over the board of scores, and all ${rot.ids.length} are on the board beside it — ${rot.ids.filter((k) => !shop.slots[k]).length} of the places are free.` : '';
     const got = await hud.form(`Sponsor ${GAME_NAMES[gameOf(id)] || place.what}`,
       `${view ? `${rot ? 'Its five places are taken; the least paid for went for' : 'Its sponsor paid'} ${price(view.bid || 0)}: bid at least ${price(least)} and ${rot ? 'that place' : 'the panel'} is yours.` : `${rot ? 'A place is free' : 'Nobody sponsors it yet'}: the first bid is ${price(least)}.`}${shared} You pay once and keep the panel — your name, a line, your logo, a link — until somebody bids more. That day you are refunded in full, automatically, and they take your place. Say what it should show, then pay: it goes up the moment you are back.`,
       [...sponsorFields(), { key: 'bid', label: `Your bid, in US dollars (at least ${price(least)})`, value: String(least / 100), max: 9 }], 'Go to payment');
@@ -1131,7 +1142,7 @@ async function boot() {
     const own = rot.ids.find((k) => shop.slots[k]?.mine);
     if (own) return placeActionsOne(own, row);
     const out = [], place = places.get(id), free = rot.ids.filter((k) => !shop.slots[k]), cur = shop.slots[rot.current];
-    const target = free[0] || rot.ids.slice().sort((a, b) => (shop.slots[a]?.bid || 0) - (shop.slots[b]?.bid || 0))[0];
+    const target = targetOf(rot);
     if (who.admin && shop.open) out.push({ label: 'Fill a place in (administrator)', run: () => fillPlace(target) });
     if (shop.open && out.length < 2) out.push({ label: free.length ? `Sponsor ${place.what} · from ${price(shop.least(target))}` : `Outbid a sponsor · from ${price(shop.least(target))}`, run: () => bidFor(id) });
     if (cur?.state === 'live' && cur.url) out.push({ label: `Visit ${cur.title}`, run: () => visitSponsor(rot.current, cur.url) });
@@ -1169,14 +1180,29 @@ async function boot() {
     }
     return out;
   };
+  // (by the board of the five sponsors of a big attraction — nearer it than the board of scores —: who they are, and the way to join them)
+  const byRoll = (p, sl) => !!sl.rollAt && Math.abs(p.pos.y - sl.y) < 2.5 && near(p, [sl.rollAt.x, sl.rollAt.z], sl.rollAt.reach)
+    && (p.pos.x - sl.rollAt.x) ** 2 + (p.pos.z - sl.rollAt.z) ** 2 < (p.pos.x - sl.x) ** 2 + (p.pos.z - sl.z) ** 2;
   world.actionSources.push((p) => {
-    for (const sl of world.sponsorSlots || []) if (Math.abs(p.pos.y - sl.y) < 2.5 && near(p, [sl.x, sl.z], sl.reach)) return placeActions(sl.id)[0] || null;
+    for (const sl of world.sponsorSlots || []) if (Math.abs(p.pos.y - sl.y) < 2.5 && near(p, [sl.x, sl.z], sl.reach) && !byRoll(p, sl)) return placeActions(sl.id)[0] || null;
     return null;
   });
   world.actionSources.push((p) => {
-    for (const sl of world.sponsorSlots || []) if (Math.abs(p.pos.y - sl.y) < 2.5 && near(p, [sl.x, sl.z], sl.reach)) return placeActions(sl.id)[1] || null;
+    for (const sl of world.sponsorSlots || []) if (Math.abs(p.pos.y - sl.y) < 2.5 && near(p, [sl.x, sl.z], sl.reach) && !byRoll(p, sl)) return placeActions(sl.id)[1] || null;
     return null;
   });
+  /** The five sponsors of a big attraction, in a list one reads — the most generous first —: a click opens a site (counted for them). */
+  const openRoll = (slotId) => {
+    const rot = places.get(slotId)?.rotor, name = GAME_NAMES[gameOf(slotId)] || 'this game';
+    if (!rot) return;
+    const live = rot.ids.filter((k) => shop.slots[k]?.state === 'live').sort((a, b) => weightOf(b) - weightOf(a));
+    if (!live.length) { hud.note(`Nobody sponsors ${name} yet. ${shop.open ? `The first bid is ${price(shop.least(targetOf(rot)))}: step up to its board of scores.` : 'Sponsoring starts soon.'}`, 6000); return; }
+    const rows = live.map((k) => { const v = shop.slots[k], w = weightOf(k); return { name: v.title, tagline: v.subtitle || '', url: v.url || '', site: siteWords(v.url), clicks: v.clicks || 0, logo: v.logo || null, figure: w > 0 ? price(w) : '', unit: '', note: '', where: k === rot.current ? 'on the panel over the board' : '' }; });
+    hud.thanks(`The sponsors of ${name}`, `The highest bid has the panel over the board of scores; all ${rot.ids.length} places are on the board beside it. Pick a sponsor to open its site: it is counted for them.`, rows)
+      .then((i) => { if (i === null) return; const id = live[i], v = shop.slots[id]; if (v?.url) { visitSponsor(id, v.url); setTimeout(() => refreshShop(), 1500); } else if (v) hud.note(`${v.title} gave no site.`, 4000); });
+  };
+  world.actionSources.push((p) => { for (const sl of world.sponsorSlots || []) if (byRoll(p, sl)) return { label: `The sponsors of ${GAME_NAMES[gameOf(sl.id)] || 'this game'}`, run: () => openRoll(sl.id) }; return null; });
+  world.actionSources.push((p) => { for (const sl of world.sponsorSlots || []) if (byRoll(p, sl)) return placeActions(sl.id)[0] || null; return null; });
   // the plaques of the companions: the two plates in front of whoever stands by the plinth (the upper, then the lower)
   const plaqueActions = (p) => {
     if (!plaques || Math.abs(p.pos.y - plaques.y) > 2.5) return [];
@@ -1230,7 +1256,7 @@ async function boot() {
   });
   // the Trading Post, on the plaza at the foot of the pier: every game on a card — a photograph of it, who
   // sponsors it, the way to take its panel (ui/SponsorsView.js)
-  // (the big attractions — those with a star on the map — first, then the stalls of the pier)
+  // (the big attractions — five sponsors each — first, then the stalls of the pier)
   const boardIds = () => Object.keys(GAME_NAMES).sort((a, b) => (MAJOR_GAMES.includes(a) ? MAJOR_GAMES.indexOf(a) : 99) - (MAJOR_GAMES.includes(b) ? MAJOR_GAMES.indexOf(b) : 99)).map((k) => `board:${k}`).filter((id) => places.has(id));
   const adRows = () => boardIds().map((id) => { const v = shop.slots[id]; return { game: GAME_NAMES[id.split(':')[1]], sponsor: v?.state === 'live' ? v.title : '', offer: shop.open ? `from ${price(shop.least(id))}` : 'free' }; });
   // the stand of the wheel: its gondolas, who sponsors them, which are free
@@ -1443,7 +1469,7 @@ async function boot() {
     flip: { title: 'BEST TIMES', sub: 'a thousand metres of girders · 3 s for each fall, a quarter of a second off for each spark', at: [4.4, -0.5, 0] },
     spiral: { title: 'BEST TIMES', sub: 'nineteen turns up to the bell · fastest, falls and all', at: [4.4, -0.5, 0] },
     cars: { title: 'BEST TIMES', sub: 'three laps of the table · fastest', at: [4.4, -0.5, 0] },
-    golf: { title: 'FEWEST STROKES', sub: 'nine holes round the acid pond · the fewest strokes, then the fastest', at: [4.4, -0.5, 0], format: golfScore },
+    golf: { title: 'FEWEST STROKES', sub: 'nine holes round the acid pond · the fewest strokes, then the fastest', at: [4.4, -0.5, 0], format: golfScore, star: false }, // (no star on the map for the golf)
   };
   const labSigns = { group: null, key: null, planted: new Set() };
   /** What follows the building of the extras that were switched on. */
@@ -1455,10 +1481,13 @@ async function boot() {
       const o = LAB_BOARD[id], fx = Math.sin(gate.yaw), fz = Math.cos(gate.yaw);
       const spot = game.boardSpot || { x: gate.x - fz * o.at[0] + fx * o.at[1], z: gate.z + fx * o.at[0] + fz * o.at[1], yaw: gate.yaw + Math.PI + o.at[2] };
       if (id === 'slide') game.board?.mesh?.removeFromParent(); // (the plain board the slide hung for itself: this one takes its place)
-      const deck = o.deck ? { y: gate.y, width: 2.7, pixels: 0.75, foot: gate.y - Math.min(world.data.heightAt(spot.x, spot.z), 0) + 0.6 } : o.level ? { y: gate.y } : null;
-      fair.stands[id] = world.games.lateStand(id, spot.x, spot.z, spot.yaw, { title: `${GAME_NAMES[id].toUpperCase()} — ${o.title}`, sub: o.sub, format: o.format || formatTime, what: 'this game', ...deck });
+      const deck = o.deck ? { y: gate.y, width: 2.7, pixels: 0.75, foot: gate.y - Math.min(world.data.heightAt(spot.x, spot.z), 0) + 0.6, piles: true } : o.level ? { y: gate.y } : null;
+      // (a big attraction: the board of its five sponsors beside its board, on the side away from its gate — or where the game says)
+      const lx = Math.cos(spot.yaw), lz = -Math.sin(spot.yaw), away = Math.sign((spot.x - gate.x) * lx + (spot.z - gate.z) * lz) || 1;
+      const five = MAJOR_GAMES.includes(id) ? { roll: o.roll || away, rollBack: o.rollBack || 0, rollAt: game.rollSpot || null } : {};
+      fair.stands[id] = world.games.lateStand(id, spot.x, spot.z, spot.yaw, { title: `${GAME_NAMES[id].toUpperCase()} — ${o.title}`, sub: o.sub, format: o.format || formatTime, what: 'this game', ...deck, ...five });
       const slot = (world.sponsorSlots || []).find((q) => q.id === `board:${id}`);
-      if (slot) { addPlace(slot); slot.offer?.(shop.open ? `from ${price(shop.least(slot.id))} · step up and bid` : ''); }
+      if (slot) { addPlace(slot); const rot = places.get(slot.id)?.rotor; slot.offer?.(shop.open ? `from ${price(shop.least(rot ? targetOf(rot) : slot.id))} · step up and bid` : ''); rot?.show(); }
       added = true;
     }
     if (added) { refreshBoards(); applySponsors(); shopView.stale('board:'); if (shopView.isOpen) shopView.refresh(shopItems()); }
@@ -1502,7 +1531,7 @@ async function boot() {
     list.push({ id: 'wing', name: WING.name, x: WING.x, z: WING.z });
     for (const id of Object.keys(LAB_GAMES)) {
       const game = app.extras?.[id], at = game && (game.gate || game.stand);
-      if (!at) continue;
+      if (!at || LAB_BOARD[id]?.star === false) continue;
       const points = id === 'slide' ? game.course?.main?.points : null;
       list.push({ id, name: GAME_NAMES[id], x: at.x, z: at.z, ...(points && { line: points.filter((_, i) => i % 6 === 0 || i === points.length - 1).map((p) => [p.x, p.z]) }) });
     }

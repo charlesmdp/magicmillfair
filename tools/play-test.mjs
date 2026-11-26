@@ -24,7 +24,7 @@ const SPECS = {
   flip: { offer: /Mostly Up & Down/, score: (ms) => ms > 10000 && ms < 900000 },
   spiral: { offer: /Spiral of Death/, score: (ms) => ms > 20000 && ms < 900000 },
   cars: { offer: /Karting Simulator/, score: (ms) => ms > 5000 && ms < 900000 },
-  golf: { offer: /Balthazar Golf/, score: (n) => n > 0 },
+  golf: { offer: /Balthazar Golf/, score: (n) => n > 0, star: false }, // (the golf has no star on the map)
 };
 const asked = process.argv.slice(2).filter((a) => SPECS[a]), ids = asked.length ? asked : Object.keys(SPECS);
 
@@ -56,12 +56,20 @@ try {
   for (const id of ids) {
     const spec = SPECS[id];
     // (switched on as the game does when the owner throws the switch: main.js, applyRelease)
-    const built = await page.evaluate((id) => import('/src/extras/index.js').then(({ loadExtras }) => loadExtras(window.__mmf, { [id]: true })).then((all) => { const a = window.__mmf, g = all[id]; a.extrasBuilt(); const stand = a.fair.stands[id]; return { gate: g.gate, group: !!a.world.scene.getObjectByName(id), game: !!a.labGames[id], hook: typeof a[`${id}Run`] === 'function' && a[`${id}Run`]() === null, stand: !!stand && !!stand.board?.mesh?.parent, at: stand ? [stand.board.mesh.position.x, stand.board.mesh.position.y, stand.board.mesh.position.z] : null, lists: !!a.fair.boards[id], slot: (a.world.sponsorSlots || []).some((q) => q.id === `board:${id}`), star: !!a.hud.attractions?.some((q) => q.id === id), ground: stand ? a.world.collision.spawnHeight(stand.board.mesh.position.x, stand.board.mesh.position.z) : 0 }; }).catch((e) => ({ error: String(e && e.stack || e).slice(0, 400) })), id);
+    const built = await page.evaluate((id) => import('/src/extras/index.js').then(({ loadExtras }) => loadExtras(window.__mmf, { [id]: true })).then((all) => { const a = window.__mmf, g = all[id]; a.extrasBuilt(); const stand = a.fair.stands[id]; return { gate: g.gate, group: !!a.world.scene.getObjectByName(id), game: !!a.labGames[id], hook: typeof a[`${id}Run`] === 'function' && a[`${id}Run`]() === null, stand: !!stand && !!stand.board?.mesh?.parent, at: stand ? [stand.board.mesh.position.x, stand.board.mesh.position.y, stand.board.mesh.position.z] : null, lists: !!a.fair.boards[id], slot: (a.world.sponsorSlots || []).some((q) => q.id === `board:${id}`), star: !!a.hud.attractions?.some((q) => q.id === id), ground: stand ? a.world.collision.spawnHeight(stand.board.mesh.position.x, stand.board.mesh.position.z) : 0,
+      // (the board of its five sponsors, beside the board of scores)
+      roll: stand?.roll ? { parent: !!stand.roll.mesh.parent, at: [stand.roll.at.x, stand.roll.at.y, stand.roll.at.z], dyaw: Math.abs(stand.roll.mesh.rotation.y - stand.board.mesh.rotation.y), rows: stand.roll.rows.length, free: stand.roll.rows.filter((r) => r.state === 'free').length, box: a.world.collision.boxes.some((b) => Math.abs(b[0] - stand.roll.at.x) < 1e-6 && Math.abs(b[1] - stand.roll.at.z) < 1e-6), hw: stand.roll.at.hw, feet: [-1, 1].map((s) => a.world.data.heightAt(stand.roll.at.x + Math.cos(stand.roll.mesh.rotation.y) * s * (stand.roll.at.hw - 0.11), stand.roll.at.z - Math.sin(stand.roll.mesh.rotation.y) * s * (stand.roll.at.hw - 0.11))) } : null }; }).catch((e) => ({ error: String(e && e.stack || e).slice(0, 400) })), id);
     await frames(4);
     check(`${id}: built in the running game — one group named after it, a gate, and what tells the game that a run is on`, !built.error && built.group && built.game && built.hook && Number.isFinite(built.gate?.x), built.error || `gate at (${built.gate.x.toFixed(1)}, ${built.gate.z.toFixed(1)})`);
     if (built.error) continue;
     // (the board is 3 m high and stands 0.75 m off the ground: its middle is 2.25 m over what one walks on there)
-    check(`${id}: its board of scores stands by the gate, on the ground one walks on there, as at every game of the fair — a sponsor's panel over it, a star on the map`, built.stand && built.lists && built.slot && built.star && Math.hypot(built.at[0] - built.gate.x, built.at[2] - built.gate.z) < 12 && Math.abs(built.at[1] - 2.25 - built.ground) < 0.8, built.at ? `${Math.hypot(built.at[0] - built.gate.x, built.at[2] - built.gate.z).toFixed(1)} m from the gate, its middle ${(built.at[1] - built.ground).toFixed(2)} m over the ground` : 'no stand');
+    check(`${id}: its board of scores stands by the gate, on the ground one walks on there, as at every game of the fair — a sponsor's panel over it, a star on the map${spec.star === false ? ' (not the golf: no star)' : ''}`, built.stand && built.lists && built.slot && (spec.star === false ? !built.star : built.star) && Math.hypot(built.at[0] - built.gate.x, built.at[2] - built.gate.z) < 12 && Math.abs(built.at[1] - 2.25 - built.ground) < 0.8, built.at ? `${Math.hypot(built.at[0] - built.gate.x, built.at[2] - built.gate.z).toFixed(1)} m from the gate, its middle ${(built.at[1] - built.ground).toFixed(2)} m over the ground` : 'no stand');
+    {
+      const r = built.roll, far = r ? Math.hypot(r.at[0] - built.at[0], r.at[2] - built.at[2]) : 0, gap = r ? Math.hypot(r.at[0] - built.gate.x, r.at[2] - built.gate.z) : 0;
+      check(`${id}: beside its board, the board of its five sponsors — the same way round, clear of the gate, its feet on what is under it, a wall one does not walk through; all five places free here (the shop is closed)`,
+        !!r && r.parent && r.dyaw < 1e-6 && far > 2.3 && far < 9 && gap > r.hw + 1.5 && r.box && r.rows === 5 && r.free === 5 && r.feet.every((g) => g <= r.at[1] + 0.05),
+        r ? `${far.toFixed(1)} m from the board, ${gap.toFixed(1)} m from the gate, at (${r.at.map((v) => v.toFixed(1)).join(', ')})` : 'none');
+    }
     if (spec.also) await spec.also(page, check);
     // ---- at its gate: offered; on ground one can stand on
     const stand = await page.evaluate((id) => { const a = window.__mmf, g = a.labGames[id].game.gate; a.setMode?.('walk', true); a.player.teleport(g.x, g.z, g.yaw); return { y: a.player.pos.y, gate: g.y }; }, id);
@@ -94,7 +102,7 @@ try {
     check(`${id}: and the player is let go at the gate, the camera given back`, !done.driver && done.fov === null && Math.hypot(done.x - built.gate.x, done.z - built.gate.z) < 1.5);
   }
   const after = await world();
-  check('each adds one group to the world, one action and one thing that goes by the clock; each has its board, its panel and its star', after.groups === ids.length && after.games === ids.length && after.sources === before.sources + ids.length && after.zones === before.zones + ids.length && after.stands === ids.length && after.slots === ids.length && after.stars === ids.length, after);
+  check('each adds one group to the world, one action and one thing that goes by the clock; each has its board, its panel and its star (but the golf)', after.groups === ids.length && after.games === ids.length && after.sources === before.sources + ids.length && after.zones === before.zones + ids.length && after.stands === ids.length && after.slots === ids.length && after.stars === ids.filter((id) => SPECS[id].star !== false).length, after);
   check('nothing was reported wrong by the browser', errors.length === 0, errors.slice(0, 3).join(' | '));
 } finally {
   await browser.close();

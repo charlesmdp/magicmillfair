@@ -879,6 +879,21 @@ try {
       && win.cards.length === 14 && win.cards.includes('Mostly Up') && win.cards.includes('Meltdown Run') && win.photos === 14 && win.tags.join() === 'Free' && win.extras.includes('The big wheel') && /of 14 games sponsored/.test(win.count) && !win.sky && shut,
       JSON.stringify({ booth: signs.booth, atBooth, win, shut }));
   }
+  // --- the big attractions of the fair — the climb, the race, the flying theatre — have the board of their five
+  // sponsors beside their board of scores: the same way round, a wall one does not walk through; the stalls have none
+  {
+    const fives = await page.evaluate(() => {
+      const m = window.__mmf, S = m.world.games.stands, out = {};
+      for (const id of ['sky', 'race', 'wing']) {
+        const st = S[id], r = st?.roll, b = st?.board.mesh.position;
+        out[id] = r ? { dyaw: Math.abs(r.mesh.rotation.y - st.board.mesh.rotation.y), far: +Math.hypot(r.at.x - b.x, r.at.z - b.z).toFixed(2), rows: r.rows.length, free: r.rows.filter((q) => q.state === 'free').length, box: m.world.collision.boxes.some((q) => Math.abs(q[0] - r.at.x) < 1e-6 && Math.abs(q[1] - r.at.z) < 1e-6), slot: !!(m.world.sponsorSlots || []).find((q) => q.id === `board:${id}`)?.rollAt } : null;
+      }
+      out.stalls = Object.keys(S).filter((id) => !['sky', 'race', 'wing'].includes(id) && S[id].roll).length;
+      return out;
+    });
+    check('the big attractions have the board of their five sponsors beside their board of scores (the climb, the race, the flying theatre): the same way round, a wall one does not walk through, five places — free here —, a spot to read them from; the stalls have none',
+      ['sky', 'race', 'wing'].every((id) => { const f = fives[id]; return f && f.dyaw < 1e-6 && f.far > 2.3 && f.far < 4 && f.rows === 5 && f.free === 5 && f.box && f.slot; }) && fives.stalls === 0, JSON.stringify(fives));
+  }
   // --- the wall of thanks: a tablet cut into the cliff west of the meadow of the acid pond, facing the meadow. Nobody
   // sponsors anything in this world: it says its title, and invites
   {

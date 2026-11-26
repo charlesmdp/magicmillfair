@@ -249,7 +249,8 @@ try {
     const m = window.__mmf, w = m.world, out = { stands: {}, slots: {} };
     for (const id of ['hill', 'hollow', 'pond']) {
       const st = w.games.stands?.[id], gate = m.extras[id]?.gate, p = st?.board.mesh.position;
-      out.stands[id] = st ? { far: +Math.hypot(p.x - gate.x, p.z - gate.z).toFixed(1), dry: w.data.heightAt(p.x, p.z) > 0.5, first: st.lists?.day?.[0]?.name || '' } : null;
+      out.stands[id] = st ? { far: +Math.hypot(p.x - gate.x, p.z - gate.z).toFixed(1), dry: w.data.heightAt(p.x, p.z) > 0.5, first: st.lists?.day?.[0]?.name || '',
+        roll: st.roll ? { dyaw: Math.abs(st.roll.mesh.rotation.y - st.board.mesh.rotation.y), far: +Math.hypot(st.roll.at.x - p.x, st.roll.at.z - p.z).toFixed(1), rows: st.roll.rows.length, box: w.collision.boxes.some((b) => Math.abs(b[0] - st.roll.at.x) < 1e-6 && Math.abs(b[1] - st.roll.at.z) < 1e-6) } : null } : null;
       out.slots[id] = (w.sponsorSlots || []).some((q) => q.id === `board:${id}`);
     }
     out.stars = (m.hud.attractions || []).map((a) => a.id).join();
@@ -257,10 +258,11 @@ try {
     out.posts = (m.labSigns || []).map((p) => p.id).join();
     return out;
   });
-  check('the two games got what every game of the fair has, as the game runs: a stand by the gate with the time just made on it, a panel for a sponsor over it, a star on the map, planks at the forks — and the game that is still off has none of it',
+  check('the two games got what every game of the fair has, as the game runs: a stand by the gate with the time just made on it, a panel for a sponsor over it and the board of its five sponsors beside it, a star on the map, planks at the forks — and the game that is still off has none of it',
     dressed.stands.hill && dressed.stands.hollow && !dressed.stands.pond && dressed.stands.hill.far > 2 && dressed.stands.hill.far < 12 && dressed.stands.hollow.far > 2 && dressed.stands.hollow.far < 12
     && dressed.stands.hill.dry && dressed.stands.hollow.dry && dressed.stands.hill.first === 'Traveller' && dressed.stands.hollow.first === 'Traveller'
     && dressed.slots.hill && dressed.slots.hollow && !dressed.slots.pond
+    && ['hill', 'hollow'].every((id) => { const r = dressed.stands[id].roll; return r && r.box && r.dyaw < 1e-6 && r.far > 2.3 && r.far < 4 && r.rows === 5; })
     && dressed.stars === 'climb,race,wing,hill,hollow' && dressed.planks === 'hill,hollow' && dressed.posts === 'games-arrival,games-plaza,games-pondside,games-shore',
     JSON.stringify(dressed));
   await page.evaluate(([x, z]) => { const m = window.__mmf; m.player.teleport(x, z, 1.2); m.rig.snap(m.player.pos, 1.2 + Math.PI); }, [first.x, first.z]);

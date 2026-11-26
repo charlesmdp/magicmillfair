@@ -25,7 +25,8 @@
 // Its board of scores is the game's to keep, as for every extra that is a game (main.js: LAB_GAMES, LAB_BOARD —
 // the stand by the gate, its sponsor's panel, the star on the map; server/scores.js: what a score is). The stand
 // is put to the right of the gate unless the game says where: game.boardSpot = { x, z, yaw (the way its face
-// looks) }. What `plug` gives the game for it: app.<id>Run() — the run that is on, or null — and, when a run is
+// looks) }; the board of its five sponsors, beside it on the side away from the gate, unless the game says where:
+// game.rollSpot = { x, z }. What `plug` gives the game for it: app.<id>Run() — the run that is on, or null — and, when a run is
 // over, app.<id>Done(score, state).
 import { keysHelp } from './help.js';
 import { TUNES, tunePlayer } from './tunes.js';

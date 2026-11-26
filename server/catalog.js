@@ -35,8 +35,9 @@ export const BOARDS = {
   waves: 'Big Tsunami', lava: 'No Touch Lava!', hive: "Bee Fly", flip: 'Mostly Up & Down', spiral: 'Spiral of Death', cars: 'Karting Simulator', golf: 'Balthazar Golf',
 };
 /**
- * The big attractions — those with a star on the map: their panel is shared by up to BOARD_PLACES sponsors,
- * shown turn by turn. Its places are 'board:<id>' and 'board:<id>-2' … '-5': each an auction of its own.
+ * The big attractions: up to BOARD_PLACES sponsors each — the highest bid has the panel over the board of scores,
+ * and the board beside it lists the five (src/main.js, GamesZone.scoreStand). Its places are 'board:<id>' and
+ * 'board:<id>-2' … '-5': each an auction of its own. (They have a star on the map, but the golf.)
  */
 export const MAJOR_BOARDS = ['sky', 'race', 'wing', 'slide', 'pond', 'boats', 'hill', 'crack', 'hollow', 'waves', 'lava', 'hive', 'flip', 'spiral', 'cars', 'golf'], BOARD_PLACES = 5;
 /** The place of a panel: 'slide-3' → ['slide', 3], 'slide' → ['slide', 1]; null when there is no such place. */
