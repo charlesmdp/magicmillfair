@@ -77,7 +77,7 @@ export const TERMS = () => ({
     ] },
     { icon: '✏️', title: 'Changes, and who to talk to', text: [
       'These terms may be updated as the game grows; the date below says when they last were. Carrying on playing after a change means accepting it.',
-      `A question, a complaint, a request? You can ${reach()}.`,
+      `A question, a complaint, a request? You can ${reach()}, or use Help & support, in the settings.`,
     ] },
   ],
 });
@@ -101,7 +101,7 @@ export const PRIVACY = () => ({
       'All of this is stored with the host of the game (Cloudflare). It is kept for as long as the game needs it — a score while its board exists, an account until you ask for it to be deleted.',
     ] },
     { icon: '🧩', title: 'The outside services', text: [
-      ['Cloudflare — hosts the site, runs the server of the game and its storage, and (where e-mails are switched on) sends them. It sees every request, as any host does.', 'Stripe — takes the payments, on its own form. It receives what you type there and applies its own privacy policy.', 'Anthropic — when you talk to Billy the AI (the alligator), the line you said is sent to its Claude API to write his answer — with the few lines of your own conversation with him just before it (the last three exchanges, which your browser keeps for ten minutes at the most), so that he can follow. Nothing else goes with it, nobody else\'s words ever do, and the game\'s server does not keep the conversation.', 'Ship or Die (ship-or-die.com) — a small script from the hackathon the game takes part in, loaded with the page to count its visits. Like any script fetched from another site, it lets that site see your IP address, your browser and the address of the page.'],
+      ['Cloudflare — hosts the site, runs the server of the game and its storage, and (where e-mails are switched on) sends them. It sees every request, as any host does.', 'Stripe — takes the payments, on its own form. It receives what you type there and applies its own privacy policy.', 'Anthropic — when you talk to Billy the AI (the alligator), the line you said is sent to its Claude API to write his answer — with the few lines of your own conversation with him just before it (the last three exchanges, which your browser keeps for ten minutes at the most), so that he can follow. Nothing else goes with it, nobody else\'s words ever do, and the game\'s server does not keep the conversation.', 'Orka (orka.chat) — the help form (Help & support, in the settings). It is fetched from Orka only when you open it, and the game sends it nothing about you: what you write in it — with a name and an address, if you give them — goes to Orka, which brings it to the fair\'s team and applies its own privacy policy. Like any page from another site, it lets Orka see your IP address and your browser.', 'Ship or Die (ship-or-die.com) — a small script from the hackathon the game takes part in, loaded with the page to count its visits. Like any script fetched from another site, it lets that site see your IP address, your browser and the address of the page.'],
       'There are no advertising networks and no social-network buttons.',
     ] },
     { icon: '⚖️', title: 'Why the game is allowed to', text: [

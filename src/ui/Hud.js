@@ -273,7 +273,7 @@ export class Hud {
       <div class="banner" role="alert"></div>
       <div class="elsewhere" hidden><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="elsewhere-title"><h2 id="elsewhere-title">Open in another tab</h2><p>Atomic Oasis is open in another tab of this browser: you are playing there. One of you is enough — here, everything is paused.</p><button class="play-here" type="button">Play here</button></div></div>
       <div class="panel" role="dialog" aria-label="Settings">
-        <h2>Settings</h2>
+        <div class="panel-top"><h2>Settings</h2><button class="open-help" type="button"><i aria-hidden="true">?</i>Help &amp; support</button></div>
         <div class="room-box" hidden>
           <h3>Your room</h3>
           <div class="room-list" role="list" aria-label="The rooms of the fair: the one you are in, and the others"></div>
@@ -418,6 +418,7 @@ export class Hud {
     this.emotes.querySelector('[data-firework]').onclick = () => { this.emit('firework'); this.emotes.classList.remove('on'); };
     this.emotes.querySelector('[data-mushroom]').onclick = () => { this.emit('mushroom'); this.emotes.classList.remove('on'); };
     h.querySelector('.open-shop').onclick = () => { this.panel.classList.remove('on'); this.emit('shop'); };
+    h.querySelector('.open-help').onclick = () => { this.panel.classList.remove('on'); this.emit('help'); }; // (help and support: ui/HelpView.js)
     this._robotUI(h.querySelector('.swatches.robot'), h.querySelector('.sizes.robot'), h.querySelector('.panel .passhint'));
     this.wastedEl = h.querySelector('.wasted');
     h.querySelectorAll('.quality button').forEach((b) => (b.onclick = () => this.emit('quality', b.dataset.q)));

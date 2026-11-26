@@ -90,7 +90,7 @@ try {
   });
   await page.evaluate(() => document.querySelector('.legal-links [data-legal="privacy"]').click());
   await frames(2);
-  const legal = await page.evaluate(() => { const text = document.querySelector('.legal-body').textContent; return { open: document.querySelector('.legal').classList.contains('on'), panel: document.querySelector('.hud .panel').classList.contains('on'), tab: document.querySelector('.legal-tabs .on')?.textContent, sections: document.querySelectorAll('.legal-body section').length, names: ['Cloudflare', 'Stripe', 'Anthropic', 'ship-or-die'].filter((n) => text.includes(n)).length }; });
+  const legal = await page.evaluate(() => { const text = document.querySelector('.legal-body').textContent; return { open: document.querySelector('.legal').classList.contains('on'), panel: document.querySelector('.hud .panel').classList.contains('on'), tab: document.querySelector('.legal-tabs .on')?.textContent, sections: document.querySelectorAll('.legal-body section').length, names: ['Cloudflare', 'Stripe', 'Anthropic', 'Orka', 'ship-or-die'].filter((n) => text.includes(n)).length }; });
   await shot('8-privacy');
   // nothing of the sky villages while they are hidden (the owner's switch; no server here: hidden): no gate, no
   // village on the mountains, no name on the map, not a word from the alligator
@@ -110,8 +110,21 @@ try {
   await page.evaluate(() => document.querySelector('.legal-x').click());
   const legalClosed = await page.evaluate(() => !document.querySelector('.legal').classList.contains('on'));
   console.log(`small print: ${JSON.stringify({ extras, legal, terms, notice: { tab: notice.tab, chars: notice.text.length }, legalClosed })}`);
-  if (!extras.full || extras.links !== 'Terms of use,Privacy,Legal notice' || !extras.counted || !legal.open || legal.panel || legal.tab !== 'Privacy' || legal.sections < 5 || legal.names !== 4 || terms.tab !== 'Terms of use' || terms.sections < 5
+  if (!extras.full || extras.links !== 'Terms of use,Privacy,Legal notice' || !extras.counted || !legal.open || legal.panel || legal.tab !== 'Privacy' || legal.sections < 5 || legal.names !== 5 || terms.tab !== 'Terms of use' || terms.sections < 5
     || notice.tab !== 'Legal notice' || !/MY BIG LEO/.test(notice.text) || !/SIREN 880 338 827/.test(notice.text) || !/Cloudflare, Inc\./.test(notice.text) || !/101 Townsend Street/.test(notice.text) || !legalClosed) { failed = true; console.log('FAIL: the small print, the full screen control or the script that counts the visits'); }
+  // …and to help: the form of Orka, on a card of its own — nothing of Orka's is fetched before it is opened; the
+  // frame grows with the form (it says how tall it is); the fair's own address is under it (the privacy page names Orka)
+  await page.click('[data-act="settings"]');
+  const beforeHelp = await page.evaluate(() => ({ button: document.querySelector('.panel .open-help')?.textContent || '', frames: document.querySelectorAll('iframe').length }));
+  await page.click('.panel .open-help');
+  await page.waitForFunction(() => document.querySelector('.help-frame')?.style.height === '480px', null, { timeout: 15000 }).catch(() => {});
+  const help = await page.evaluate(() => { const f = document.querySelector('.help-frame'); return { open: document.querySelector('.help').classList.contains('on'), panel: document.querySelector('.hud .panel').classList.contains('on'), src: f?.src || '', height: f?.style.height || '', ready: document.querySelector('.help-form').classList.contains('ready'), foot: document.querySelector('.help-foot').textContent }; });
+  await shot('6b-help');
+  await page.evaluate(() => document.querySelector('.help-x').click());
+  const helpClosed = await page.evaluate(() => !document.querySelector('.help').classList.contains('on'));
+  console.log(`help: ${JSON.stringify({ beforeHelp, help: { ...help, foot: help.foot.slice(0, 60) }, helpClosed })}`);
+  if (!/Help & support/.test(beforeHelp.button) || beforeHelp.frames !== 0 || !help.open || help.panel || help.src !== 'https://widget.orka.chat/form.html?appId=6b0872839b5d97f318d3ab69' || help.height !== '480px' || !help.ready
+    || !/atomicoasisgame@gmail\.com/.test(help.foot) || !helpClosed) { failed = true; console.log('FAIL: help and support (the form of Orka)'); }
   // the minimap opens the large map; a click closes it
   await page.click('.minimap');
   await frames(3);

@@ -1167,11 +1167,20 @@ work on the Node server; there, `MAIL_FILE=/some/file` writes each message to th
 it (to try things out — the tests use it). `server/mail.js` holds the message, what an address must look
 like, and both ways of sending.
 
+**Help and support.** *Help & support*, at the top of the settings beside their title, opens a card with the
+contact form of Orka (orka.chat), which brings what is written in it to the fair's team (`src/ui/HelpView.js`;
+the fair's name at Orka, `ORKA.app`, is in that file — it is not a secret). The form is a page of Orka's in a
+frame, fetched only when the card is first opened; the game sends it nothing of the visitor's — what reaches Orka
+is what is typed in it — and the frame grows with the form (it says how tall it is: only the form itself is
+listened to). The fair's own address is under it, for whoever would rather write. While the card is open, the
+game does not reload itself for a new version (a message being written would be lost). The terms of use point
+to it too. The tests answer for Orka with a stand-in form (`tools/lib/outside.mjs`).
+
 **The small print.** At the bottom of the settings, *Terms of use*, *Privacy* and *Legal notice* open a card
 with three tabs (`src/ui/LegalView.js`; the words are in `src/app/legal.js`): a short version at the top of
 each, then sections in plain words — what the fair asks of its visitors, what the shop sells and how a purchase
 is undone, and, for privacy, everything the game keeps and every outside service it uses (Cloudflare, Stripe,
-Anthropic for Billy the AI, and the script that counts the visits). The lines at the top of `legal.js` say who
+Anthropic for Billy the AI, Orka for the help form, and the script that counts the visits). The lines at the top of `legal.js` say who
 runs the game — the company, its registration number, its address — and where to write: the pages show
 them. The *Legal notice* (the "mentions légales" a French company's site must carry: law no. 2004-575, art.
 1-1) says who publishes the site and who hosts it (Cloudflare, Inc., its address and telephone); its lines are

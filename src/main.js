@@ -18,6 +18,7 @@ import { Arcade } from './ui/Arcade.js';
 import { AccountView } from './ui/AccountView.js';
 import { PayView } from './ui/PayView.js';
 import { LegalView } from './ui/LegalView.js';
+import { HelpView } from './ui/HelpView.js';
 import { SponsorsView, Photographer } from './ui/SponsorsView.js';
 import { deviceId } from './net/device.js';
 import { Previewer } from './ui/Preview.js';
@@ -78,6 +79,7 @@ const arcade = new Arcade(ui); // (the screen of the cabinet of the pier: shown 
 const accountView = new AccountView(ui); // (the card of the account: signing in, making one)
 const payView = new PayView(ui); // (the payment form, when it can be shown inside the game)
 const legalView = new LegalView(ui, { device: deviceId }); // (the terms of use and the privacy policy, opened from the settings)
+const helpView = new HelpView(ui); // (help and support: the form of Orka, opened from the settings)
 const sponsorsView = new SponsorsView(ui); // (the window of the Trading Post: the games and their sponsors)
 if (SHOT && !params.has('ui')) ui.style.display = 'none';
 
@@ -1622,8 +1624,9 @@ async function boot() {
     }
   };
   Object.assign(app, { extrasBuilt });
-  // (never in the middle of a game, a race, a timed climb, a ride, a payment, a form or a sentence)
-  const busyNow = () => !!fair.session || world.games.run.state === 'running' || labBusy() || player.riding || shopView.isOpen || payView.isOpen || accountView.isOpen || sponsorsView.isOpen
+  // (never in the middle of a game, a race, a timed climb, a ride, a payment, a form or a sentence — a message to the
+  // fair's help included: the frame of its form has the keys, and a reload would lose what is being written)
+  const busyNow = () => !!fair.session || world.games.run.state === 'running' || labBusy() || player.riding || shopView.isOpen || payView.isOpen || accountView.isOpen || sponsorsView.isOpen || helpView.isOpen
     || hud.chatOpen || !!hud.chatInput?.value || !!document.querySelector('.chooser.on, .pitch.on') || /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName || '');
   const updates = new Updates(ui, {
     build: typeof __BUILD__ !== 'undefined' ? __BUILD__.commit || '' : '',
@@ -1890,7 +1893,7 @@ async function boot() {
     })
     .on('mailcode', (who) => account.mailCode(who))
     .on('close', () => { document.getElementById('view')?.focus({ preventScroll: true }); });
-  Object.assign(app, { account, accountAction, accountView, payView, legalView });
+  Object.assign(app, { account, accountAction, accountView, payView, legalView, helpView });
   const equip = (id, on) => {
     const [type, sub] = id.split(':');
     if (type === 'jetpack' || type === 'jetlite') {
@@ -2218,6 +2221,7 @@ async function boot() {
     .on('shop', () => openShop())
     .on('account', accountAction)
     .on('legal', (which) => { hud.closeAll(); input.exitLock(); input.keys.clear(); legalView.open(which); })
+    .on('help', () => { hud.closeAll(); input.exitLock(); input.keys.clear(); helpView.open(); })
     .on('firework', lightFirework)
     .on('drop', () => { look.bouquet = false; look.kinds = undefined; })
     .on('volume', (key, value) => {
@@ -2256,7 +2260,7 @@ async function boot() {
   input.on('drop', () => { if (look.bouquet) { look.bouquet = false; look.kinds = undefined; } });
   input.on('chat', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleChat(true, talking ? talking.brain.ask || `Say something to ${talking.name}…` : undefined); });
   input.on('respawn', () => { if (state.mode === 'walk') { endGame(); spawn(); hud.note('Back to the mill'); } });
-  input.on('menu', () => { accountView.close(); payView.close(); legalView.close(); sponsorsView.close(); if (fair.session && (!fair.session.over || fair.kind === 'arcade')) { endGame(); hud.note('Game left.'); } hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); hud.toggleChat(false); hud.closeChoice(); hud.closeRoster(); });
+  input.on('menu', () => { accountView.close(); payView.close(); legalView.close(); helpView.close(); sponsorsView.close(); if (fair.session && (!fair.session.over || fair.kind === 'arcade')) { endGame(); hud.note('Game left.'); } hud.panel.classList.remove('on'); hud.emotes.classList.remove('on'); hud.toggleBigMap(false); hud.toggleChat(false); hud.closeChoice(); hud.closeRoster(); });
   input.on('map', () => { if (state.mode === 'walk' || state.mode === 'free') hud.toggleBigMap(); });
   hud.setMap(data.meta.map, PLACES);
   hud.setVillages(world.sky.villages, data.meta.size, villageLabel);
