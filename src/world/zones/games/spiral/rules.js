@@ -20,7 +20,8 @@
 //   Clockwork             what moves, by the clock of the world: mills (one arm low, one high), stompers
 //                         (two blocks side by side, never down together), hammers that swing across
 //   Roll Out the Barrel   barrels dropped from the gallery above roll down the track: jumped, or let by — they
-//                         come at who stands still as well
+//                         come at who stands still as well (one stretch of them; the gallery above it is not
+//                         drawn while one runs there, so that they are seen coming)
 //   The Works             all of it, and three narrow planks
 //   Give Way              planks that give way a moment after one sets foot on them: one keeps running
 //   Spring Tide           springboards before holes too long for any jump: one runs onto them, and is thrown over
@@ -214,8 +215,11 @@ export function course() {
   hammer(209.5, 2.6, 1.0); hole(214.5, 2.6); low(221.5);
   mill(227, 2.4, 2.2); stomp(232.5, 1.9, 0.55);
   hammer(238.5, 2.2, 3.1);
-  // ---- 5 · Roll Out the Barrel: they are dropped from the gallery above, and roll down into a hole
-  hole(243.6, 2.6); barrels(246.2, 270, 1.5, 5, 0);
+  // ---- 5 · Roll Out the Barrel: a hole and two boards slid under, as a foretaste; a hurdle; then the barrels —
+  // one stretch of them, between two boards slid under —, dropped from the gallery above, roll down at one into the
+  // hole behind them. (Over that stretch the gallery above is not drawn while one runs there — Spiral.js: what
+  // comes down the track stays in sight)
+  hole(243.6, 2.6);
   high(255); high(263.5);
   low(273.5);
   hole(277.2, 2.6); barrels(279.8, 299, 1.15, 5.6, 0.4);

@@ -246,7 +246,7 @@ const windowOf = (key, from, to, u = 0) => { let n = 0; for (let k = 0; k < 240;
     const res = go(stander(s0, u, t0), 1e9, (st, input) => { input.run = 0; input.crouch = crouch; }, 90);
     stoodAt++; if (res.out === 'barrel') { bowled++; worst = Math.max(worst, res.t); sum += res.t; }
   }
-  check('standing still in the turn of the barrels does not save one: wherever one stands, a barrel comes', bowled === stoodAt && worst < 60, `${stoodAt} times stood among them, on both stretches: bowled over every time — after ${(sum / Math.max(1, bowled)).toFixed(1)} s on average, ${worst.toFixed(1)} s at the longest`);
+  check('standing still in the turn of the barrels does not save one: wherever one stands, a barrel comes', bowled === stoodAt && worst < 60, `${stoodAt} times stood among them, on ${rolls.length === 1 ? 'their stretch' : `their ${rolls.length} stretches`}: bowled over every time — after ${(sum / Math.max(1, bowled)).toFixed(1)} s on average, ${worst.toFixed(1)} s at the longest`);
 }
 {
   // ---- the new kinds, one after the other: their move gets one past, nothing else does

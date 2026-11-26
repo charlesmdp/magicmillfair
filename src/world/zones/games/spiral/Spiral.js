@@ -53,12 +53,17 @@ export class Spiral {
     const world = this.world, mats = world.materials, core = new Parts();
     // (what never moves is merged in pieces of three turns each: a piece out of sight of a camera is not drawn for it)
     const chunks = Array.from({ length: Math.ceil(S.turns / 3) }, () => new Parts());
-    let paint, deck, dark, glow;
-    /** The builders of the piece that holds metre `s`. */
-    const chunk = (s) => { const p = chunks[clamp(Math.floor(s / (3 * TURN)), 0, chunks.length - 1)]; paint = p.get('paint'); deck = p.get('woodDeck'); dark = p.get('woodDark'); glow = p.get('glow'); };
-    chunk(0);
     const { things, bare } = course(), top = trackY(LENGTH), roofY = top + 5.4;
     const of = (kind) => things.filter((t) => t.kind === kind);
+    // (over the stretch of the barrels, the gallery of the turn above — from a little before it, where who comes to
+    // it looks up the track, to its hatch — is a piece apart: not drawn while one runs below it, a little before
+    // and a little after, where it would hide what comes down the track. Shown or hidden where it cannot be seen)
+    // (its far end takes in the last of the dark net under the planks over nothing, short of the banner of the turn after)
+    const open = of('barrels').map((t) => ({ a: t.s0 - 6.7 + TURN, b: t.s1 + 2.5 + TURN, from: t.s0 - 30, to: t.s1 + 15, parts: new Parts() }));
+    let paint, deck, dark, glow;
+    /** The builders of the piece that holds metre `s`. */
+    const chunk = (s) => { const o = open.find((x) => s >= x.a && s < x.b), p = o ? o.parts : chunks[clamp(Math.floor(s / (3 * TURN)), 0, chunks.length - 1)]; paint = p.get('paint'); deck = p.get('woodDeck'); dark = p.get('woodDark'); glow = p.get('glow'); };
+    chunk(0);
 
     // ---- the rock it stands on, the tower, its roof: what casts a shadow and shows in the sea
     {
@@ -99,6 +104,7 @@ export class Spiral {
     cuts.push(S1);
     for (const h of gaps) cuts.push(h.s0, h.s1);
     for (const a of LANDINGS) cuts.push(a, a + S.land);
+    for (const o of open) cuts.push(o.a, o.b); // (the piece apart ends where the planks are cut)
     cuts.sort((a, b) => a - b);
     const marks = cuts.filter((s, i) => i === 0 || s - cuts[i - 1] > 0.04);
     for (let i = 0; i + 1 < marks.length; i++) {
@@ -312,6 +318,13 @@ export class Spiral {
       this.group.add(m);
       return { a: 3 * k * TURN, b: 3 * (k + 1) * TURN, casts };
     });
+    this.cutaways = open.map((o, k) => {
+      const m = o.parts.toMeshes(mats, { name: `spiral-open${k}`, layers: [] }), casts = [];
+      m.traverse((x) => { if (x.isMesh && x.castShadow) casts.push(x); });
+      this.group.add(m);
+      this.chunks.push({ a: o.a, b: o.b, casts });
+      return { mesh: m, from: o.from, to: o.to };
+    });
 
     // ---- what moves: each kind built once and drawn as instances where the clock says (see _place)
     /** A kind of moving thing: its pieces built in the frame of `pose` (+x up the track, +z towards the rail), as many as `max` at once. */
@@ -475,6 +488,8 @@ export class Spiral {
     }
     for (const f of this.fleets) for (const im of f.ims) { im.count = f.n; im.visible = f.n > 0; im.instanceMatrix.needsUpdate = true; }
     for (const { b, s } of this.banners) b.mesh.visible = Math.abs(s - F) < NEAR;
+    // (the gallery over the barrels: not drawn while one runs below it — for everybody else, there as ever)
+    for (const o of this.cutaways) o.mesh.visible = !(st && F > o.from && F < o.to);
     // (only the pieces of the gallery about the camera cast a shadow, and the one over it: the rest is far, and dear)
     for (const c of this.chunks) { const cast = F > c.a - 1.5 * TURN && F < c.b + 0.5 * TURN; for (const o of c.casts) o.castShadow = cast; }
   }
