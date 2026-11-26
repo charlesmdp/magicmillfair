@@ -667,7 +667,9 @@ body.dead #view { filter: grayscale(1) contrast(1.15) brightness(0.72); }
 .emotes .zoo { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; max-width: min(92vw, 640px); }
 @media (min-width: 760px) and (min-height: 520px) {
   /* (room enough: the ten of them in one line, small) */
-  #ui:not(.touch) .emotes .zoo { grid-template-columns: repeat(10, minmax(0, 1fr)); max-width: 690px; gap: 5px; }
+  #ui:not(.touch) .emotes .zoo { grid-template-columns: repeat(11, minmax(0, 1fr)); max-width: 720px; gap: 5px; }
+  #ui:not(.touch) .emotes .zoo .beast.cloud { grid-column: auto; }
+  #ui:not(.touch) .emotes .zoo .beast.cloud b { font-size: 10.5px; }
   #ui:not(.touch) .emotes .zoo .pic { max-width: 54px; }
   #ui:not(.touch) .emotes .zoo .beast { padding: 5px 2px 5px; }
   #ui:not(.touch) .emotes .zoo .beast b { font-size: 11.5px; }
@@ -688,6 +690,7 @@ body.dead #view { filter: grayscale(1) contrast(1.15) brightness(0.72); }
 .emotes .zoo .beast.next { opacity: 0.95; }
 .emotes .zoo .beast.next .pic canvas { filter: grayscale(0.85) brightness(0.75); }
 .emotes .zoo .beast.unknown { opacity: 0.5; }
+.emotes .zoo .beast.cloud { grid-column: 3; } /* (the mushroom cloud, after the ten animals: alone in the middle of its row where there are five a row) */
 .touch .emotes .zoo { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
 .touch .emotes .zoo .beast b { font-size: 11px; }
 .touch .emotes { bottom: calc(12px + var(--safe-b)); max-width: calc(100vw - 330px); z-index: 4; }

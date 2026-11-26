@@ -513,7 +513,21 @@ export class Hud {
   /** Whoever has the box of fireworks gets a button for it in the emotes. */
   setFireworks(on) { this.emotes.classList.toggle('fireworks', !!on); }
   /** The mushroom cloud of those who found every relic: how many they found, of how many (it says so until they have them all). */
-  setMushroom(found, total) { const b = this.emotes.querySelector('[data-mushroom]'); b.textContent = found >= total ? '☢ Mushroom cloud' : `☢ Mushroom cloud — find the ${total} relics (${found} found)`; b.classList.toggle('locked', found < total); }
+  setMushroom(found, total) {
+    const b = this.emotes.querySelector('[data-mushroom]');
+    b.textContent = found >= total ? '☢ Mushroom cloud' : `☢ Mushroom cloud — find the ${total} relics (${found} found)`;
+    b.classList.toggle('locked', found < total);
+    this._relics = { found, total };
+    const card = this.emotes.querySelector('.zoo .beast.cloud');
+    if (card) this._cloudCard(card);
+  }
+  /** The tile of the mushroom cloud, after the animals of light: locked — its picture greyed — until every relic is found. */
+  _cloudCard(c) {
+    const { found = 0, total = 0 } = this._relics || {}, mine = total > 0 && found >= total;
+    c.className = `beast cloud ${mine ? 'owned' : 'locked next'}`;
+    c.querySelector('small').textContent = mine ? 'Yours · play it' : `${found} of ${total} relics`;
+    c.title = mine ? '/mushroom' : `The mushroom cloud is for those who find the ${total} relics of the world before: ${found} found, ${total - found} to go. Look for what does not belong here.`;
+  }
   /** A dot on the icon of the shop while something is sold there. */
   setShop(open) { this.hud.querySelector('.shop-icon').classList.toggle('selling', !!open); }
 
@@ -708,6 +722,15 @@ export class Hud {
       zoo.append(b);
       if (known) this._zooTiles.push({ kind: e.rank, pic });
     }
+    // after the animals, the mushroom cloud, of light too: earned by finding every relic of the world before, not by
+    // days in a row (its picture is shown, greyed, until then: one sees what one is looking for)
+    const cloud = el('button', 'beast cloud'), cpic = el('span', 'pic');
+    cloud.type = 'button';
+    cloud.append(cpic, el('b', '', 'Mushroom'), el('small'));
+    cloud.onclick = () => { this.emit('mushroom'); this.emotes.classList.remove('on'); };
+    this._cloudCard(cloud);
+    zoo.append(cloud);
+    this._zooTiles.push({ kind: 'mushroom', pic: cpic });
     g.append(zoo);
     if (this.emotes.classList.contains('on')) this._zooPictures();
     return g;

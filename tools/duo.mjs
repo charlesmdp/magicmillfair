@@ -110,6 +110,10 @@ try {
   await alice.page.keyboard.press('Enter');
   const wolf = await until(() => bob.page.evaluate(() => window.__mmf.rank.active.some((e) => e.kind === 'wolf')), 20000);
   check('Bob sees the wolf Alice summons', !!wolf);
+  // the mushroom cloud of those who found every relic: of light, over Alice, on Bob's screen too
+  await alice.page.evaluate(() => window.__mmf.presence.sendEmote(29));
+  const cloud = await until(() => bob.page.evaluate(() => window.__mmf.rank.active.some((e) => e.kind === 'mushroom')), 20000);
+  check('Bob sees the mushroom cloud Alice raises, made of light over her', !!cloud);
   // what Alice puts on in the shop (a paint job, a trail), Bob sees on her; a firework she lights goes up on his screen too
   await alice.page.evaluate(() => { const a = window.__mmf; a.equip('paint:gold', true); a.equip('trail:confetti', true); });
   const kitSeen = await until(() => bob.page.evaluate(() => { const a = window.__mmf, it = [...a.avatars.items.values()][0]; return it && it.character.paint === 1 && it.trail === 2 ? { paint: it.character.paint, trail: it.trail, kit: it.peer.kit } : null; }), 20000);

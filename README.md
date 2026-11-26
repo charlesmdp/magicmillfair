@@ -240,7 +240,9 @@ round the ring (50). The emote panel (T, or the smiley) is in order: what one do
 put the bouquet down, light a firework), the gestures, the cheers, then the animals. It shows where you stand, with a medallion for each animal: a picture of
 those that are yours (click one to play it) and of the next one to come, greyed, with the days still to
 go; the others stay a question mark until their turn. The pictures are drawn by the game's own renderer
-the first time the panel is opened (`rankPicture`). The administrator has them all.
+the first time the panel is opened (`rankPicture`). The administrator has them all. After the ten, an
+eleventh medallion: the **mushroom cloud**, of light too, for those who found every relic of the world before
+(below) — greyed, with the relics found so far, until then.
 
 ## Things to do
 
@@ -644,13 +646,14 @@ the back of a hollow half-way up the island of the boulder, a message in a bottl
 cove, a rack of bleached postcards on the beach at the foot of the stairs to the golden statues, and a stack of
 tins — all peaches, no opener — in the grotto behind the waterfall. Walked up to, each offers "Look at …" and says a line or two (a
 note of the screen, which wraps when it is long); which ones were looked at is kept in the browser
-(`mmf.relics`). Whoever has found them all sees a **mushroom cloud** go up over their head — six metres of it:
-a flash and a ring of dust along the ground, a stem, a cap that rolls out and cools from white to orange to
-smoke, a ring of vapour round the stem, and confetti for fallout (`effects/Sparks.js`), with a small boom —
-and may raise one whenever they like from then on (the emotes, or `/mushroom`): it travels as an emote, so
-that the others see and hear it too; until then the button says how many are found. They weigh next to
-nothing: their wood, metal and stone are merged with the rest of the fair, everything written or drawn on
-them is one canvas of 1024 × 1024 on one mesh, and the cloud is made of the same points as the fireworks.
+(`mmf.relics`). Whoever has found them all sees a **mushroom cloud** go up over their head, made of light like
+the animals, in their ring: a flash at its foot and rings of dust along the ground, a stem of golden drums that
+rises each out of the one under it, a cap whose rim rolls round a white-hot seam, a collar of cloud round the
+stem, embers that fly off and fall (`mushroom` in `player/RankAnimals.js`; two draw calls, as an animal), with a
+small boom — and may raise one whenever they like from then on (its medallion, the last of the animals of light
+in the emotes, or `/mushroom`): it travels as an emote, so that the others see and hear it too; until then its
+medallion and the button say how many are found. They weigh next to nothing: their wood, metal and stone are
+merged with the rest of the fair, and everything written or drawn on them is one canvas of 1024 × 1024 on one mesh.
 
 **Wooden signposts** stand at the forks of the paths — past the banner of the arrival, in front of the
 mill, half way down the valley, on the plaza, on the boardwalk, by the paddock of the race: a post, and
@@ -1472,7 +1475,7 @@ notebook, with the rest. No new Durable Object class: such a room is a room like
 | `npm run test:smoke` | drives the real site: welcome screen, walking, free camera, settings, large map (and its stars), who comes back going straight in, the two cards that make an offer, the emotes and the pictures of their animals, the story of the opening told once (`-- --mobile` for the touch layout) |
 | `npm run test:audio` | Listens to the sound engine without ears: in headless Chromium it renders a dozen listener scenarios (beach, cliffs, pier, woods, mill, waterfall, cave, sky village, the climb…) and every one-shot effect through an offline audio context, measures level, spectrum, how the loudness moves and how tonal it is, fails on silence or clipping, and times `update()` (about 0.01 ms a frame) |
 | `npm run test:walk` | 62 checks in the real game (each of the twelve games a bot plays there is then played again by the server's referee, from what the page wrote down, and must end with the very same score): what a newcomer sees first (the banner, the rules, the story on its board, the easel of life advice; the boards of what is new out of that first look — taken away and put back), who hears the chat (it opens on Nearby, says so, and is told how to reach everybody), the wooden signposts (beside the paths, each plank pointing the way of what it names), the Trading Post and its window of photographs, pier and railing, footbridge, garden steps, mountains, swimming, a flight of the stairway, the temple (gate, lookout wall, steps of the hall), the terraces above the falls and the high clearing above them, the leap from the lowest (a swan dive into the deep pool, and out again on foot), the swim to the secret cove, the swim along the northern cliffs to what the fall into the sea hides, the swim on to the golden cove (the shark stays away; out of the sea on the beach; the stair up to the golden dog; the plaques round its plinth, painted for who climbs up there), the fifty sky villages (prices, places to sit, the board of one for hire, the one dressed as a demonstration), the Sky Gate and a sky village, the island (wall, walkway and rope, boulder), beanbag and laptop, hammock, sitting down on the ground, the two jetpacks (which is on; the light one's fifteen seconds), big wheel, a cave and its walls, through the waterfall into the grotto, chat, an animal emote, the Sky Stones (a bot makes every jump; clock; board), the four booths of the pier head and the six of the walk (a bot plays each through the pointer, as a visitor would: baskets shot where the hoop is going to be, a tower stacked, a sequence of lamps remembered, fish brought up, alarms answered in a fifth of a second, a cup followed; boards), the arcade cabinet (a bot runs three hundred metres; then a finger: the top of its picture jumps, the bottom ducks, the cross of its frame walks away), the keys of every game (said when it opens, there for the asking, gone when it closes), the quad race (asked for in the paddock, it leaves with the next named start; a bot drives three laps flat out — it never lifts, never leaves the track, never drops under 18 m/s — through the chicanes, and flies off the ramp), the flying theatre (a bot flaps through nine pairs of columns), the acid pond, the shark, change of tier |
-| `npm run test:duo` | 32 checks with two visitors on the production server: they must see each other move, wave, summon an animal, chat (nearby first, then to everyone) and sit down; the administrator's badge worn and taken off; the rooms (a room that fills, the offer of a livelier one, the list, a link); the largest size and a party hat, sitting on the ground, a bouquet given from hand to hand; the administrator's key in the address, the administrator seeing the game as a visitor does (`-- --cloudflare` for the Cloudflare version) |
+| `npm run test:duo` | 33 checks with two visitors on the production server: they must see each other move, wave, summon an animal and raise the mushroom cloud of light, chat (nearby first, then to everyone) and sit down; the administrator's badge worn and taken off; the rooms (a room that fills, the offer of a livelier one, the list, a link); the largest size and a party hat, sitting on the ground, a bouquet given from hand to hand; the administrator's key in the address, the administrator seeing the game as a visitor does (`-- --cloudflare` for the Cloudflare version) |
 | `npm run bench` | benchmark tour for each tier (`-- --mobile` for the phone profile) |
 | `npm run profile` | cost of each system (script, draw calls, triangles) at seven viewpoints |
 | `npm run shots -- name=x,y,z,heading,pitch` | screenshots from a viewpoint |

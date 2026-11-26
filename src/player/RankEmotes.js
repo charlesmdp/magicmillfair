@@ -2,7 +2,7 @@
 // few seconds and fades away. Ten of them (built in RankAnimals.js): a goldfish that blows bubbles, a squirrel
 // that nibbles a nut, a carp that leaps as up a waterfall, an eagle that spreads its wings, a panda that munches
 // bamboo, an elephant that trumpets, a stag that rears, a wolf that howls, a tiger that leaps through the ring,
-// a dragon that coils around it.
+// a dragon that coils around it. And, for those who found every relic of the world before, a mushroom cloud.
 // Each animal is ONE mesh: rigid parts (plates, drums, beams) that the vertex shader moves with one matrix per
 // part, so an emote costs two draw calls (the animal, the ring) whatever its number of pieces.
 import * as THREE from 'three';
@@ -195,7 +195,7 @@ class Emote {
 }
 
 /** The instant of its five seconds at which each animal is at its best (for its picture). */
-const PORTRAIT = { goldfish: 2.8, squirrel: 1.8, carp: 2.4, deer: 2.4, eagle: 1.8, panda: 2.3, wolf: 2.9, tiger: 1.3, elephant: 2.9, dragon: 1.8 };
+const PORTRAIT = { goldfish: 2.8, squirrel: 1.8, carp: 2.4, deer: 2.4, eagle: 1.8, panda: 2.3, wolf: 2.9, tiger: 1.3, elephant: 2.9, dragon: 1.8, mushroom: 3.2 };
 
 /**
  * A picture of an animal of light, `size` pixels square, drawn by the game's own renderer: a canvas,
@@ -265,7 +265,8 @@ export class RankEmotes {
 
   /**
    * Summon an animal over `target` (an Object3D: the avatar's root).
-   * `kind`: goldfish | squirrel | carp | eagle | panda | elephant | deer | wolf | tiger | dragon.
+   * `kind`: goldfish | squirrel | carp | eagle | panda | elephant | deer | wolf | tiger | dragon | mushroom (the cloud
+   * of those who found every relic: it is no animal, and needs no days in a row).
    */
   play(kind, target) {
     if (!BUILDERS[kind] || !target) return;

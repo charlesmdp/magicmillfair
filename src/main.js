@@ -303,8 +303,15 @@ async function boot() {
     presence.on('emote', ({ id, emote: i }) => {
       const o = presence.peers.get(id), e = EMOTE_LIST[i];
       if (o && o.visible && i === FIREWORK) { world.sparks.firework(o.x, o.y, o.z); return; } // (somebody lit a firework)
-      // (…or raised their mushroom cloud — they found every relic —: seen, and heard from as far as one would hear it)
-      if (o && o.visible && i === MUSHROOM) { world.sparks.mushroom(o.x, o.y, o.z); const d = Math.hypot(o.x - player.pos.x, o.z - player.pos.z); if (d < 80) audio.play('boom', { volume: 0.5 * (1 - d / 80), rate: 1.7 }); return; }
+      // (…or raised their mushroom cloud — they found every relic —: of light, over them, as the animals are; and
+      // heard from as far as one would hear it)
+      if (o && o.visible && i === MUSHROOM) {
+        const it = avatars?.items.get(id);
+        if (it?.character?.root) rank.play('mushroom', it.character.root); else world.sparks.mushroom(o.x, o.y, o.z);
+        const d = Math.hypot(o.x - player.pos.x, o.z - player.pos.z);
+        if (d < 80) audio.play('boom', { volume: 0.5 * (1 - d / 80), rate: 1.7 });
+        return;
+      }
       if (o && o.visible && i === BOUQUET) {
         // somebody holds out their bouquet: whoever stands right by them, hands free, takes it
         if (Math.hypot(o.x - player.pos.x, o.z - player.pos.z) < 3 && Math.abs(o.y - player.pos.y) < 2 && !look.bouquet && state.mode === 'walk' && !player.dead && !fair.session) {
@@ -1286,20 +1293,21 @@ async function boot() {
         if (first) { store.set('mmf.relics', [...seen].join(',')); hud.setMushroom(seen.size, all); }
         hud.note(`${q.text}${!first ? '' : seen.size >= all ? ` — That was the last of the ${all} relics of the world before. Now you know — and the mushroom cloud is yours: in the emotes (T).` : ` — Relic ${seen.size} of ${all}.`}`, 12000);
         audio.play('tick');
-        // (the last one found: a cloud goes up at once, with its confetti — and from now on whenever they like)
-        if (first && seen.size >= all) { world.sparks.mushroom(player.pos.x, player.pos.y, player.pos.z); audio.play('boom', { volume: 0.5, rate: 1.7 }); audio.play('victory'); presence?.sendEmote(MUSHROOM); }
+        // (the last one found: the cloud goes up at once — and from now on whenever they like)
+        if (first && seen.size >= all) { rank.play('mushroom', me.root); audio.play('boom', { volume: 0.5, rate: 1.7 }); audio.play('victory'); presence?.sendEmote(MUSHROOM); }
       } };
     });
     hud.setMushroom(seen.size, relics.list.length);
-    // the mushroom cloud of those who found them all: six metres of it over their head — the flash, the stem, the
-    // cap that rolls and cools, a fallout of confetti (effects/Sparks.js) — and a small boom; everybody near sees it
+    // the mushroom cloud of those who found them all, made of light like the animals, in their ring over their head —
+    // the flash, the stem that rises drum by drum, the cap whose rim rolls, the embers (player/RankAnimals.js) —, and
+    // a small boom; everybody near sees it (its tile is the last of the animals of light, in the emotes)
     let cloudAt = -10;
     app.mushroom = () => {
       if (state.mode !== 'walk' || player.dead || fair.session) return;
       if (seen.size < relics.list.length) { hud.note(`The mushroom cloud is for those who found the ${relics.list.length} relics of the world before: you have found ${seen.size}. Look for what does not belong here.`, 7000); return; }
       if (state.time - cloudAt < 5) return; // (one at a time: it lasts five seconds)
       cloudAt = state.time;
-      world.sparks.mushroom(player.pos.x, player.pos.y, player.pos.z);
+      rank.play('mushroom', me.root);
       audio.play('boom', { volume: 0.5, rate: 1.7 });
       presence?.sendEmote(MUSHROOM);
     };

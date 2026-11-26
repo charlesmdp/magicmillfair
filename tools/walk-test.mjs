@@ -953,9 +953,9 @@ try {
         m.interact.press(0);
         return { id: q.id, asked: asked === `Look at ${q.label}`, said: note.textContent.startsWith(q.text) && note.classList.contains('show') && note.classList.contains('long'), tail: note.textContent.slice(q.text.length) };
       };
-      out.locked = cloud(); m.mushroom(); out.refused = m.world.sparks.clouds.length;
+      out.locked = cloud(); out.card = document.querySelector('.emotes .zoo .beast.cloud')?.className || ''; m.mushroom(); out.refused = m.rank.active.filter((e) => e.kind === 'mushroom').length;
       for (const q of R.list) out.looks.push(await look(q));
-      out.clouds = m.world.sparks.clouds.length; out.unlocked = cloud();
+      out.clouds = m.rank.active.filter((e) => e.kind === 'mushroom').length; out.unlocked = cloud(); out.cardAfter = document.querySelector('.emotes .zoo .beast.cloud')?.className || '';
       // (the periscope of the hidden shelter looks at who stands by it)
       { const b = R.list.find((q) => q.id === 'bunker'); m.player.teleport(b.x + 3, b.z + 3, 0); await frames(3); const h = R.head, want = Math.atan2(m.player.pos.x - h.position.x, m.player.pos.z - h.position.z); out.scope = Math.abs(Math.atan2(Math.sin(h.rotation.y - want), Math.cos(h.rotation.y - want))); }
       out.again = await look(R.list[0]);
@@ -965,7 +965,7 @@ try {
     check('twenty-five relics of the world before stand all over the valley — on dry ground, off the road, out of the trees, far from one another, none behind a wall, each on what one walks on there (the top of the tower and the grotto among them); walked up to, each is offered to be looked at and says its line, counting; the last says they were all found — a mushroom cloud goes up, and the emote that was locked is theirs —, the browser remembers which, one looked at again says its line and no more; the periscope of the hidden shelter looks at who comes',
       relics.ids === 'barrel,billboard,bottle,bunker,busstop,car,clock,dish,forecast,geiger,gnome,hatch,mailbox,meter,news,phone,postcards,scarecrow,sign,sunflower,tally,telescope,tins,trolley,vendor' && relics.bad.length === 0 && relics.hidden.length === 0 && relics.off.length === 0 && relics.quads === 16
       && relics.looks.length === 25 && relics.looks.every((l, i) => l.asked && l.said && (i < 24 ? l.tail === ` — Relic ${i + 1} of 25.` : /the last of the 25 relics/.test(l.tail) && /mushroom cloud is yours/.test(l.tail)))
-      && /find the 25 relics \(0 found\)/.test(relics.locked) && relics.refused === 0 && relics.clouds === 1 && relics.unlocked === '☢ Mushroom cloud' && relics.scope < 0.05
+      && /find the 25 relics \(0 found\)/.test(relics.locked) && relics.refused === 0 && relics.clouds === 1 && relics.unlocked === '☢ Mushroom cloud' && /locked/.test(relics.card) && /owned/.test(relics.cardAfter) && relics.scope < 0.05
       && relics.again.asked && relics.again.said && relics.again.tail === '' && relics.kept === relics.ids, JSON.stringify(relics));
   }
   // --- the fair: the four booths of the pier, played by a bot through the pointer; the race, driven by a bot

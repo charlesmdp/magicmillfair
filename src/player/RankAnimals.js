@@ -786,4 +786,68 @@ function elephant() {
   return rig;
 }
 
-export const BUILDERS = { deer, wolf, tiger, dragon, goldfish, squirrel, carp, eagle, panda, elephant };
+/**
+ * The mushroom cloud, made of light like the animals — for those who found every relic of the world before (it
+ * is no animal: nothing counts days for it). A flash at the foot of the ring; a ring of dust runs over the ground;
+ * a stem of golden drums rises, each out of the one under it, to the top of the ring; a cap swells on it, its rim a
+ * rolling tube of plates around a white-hot seam; a collar of cloud rings the stem; embers fly off and fall.
+ */
+function mushroom() {
+  const R = new RigBuilder(), STEM = 6, ROLL = 8, EMBERS = 6, Z = RING.z - 0.35, RC = 1.5, TUBE = 0.56, DRUM = 0.76;
+  for (let i = 0; i < STEM; i++) {
+    R.part(`stem${i}`, null, [0, 0, Z], (b, sh) => {
+      // (a drum of the stem: narrower going up — the foot of the cloud is wide —, a glowing band round its top)
+      const r = i ? 0.44 - 0.03 * i : 0.62;
+      sh(i % 2 ? 0.86 : 1); b.cylinder(0, 0, 0, r + (i ? 0.03 : 0.42), r, DRUM, 12, { capTop: false });
+      sh(1.25); b.cylinder(0, DRUM - 0.06, 0, r + 0.035, r + 0.035, 0.06, 12, { capTop: false, capBottom: true });
+      if (!i) { sh(0.6); for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2; b.beam(V(Math.cos(a) * 0.62, 0.02, Math.sin(a) * 0.62), V(Math.cos(a) * 1.18, 0.02, Math.sin(a) * 1.18), 0.16, 0.08); } } // (its roots, flat on the ground)
+    });
+  }
+  R.part('cap', null, [0, 0, Z], (b, sh) => {
+    sh(1); b.lathe([[RC + 0.16, 0.12], [RC + 0.08, 0.6], [1.18, 1.0], [0.7, 1.28], [0.3, 1.38], [0, 1.4]], 16); // its dome
+    sh(0.82); b.lathe([[RC - 0.05, 0.62], [RC - 0.15, 0.7]], 16); // a fold of cloud round the dome
+    sh(0.7); b.lathe([[0.3, -0.42], [0.86, -0.3], [RC - 0.3, 0.04]], 16); // its belly, over the stem
+    sh(2.6); b.lathe([[RC - TUBE + 0.1, -0.18], [RC - TUBE - 0.04, 0], [RC - TUBE + 0.1, 0.18]], 16); // the white-hot seam inside the tube
+    sh(2.2); b.cylinder(0, 1.36, 0, 0.22, 0.05, 0.18, 8); // a spark on its top
+  });
+  for (let k = 0; k < ROLL; k++) {
+    R.part(`roll${k}`, 'cap', [0, 0, 0], (b, sh) => {
+      // (a plate of the tube round the rim: a short drum lying along the rim, a ridge on it that rolls over)
+      const half = RC * Math.tan(Math.PI / ROLL) + 0.04;
+      sh(k % 2 ? 0.86 : 1); b.rod(V(-half, 0, 0), V(half, 0, 0), TUBE, 9);
+      sh(1.7); b.beam(V(-half * 0.92, TUBE - 0.02, 0), V(half * 0.92, TUBE - 0.02, 0), 0.16, 0.08);
+      sh(0.55); b.beam(V(-half * 0.92, -TUBE + 0.02, 0), V(half * 0.92, -TUBE + 0.02, 0), 0.12, 0.06);
+    });
+  }
+  R.part('collar', null, [0, 0, Z], (b, sh) => { sh(1.45); b.lathe([[1, -0.04], [0.86, 0.07], [0.68, 0.02], [0.66, -0.03]], 18); });
+  for (let j = 0; j < 2; j++) R.part(`dust${j}`, null, [0, 0, Z], (b, sh) => { sh(j ? 1 : 1.35); b.lathe([[1, 0], [0.93, 0.07], [0.86, 0.02]], 22); });
+  for (let j = 0; j < EMBERS; j++) R.part(`ember${j}`, null, [0, 0, Z], (b, sh) => { sh(2.3); b.lathe([[0, -0.15], [0.1, 0], [0, 0.15]], 5); });
+  R.part('flash', null, [0, 0, Z], (b, sh) => { sh(2.9); b.lathe([[0, -0.62], [0.46, -0.44], [0.62, 0], [0.46, 0.44], [0, 0.62]], 10); });
+  const rig = R.build(), I = rig.index, m = new THREE.Matrix4(), none = () => m.makeScale(0, 0, 0);
+  rig.animate = (t, P) => {
+    // the stem: up in a second and a half, each drum out of the one under it (the narrower nest in the wider)
+    const rise = 1 - Math.exp(-Math.max(0, t - 0.85) / 0.75), top = 0.7 + (STEM - 1) * (DRUM - 0.05) * rise;
+    for (let i = 0; i < STEM; i++) P.direct(I[`stem${i}`], m.makeTranslation(0, ((top - 0.7) * i) / (STEM - 1), Z));
+    // the cap: rides on the stem and swells; its tube rolls outwards, over and over
+    const grow = 0.25 + 0.8 * (1 - Math.exp(-Math.max(0, t - 0.9) / 0.8)), breathe = 1 + 0.03 * Math.sin(t * 3.1);
+    P.direct(I.cap, m.makeScale(grow * breathe, grow, grow * breathe).setPosition(0, top + DRUM - 0.1 + 0.4 * grow, Z));
+    for (let k = 0; k < ROLL; k++) { const a = ((k + 0.5) * 2 * Math.PI) / ROLL; P.pos(I[`roll${k}`], RC * Math.sin(a), 0, RC * Math.cos(a)); P.rot(I[`roll${k}`], -2.6 * t, a, 0); }
+    // a collar of cloud rings the stem half-way up, once it is there, and widens
+    const c = ss(1.5, 1.8, t), w = 0.7 + 1.1 * ss(1.5, 3.4, t);
+    P.direct(I.collar, c ? m.makeScale(w * c, 1, w * c).setPosition(0, 0.5 * top + 0.4, Z) : none());
+    // two rings of dust run over the ground, one after the other
+    for (let j = 0; j < 2; j++) { const u = (t - 0.7 - 0.28 * j) / 1.5, k = u > 0 && u < 1 ? 0.5 + 3.3 * (1 - (1 - u) ** 2) : 0; P.direct(I[`dust${j}`], k ? m.makeScale(k, 1 - 0.6 * u, k).setPosition(0, 0.03, Z) : none()); }
+    // embers fly off the cap and fall
+    for (let j = 0; j < EMBERS; j++) {
+      const u = t - 1.6 - 0.17 * j, a = j * 2.4 + 0.5, v = 1.9 + 0.45 * (j % 3), s = u > 0 && u < 1.3 ? ss(0, 0.12, u) * (1 - ss(0.95, 1.3, u)) : 0;
+      P.direct(I[`ember${j}`], s ? m.makeScale(s, s, s).setPosition(Math.cos(a) * v * u, top + 1.1 + 2.6 * u - 3.4 * u * u, Z + Math.sin(a) * v * u * 0.6) : none());
+    }
+    // the flash, at the foot, before anything else
+    const f = hold(0.62, 0.82, 1.0, 1.55, t) * (1 + 0.7 * ss(0.62, 1.4, t));
+    P.direct(I.flash, f ? m.makeScale(f, f, f).setPosition(0, 0.75, Z) : none());
+    return Math.max(hold(0.62, 0.85, 1.05, 1.7, t), 0.32 * hold(1.5, 2.1, 3.7, 4.7, t)); // (the ring and the plates: the flash, then a warm glow)
+  };
+  return rig;
+}
+
+export const BUILDERS = { deer, wolf, tiger, dragon, goldfish, squirrel, carp, eagle, panda, elephant, mushroom };
