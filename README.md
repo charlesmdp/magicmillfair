@@ -1166,10 +1166,10 @@ Anthropic for Billy the AI, and the script that counts the visits). The lines at
 runs the game — the company, its registration number, its address — and where to write: the pages show
 them. The *Legal notice* (the "mentions légales" a French company's site must carry: law no. 2004-575, art.
 1-1) says who publishes the site and who hosts it (Cloudflare, Inc., its address and telephone); its lines are
-`NOTICE` in `legal.js`, and a line left empty is not shown. **Still to be filled in by the owner**: the legal
-form and the share capital, the town of the trade register (RCS), the VAT number (if the company has one), a
-telephone number, the director of publication, and the consumer mediator the company has joined (required to
-sell to consumers). Keep the pages true: when the game starts to use something new, say so there and change
+`NOTICE` in `legal.js`, and a line left empty is not shown: the company (a SASU with a share capital of
+€36,000), its registered office, its registration (RCS Paris, SIREN, SIRET) and its VAT number. **Still to be
+filled in by the owner**: a telephone number, the director of publication, and the consumer mediator the
+company has joined (required to sell to consumers). Keep the pages true: when the game starts to use something new, say so there and change
 the date.
 
 **The script that counts the visits.** The page carries one script from another site

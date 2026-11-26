@@ -7,20 +7,19 @@
 export const LEGAL = {
   updated: '26 November 2026',
   maker: 'MY BIG LEO',
-  operator: 'It is made and run by MY BIG LEO, a company registered in France (SIREN 880 338 827), 14 rue Charles V, Paris, France.',
+  operator: 'It is made and run by MY BIG LEO, a SASU (a French simplified joint-stock company with a single shareholder) with a share capital of €36,000, registered in Paris (RCS Paris 880 338 827), 14 rue Charles V, 75004 Paris, France.',
   contact: 'atomicoasisgame@gmail.com',
 };
 
 // The legal notice (in France, the "mentions légales" of a company's site: law no. 2004-575, art. 1-1): who
 // publishes the site and who hosts it. A line left empty is not shown. Still to be given by the owner (see
-// README, "The small print"): the legal form and the share capital, the town of the trade register (RCS), the VAT
-// number (if the company has one), a telephone number, the director of publication, the consumer mediator.
+// README, "The small print"): a telephone number, the director of publication, the consumer mediator.
 export const NOTICE = {
   company: 'MY BIG LEO',
-  form: '', // (its legal form and share capital, e.g. "SAS with a share capital of €1,000")
-  address: '14 rue Charles V, Paris, France',
-  registration: 'SIREN 880 338 827', // (with the town of its trade register once known, e.g. "RCS Paris 880 338 827")
-  vat: '', // (its intra-community VAT number, e.g. "FR00 880338827")
+  form: 'SASU (société par actions simplifiée unipersonnelle) with a share capital of €36,000',
+  address: '14 rue Charles V, 75004 Paris, France (domiciled with ABC LIV)',
+  registration: 'RCS Paris 880 338 827 — SIREN 880 338 827, SIRET 880 338 827 00012',
+  vat: 'FR15880338827', // (its intra-community VAT number)
   phone: '',
   director: '', // (the director of publication: the company's legal representative)
   host: { name: 'Cloudflare, Inc.', address: '101 Townsend Street, San Francisco, CA 94107, United States', phone: '+1 888 993 5273' },
