@@ -121,9 +121,22 @@
       </dialog>
     </section>
 
+    <dialog id="sponsor-edit" aria-labelledby="sponsor-edit-title">
+      <form id="sponsor-edit-form" class="stack">
+        <h3 id="sponsor-edit-title">Change <span id="sponsor-edit-where"></span></h3>
+        <p class="hint">What it shows, for everybody, at once. The sponsor is not asked.</p>
+        <label>Name <input id="sponsor-edit-name" type="text" maxlength="28" required></label>
+        <label>Line under it <input id="sponsor-edit-line" type="text" maxlength="40"></label>
+        <label id="sponsor-edit-site-row">Site <input id="sponsor-edit-site" type="url" maxlength="200" placeholder="https://…" pattern="https://.+" title="An address that starts with https://"></label>
+        <label id="sponsor-edit-logo-row">New picture (leave empty to keep it) <input id="sponsor-edit-logo" type="file" accept="image/png,image/jpeg,image/webp"></label>
+        <p class="error" id="sponsor-edit-error" hidden></p>
+        <div class="row"><button type="submit" id="sponsor-edit-save">Save</button><button type="button" class="ghost" id="sponsor-edit-cancel">Cancel</button></div>
+      </form>
+    </dialog>
     <section class="card" data-tab="sponsors">
       <h2>Sponsors</h2>
       <p class="hint">What a sponsor sends is shown at once. Take down what should not be there: with the money back (a bid in full; of a place paid by the month, the month that is running) or without. A place paid by the month stops being charged either way.</p>
+      <p class="hint" id="sponsors-total"></p>
       <div id="sponsors" class="list"></div>
       <h3>Plaques of the companions — awaiting your approval</h3>
       <p class="hint">A plaque is engraved once you have looked at it.</p>

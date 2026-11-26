@@ -155,6 +155,17 @@ export function paysOf(id, s, now) {
 }
 
 /**
+ * What a place has brought in so far, for the administrator: as paysOf — and a plaque too (paid once), which is not
+ * on the wall of thanks. Null when nobody is known to have paid for it (filled in by hand, without a figure).
+ */
+export function brought(id, s, now) {
+  const pays = paysOf(id, s, now), what = describe(id);
+  if (pays) return pays;
+  // (a plaque bought at the shop was paid its price, once; one the administrator filled in by hand, what they said)
+  return what?.plaque && s && (s.paid > 0 || s.by !== 'admin') ? { amount: s.paid > 0 ? s.paid : what.amount, monthly: false, total: s.paid > 0 ? s.paid : what.amount } : null;
+}
+
+/**
  * What was paid for becomes theirs (called from the webhook; safe to call twice). `customer`: who pays, at Stripe.
  * `once` (cents): it was bought for good — a gondola, a room — and this is what was paid: no subscription holds
  * it, and nothing ends it.
@@ -572,11 +583,21 @@ export async function shopRoute(req, ctx) {
       const id = body?.slot;
       if (typeof id !== 'string' || !describe(id) || describe(id).kind !== 'slot') return out(400, { error: 'No such place.' });
       if (body.set) {
-        // the administrator fills a place by hand (a sponsor who paid some other way)
+        // the administrator fills a place by hand (a sponsor who paid some other way) — or changes what a sponsor
+        // shows (the back office: `was`, the place as it was when the administrator opened it — what they changed)
         const title = cleanText(body.set.title, 28);
         if (!title) return out(400, { error: 'A name is needed.' });
+        const url = describe(id).plaque ? '' : cleanUrl(body.set.url);
+        if (!url && typeof body.set.url === 'string' && body.set.url.trim() && !describe(id).plaque) return out(400, { error: 'The link must start with https://' });
+        const was = body.was && typeof body.was === 'object' ? body.was : null, cur = slots[id];
+        if (was) {
+          // (an edit is of the place as it was: if it changed hands, was let go, or its sponsor changed it meanwhile, nothing is written)
+          if (!cur) return out(409, { error: 'This place has been let go since you opened it: nothing was changed.' });
+          const same = (a, b) => String(a ?? '') === String(b ?? '');
+          if (!same(cur.by, was.by) || cur.at !== was.at || !same(cur.title, was.title) || !same(cur.subtitle, was.subtitle) || !same(cur.url, was.url) || (was.logo !== undefined && !same(shown(id, cur).logo, was.logo))) return out(409, { error: 'This place has changed since you opened it: look at it again, then change it.' });
+        }
         const s = (slots[id] ||= { by: 'admin', sub: null, at: now, logo: 0 });
-        Object.assign(s, { state: 'live', title, subtitle: cleanText(body.set.subtitle, 40), url: describe(id).plaque ? '' : cleanUrl(body.set.url), draft: null });
+        Object.assign(s, { state: 'live', title, subtitle: cleanText(body.set.subtitle, 40), url, ...(!was && { draft: null }) }); // (an edit leaves what awaits approval as it is)
         if (body.set.bg !== undefined) s.bg = cleanColor(body.set.bg); // (the colour behind it: the administrator's choice, never the sponsor's)
         // (what a sponsor who paid some other way has paid, for the wall of thanks: the administrator's word)
         if (body.set.paid !== undefined) { const paid = Math.round(Number(body.set.paid)); if (paid > 0 && paid <= 100_000_000) s.paid = paid; else delete s.paid; }
@@ -618,7 +639,7 @@ export async function shopRoute(req, ctx) {
       ...taken,
       // (the money given back — and what was kept, or could not be given back: `kept`, `ok: false`)
       refunds: ((await ctx.store.get('refunds')) || []).slice(-30).reverse().map(({ by, ...r }) => r),
-      slots: Object.fromEntries(Object.entries(slots).map(([id, s]) => [id, { state: s.state, by: s.by, sub: !!s.sub, at: s.at, ...(s.bid && { bid: s.bid }), ...(s.paid && { paid: s.paid }), ...shown(id, s), draft: draftOf(id, s) }])),
+      slots: Object.fromEntries(Object.entries(slots).map(([id, s]) => [id, { state: s.state, by: s.by, sub: !!s.sub, at: s.at, ...(s.bid && { bid: s.bid }), ...(s.paid && { paid: s.paid }), ...(brought(id, s, now) && { pays: brought(id, s, now) }), ...shown(id, s), draft: draftOf(id, s) }])),
     });
   }
   return null;

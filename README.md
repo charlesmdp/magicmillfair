@@ -1300,8 +1300,11 @@ followed as it comes: every line with its room, its author and to whom it was sa
 lines of those kept out in silence too; on each line, *Kick*, *To the common rooms* (from a room of its own)
 and *Ban…*, which asks for how long, in silence or not, their address too — never the owner's lines; a box
 to find a name or a word; the owner can forget it all);
-**Sponsors & plaques** (take a sponsor down, with
-the money back or without; accept or refuse a plaque, its picture in sight; the refunds); **Kept out** (the
+**Sponsors & plaques** (what each place has brought in — once, the highest bid, or every month begun —
+and all the places held now together; **Edit** changes what a sponsor shows — name, line, site, picture —
+for everybody at once, and changes nothing if the place changed hands, was let go or was changed by its sponsor
+since the page was opened; take a sponsor down, with the money back or without; accept or refuse a plaque, its
+picture in sight; the refunds); **Kept out** (the
 list, add, let back in); **Figures** (the page everybody can read, and what was before the counting began);
 **Administrators**. An administrator the owner has named opens it with their own key and sees all but the
 releases. The page is fenced in by its headers: no script but its own, nothing from another site, never

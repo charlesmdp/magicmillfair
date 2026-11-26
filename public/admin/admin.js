@@ -259,6 +259,12 @@
     for (const src of blobs.splice(0)) URL.revokeObjectURL(src);
     const { slots, refunds } = res.body, live = $('sponsors'), wait = $('plaques'), done = $('engraved'), back = $('refunds');
     live.textContent = wait.textContent = done.textContent = back.textContent = '';
+    // (what they have put in: each place, and all of them together — a place paid by the month, every month begun)
+    const paying = Object.values(slots).filter((s) => s.pays);
+    // (of the places held now: a place let go — taken down, a subscription ended — is no longer counted here; the
+    // money given back or kept is in the list of refunds below)
+    $('sponsors-total').textContent = paying.length ? `The ${paying.length === 1 ? 'place' : `${paying.length} places`} held now ${paying.length === 1 ? 'has' : 'have'} brought in ${money(paying.reduce((n, s) => n + s.pays.total, 0))} so far${paying.some((s) => s.pays.monthly) ? ` — of which ${money(paying.filter((s) => s.pays.monthly).reduce((n, s) => n + s.pays.amount, 0))} comes in every month` : ''}.` : 'No place is paid for right now.';
+    const paid = (s) => (s.pays ? (s.pays.monthly ? `${money(s.pays.amount)} a month · ${money(s.pays.total)} so far` : s.bid ? `bid ${money(s.pays.total)}` : `${money(s.pays.total)}, paid once`) : s.by === 'admin' ? 'filled in by hand' : '');
     const down = (id, s) => {
       const acts = [];
       // (nothing is given back by itself: the owner decides — at once, or later from the list of refunds)
@@ -284,7 +290,7 @@
       }
       const title = el('b', '', `${placeName(id)}${s.title ? ` — "${s.title}"` : ''}`);
       if (s.state !== 'live') title.append(el('span', 'tag', 'paid, nothing shown yet'));
-      const row = item(title, [s.subtitle, s.url, s.bid ? `bid ${money(s.bid)}` : s.sub ? 'paid by the month' : '', `since ${when(s.at)}`].filter(Boolean).join(' · '), ...down(id, s));
+      const row = item(title, [s.subtitle, s.url, paid(s), `since ${when(s.at)}`].filter(Boolean).join(' · '), button('Edit', 'ghost small', () => editSponsor(id, s)), ...down(id, s));
       if (s.logo) { const img = el('img'); img.alt = ''; img.loading = 'lazy'; img.src = s.logo; row.prepend(img); }
       (plaque ? done : live).append(row);
     }
@@ -303,6 +309,63 @@
     }
     if (!back.children.length) empty(back, 'No refund so far.');
   }
+
+  // (what a sponsor shows — or what is engraved on a plaque —, changed by the administrator: the words, the site, the
+  // picture; the picture is made small here, as the game does, before it leaves. What the place was when the dialog
+  // opened goes with it: if it changed meanwhile, the server changes nothing and says so)
+  let editing = null; // ({ id, was, n }: the place the dialog is open on; n counts the openings)
+  const editSponsor = (id, s) => {
+    const d = $('sponsor-edit'), plaque = id.startsWith('plaque:'), village = id.startsWith('village:');
+    editing = { id, was: { by: s.by, at: s.at, title: s.title || '', subtitle: s.subtitle || '', url: s.url || '', logo: s.logo || '' }, n: (editing?.n || 0) + 1 };
+    $('sponsor-edit-where').textContent = placeName(id);
+    // (as the game's own form: a village has a shorter name and line, and no picture)
+    $('sponsor-edit-name').maxLength = village ? 22 : 28;
+    $('sponsor-edit-line').maxLength = village ? 34 : 40;
+    $('sponsor-edit-name').value = s.title || '';
+    $('sponsor-edit-line').value = s.subtitle || '';
+    $('sponsor-edit-site').value = s.url || '';
+    $('sponsor-edit-site-row').hidden = plaque; // (a plaque never carries a link)
+    $('sponsor-edit-logo-row').hidden = village; // (a village sign shows no picture)
+    $('sponsor-edit-logo').value = '';
+    $('sponsor-edit-error').hidden = true;
+    $('sponsor-edit-save').disabled = false;
+    d.showModal();
+  };
+  const shrink = async (file) => {
+    if (!file || !/^image\/(png|jpeg|webp)$/.test(file.type) || file.size > 8_000_000) return null;
+    try {
+      const bitmap = await createImageBitmap(file);
+      for (const side of [256, 192, 128, 96]) {
+        const k = Math.min(1, side / Math.max(bitmap.width, bitmap.height)), c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(bitmap.width * k)); c.height = Math.max(1, Math.round(bitmap.height * k));
+        c.getContext('2d').drawImage(bitmap, 0, 0, c.width, c.height);
+        const data = c.toDataURL('image/png').split(',')[1] || '';
+        if (data && data.length * 0.75 < 88_000) return data;
+      }
+    } catch { /* not a picture after all */ }
+    return null;
+  };
+  $('sponsor-edit-form').onsubmit = async (e) => {
+    e.preventDefault();
+    if (!editing) return;
+    // (everything is read now, before the picture is made small: what is sent is what the dialog said when Save was pressed)
+    const d = $('sponsor-edit'), { id, was, n } = editing, err = $('sponsor-edit-error'), save = $('sponsor-edit-save'), file = id.startsWith('village:') ? null : $('sponsor-edit-logo').files[0];
+    const set = { title: $('sponsor-edit-name').value.trim(), subtitle: $('sponsor-edit-line').value.trim(), ...(!id.startsWith('plaque:') && { url: $('sponsor-edit-site').value.trim() }) };
+    const still = () => d.open && editing?.n === n; // (closed, or opened on another place meanwhile: this save is forgotten)
+    save.disabled = true;
+    err.hidden = true;
+    const logo = file ? await shrink(file) : null;
+    if (!still()) return;
+    if (file && !logo) { err.textContent = 'That picture cannot be used: a PNG, a JPEG or a WebP, please.'; err.hidden = false; save.disabled = false; return; }
+    const out = await api('/api/sponsors', { method: 'POST', body: { slot: id, set: { ...set, ...(logo && { logo }) }, was } });
+    if (!still()) { if (out.ok) showSponsors(); return; }
+    save.disabled = false;
+    if (!out.ok) { err.textContent = out.body?.error || 'It could not be saved.'; err.hidden = false; if (out.status === 409) showSponsors(); return; }
+    d.close();
+    toast('Saved: it is shown to everyone.');
+    showSponsors();
+  };
+  $('sponsor-edit-cancel').onclick = () => $('sponsor-edit').close();
 
   // ---------------------------------------------------------------------------------------------- who is kept out
   async function showBans() {

@@ -1428,6 +1428,31 @@ async function testShop({ port }) {
     const again = await seenBy(other);
     check('shop: what a sponsor who is kept out in silence had put up is shown to them alone — and to everybody again once it is lifted', toOthers?.state === 'taken' && toOthers.title === undefined && toThem?.state === 'live' && toThem.mine === true && again?.state === 'live', [toOthers, toThem?.state, again?.state]);
   }
+  // the administrator sees what each place has brought in (by the month: every month begun), and may change what a
+  // sponsor shows — the words, the site — without anything else of the place changing (who holds it, how it is paid)
+  {
+    const before = json(await request(port, '/api/sponsors', { headers: admin }))?.slots?.['tarp:shoot'];
+    const was = (s) => ({ by: s.by, at: s.at, title: s.title || '', subtitle: s.subtitle || '', url: s.url || '', logo: s.logo || '' });
+    const edited = await post('/api/sponsors', { slot: 'tarp:shoot', set: { title: 'Acme (changed)', subtitle: 'by the fair', url: 'https://acme.example/new' }, was: was(before) }, admin);
+    const after = json(await request(port, '/api/sponsors', { headers: admin }))?.slots?.['tarp:shoot'], shown = json(await request(port, `/api/shop?device=${ann}`)).slots['tarp:shoot'];
+    // (an edit of the place as it was before: it has changed since — nothing is written; a site that is not https: refused, not erased; a place let go: not made again)
+    const stale = await post('/api/sponsors', { slot: 'tarp:shoot', set: { title: 'Stale', subtitle: '', url: 'https://stale.example' }, was: was(before) }, admin);
+    const plain = await post('/api/sponsors', { slot: 'tarp:shoot', set: { title: 'Acme', subtitle: '', url: 'www.acme.example' }, was: was(after) }, admin);
+    const gone = await post('/api/sponsors', { slot: 'gondola:23', set: { title: 'Nobody', subtitle: '', url: '' }, was: { by: 'x', at: 1, title: 'Nobody', subtitle: '', url: '' } }, admin);
+    const still = json(await request(port, '/api/sponsors', { headers: admin }))?.slots;
+    // (its picture changed meanwhile, the words the same — here sent again by hand —: an edit of the place as it was writes nothing either)
+    await post('/api/sponsors', { slot: 'tarp:shoot', set: { title: after.title, subtitle: after.subtitle, url: after.url, logo: JPEG } }, admin);
+    const repictured = json(await request(port, '/api/sponsors', { headers: admin }))?.slots?.['tarp:shoot'];
+    const stalePicture = await post('/api/sponsors', { slot: 'tarp:shoot', set: { title: 'Acme', subtitle: '', url: '' }, was: was(after) }, admin);
+    await post('/api/sponsors', { slot: 'tarp:shoot', set: { title: before.title, subtitle: before.subtitle, url: before.url }, was: was(repictured) }, admin);
+    const back = json(await request(port, '/api/sponsors', { headers: admin }))?.slots?.['tarp:shoot'];
+    check('shop: the administrator sees what each place has brought in (a place by the month: every month begun), and changes what a sponsor shows — its words, its site — for everybody at once; who holds it, how it is paid and its picture stay; an edit of a place that changed meanwhile (its words, or its picture), or let go, writes nothing; a site that is not https is refused, not erased',
+      before?.pays?.monthly === true && before.pays.amount === 9900 && before.pays.total === 9900 && edited.status === 200 && after?.title === 'Acme (changed)' && after.subtitle === 'by the fair' && after.url === 'https://acme.example/new'
+      && after.by === before.by && after.sub === true && after.pays?.total === 9900 && after.logo === before.logo && shown?.title === 'Acme (changed)' && back?.title === before.title && back.url === before.url
+      && stale.status === 409 && plain.status === 400 && /https/.test(json(plain)?.error || '') && gone.status === 409 && still?.['tarp:shoot']?.title === 'Acme (changed)' && still['tarp:shoot'].url === 'https://acme.example/new' && !still['gondola:23']
+      && !!repictured?.logo && repictured.logo !== after.logo && stalePicture.status === 409,
+      [before, edited.status, after, shown?.title, stale.status, plain.status, gone.status, repictured?.logo, stalePicture.status, back?.title]);
+  }
   // the administrator fills a place by hand; a subscription that ends frees its place
   const byHand = await post('/api/sponsors', { slot: 'gondola:7', set: { title: 'Seven Seas Ice Cream', subtitle: 'on the pier since ever', url: 'https://ice.example', logo: JPEG } }, admin);
   const g7 = json(await request(port, '/api/shop')).slots['gondola:7'], g7logo = await request(port, g7?.logo || '/nowhere');
