@@ -31,6 +31,11 @@ const stripe = http.createServer((req, res) => {
   let text = '';
   req.on('data', (d) => { text += d; });
   req.on('end', () => {
+    // (whom to tell of an outbid, of a refund: the payment page of a payment, found again — none here — and no page is made)
+    if (req.method === 'GET' && /^\/v1\/(checkout\/sessions\?|customers\/)/.test(req.url || '')) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify(req.url.startsWith('/v1/customers/') ? { id: 'cus_none' } : { object: 'list', data: [] }));
+    }
     const form = new URLSearchParams(text);
     asked.push(form);
     res.writeHead(200, { 'Content-Type': 'application/json' });

@@ -115,7 +115,7 @@ ${where ? `<tr><td align="center" style="padding:6px 28px 28px"><a href="${esc(w
 </body></html>`;
 }
 
-const RARELY = 'We write very rarely: a welcome, a thank-you for the Game Pass, and a code when a new password is asked for. No newsletter, no tracking.';
+const RARELY = 'We write very rarely: a welcome, a thank-you, a code when a new password is asked for — and a word when something happens to what you paid for (outbid, refunded, taken down). No newsletter, no tracking.';
 
 /** The welcome to whoever has just made an account with an address. `site`: the address of the game. */
 export function welcomeMail(site, name) {
@@ -246,6 +246,88 @@ ${para(`<b>${esc(what)}</b>`)}
 ${who ? para(esc(who)) : ''}
 ${next ? para(esc(next)) : ''}`,
     why,
+  });
+  return { subject, text, html };
+}
+
+const dollars = (cents) => (cents > 0 ? `$${(cents / 100).toFixed(2).replace(/\.00$/, '')}` : '');
+
+/**
+ * To a sponsor — at the address of their account or, failing that, the one they gave at the payment (shop.js asks
+ * Stripe for it when it is needed; it is kept nowhere) —: something happened to what they paid for. `kind`:
+ *   'outbid'    somebody bid more for their place: they are refunded in full (`cents`: what they had bid)
+ *   'late'      their bid came too late (somebody bid more just before): refunded in full
+ *   'top'       a big attraction: another of its five places now has the highest bid, and the big panel over its
+ *               board of scores — they keep their place on the board of the five (`cents`: the bid to beat)
+ *   'down'      the fair took their place down (`refunded`: the money given back; `monthly`: paid by the month —
+ *               nothing more will be charged; `plaque`; `contact`: where to write about it)
+ *   'refunded'  the fair gave back, after all, what was kept when it was taken down
+ * `place`: what it is, in words ("the board of Shell Shock"; for 'top', the name of the attraction).
+ */
+export function sponsorNoticeMail(site, name, { kind = 'outbid', place = '', cents = 0, refunded = false, monthly = false, plaque = false, contact = '' } = {}) {
+  const where = siteOf(site), sum = dollars(cents), hello = name ? `Hello, ${name}.` : 'Hello.';
+  const it = plaque ? 'plaque' : 'panel', settle = 'It may take a few days to show on your statement.';
+  const words = {
+    outbid: {
+      subject: `You were outbid on ${place}`,
+      lead: `Somebody bid more for ${place}.`,
+      body: [`Your bid${sum ? ` of ${sum}` : ''} has been refunded in full. ${settle}`, 'Want it back? Bid again, from the game: walk up to its board of scores.'],
+    },
+    late: {
+      subject: `Your bid for ${place} came too late`,
+      lead: `Somebody bid more for ${place} just before you.`,
+      body: [`Your payment${sum ? ` of ${sum}` : ''} has been refunded in full. ${settle}`, 'You can bid again, from the game: walk up to its board of scores.'],
+    },
+    top: {
+      subject: `Your logo left the big panel of ${place}`,
+      lead: `Somebody bid more for another of the five places of ${place}: the big panel over its board of scores now shows them.`,
+      body: ['You keep your place: your logo is still on the board of the five, beside it.', `To take the big panel back, bid more${sum ? ` than ${sum}` : ''} — from the game, at its board of scores.`],
+    },
+    down: {
+      subject: `Your ${it} was taken down`,
+      lead: `The fair took your ${it} down: ${place}.`,
+      body: [monthly ? (refunded ? `The month you had paid has been refunded, and nothing more will be charged for it. ${settle}` : 'Nothing more will be charged for it.')
+        : refunded ? `Your payment${sum ? ` of ${sum}` : ''} has been refunded in full. ${settle}` : '', contact ? `A question about it? Write to ${contact}.` : ''].filter(Boolean),
+    },
+    refunded: {
+      subject: 'Your payment has been refunded',
+      lead: `The fair has refunded your payment${sum ? ` of ${sum}` : ''}${place ? ` for ${place}` : ''}.`,
+      body: [settle],
+    },
+  }[kind] || { subject: 'About your place at Atomic Oasis', lead: place, body: [] };
+  const because = `You get this message because something was paid for at Atomic Oasis with this address${name ? ` (account "${name}")` : ''}. ${RARELY}`;
+  const text = [hello, '', words.lead, ...words.body.flatMap((b) => ['', b]), ...(where ? ['', where] : []), '', because].join('\n');
+  const html = dressed({
+    title: words.subject, preview: words.lead, site, button: 'Back to the fair',
+    body: `<h1 style="margin:0 0 14px;font:700 24px/1.25 Georgia,'Times New Roman',serif;color:${INK}">${esc(hello)}</h1>
+${para(`<b>${esc(words.lead)}</b>`)}
+${words.body.map((b) => para(esc(b))).join('\n')}`,
+    why: esc(because),
+  });
+  return { subject: words.subject, text, html };
+}
+
+/**
+ * To the owner — at the address they gave in the back office —: money was given back (`ok`), or Stripe refused to
+ * (`error`: what it said; the payment then waits in the back office, under Refunds). `reason`: 'outbid', 'raised' (the
+ * holder raised their own bid: the first payment goes back), 'late', 'down' (taken down: `monthly`, the month that was
+ * running), 'later' (given back from the back office).
+ */
+export function ownerRefundMail(site, { cents = 0, place = '', reason = '', monthly = false, ok = true, error = '' } = {}) {
+  const where = siteOf(site), back = where ? `${where.replace(/\/$/, '')}/admin#sponsors` : '', sum = dollars(cents) || 'a payment';
+  const why = { outbid: `its holder was outbid on ${place}`, raised: `its holder raised their own bid on ${place}`, late: `a bid for ${place} came too late`, down: monthly ? `${place} was taken down — the month that was running` : `${place} was taken down`, later: `given back from the back office${place ? ` — ${place}` : ''}` }[reason] || place;
+  const what = ok ? `Refunded: ${sum} — ${why}.` : `Stripe refused to refund ${sum} — ${why}: ${error || 'no reason given'}.`;
+  const next = ok ? 'The sponsor is told too (by e-mail where an address is known, and in the game).'
+    : 'Nothing was given back. It waits in the back office, under Refunds: give it back from there, or in Stripe itself.';
+  const subject = ok ? `Refunded — ${sum} — ${place || 'a payment'}` : `A refund failed — ${place || 'a payment'}`;
+  const tail = 'You get this message because this address was given in the back office of Atomic Oasis, to be told of new sponsors. Remove it there to stop.';
+  const text = [what, '', next, ...(back ? ['', `The back office: ${back}`] : []), '', tail].join('\n');
+  const html = dressed({
+    title: subject, preview: what, site: back || site, button: 'Open the back office',
+    body: `<h1 style="margin:0 0 14px;font:700 24px/1.25 Georgia,'Times New Roman',serif;color:${INK}">${esc(ok ? 'A refund' : 'A refund failed')}</h1>
+${para(`<b>${esc(what)}</b>`)}
+${para(esc(next))}`,
+    why: tail,
   });
   return { subject, text, html };
 }

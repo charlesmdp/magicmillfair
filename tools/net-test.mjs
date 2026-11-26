@@ -68,6 +68,20 @@ async function startStripe() {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ id: `bps_test_${stripe.portals.length}`, url: `https://billing.stripe.test/p/session/${stripe.portals.length}` }));
       }
+      // (the payment page of a payment, found again by its payment intent — whom to tell of an outbid, of a refund —;
+      // a customer, for what is paid by the month)
+      const byPay = /^\/v1\/checkout\/sessions\?(.*)$/.exec(req.url);
+      if (byPay && req.method === 'GET') {
+        const pi = new URLSearchParams(byPay[1]).get('payment_intent'), mine = req.headers.authorization === `Bearer ${STRIPE_KEY}`;
+        res.writeHead(mine ? 200 : 401, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify(mine ? { object: 'list', data: Object.values(stripe.sessions).filter((s) => s.payment_intent === pi).slice(0, 1) } : { error: { message: 'Invalid API Key' } }));
+      }
+      const cus = /^\/v1\/customers\/(cus_\w+)$/.exec(req.url);
+      if (cus && req.method === 'GET') {
+        const mine = req.headers.authorization === `Bearer ${STRIPE_KEY}`;
+        res.writeHead(mine ? 200 : 401, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify(mine ? { id: cus[1], email: 'buyer@example.org' } : { error: { message: 'Invalid API Key' } }));
+      }
       const one = /^\/v1\/checkout\/sessions\/(cs_\w+)$/.exec(req.url);
       if (one && req.method === 'GET') {
         // a payment page, asked about: as it stands (the test says when it is paid: stripe.sessions[id])
@@ -1705,7 +1719,8 @@ async function testPaid({ port }) {
   const ear = new Client(port, 'main');
   await ear.hello('Ear', 1);
   const dog = randomId(16);
-  stripe.asked.length = 0;
+  // (no new count of the payment pages here: the page of the beanie above was cs_test_1, and a bid on a page of the
+  // same name would be taken for a payment already counted — never thanked, never told to the owner)
   const bidPage = await post('/api/checkout', { item: 'board:cups', device: dog, bid: 700 }), bid = `cs_test_${stripe.asked.length}`;
   pay(bid);
   const took = await post('/api/checkout/confirm', { session: bid }), mine = (await owned(dog)).slots['board:cups'];
@@ -1775,6 +1790,30 @@ async function testPaid({ port }) {
   const row = rankSponsors((await owned(randomId(16))).slots, { cups: 'Shell Shock' }).find((r) => r.name === 'Acme Robots Inc');
   check('clicks: the site of a sponsor opened from the game is counted on its place — the same address only once in ten minutes —, nothing is counted for a place that has no site; the wall of thanks adds them up for the sponsor, with its site in a few letters',
     c1?.clicks === 1 && c2?.clicks === 1 && c3?.clicks === 2 && nope.status === 404 && row?.clicks === 2 && row.site === 'example.org' && row.first === 'board:cups' && row.figure === '$7', [c1, c2, c3, nope.status, row]);
+  {
+    // whoever loses something by a bid is told by e-mail too — at the address they gave at the payment, asked of
+    // Stripe then and kept nowhere —, and the owner of every refund: outbid (refunded in full); at a big attraction,
+    // the big panel lost to another of its five places (their own place is kept); a bid that came too late (refunded)
+    const mails = () => (CF || !fs.existsSync(MAIL_FILE) ? null : fs.readFileSync(MAIL_FILE, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)));
+    const seen = mails()?.length ?? 0;
+    const buy = async (item, device, bid) => { const p = await request(port, '/api/checkout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ item, device, bid }), from: '127.0.0.87' }); return { status: p.status, id: `cs_test_${stripe.asked.length}` }; };
+    const confirm = async (id) => json(await request(port, '/api/checkout/confirm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ session: id }), from: '127.0.0.88' }));
+    const cow = randomId(16), ewe = randomId(16), fox = randomId(16);
+    const over = await buy('board:cups', cow, 900); pay(over.id); const tookCups = await confirm(over.id); // (dog, at $7, is outbid)
+    const third = await buy('board:sky-3', ewe, 600); pay(third.id); const tookThird = await confirm(third.id); // (dog's board:sky-2, at $5, loses the big panel)
+    const first = await buy('board:sky-4', fox, 700), late = await buy('board:sky-4', cow, 650); // (two payment pages open at once)
+    pay(first.id); const tookFourth = await confirm(first.id); // (ewe's board:sky-3 loses the big panel)
+    pay(late.id); const tookLate = await confirm(late.id); // (too late: refunded at once)
+    await sleep(300);
+    const fresh = mails()?.slice(seen) || null, to = (who, re) => (fresh || []).filter((m) => m.to === who && re.test(m.subject));
+    const outbid = to('buyer@example.org', /^You were outbid on the board of Shell Shock$/), lost = to('buyer@example.org', /^Your logo left the big panel of Mostly Up$/), tooLate = to('buyer@example.org', /^Your bid for the board of Mostly Up \(place 4\) came too late$/);
+    const refunds = to('owner@example.org', /^Refunded — /);
+    check('whoever loses something by a bid is told by e-mail — outbid (refunded in full), the big panel of a big attraction lost to another of its five places (their place kept), a bid that came too late (refunded) — at the address given at the payment, found again at Stripe; and the owner is told of each refund',
+      over.status === 200 && tookCups?.given === true && tookThird?.given === true && tookFourth?.given === true && tookLate?.ok === true && tookLate.given === false
+      && (fresh === null || (outbid.length === 1 && /Your bid of \$7 has been refunded in full/.test(outbid[0].text) && lost.length === 2 && /more than \$6 /.test(lost[0].text) && /more than \$7 /.test(lost[1].text)
+        && tooLate.length === 1 && /\$6\.50 has been refunded in full/.test(tooLate[0].text) && refunds.length === 2 && refunds.some((m) => /^Refunded — \$7 — the board of Shell Shock$/.test(m.subject)) && refunds.some((m) => /^Refunded — \$6\.50 — the board of Mostly Up \(place 4\)$/.test(m.subject)))),
+      [over.status, tookCups, tookThird, tookFourth, tookLate, fresh?.map((m) => `${m.to}: ${m.subject}`)]);
+  }
 }
 
 // ------------------------------------------------------------- what may not be said, nor worn as a name (decency.js)

@@ -49,8 +49,8 @@
 // `logo:<slot>` and `logo:<slot>:draft` → { type, data (base64) }; `refunds` → the last hundred, [{ pay, amount,
 // at, why, ok, error }].
 import { allowed } from './api.js';
-import { describe, forLife, publicPrices, nextBid, AUCTION, CURRENCY } from './catalog.js';
-import { createCheckout, createPortal, verifyWebhook, refundPayment, endSubscription, fetchCheckout } from './stripe.js';
+import { describe, forLife, publicPrices, nextBid, AUCTION, CURRENCY, MAJOR_BOARDS, BOARD_PLACES } from './catalog.js';
+import { createCheckout, createPortal, verifyWebhook, refundPayment, endSubscription, fetchCheckout, buyerEmail } from './stripe.js';
 import { noteSale, noteRefund } from './stats.js';
 import { readRelease } from './release.js';
 import { BOARDS as SCORE_BOARDS } from './scores.js';
@@ -58,8 +58,9 @@ import { accountOf, addItem, holderOf, itemsOf, passLive, sameOwner } from './ac
 import { quietOnes } from './bans.js';
 import { PASS, TRIAL, itemOf } from './items.js';
 import { userRoomsOn, roomOfAccount, openRoom, sleepRoom } from './urooms.js';
-import { cleanEmail, mailLater, passMail, sponsorMail, ownerSaleMail } from './mail.js';
+import { cleanEmail, mailLater, passMail, sponsorMail, ownerSaleMail, sponsorNoticeMail, ownerRefundMail } from './mail.js';
 import { maskWords } from './decency.js';
+import { LEGAL } from '../src/app/legal.js';
 
 const out = (status, body, headers = {}) => ({ status, body, headers });
 /**
@@ -226,26 +227,63 @@ async function leaveNote(ctx, device, text) {
   await ctx.store.put(`own:${device}`, { ...rec, notes: [...(rec.notes || []), text].slice(-5) });
 }
 
+/** The site the owner saved their address from (their own request), or the one given: where the links of the e-mails go. */
+const siteFor = async (ctx, site = '') => (await ctx.store.get('notify'))?.site || site;
+/** The place a refund was for, in words — from the reason written down with it ("outbid on board:cups"). */
+const placeIn = (text) => { const m = /\b((?:board|gondola|hut|tarp|village|plaque):[a-z0-9-]+)/.exec(String(text || '')), d = m && describe(m[1]); return d ? placeOf(d) : ''; };
+
+/**
+ * A sponsor is told by e-mail what became of what they paid for (mail.js sponsorNoticeMail: outbid, a bid that came
+ * too late, the big panel lost, taken down, refunded) — where the host sends e-mail and an address is known: the one
+ * of their account or, failing that, the one they gave at the payment (asked of Stripe now, kept nowhere). It never
+ * stands in the way of what is being done. (The game says it too, at their next visit: leaveNote.)
+ */
+async function tellSponsor(ctx, cfg, { device = '', pay = '', customer = '', site = '', ...what } = {}) {
+  if (!ctx.mail) return;
+  try {
+    const acct = DEVICE.test(device || '') ? await accountOf(ctx.store, device) : null;
+    const to = cleanEmail(acct?.email || '') || (cfg?.key ? cleanEmail(await buyerEmail(cfg, { pay, customer }, ctx.fetch || fetch)) : '');
+    if (to) mailLater(ctx, { to, ...sponsorNoticeMail(await siteFor(ctx, site), acct?.name || '', { contact: LEGAL.contact, ...what }) });
+  } catch (err) { console.error('[shop] a word to a sponsor', String(err?.message || err).slice(0, 160)); }
+}
+
+/** The owner is told by e-mail of money given back — or that Stripe refused to (mail.js ownerRefundMail). */
+async function tellOwnerRefund(ctx, what) {
+  if (!ctx.mail) return;
+  try {
+    const kept = (await ctx.store.get('notify')) || {}, to = cleanEmail(kept.email || '');
+    if (to) mailLater(ctx, { to, ...ownerRefundMail(kept.site || '', what) });
+  } catch (err) { console.error('[shop] a word to the owner', String(err?.message || err).slice(0, 160)); }
+}
+
 /** Gives a payment back, and writes it down (a refund that fails is kept for the administrator). */
 // What was kept when something was taken down — or could not be given back — given back after all: the owner's
 // choice, from the list of refunds. True when Stripe did it, false when it refused, null when there is no such payment.
-async function refundLater(ctx, cfg, pay) {
+async function refundLater(ctx, cfg, pay, site = '') {
   const list = (await ctx.store.get('refunds')) || [], entry = [...list].reverse().find((e) => e.pay === pay && !e.ok);
   if (!entry) return null;
   try { await refundPayment(cfg, pay, entry.why, ctx.fetch || fetch); entry.ok = true; entry.at = ctx.now(); delete entry.kept; delete entry.error; } catch (err) { entry.error = String(err.message || err).slice(0, 160); console.error('[shop] refund', entry.error); }
   await ctx.store.put('refunds', list);
+  const place = placeIn(entry.why);
   if (entry.ok) {
     await noteRefund(ctx.store, { cents: entry.amount }, ctx.now()).catch(() => {});
     if (entry.by) await leaveNote(ctx, entry.by, 'The fair has refunded your payment in full.');
+    await tellSponsor(ctx, cfg, { device: entry.by || '', pay, site, kind: 'refunded', place, cents: entry.amount || 0 });
   }
+  await tellOwnerRefund(ctx, { cents: entry.amount || 0, place, reason: 'later', ok: !!entry.ok, error: entry.error || '' });
   return entry.ok;
 }
 
-async function refund(ctx, cfg, pay, amount, why) {
-  const entry = { pay, amount, at: ctx.now(), why, ok: true };
+/**
+ * `why`: written down with it (and for Stripe); `place`, `reason` ('outbid', 'raised', 'late', 'down'): for the
+ * owner's e-mail; `by`: the browser it is given back to (kept with it — never shown — for a refund made later).
+ */
+async function refund(ctx, cfg, pay, amount, why, { place = '', reason = '', by = '' } = {}) {
+  const entry = { pay, amount, at: ctx.now(), why, ok: true, ...(DEVICE.test(by || '') && { by }) };
   try { await refundPayment(cfg, pay, why, ctx.fetch || fetch); } catch (err) { entry.ok = false; entry.error = String(err.message || err).slice(0, 160); console.error('[shop] refund', entry.error); }
   await ctx.store.put('refunds', [...((await ctx.store.get('refunds')) || []), entry].slice(-100));
   if (entry.ok) await noteRefund(ctx.store, { cents: amount }, ctx.now()).catch(() => {}); // (the figures: what the shop earned)
+  await tellOwnerRefund(ctx, { cents: amount, place: place || placeIn(why), reason, ok: entry.ok, error: entry.error || '' });
   return entry.ok;
 }
 
@@ -284,7 +322,7 @@ async function completed(ctx, cfg, o, site) {
   const named = describe(o.metadata?.item), sold = named && o.metadata?.life ? forLife(named) : named, fresh = sold ? await firstTime(ctx, o.id) : false; // (fresh: it is said for the first time)
   if (!sold) return false;
   if (fresh) await noteSale(ctx.store, { cents: Number.isInteger(o.amount_total) ? o.amount_total : 0, pass: sold.kind === 'pass' }, now).catch(() => {});
-  const got = sold.auction ? await takeBid(ctx, cfg, o.metadata.item, o.metadata?.device, o.amount_total, o.payment_intent)
+  const got = sold.auction ? await takeBid(ctx, cfg, o.metadata.item, o.metadata?.device, o.amount_total, o.payment_intent, site)
     : await grant(ctx, o.metadata?.item, o.metadata?.device, o.subscription, o.customer, o.metadata?.account, sold.life ? (Number.isInteger(o.amount_total) && o.amount_total > 0 ? o.amount_total : sold.amount) : 0);
   if (got && fresh && sold.kind === 'pass') await thankForPass(ctx, o, site);
   if (got && fresh && sold.kind === 'slot') await thankSponsor(ctx, o, site, sold).catch(() => {});
@@ -340,23 +378,40 @@ async function firstTime(ctx, id) {
   return true;
 }
 
+/** The five places of a big attraction a place belongs to ('board:sky-3' → 'board:sky' … 'board:sky-5'), or null. */
+const fiveOf = (item) => {
+  const m = /^board:([a-z]+)(?:-[2-9])?$/.exec(item || '');
+  return m && MAJOR_BOARDS.includes(m[1]) ? Array.from({ length: BOARD_PLACES }, (_, i) => (i ? `board:${m[1]}-${i + 1}` : `board:${m[1]}`)) : null;
+};
+/** Of these places, the one whose bid is the highest — it has the panel over the board of scores: [id, { by, pay, bid }], or null. */
+const topOf = (slots, ids) => {
+  let best = null;
+  for (const id of ids || []) { const s = slots[id]; if (s?.bid > 0 && (!best || s.bid > best[1].bid)) best = [id, { by: s.by, pay: s.pay, bid: s.bid }]; }
+  return best;
+};
+
 /**
  * A bid has been paid for an auctioned place: the highest takes it, the other is refunded. `pay`: the payment
- * (so that it can be given back one day), `amount`: what Stripe says was paid, in cents. Safe to call twice.
+ * (so that it can be given back one day), `amount`: what Stripe says was paid, in cents. Safe to call twice. Whoever
+ * loses something by it is told, by e-mail too: the one outbid; the one whose bid came too late; at a big attraction,
+ * the one whose place no longer has the highest bid of the five (the big panel over the board of scores). `site`:
+ * the address of the game, for the links of those e-mails (the one the owner saved theirs from comes first).
  */
-export async function takeBid(ctx, cfg, item, device, amount, pay) {
+export async function takeBid(ctx, cfg, item, device, amount, pay, site = '') {
   const what = describe(item);
   if (!what?.auction || !DEVICE.test(device || '') || !Number.isInteger(amount) || amount <= 0 || typeof pay !== 'string' || !pay) return false;
-  const slots = await slotsOf(ctx), cur = slots[item];
+  const slots = await slotsOf(ctx), cur = slots[item], place = placeOf(what);
   if (cur && cur.pay === pay) return true; // (Stripe said it twice)
   if (cur && amount <= (cur.bid || 0)) {
     // somebody paid more while this one was at the payment page: it is given back at once
-    await refund(ctx, cfg, pay, amount, `too late for ${item}`);
+    await refund(ctx, cfg, pay, amount, `too late for ${item}`, { place, reason: 'late', by: device });
     await leaveNote(ctx, device, `Somebody bid more for ${what.label} just before you: your payment has been refunded.`);
+    await tellSponsor(ctx, cfg, { device, pay, site, kind: 'late', place, cents: amount });
     return false;
   }
   // (who raises their own bid keeps what they show; a newcomer starts from an empty panel)
   const again = !!cur && (await sameOwner(ctx.store, cur.by, device));
+  const five = fiveOf(item), wasTop = topOf(slots, five);
   slots[item] = again ? { ...cur, by: device, bid: amount, pay, at: ctx.now() } : { by: device, sub: null, at: ctx.now(), state: 'paid', logo: 0, bid: amount, pay };
   await ctx.store.put('slots', slots);
   if (cur && !again) {
@@ -367,7 +422,15 @@ export async function takeBid(ctx, cfg, item, device, amount, pay) {
   // (the rooms are told once the pictures of the one outbid are gone: telling them waits on the network, and on the
   // Worker another request may run meanwhile — the newcomer's own picture, sent at once, must not be deleted after it)
   await tellRooms(ctx);
-  if (cur?.pay) await refund(ctx, cfg, cur.pay, cur.bid || 0, `outbid on ${item}`);
+  if (cur?.pay) await refund(ctx, cfg, cur.pay, cur.bid || 0, `outbid on ${item}`, { place, reason: again ? 'raised' : 'outbid', by: cur.by });
+  if (cur?.pay && !again) await tellSponsor(ctx, cfg, { device: cur.by, pay: cur.pay, site, kind: 'outbid', place, cents: cur.bid || 0 });
+  // (a big attraction: the place that had the big panel lost it to another of the five — its holder keeps their place)
+  const nowTop = topOf(slots, five);
+  if (wasTop && nowTop && wasTop[0] !== nowTop[0] && wasTop[0] !== item && wasTop[1].pay && !(await sameOwner(ctx.store, wasTop[1].by, nowTop[1].by))) {
+    const game = describe(five[0])?.label || what.label; // (the attraction itself: "Mostly Up", not one of its places)
+    await leaveNote(ctx, wasTop[1].by, `Somebody bid more for another place of ${game}: the big panel over its board shows them now. You keep your place on the board of the five.`);
+    await tellSponsor(ctx, cfg, { device: wasTop[1].by, pay: wasTop[1].pay, site, kind: 'top', place: game, cents: nowTop[1].bid });
+  }
   return true;
 }
 
@@ -625,7 +688,7 @@ export async function shopRoute(req, ctx) {
     if (method === 'POST' && typeof body?.refund === 'string') {
       // the owner gives back what was kept when something was taken down (or what Stripe had refused to give back)
       if (!req.owner) return out(403, { error: 'Only the owner gives money back.' });
-      const done = await refundLater(ctx, cfg, body.refund);
+      const done = await refundLater(ctx, cfg, body.refund, req.site || '');
       if (done === null) return out(404, { error: 'No such payment waits to be given back.' });
       taken = { refunded: done };
     } else if (method === 'POST') {
@@ -674,7 +737,7 @@ export async function shopRoute(req, ctx) {
       const gone = slots[id], back = query.get('refund') === '1';
       if (back && !req.owner) return out(403, { error: 'Only the owner gives money back.' });
       let refunded = false, stopped = false;
-      if (gone.pay && back) refunded = await refund(ctx, cfg, gone.pay, gone.bid || 0, `removed from ${id}`);
+      if (gone.pay && back) refunded = await refund(ctx, cfg, gone.pay, gone.bid || 0, `removed from ${id}`, { place: placeOf(describe(id)), reason: 'down', by: gone.by });
       else if (gone.pay) await ctx.store.put('refunds', [...((await ctx.store.get('refunds')) || []), { pay: gone.pay, amount: gone.bid || 0, at: now, why: `taken down from ${id}`, ok: false, kept: true, by: gone.by }].slice(-100));
       if (gone.sub && cfg.key) {
         try { const done = await endSubscription(cfg, gone.sub, back, ctx.fetch || fetch); stopped = true; refunded = refunded || done.refunded; } catch (err) { console.error('[shop] subscription', String(err.message || err).slice(0, 160)); }
@@ -684,6 +747,10 @@ export async function shopRoute(req, ctx) {
         : stopped ? `The fair took your ${what} down: ${refunded ? 'the month you paid has been refunded, and ' : ''}nothing more will be charged for it.` : `The fair took your ${what} down.`);
       await release(ctx, slots, id);
       taken = { removed: id, refunded, stopped };
+      // (told by e-mail too — where an address is known; and the owner, of the month given back of a place paid by the
+      // month: a bid given back has told them already, in refund())
+      if (gone.by !== 'admin') await tellSponsor(ctx, cfg, { device: gone.by, pay: gone.pay || '', customer: gone.customer || '', site: req.site || '', kind: 'down', place: placeOf(describe(id)), cents: gone.bid || 0, refunded, monthly: !!gone.sub, plaque: what === 'plaque' });
+      if (gone.sub && back) await tellOwnerRefund(ctx, { cents: describe(id)?.amount || 0, place: placeOf(describe(id)), reason: 'down', monthly: true, ok: refunded, error: refunded ? '' : (stopped ? 'Stripe found no payment of the month to give back' : 'the subscription could not be stopped') });
     } else if (!reading) return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD, POST, DELETE' });
     return out(200, {
       ...taken,
