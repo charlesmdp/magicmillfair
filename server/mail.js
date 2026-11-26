@@ -151,7 +151,7 @@ ${para('See you at the fair,<br><i>Atomic Oasis — made by a guy on a couch, no
  * The word of thanks to whoever has just sponsored something, or had a plaque engraved. `place`: what it is, in
  * words ("the board of Mostly Up", "gondola 3 of the big wheel"); `cents`: what was paid; `monthly`: it is paid
  * by the month; `auction`: it is kept until somebody bids more; `plaque`: a plaque for a companion; `life`: it
- * was bought for good, paid once (a gondola).
+ * was bought for good, paid once (a gondola, a beach hut).
  */
 export function sponsorMail(site, name, { place = '', cents = 0, monthly = false, auction = false, plaque = false, life = false } = {}) {
   const where = siteOf(site), hello = name ? `Thank you, ${name}!` : 'Thank you!';
@@ -163,7 +163,7 @@ export function sponsorMail(site, name, { place = '', cents = 0, monthly = false
   const keep = plaque ? '' : auction
     ? 'You paid once, and you keep the panel until somebody bids more. That day you are refunded in full, automatically, and they take your place.'
     : monthly ? 'It is paid by the month, on Stripe. Stop whenever you like — in the game, at your place: "Look after it, or stop it" — and the place is free again at the end of the month you paid for.'
-      : life ? 'You paid once, and it is yours for good: nothing to renew, nothing to stop — it goes round for as long as the fair stands.' : '';
+      : life ? 'You paid once, and it is yours for good: nothing to renew, nothing to stop — it stays up for as long as the fair stands.' : '';
   const why = 'Sponsors are why Atomic Oasis is free for everybody. It is not made by a multinational, but by a guy on a couch: you have just made his day — for real.';
   const because = `You get this message because something was paid for at Atomic Oasis with this address${name ? ` (account "${name}")` : ''}. ${RARELY}`;
   const text = [hello, '', got, '', next, ...(keep ? ['', keep] : []), '', why, ...(where ? ['', where] : []), '', because].join('\n');

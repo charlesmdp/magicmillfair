@@ -1,7 +1,7 @@
 // Who is thanked on the wall of thanks (world/zones/games/ThanksWall.js), and in which order.
 //
 // Who counts as a sponsor: whoever shows something on the panel of a game, on a gondola of the big wheel, on
-// the backdrop of the shooting gallery or on a sky village. Not the plaques of the companions round the golden
+// the roof of a beach hut, on the backdrop of the shooting gallery or on a sky village. Not the plaques of the companions round the golden
 // dog: those are for pets, and put there by people.
 //
 // The order: what each has put in so far, the most first. A bid counts for what was bid; a place held by the
@@ -25,6 +25,7 @@ export function placeWords(id, games = {}) {
   const [type, sub] = String(id).split(':');
   if (type === 'board') return games[sub] || 'A game of the fair';
   if (type === 'gondola') return `Gondola ${sub}`;
+  if (type === 'hut') return `Beach hut ${sub}`;
   if (type === 'tarp') return `The backdrop of ${games[sub] || 'the shooting gallery'}`;
   if (type === 'village') return 'A village in the sky';
   return '';
@@ -58,8 +59,8 @@ export function rankSponsors(slots, games = {}) {
       r.total += Number.isFinite(p.total) && p.total > 0 ? p.total : p.amount;
     }
   }
-  // (the places of a sponsor: the games first, then the wheel by number, the rest after)
-  const kind = (id) => ['board', 'tarp', 'gondola', 'village'].indexOf(id.split(':')[0]);
+  // (the places of a sponsor: the games first, then the wheel by number, the huts by number, the rest after)
+  const kind = (id) => ['board', 'tarp', 'gondola', 'hut', 'village'].indexOf(id.split(':')[0]);
   const rows = [...byName.values()].map((r) => {
     r.places.sort((a, b) => kind(a.id) - kind(b.id) || (parseInt(a.id.split(':')[1], 10) || 0) - (parseInt(b.id.split(':')[1], 10) || 0) || a.words.localeCompare(b.words));
     const places = r.places.map((p) => p.words);

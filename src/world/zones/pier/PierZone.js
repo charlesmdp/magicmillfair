@@ -6,6 +6,7 @@ import { ANIM, SEAT } from '../../../player/Character.js';
 import { seatAt } from '../../../player/PlayerController.js';
 import { drawSponsor, canvasBoard } from '../games/Boards.js';
 import { PIER, PROMENADE, COAST, pierToWorld, BEACH_LOUNGE } from '../../layout/layout.js';
+import { HUT_COUNT } from '../../layout/sponsors.js';
 import { roadRibbon } from '../../props/Structures.js';
 import { distanceCuller, mergeStatic } from '../../props/StaticBatch.js';
 import { surfaceMaterial } from '../../../render/SurfaceMaterial.js';
@@ -62,10 +63,11 @@ export class PierZone {
     // one mesh per material for everything that stands still (promenade and pier together)
     this.group.add(mergeStatic([shore, deck], 'seafront'));
     this._wheel();
+    this._hutBanners();
     this._sign();
     this.group.updateMatrixWorld(true);
     // small things vanish with distance; the pier and its wheel stay as landmarks
-    this._cull = distanceCuller(this.group, [[/big-wheel/, Infinity], [/:glow$/, 300], [/^seafront:doubleSided$/, 420], [/pier-sign/, 420]]);
+    this._cull = distanceCuller(this.group, [[/big-wheel/, Infinity], [/:glow$/, 300], [/^seafront:doubleSided$/, 420], [/pier-sign/, 420], [/beach-hut-banners/, 320]]);
 
     const half = PIER.width / 2, head0 = PIER.length - PIER.headLength;
     this.platforms.push({ type: 'pier', x0: 0, x1: PIER.length, half, head0, headHalf: PIER.headWidth / 2 });
@@ -193,6 +195,9 @@ export class PierZone {
     const brook = this.data.meta.streams.find((q) => q.id === 'brook').samples;
     // (nothing in the brook, nor where the beanbags are)
     const nearBrook = (x, z, r) => brook.some((q) => (q[0] - x) ** 2 + (q[1] - z) ** 2 < r * r) || (x - BEACH_LOUNGE.x) ** 2 + (z - BEACH_LOUNGE.z) ** 2 < (BEACH_LOUNGE.r + r) ** 2;
+    // (where each hut stands, from the north to the south: the panels on their roofs are hung there, and a
+    // sponsor's place is the hut of the same number — see _hutBanners)
+    this.hutSpots = [];
     let n = 0;
     for (let i = 3; i < samples.length - 3; i++) {
       const p = samples[i], a = samples[i - 1], b = samples[i + 1];
@@ -226,7 +231,11 @@ export class PierZone {
         paint.tri(V(0.95, 2.0, -0.95), V(-0.95, 2.0, -0.95), V(0, 2.68, -0.95));
         paint.tint(0.95, 0.93, 0.88, 1);
         paint.box(-0.36, 0.05, 0.95, 0.36, 1.75, 0.98);
+        // two posts on the roof, either side of the ridge: they hold the panel of the hut's sponsor
+        paint.tint(0.42, 0.32, 0.22, 1);
+        for (const sx of [-0.72, 0.72]) paint.box(sx - 0.03, 2.18, -0.03, sx + 0.03, 2.82, 0.03);
         paint.pop();
+        this.hutSpots.push({ x: hx, z: hz, y: gy + 0.25, ground: gy, yaw, col });
         this.colliders.push({ type: 'circle', x: hx, z: hz, r: 1.25 });
       }
       // parasols and towels scattered on the dry sand
@@ -720,6 +729,106 @@ export class PierZone {
         if (d < bestD) { best = s; bestD = d; }
       }
       return best;
+    };
+  }
+
+  /**
+   * The panels on the roofs of the beach huts: one for each hut, standing across its ridge on two posts, with a
+   * face towards the sea and one towards the boardwalk — its sponsor's, or a small invitation to be it (as on
+   * the gondolas of the wheel). One sheet for all of them and one mesh: a hut that finds a sponsor gets a panel
+   * wider than its roof. Each says the number of its hut: the Trading Post names them so.
+   */
+  _hutBanners() {
+    const spots = this.hutSpots || [], N = spots.length;
+    this.huts = N;
+    if (N !== HUT_COUNT) console.warn(`[pier] ${N} beach huts were built where ${HUT_COUNT} are sold (layout/sponsors.js: HUT_COUNT)`);
+    const COLS = 6, CW = 320, CH = 120, STUB = 46, ROWS = Math.max(1, Math.ceil(N / COLS)), canvas = document.createElement('canvas');
+    canvas.width = COLS * CW; canvas.height = ROWS * CH;
+    const ctx = canvas.getContext('2d'), tex = new THREE.CanvasTexture(canvas), state = new Array(N).fill(null);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    const paint = (i) => {
+      ctx.save();
+      ctx.translate((i % COLS) * CW, Math.floor(i / COLS) * CH);
+      ctx.beginPath(); ctx.rect(0, 0, CW, CH); ctx.clip();
+      ctx.clearRect(0, 0, CW, CH);
+      if (state[i]) {
+        // its sponsor's panel and, on a stub at its end, the number of the hut: "Beach hut 7" at the Trading Post is this one
+        drawSponsor(ctx, CW - STUB, CH, state[i], { what: `beach hut ${i + 1}` });
+        const x = CW - STUB;
+        ctx.fillStyle = '#0d5f63'; ctx.fillRect(x, 0, STUB, CH);
+        ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 4; ctx.strokeRect(x + 2, 4, STUB - 6, CH - 8);
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#f2c14e'; ctx.font = '700 13px system-ui, sans-serif'; ctx.fillText('Hut', x + STUB / 2 - 1, CH * 0.3);
+        ctx.fillStyle = '#f6e7b8'; ctx.font = `800 ${i + 1 > 9 ? 27 : 34}px Georgia, 'Times New Roman', serif`; ctx.fillText(String(i + 1), x + STUB / 2 - 1, CH * 0.58);
+      } else drawSponsor(ctx, CW, CH, null, { what: `beach hut ${i + 1}` });
+      ctx.restore();
+      tex.needsUpdate = true;
+    };
+    for (let i = 0; i < N; i++) paint(i);
+    const pos = new Float32Array(Math.max(1, N) * 24), uv = new Float32Array(Math.max(1, N) * 16), idx = [];
+    for (let i = 0; i < N; i++) for (let side = 0; side < 2; side++) {
+      const q = i * 2 + side, u0 = (i % COLS) / COLS, u1 = u0 + 1 / COLS, v1 = 1 - Math.floor(i / COLS) / ROWS, v0 = v1 - 1 / ROWS;
+      uv.set([u0, v0, u1, v0, u1, v1, u0, v1], q * 8);
+      idx.push(q * 4, q * 4 + 1, q * 4 + 2, q * 4, q * 4 + 2, q * 4 + 3);
+    }
+    // a free hut: a small invitation over its ridge, between its posts; a sponsored one: a panel wider than the roof
+    // (half-width, bottom and top over the floor of the hut, m — the posts stand at 0.72 either side of the ridge)
+    const SMALL = { w: 0.78, y0: 2.8, y1: 3.385 }, BIG = { w: 1.12, y0: 2.8, y1: 3.64 }, T = 0.012;
+    const hang = (i) => {
+      const sp = spots[i], s = state[i] ? BIG : SMALL, c = Math.cos(sp.yaw), n = Math.sin(sp.yaw);
+      // (the frame of the hut: x across its door, z towards the sea — world x = x cos + z sin, world z = −x sin + z cos)
+      const put = (o, lx, ly, lz) => { pos[o] = sp.x + lx * c + lz * n; pos[o + 1] = sp.y + ly; pos[o + 2] = sp.z - lx * n + lz * c; };
+      // (each face reads from left to right for whoever looks at it: one from the sea, one from the boardwalk)
+      const o = i * 24;
+      put(o, -s.w, s.y0, T); put(o + 3, s.w, s.y0, T); put(o + 6, s.w, s.y1, T); put(o + 9, -s.w, s.y1, T);
+      put(o + 12, s.w, s.y0, -T); put(o + 15, -s.w, s.y0, -T); put(o + 18, -s.w, s.y1, -T); put(o + 21, s.w, s.y1, -T);
+    };
+    for (let i = 0; i < N; i++) hang(i);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    geo.setIndex(idx);
+    {
+      // (one sphere round all the huts, wide enough for every panel however large)
+      const box = new THREE.Box3();
+      for (const sp of spots) box.expandByPoint(new THREE.Vector3(sp.x, sp.y + 3.2, sp.z));
+      geo.boundingSphere = box.isEmpty() ? new THREE.Sphere(new THREE.Vector3(), 1) : box.getBoundingSphere(new THREE.Sphere());
+      geo.boundingSphere.radius += 3;
+    }
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
+    mesh.name = 'beach-hut-banners';
+    this.group.add(mesh);
+    /** Beach hut `n` (1 to 26) shows its sponsor ({ title, subtitle, logo, bg }), or is free again (null). */
+    this.setHut = (n, sponsor) => {
+      const i = n - 1;
+      if (!(i >= 0 && i < N)) return;
+      state[i] = sponsor || null;
+      paint(i);
+      hang(i);
+      geo.attributes.position.needsUpdate = true;
+    };
+    /** Does beach hut `n` show a sponsor? */
+    this.hutShown = (n) => !!state[n - 1];
+    /** The hut whose sponsor's place one stands by, at (x, z) on the sand: its number, or 0. */
+    this.hutAt = (x, z, y, reach = 2.7) => {
+      let best = 0, bd = reach * reach;
+      for (let i = 0; i < N; i++) {
+        const sp = spots[i], d = (sp.x - x) ** 2 + (sp.z - z) ** 2;
+        if (d < bd && Math.abs(y - sp.ground) < 2.2) { bd = d; best = i + 1; }
+      }
+      return best;
+    };
+    /**
+     * Where to stand to photograph beach hut `n`, its panel first: { from, at } (in the world) — on the side of the
+     * sea, a few steps out and a little to one side, a little higher than the roof: the hut is seen from its door,
+     * the boardwalk behind it. (From the boardwalk, the palms that grow along it hide some of the panels: they lean.)
+     */
+    this.hutView = (n) => {
+      const sp = spots[n - 1];
+      if (!sp) return null;
+      const c = Math.cos(sp.yaw), s = Math.sin(sp.yaw), at = (lx, ly, lz) => [sp.x + lx * c + lz * s, sp.y + ly, sp.z - lx * s + lz * c];
+      return { from: at(-0.6, 3.25, 3.5), at: at(0, 3.0, 0) };
     };
   }
 

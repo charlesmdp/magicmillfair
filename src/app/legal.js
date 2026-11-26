@@ -35,7 +35,7 @@ export const TERMS = () => ({
       'The Game Pass is paid by the month until you stop it (from the shop: "Look after it, or stop it"); it then lasts to the end of the month already paid. What it lends — hats, sizes, colours — goes back when it ends; what you bought separately stays.',
     ] },
     { icon: '📣', title: 'Sponsors and plaques', text: [
-      'The panel of a game goes to the highest bid, paid once; whoever is outbid is refunded in full, automatically. Other places (a gondola, a backdrop, a village) are by the month.',
+      'The panel of a game goes to the highest bid, paid once; whoever is outbid is refunded in full, automatically. Other places (a gondola, a beach hut, a backdrop, a village) are by the month — a gondola or a beach hut can also be bought once, for good.',
       'A plaque for a companion is paid once and stays for as long as the game exists. What a sponsor sends — words, a picture, a link — is shown at once; a plaque is engraved once an administrator has looked at it. Either can be taken down at any time if it breaks these terms — with or without a refund, as the administrator judges; a place paid by the month then stops being charged. Send only what you have the right to show.',
     ] },
     { icon: '🧾', title: 'Accounts', text: [

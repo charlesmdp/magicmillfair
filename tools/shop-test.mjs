@@ -357,6 +357,68 @@ try {
       && !!acme && acme.logo && /Shooting|Bullseye/.test(acme.meta) && !thanks.markup && thanks.rows.every((r) => r.high >= 58)
       && !shut.on && !shut.thanks && shut.close === 'Stay here', JSON.stringify({ thanks, shut }));
   }
+  // ---- a beach hut: the panel on its roof, by the month or for good — half what a gondola costs. It is offered on
+  // the sand by the hut itself; taken, its panel grows wider than the roof, a face to the sea and one to the
+  // boardwalk; the Trading Post lists the twenty-six and photographs the one that is held; the wall of thanks has it
+  {
+    await page.evaluate(() => window.__mmf.setMode?.('walk', true));
+    const count = await page.evaluate(() => window.__mmf.world.pier.huts);
+    // (on the sand between the boardwalk and hut 5, facing it)
+    await page.evaluate(() => { const m = window.__mmf, s = m.world.pier.hutSpots[4]; m.player.teleport(s.x - Math.sin(s.yaw) * 2.1, s.z - Math.cos(s.yaw) * 2.1, s.yaw); });
+    await frames(8);
+    const offered = await prompts();
+    const bare = await page.evaluate(() => window.__mmf.world.pier.hutShown(5));
+    await pay('hut:5', device, 'sub_test_hut_5');
+    const filled = await (await fetch(`${BASE}/api/sponsor`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ slot: 'hut:5', device, title: 'Sandy Toes Surf School', subtitle: 'lessons at low tide', url: 'https://surf.example' }) })).json();
+    await page.evaluate(() => window.__mmf.refreshShop());
+    await page.waitForFunction(() => window.__mmf.world.pier.hutShown(5), null, { timeout: 30000 });
+    await frames(8);
+    const held = await prompts();
+    const board = await page.evaluate(() => {
+      const pier = window.__mmf.world.pier, mesh = pier.group.getObjectByName('beach-hut-banners'), pos = mesh.geometry.attributes.position, uv = mesh.geometry.attributes.uv;
+      // (a panel of a hut, in the world: which way it faces — +1 towards the sea —, which way its words run for who
+      // looks at it — +1 from left to right —, how wide it is, how high its foot is over the floor of the hut)
+      const quad = (n, side) => {
+        const s = pier.hutSpots[n - 1], o = ((n - 1) * 2 + side) * 4, P = (k) => [pos.getX(o + k), pos.getY(o + k), pos.getZ(o + k)], a = P(0), b = P(1), d = P(3);
+        const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], e2 = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
+        const N = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+        return { faces: Math.sign(N[0] * Math.sin(s.yaw) + N[2] * Math.cos(s.yaw)), runs: Math.sign((e1[0] * N[2] - e1[2] * N[0]) * (uv.getX(o + 1) - uv.getX(o))), wide: +Math.hypot(...e1).toFixed(2), low: +(Math.min(a[1], b[1]) - s.y).toFixed(2) };
+      };
+      return { sea: quad(5, 0), shore: quad(5, 1), free: quad(6, 0), shown: [5, 6].map((n) => pier.hutShown(n)).join() };
+    });
+    await page.evaluate(() => window.__mmf.openTrading());
+    await page.waitForSelector('.tp-hut[data-id="hut:5"] canvas', { timeout: 120000 });
+    const post5 = await page.evaluate(() => {
+      const c = document.querySelector('.tp-hut[data-id="hut:5"]'), k = c.querySelector('canvas'), px = k.getContext('2d').getImageData(0, 0, k.width, k.height).data;
+      let lit = 0;
+      for (let i = 0; i < px.length; i += 400) if (px[i] + px[i + 1] + px[i + 2] > 60) lit++;
+      c.scrollIntoView({ block: 'center' });
+      return { name: c.querySelector('h3').textContent, who: c.querySelector('.tp-who').textContent, price: c.querySelector('.tp-price')?.textContent || '', title: document.querySelector('.tp-also-b').textContent, huts: document.querySelectorAll('.tp-hut').length, extra: [...document.querySelectorAll('.tp-extra')].map((x) => x.textContent).find((t) => /beach huts/.test(t)) || '', lit };
+    });
+    await frames(3);
+    await page.screenshot({ path: path.join(ROOT, 'tools/preview/shop-trading-huts.png') });
+    await page.evaluate(() => [...document.querySelectorAll('.tp-extra button')].find((b) => b.textContent === 'Choose a beach hut').click());
+    await page.waitForFunction(() => document.querySelectorAll('.chooser.on .list button').length === 26, null, { timeout: 20000 });
+    const list = await page.evaluate(() => [4, 5].map((k) => document.querySelectorAll('.chooser .list button')[k].textContent));
+    await page.evaluate(() => document.querySelectorAll('.chooser .list button')[8].click());
+    await page.waitForFunction(() => document.querySelector('.chooser.on h2')?.textContent === 'Beach hut 9', null, { timeout: 20000 });
+    const ways = await page.evaluate(() => ({ lead: document.querySelector('.chooser .lead').textContent, list: [...document.querySelectorAll('.chooser .list button')].map((b) => b.textContent) }));
+    await page.keyboard.press('Escape');
+    await frames(3);
+    const row = await page.evaluate(async () => {
+      const wall = window.__mmf.world.games.thanks, mine = () => wall.shown?.rows.find((r) => r.name === 'Sandy Toes Surf School');
+      for (let i = 0; i < 100 && !mine(); i++) await new Promise((r) => setTimeout(r, 100));
+      return mine() || null;
+    });
+    check('a beach hut is offered on the sand by the hut itself, by the month or for good, for half what a gondola costs; taken, its panel grows wider than the roof — a face to the sea and one to the boardwalk, each read from left to right, over the ridge —, a free hut keeping its small invitation; the Trading Post lists the twenty-six with their price and photographs the one that is held; the wall of thanks has it at "$14.50 a month"',
+      count === 26 && offered.join(' | ') === 'Sponsor beach hut 5 · $14.50 a month | Buy beach hut 5 for good · $99.50, once' && bare === false && filled.ok === true && held.includes('Set up your panel')
+      && board.shown === 'true,false' && board.sea.faces === 1 && board.shore.faces === -1 && board.sea.runs === 1 && board.shore.runs === 1 && board.sea.wide > 2 && board.free.wide < 1.7 && board.sea.low >= 2.75
+      && post5.name === 'Beach hut 5' && /Sandy Toes Surf School/.test(post5.who) && post5.price === '$14.50 a month, or $99.50 for good' && /1 of 26 beach huts sponsored/.test(post5.title) && post5.huts === 1 && post5.lit > 200
+      && /25 free · \$14\.50 a month, or \$99\.50 for good/.test(post5.extra)
+      && /Yours: set it up/.test(list[0]) && /Free · \$14\.50 a month, or \$99\.50 for good/.test(list[1]) && ways.list.join(' | ') === 'By the month · $14.50Stop whenever you like | For good · $99.50Paid once — yours to keep' && /pay once/.test(ways.lead)
+      && row?.figure === '$14.50' && row.unit === 'a month',
+      JSON.stringify({ count, offered, bare, filled, held, board, post5, list, ways, row }));
+  }
   const atPlate = (n) => page.evaluate((n) => { const m = window.__mmf, q = m.world.places.plaques, w = q.where(n), yaw = Math.atan2(w.x - w.sx, w.z - w.sz); m.player.teleport(w.sx, w.sz, yaw); m.player.pos.y = q.y; m.rig.snap(m.player.pos, yaw + Math.PI); m.rig.yaw = yaw + Math.PI; m.rig.pitch = -0.04; m.rig.distance = 2.4; return { count: q.count, column: q.columnAt(w.sx, w.sz), row: w.row }; }, n);
   const plates = await atPlate(3);
   await frames(10);

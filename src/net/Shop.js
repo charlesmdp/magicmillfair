@@ -26,7 +26,7 @@ export const price = (cents) => { const d = Math.floor(cents / 100), c = cents %
 export class Shop {
   constructor() {
     this.mode = null; // 'test' | 'live' when things are sold
-    this.prices = { tarp: 9900, gondola: 2900, plaque: 2000, village: [], items: {}, auction: { start: 100, max: 1_000_000 } };
+    this.prices = { tarp: 9900, gondola: 2900, hut: 1450, plaque: 2000, village: [], items: {}, auction: { start: 100, max: 1_000_000 } };
     this.notes = []; // what happened while the visitor was away (outbid, refunded): said once
     this.owned = new Set();
     /** slot → { state: 'live' | 'taken', mine, title, subtitle, url, logo (an address), draft, pays: { amount, monthly, total } (cents: what its sponsor pays) } */
@@ -72,8 +72,8 @@ export class Shop {
   /** What an item costs, in cents (a village: give its tier). */
   cost(item, tier = 0) { const type = item.split(':')[0]; return type === 'village' ? this.prices.village[tier] || 0 : this.prices.items?.[item] ?? this.prices[type] ?? 0; }
 
-  /** What the same thing costs bought for good, paid once, in cents — a gondola of the big wheel —; 0: it is only held by the month. */
-  lifeCost(item) { return item.split(':')[0] === 'gondola' ? this.prices.gondolaLife || 0 : 0; }
+  /** What the same thing costs bought for good, paid once, in cents — a gondola of the big wheel, a beach hut —; 0: it is only held by the month. */
+  lifeCost(item) { const type = item.split(':')[0]; return type === 'gondola' ? this.prices.gondolaLife || 0 : type === 'hut' ? this.prices.hutLife || 0 : 0; }
 
   /** The least that can be bid for an auctioned place, in cents: what beats its sponsor, or the first bid. */
   least(slot) { return this.slots[slot]?.next || this.prices.auction?.start || 100; }

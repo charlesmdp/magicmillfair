@@ -21,7 +21,8 @@ import { addScore, topsOf, periodKeys, runFits, cleanScore } from '../server/sco
 import { signWebhook, stripeConfig } from '../server/stripe.js';
 import { cleanLogo, cleanText, cleanUrl, paysOf } from '../server/shop.js';
 import { restMailer, sponsorMail } from '../server/mail.js';
-import { rankSponsors } from '../src/app/thanks.js';
+import { rankSponsors, placeWords } from '../src/app/thanks.js';
+import { describe as describeItem, forLife, publicPrices, PRICES } from '../server/catalog.js';
 import { visit, localDay } from '../server/routes.js';
 import { cleanTalk, oneSentence, PERSONAS, REPLY_MAX, REPLY_WORDS } from '../server/npc.js';
 import { wardrobeFrom, fitLook, fitKit, fitColor, mayLight, HAT_IDS, FIREWORK } from '../server/wardrobe.js';
@@ -1483,6 +1484,36 @@ async function testShop({ port }) {
       [page?.status, form && Object.fromEntries(form), noLife?.status, noPass?.status, mine, shown?.pays, taken?.status, rented?.status, wall?.figure, prices.gondolaLife]);
     await request(port, '/api/sponsors?slot=gondola:15', { method: 'DELETE', headers: admin });
   }
+  // ---- a beach hut: the panel on its roof, by the month or for good — half what a gondola costs (catalog.js)
+  {
+    const fay = randomId(16), gus = randomId(16), same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+    stripe.asked.length = 0;
+    const month = CF ? null : await post('/api/checkout', { item: 'hut:4', device: fay }, { 'x-forwarded-for': '10.7.14.1' }), monthForm = stripe.asked[0]?.form;
+    stripe.asked.length = 0;
+    const once = CF ? null : await post('/api/checkout', { item: 'hut:12', device: gus, life: true }, { 'x-forwarded-for': '10.7.14.2' }), lifeForm = stripe.asked[0]?.form;
+    const nowhere = CF ? null : await post('/api/checkout', { item: 'hut:27', device: fay }, { 'x-forwarded-for': '10.7.14.3' });
+    await hook({ type: 'checkout.session.completed', data: { object: { id: 'cs_hut_4', payment_status: 'paid', subscription: 'sub_hut_4', customer: 'cus_hut_4', amount_total: 1450, metadata: { item: 'hut:4', device: fay } } } });
+    await hook({ type: 'checkout.session.completed', data: { object: { id: 'cs_hut_12', payment_status: 'paid', subscription: null, customer: 'cus_hut_12', amount_total: 9950, metadata: { item: 'hut:12', device: gus, life: '1' } } } });
+    const held = json(await request(port, `/api/shop?device=${fay}`)).slots['hut:4'], mine = json(await request(port, `/api/shop?device=${gus}`)).slots['hut:12'];
+    // (nobody else can take the one bought for good)
+    const taken = CF ? null : await post('/api/checkout', { item: 'hut:12', device: randomId(16), life: true }, { 'x-forwarded-for': '10.7.14.4' });
+    const set4 = await post('/api/sponsors', { slot: 'hut:4', set: { title: 'Sandy Toes Surf School', subtitle: 'lessons at low tide' } }, admin);
+    const set12 = await post('/api/sponsors', { slot: 'hut:12', set: { title: 'Forever Sandals' } }, admin);
+    const all = json(await request(port, '/api/shop')), wall = rankSponsors(all.slots, {}), sand = wall.find((r) => r.name === 'Sandy Toes Surf School'), sandals = wall.find((r) => r.name === 'Forever Sandals');
+    // (the one held by the month ends with its subscription; the one bought for good stays)
+    await hook({ type: 'customer.subscription.deleted', data: { object: { id: 'sub_hut_4' } } });
+    const after = json(await request(port, '/api/shop')).slots;
+    check('shop: a beach hut is sponsored like a gondola, for half its price — $14.50 a month on a subscription, or $99.50 once and for good —, from 1 to 26; the one bought for good is nobody else\'s, the one held by the month ends with its subscription; the wall of thanks says which hut and how each pays',
+      (CF || (month.status === 200 && monthForm?.get('mode') === 'subscription' && monthForm.get('line_items[0][price_data][unit_amount]') === '1450' && monthForm.get('line_items[0][price_data][recurring][interval]') === 'month' && monthForm.get('metadata[item]') === 'hut:4'
+        && once.status === 200 && lifeForm?.get('mode') === 'payment' && lifeForm.get('line_items[0][price_data][unit_amount]') === '9950' && lifeForm.get('line_items[0][price_data][recurring][interval]') === null && lifeForm.get('metadata[item]') === 'hut:12' && lifeForm.get('metadata[life]') === '1' && /beach hut 12 by the pier, for good$/.test(lifeForm.get('line_items[0][price_data][product_data][name]'))
+        && nowhere.status === 400 && taken.status === 409))
+      && held?.mine === true && !held.life && mine?.mine === true && mine.life === true && !mine.manage && set4.status === 200 && set12.status === 200
+      && same(all.slots['hut:4']?.pays, { amount: 1450, monthly: true, total: 1450 }) && same(all.slots['hut:12']?.pays, { amount: 9950, monthly: false, total: 9950 }) && all.prices.hut === 1450 && all.prices.hutLife === 9950
+      && sand?.figure === '$14.50' && sand.unit === 'a month' && sand.places.join() === 'Beach hut 4' && sandals?.figure === '$99.50' && sandals.unit === '' && sandals.places.join() === 'Beach hut 12'
+      && !after['hut:4'] && after['hut:12']?.state === 'live',
+      [month?.status, monthForm && Object.fromEntries(monthForm), once?.status, lifeForm && Object.fromEntries(lifeForm), nowhere?.status, taken?.status, held, mine, all.slots['hut:4']?.pays, all.slots['hut:12']?.pays, sand, sandals, after['hut:4'], after['hut:12']?.state]);
+    await request(port, '/api/sponsors?slot=hut:12', { method: 'DELETE', headers: admin });
+  }
 }
 // Accounts: nobody needs one; whoever signs in keeps what they bought, their days in a row and their look,
 // from one browser to the next.
@@ -1789,6 +1820,18 @@ function testShopLogic() {
       && same(paysOf('board:sky', { bid: 500, pay: 'pi_x' }, t0), { amount: 500, monthly: false, total: 500 }) && paysOf('board:sky', { by: 'admin' }, t0) === null
       && paysOf('tarp:shoot', { paid: 5000 }, t0)?.total === 5000 && paysOf('plaque:3', { paid: 2000, sub: 'sub_y' }, t0) === null && paysOf('nothing:1', { paid: 1 }, t0) === null,
       [paysOf('gondola:3', { sub: 'sub_x', at: t0 }, t0 + 65 * day), paysOf('board:sky', { bid: 500, pay: 'pi_x' }, t0), paysOf('tarp:shoot', { paid: 5000 }, t0)]);
+  }
+  {
+    // (a beach hut: a place of its own, by the month or for good, for half what a gondola costs — server/catalog.js)
+    const day = 86_400_000, t0 = 1_700_000_000_000, same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+    const h7 = describeItem('hut:7'), life = forLife(h7), p = publicPrices(), month = paysOf('hut:7', { sub: 'sub_h', at: t0 }, t0 + 40 * day);
+    check('shop logic: a beach hut is a place of its own — twenty-six of them, $14.50 a month or $99.50 once, half what a gondola costs —; its name says which; what it puts in counts on the wall of thanks, where it is "Beach hut 7"',
+      h7?.kind === 'slot' && h7.amount === 1450 && h7.monthly === true && h7.name === 'Atomic Oasis — beach hut 7 by the pier' && describeItem('hut:26')?.amount === 1450
+      && ['hut:0', 'hut:27', 'hut:07', 'hut:x', 'hut', 'hut:1:2', 'hut:-1'].every((id) => describeItem(id) === null)
+      && life?.amount === 9950 && life.monthly === false && life.life === true && life.name === 'Atomic Oasis — beach hut 7 by the pier, for good'
+      && PRICES.hut * 2 === PRICES.gondola && PRICES.hutLife * 2 === PRICES.gondolaLife && p.hut === 1450 && p.hutLife === 9950 && !('room' in p) && !('board' in p)
+      && same(month, { amount: 1450, monthly: true, total: 2900 }) && same(paysOf('hut:7', { paid: 9950 }, t0), { amount: 9950, monthly: false, total: 9950 }) && placeWords('hut:7') === 'Beach hut 7',
+      [h7, life, p.hut, p.hutLife, month]);
   }
   check('shop logic: text is one short line without markup; links are https and carry no name or password',
     cleanText('  <b>Hello</b>\n\tworld\u0000 ', 20) === 'b Hello /b world' && cleanText('x'.repeat(99), 28).length === 28 && cleanUrl('https://example.com/a?b=1') === 'https://example.com/a?b=1' && ['http://example.com', 'javascript:alert(1)', 'data:text/html,x', 'https://user:pw@example.com', 'https://localhost', 'ftp://example.com', ''].every((u) => cleanUrl(u) === ''), [cleanText('  <b>Hello</b>\n\tworld\u0000 ', 20)]);

@@ -59,3 +59,9 @@ export const sponsorId = (s) => (s.id || s.name).toLowerCase().replace(/[^a-z0-9
 // The plaques of the companions, round the plinth of the golden dog (zones/places/Plaques.js): how many there
 // are — two rows of thirty-six. (Here because the server counts them too: see server/catalog.js.)
 export const PLAQUE_COUNT = 72;
+
+// The beach huts on the sand, either side of the pier (zones/pier/PierZone.js: _beach): how many there are,
+// numbered from the north to the south. Each carries a panel on its roof that a sponsor can hold. (Here because
+// the server sells them: see server/catalog.js. The huts are placed from the promenade of world.json: if it is
+// ever laid out again, the pier says so when the count differs.)
+export const HUT_COUNT = 26;

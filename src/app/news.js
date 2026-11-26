@@ -6,6 +6,7 @@ export const NEWS = [
   {
     date: '26 November 2026',
     items: [
+      ['Beach huts for sponsors', 'Each of the twenty-six beach huts by the pier now has a panel on its roof for a sponsor: $14.50 a month, or $99.50 once, for good. Step onto the sand by a hut, or open the Trading Post.'],
       ['Three games, new names', 'Uphill Battle is now Jump the Logs, Between a Rock is Bouncy Rock, and The Little Regatta is Harbor Heaven. The same games, the same boards of scores.'],
     ],
   },

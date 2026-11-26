@@ -245,6 +245,7 @@
     const [type, rest] = id.split(':');
     if (type === 'board') { const [game, n] = rest.split('-'); return `The panel of ${me.boards.find((b) => b.id === game)?.name || game}${n ? ` (place ${n})` : ''}`; }
     if (type === 'gondola') return `Gondola ${rest} of the big wheel`;
+    if (type === 'hut') return `Beach hut ${rest} (by the pier)`;
     if (type === 'tarp') return 'The backdrop of Bullseye Alley';
     if (type === 'village') return `The sky village "${rest}"`;
     if (type === 'plaque') return `Plaque no. ${rest}`;

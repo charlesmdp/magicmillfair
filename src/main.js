@@ -958,6 +958,7 @@ async function boot() {
   for (const sl of world.sponsorSlots || []) addPlace(sl);
   { let since = 0; world.zones.push({ update: (dt) => { since += dt; if (since < 6) return; since = 0; for (const r of rotors) { r.k++; r.show(); } } }); }
   for (let n = 1; n <= (world.pier.gondolas || 0); n++) places.set(`gondola:${n}`, { what: `gondola ${n} of the big wheel`, set: (sp) => world.pier.setGondola(n, sp) });
+  for (let n = 1; n <= (world.pier.huts || 0); n++) places.set(`hut:${n}`, { what: `beach hut ${n}`, set: (sp) => world.pier.setHut(n, sp) });
   for (const v of sky.villages) places.set(`village:${v.id}`, { what: `the sky village ${v.name}`, village: v, set: (sp) => { if (sp) sky.setSponsor(v.index, { name: sp.title, motto: sp.subtitle, url: sp.url }); } });
   const plaques = world.places.plaques; // (the plaques of the companions, round the plinth of the golden dog: places paid once)
   for (let n = 1; n <= (plaques?.count || 0); n++) places.set(`plaque:${n}`, { what: 'a plaque round the golden dog', plaque: n, set: (sp) => plaques.set(n, sp) });
@@ -1247,6 +1248,31 @@ async function boot() {
       });
   };
   world.actionSources.push((p) => (world.pier.sponsorBooth && near(p, world.pier.sponsorBooth, 2.6) ? { label: 'The gondolas and their sponsors', run: chooseGondola } : null));
+  // the beach huts: a panel on each roof, by the month or for good — chosen on the sand by the hut itself, or
+  // from the list of the Trading Post (not among world.sponsorSlots: they stand close together, and the nearest
+  // is the one meant)
+  const hutIds = () => Array.from({ length: world.pier.huts || 0 }, (_, k) => `hut:${k + 1}`);
+  /** What a beach hut costs, in words: by the month — or for good. */
+  const hutTerms = () => `${price(shop.prices.hut)} a month${shop.prices.hutLife ? `, or ${price(shop.prices.hutLife)} for good` : ''}`;
+  const hutActions = (p) => { const n = world.pier.hutAt?.(p.pos.x, p.pos.z, p.pos.y) || 0; return n ? placeActions(`hut:${n}`) : []; };
+  world.actionSources.push((p) => hutActions(p)[0] || null);
+  world.actionSources.push((p) => hutActions(p)[1] || null);
+  const chooseHut = () => {
+    const ids = hutIds();
+    const say = (id) => { const v = shop.slots[id], d = who.admin && pending[id]?.draft; return d ? `Awaiting approval: ${d.title}` : v?.mine ? (v.life ? 'Yours for good: set it up' : 'Yours: set it up') : v?.state === 'live' ? v.title : v ? 'Taken' : shop.open ? `Free · ${hutTerms()}` : 'Free'; };
+    hud.choose('The beach huts', `${ids.length} beach huts on the sand, either side of the pier, numbered from the north: a panel on each roof, in sight of the whole boardwalk.`, ids.map((id, k) => ({ label: `Beach hut ${k + 1}`, note: say(id), color: shop.slots[id]?.state === 'live' ? [0.9, 0.7, 0.2] : [0.5, 0.55, 0.6] })))
+      .then((i) => {
+        if (i === null) return;
+        const acts = placeActions(ids[i]);
+        if (!acts.length) { hud.note(shop.open ? 'That one is taken.' : 'The shop is not open yet. Come back soon!', 4000); return; }
+        if (acts.length === 1) { acts[0].run(); return; }
+        hud.choose(`Beach hut ${i + 1}`, shop.slots[ids[i]] ? 'What would you like to do with it?' : 'It is free. By the month, you stop whenever you like; for good, you pay once and your panel stays on its roof for as long as the fair stands.',
+          acts.map((a) => (/for good/.test(a.label) ? { label: `For good · ${price(shop.prices.hutLife)}`, note: 'Paid once — yours to keep', color: [0.9, 0.7, 0.2] }
+            : /a month$/.test(a.label) ? { label: `By the month · ${price(shop.prices.hut)}`, note: 'Stop whenever you like' }
+              : /administrator/.test(a.label) ? { label: 'Fill it in (administrator)', note: 'By hand, for nothing' } : { label: a.label, note: '' })))
+          .then((k) => { if (k !== null && acts[k]) acts[k].run(); });
+      });
+  };
   {
     // twenty-five things left over from the world before (zones/games/Relics.js): looked at, each has a word to say —
     // and which ones were looked at is remembered, to say when all of them were
@@ -1347,9 +1373,19 @@ async function boot() {
       return { id, name: `Gondola ${n}`, state, sponsor, price: shop.open ? gondolaTerms() : '', acts: placeActions(id).sort((a, b) => first(a) - first(b)), photo, stamp: `${state}|${sponsor?.title || ''}|${sponsor?.logo || ''}|${v?.bg || ''}|${Math.floor(Date.now() / 30_000)}` };
     });
     if (gondolas.length) extras.push({ title: 'The big wheel', text: `${gondolas.length} gondolas, a banner on each, in sight of the whole bay · ${freeG} free${shop.open ? ` · ${gondolaTerms()}` : ''}`, act: { label: 'Choose a gondola', run: chooseGondola } });
+    // the beach huts somebody holds, each by its number and photographed from the boardwalk
+    const hutList = hutIds(), freeH = hutList.filter((id) => !shop.slots[id]).length;
+    const huts = hutList.filter((id) => shop.slots[id] || (who.admin && pending[id]?.draft)).map((id) => {
+      const n = +id.split(':')[1], v = shop.slots[id], d = who.admin && pending[id]?.draft;
+      const state = d ? 'pending' : v?.mine ? 'mine' : v?.state === 'live' ? 'live' : 'taken';
+      const sponsor = d ? { title: d.title, subtitle: d.subtitle } : v?.state === 'live' ? { title: v.title, subtitle: v.subtitle, logo: v.logo, url: v.url, site: siteWords(v.url), clicks: v.clicks || 0 } : null;
+      const photo = () => { const g = world.pier.hutView(n); return g ? photographer.shoot(g.from, g.at, 480, 300, 46) : null; };
+      return { id, name: `Beach hut ${n}`, state, sponsor, price: shop.open ? hutTerms() : '', acts: placeActions(id).sort((a, b) => first(a) - first(b)), photo, stamp: `${state}|${sponsor?.title || ''}|${sponsor?.logo || ''}|${v?.bg || ''}` };
+    });
+    if (hutList.length) extras.push({ title: 'The beach huts', text: `${hutList.length} huts on the sand either side of the pier, a panel on each roof · ${freeH} free${shop.open ? ` · ${hutTerms()}` : ''}`, act: { label: 'Choose a beach hut', run: chooseHut } });
     if (places.has('tarp:shoot')) { const v = shop.slots['tarp:shoot'], act = placeActions('tarp:shoot')[0]; extras.push({ title: 'The backdrop of Bullseye Alley', text: v?.state === 'live' ? `Held by ${v.title}.` : `The whole wall behind the targets${shop.open && !v ? ` · ${price(shop.prices.tarp)} a month` : v ? ' · taken' : ''}`, act: act ? { label: act.label.length > 34 ? 'Take the backdrop' : act.label, run: act.run } : null }); }
     if (plaques?.count) { const taken = Array.from({ length: plaques.count }, (_, k) => `plaque:${k + 1}`).filter((id) => shop.slots[id]).length; extras.push({ title: 'A plaque for a companion', text: `${plaques.count} brass plates round the golden dog, ${taken} of them taken${shop.open ? ` · ${price(shop.prices.plaque)}, once` : ''}. They are chosen on the spot: swim north along the cliffs to the Golden Cove, then climb.`, act: null }); }
-    sponsorsView.open({ cards, wheel: { cards: cars, of: gondolas.length }, extras, note: shop.open ? '' : 'The shop is not open yet: sponsoring starts soon. Meanwhile, here is every game and who sponsors it.' });
+    sponsorsView.open({ cards, wheel: { cards: cars, of: gondolas.length }, beach: { cards: huts, of: hutList.length }, extras, note: shop.open ? '' : 'The shop is not open yet: sponsoring starts soon. Meanwhile, here is every game and who sponsors it.' });
     audio.play('pick');
   };
   sponsorsView.on('close', () => { document.getElementById('view')?.focus({ preventScroll: true }); });

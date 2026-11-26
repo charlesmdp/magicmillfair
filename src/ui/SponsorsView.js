@@ -2,11 +2,12 @@
 // now (taken by the game itself, see Photographer below), who sponsors it if somebody does, what it takes to
 // have its panel — and, underneath, the other things a sponsor can have.
 //
-//   view.open({ cards, wheel, extras, note })
+//   view.open({ cards, wheel, beach, extras, note })
 //     cards:  [{ id, name, state: 'free' | 'live' | 'mine' | 'pending' | 'taken', sponsor: { title, subtitle, logo, url, site, clicks } | null,
 //                price (words), acts: [{ label, run }], photo: () → canvas | null, stamp (when it changes, the photograph is retaken) }]
 //     wheel:  the gondolas of the big wheel that somebody holds, as cards of the same kind ("Gondola 7": which
 //             one it is, a photograph of it as it goes round, whose it is) — { cards, of (how many gondolas there are) }
+//     beach:  the beach huts that somebody holds, the same way ("Beach hut 5") — { cards, of (how many huts there are) }
 //     extras: [{ title, text, act: { label, run } | null }]
 //     note:   a line under the title (the shop is closed, test mode…)
 //
@@ -79,6 +80,8 @@ export class SponsorsView {
           <div class="tp-grid"></div>
           <h3 class="tp-also tp-also-w">On the big wheel</h3>
           <div class="tp-grid tp-wheel"></div>
+          <h3 class="tp-also tp-also-b">On the beach</h3>
+          <div class="tp-grid tp-beach"></div>
           <h3 class="tp-also tp-also-x">Also for sponsors</h3>
           <div class="tp-extras"></div>
         </div>
@@ -87,6 +90,7 @@ export class SponsorsView {
     this.sheet = this.el.querySelector('.tp-sheet');
     this.grid = this.el.querySelector('.tp-grid');
     this.wheel = this.el.querySelector('.tp-wheel');
+    this.beach = this.el.querySelector('.tp-beach');
     this.extras = this.el.querySelector('.tp-extras');
     this.el.querySelector('.tp-x').onclick = () => this.close();
     this.el.addEventListener('pointerdown', (e) => { if (e.target === this.el) this.close(); });
@@ -98,7 +102,7 @@ export class SponsorsView {
   on(name, fn) { this.handlers[name] = fn; return this; }
   get isOpen() { return this.el.classList.contains('on'); }
 
-  open({ cards = [], wheel = null, extras = [], note = '' } = {}) {
+  open({ cards = [], wheel = null, beach = null, extras = [], note = '' } = {}) {
     this.el.classList.add('on');
     this.run = (this.run || 0) + 1;
     const held = cards.filter((c) => c.state === 'live' || c.state === 'mine' || c.state === 'taken').length;
@@ -108,14 +112,19 @@ export class SponsorsView {
     count.append(el('b', '', `${held}`), el('span', '', ` of ${cards.length} games sponsored`));
     this.grid.textContent = '';
     this.wheel.textContent = '';
-    const frames = [], cars = wheel?.cards || [];
+    this.beach.textContent = '';
+    const frames = [], cars = wheel?.cards || [], huts = beach?.cards || [];
     // (the gondolas somebody holds, each by its number: a sponsor finds theirs here)
     const title = this.el.querySelector('.tp-also-w');
     title.hidden = this.wheel.hidden = !cars.length;
     title.textContent = `On the big wheel · ${cars.length} of ${wheel?.of || cars.length} gondolas sponsored`;
-    for (const c of [...cards, ...cars]) {
-      const car = cars.includes(c);
-      const card = el('article', `tp-card${car ? ' tp-car' : ''} is-${c.state}`);
+    // (the beach huts somebody holds, the same way)
+    const sand = this.el.querySelector('.tp-also-b');
+    sand.hidden = this.beach.hidden = !huts.length;
+    sand.textContent = `On the beach · ${huts.length} of ${beach?.of || huts.length} beach huts sponsored`;
+    for (const c of [...cards, ...cars, ...huts]) {
+      const car = cars.includes(c), hut = huts.includes(c);
+      const card = el('article', `tp-card${car ? ' tp-car' : ''}${hut ? ' tp-hut' : ''} is-${c.state}`);
       card.dataset.id = c.id;
       const pic = el('div', 'tp-pic');
       pic.append(el('span', 'tp-tag', TAGS[c.state] || ''));
@@ -127,7 +136,7 @@ export class SponsorsView {
       if (c.sponsor && c.sponsor.title) {
         if (c.sponsor.logo) { const img = el('img', 'tp-logo'); img.alt = ''; img.loading = 'lazy'; img.decoding = 'async'; img.referrerPolicy = 'no-referrer'; img.src = c.sponsor.logo; img.onerror = () => img.remove(); who.append(img); }
         const words = el('div', 'tp-words');
-        words.append(el('small', '', c.state === 'pending' ? 'Awaiting your approval' : c.state === 'mine' ? (car ? 'Your gondola' : 'Your panel') : 'Sponsored by'), el('b', '', c.sponsor.title));
+        words.append(el('small', '', c.state === 'pending' ? 'Awaiting your approval' : c.state === 'mine' ? (car ? 'Your gondola' : hut ? 'Your beach hut' : 'Your panel') : 'Sponsored by'), el('b', '', c.sponsor.title));
         if (c.sponsor.subtitle) words.append(el('i', '', c.sponsor.subtitle));
         // (its site, and how many times it was opened from the game)
         if (c.sponsor.site) words.append(el('span', 'tp-site', `${c.sponsor.site} · ${c.sponsor.clicks || 0} click${c.sponsor.clicks === 1 ? '' : 's'}`));
@@ -147,7 +156,7 @@ export class SponsorsView {
       });
       body.append(acts);
       card.append(pic, body);
-      (car ? this.wheel : this.grid).append(card);
+      (car ? this.wheel : hut ? this.beach : this.grid).append(card);
     }
     this.extras.textContent = '';
     this.el.querySelector('.tp-also-x').hidden = !extras.length;
