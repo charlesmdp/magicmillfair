@@ -104,10 +104,21 @@
 
     <section class="card" data-tab="chat">
       <h2>Chat</h2>
-      <p class="hint">What was said in the rooms, the newest first: the lines for everybody, those said to who stood nearby, the "important" ones — and the lines of those kept out in silence, which nobody else read. <span id="chat-keeps"></span> What is said to Billy is not chat and is not here.</p>
+      <p class="hint">What was said in the rooms, the newest first: the lines for everybody, those said to who stood nearby, the "important" ones — and the lines of those kept out in silence, which nobody else read. <span id="chat-keeps"></span> What is said to Billy is not chat and is not here. On a line: <b>Kick</b> puts its author out at once (they can come back); <b>To the common rooms</b> sends them out of a room of its own; <b>Ban…</b> keeps them out — by their browser and the account it is signed in to. Their address and their browser are never shown here.</p>
       <div class="row wrap"><input type="search" id="chat-find" placeholder="Find a name, a word, a room…" aria-label="Find in the lines below" /><label class="tick"><input type="checkbox" id="chat-live" checked> Follow as it comes</label><button type="button" class="ghost small" id="chat-forget" hidden>Forget everything kept</button></div>
       <div id="chatlog" class="chatlog"></div>
       <div class="row"><button type="button" class="ghost" id="chat-more" hidden>Older lines</button></div>
+      <dialog id="line-ban" aria-labelledby="line-ban-title">
+        <form id="line-ban-form" class="stack">
+          <h3 id="line-ban-title">Keep <span id="line-ban-who"></span> out</h3>
+          <p class="hint" id="line-ban-said"></p>
+          <label>For <select id="line-ban-hours"><option value="1">1 hour</option><option value="24">1 day</option><option value="168">1 week</option><option value="0">For good</option></select></label>
+          <label class="tick"><input type="checkbox" id="line-ban-quiet"> In silence: they stay, and nobody hears them any more</label>
+          <label class="tick"><input type="checkbox" id="line-ban-ip"> Their address too</label>
+          <p class="hint">By their browser — and the account it is signed in to, if any. An address is shared by a school, a café, a phone network: everybody behind it would be kept out too.</p>
+          <div class="row"><button type="submit" class="warn">Keep out</button><button type="button" class="ghost" id="line-ban-cancel">Cancel</button></div>
+        </form>
+      </dialog>
     </section>
 
     <section class="card" data-tab="sponsors">

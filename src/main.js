@@ -242,7 +242,7 @@ async function boot() {
       store.set('mmf.room', JSON.stringify({ room: e.room, asked: params.get('room') || '' }), true);
       // (a name the address did not ask for — a page served under a folder of its own — is not worth a word)
       const lost = e.closed ? (params.has('room') ? `"${e.closed}" is not a room of the fair` : '') : e.full ? `${e.fullLabel || roomLabel(e.full)} is full` : e.asleep ? `"${e.asleepLabel}" is asleep (nobody pays for it any more)`
-        : e.out ? `The owner of "${e.outLabel}" has put you out of it` : e.gone ? `${roomLabel(e.gone)} is no longer open` : '';
+        : e.out ? (e.outBy === 'admin' ? `An administrator has sent you out of "${e.outLabel}"` : `The owner of "${e.outLabel}" has put you out of it`) : e.gone ? `${roomLabel(e.gone)} is no longer open` : '';
       if (lost) hud.note(e.moved ? `${lost}: you are in ${e.label}.` : `${lost}: you stay in ${e.label}.`, 7000);
       // (put out of a room, or its door found shut: said in the chat too, where it stays)
       if (lost && (e.out || e.asleep)) hud.addChat('✦', 5, `${lost}: you are in ${e.label}.`, true);

@@ -116,6 +116,8 @@ export class Room extends DurableObject {
       promote: (who) => this.notebook('/promote', who).then((r) => r?.made || null),
       // the big red button: when it last went off outlives the sleep of the room (and is forgotten once it may go off again)
       fired: (at) => { ctx.waitUntil(Promise.all([ctx.storage.put('blastAt', at), ctx.storage.setAlarm(Date.now() + BLAST_EVERY + 5000)]).catch(() => {})); },
+      // who was put out of the room and may not come back in for a while: that too outlives its sleep
+      outed: (list) => { ctx.waitUntil(ctx.storage.put('outs', list).catch(() => {})); },
       // the list of who is kept out is the notebook's (every room asks it)
       ban: (who) => ctx.waitUntil(env.ROOMS.get(env.ROOMS.idFromName(NOTEBOOK)).fetch(new Request('https://notebook/ban', { method: 'POST', body: JSON.stringify(who) })).catch(() => {})),
     });
@@ -132,6 +134,7 @@ export class Room extends DurableObject {
     this.told = { n: -1, old: -1, at: 0 }; // (what the notebook was last told of this room)
     ctx.blockConcurrencyWhile(async () => {
       const at = await ctx.storage.get('blastAt'); if (Number.isFinite(at)) this.relay.blastAt = at;
+      this.relay.keepOuts(await ctx.storage.get('outs'));
       const name = await ctx.storage.get('room'); if (typeof name === 'string') this.name = name;
       const live = await ctx.storage.get('live'); if (typeof live === 'string') this.live = live;
     });
@@ -204,6 +207,12 @@ export class Room extends DurableObject {
       hush: async (who, on) => {
         const dir = await this.directory(false), text = JSON.stringify({ ...who, on: !!on });
         await Promise.all(Object.keys(dir.rooms).map((name) => this.env.ROOMS.get(this.env.ROOMS.idFromName(name)).fetch(new Request('https://room/hush', { method: 'POST', body: text })).catch(() => {})));
+      },
+      // put out from the back office (chatlog.js): every room — or the one named — is told; how many were put out
+      oust: async (who, how) => {
+        const dir = await this.directory(false), names = who.room ? (dir.rooms[who.room] ? [who.room] : []) : Object.keys(dir.rooms), text = JSON.stringify({ ...who, how });
+        const said = await Promise.all(names.map((name) => this.env.ROOMS.get(this.env.ROOMS.idFromName(name)).fetch(new Request('https://room/oust', { method: 'POST', body: text })).then((r) => r.json()).catch(() => null)));
+        return said.reduce((sum, r) => sum + (Number(r?.n) || 0), 0);
       },
       ...(/^(0|false|off|no)$/i.test(String(env.ADDRESS_LIMITS || '')) && { addressLimits: false }),
       directory: () => this.directory(),
@@ -344,7 +353,12 @@ export class Room extends DurableObject {
     if (url.pathname === '/hush') {
       // the notebook says who is kept out in silence from now on, or no longer (not reachable from outside)
       const w = (await request.json().catch(() => null)) || {};
-      return Response.json({ n: this.relay.hush({ ip: typeof w.ip === 'string' ? w.ip : '', dev: typeof w.dev === 'string' ? w.dev : '' }, !!w.on) });
+      return Response.json({ n: this.relay.hush({ ip: typeof w.ip === 'string' ? w.ip : '', dev: typeof w.dev === 'string' ? w.dev : '', devs: Array.isArray(w.devs) ? w.devs.filter((d) => typeof d === 'string').slice(0, 12) : [] }, !!w.on) });
+    }
+    if (url.pathname === '/oust') {
+      // the notebook says who is put out from the back office (not reachable from outside)
+      const w = (await request.json().catch(() => null)) || {}, devs = Array.isArray(w.devs) ? w.devs.filter((d) => typeof d === 'string').slice(0, 12) : [];
+      return Response.json({ n: this.relay.oust({ dev: typeof w.dev === 'string' ? w.dev : '', devs, ...(Number.isInteger(w.id) && { id: w.id, since: Number(w.since) }) }, ['kick', 'ban', 'move'].includes(w.how) ? w.how : 'kick') });
     }
     if (url.pathname === '/push') {
       // the notebook has something to say to everybody here (not reachable from outside)

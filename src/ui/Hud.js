@@ -1015,9 +1015,10 @@ export class Hud {
         const row = el('div', 'who');
         const text = el('span');
         const name = el('b'); name.textContent = b.name || '?';
-        const what = el('small'); what.textContent = `${b.quiet ? 'in silence · ' : ''}${b.kind === 'ip' ? `address ${b.key}` : b.kind === 'acct' ? `account ${b.key}` : `device ${String(b.key).slice(0, 8)}…`} · ${b.until ? `until ${new Date(b.until).toLocaleString()}` : 'for good'}`;
+        // (a ban made from a line of the chat: what it holds is never shown, and it is lifted as one, by its line)
+        const what = el('small'); what.textContent = `${b.quiet ? 'in silence · ' : ''}${b.line ? (b.kind === 'acct' ? `account ${b.key}, from a line of the chat` : `${b.kind === 'ip' ? 'address' : 'device'} from a line of the chat`) : b.kind === 'ip' ? `address ${b.key}` : b.kind === 'acct' ? `account ${b.key}` : `device ${String(b.key).slice(0, 8)}…`} · ${b.until ? `until ${new Date(b.until).toLocaleString()}` : 'for good'}`;
         text.append(name, what);
-        const lift = el('button'); lift.type = 'button'; lift.textContent = 'Lift'; lift.onclick = () => this.emit('unban', { kind: b.kind, key: b.key });
+        const lift = el('button'); lift.type = 'button'; lift.textContent = 'Lift'; lift.onclick = () => this.emit('unban', b.line ? { kind: 'line', key: b.line } : { kind: b.kind, key: b.key });
         const acts = el('span', 'acts'); acts.append(lift);
         row.append(text, acts);
         bansEl.append(row);

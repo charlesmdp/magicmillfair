@@ -69,6 +69,11 @@ button.small { padding: 5px 10px; font-size: 12.5px; }
 .said .what { flex: 1 1 240px; min-width: 0; overflow-wrap: anywhere; }
 .said .tag { margin-left: 0; }
 .said.muted { opacity: 0.72; border-style: dashed; }
+.said .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+dialog { max-width: min(520px, calc(100% - 24px)); padding: 16px 18px; border-radius: 16px; border: 1px solid var(--gold); background: var(--card, #1d1838); color: var(--ink); }
+dialog::backdrop { background: rgba(8, 6, 24, 0.7); }
+dialog .stack { display: grid; gap: 10px; }
+dialog h3 { margin: 0; }
 .chatlog > .empty { margin: 0; }
 /* the boards of scores, all at once: a card each */
 .boards { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 10px; align-items: start; }

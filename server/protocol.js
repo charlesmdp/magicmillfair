@@ -175,13 +175,18 @@ export class Room {
    *   ban({ ip, dev, name, hours, quiet })   optional: keep someone out from now on (0 hours: for good; quiet: in silence)
    *   wardrobe(dev)                    optional: what that browser has ({ m, left }, see wardrobe.js; null: nothing
    *                                    is sold, everything is everybody's), or a promise of it
-   *   said({ name, text, near, important, muted })   optional: a line of chat was said here (for the host's log)
+   *   said({ name, text, near, important, muted, id, since, ip, dev, rank })   optional: a line of chat was said here
+   *                                    (for the host's log — who said it is kept apart, never shown: an administrator
+   *                                    may put its author out from the back office, see Room.oust)
    *   named(dev, name)                 optional: may that browser be seen under that name? false when it is the
    *                                    name of an account it is not signed in to (accounts.js) — or a promise of it
    *   wake()                           optional: something happened that no message brought (somebody came in
    *                                    once their name was looked up, a state waits to be flushed)
    *   fired(at)                        optional: the big red button went off at `at` (relay clock): a host that
    *                                    forgets its rooms keeps it, and gives it back by setting room.blastAt
+   *   outed(list)                      optional: who may not come back in here, and until when ([[browser, until,
+   *                                    by], …], relay clock; by: 'admin' or ''): a host that forgets its rooms keeps
+   *                                    it, and gives it back with room.keepOuts(list)
    */
   constructor(io) {
     this.io = io;
@@ -244,10 +249,54 @@ export class Room {
     return p;
   }
 
-  /** Kept out in silence from now on — or no longer (`on`): whoever is here from that address, or with that browser. Returns how many. */
-  hush({ ip, dev }, on) {
+  /**
+   * Kept out in silence from now on — or no longer (`on`): whoever is here from that address, or with that browser
+   * (or one of `devs`: the one the door let in, or the one the page names). Never the owner. Returns how many.
+   */
+  hush({ ip, dev, devs }, on) {
+    const list = [dev, ...(Array.isArray(devs) ? devs : [])].filter((d) => typeof d === 'string' && d);
     let n = 0;
-    for (const p of this.players.values()) if ((ip && p.ip === ip) || (dev && p.dev === dev)) { p.mute = !!on; this.io.save?.(p); n++; }
+    for (const p of this.players.values()) {
+      if (on && p.rank === 'owner') continue;
+      if ((ip && p.ip === ip) || (p.dev && list.includes(p.dev)) || (p.tdev && list.includes(p.tdev))) { p.mute = !!on; this.io.save?.(p); n++; }
+    }
+    return n;
+  }
+
+  /** Browser `d` may not come back in here for an hour (put out by the owner of the room — or by an administrator: `by`). */
+  _keepOut(d, t, by = '') {
+    this.outs ||= new Map();
+    for (const [k, o] of this.outs) if (o.until <= t) this.outs.delete(k);
+    if (this.outs.size >= 500) this.outs.delete(this.outs.keys().next().value); // (the oldest goes: a room is not a register)
+    this.outs.set(d, { until: t + OUT_MS, by });
+    this.io.outed?.([...this.outs].map(([k, o]) => [k, o.until, o.by]));
+  }
+
+  /** (a host that forgot this room gives back who may not come back in: [[browser, until, by], …], as `outed` handed it) */
+  keepOuts(list) {
+    if (!Array.isArray(list)) return;
+    const t = this.io.now();
+    for (const o of list.slice(-500)) if (Array.isArray(o) && typeof o[0] === 'string' && o[0] && Number.isFinite(o[1]) && o[1] > t) (this.outs ||= new Map()).set(o[0].slice(0, 64), { until: o[1], by: o[2] === 'admin' ? 'admin' : '' });
+  }
+
+  /**
+   * Put out from the back office (the chat log, server/chatlog.js): every connection here of that browser (`dev`,
+   * or one of `devs`) — or, with no browser known, the connection `id` that arrived at `since`. `how`: 'kick' (told
+   * so, 4001: they may come back), 'ban' (told so, 4003: the door keeps them out) or 'move' (sent back to the door —
+   * the common rooms — and not let in here again for an hour). Never the owner. Returns how many.
+   */
+  oust({ dev, devs, id, since }, how = 'kick') {
+    const list = [dev, ...(Array.isArray(devs) ? devs : [])].filter((d) => typeof d === 'string' && d), t = this.io.now();
+    let n = 0;
+    for (const p of [...this.players.values()]) {
+      const hit = list.length ? list.includes(p.tdev) || list.includes(p.dev) : Number.isInteger(id) && p.id === id && p.since === since;
+      if (!hit || p.rank === 'owner') continue;
+      const d = p.tdev || p.dev;
+      if (how === 'move' && d) this._keepOut(d, t, 'admin');
+      this.io.send(p.conn, JSON.stringify(how === 'move' ? { t: 'kicked', ban: false, host: true, by: 'admin' } : { t: 'kicked', ban: how === 'ban' }));
+      (this.io.kick || this.io.drop)(p.conn, how === 'ban' ? 4003 : 4001, how === 'ban' ? 'banned' : 'kicked');
+      n++;
+    }
     return n;
   }
 
@@ -319,12 +368,13 @@ export class Room {
   }
 
   // The owner of a room of their own (urooms.js) puts a visitor out: gone, and not back for an hour — by the
-  // browser the door let in. Never an administrator. (Kept in the memory of the room, and nowhere else.)
+  // browser the door let in. Never an administrator. (Kept in the memory of the room — and by the host while the
+  // room is empty or asleep: `outed`.)
   _putOut(p, m, t) {
     const target = [...this.players.values()].find((o) => o.id === m.id);
     if (!target || target === p || target.admin || target.host || !target.joined) return;
     const dev = target.tdev || target.dev;
-    if (dev) { this.outs ||= new Map(); for (const [k, until] of this.outs) if (until <= t) this.outs.delete(k); this.outs.set(dev, t + OUT_MS); }
+    if (dev) this._keepOut(dev, t);
     this.io.send(target.conn, '{"t":"kicked","ban":false,"host":true}');
     (this.io.kick || this.io.drop)(target.conn, 4001, 'kicked');
   }
@@ -371,7 +421,7 @@ export class Room {
     const text = maskChat(said);
     p.chat -= 1;
     // (the host is told what was said — as it was typed —, for the administrators to read: chatlog.js; the relay itself keeps nothing)
-    this.io.said?.({ name: p.name, text: said, ...(text !== said && { hid: true }), near: !!m.n && !(m.i && p.admin), important: !!(m.i && p.admin), muted: !!p.mute });
+    this.io.said?.({ name: p.name, text: said, ...(text !== said && { hid: true }), near: !!m.n && !(m.i && p.admin), important: !!(m.i && p.admin), muted: !!p.mute, id: p.id, since: p.since, ip: p.ip || '', dev: p.tdev || p.dev || '', ...(p.rank && { rank: p.rank }) });
     if (p.mute) return; // (kept out in silence: nobody hears)
     if (m.i && p.admin) this.broadcast(JSON.stringify({ t: 'c', id: p.id, m: text, i: 1 }), p); // (the "important" channel: an administrator's)
     else if (m.n) this.around(p, CHAT_NEAR, JSON.stringify({ t: 'c', id: p.id, m: text, n: 1 }));
@@ -503,9 +553,10 @@ export class Room {
       });
       return;
     }
-    // (put out of this room by its owner less than an hour ago: not back yet)
-    if (!p.joined && this.outs && !p.admin && (this.outs.get(p.tdev || p.dev) || 0) > this.io.now()) {
-      this.io.send(p.conn, '{"t":"kicked","ban":false,"host":true}');
+    // (put out of this room by its owner — or by an administrator — less than an hour ago: not back yet)
+    const out = !p.joined && this.outs && !p.admin ? (p.tdev && this.outs.get(p.tdev)) || (p.dev && this.outs.get(p.dev)) : null;
+    if (out && out.until > this.io.now()) {
+      this.io.send(p.conn, JSON.stringify({ t: 'kicked', ban: false, host: true, ...(out.by && { by: out.by }) }));
       return (this.io.kick || this.io.drop)(p.conn, 4001, 'kicked');
     }
     // (the wardrobe that came with the connection is that of the browser named in the address: a hello that

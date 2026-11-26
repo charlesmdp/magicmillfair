@@ -207,7 +207,14 @@ and how to talk to the whole oasis. The relay keeps nothing — a line is relaye
 at most, five in a row then one every two seconds), and nobody is shown what was said before they came —, but
 **the host notes each line for the administrators**: who said it, in which room, to whom, when; the last
 5,000 lines, fourteen days at the most (`server/chatlog.js`, read on the page `/admin`, *Chat*; the privacy
-page says so, and what is said to Billy is not chat: it is not there). **What may not be said is hidden**
+page says so, and what is said to Billy is not chat: it is not there). With each line the browser and the
+address it came from are kept apart — never shown, not even to the administrators —, so that the author of a
+line can be put out (*Kick*), sent back to the common rooms from a room of its own (and not let back in for an
+hour, even once the room has emptied or gone to sleep), or kept out (*Ban…*: by their browser and the account it
+is signed in to, their address too if asked, told so or in silence) from the line itself (`POST /api/chatlog`;
+`Room.oust` in `server/protocol.js`). Such a ban says which line it came from: *Kept out* shows neither the
+browser nor the address it holds (the server does not send them), and lifts it as one — a silence on every
+browser it was put on. **What may not be said is hidden**
 (`server/decency.js`, the same rules on both sides — the relay's are the ones that count): the address of a
 site, a slur, a strong insult thrown at somebody, a threat, a call to hurt oneself, a slogan of hate are
 replaced by `********` for everybody who reads the line (the administrators' log keeps it as it was typed,
@@ -1258,7 +1265,9 @@ refreshes*, a word to every room — the owner only); **Rooms** (those that hold
 **High scores** (every board at once — a card for each game with its first five for the period chosen,
 the rest behind *Show all*; refuse a line); **Chat** (what was said in the rooms lately, the newest first,
 followed as it comes: every line with its room, its author and to whom it was said — nearby lines and the
-lines of those kept out in silence too; a box to find a name or a word; the owner can forget it all);
+lines of those kept out in silence too; on each line, *Kick*, *To the common rooms* (from a room of its own)
+and *Ban…*, which asks for how long, in silence or not, their address too — never the owner's lines; a box
+to find a name or a word; the owner can forget it all);
 **Sponsors & plaques** (take a sponsor down, with
 the money back or without; accept or refuse a plaque, its picture in sight; the refunds); **Kept out** (the
 list, add, let back in); **Figures** (the page everybody can read, and what was before the counting began);

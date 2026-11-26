@@ -504,7 +504,7 @@ export class Presence {
   }
 
   // Put out of a room a player made, by its owner: back to the common rooms (the 'room' event then says `out`).
-  _putOut() {
+  _putOut(admin = false) {
     const room = this.room;
     this._turn++;
     for (const tr of [this._ws]) if (tr) tr.close();
@@ -514,7 +514,7 @@ export class Presence {
     this.id = 0;
     this.mode = 'offline'; // (nowhere, until the door has said which room of the fair)
     this._changed();
-    this._said = { out: room };
+    this._said = { out: room, ...(admin && { by: 'admin' }) };
     this._enter({});
   }
 
@@ -538,7 +538,7 @@ export class Presence {
     if (m.t === 'closed') { if (tr !== this._tr) tr.shut = true; return; } // (that name is not a room one may open: the same)
     if (m.t === 'locked') { if (tr !== this._tr) tr.relock = true; return; } // (a room a player made, and no good ticket: the same)
     if (m.t === 'limit') { if (tr !== this._tr) tr.limit = { of: m.of === 'room' || m.of === 'minute' ? m.of : 'total', max: Number(m.max) || 0 }; return; } // (too many from this address: the same)
-    if (m.t === 'kicked') return m.host && !m.ban ? this._putOut() : this._out(!!m.ban); // (by an administrator — or by the owner of a room of their own)
+    if (m.t === 'kicked') return m.host && !m.ban ? this._putOut(m.by === 'admin') : this._out(!!m.ban); // (by an administrator — or by the owner of a room of their own)
     if (m.t === 'welcome') {
       if (Number.isInteger(m.id)) this._welcome(tr, mode, m);
     } else if (tr !== this._tr) return;
@@ -591,7 +591,7 @@ export class Presence {
       if (moved || said.full || said.gone || said.closed || said.asleep || said.out) {
         this._in = this._back = this.room;
         this._emit('room', { room: this.room, label: this.label, why: said.why || '', moved, ...(said.full && said.full !== this.room && { full: said.full, fullLabel: this._labels[said.full] || roomLabel(said.full) }), ...(said.gone && { gone: said.gone }), ...(said.closed && { closed: said.closed }),
-          ...(said.asleep && { asleep: said.asleep, asleepLabel: this._labels[said.asleep] || said.asleep }), ...(said.out && { out: said.out, outLabel: this._labels[said.out] || said.out }), ...(mine && { own: true, host: this.host }) });
+          ...(said.asleep && { asleep: said.asleep, asleepLabel: this._labels[said.asleep] || said.asleep }), ...(said.out && { out: said.out, outLabel: this._labels[said.out] || said.out, ...(said.by && { outBy: said.by }) }), ...(mine && { own: true, host: this.host }) });
       }
     }
     this._interval = Math.max(SEND_MS, Number.isFinite(m.tick) ? m.tick : 0);

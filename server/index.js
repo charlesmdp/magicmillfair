@@ -205,6 +205,8 @@ const api = {
   ...(/^(0|false|off|no)$/i.test(process.env.ADDRESS_LIMITS || '') && { addressLimits: false }),
   // kept out in silence from now on, or no longer: said to whoever is connected (bans.js)
   hush: (who, on) => { for (const room of rooms.values()) room.hush(who, on); },
+  // put out from the back office (chatlog.js): every room — or the one named — is told; how many were put out
+  oust: (who, how) => { let n = 0; for (const [name, room] of rooms) if (!who.room || who.room === name) n += room.oust(who, how); return n; },
   directory: async () => {
     const t = Date.now(), live = buildId(), rules = await roomRules(api);
     for (const [name, room] of rooms) { const c = room.census(live); noteRoom(directory, name, c.players, c.old, t, rules); }
@@ -282,6 +284,7 @@ async function onRequest(req, res) {
 const rooms = new Map(); // room id → Room
 const directory = newDirectory(); // what the door knows of them (rooms.js): which take newcomers, who is on their way
 const blasts = new Map(); // room id → when its big red button last went off (a room that empties is forgotten; this is not)
+const outs = new Map(); // room id → who was put out of it and may not come back in yet ([[browser, until, by], …]: the same)
 let nextId = 1;
 
 // What a Room needs from this host (see ./protocol.js). Connections are `ws` sockets.
@@ -325,9 +328,12 @@ function onConnection(ws, roomId, from) {
   let room = rooms.get(roomId);
   if (!room) {
     rooms.set(roomId, (room = new Room({ ...io, fired: (at) => { if (blasts.size > 5000) blasts.clear(); blasts.set(roomId, at); },
+      // (who was put out of it, and may not come back for a while: kept here while the room is empty)
+      outed: (list) => { if (outs.size > 5000) outs.clear(); outs.set(roomId, list); },
       // (what is said in the chat is kept a while for the administrators: chatlog.js)
       said: (line) => { noteChat(api, roomId, [{ ...line, t: Date.now() }]); } })));
     if (blasts.has(roomId)) room.blastAt = blasts.get(roomId);
+    if (outs.has(roomId)) room.keepOuts(outs.get(roomId));
   }
   const p = room.add(ws, undefined, from);
   if (!p) { ws.send('{"t":"full"}'); return ws.close(1013, 'full'); }

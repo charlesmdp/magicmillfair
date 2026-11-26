@@ -310,10 +310,26 @@
     const box = $('bans'), list = res.body.bans || [];
     if (!list.length) return empty(box, 'Nobody is kept out.');
     box.textContent = '';
+    // (a ban made from a line of the chat is one row, whatever it holds: its browser and its address are never
+    // shown — the server does not even send them —, and it is lifted as one, by its line)
+    const rows = [], lines = new Map();
     for (const b of list) {
+      if (!b.line) { rows.push(b); continue; }
+      const g = lines.get(b.line);
+      if (g) { g.kinds.push(b.kind); if (b.kind === 'acct') g.acct = b.key; continue; }
+      const first = { ...b, kinds: [b.kind], acct: b.kind === 'acct' ? b.key : '' };
+      lines.set(b.line, first); rows.push(first);
+    }
+    const lift = (b, query) => button(b.quiet ? 'Lift' : 'Let back in', 'ghost small', async () => { if (said(await api(`/api/bans?${query}`, { method: 'DELETE' }), b.quiet ? 'Lifted: they are heard again.' : 'Let back in.')) showBans(); });
+    for (const b of rows) {
+      const how = `${b.quiet ? 'in silence · ' : ''}${b.until ? `until ${when(b.until)}` : 'for good'} · since ${when(b.at)}`;
+      if (b.kinds) {
+        const held = [b.kinds.includes('dev') && 'their browser', b.kinds.includes('ip') && 'their address', b.acct && `their account "${b.acct}"`].filter(Boolean).join(', ');
+        box.append(item(`${b.name || 'Somebody'} — from a line of the chat: ${held}`, how, lift(b, `line=${b.line}`)));
+        continue;
+      }
       const kind = b.kind === 'ip' ? 'ip' : b.kind === 'acct' ? 'acct' : 'dev';
-      box.append(item(`${b.name || 'Somebody'} — ${kind === 'ip' ? 'address' : kind === 'acct' ? 'account' : 'browser'} ${b.key}`, `${b.quiet ? 'in silence · ' : ''}${b.until ? `until ${when(b.until)}` : 'for good'} · since ${when(b.at)}`,
-        button(b.quiet ? 'Lift' : 'Let back in', 'ghost small', async () => { if (said(await api(`/api/bans?${kind}=${encodeURIComponent(b.key)}`, { method: 'DELETE' }), b.quiet ? 'Lifted: they are heard again.' : 'Let back in.')) showBans(); })));
+      box.append(item(`${b.name || 'Somebody'} — ${kind === 'ip' ? 'address' : kind === 'acct' ? 'account' : 'browser'} ${b.key}`, how, lift(b, `${kind}=${encodeURIComponent(b.key)}`)));
     }
   }
   $('ban-form').onsubmit = async (e) => {
@@ -378,9 +394,44 @@
       if (l.to !== 'everyone') row.append(el('span', `tag ${l.to}`, l.to));
       if (l.muted) row.append(el('span', 'tag', 'kept out in silence'));
       if (l.filtered) row.append(el('span', 'tag', 'the others read ********'));
+      if (l.by) row.append(el('span', 'tag', l.by === 'owner' ? 'the owner' : 'an administrator'));
+      if (l.act) {
+        // (what can be done about its author: put out now; sent back to the common rooms — from a room of its own —; kept out)
+        const acts = el('span', 'acts');
+        acts.append(button('Kick', 'ghost small', () => onLine(l, 'kick')));
+        if (!/^main(-[0-9]+)?$/.test(l.room)) acts.append(button('To the common rooms', 'ghost small', () => onLine(l, 'move')));
+        acts.append(button('Ban…', 'warn small', async () => keepOut(l)));
+        row.append(acts);
+      }
       box.append(row);
     }
   }
+  /** Does something about the author of line `l`: 'kick', 'move' or 'ban' (`extra`: { hours, quiet, address }). */
+  async function onLine(l, act, extra = {}) {
+    if (act !== 'ban' && !confirm(act === 'kick' ? `Put ${l.name} out now? They can come back by loading the page again.` : `Send ${l.name} out of ${roomName(l.room)}, to the common rooms? They cannot come back into it for an hour.`)) return;
+    const res = await api('/api/chatlog', { method: 'POST', body: { n: l.n, act, ...extra } });
+    if (!res.ok) return said(res, '');
+    const { out = 0, account } = res.body;
+    toast(act === 'ban' ? `${l.name} is kept out${account ? ` (their account "${account}" too)` : ''}${extra.quiet ? ': nobody hears them any more.' : out ? `: put out of ${out} connection${out > 1 ? 's' : ''} at once.` : ': from their next visit.'} See "Kept out" to let them back in.`
+      : out ? `${l.name} is put out.` : `${l.name} is not connected any more: nobody was put out.`);
+    if (act === 'ban') showBans();
+  }
+  /** The dialog that keeps the author of line `l` out: for how long, in silence or not, their address too. */
+  const keepOut = (l) => {
+    const d = $('line-ban');
+    d.dataset.n = String(l.n);
+    $('line-ban-who').textContent = l.name;
+    $('line-ban-said').textContent = `"${l.text}" — ${roomName(l.room)}, ${clock(l.t)}`;
+    $('line-ban-quiet').checked = false; $('line-ban-ip').checked = false; $('line-ban-hours').value = '24';
+    d.showModal();
+  };
+  $('line-ban-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const d = $('line-ban'), l = chatLines.find((x) => String(x.n) === d.dataset.n);
+    d.close();
+    if (l) await onLine(l, 'ban', { hours: Number($('line-ban-hours').value), quiet: $('line-ban-quiet').checked, address: $('line-ban-ip').checked });
+  };
+  $('line-ban-cancel').onclick = () => $('line-ban').close();
   async function showChat(older = false) {
     const res = await api(`/api/chatlog?limit=200${older && chatLines.length ? `&before=${chatLines[chatLines.length - 1].n}` : ''}`);
     if (!res.ok) return;

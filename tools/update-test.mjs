@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import { stubOutside } from './lib/outside.mjs';
 import { sign, randomId } from '../server/token.js';
+import { Client } from './lib/net.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -151,6 +152,47 @@ try {
   await office.click('#tabs [data-tab="chat"]');
   await office.waitForFunction(() => !!document.querySelector('#chatlog').children.length && /14 days/.test(document.getElementById('chat-keeps').textContent), null, { timeout: 20000 });
   await office.screenshot({ path: path.join(ROOT, 'tools/preview/admin-chat.png'), fullPage: true });
+  // (a visitor says what should not be said: from its line in the back office, put out; back again, kept out in silence; let back in)
+  {
+    const MAL = 'device-of-mallory-0123456789', said = (text) => office.waitForFunction((text) => [...document.querySelectorAll('#chatlog .said')].some((r) => r.querySelector('.what')?.textContent === text && r.querySelector('.acts')), text, { timeout: 30000 });
+    const rowAct = (text, label) => office.evaluate(([text, label]) => [...[...document.querySelectorAll('#chatlog .said')].find((r) => r.querySelector('.what')?.textContent === text).querySelectorAll('.acts button')].find((b) => b.textContent === label).click(), [text, label]);
+    const mal = new Client(PORT, 'fair', { dev: MAL });
+    await mal.hello('Mallory', 3, MAL);
+    mal.send({ t: 'c', m: 'buy gold here' });
+    await office.click('#tabs [data-tab="chat"]');
+    await said('buy gold here');
+    const buttons = await office.evaluate(() => [...[...document.querySelectorAll('#chatlog .said')].find((r) => r.querySelector('.what')?.textContent === 'buy gold here').querySelectorAll('.acts button')].map((b) => b.textContent));
+    await rowAct('buy gold here', 'Kick');
+    const kicked = await mal.wait((m) => m.t === 'kicked', 8000), code = await Promise.race([mal.closed, new Promise((r) => setTimeout(() => r('open'), 8000))]);
+    const mal2 = new Client(PORT, 'fair', { dev: MAL }), ear = new Client(PORT, 'fair', { dev: 'device-of-an-ear-0123456789' });
+    await mal2.hello('Mallory', 3, MAL); await ear.hello('Ear', 4, 'device-of-an-ear-0123456789');
+    mal2.send({ t: 'c', m: 'gold, cheap' });
+    await office.click('#tabs [data-tab="scores"]');
+    await office.click('#tabs [data-tab="chat"]');
+    await said('gold, cheap');
+    await rowAct('gold, cheap', 'Ban…');
+    await office.waitForFunction(() => document.getElementById('line-ban').open, null, { timeout: 10000 });
+    const asked = await office.evaluate(() => ({ who: document.getElementById('line-ban-who').textContent, said: document.getElementById('line-ban-said').textContent }));
+    await office.selectOption('#line-ban-hours', '1');
+    await office.check('#line-ban-quiet');
+    await office.click('#line-ban-form button[type="submit"]');
+    await office.click('#tabs [data-tab="bans"]');
+    await office.waitForFunction(() => /Mallory/.test(document.getElementById('bans').textContent) && /in silence/.test(document.getElementById('bans').textContent), null, { timeout: 20000 });
+    const listed = await office.textContent('#bans');
+    const stillThere = mal2.code === null;
+    mal2.send({ t: 'c', m: 'anybody there?' });
+    const unheard = await ear.wait((m) => m.t === 'c' && m.m === 'anybody there?', 1500);
+    await office.click('#bans .item button');
+    await office.waitForFunction(() => /Nobody is kept out/.test(document.getElementById('bans').textContent), null, { timeout: 20000 });
+    await new Promise((r) => setTimeout(r, 400));
+    mal2.send({ t: 'c', m: 'heard again' });
+    const heardAgain = await ear.wait((m) => m.t === 'c' && m.m === 'heard again', 8000);
+    await mal2.close(); await ear.close();
+    check('the back office: from a line of the chat its author is put out (Kick), then kept out in silence for an hour (Ban…, which asks how) — still there, heard by nobody, listed in "Kept out", and let back in from there, heard again at once; their browser and their address are never shown on the page — not in the chat, not in "Kept out"',
+      ['Kick,To the common rooms,Ban…', 'Kick,Ban…'].includes(buttons.join()) && kicked?.ban === false && code === 4001 && asked.who === 'Mallory' && /gold, cheap/.test(asked.said) && /Mallory/.test(listed) && /in silence/.test(listed) && /from a line of the chat/.test(listed)
+      && stillThere && unheard === null && !!heardAgain && !/device-of-mallory/.test(await office.textContent('#chatlog')) && !/device-of-mallory/.test(listed),
+      JSON.stringify({ buttons, kicked, code, asked, listed: listed.slice(0, 160), stillThere, unheard, heardAgain: !!heardAgain }));
+  }
   await office.click('#tabs [data-tab="scores"]');
   await office.click('#scores .board[data-board="bell"] .line button');
   await office.waitForFunction(() => /Nobody on any board/.test(document.getElementById('scores').textContent), null, { timeout: 20000 });

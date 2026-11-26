@@ -848,6 +848,102 @@ async function testModeration(start, dist) {
       [!!w1, !!w2, !!left, firstEnd, !!w3, !!w4, stayed, w3?.peers.map((q) => q.name), w4?.peers.map((q) => q.name)]);
     await Promise.all([seer, again, tab, other2].map((c) => c.close()));
   }
+  // ---- from the chat log of the back office: the author of a line is put out, kept out — by their browser, at once,
+  // told so or in silence —, sent back to the common rooms from a room of its own; never the owner; nothing of who
+  // they are is ever shown there
+  {
+    const MAL = 'device-of-mal-0123456789', KIM = 'device-of-kim-0123456789', KIM2 = 'device-of-kim-phone-0123456789', NED = 'device-of-ned-0123456789', TOM = 'device-of-tom-0123456789', ZED = 'device-of-zed-0123456789', auth = { authorization: `Bearer ${ADMIN_KEY}` };
+    const log = async () => json(await request(port, '/api/chatlog?limit=60', { headers: auth }))?.lines || [];
+    const act = (body, key = ADMIN_KEY) => request(port, '/api/chatlog', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` }, body: JSON.stringify(body) });
+    const lineOf = async (text) => { for (let i = 0; i < 50; i++) { const l = (await log()).find((q) => q.text === text); if (l) return l; await sleep(150); } return null; };
+    const end = (c) => Promise.race([c.closed, sleep(5000).then(() => 'open')]);
+    const mal = new Client(port, 'logroom', from(21, MAL)), watch = new Client(port, 'logroom', from(22));
+    await mal.hello('Mallory', 3, MAL); await watch.hello('Watcher', 4);
+    mal.send({ t: 'c', m: 'buy gold here' });
+    const l1 = await lineOf('buy gold here');
+    const nokey = await act({ n: l1?.n, act: 'kick' }, 'not the key'), junk = await act({ n: l1?.n, act: 'jump' }), noHours = await act({ n: l1?.n, act: 'ban' }), gone = await act({ n: 99999999, act: 'kick' });
+    const kicked = json(await act({ n: l1?.n, act: 'kick' })), told1 = await mal.wait((m) => m.t === 'kicked', 4000), code1 = await end(mal);
+    // (back at once — a kick does not keep out —, says it again, and is kept out from the line: at once, by the browser)
+    const mal2 = new Client(port, 'logroom', from(21, MAL));
+    const again = await mal2.hello('Mallory', 3, MAL);
+    mal2.send({ t: 'c', m: 'still selling gold' });
+    const l2 = await lineOf('still selling gold');
+    const banned = json(await act({ n: l2?.n, act: 'ban', hours: 1 })), told2 = await mal2.wait((m) => m.t === 'kicked', 4000), code2 = await end(mal2);
+    const bans = json(await request(port, '/api/bans', { headers: auth }))?.bans || [];
+    const mal3 = new Client(port, 'logroom', from(23, MAL)), door = await end(mal3); // (another address, the same browser: the door says no)
+    const shown = JSON.stringify(await log());
+    const lifted = json(await request(port, `/api/bans?line=${l2?.n}`, { method: 'DELETE', headers: auth })), after = json(await request(port, '/api/bans', { headers: auth }))?.bans || [];
+    check('chat log: from a line, its author is put out (they may come back), then kept out — by their browser, at once, and at the door —; a wrong key, an act that is no act, a ban with no duration, a line no longer kept are refused; who they are is never shown — not in the log, not in the list of who is kept out (the ban says which line it came from, and is lifted by it)',
+      nokey.status === 403 && junk.status === 400 && noHours.status === 400 && gone.status === 404 && l1?.act === true && kicked?.out === 1 && told1?.ban === false && code1 === 4001 && !!again
+      && banned?.out === 1 && told2?.ban === true && code2 === 4003 && bans.some((b) => b.kind === 'dev' && b.key === '' && b.line === l2?.n && b.name === 'Mallory' && b.until > Date.now()) && !bans.some((b) => b.kind === 'ip' && b.name === 'Mallory') && door === 4003
+      && !shown.includes(MAL) && !shown.includes('10.9.8.21') && !JSON.stringify(bans).includes(MAL) && !JSON.stringify(bans).includes('10.9.8.2') && lifted?.removed === 1 && !after.some((b) => b.name === 'Mallory'),
+      [nokey.status, junk.status, noHours.status, gone.status, l1, kicked, told1, code1, !!again, banned, told2, code2, bans, door, lifted, after]);
+    // (in silence: they stay, and nobody hears them any more — on any browser of their account; lifted from the
+    // list of who is kept out, heard again at once on all of them; nothing of who they are in that list either)
+    const signUp = (body, n) => request(port, '/api/account', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), from: `127.0.0.${n}` });
+    const madeKim = await signUp({ action: 'create', device: KIM, name: 'Kimberly', password: 'a good password' }, 141), inKim2 = await signUp({ action: 'login', device: KIM2, name: 'Kimberly', password: 'a good password' }, 142);
+    const kim = new Client(port, 'logroom', from(24, KIM)), kim2 = new Client(port, 'logroom', from(27, KIM2));
+    await kim.hello('Kim', 5, KIM); await kim2.hello('Kim too', 5, KIM2);
+    kim.send({ t: 'c', m: 'shh' });
+    const l3 = await lineOf('shh');
+    const quiet = json(await act({ n: l3?.n, act: 'ban', hours: 1, quiet: true }));
+    await sleep(400);
+    kim.send({ t: 'c', m: 'can anybody hear me' }); kim2.send({ t: 'c', m: 'nor me from the phone' });
+    const heard = await watch.wait((m) => m.t === 'c' && /can anybody hear me/.test(m.m), 1500), heard2 = await watch.wait((m) => m.t === 'c' && /nor me from the phone/.test(m.m), 600), l4 = await lineOf('can anybody hear me');
+    const quietList = json(await request(port, '/api/bans', { headers: auth }))?.bans || [];
+    const liftedKim = json(await request(port, `/api/bans?line=${l3?.n}`, { method: 'DELETE', headers: auth }));
+    await sleep(300);
+    kim2.send({ t: 'c', m: 'the phone is heard again' });
+    const heardAgain = await watch.wait((m) => m.t === 'c' && /the phone is heard again/.test(m.m), 3000);
+    check('chat log: kept out in silence from a line — on every browser of their account at once —; the list of who is kept out shows their account, never their browsers; lifted by that line, they are heard again at once on all of them',
+      madeKim.status === 200 && inKim2.status === 200 && quiet?.account === 'Kimberly' && heard === null && heard2 === null && quietList.some((b) => b.kind === 'acct' && b.key === 'kimberly' && b.line === l3?.n && b.quiet) && quietList.some((b) => b.kind === 'dev' && b.key === '' && b.line === l3?.n)
+      && !JSON.stringify(quietList).includes('device-of-kim') && !JSON.stringify(quietList).includes('devs') && liftedKim?.removed === 2 && !!heardAgain,
+      [madeKim.status, inKim2.status, quiet, heard, heard2, quietList, liftedKim, !!heardAgain]);
+    // (in silence with their address too: never the owner, who may come from the same one)
+    const tom = new Client(port, 'logroom', from(25, TOM));
+    await tom.hello('Tom', 7, TOM);
+    tom.send({ t: 'c', m: 'tom shares an address' });
+    const l7 = await lineOf('tom shares an address');
+    // (the owner's own lines: no act on them, and none taken)
+    const boss = new Client(port, 'logroom', from(25));
+    await boss.hello('Boss', 1);
+    boss.send({ t: 'admin', key: ADMIN_KEY });
+    await boss.wait((m) => m.t === 'admin');
+    boss.send({ t: 'c', m: 'the owner speaks' });
+    const l5 = await lineOf('the owner speaks'), refused = await act({ n: l5?.n, act: 'kick' });
+    const tomQuiet = json(await act({ n: l7?.n, act: 'ban', hours: 1, quiet: true, address: true }));
+    await sleep(400);
+    boss.send({ t: 'c', m: 'the owner is still heard' }); tom.send({ t: 'c', m: 'tom is not' });
+    const bossHeard = await watch.wait((m) => m.t === 'c' && /the owner is still heard/.test(m.m), 3000), tomHeard = await watch.wait((m) => m.t === 'c' && /tom is not/.test(m.m), 600);
+    const tomList = json(await request(port, '/api/bans', { headers: auth }))?.bans || [];
+    await request(port, `/api/bans?line=${l7?.n}`, { method: 'DELETE', headers: auth });
+    // (sent back to the common rooms from a room of its own, and not back in it for an hour)
+    const ned = new Client(port, 'logroom', from(26, NED));
+    await ned.hello('Ned', 6, NED);
+    ned.send({ t: 'c', m: 'ned was here' });
+    const l6 = await lineOf('ned was here'), moved = json(await act({ n: l6?.n, act: 'move' })), told6 = await ned.wait((m) => m.t === 'kicked', 4000), code6 = await end(ned);
+    const ned2 = new Client(port, 'logroom', from(26, NED));
+    await ned2.opened;
+    ned2.send({ t: 'hello', name: 'Ned', color: 6, v: 2, dev: NED });
+    const notBack = await ned2.wait((m) => m.t === 'kicked', 4000);
+    // (…even when that left the room empty: alone in it, sent back, and not let in again either)
+    const zed = new Client(port, 'zedroom', from(28, ZED));
+    await zed.hello('Zed', 8, ZED);
+    zed.send({ t: 'c', m: 'zed alone' });
+    const l8 = await lineOf('zed alone'), movedZed = json(await act({ n: l8?.n, act: 'move' })), codeZed = await end(zed);
+    await sleep(300);
+    const zed2 = new Client(port, 'zedroom', from(28, ZED));
+    await zed2.opened;
+    zed2.send({ t: 'hello', name: 'Zed', color: 8, v: 2, dev: ZED });
+    const zedBack = await zed2.wait((m) => m.t === 'kicked' || m.t === 'welcome', 4000);
+    check('chat log: kept out in silence from a line — still there, nobody hears them, their next line is marked so —; the owner\'s lines cannot be acted upon, and a silence by address never falls on the owner; from a room of its own, sent back to the common rooms and not let in again (told who did it) — even once that room has emptied',
+      quiet?.quiet === true && kim.code === null && heard === null && l4?.muted === true && l5?.by === 'owner' && !l5.act && refused.status === 403 && boss.code === null
+      && tomQuiet?.quiet === true && !!bossHeard && tomHeard === null && tomList.some((b) => b.kind === 'ip' && b.key === '' && b.line === l7?.n) && !JSON.stringify(tomList).includes('10.9.8.25')
+      && moved?.out === 1 && told6?.host === true && told6.by === 'admin' && code6 === 4001 && notBack?.host === true && notBack.by === 'admin'
+      && movedZed?.out === 1 && codeZed === 4001 && zedBack?.t === 'kicked' && zedBack.host === true && zedBack.by === 'admin',
+      [quiet, kim.code, heard, l4, l5, refused.status, boss.code, tomQuiet, !!bossHeard, tomHeard, tomList, moved, told6, code6, notBack, movedZed, codeZed, zedBack]);
+    await Promise.all([watch, kim, kim2, tom, boss, ned2, zed2, mal3].map((c) => c.close()));
+  }
   await Promise.all([adm, other, back, sameAddress, sameDevice].map((c) => c.close()));
   await server.stop();
   fs.rmSync(file, { force: true });
@@ -1535,6 +1631,7 @@ async function testChatLog({ port }) {
   a.ws.close(); b.ws.close();
   check('chat log: what is said in a room — to everybody, to who stands nearby — is kept for the administrators, the newest first, with who said it, where, to whom and when; nobody else reads it; it is read page by page; the owner empties it',
     !!got && got.lines[0].to === 'nearby' && got.lines[0].name === 'Bob Talks' && got.lines[0].room === 'talk' && got.lines[1].to === 'everyone' && got.lines[1].name === 'Ada Talks' && got.lines[1].text === 'Hello <b>everybody</b>'
+    && got.lines.slice(0, 2).every((l) => l.act === true && !('ip' in l) && !('dev' in l)) && !JSON.stringify(got).includes('127.0.0.1')
     && Math.abs(got.lines[1].t - Date.now()) < 120000 && got.keeps?.days === 14 && got.keeps.lines === 5000 && nobody.status === 403 && page?.lines?.length === 1 && page.more === true && older?.lines?.[0]?.name === 'Ada Talks'
     && wiped.status === 200 && after?.lines?.length === 0,
     [got?.lines?.slice(0, 2), nobody.status, page, older?.lines?.[0], wiped.status, after]);
