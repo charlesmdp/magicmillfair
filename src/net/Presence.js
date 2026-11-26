@@ -9,6 +9,7 @@ import { BroadcastTransport } from './transports/BroadcastTransport.js';
 import { WebSocketTransport } from './transports/WebSocketTransport.js';
 import { maskChat, nameOk } from '../../server/decency.js';
 import { deviceId } from './device.js';
+import { heardRelay } from './api.js';
 
 const BUILD = typeof __BUILD__ !== 'undefined' && /^[0-9a-f]{4,12}$/.test(__BUILD__.commit || '') ? __BUILD__.commit : ''; // which version this page is (said with the hello)
 const SEND_MS = 1000 / 12; // own state goes out at ~12 Hz…
@@ -706,6 +707,7 @@ export class Presence {
   _states(m) {
     if (!Array.isArray(m.s)) return;
     const t = now(), base = Number.isFinite(m.now) ? m.now : t;
+    if (Number.isFinite(m.now)) heardRelay(m.now); // (the clock everybody shares is set by it: net/api.js)
     for (const r of m.s) {
       const track = Array.isArray(r) ? this._tracks.get(r[0]) : null;
       if (!track) continue;

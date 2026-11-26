@@ -29,6 +29,23 @@ export const noApi = () => none;
  */
 export const sharedNow = () => Date.now() + ahead;
 
+const RELAY_EPOCH = Date.UTC(2026, 0, 1); // (the relay of Cloudflare counts its milliseconds from there: cloudflare/worker.js)
+let best = -Infinity, older = -Infinity, turned = 0;
+/**
+ * The relay said what time it is by its clock (ms), as it does ten times a second. Where that clock is the
+ * server's (it counts from RELAY_EPOCH), this is a far better measure than the one request above: the message
+ * that took the least time on its way says how far ahead the server is to a few hundredths of a second — so that
+ * what two visitors see "at the same moment" (a wave, a start, a column that comes up) is the same moment.
+ * The clock is never made to jump: it is brought there a few milliseconds at a time.
+ */
+export function heardRelay(relayNow) {
+  const t = Date.now(), s = relayNow + RELAY_EPOCH - t; // (how far ahead, less what the message took to come)
+  if (!Number.isFinite(s) || Math.abs(s - ahead) > 3000) return; // (a relay that counts from its own start — the Node server —, or a message held up for seconds)
+  if (t - turned > 30000) { older = best; best = -Infinity; turned = t; } // (the last half minute or so counts: clocks drift)
+  if (s > best) best = s;
+  ahead += Math.max(-4, Math.min(4, Math.max(best, older) - ahead));
+}
+
 /** Is this an administrator's key? { ok, owner, dead } — `dead`: the server said no (not merely out of reach). Never throws. */
 export async function checkAdminKey(key) {
   if (!(await hasApi())) return { ok: false, owner: false, dead: false };

@@ -239,6 +239,9 @@ export class Hive {
     const S = { count: 3, last: 4, acc: 0, after: 0, cam: null, look: V(0, 0, 0) }, _t = V(0, 0, 0);
     const session = {
       hive: this, over: false, ended: false, score: 0, line: '', riding: false, anim: ANIM.idle, state: st, auto: false, seed,
+      // (a run is one's own — the cells that have given way are — so nobody shares it: who else runs on the combs is
+      // not shown meanwhile, rather than seen falling through wax that is whole here: src/extras/mates.js)
+      instance: seed,
       step: (dt, pl, control) => {
         const inp = pl.input;
         if (S.count > 0) {

@@ -403,6 +403,7 @@ async function boot() {
     presence.on('leave', (peer) => { if (presence.mode === shownMode && presence.count <= 30) hud.note(`${peer.name} left`); if (hud.rosterOpen) showRoster(); });
     presence.connect();
     Object.assign(app, { presence, avatars });
+    app.worldClock = sharedNow; // (the clock everybody shares, for the tools that look at two visitors at once)
   };
 
   // ---------- who is here (and, for the administrator, where from; putting out, keeping out)
@@ -2472,9 +2473,12 @@ async function boot() {
     if (presence) {
       presence.setLocal(player.pos.x, player.pos.y, player.pos.z, player.yaw, player.anim, packLook({ free: mode === 'free', ...look }));
       presence.update(dt);
-      avatars.update(dt, camera, engine.width, engine.height);
     }
     world.update(dt, camera);
+    // (the other visitors are placed — and their names put on the screen — once the world has had its turn: a game
+    // that is being played sets its own camera there (src/extras/plug.js), and says who is hidden or runs head
+    // down. Done before, the names were laid out for the camera of the walk: beside the robots, and never still)
+    if (presence) avatars.update(dt, camera, engine.width, engine.height);
     const t0 = world.profile ? performance.now() : 0;
     if (!arcade.isOpen || app.frames % 4 === 0) engine.renderer.render(scene, camera); // (behind the screen of the arcade, the world is drawn one frame in four)
     if (world.profile) { world.profile.mainPass = (world.profile.mainPass || 0) + performance.now() - t0; world.profile.frames = (world.profile.frames || 0) + 1; }

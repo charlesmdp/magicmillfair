@@ -32,7 +32,7 @@ export function attach(app) {
     tell: (kind, run, numbers) => app.presence?.sendThing?.(kind, run, numbers),
   };
   // (what the network says of the others' boats: handed to the regatta, which shows them)
-  let heard = null;
+  let heard = null, named = new Set();
   const listen = () => { if (app.presence && heard !== app.presence) { heard = app.presence; heard.on('thing', (e) => { if (e.kind === THING) boats.heard(e.id, e.run, e.d); }); } };
   const leave = (finished) => {
     if (!race) return;
@@ -62,6 +62,19 @@ export function attach(app) {
   world.zones.push({
     update: (dt, time, camera) => {
       listen();
+      // (the names: over the boats, not over the robots that steer them from the bank — one's eye is on the water.
+      // Who races with another start, whose boat is not shown to one who races, has no name meanwhile)
+      const peers = app.presence?.peers, now = new Set();
+      if (peers) {
+        for (const [id, g] of boats.guests) {
+          const p = peers.get(id);
+          if (!p) continue;
+          now.add(p);
+          if (g.hull.visible) { const at = (p.tagAt ||= { x: 0, y: 0, z: 0 }); at.x = g.hull.position.x; at.y = g.hull.position.y + 1.15; at.z = g.hull.position.z; p.tagOff = false; } else { p.tagAt = null; p.tagOff = !!race; }
+        }
+        for (const p of named) if (!now.has(p)) { p.tagAt = null; p.tagOff = false; }
+        named = now;
+      }
       if (!race) { boats.update(dt, null); return; } // (from the bank one sees whoever is racing)
       if (player.dead || player.driver !== race) { leave(false); return; }
       app.fair.fov = race.camera(camera, dt);
