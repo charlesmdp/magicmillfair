@@ -1366,7 +1366,8 @@ one touches is held by itself — nothing to hold down —; a kick given within 
 a wall is a *sharp* kick, which carries higher, rings, and counts in a streak shown on the screen; the game
 says so at the first walls. And nothing is left to luck: stones come down the walls only, never the middle,
 on the top quarter of the climb, each announced by a mark on its wall — one is on the other wall. The music
-of the climb rises with the climber. *Harbor Heaven*: **a start every ten seconds**, each with its name
+of the climb rises with the climber. *Harbor Heaven*: nothing grows in front of its stand (no water lily,
+reed or iris between whoever steers and the course: `keepClear` in `extras/boats.js`); **a start every ten seconds**, each with its name
 (Alpha, Bravo…), on the clock everybody shares — one joins the next until its last moment, and friends who
 take the same one race together: the race is where that clock says, so that every screen of one start is at
 the same step, against the same three boats that sail by themselves (2 % slower than they were, a little

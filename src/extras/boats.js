@@ -12,6 +12,10 @@ const KEY = 'mmf.boats.best';
 export function attach(app) {
   const { world, player, hud } = app;
   const boats = new Boats(world).build();
+  // (nothing grows in front of the stand — no water lily, no reed, no iris between whoever steers and the course —,
+  // nor on it: the plants of the bank and of the shallows give way there, as at the jetty of The Endless Pond — pond.js)
+  const s = boats.stand;
+  world.scatter?.keepClear?.(s.x + Math.sin(s.yaw) * 4, s.z + Math.cos(s.yaw) * 4, 10);
   world.bakeShadows(); // (the stand and the buoys were not there when the shadows of what never moves were drawn)
   const read = () => { try { return parseInt(localStorage.getItem(KEY), 10) || 0; } catch { return 0; } };
   boats.setBest(read());
