@@ -1409,6 +1409,7 @@ async function boot() {
     const on = Object.fromEntries(EXTRA.map((k) => [k, release[k] === true]));
     if (EXTRA.some((k) => on[k])) import('./extras/index.js').then(({ loadExtras }) => loadExtras(app, on)).then(() => extrasBuilt()).catch((err) => console.error('[extras]', err));
     hud.setStars(release.stars !== false); // (the stars of the map: the owner's switch)
+    world.games.notices.setNews(release.newsBoards !== false); // (the boards of what is new by the poppy field: taken away, or put back, at once)
     // (the rooms that players make: their card in the shop and their corner of "Who is here" come and go with the switch)
     if (!before || before.userRooms !== release.userRooms) queueMicrotask(() => refreshMine(release.userRooms === true));
     // (the sky is built with the world: another stage of it is another world)

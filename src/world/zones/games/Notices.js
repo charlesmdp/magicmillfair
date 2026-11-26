@@ -15,6 +15,7 @@ import { paintWords, wordsWidth } from '../../props/handpaint.js';
 import { NEWS } from '../../../app/news.js';
 import { arcadeTitle } from '../../../ui/Arcade.js';
 import { NOTICES, PIER, TRADING, WAYS, pierToWorld } from '../../layout/layout.js';
+import { LAYER } from '../../../render/Shadows.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const SERIF = "Georgia, 'Times New Roman', serif", SANS = 'system-ui, sans-serif';
@@ -119,6 +120,8 @@ const RULES = [
   ['Take your time.', 'Sit, swim, climb, fly, pick flowers. Or do nothing at all.'],
   ['You are free.', 'That is the whole idea.'],
 ];
+// (are the boards of what is new up? The rules point to them while they are: see setNews below)
+let newsShown = true;
 function drawRules(ctx, w, h) {
   const g = ctx.createLinearGradient(0, 0, 0, h);
   g.addColorStop(0, '#2a1d5e'); g.addColorStop(1, '#17103a');
@@ -145,8 +148,10 @@ function drawRules(ctx, w, h) {
   ctx.textAlign = 'center';
   ctx.fillStyle = '#ffe9a6'; ctx.font = `700 15px ${SANS}`;
   ctx.fillText('M: the map  ·  O: the shop  ·  T: emotes  ·  /kill if you are stuck', w / 2, h - foot + 18, w - 40);
-  ctx.fillStyle = '#9fd8c8'; ctx.font = `600 14.5px ${SANS}`;
-  ctx.fillText('The news of the fair: on the boards by the poppies, behind you.', w / 2, h - foot + 46, w - 40);
+  if (newsShown) {
+    ctx.fillStyle = '#9fd8c8'; ctx.font = `600 14.5px ${SANS}`;
+    ctx.fillText('The news of the fair: on the boards by the poppies, behind you.', w / 2, h - foot + 46, w - 40);
+  }
 }
 
 /** How it came to this, as it is told at the fair: the story of the opening once more, another way. */
@@ -283,8 +288,13 @@ export function buildNotices(zone) {
   const parts = new Parts(), wood = parts.get('woodDark'), paint = parts.get('paint'), cloth = parts.get('doubleSided'), glow = parts.get('glow');
   const meshes = [];
   // ---- what is new: by the poppy field, a board for each of the latest days something changed (the newest to
-  // the left of who reads them), each on two posts under a little roof, a lamp at each end
+  // the left of who reads them), each on two posts under a little roof, a lamp at each end. (All of it apart from
+  // the rest — pieces of its own, a group of its own —: the owner may take the three boards away and bring them
+  // back while the game runs, with the switch `newsBoards` of /admin: setNews below.)
   const n = NOTICES.news, days = NEWS.slice(0, 3), newsAt = [];
+  const newsParts = new Parts(), nwood = newsParts.get('woodDark'), ncloth = newsParts.get('doubleSided'), nglow = newsParts.get('glow');
+  const newsGroup = new THREE.Group(), newsBoards = [], newsPosts = [];
+  newsGroup.name = 'notice-news-boards';
   days.forEach((day, i) => {
     const k = i - (days.length - 1) / 2, W = 2.2, H = 2.75;
     // (on an arc: each turned a little towards the one in the middle)
@@ -294,22 +304,33 @@ export function buildNotices(zone) {
     board.mesh.position.set(x, y + 0.7 + H / 2, z);
     board.mesh.rotation.y = yaw;
     board.mesh.name = `notice-news${i}`;
-    meshes.push(board.mesh);
-    for (const b of [wood, paint, cloth, glow]) b.place(x, y, z, yaw);
+    newsBoards.push(board.mesh);
+    newsGroup.add(board.mesh);
+    for (const b of [nwood, ncloth, nglow]) b.place(x, y, z, yaw);
     for (const s of [-1, 1]) {
-      wood.tint(1.05, 0.92, 0.75, 1).box(s * (W / 2 + 0.1) - 0.08, -0.5, -0.08, s * (W / 2 + 0.1) + 0.08, 0.7 + H + 0.35, 0.08, { tile: 1 });
-      glow.tint(1.0, 0.86, 0.5, 1).place(s * (W / 2 + 0.1), 0.7 + H + 0.42, 0).lathe([[0.0, 0.0], [0.1, 0.05], [0.12, 0.17], [0.06, 0.27], [0.0, 0.3]], 7).pop();
+      nwood.tint(1.05, 0.92, 0.75, 1).box(s * (W / 2 + 0.1) - 0.08, -0.5, -0.08, s * (W / 2 + 0.1) + 0.08, 0.7 + H + 0.35, 0.08, { tile: 1 });
+      nglow.tint(1.0, 0.86, 0.5, 1).place(s * (W / 2 + 0.1), 0.7 + H + 0.42, 0).lathe([[0.0, 0.0], [0.1, 0.05], [0.12, 0.17], [0.06, 0.27], [0.0, 0.3]], 7).pop();
     }
-    wood.tint(1.05, 0.92, 0.75, 1).box(-W / 2 - 0.2, 0.7 + H + 0.04, -0.06, W / 2 + 0.2, 0.7 + H + 0.16, 0.06, { tile: 1 });
+    nwood.tint(1.05, 0.92, 0.75, 1).box(-W / 2 - 0.2, 0.7 + H + 0.04, -0.06, W / 2 + 0.2, 0.7 + H + 0.16, 0.06, { tile: 1 });
     for (let q = 0; q < 8; q++) { // (a striped canopy over it)
       const c = q % 2 ? [0.97, 0.95, 0.9] : [0.1, 0.55, 0.6], x0 = -W / 2 - 0.3 + (q * (W + 0.6)) / 8, x1 = x0 + (W + 0.6) / 8;
-      cloth.tint(c[0], c[1], c[2], 1).quad(V(x0, 0.7 + H + 0.2, 0.55), V(x1, 0.7 + H + 0.2, 0.55), V(x1, 0.7 + H + 0.5, 0), V(x0, 0.7 + H + 0.5, 0)).quad(V(x1, 0.7 + H + 0.2, -0.55), V(x0, 0.7 + H + 0.2, -0.55), V(x0, 0.7 + H + 0.5, 0), V(x1, 0.7 + H + 0.5, 0));
+      ncloth.tint(c[0], c[1], c[2], 1).quad(V(x0, 0.7 + H + 0.2, 0.55), V(x1, 0.7 + H + 0.2, 0.55), V(x1, 0.7 + H + 0.5, 0), V(x0, 0.7 + H + 0.5, 0)).quad(V(x1, 0.7 + H + 0.2, -0.55), V(x0, 0.7 + H + 0.2, -0.55), V(x0, 0.7 + H + 0.5, 0), V(x1, 0.7 + H + 0.5, 0));
     }
-    for (const b of [wood, paint, cloth, glow]) b.pop();
+    for (const b of [nwood, ncloth, nglow]) b.pop();
     const bx = Math.cos(yaw), bz = -Math.sin(yaw);
-    for (const s of [-1, 1]) zone.colliders.push({ type: 'circle', x: x + bx * s * (W / 2 + 0.1), z: z + bz * s * (W / 2 + 0.1), r: 0.2 });
+    // (its two posts: what one bumps into there — let go of when the boards are taken away)
+    for (const s of [-1, 1]) { const post = { type: 'circle', x: x + bx * s * (W / 2 + 0.1), z: z + bz * s * (W / 2 + 0.1), r: 0.2 }; zone.colliders.push(post); newsPosts.push(post); }
     newsAt.push({ x: x + Math.sin(yaw) * 2.2, z: z + Math.cos(yaw) * 2.2, date: day.date });
   });
+  {
+    // (their posts, roofs and lamps: in the shadows that are drawn once, like everything that stands still — drawn
+    // again when the boards come or go — and not in the reflections of the water, like the rest of the fair's notices)
+    const posts = newsParts.toMeshes(zone.world.materials, { name: 'notice-news-posts', layers: zone.cast });
+    posts.traverse((o) => { if (o.isMesh) o.layers.disable(LAYER.REFLECT); });
+    newsGroup.add(posts);
+    zone.group.add(newsGroup);
+    newsGroup.updateMatrixWorld(true);
+  }
   // ---- where one arrives: a banner across the lane — a little mushroom cloud puffs over each of its posts, again
   // and again, like an animated picture — and, to the left, the rules of the fair
   const wl = NOTICES.welcome, FRAMES = 12;
@@ -346,8 +367,10 @@ export function buildNotices(zone) {
     });
   }
   const ru = NOTICES.rules, ry = zone.ground(ru.x, ru.z);
+  let rules = null; // (the board of the rules: painted again when the boards of what is new come or go)
   {
     const W = 2.3, H = 2.9, board = canvasBoard(580, 732, drawRules, W, H, { both: true });
+    rules = board;
     board.mesh.position.set(ru.x, ry + 0.7 + H / 2, ru.z);
     board.mesh.rotation.y = ru.yaw;
     board.mesh.name = 'notice-rules';
@@ -548,8 +571,26 @@ export function buildNotices(zone) {
     welcome: { x: wl.x, z: wl.z }, rules: front(ru, 2.2), story: front(st, 2.2), beach: front(NOTICES.beach, 2), advice: front(NOTICES.advice, 2),
     arcade: { ...front({ x: cx, z: cz, yaw: cyaw }, 1.2), yaw: cyaw + Math.PI, reach: 1.8, board: runBoard },
     ads: { ...front(a, 2.4), reach: 2.6, set(rows) { state.rows = rows; ads.redraw(); } },
+    /**
+     * The boards of what is new are up (on: true) or taken away — posts, roofs and lamps with them, and what one
+     * bumped into there (the switch `newsBoards`; main.js asks at every word from the server: nothing is done when
+     * nothing changes). The shadows that are drawn once are drawn again; the rules stop pointing to them.
+     */
+    setNews(on) {
+      on = on !== false;
+      if (newsGroup.visible === on) return;
+      newsGroup.visible = on;
+      for (const p of newsPosts) if (p.handle) p.handle[3] = on ? (p.y0 ?? -1e9) : 1e9;
+      newsShown = on;
+      rules?.redraw();
+      zone.world.bakeShadows?.();
+    },
+    /** Are the boards of what is new up? (And their posts, as the collisions keep them: for the checks.) */
+    get newsUp() { return newsGroup.visible; },
+    newsPosts,
     update(pos, time = 0) {
       for (const m of meshes) m.visible = (pos.x - m.position.x) ** 2 + (pos.z - m.position.z) ** 2 < 230 * 230;
+      for (const m of newsBoards) m.visible = (pos.x - m.position.x) ** 2 + (pos.z - m.position.z) ** 2 < 230 * 230;
       // (the little clouds: a new picture seven times a second, while somebody is near enough to see them)
       if (puffs && (pos.x - puffs.x) ** 2 + (pos.z - puffs.z) ** 2 < 90 * 90) {
         const f = Math.floor(time * 7) % FRAMES;

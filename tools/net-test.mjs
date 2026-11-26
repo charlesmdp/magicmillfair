@@ -868,7 +868,7 @@ async function testRelease(start, dist) {
   try {
     const st = json(await call('/api/status'));
     check('release: the status says what is released — the slide, the lab\'s five other games and the seven games with a gate off, the caves and the figures on, the sky hidden — and which version is online',
-      st?.ok === true && st.release?.slide === false && ['pond', 'boats', 'hill', 'crack', 'hollow', 'waves', 'lava', 'hive', 'flip', 'spiral', 'cars', 'golf'].every((k) => st.release[k] === false) && st.release.caves === true && st.release.stats === true && st.release.sky === 'hidden' && st.release.userRooms === false && st.build === 'abc1234' && st.refresh === 0, st);
+      st?.ok === true && st.release?.slide === false && ['pond', 'boats', 'hill', 'crack', 'hollow', 'waves', 'lava', 'hive', 'flip', 'spiral', 'cars', 'golf'].every((k) => st.release[k] === false) && st.release.caves === true && st.release.stats === true && st.release.sky === 'hidden' && st.release.userRooms === false && st.release.newsBoards === true && st.build === 'abc1234' && st.refresh === 0, st);
     // the board of a game that is not released: as if it did not exist
     const shut = { run: await call('/api/run', { board: 'slide' }), board: await call('/api/scores?board=slide'), all: json(await call('/api/scores?board=all')) };
     // two visitors, in two rooms

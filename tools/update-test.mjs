@@ -109,7 +109,7 @@ try {
   }));
   check('the back office: /admin opens with the owner\'s key and no other; the page is fenced in (nothing from elsewhere, never framed); it says which version is online, how many are connected, and shows every switch as it stands',
     desk.url === '/admin/' && /script-src 'self'/.test(fence) && /frame-ancestors 'none'/.test(fence) && /not recognised/.test(refusedKey.text) && refusedKey.shut && /owner/.test(desk.who) && desk.tabs === 'Releases,Rooms,High scores,Chat,Sponsors & plaques,Kept out,Figures,Administrators'
-    && desk.build === ONE && desk.here === '1' && desk.old === '0' && desk.switches.includes('The game in figures=true') && desk.switches.includes('Stars on the map=true') && desk.switches.includes('Mostly Down — the water slide=false') && desk.switches.includes('The sky villages=Hidden') && !desk.foreign.length, JSON.stringify({ fence, refusedKey, desk }));
+    && desk.build === ONE && desk.here === '1' && desk.old === '0' && desk.switches.includes('The game in figures=true') && desk.switches.includes('Stars on the map=true') && desk.switches.includes('The boards of what is new=true') && desk.switches.includes('Mostly Down — the water slide=false') && desk.switches.includes('The sky villages=Hidden') && !desk.foreign.length, JSON.stringify({ fence, refusedKey, desk }));
   const throwSwitch = (title) => office.evaluate((title) => [...document.querySelectorAll('#switches .switch')].find((s) => s.querySelector('b').textContent === title).querySelector('.toggle').click(), title);
 
   // ---- a word to every room, said from there
@@ -198,6 +198,20 @@ try {
   await page.waitForFunction(() => document.querySelector('.open-figures'), null, { timeout: 30000 });
   const on = await state();
   check('a switch goes on: what it releases is there at once, as the game runs — no refresh', on.extras === 'caves,stats' && on.figures && !on.bar && on.release.stats === true, JSON.stringify(on));
+
+  // ---- the boards of what is new, taken away from the back office and put back: at once, in the running game
+  const newsNow = () => page.evaluate(() => { const m = window.__mmf, n = m.world.games.notices; return { up: n.newsUp, shown: !!m.world.games.group.getObjectByName('notice-news-boards')?.visible, held: n.newsPosts.filter((q) => q.handle && q.handle[3] < 0).length, bar: !!document.querySelector('.update-bar.on'), release: m.updates?.release?.newsBoards }; });
+  const newsBefore = await newsNow();
+  await throwSwitch('The boards of what is new');
+  await page.waitForFunction(() => !window.__mmf.world.games.notices.newsUp, null, { timeout: 30000 });
+  const newsOff = await newsNow();
+  await office.waitForFunction(() => [...document.querySelectorAll('#switches .switch')].some((s) => s.querySelector('b').textContent === 'The boards of what is new' && s.querySelector('.toggle').getAttribute('aria-pressed') === 'false'), null, { timeout: 20000 });
+  await throwSwitch('The boards of what is new');
+  await page.waitForFunction(() => window.__mmf.world.games.notices.newsUp, null, { timeout: 30000 });
+  const newsOn = await newsNow();
+  check('the boards of what is new are taken away from the back office, and put back: at once, in the running game, no refresh — their posts with them, nothing left to bump into',
+    newsBefore.up && newsBefore.shown && newsBefore.held === 6 && !newsOff.up && !newsOff.shown && newsOff.held === 0 && !newsOff.bar && newsOn.up && newsOn.shown && newsOn.held === 6 && !newsOn.bar,
+    JSON.stringify({ newsBefore, newsOff, newsOn }));
 
   // ---- two of the lab's games, thrown on from the back office like anything else: their files are fetched and
   // they are built as the game runs (in a build made as the delivered one is); each is played by its own bot, and

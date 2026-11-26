@@ -28,6 +28,7 @@ export const RELEASE = {
   caves: true, // the caves are safe places: only those nearby hear what is said there (an extra)
   stats: true, // the game in figures: the counters and the page /opendata (an extra)
   stars: true, // the stars of the big attractions on the map, with their names (off: the map names its places only)
+  newsBoards: true, // the three wooden boards of what is new, by the poppy field (off: taken away at once, in every browser — no refresh)
   sky: 'hidden', // the sky villages: 'hidden' (nothing of them), 'soon' (their gate, closed), 'open'
   userRooms: false, // rooms that players make for themselves
   // any name written in the address (?room=a-name) is a room of its own, free. Off — as the fair is delivered —

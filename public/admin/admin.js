@@ -65,6 +65,7 @@
     caves: ['The caves are safe places', 'In a cave, only those nearby hear what is said.'],
     stats: ['The game in figures', 'The counters, and the page /opendata.'],
     stars: ['Stars on the map', 'On: the big attractions wear a red star and their name on the map (M). Off: the map names its places only.'],
+    newsBoards: ['The boards of what is new', 'On: three wooden boards by the poppy field say what changed lately (src/app/news.js). Off: they are taken away, posts and roofs with them — at once, in every browser, without a refresh.'],
     sky: ['The sky villages', 'Hidden: nothing of them. Soon: their gate is there, closed. Open: everything.'],
     userRooms: ['Rooms made by players', 'Off: nothing of them — no card in the shop, no path that answers. On: an account can buy a room of its own ($59 a month): reached by its link only, fifty visitors, a password if its owner wants one, its own boards of scores.'],
     freeRooms: ['Rooms by address', 'Off: only the common rooms exist (you still get in anywhere). On: any name written in the address (?room=a-name) is a room of its own, free.'],

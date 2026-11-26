@@ -795,6 +795,22 @@ try {
     check('where one arrives: a banner of welcome across the lane (little mushroom clouds puffing over its posts) and the rules to the left are what is seen first; the boards of what is new stand by the poppies, out of that first look — one for each of the three latest days',
       arrive.banner.there && arrive.banner.ahead < 12 && arrive.banner.far > 7 && arrive.banner.far < 16 && arrive.rules.there && arrive.rules.ahead < 48 && arrive.rules.left && arrive.puffs.moved && arrive.puffs.frames === 12
       && arrive.news.length === 3 && arrive.boards.every(Boolean) && !arrive.old && arrive.news.every((b, k) => b.date === arrive.days[k] && b.behind > 75 && b.far > 18 && b.far < 45) && arrive.flowers.some(Boolean), JSON.stringify(arrive));
+    // (the boards of what is new can be taken away while the game runs — the switch `newsBoards` of /admin —, posts
+    // and roofs with them, and nothing left to bump into; and put back. Here, with no server, by hand)
+    const newsAway = await page.evaluate(() => {
+      const m = window.__mmf, n = m.world.games.notices, g = m.world.games.group.getObjectByName('notice-news-boards'), col = m.world.collision;
+      // (a walker who steps right where a post stands: pushed off it, or not)
+      const pushed = () => n.newsPosts.map((q) => { const p = { x: q.x + 0.05, z: q.z }; col.resolve(p, 0.35, m.world.data.heightAt(q.x, q.z)); return +Math.hypot(p.x - q.x, p.z - q.z).toFixed(2); });
+      const before = { up: n.newsUp, shown: g.visible, pushed: pushed() };
+      n.setNews(false);
+      const away = { up: n.newsUp, shown: g.visible, pushed: pushed(), boards: [0, 1, 2].map((k) => !!g.getObjectByName(`notice-news${k}`)) };
+      n.setNews(false); // (said again: nothing changes)
+      n.setNews(true);
+      return { posts: n.newsPosts.length, before, away, back: { up: n.newsUp, shown: g.visible, pushed: pushed() } };
+    });
+    check('the boards of what is new can be taken away while the game runs (the switch of /admin), their posts and roofs with them and nothing left to bump into — and put back as they were',
+      newsAway.posts === 6 && newsAway.before.up && newsAway.before.shown && newsAway.before.pushed.every((d) => d >= 0.5)
+      && !newsAway.away.up && !newsAway.away.shown && newsAway.away.pushed.every((d) => d < 0.1) && newsAway.back.up && newsAway.back.shown && newsAway.back.pushed.every((d) => d >= 0.5), JSON.stringify(newsAway));
     check('…and, on arriving: to the right, a board tells how it all came to this (the story of the opening, another way); beside one, an easel sends everybody to the beach — PLAY ON THE BEACH!, an arrow up the lane on its front —; the easel of the life coach stands in a flower bed of the rock garden, by its path, an arrow on each face — and planks at the mill and by the pond point the rest of the way to Billy',
       arrive.story.there && !arrive.story.left && arrive.story.ahead < 48 && arrive.story.far > 5 && arrive.story.far < 14
       && arrive.beach.there && arrive.beach.left && arrive.beach.far < 3.5 && /^PLAY ON THE BEACH! · GAMES · THE PIER · \d+0 M$/.test(arrive.beach.words) && typeof arrive.beach.turns[0] === 'number' && Math.abs(arrive.beach.turns[0]) < 0.9

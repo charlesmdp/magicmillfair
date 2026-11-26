@@ -15,11 +15,16 @@ export class Collision {
     this._q = { x: 0, z: 0 };
   }
 
-  /** Vertical round obstacle. y0/y1 limit it to a height band (things standing on a deck, for instance). */
+  /**
+   * Vertical round obstacle. y0/y1 limit it to a height band (things standing on a deck, for instance). Returns
+   * what is kept of it, [x, z, r, y0, y1]: its band can be changed afterwards — y0 = 1e9 lets go of it (a thing
+   * taken away while the game runs), and putting y0 back brings it back.
+   */
   addCircle(x, z, r, y0 = -1e9, y1 = 1e9) {
     this.bulky = null;
-    const i = this.circles.push([x, z, r, y0, y1]) - 1;
+    const c = [x, z, r, y0, y1], i = this.circles.push(c) - 1;
     this._insert(x - r, z - r, x + r, z + r, i);
+    return c;
   }
 
   /** Oriented box footprint (yaw around Y, same convention as layout frames). */

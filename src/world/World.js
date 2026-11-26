@@ -167,7 +167,7 @@ export class World {
     for (const [x, z, r] of this.rocks.colliders) col.addCircle(x, z, r);
     for (const zone of [this.mill, this.places, this.games, this.sky]) for (const c of zone.colliders) {
       if (c.type === 'box') col.addBox(c.x, c.z, c.hw, c.hl, c.yaw, c.y0, c.y1);
-      else col.addCircle(c.x, c.z, c.r, c.y0, c.y1);
+      else c.handle = col.addCircle(c.x, c.z, c.r, c.y0, c.y1); // (kept: a thing taken away while the game runs lets go of it)
     }
     for (const a of [...this.places.areas, ...this.sky.areas]) col.addArea(a);
     for (const outline of SEA_REACH) col.addArea(new Polygon(outline, { name: 'sea' }));
