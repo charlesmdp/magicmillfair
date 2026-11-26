@@ -41,7 +41,7 @@ const STRIPE_KEY = 'sk_test_magicmillfairtests', STRIPE_HOOK = 'whsec_magicmillf
 const MAIL_FILE = path.join(os.tmpdir(), `mmf-net-test-mail-${process.pid}.jsonl`);
 process.on('exit', () => { try { fs.rmSync(MAIL_FILE, { force: true }); } catch { /* nothing to remove */ } });
 // A stand-in for Stripe: it hands out payment pages and remembers what it was asked.
-const stripe = { sessions: {}, asked: [], refunds: [], portals: [], cancelled: [], port: 0, server: null };
+const stripe = { sessions: {}, asked: [], refunds: [], portals: [], cancelled: [], invoices: {}, sent: [], credits: [], refuseTax: false, refuseCredit: false, port: 0, server: null };
 async function startStripe() {
   stripe.port = await freePort();
   stripe.server = http.createServer((req, res) => {
@@ -62,7 +62,8 @@ async function startStripe() {
         const stuck = req.method === 'DELETE' && sub[1].startsWith('sub_stuck');
         if (req.method === 'DELETE' && !stuck) stripe.cancelled.push(sub[1]);
         res.writeHead(stuck ? 400 : 200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify(stuck ? { error: { message: 'This subscription cannot be cancelled just now.' } } : req.method === 'DELETE' ? { id: sub[1], status: 'canceled' } : { id: sub[1], latest_invoice: { id: 'in_test_1', payment_intent: { id: `pi_month_${sub[1]}` } } }));
+        if (req.method !== 'DELETE') stripe.invoices[`in_month_${sub[1]}`] ||= { id: `in_month_${sub[1]}`, object: 'invoice', number: `MONTH-${sub[1]}`, status: 'paid', total: 2900, total_excluding_tax: 2900, currency: 'usd', created: Math.floor(Date.now() / 1000), subscription: sub[1], payment_intent: `pi_month_${sub[1]}`, lines: { object: 'list', has_more: false, data: [{ id: `il_month_${sub[1]}`, quantity: 1, amount: 2900 }] } };
+        return res.end(JSON.stringify(stuck ? { error: { message: 'This subscription cannot be cancelled just now.' } } : req.method === 'DELETE' ? { id: sub[1], status: 'canceled' } : { id: sub[1], latest_invoice: { id: `in_month_${sub[1]}`, payment_intent: { id: `pi_month_${sub[1]}` } } }));
       }
       if (req.url === '/v1/billing_portal/sessions' && req.headers.authorization === `Bearer ${STRIPE_KEY}`) {
         stripe.portals.push({ customer: form.get('customer'), back: form.get('return_url') });
@@ -84,6 +85,24 @@ async function startStripe() {
         const given = Object.values(stripe.sessions).find((s) => s.customer === cus[1])?.customer_details?.email; // (the address given at its payment page)
         return res.end(JSON.stringify(mine ? { id: cus[1], email: given || 'buyer@example.org' } : { error: { message: 'Invalid API Key' } }));
       }
+      // (a credit note on a paid invoice: it makes the refund — or Stripe refuses it, when the test says so)
+      if (req.url === '/v1/credit_notes' && req.method === 'POST' && req.headers.authorization === `Bearer ${STRIPE_KEY}`) {
+        const v = stripe.invoices[form.get('invoice')];
+        if (stripe.refuseCredit || !v) { res.writeHead(400, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ error: { type: 'invalid_request_error', message: 'Credit notes cannot be made just now.' } })); }
+        stripe.credits.push({ invoice: v.id, refund: form.get('refund_amount'), line: form.get('lines[0][invoice_line_item]'), quantity: form.get('lines[0][quantity]'), key: req.headers['idempotency-key'], why: form.get('metadata[why]') });
+        stripe.refunds.push({ pay: v.payment_intent, key: req.headers['idempotency-key'], why: form.get('metadata[why]'), credit: v.id });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ id: `cn_test_${stripe.credits.length}`, object: 'credit_note', invoice: v.id, total: Number(form.get('refund_amount')) }));
+      }
+      // (the invoices Stripe made: one, a subscription's, a customer's — and one sent again)
+      const inv = /^\/v1\/invoices\/(in_\w+)(\/send)?$/.exec(req.url), invs = /^\/v1\/invoices\?(.*)$/.exec(req.url);
+      if ((inv || invs) && req.headers.authorization === `Bearer ${STRIPE_KEY}`) {
+        if (inv && inv[2] && req.method === 'POST') stripe.sent.push(inv[1]);
+        const q = invs ? new URLSearchParams(invs[1]) : null, all = Object.values(stripe.invoices);
+        const body = inv ? stripe.invoices[inv[1]] : { object: 'list', data: all.filter((v) => (q.get('subscription') ? v.subscription === q.get('subscription') : v.customer === q.get('customer'))).reverse() };
+        res.writeHead(body ? 200 : 404, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify(body || { error: { message: 'No such invoice' } }));
+      }
       const one = /^\/v1\/checkout\/sessions\/(cs_\w+)$/.exec(req.url);
       if (one && req.method === 'GET') {
         // a payment page, asked about: as it stands (the test says when it is paid: stripe.sessions[id])
@@ -92,10 +111,23 @@ async function startStripe() {
         return res.end(JSON.stringify(s || { error: { message: 'No such checkout.session' } }));
       }
       stripe.asked.push({ url: req.url, auth: req.headers.authorization, version: req.headers['stripe-version'] || '', form });
+      // (Stripe Tax not set up: a page asked for with the VAT is refused — as Stripe does, with a 400)
+      if (ok && stripe.refuseTax && form.get('automatic_tax[enabled]') === 'true') {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ error: { type: 'invalid_request_error', message: 'Stripe Tax has not been activated on your account.' } }));
+      }
       if (ok) {
-        const id = `cs_test_${stripe.asked.length}`, month = form.get('mode') === 'subscription';
-        stripe.sessions[id] = { id, status: 'open', payment_status: 'unpaid', amount_total: Number(form.get('line_items[0][price_data][unit_amount]')), payment_intent: month ? null : `pi_${id}`, subscription: month ? `sub_${id}` : null, customer: `cus_${id}`,
+        const id = `cs_test_${stripe.asked.length}`, month = form.get('mode') === 'subscription', total = Number(form.get('line_items[0][price_data][unit_amount]'));
+        stripe.sessions[id] = { id, status: 'open', payment_status: 'unpaid', amount_total: total, payment_intent: month ? null : `pi_${id}`, subscription: month ? `sub_${id}` : null, customer: `cus_${id}`,
           customer_details: { email: 'buyer@example.org' }, metadata: Object.fromEntries([...form].filter(([k]) => /^metadata\[\w+\]$/.test(k)).map(([k, v]) => [k.slice(9, -1), v])) };
+        // (with the VAT: an invoice of the payment — of a payment made once, as its page asks; of the first month — the
+        // VAT taken out of the price, at a fifth of what is left: 20 %)
+        if (form.get('automatic_tax[enabled]') === 'true' && (month || form.get('invoice_creation[enabled]') === 'true')) {
+          const vid = `in_${id}`, net = Math.round(total / 1.2);
+          stripe.invoices[vid] = { id: vid, object: 'invoice', number: `TEST-${stripe.asked.length}`, status: 'paid', total, total_excluding_tax: net, currency: 'usd', created: Math.floor(Date.now() / 1000), hosted_invoice_url: `https://invoice.stripe.test/i/${vid}`, invoice_pdf: `https://pay.stripe.test/invoice/${vid}/pdf`, subscription: month ? `sub_${id}` : null, customer: `cus_${id}`,
+            payment_intent: month ? null : `pi_${id}`, lines: { object: 'list', has_more: false, data: [{ id: `il_${id}`, quantity: 1, amount: total }] } };
+          if (!month) stripe.sessions[id].invoice = vid;
+        }
       }
       res.writeHead(ok ? 200 : 401, { 'Content-Type': 'application/json' });
       // (a form to show inside the game has no page: Stripe gives a secret for its script instead)
@@ -1854,6 +1886,74 @@ async function testPaid({ port }) {
   }
 }
 
+// ------------------------------------------------------------- the VAT on each sale (Stripe Tax), and the invoices
+async function testTax({ port }) {
+  const json = (res) => { try { return JSON.parse(res.body.toString()); } catch { return null; } };
+  const owner = { 'content-type': 'application/json', authorization: `Bearer ${ADMIN_KEY}` };
+  const call = (target, method = 'GET', body, headers = owner) => request(port, target, { method, headers, ...(body && { body: JSON.stringify(body) }), from: '127.0.0.91' });
+  const buy = async (item, device, more = {}) => { const res = await request(port, '/api/checkout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ item, device, ...more }), from: '127.0.0.92' }); return { status: res.status, id: `cs_test_${stripe.asked.length}`, form: stripe.asked[stripe.asked.length - 1]?.form }; };
+  const pay = (id) => Object.assign(stripe.sessions[id], { status: 'complete', payment_status: 'paid' });
+  const confirm = async (id) => json(await request(port, '/api/checkout/confirm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ session: id }), from: '127.0.0.93' }));
+  // (off, as it is by default: a price is what is paid — and Stripe is asked for nothing more)
+  const at0 = json(await call('/api/tax')), nobody = await call('/api/tax', 'GET', null, { 'content-type': 'application/json' });
+  const plain = await buy('hat:beanie', randomId(16));
+  const offForm = plain.form;
+  // (on, with a code: the VAT worked out by Stripe, out of the price; a business may give its VAT number; an invoice
+  // of a payment made once — of what is paid by the month there always is)
+  const badCode = await call('/api/tax', 'POST', { on: true, code: 'VAT20' }), set = json(await call('/api/tax', 'POST', { on: true, code: 'txcd_10000000' }));
+  const once = await buy('board:hoop', randomId(16), { bid: 300 }), month = await buy('gondola:23', randomId(16));
+  check('VAT: off by default (a price is what is paid, Stripe adds nothing); the owner alone switches it on: each payment page asks Stripe for it, out of the price — a business may give its VAT number, a payment made once gets an invoice (what is paid by the month has them anyway)',
+    at0?.on === false && nobody.status === 403 && plain.status === 200 && offForm?.get('line_items[0][price_data][tax_behavior]') === 'inclusive' && offForm.get('automatic_tax[enabled]') === null && offForm.get('invoice_creation[enabled]') === null
+    && badCode.status === 400 && set?.on === true && set.code === 'txcd_10000000'
+    && once.status === 200 && once.form?.get('automatic_tax[enabled]') === 'true' && once.form.get('tax_id_collection[enabled]') === 'true' && once.form.get('invoice_creation[enabled]') === 'true' && once.form.get('customer_creation') === 'always'
+    && once.form.get('line_items[0][price_data][tax_behavior]') === 'inclusive' && once.form.get('line_items[0][price_data][product_data][tax_code]') === 'txcd_10000000' && once.form.get('line_items[0][price_data][unit_amount]') === '300'
+    && month.status === 200 && month.form?.get('mode') === 'subscription' && month.form.get('automatic_tax[enabled]') === 'true' && month.form.get('invoice_creation[enabled]') === null && month.form.get('customer_creation') === null,
+    { at0, nobody: nobody.status, offForm: offForm && Object.fromEntries([...offForm].filter(([k]) => /tax|invoice|customer_creation/.test(k))), badCode: badCode.status, set, once: once.form && Object.fromEntries([...once.form].filter(([k]) => /tax|invoice|customer_creation/.test(k))), month: month.form && Object.fromEntries([...month.form].filter(([k]) => /tax|invoice|customer_creation/.test(k))) });
+  // (the invoices of a place, for the owner: of a bid — the one its payment page made —, of what is paid by the month; one sent again)
+  pay(once.id); pay(month.id);
+  const tookBid = await confirm(once.id), tookMonth = await confirm(month.id);
+  const ofBid = json(await call('/api/invoices?slot=board:hoop')), ofMonth = json(await call('/api/invoices?slot=gondola:23'));
+  const notOwner = await call('/api/invoices?slot=board:hoop', 'GET', null, { 'content-type': 'application/json' }), none = await call('/api/invoices?slot=board:milk');
+  const sendBad = await call('/api/invoices', 'POST', { send: '../x' }), sent = json(await call('/api/invoices', 'POST', { send: ofBid?.invoices?.[0]?.id || 'in_none' }));
+  check('invoices: the owner sees those Stripe made of what a place was paid with — of a bid, of a place paid by the month —, with the VAT in them, their page and their PDF, and has one sent again; nobody else sees them',
+    tookBid?.given === true && tookMonth?.given === true && ofBid?.invoices?.length === 1 && ofBid.invoices[0].total === 300 && ofBid.invoices[0].tax === 50 && /^https:\/\/invoice\.stripe\.test\//.test(ofBid.invoices[0].url) && /pdf$/.test(ofBid.invoices[0].pdf) && ofBid.invoices[0].status === 'paid'
+    && ofMonth?.invoices?.length === 1 && ofMonth.invoices[0].total === 2900 && notOwner.status === 403 && none.status === 404 && sendBad.status === 400 && sent?.ok === true && stripe.sent.includes(ofBid.invoices[0].id),
+    { tookBid, tookMonth, ofBid, ofMonth, notOwner: notOwner.status, none: none.status, sendBad: sendBad.status, sent, stripeSent: stripe.sent });
+  // (a bid given back — outbid — while it has an invoice: given back by a credit note on that invoice, which makes the
+  // refund and cancels the invoice; if Stripe refuses the credit note, the money goes back all the same, and the owner
+  // is told the credit note is still to be made)
+  const mails = () => (CF || !fs.existsSync(MAIL_FILE) ? null : fs.readFileSync(MAIL_FILE, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)));
+  const second = await buy('board:hoop', randomId(16), { bid: 400 });
+  pay(second.id);
+  const tookSecond = await confirm(second.id), credit = stripe.credits.find((c) => c.invoice === `in_${once.id}`), viaCredit = stripe.refunds.some((r) => r.pay === `pi_${once.id}` && r.credit === `in_${once.id}`);
+  stripe.refuseCredit = true;
+  const third = await buy('board:hoop', randomId(16), { bid: 500 });
+  pay(third.id);
+  const tookThird = await confirm(third.id);
+  stripe.refuseCredit = false;
+  const plainBack = stripe.refunds.some((r) => r.pay === `pi_${second.id}` && !r.credit && r.key === `refund-pi_${second.id}`);
+  const book = json(await call('/api/sponsors')), firstBack = (book?.refunds || []).find((r) => r.pay === `pi_${once.id}`), secondBack = (book?.refunds || []).find((r) => r.pay === `pi_${second.id}`);
+  for (let i = 0; i < 40 && mails() && !mails().some((m) => m.to === 'owner@example.org' && /^Refunded — \$4 — /.test(m.subject)); i++) await sleep(50);
+  const toldOwner = mails()?.filter((m) => m.to === 'owner@example.org' && /^Refunded — \$4 — /.test(m.subject)) || null;
+  check('a payment given back while it has an invoice (here, a bid outbid) is given back by a credit note on that invoice — the refund and what cancels the invoice, at once —; if Stripe refuses the credit note, the money goes back all the same, and the back office and the owner are told it is still to be made',
+    tookSecond?.given === true && credit?.refund === '300' && credit.line === `il_${once.id}` && credit.quantity === '1' && credit.key === `credit-pi_${once.id}` && viaCredit && firstBack?.ok === true && !firstBack.uncredited
+    && tookThird?.given === true && plainBack && secondBack?.ok === true && /Credit notes cannot be made just now/.test(secondBack.uncredited || '')
+    && (toldOwner === null || (toldOwner.length === 1 && /still wants its credit note/.test(toldOwner[0].text))),
+    { tookSecond, tookThird, credit, viaCredit, plainBack, firstBack, secondBack, toldOwner: toldOwner?.map((m) => m.text.split('\n')[2]) });
+  // (Stripe Tax not set up in Stripe: the page is refused with the VAT — the sale is made without it, and the owner sees why;
+  // once Stripe takes it again, that goes)
+  stripe.refuseTax = true;
+  const asked = stripe.asked.length, refusedBuy = await buy('hat:beanie', randomId(16)), twice = stripe.asked.length - asked, seen = json(await call('/api/tax'));
+  stripe.refuseTax = false;
+  const againBuy = await buy('hat:beanie', randomId(16)), cleared = json(await call('/api/tax'));
+  await call('/api/tax', 'POST', { on: false, code: '' }); // (off again, for what follows)
+  const off = json(await call('/api/tax'));
+  check('VAT refused by Stripe (Stripe Tax not set up there): the payment page is made without it — the sale is not lost —, the back office says why; once Stripe takes it again, that goes',
+    refusedBuy.status === 200 && twice === 2 && refusedBuy.form?.get('automatic_tax[enabled]') === null && /Stripe Tax has not been activated/.test(seen?.refused?.error || '') && seen.refused.at > 0
+    && againBuy.status === 200 && againBuy.form?.get('automatic_tax[enabled]') === 'true' && cleared?.refused === null && off?.on === false,
+    { refusedBuy: refusedBuy.status, twice, seen, againBuy: againBuy.status, cleared, off });
+}
+
 // ------------------------------------------------------------- what may not be said, nor worn as a name (decency.js)
 async function testDecency({ port }) {
   const { maskChat, nameOk } = await import('../server/decency.js');
@@ -3063,6 +3163,7 @@ try {
     await section('api', () => testApi(server));
     await section('shop', () => testShop(server));
     await section('paid', () => testPaid(server));
+    await section('tax', () => testTax(server));
     await section('accounts', () => testAccounts(server));
     await section('chatlog', () => testChatLog(server));
     await section('decency', () => testDecency(server));
@@ -3090,6 +3191,7 @@ try {
     await section('api', () => testApi(server));
     await section('shop', () => testShop(server));
     await section('paid', () => testPaid(server));
+    await section('tax', () => testTax(server));
     await section('accounts', () => testAccounts(server));
     await section('chatlog', () => testChatLog(server));
     await section('decency', () => testDecency(server));

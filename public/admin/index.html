@@ -142,6 +142,24 @@
         <button type="button" class="ghost small" id="notify-test">Send a test</button>
       </form>
       <p class="hint" id="notify-said" hidden></p>
+      <div id="tax-box" hidden>
+        <h3>VAT and invoices</h3>
+        <p class="hint">With the VAT on, Stripe works out the VAT due on each sale — where the buyer is — out of the price, which includes it (a bid stays what is paid); a business can give its VAT number; and each payment gets an invoice, which Stripe e-mails to the buyer. <b>First, in Stripe</b>: <i>Settings → Tax</i> (the address of the company and its VAT registrations), <i>Settings → Business → Public details</i> (what the invoices show), and <i>Settings → Customer emails</i>: "Successful payments" (so that invoices are sent). If Stripe Tax is not set up at all, Stripe refuses the VAT: the shop sells without it, and this says so here. The rest is not checked from here — look at a first invoice to see that it carries the VAT. A payment given back (outbid, taken down) gets its credit note.</p>
+        <form id="tax-form" class="row wrap">
+          <label class="tick"><input type="checkbox" id="tax-on"> VAT on each sale (Stripe Tax)</label>
+          <label>Tax code <input id="tax-code" type="text" maxlength="13" spellcheck="false" autocomplete="off" placeholder="the one set in Stripe" pattern="txcd_[0-9]{8}" title="txcd_ and eight digits — or leave it empty"></label>
+          <button type="submit" class="small">Save</button>
+        </form>
+        <p class="hint" id="tax-said"></p>
+      </div>
+      <dialog id="invoices" aria-labelledby="invoices-title">
+        <div class="stack">
+          <h3 id="invoices-title">Invoices</h3>
+          <p class="hint" id="invoices-where"></p>
+          <div id="invoices-list" class="list"></div>
+          <div class="row"><button type="button" class="ghost" id="invoices-close">Close</button></div>
+        </div>
+      </dialog>
       <p class="hint" id="sponsors-total"></p>
       <div id="sponsors" class="list"></div>
       <h3>Plaques of the companions — awaiting your approval</h3>

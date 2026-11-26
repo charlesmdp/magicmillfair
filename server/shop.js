@@ -24,6 +24,8 @@
 //   POST   /api/sponsors  { slot, approve } | { slot, set: { title, subtitle, url, logo, bg, paid } }   (bg: the colour of the panel, #rrggbb;
 //                                                      paid: what a sponsor entered by hand has paid, in cents — 0: not said)
 //   DELETE /api/sponsors?slot=…                        the administrator frees a place
+//   GET    /api/tax  ·  POST /api/tax { on, code }      the owner: the VAT on each sale (Stripe Tax) → { on, code, refused }
+//   GET    /api/invoices?slot=…  ·  POST { send }       the owner: the invoices Stripe made of what a place was paid with; one sent again
 //
 // Who is who: a visitor is the random name their browser gave itself (`device`, see src/net/device.js); one who
 // has signed in to an account (accounts.js) is all the browsers of that account at once: what any of them
@@ -50,7 +52,7 @@
 // at, why, ok, error }].
 import { allowed } from './api.js';
 import { describe, forLife, publicPrices, nextBid, AUCTION, CURRENCY, MAJOR_BOARDS, BOARD_PLACES } from './catalog.js';
-import { createCheckout, createPortal, verifyWebhook, refundPayment, endSubscription, fetchCheckout, buyerEmail } from './stripe.js';
+import { createCheckout, createPortal, verifyWebhook, refundPayment, endSubscription, fetchCheckout, buyerEmail, findInvoices, sendInvoice } from './stripe.js';
 import { noteSale, noteRefund } from './stats.js';
 import { readRelease } from './release.js';
 import { BOARDS as SCORE_BOARDS } from './scores.js';
@@ -267,7 +269,7 @@ async function tellOwnerRefund(ctx, what) {
 async function refundLater(ctx, cfg, pay, site = '') {
   const list = (await ctx.store.get('refunds')) || [], entry = [...list].reverse().find((e) => e.pay === pay && !e.ok);
   if (!entry) return null;
-  try { await refundPayment(cfg, pay, entry.why, ctx.fetch || fetch); entry.ok = true; entry.at = ctx.now(); delete entry.kept; delete entry.error; } catch (err) { entry.error = String(err.message || err).slice(0, 160); console.error('[shop] refund', entry.error); }
+  try { const done = await refundPayment(cfg, pay, entry.why, ctx.fetch || fetch); entry.ok = true; entry.at = ctx.now(); delete entry.kept; delete entry.error; if (done.uncredited) entry.uncredited = done.uncredited; } catch (err) { entry.error = String(err.message || err).slice(0, 160); console.error('[shop] refund', entry.error); }
   await ctx.store.put('refunds', list);
   const place = placeIn(entry.why);
   if (entry.ok) {
@@ -275,7 +277,7 @@ async function refundLater(ctx, cfg, pay, site = '') {
     if (entry.by) await leaveNote(ctx, entry.by, 'The fair has refunded your payment in full.');
     tellSponsor(ctx, cfg, { device: entry.by || '', pay, site, kind: 'refunded', place, cents: entry.amount || 0 });
   }
-  await tellOwnerRefund(ctx, { cents: entry.amount || 0, place, reason: 'later', ok: !!entry.ok, error: entry.error || '' });
+  await tellOwnerRefund(ctx, { cents: entry.amount || 0, place, reason: 'later', ok: !!entry.ok, error: entry.error || '', uncredited: entry.ok ? entry.uncredited || '' : '' });
   return entry.ok;
 }
 
@@ -285,10 +287,11 @@ async function refundLater(ctx, cfg, pay, site = '') {
  */
 async function refund(ctx, cfg, pay, amount, why, { place = '', reason = '', by = '' } = {}) {
   const entry = { pay, amount, at: ctx.now(), why, ok: true, ...(DEVICE.test(by || '') && { by }) };
-  try { await refundPayment(cfg, pay, why, ctx.fetch || fetch); } catch (err) { entry.ok = false; entry.error = String(err.message || err).slice(0, 160); console.error('[shop] refund', entry.error); }
+  // (uncredited: given back, but its invoice still wants its credit note — Stripe refused to make it)
+  try { const done = await refundPayment(cfg, pay, why, ctx.fetch || fetch); if (done.uncredited) entry.uncredited = done.uncredited; } catch (err) { entry.ok = false; entry.error = String(err.message || err).slice(0, 160); console.error('[shop] refund', entry.error); }
   await ctx.store.put('refunds', [...((await ctx.store.get('refunds')) || []), entry].slice(-100));
   if (entry.ok) await noteRefund(ctx.store, { cents: amount }, ctx.now()).catch(() => {}); // (the figures: what the shop earned)
-  await tellOwnerRefund(ctx, { cents: amount, place: place || placeIn(why), reason, ok: entry.ok, error: entry.error || '' });
+  await tellOwnerRefund(ctx, { cents: amount, place: place || placeIn(why), reason, ok: entry.ok, error: entry.error || '', uncredited: entry.uncredited || '' });
   return entry.ok;
 }
 
@@ -609,7 +612,16 @@ export async function shopRoute(req, ctx) {
     if (what.life) extra = { ...extra, life: 1 };
     try {
       const embed = body.embed === true && !!cfg.publishable; // (the form inside the game: only where its key was given)
-      const session = await createCheckout(cfg, { ...what, currency: CURRENCY }, device, req.site || '', ctx.fetch || fetch, extra, embed);
+      // (the VAT, where the owner switched it on: a page Stripe refused with it is made without it — the owner sees
+      // why in the back office; a page made with it again clears that)
+      const tax = await ctx.store.get('tax');
+      const session = await createCheckout(cfg, { ...what, currency: CURRENCY }, device, req.site || '', ctx.fetch || fetch, extra, embed, tax?.on ? tax : null);
+      if (tax?.on && (session.untaxed || tax.refused)) {
+        // (onto the record as it is now — the owner may have changed it while Stripe was being asked — and only while
+        // it is still the one this page was made with)
+        const cur = await ctx.store.get('tax');
+        if (cur?.on && cur.code === tax.code && (session.untaxed || cur.refused)) await ctx.store.put('tax', { ...cur, refused: session.untaxed ? { at: now, error: session.untaxed } : null });
+      }
       return out(200, embed ? { secret: session.secret, id: session.id } : { url: session.url });
     } catch (err) {
       console.error('[shop]', err.message);
@@ -729,6 +741,38 @@ export async function shopRoute(req, ctx) {
     };
   }
 
+  if (path === '/api/tax') {
+    // the VAT on each sale, the owner's switch (stripe.js, taxed): off until Stripe Tax is set up in Stripe itself
+    if (!req.owner) return out(403, { error: 'Only the owner.' });
+    const kept = (await ctx.store.get('tax')) || { on: false, code: '' };
+    if (method === 'POST') {
+      const code = typeof body?.code === 'string' ? body.code.trim() : '';
+      if (code && !/^txcd_\d{8}$/.test(code)) return out(400, { error: 'A tax code looks like txcd_10000000 (or leave it empty).' });
+      const tax = { on: body?.on === true, code, refused: null };
+      await ctx.store.put('tax', tax);
+      return out(200, { ...tax, stripe: !!cfg.mode });
+    }
+    if (!reading) return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD, POST' });
+    return out(200, { on: !!kept.on, code: kept.code || '', refused: kept.refused || null, stripe: !!cfg.mode });
+  }
+
+  if (path === '/api/invoices') {
+    // the invoices Stripe made of what a place was paid with — to look at, and to send again to who paid (the owner)
+    if (!req.owner) return out(403, { error: 'Only the owner.' });
+    if (!cfg.mode) return out(501, { error: 'The shop is not open.' });
+    if (method === 'POST' && !/^in_[A-Za-z0-9_]{4,250}$/.test(typeof body?.send === 'string' ? body.send : '')) return out(400, { error: 'No such invoice.' });
+    try {
+      if (method === 'POST') return out(200, { ok: true, sent: await sendInvoice(cfg, body.send, ctx.fetch || fetch) });
+      if (!reading) return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD, POST' });
+      const s = (await slotsOf(ctx))[query.get('slot') || ''];
+      if (!s) return out(404, { error: 'No such place.' });
+      return out(200, { invoices: await findInvoices(cfg, { pay: s.pay || '', sub: s.sub || '', customer: s.customer || '' }, ctx.fetch || fetch) });
+    } catch (err) {
+      console.error('[shop] invoices', String(err.message || err).slice(0, 160));
+      return out(502, { error: String(err.message || err).slice(0, 160) });
+    }
+  }
+
   if (path === '/api/sponsors') {
     if (!req.admin) return out(403, { error: 'Forbidden.' });
     const slots = await slotsOf(ctx);
@@ -787,13 +831,13 @@ export async function shopRoute(req, ctx) {
       // kept is written down with the refunds: the owner can still give it back later.
       const gone = slots[id], back = query.get('refund') === '1', where = describe(id) ? placeOf(describe(id)) : id; // (where: in words — a place no longer sold keeps its name)
       if (back && !req.owner) return out(403, { error: 'Only the owner gives money back.' });
-      let refunded = false, stopped = false, unstopped = '';
+      let refunded = false, stopped = false, unstopped = '', uncredited = '';
       if (gone.pay && back) refunded = await refund(ctx, cfg, gone.pay, gone.bid || 0, `removed from ${id}`, { place: where, reason: 'down', by: gone.by });
       else if (gone.pay) await ctx.store.put('refunds', [...((await ctx.store.get('refunds')) || []), { pay: gone.pay, amount: gone.bid || 0, at: now, why: `taken down from ${id}`, ok: false, kept: true, by: gone.by }].slice(-100));
       if (gone.sub) {
         // (unstopped: why Stripe would not stop what is paid by the month — the owner must, in Stripe itself)
         if (!cfg.key) unstopped = 'Stripe is not set up on this server';
-        else try { const done = await endSubscription(cfg, gone.sub, back, ctx.fetch || fetch); stopped = true; refunded = refunded || done.refunded; } catch (err) { unstopped = String(err.message || err).slice(0, 160); console.error('[shop] subscription', unstopped); }
+        else try { const done = await endSubscription(cfg, gone.sub, back, ctx.fetch || fetch); stopped = true; refunded = refunded || done.refunded; uncredited = done.uncredited || ''; } catch (err) { unstopped = String(err.message || err).slice(0, 160); console.error('[shop] subscription', unstopped); }
       }
       const what = describe(id)?.plaque ? 'plaque' : 'panel';
       await leaveNote(ctx, gone.by, gone.pay && refunded ? `The fair took your ${what} down: your payment has been refunded in full.`
@@ -805,7 +849,7 @@ export async function shopRoute(req, ctx) {
       // in refund() —, or of a subscription Stripe would not stop: it may go on being charged)
       // (the links: the owner's own request is trusted with the address of the site, another administrator's is not)
       if (gone.by !== 'admin') tellSponsor(ctx, cfg, { device: gone.by, pay: gone.pay || '', customer: gone.customer || '', site: req.owner ? req.site || '' : '', kind: 'down', place: where, cents: gone.bid || 0, refunded, monthly: !!gone.sub && stopped, plaque: what === 'plaque' });
-      if (gone.sub && (back || !stopped)) await tellOwnerRefund(ctx, { cents: describe(id)?.amount || 0, place: where, reason: 'down', monthly: true, ok: refunded, asked: back, unstopped: !stopped, error: !stopped ? unstopped : refunded ? '' : 'Stripe gave nothing back for the month that was running' });
+      if (gone.sub && (back || !stopped)) await tellOwnerRefund(ctx, { cents: describe(id)?.amount || 0, place: where, reason: 'down', monthly: true, ok: refunded, asked: back, unstopped: !stopped, uncredited, error: !stopped ? unstopped : refunded ? '' : 'Stripe gave nothing back for the month that was running' });
     } else if (!reading) return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD, POST, DELETE' });
     return out(200, {
       ...taken,

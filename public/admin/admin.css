@@ -23,6 +23,9 @@ h3 { margin: 20px 0 6px; font: 700 12px/1.2 system-ui, sans-serif; letter-spacin
 .row { display: flex; align-items: center; gap: 9px; margin: 8px 0; }
 .row.wrap { flex-wrap: wrap; align-items: flex-end; }
 .row label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--dim); }
+/* (a field under its label: it grows across the row, never down — "flex: 1 1 220px" of a field would make it 220 px tall in a column) */
+.row label:has(> input[type="text"], > input[type="email"], > input[type="url"], > input[type="password"], > input:not([type])) { flex: 1 1 220px; }
+.row label > input { flex: none; }
 input, select, button { font: inherit; color: inherit; }
 input[type="text"], input[type="password"], input[type="number"], input[type="url"], input[type="email"], select { min-width: 0; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--line); background: #110d30; color: var(--ink); }
 input[type="text"], input[type="password"], input[type="url"], input[type="email"] { flex: 1 1 220px; }
@@ -34,6 +37,10 @@ button.ghost { background: rgba(255, 255, 255, 0.08); color: var(--ink); border:
 button.warn { background: #ff9646; color: #2b1200; }
 button.danger { background: var(--red); color: #2b0703; }
 button.small { padding: 5px 10px; font-size: 12.5px; }
+/* (a link that looks like a small button: the page of an invoice, its PDF) */
+a.ghost { display: inline-block; padding: 5px 10px; border-radius: 9px; background: rgba(255, 255, 255, 0.08); color: var(--ink); border: 1px solid var(--line); font-size: 12.5px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+a.ghost:hover { filter: brightness(1.15); }
+.hint.bad { color: var(--red); }
 .tabs { position: sticky; top: 0; z-index: 5; display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 0; background: var(--bg); }
 .tabs button { background: var(--card); color: var(--dim); border: 1px solid var(--line); font-weight: 700; }
 .tabs button.on { background: var(--gold); color: #2a1d05; border-color: var(--gold); }

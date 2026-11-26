@@ -547,6 +547,30 @@ To keep both pairs at once, name them `STRIPE_TEST_SECRET_KEY`, `STRIPE_TEST_WEB
 `STRIPE_LIVE_PUBLISHABLE_KEY` for the form inside the game), and set the variable `STRIPE_MODE` to `test` or
 `live` (without it, live wins as soon as its key is there).
 
+**VAT and invoices.** A price is what is paid: each payment page tells Stripe that any tax is in it (*inclusive*
+— a bid stays the sum bid, whatever Stripe's own settings say of prices). The owner switches **the VAT** on in
+the back office (*Sponsors* → *VAT and invoices*), once Stripe Tax is set up in Stripe itself — *Settings →
+Tax*: the address of the company and its VAT registrations (France; and the EU's one-stop shop, OSS, once sales
+to consumers elsewhere in the Union call for it) —, the details the invoices show (*Settings → Business →
+Public details*) and *Settings → Customer emails → Successful payments* (so that invoices are e-mailed). With
+the VAT on, each payment page asks Stripe for it (`automatic_tax`): Stripe works out what is due where the buyer
+is, out of the price; a business may give its VAT number; a payment made once gets a paid invoice
+(`invoice_creation` — Stripe charges 0.4 % of it, at most $2), and what is paid by the month has its invoices
+anyway. A tax code may be given (the kind of thing sold, in Stripe's words: `txcd_…`; empty, the one chosen in
+Stripe's settings — which code and which registrations is a question for the company's accountant). If Stripe
+refuses a page with the VAT (Stripe Tax not set up), the page is made without it — the sale is not lost — and
+the back office says why, until a page is made with it again (only a refusal of what was asked counts: Stripe
+busy, or out of reach, is not — the buyer tries again). **A payment given back** — outbid, too late, taken down
+with the money back, the month of a place paid by the month — **that has an invoice** is given back by a credit
+note on that invoice (the refund, and what cancels the invoice in the books); if Stripe refuses the credit note,
+the money is given back all the same, the plain way, and the owner is told — by e-mail and in the list of
+refunds — that the credit note is still to be made, in Stripe. **Invoices**: on each place a visitor paid for,
+*Invoices* asks Stripe for those of that payment — a bid's (made while the VAT was on), the months of a place
+paid by the month — with the VAT in them, their page and their PDF, and *Send it* has Stripe e-mail one again
+to who paid. All of it is the owner's alone (`/api/tax`, `/api/invoices`; `server/stripe.js`: `taxed`,
+`findInvoices`, `sendInvoice`). A payment made before the VAT was on has no invoice at Stripe: one is made by
+hand, in Stripe (*Invoices → Create*).
+
 **Sponsors.** A place that can be sponsored is held by one sponsor at a time, for as long as the
 subscription runs (when it ends, Stripe says so and the place is free again). Its holder goes to it in the
 game — "Set up your panel" — and gives a name, a line under it, a link and a logo. **What a sponsor sends
@@ -1556,8 +1580,8 @@ notebook, with the rest. No new Durable Object class: such a room is a room like
 |---|---|
 | `npm run bake` | bakes the world, the statue and the textures again |
 | `npm run bake:statue` | sculpts the golden dog and its companions again (`-- --preview=dog.png` also draws them from six sides, `-- --cell=0.012` makes a finer mesh) |
-| `npm test` | 272 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving, a beach hut by the month and for good), the accounts (and the code mailed to set a new password), the rooms that players make (bought, entered with a ticket, their own boards, asleep when unpaid, freed) |
-| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (207 in all) |
+| `npm test` | 278 checks of the Node server, the protocol (chat included), the interpolation, full rooms, the API (leaderboards, limits) and the shop (a stand-in for Stripe, forged webhooks, pictures that are not pictures, the Game Pass from the subscription to its end, the free day, the administrator's presents, a plaque from the payment to the engraving, a beach hut by the month and for good, the e-mails of what happens to what a sponsor paid for, bids said twice at once, the VAT, invoices and credit notes), the accounts (and the code mailed to set a new password), the rooms that players make (bought, entered with a ticket, their own boards, asleep when unpaid, freed) |
+| `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (213 in all) |
 | `npm run test:update` | a delivery from end to end, in the real game: two builds, a visitor in the world, the owner at the back office (`/admin`: the switches, the boards of what is new taken away and put back, a word to every room, a line refused, somebody kept out, the figures, two games of the lab thrown on — fetched and built as the game runs, each played by its own bot, its time on its board; each with its stand, its panel for a sponsor, its star on the map and its planks at the forks —, the sky villages stage by stage), every page asked to refresh but never in the middle of a sentence, then the server replaced by the next version — the page says so, refreshes, comes back at the same spot, and puts no card of what is new in the way (the boards by the poppy field say it); and a plain build leaves nothing of the game on the page (16 checks) |
 | `node tools/extras-test.mjs`, `node tools/slide-test.mjs`, `node tools/pond-test.mjs`, `node tools/boats-test.mjs`, `node tools/hill-test.mjs`, `node tools/crack-test.mjs`, `node tools/hollow-test.mjs`, `node tools/games-test.mjs` | the lab's own checks of its extras and of each of its games — the last one plays them in the running game, in a browser (see `lab/INTEGRATION.md`) |
 | `node tools/wall-test.mjs` | the wall of the companions, without a browser (`layout/plaquewall.js`): its galleries in the cliff, its stair walked with the real collision, its 324 plates and the plaques the server sells for them — while its switch is on; off, nothing of it is there |

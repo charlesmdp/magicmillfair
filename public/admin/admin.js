@@ -257,8 +257,9 @@
   async function showSponsors() {
     // (and, for the owner, the address they are told of new sponsors at — and whether this server sends e-mail at all:
     // both asked before anything is emptied, so that two refreshes at once cannot mix their rows)
-    const [res, n] = await Promise.all([api('/api/sponsors'), me.owner ? api('/api/notify') : null]);
+    const [res, n, t] = await Promise.all([api('/api/sponsors'), me.owner ? api('/api/notify') : null, me.owner ? api('/api/tax') : null]);
     if (!res.ok) return;
+    if (t?.ok) showTax(t.body);
     for (const src of blobs.splice(0)) URL.revokeObjectURL(src);
     const { slots, refunds } = res.body, live = $('sponsors'), wait = $('plaques'), done = $('engraved'), back = $('refunds');
     live.textContent = wait.textContent = done.textContent = back.textContent = '';
@@ -286,6 +287,8 @@
         const out = await api(`/api/sponsors?slot=${encodeURIComponent(id)}${refund ? '&refund=1' : ''}`, { method: 'DELETE' });
         if (said(out, `Taken down${out.body?.refunded ? ', refunded' : ''}${out.body?.stopped ? ', its subscription stopped' : ''}.`)) showSponsors();
       };
+      // (what it was paid with, at Stripe — a place filled in by hand was not —: its invoices, for the owner)
+      if (me.owner && s.by !== 'admin') acts.push(button('Invoices', 'ghost small', () => showInvoices(id)));
       acts.push(button('Take down', 'danger small', take(false)));
       if ((s.bid || s.sub) && me.owner) acts.push(button('Take down and refund', 'ghost small', take(true)));
       return acts;
@@ -318,7 +321,7 @@
         if (out.ok && !out.body?.refunded) toast('Stripe refused: to be done by hand in Stripe.', true); else said(out, 'Given back.');
         showSponsors();
       })] : [];
-      back.append(item(`${money(r.amount || 0)} — ${r.why || ''}`, `${when(r.at)} · ${r.ok ? 'given back' : r.kept && !r.error ? 'kept: not given back' : `NOT given back: ${r.error || 'Stripe refused'} — to be done by hand in Stripe`}`, ...later));
+      back.append(item(`${money(r.amount || 0)} — ${r.why || ''}`, `${when(r.at)} · ${r.ok ? `given back${r.uncredited ? ` — its invoice still wants its credit note (Stripe: ${r.uncredited}): make it in Stripe, without refunding again` : ''}` : r.kept && !r.error ? 'kept: not given back' : `NOT given back: ${r.error || 'Stripe refused'} — to be done by hand in Stripe`}`, ...later));
     }
     if (!back.children.length) empty(back, 'No refund so far.');
   }
@@ -392,6 +395,46 @@
     b.title = other ? 'Save the address first' : '';
   };
   $('notify-email').addEventListener('input', notifyTest);
+
+  // (the VAT on each sale, the owner's switch — and why Stripe refused it, the last time it did)
+  function showTax(t) {
+    $('tax-box').hidden = false;
+    if (document.activeElement !== $('tax-on')) $('tax-on').checked = !!t.on;
+    if (document.activeElement !== $('tax-code')) $('tax-code').value = t.code || '';
+    const said = $('tax-said');
+    said.classList.toggle('bad', !!t.refused);
+    said.textContent = !t.stripe ? 'The shop is not open: there is no Stripe key on this server.'
+      : t.refused ? `Stripe refused the VAT on ${when(t.refused.at)} ("${t.refused.error}"): that sale was made without it. Look at Stripe's tax settings, then save here again.`
+        : t.on ? 'On: each payment page asks Stripe for the VAT, and each payment gets an invoice.' : 'Off: prices are what is paid, and Stripe adds no VAT nor makes invoices of payments made once.';
+  }
+  $('tax-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const on = $('tax-on').checked, code = $('tax-code').value.trim();
+    if (on && !confirm('Switch the VAT on? Do it once Stripe Tax is set up in Stripe (Settings → Tax).')) return;
+    const res = await api('/api/tax', { method: 'POST', body: { on, code } });
+    if (said(res, on ? 'The VAT is on.' : 'The VAT is off.')) showTax(res.body);
+  };
+  // (the invoices of a place, at Stripe: to look at — its page, its PDF — and to send again to who paid)
+  let invoicesAsked = 0; // (each opening is counted: the answer of an earlier one, come late, is dropped)
+  const showInvoices = async (id) => {
+    const d = $('invoices'), list = $('invoices-list'), n = ++invoicesAsked;
+    $('invoices-where').textContent = placeName(id);
+    empty(list, 'Asking Stripe…');
+    if (!d.open) d.showModal();
+    const res = await api(`/api/invoices?slot=${encodeURIComponent(id)}`);
+    if (n !== invoicesAsked || !d.open) return;
+    if (!res.ok) { empty(list, res.body?.error || 'Stripe could not be asked. Try again in a moment.'); return; }
+    list.textContent = '';
+    for (const v of res.body.invoices || []) {
+      const cur = (v.currency || 'usd').toUpperCase(), sum = (c) => (cur === 'USD' ? money(c) : `${(c / 100).toFixed(2)} ${cur}`);
+      const link = (label, href) => { const a = el('a', 'ghost small', label); a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer'; return a; };
+      list.append(item(`${v.number || v.id} — ${sum(v.total)}${v.tax ? ` (of which VAT ${sum(v.tax)})` : ''}`, `${when(v.at)} · ${v.status}`,
+        ...(v.url ? [link('See it', v.url)] : []), ...(v.pdf ? [link('PDF', v.pdf)] : []),
+        button('Send it', 'small', async () => { if (confirm('Send this invoice again to who paid, by e-mail?')) said(await api('/api/invoices', { method: 'POST', body: { send: v.id } }), 'Sent by Stripe.'); })));
+    }
+    if (!list.children.length) empty(list, 'Stripe has no invoice of this payment. Invoices are made of the payments made while the VAT is on — and, of what is paid by the month, every month.');
+  };
+  $('invoices-close').onclick = () => $('invoices').close();
   $('notify-test').onclick = async () => { const res = await api('/api/notify', { method: 'POST', body: { test: true } }); said(res, `Sent to ${res.body?.email || notifyKept}: look in that mailbox (and in its spam, the first time).`); };
 
   // ---------------------------------------------------------------------------------------------- who is kept out

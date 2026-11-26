@@ -321,7 +321,7 @@ ${words.body.map((b) => para(esc(b))).join('\n')}`,
  * running — `asked`: the owner asked for it to be given back), 'later' (given back from the back office).
  * `unstopped`: a place paid by the month was taken down, and Stripe would not stop what is paid for it (`error`).
  */
-export function ownerRefundMail(site, { cents = 0, place = '', reason = '', monthly = false, ok = true, error = '', asked = true, unstopped = false } = {}) {
+export function ownerRefundMail(site, { cents = 0, place = '', reason = '', monthly = false, ok = true, error = '', asked = true, unstopped = false, uncredited = '' } = {}) {
   const where = siteOf(site), back = where ? `${where.replace(/\/$/, '')}/admin#sponsors` : '', sum = dollars(cents) || 'a payment';
   const why = { outbid: `its holder was outbid on ${place}`, raised: `its holder raised their own bid on ${place}`, late: `a bid for ${place} came too late`, down: monthly ? `${place} was taken down — the month that was running` : `${place} was taken down`, later: `given back from the back office${place ? ` — ${place}` : ''}` }[reason] || place;
   let what = ok ? `Refunded: ${sum} — ${why}.` : `Stripe refused to refund ${sum} — ${why}: ${error || 'no reason given'}.`;
@@ -329,6 +329,8 @@ export function ownerRefundMail(site, { cents = 0, place = '', reason = '', mont
     : monthly ? 'Nothing was given back: give the month back in Stripe itself, if you still mean to.'
       : 'Nothing was given back. It waits in the back office, under Refunds: give it back from there, or in Stripe itself.';
   let subject = ok ? `Refunded — ${sum} — ${place || 'a payment'}` : `A refund failed — ${place || 'a payment'}`;
+  // (given back, but the invoice of that payment still wants its credit note: Stripe refused to make it)
+  if (ok && uncredited) next = `${next} Its invoice still wants its credit note — Stripe would not make it (${uncredited}): make it in Stripe, on that invoice, without refunding a second time (the money has been given back).`;
   if (unstopped) {
     subject = `A subscription could not be stopped — ${place || 'a place'}`;
     what = `${place ? `${place[0].toUpperCase()}${place.slice(1)}` : 'A place'} was taken down, but Stripe would not stop what is paid for it every month: ${error || 'no reason given'}.`;
