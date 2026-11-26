@@ -79,10 +79,10 @@ export class PlayerController {
     this.onRespawn = null;
   }
 
-  teleport(x, z, yaw = 0) {
+  teleport(x, z, yaw = 0, y = null) {
     this.seat = null;
     this.cross = false;
-    this.pos.set(x, this.collision.spawnHeight(x, z), z);
+    this.pos.set(x, Number.isFinite(y) ? y : this.collision.spawnHeight(x, z), z); // (y: on that floor, where several are over that spot)
     this.vel.set(0, 0, 0);
     this.yaw = yaw;
     this.grounded = true;

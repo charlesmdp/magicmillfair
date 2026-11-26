@@ -17,7 +17,7 @@ import { PLAQUE_COUNT, PLAQUE_WALL, PLAQUE_WALL_COUNT } from '../src/world/layou
 import { RELEASE } from '../src/app/config.js';
 import { describe as describeItem } from '../server/catalog.js';
 import {
-  WALL, DECKS, FLIGHTS, LANDINGS, PIECES, point, place, out, eIn, eOut, heightOn, wallPosts, outline, arcLength,
+  WALL, DECKS, FLIGHTS, LANDINGS, PIECES, SIGN, point, place, out, eIn, eOut, heightOn, heightNear, wallPosts, outline, arcLength,
   COLUMNS, FIRST, WALL_COUNT, plateOf, idsOf, plateAt, columnAt,
 } from '../src/world/layout/plaquewall.js';
 
@@ -28,7 +28,11 @@ const [lo, hi] = meta.heightRange, N = info.width, half = N / 2;
 const H = (x, z) => { const i = (Math.min(N - 1, Math.max(0, z)) * N + Math.min(N - 1, Math.max(0, x))) * info.channels; return ((data[i] * 256 + data[i + 1]) / 65535) * (hi - lo) + lo; };
 const ground = (x, z) => { const u = x + half - 0.5, v = z + half - 0.5, x0 = Math.floor(u), z0 = Math.floor(v), fx = u - x0, fz = v - z0; const a = H(x0, z0), b = H(x0 + 1, z0), c = H(x0, z0 + 1), d = H(x0 + 1, z0 + 1); return (a + (b - a) * fx) * (1 - fz) + (c + (d - c) * fx) * fz; };
 
-const E = NORTH.ledge, S = NORTH.statue, RAD = 0.38, STEP = 0.62;
+const E = NORTH.ledge, S = NORTH.statue, RAD = 0.38, STEP = 0.62, CLIMB = 1.35, REACH = 0.6;
+// (where things stand on the ledge, as PlacesZone._north puts them: the plinth's drum, PR = 7.05; where one says hello to
+// the dog, and from how far; the sign of the companions, 38° round the drum from the tablet, 4.7 m out)
+const PR = 7.05, fwd = [Math.sin(S.yaw), Math.cos(S.yaw)], HELLO = { x: S.x + fwd[0] * (PR + 2.2), z: S.z + fwd[1] * (PR + 2.2), reach: 4.2 };
+const COMPANIONS = (() => { const a = (38 * Math.PI) / 180, lx = Math.sin(a) * (PR + 4.7), lz = Math.cos(a) * (PR + 4.7), c = Math.cos(S.yaw), s = Math.sin(S.yaw); return { x: S.x + lx * c + lz * s, z: S.z - lx * s + lz * c }; })();
 const rampAt = (p, a) => (p.y0 === p.y1 ? p.y0 : p.y0 + (p.y1 - p.y0) * ((a - p.a0) / (p.a1 - p.a0)));
 /** The lowest of f(a, e) - ground over a piece (every quarter of a degree, every 4 cm out). */
 const lowest = (p, f) => { let min = Infinity, at = null; for (let a = p.a0; a <= p.a1 + 1e-9; a += 0.25) for (let e = p.lo; e <= p.hi + 1e-9; e += out(0.04)) { const [x, z] = point(a, e), c = f(a, e) - ground(x, z); if (c < min) { min = c; at = [+a.toFixed(2), +e.toFixed(4)]; } } return { min: +min.toFixed(2), at }; };
@@ -81,12 +85,13 @@ const lowest = (p, f) => { let min = Infinity, at = null; for (let a = p.a0; a <
     }
   }
   check('nowhere is anything over a gallery, a flight or a landing lower than a head: 2.6 m of room at least', least >= 2.6, { least: +least.toFixed(2), where });
-  const hello = { x: S.x + Math.sin(S.yaw) * 9.25, z: S.z + Math.cos(S.yaw) * 9.25 }, [fx, fz] = point(FLIGHTS[0].a0, (FLIGHTS[0].lo + FLIGHTS[0].hi) / 2);
+  const [fx, fz] = point(FLIGHTS[0].a0, (FLIGHTS[0].lo + FLIGHTS[0].hi) / 2);
   let ring = Infinity;
   for (let a = FLIGHTS[0].a0; a <= FLIGHTS[0].a1; a += 0.5) { const [x, z] = point(a, FLIGHTS[0].lo); ring = Math.min(ring, Math.hypot(x - S.x, z - S.z) - 7.47); }
-  check('the foot of the stair is clear of where one says hello to the dog, and leaves room to walk round the plinth beside it', Math.hypot(fx - hello.x, fz - hello.z) > 3 && ring > 1.5, { hello: +Math.hypot(fx - hello.x, fz - hello.z).toFixed(2), ring: +ring.toFixed(2) });
-  const arrival = place(...NORTH.stairs[0].points.at(-1).slice(0, 2));
-  check('the wall keeps away from the top of the stair from the sand (where one arrives), the sign of the companions and the benches', arrival.a < WALL.from - 20 && [70.6, 14, 42].every((a) => a < WALL.from - 20), { arrival: +arrival.a.toFixed(1), from: WALL.from });
+  const hello = Math.hypot(fx - HELLO.x, fz - HELLO.z);
+  check('the foot of the stair is three metres and more from the spot where one says hello to the dog (within its reach: whoever stands there may greet it), and leaves 1.5 m to walk round the plinth beside it', hello > 3 && ring > 1.5, { hello: +hello.toFixed(2), reach: HELLO.reach, ring: +ring.toFixed(2) });
+  const arrival = place(...NORTH.stairs[0].points.at(-1).slice(0, 2)), sign = place(COMPANIONS.x, COMPANIONS.z);
+  check('the wall keeps away from the top of the stair from the sand (where one arrives), the sign of the companions and the benches', arrival.a < WALL.from - 20 && sign.a < WALL.from - 20 && [14, 42].every((a) => a < WALL.from - 20), { arrival: +arrival.a.toFixed(1), sign: +sign.a.toFixed(1), from: WALL.from });
 }
 
 {
@@ -100,9 +105,12 @@ const lowest = (p, f) => { let min = Infinity, at = null; for (let a = p.a0; a <
   }
   check('in front of every plate there is a spot on its gallery from which its column is offered (the two plates of it)', !bad.length, bad.slice(0, 8));
   check('the plates of a row do not touch (93 cm wide, a little more from one to the next)', apart > 0.98 && apart < 1.2, { apart: +apart.toFixed(3) });
-  check('nobody is offered a plate from the floor of the ledge, from a stair, or from the gallery over or under it',
-    columnAt(...point(200, 0.85), E.y) === null && columnAt(...point(FLIGHTS[1].a0 + 10, (FLIGHTS[1].lo + FLIGHTS[1].hi) / 2), rampAt(FLIGHTS[1], FLIGHTS[1].a0 + 10)) === null
-    && columnAt(plateAt(200).sx, plateAt(200).sz, plateAt(200).sy + 3.3) === null);
+  // (everywhere: the floor of the ledge round the plinth, every flight all along, every reading spot from the floors over and under it)
+  const wrong = [];
+  for (let a = 90; a <= 320; a += 2) for (const e of [0.75, 0.85, 0.93]) if (columnAt(...point(a, e), E.y + 0.2)) wrong.push(['floor', a, e]);
+  for (const f of FLIGHTS) for (let a = f.a0; a <= f.a1; a += 0.5) for (const e of [f.lo + out(0.2), (f.lo + f.hi) / 2, f.hi - out(0.2)]) if (columnAt(...point(a, e), rampAt(f, a))) wrong.push(['flight', f.g, a]);
+  for (let n = FIRST; n < FIRST + WALL_COUNT; n += 3) { const p = plateAt(n); for (const dy of [-3.3, 3.3]) if (columnAt(p.sx, p.sz, p.sy + dy)) wrong.push(['floor over or under', n, dy]); }
+  check('nobody is offered a plate from the floor of the ledge, from a stair, or from the gallery over or under it', !wrong.length, wrong.slice(0, 6));
 }
 
 {
@@ -112,9 +120,12 @@ const lowest = (p, f) => { let min = Infinity, at = null; for (let a = p.a0; a <
   const ellipse = (k, n = 28) => Array.from({ length: n }, (_, i) => { const a = (i / n) * Math.PI * 2; return [E.x + Math.cos(a) * E.rx * k, E.z + Math.sin(a) * E.rz * k]; });
   col.addArea(new Polygon(ellipse(0.955), { name: 'golden' }));
   col.addCircle(S.x, S.z, 7.47); // (the plinth)
+  col.addBox(S.x + fwd[0] * (PR + 0.1), S.z + fwd[1] * (PR + 0.1), 2.75, 0.55, S.yaw); // (its tablet)
+  col.addCircle(COMPANIONS.x, COMPANIONS.z, 0.3); // (the sign of the companions)
   let on = true;
   for (const p of PIECES) col.addPlatform({ clearance: p.kind === 'flight' && p.g === 0 ? 4 : 1.0, heightAt: (x, z) => (on ? heightOn(p, x, z) : null) });
   const posts = wallPosts().map(([x, z, r, y0, y1]) => ({ h: col.addCircle(x, z, r, y0, y1), y0 }));
+  { const [sx, sz] = point(SIGN.a, SIGN.e); posts.push({ h: col.addCircle(sx, sz, SIGN.r), y0: -1e9 }); } // (the sign at the foot of the stair)
   const area = new Polygon(outline(), { name: 'companions' });
   col.addArea({ name: 'companions', cave: false, contains: (x, z) => on && area.contains(x, z), nearest: (x, z, q) => (on ? area.nearest(x, z, q) : Infinity) });
   const setOn = (v) => { on = v; for (const p of posts) p.h[3] = v ? p.y0 : 1e9; };
@@ -135,6 +146,8 @@ const lowest = (p, f) => { let min = Infinity, at = null; for (let a = p.a0; a <
       col.resolve(p, RAD, y); col.confine(p);
       const g = col.groundAt(p.x, p.z, y + 0.3);
       if (g - y > STEP) { refused++; continue; }
+      // (bare rock too steep is not walked up — as PlayerController.tryMove: over REACH ahead, steeper than CLIMB)
+      if (Math.abs(g - ground(p.x, p.z)) < 0.02 && g > y + 1e-4) { const d = Math.hypot(p.x - w.x, p.z - w.z) || 1, qx = w.x + ((p.x - w.x) / d) * REACH, qz = w.z + ((p.z - w.z) / d) * REACH; if ((ground(qx, qz) - y) / REACH > CLIMB && Math.abs(col.groundAt(qx, qz, y + 0.3) - ground(qx, qz)) < 0.02) { refused++; continue; } }
       if (!col.walkable(p.x, p.z)) off++;
       step = Math.max(step, g - y); fell = Math.max(fell, y - g);
       w.x = p.x; w.z = p.z; y = g;
@@ -179,6 +192,32 @@ const lowest = (p, f) => { let min = Infinity, at = null; for (let a = p.a0; a <
   const ring = (a0, a1) => along(0.86, a0, a1);
   const under = walk(ring(FLIGHTS[1].a0 - 2, 195), E.y + 0.2);
   check('on the floor of the ledge one walks under the flights that hang over it, as if nothing were there', under.left < 0.05 && !under.refused && under.astray < 0.05 && !under.off && under.y < E.y + 0.5, under);
+  // round the back of the plinth, where it comes near the rim: one keeps pressing along it (4.4 m/s, steps of 22 cm at
+  // most, as PlayerController does) — with the wall on, one is never pushed deeper into the plinth than with it off
+  const press = () => {
+    const w = { x: S.x + Math.cos((205 * Math.PI) / 180) * 8.1, z: S.z + Math.sin((205 * Math.PI) / 180) * 8.1 };
+    let y = E.y + 0.1, deepest = 0, frames = 0;
+    const from = Math.atan2(w.z - S.z, w.x - S.x);
+    for (; frames < 900; frames++) {
+      const a = Math.atan2(w.z - S.z, w.x - S.x), tx = -Math.sin(a), tz = Math.cos(a), dist = 4.4 / 60, n = Math.max(1, Math.ceil(dist / 0.22));
+      for (let i = 0; i < n; i++) {
+        const p = { x: w.x + ((tx * 0.97 - Math.cos(a) * 0.24) * dist) / n, z: w.z + ((tz * 0.97 - Math.sin(a) * 0.24) * dist) / n };
+        col.resolve(p, RAD, y); col.confine(p);
+        const g = col.groundAt(p.x, p.z, y + 0.3);
+        if (g - y > STEP) continue;
+        w.x = p.x; w.z = p.z; y = g;
+      }
+      deepest = Math.max(deepest, 7.85 - Math.hypot(w.x - S.x, w.z - S.z));
+      if ((Math.atan2(w.z - S.z, w.x - S.x) - from + 4 * Math.PI) % (2 * Math.PI) > (100 * Math.PI) / 180) break;
+    }
+    return { deepest: +deepest.toFixed(3), round: frames < 900, secs: +(frames / 60).toFixed(1) };
+  };
+  setOn(false); const pressOff = press(); setOn(true); const pressOn = press();
+  check('behind the dog, where its plinth comes near the rim, one goes round it with the wall on as with it off: the stone under the lowest gallery stands back, and nobody is pushed into the plinth',
+    pressOn.deepest <= pressOff.deepest + 0.02 && pressOn.round === pressOff.round, { off: pressOff, on: pressOn });
+  // where somebody stood on the wall is found again (on the floor they were on, not the one over it): a page that comes back puts them there
+  const again = [[plateAt(88), 'under the second landing'], [plateAt(166), 'under the fourth flight'], [plateAt(300), 'out in the open']].map(([p, what]) => [what, heightNear(p.sx, p.sz, p.sy) === p.sy, +p.sy.toFixed(2)]);
+  check('a spot on the wall is found again on the floor one stood on, even under a landing or a flight', again.every((r) => r[1]), again);
   // off: none of it
   setOn(false);
   const [dx, dz] = point(200, mid(DECKS[1])), offDeck = col.walkable(dx, dz), offGround = col.groundAt(dx, dz, 60), [fx, fz] = point(FLIGHTS[0].a0 + 10, mid(FLIGHTS[0]));

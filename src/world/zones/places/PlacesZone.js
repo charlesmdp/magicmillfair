@@ -1132,7 +1132,7 @@ export class PlacesZone {
       this.group.add(wall.group);
       this.wall = wall;
       return wall;
-    }));
+    }).catch((err) => { this._walling = null; throw err; })); // (a load that failed — a new version online meanwhile — is tried again next time)
   }
 
   update(dt, time, camera) {

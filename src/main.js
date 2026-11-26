@@ -1229,22 +1229,37 @@ async function boot() {
   // loaded — the first time its switch is on; its plates are places like those of the plinth (plaque:73 and on),
   // offered on its galleries while it is on. Off, it goes at once (whoever stands on it is put back at the foot of
   // its stair); the plates keep what they hold.
-  let plateWall = null, walling = null, wallWanted = false;
+  // (resumedAt: where a page that came back — from the payment page, a new version — had its visitor standing, and when)
+  let plateWall = null, walling = null, wallWanted = false, resumedAt = null;
   const setWall = (on) => {
-    if (!on && plateWall.on && plateWall.holds(player.pos.x, player.pos.z, player.pos.y)) { plateWall.setOn(false); player.teleport(plateWall.foot.x, plateWall.foot.z, rig.yaw); return; }
+    if (!on && plateWall.on && plateWall.holds(player.pos.x, player.pos.z, player.pos.y)) {
+      const f = plateWall.foot;
+      plateWall.setOn(false);
+      player.teleport(f.x, f.z, f.yaw);
+      rig.snap(player.pos, f.yaw + Math.PI);
+      return;
+    }
     plateWall.setOn(on);
   };
   const plaqueWall = (on) => {
     wallWanted = !!on;
     if (plateWall) { setWall(wallWanted); return Promise.resolve(plateWall); }
     if (!wallWanted) return Promise.resolve(null);
-    return (walling ||= world.places.buildWall().then((w) => {
+    return (walling ||= world.places.buildWall().then(async (w) => {
       plateWall = w;
       for (let n = w.first; n < w.first + w.count; n++) places.set(`plaque:${n}`, { what: 'a plaque on the wall of the companions', plaque: n, wall: true, set: (sp) => w.set(n, sp) });
       setWall(wallWanted); // (the switch may have moved while it was being built)
-      applySponsors();
+      // (a visitor who came back where they stood on the wall had nothing to stand on until now: they slid down the
+      // rock — put back up there, on the floor they were on, if that was a moment ago and they have not gone off)
+      const back = resumedAt;
+      resumedAt = null;
+      if (w.on && back && w.holds(back.x, back.z, back.y) && performance.now() - back.at < 60_000 && Math.hypot(player.pos.x - back.x, player.pos.z - back.z) < 14 && !player.dead) {
+        const h = w.heightNear(back.x, back.z, back.y);
+        if (h !== null) { player.teleport(back.x, back.z, player.yaw, h); rig.snap(player.pos, player.yaw + Math.PI); }
+      }
+      await applySponsors();
       return w;
-    }).catch((err) => { walling = null; console.error('[wall]', err); return null; }));
+    }).catch((err) => { if (!plateWall) walling = null; console.error('[wall]', err); return plateWall; }));
   };
   const wallActions = (p) => {
     const col = plateWall?.on ? plateWall.columnAt(p.pos.x, p.pos.z, p.pos.y) : null;
@@ -1550,7 +1565,7 @@ async function boot() {
     safe: () => !busyNow(),
     leave: () => {
       // (in the world: one comes back at the same spot, in the same room — as after a change of quality)
-      if (input.enabled && !SHOT) store.set('mmf.resume', JSON.stringify({ x: player.pos.x, z: player.pos.z, yaw: rig.yaw, room: presence?.room || '' }), true);
+      if (input.enabled && !SHOT) store.set('mmf.resume', JSON.stringify({ x: player.pos.x, y: +player.pos.y.toFixed(2), z: player.pos.z, yaw: rig.yaw, room: presence?.room || '' }), true);
       location.reload();
     },
     apply: applyRelease,
@@ -2003,7 +2018,7 @@ async function boot() {
     again();
   };
   // (leaving for Stripe's page — to pay, or to look after a subscription: where one stands is noted, to come back there)
-  shop.onLeave = () => { if (input.enabled && !SHOT) store.set('mmf.resume', JSON.stringify({ x: player.pos.x, z: player.pos.z, yaw: rig.yaw, room: presence?.room || '' }), true); };
+  shop.onLeave = () => { if (input.enabled && !SHOT) store.set('mmf.resume', JSON.stringify({ x: player.pos.x, y: +player.pos.y.toFixed(2), z: player.pos.z, yaw: rig.yaw, room: presence?.room || '' }), true); };
   refreshShop().then(async () => {
     const paid = params.get('paid'), session = params.get('cs');
     if (paid === null) return;
@@ -2159,7 +2174,7 @@ async function boot() {
     .on('quality', (q) => {
       // a tier changes shaders, textures and shadow maps: simplest and safest is a clean restart at the same spot
       if (q === 'auto') store.del('mmf.quality'); else store.set('mmf.quality', q);
-      store.set('mmf.resume', JSON.stringify({ x: player.pos.x, z: player.pos.z, yaw: rig.yaw }), true);
+      store.set('mmf.resume', JSON.stringify({ x: player.pos.x, y: +player.pos.y.toFixed(2), z: player.pos.z, yaw: rig.yaw }), true);
       const url = new URL(location.href);
       url.searchParams.delete('q');
       location.replace(url.href);
@@ -2440,6 +2455,7 @@ async function boot() {
   if (resume && Number.isFinite(resume.x) && Number.isFinite(resume.z) && !params.has('welcome')) { // (?welcome: the card, whatever)
     // back from a quality change, or from a new version: straight into the world, where we were (and in the same room)
     if (typeof resume.room === 'string') backTo = resume.room;
+    if (Number.isFinite(resume.y)) resumedAt = { x: resume.x, y: resume.y, z: resume.z, at: performance.now() }; // (on the wall of the companions, once it is built)
     player.teleport(resume.x, resume.z, (resume.yaw || 0) + Math.PI);
     rig.snap(player.pos, resume.yaw || 0);
     hud.splash.classList.add('done');
