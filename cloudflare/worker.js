@@ -256,7 +256,7 @@ export class Room extends DurableObject {
     if (url.pathname === '/wardrobe') return Response.json({ wear: await wardrobeOf(ctx, ((await request.json().catch(() => null)) || {}).dev || '') });
     if (url.pathname === '/said') { const b = (await request.json().catch(() => null)) || {}; await noteChat(ctx, String(b.room || ''), Array.isArray(b.lines) ? b.lines : []); return Response.json({ ok: true }); }
     if (url.pathname === '/named') { const b = (await request.json().catch(() => null)) || {}; return Response.json({ mine: await mayBeNamed(store, String(b.dev || ''), String(b.name || '')) }); }
-    if (url.pathname === '/ban') return Response.json({ added: await addBan({ store, now: () => Date.now() }, (await request.json().catch(() => null)) || {}) });
+    if (url.pathname === '/ban') return Response.json({ added: await addBan({ store, now: () => Date.now(), push: (message) => this.tellRooms(JSON.stringify(message)) }, (await request.json().catch(() => null)) || {}) }); // (push: a silence on a sponsor changes what the others see — bans.js)
     if (url.pathname === '/admin-key') return Response.json({ who: await adminOf(store, '', ((await request.json().catch(() => null)) || {}).key) });
     if (url.pathname === '/promote') return Response.json({ made: await nameAdmin(store, (await request.json().catch(() => null)) || {}, Date.now()) });
     const reading = request.method === 'GET' || request.method === 'HEAD';

@@ -37,7 +37,8 @@
 //                     {t:'r',r,v,f}   what is released (r: the switches), the version online (v) and when
 //                     every page was last asked to refresh (f) — said to a whole room when the owner changes
 //                     something; {t:'say',m}   a word from the fair to every room (server/release.js). A
-//                     browser that does not know these two ignores them.
+//                     browser that does not know these two ignores them. {t:'shop'}   what the sponsors show has
+//                     changed (server/shop.js): each page asks again, at a moment of its own
 //                     {t:'quiet',to,n}   this room has gone quiet: room `to` holds `n` visitors and has room for
 //                     everybody here (the door's offer, see rooms.js — nobody is moved)
 //                     {t:'closed'}   said instead of a welcome, before hanging up: that name is not a room one

@@ -309,9 +309,16 @@ async function boot() {
     presence.on('release', (news) => updates.hear(news));
     // a word from the fair, to every room
     presence.on('announce', ({ text }) => { hud.addChat('✦ The fair', 5, text, false, 'important'); hud.note(`The fair: ${text}`, 9000); audio.play('score'); });
-    // the relay was reached again (a delivery restarts it): is this page still the version online?
+    // the relay was reached again (a delivery restarts it, the line dropped, the tab was aside): is this page still the
+    // version online? — and what the sponsors show may have changed meanwhile, unheard: it is asked again (so too when
+    // the line first opens long after the shop was asked: a page started aside, the welcome card, a first try that failed)
     let met = false;
-    presence.on('welcome', ({ mode }) => { if (mode !== 'online') return; if (met) updates.check(); met = true; });
+    presence.on('welcome', ({ mode }) => {
+      if (mode !== 'online') return;
+      if (met) updates.check();
+      if (met || Date.now() - shopAt > 5000) sponsorsSoon();
+      met = true;
+    });
     avatars = new RemoteAvatars({ scene, factory, presence, hud, rank, world });
     presence.on('score', ({ peer, board }) => liveScore(peer, board));
     presence.on('chat', ({ id, peer, text, near, important }) => {
@@ -358,6 +365,9 @@ async function boot() {
     presence.on('kicked', ({ ban }) => hud.banner(ban ? 'The administrator has banned you from the fair.' : 'The administrator has put you out of this room. Reload the page to come back in.'));
     // something was given by an administrator: the shop is asked again (it says what, in the chat)
     presence.on('gift', () => { refreshShop().then(() => { audio.play('victory'); hud.note('A gift from the fair has just arrived: look in the item shop!', 7000); }); });
+    // (what the sponsors show has changed — a new one, a panel changed, one taken down —: the panels and the wall of
+    // thanks follow, without a reload; each page asks at a moment of its own, not all of them at once)
+    presence.on('shop', () => sponsorsSoon());
     // (the name of an account is its owner's alone: asked for by somebody else, the relay says which name is worn instead)
     presence.on('named', (e) => {
       name = e.name; store.set('mmf.name', name); hud.setName(name); world.games.setMe(account.name || name);
@@ -1051,8 +1061,10 @@ async function boot() {
   };
   let shopKnown = false; // (has the server said what is theirs yet?)
   let ownedWas = null; // (what this browser had the last time the relay was told)
+  let shopAt = 0; // (when the shop was last asked: a page whose line opens long after that asks again — see 'welcome')
   const refreshShop = async () => {
     await shop.load();
+    shopAt = Date.now();
     shopKnown = true;
     shop.everything = who.admin;
     // (the relay only shows the others what a visitor has: it is told to ask again when that changes)
@@ -1075,12 +1087,33 @@ async function boot() {
     }
     hud.setShop(shop.open);
     hud.setFireworks(shop.owns('fireworks'));
+    await sponsorsShown();
+  };
+  /** What the sponsors show, as the shop now says it: the panels, the wall of thanks, the boards, the cards of the shop. */
+  const sponsorsShown = async () => {
     for (const text of shop.notes.splice(0)) hud.addChat('✦', 5, text, true); // (outbid, refunded: said once)
     // (the empty panel over a board says how to take it)
     for (const sl of world.sponsorSlots || []) { const rot = places.get(sl.id)?.rotor; sl.offer?.(shop.open ? `from ${price(shop.least(rot ? targetOf(rot) : sl.id))} · step up and bid` : ''); }
     shopView.stale('board:');
     shopView.refresh(shopItems());
     await applySponsors();
+  };
+  /**
+   * What the sponsors show has changed somewhere ({t:'shop'}, server/shop.js), or this page has just been out of touch
+   * (its line came back): the shop is asked again and only what the sponsors show is painted again — nothing of the
+   * visitor's own robot, nothing saved to their account (that is refreshShop's) — and, for an administrator, what
+   * awaits their approval. At a moment of its own, a few seconds from now, so that the pages of the fair do not all
+   * ask at once; one after the other, so that an older answer is never painted over a newer one.
+   */
+  const refreshSponsors = async () => {
+    await shop.load();
+    shopAt = Date.now();
+    if (who.admin) pending = (await shop.all(who.key)) || {};
+    await sponsorsShown();
+  };
+  const sponsorsSoon = () => {
+    if (app.shopSoon) return;
+    app.shopSoon = setTimeout(() => { app.shopSoon = 0; app.shopRun = (app.shopRun || Promise.resolve()).then(refreshSponsors).catch(() => {}); }, 800 + Math.random() * 9000);
   };
   /** The holder of a place (or the administrator) says what to show there. */
   const fillPlace = async (id) => {

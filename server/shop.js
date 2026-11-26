@@ -62,6 +62,11 @@ import { cleanEmail, mailLater, passMail, sponsorMail, ownerSaleMail } from './m
 import { maskWords } from './decency.js';
 
 const out = (status, body, headers = {}) => ({ status, body, headers });
+/**
+ * Every room is told that what the sponsors show has changed ({t:'shop'}): each page asks again, at a moment of its
+ * own (main.js), and its panels and the wall of thanks follow — without a reload. Never for a click counted.
+ */
+const tellRooms = (ctx) => (ctx.push ? Promise.resolve(ctx.push({ t: 'shop' })).catch(() => {}) : null);
 const DEVICE = /^[A-Za-z0-9_-]{16,64}$/;
 export const LOGO_MAX = 90_000; // bytes of a picture
 const SIDE_MAX = 1024;
@@ -354,14 +359,15 @@ export async function takeBid(ctx, cfg, item, device, amount, pay) {
   const again = !!cur && (await sameOwner(ctx.store, cur.by, device));
   slots[item] = again ? { ...cur, by: device, bid: amount, pay, at: ctx.now() } : { by: device, sub: null, at: ctx.now(), state: 'paid', logo: 0, bid: amount, pay };
   await ctx.store.put('slots', slots);
-  if (cur) {
-    if (!again) {
-      await ctx.store.delete(`logo:${item}`);
-      await ctx.store.delete(`logo:${item}:draft`);
-      await leaveNote(ctx, cur.by, `You were outbid on ${what.label}: ${cur.pay ? 'your payment has been refunded in full' : 'the panel has a new sponsor'}.`);
-    }
-    if (cur.pay) await refund(ctx, cfg, cur.pay, cur.bid || 0, `outbid on ${item}`);
+  if (cur && !again) {
+    await ctx.store.delete(`logo:${item}`);
+    await ctx.store.delete(`logo:${item}:draft`);
+    await leaveNote(ctx, cur.by, `You were outbid on ${what.label}: ${cur.pay ? 'your payment has been refunded in full' : 'the panel has a new sponsor'}.`);
   }
+  // (the rooms are told once the pictures of the one outbid are gone: telling them waits on the network, and on the
+  // Worker another request may run meanwhile — the newcomer's own picture, sent at once, must not be deleted after it)
+  await tellRooms(ctx);
+  if (cur?.pay) await refund(ctx, cfg, cur.pay, cur.bid || 0, `outbid on ${item}`);
   return true;
 }
 
@@ -381,6 +387,7 @@ async function release(ctx, slots, id) {
   await ctx.store.put('slots', slots);
   await ctx.store.delete(`logo:${id}`);
   await ctx.store.delete(`logo:${id}:draft`);
+  await tellRooms(ctx); // (after the pictures are gone: see takeBid)
 }
 
 /** Answers the paths above; returns nothing for any other path. */
@@ -591,6 +598,7 @@ export async function shopRoute(req, ctx) {
     const first = !plaque && s.state !== 'live' && !req.admin; // (a new sponsor's panel goes up: the whole fair is told)
     if (!plaque) await publish(ctx, slots, id);
     await ctx.store.put('slots', slots);
+    if (!plaque) await tellRooms(ctx);
     if (first && ctx.push) { const what = describe(id); if (what) await Promise.resolve(ctx.push({ t: 'say', m: CHEERS[Math.floor(Math.random() * CHEERS.length)](draft.title, placeOf(what)) })).catch(() => {}); }
     return out(200, { ok: true, state: plaque ? 'pending' : 'live' });
   }
@@ -655,6 +663,7 @@ export async function shopRoute(req, ctx) {
         else { await ctx.store.delete(`logo:${id}:draft`); s.draft = null; }
       }
       await ctx.store.put('slots', slots);
+      await tellRooms(ctx);
     } else if (method === 'DELETE') {
       const id = query.get('slot') || '';
       if (!slots[id]) return out(404, { error: 'No such place.' });

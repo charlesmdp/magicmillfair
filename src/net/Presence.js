@@ -579,6 +579,7 @@ export class Presence {
     else if (m.t === 'w') this._seen = !!m.n;
     else if (m.t === 'r') this._emit('release', { release: m.r && typeof m.r === 'object' ? m.r : null, build: typeof m.v === 'string' ? m.v : '', refresh: Number.isFinite(m.f) ? m.f : 0 }); // (what is released has changed)
     else if (m.t === 'say') { const text = cleanChat(m.m); if (text) this._emit('announce', { text }); } // (a word from the fair, to every room)
+    else if (m.t === 'shop') this._emit('shop'); // (what the sponsors show has changed: ask again)
     else if (m.t === 'quiet') { const to = cleanRoom(m.to); if (to && to !== this.room) this._emit('quiet', { to, label: roomLabel(to), n: Number.isFinite(m.n) ? Math.max(0, Math.floor(m.n)) : 0 }); } // (this room has gone quiet: another has room)
     else if (m.t === 'admin') { this.admin = !!m.ok; this.owner = this.admin && !!m.owner; this._emit('admin', { ok: this.admin, owner: this.owner, out: !!m.out }); }
     else if (m.t === 'gift') this._emit('gift', { by: cleanName(m.by || '') });

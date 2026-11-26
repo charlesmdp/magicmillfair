@@ -419,6 +419,28 @@ try {
       && row?.figure === '$14.50' && row.unit === 'a month',
       JSON.stringify({ count, offered, bare, filled, held, board, post5, list, ways, row }));
   }
+  // ---- a panel changed elsewhere (here by the administrator, as from the back office) reaches a page that is open
+  // without a reload: the server tells every room ({t:'shop'}), and the page asks again by itself — only what the
+  // sponsors show: nothing of the visitor's own robot is sent or saved again
+  {
+    // (no earlier word of the server is still waiting to be acted on: what follows is this change's own)
+    const quiet = await page.waitForFunction(() => !window.__mmf.shopSoon, null, { timeout: 30000 }).then(() => true).catch(() => false);
+    const hellos = await page.evaluate(() => { const p = window.__mmf.presence; window.__hellos = 0; const send = p.setIdentity.bind(p); p.setIdentity = (...a) => { window.__hellos++; return send(...a); }; return true; });
+    const set = await fetch(`${BASE}/api/sponsors`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${ADMIN_KEY}` }, body: JSON.stringify({ slot: 'hut:5', set: { title: 'Sandy Toes Surf Club', subtitle: 'lessons every morning', url: 'https://example.org/surf' } }) }).then((r) => r.status);
+    const armed = await page.waitForFunction(() => !!window.__mmf.shopSoon, null, { timeout: 8000 }).then(() => true).catch(() => false);
+    const live = await page.evaluate(async () => {
+      const wall = window.__mmf.world.games.thanks, mine = () => wall.shown?.rows.find((r) => r.name === 'Sandy Toes Surf Club');
+      for (let i = 0; i < 300 && !mine(); i++) await new Promise((r) => setTimeout(r, 100));
+      return mine() ? { name: mine().name, slot: window.__mmf.shop.slots['hut:5']?.title, hellos: window.__hellos } : null;
+    });
+    // (a page that was out of touch — here its line let go, then taken again, as a tab put aside and brought back —
+    // asks again when its line comes back: it may have missed what was said meanwhile)
+    await page.waitForFunction(() => !window.__mmf.shopSoon, null, { timeout: 30000 }).catch(() => {});
+    await page.evaluate(() => { const p = window.__mmf.presence; p.sleep(); p.wake(); });
+    const back = await page.waitForFunction(() => window.__mmf.presence.mode === 'online' && !!window.__mmf.shopSoon, null, { timeout: 30000 }).then(() => true).catch(() => false);
+    check('a panel changed elsewhere — here from the back office — shows on a page that is open, without a reload, and on its wall of thanks: every room is told, and each page asks again by itself (only for what the sponsors show) — and a page out of touch for a while asks again when its line comes back',
+      quiet && hellos && set === 200 && armed && live?.name === 'Sandy Toes Surf Club' && live.slot === 'Sandy Toes Surf Club' && live.hellos === 0 && back, JSON.stringify({ quiet, set, armed, live, back }));
+  }
   // ---- a big attraction has five places on its panel: the one who bid the most has the panel over the board of
   // scores and keeps it — it no longer turns —; the board of the five beside it lists them, the most first, and the
   // places still free; at that board, who they are, and the way to join them

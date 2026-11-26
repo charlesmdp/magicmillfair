@@ -591,7 +591,14 @@ IS FREE FOR YOU!*, read from across the meadow — and under it every sponsor of
 in the most first: a rank, their logo, their name and their line, where they are, what they pay. In one
 column while they are three, up to four columns of seven (beyond that, "… and 6 more"); the first three
 are washed with gold, silver and bronze; and while a place is left the next one is invited ("Your brand
-here — from $1 — ask at the Trading Post"). The rules (`src/app/thanks.js`):
+here — from $1 — ask at the Trading Post"). **It is live**: as soon as what a sponsor shows changes — a new
+sponsor whose panel goes up, a bid, a panel changed by its sponsor or from the back office, one taken down, a
+sponsor kept out in silence or let back — the server tells every room (`{t:'shop'}`) and each page that is open
+asks again by itself, a few seconds apart from the others: its panels and the wall follow without a reload. Only
+what the sponsors show is asked again — nothing of the visitor's own robot is sent or saved anew. A page that was
+out of touch meanwhile (its line dropped, a laptop that slept, a tab that stepped aside) asks again when its line
+comes back. (A click counted on a site is not a change; a silence that simply runs out is not told; a sky village
+taken down keeps its sign on the pages that are open until they are loaded again.) The rules (`src/app/thanks.js`):
 
 - **who is on it**: whoever shows something on the panel of a game, on a gondola, on a beach hut, on the
   backdrop of Bullseye Alley or on a sky village. Not the plaques of the companions (they are for pets, by people), and

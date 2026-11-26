@@ -69,19 +69,26 @@ export async function addBan(ctx, { ip, dev, acct, name, hours, quiet, line, dev
   const now = ctx.now(), bans = liveBans(await ctx.store.get('bans'), now);
   const h = Math.max(0, Math.min(87600, Number(hours) || 0)), others = Array.isArray(devs) ? devs.filter((d) => typeof d === 'string' && DEVICE.test(d)).slice(0, 12) : [];
   const entry = { until: h > 0 ? now + h * 3600_000 : 0, name: cleanName(name || ''), at: now, ...(quiet && { quiet: true }), ...(Number.isInteger(line) && line > 0 && { line, ...(others.length && { devs: others }) }) };
-  let added = 0;
-  if (typeof ip === 'string' && ADDRESS.test(ip)) { bans.ip[ip] = entry; added++; }
+  let added = 0, shown = false; // (shown: does what the others are shown of a sponsor change — a silence on a browser or an account, put or taken away?)
+  const put = (kind, key) => { if (!!quiet !== !!bans[kind][key]?.quiet) shown = true; bans[kind][key] = entry; };
+  if (typeof ip === 'string' && ADDRESS.test(ip)) { bans.ip[ip] = entry; added++; } // (an address alone hides nothing a sponsor shows: see quietOnes)
   if (typeof dev === 'string' && DEVICE.test(dev)) {
-    bans.dev[dev] = entry; added++;
+    put('dev', dev); added++;
     // (a browser that is signed in: its account is kept out with it)
     const signed = await accountOf(ctx.store, dev);
-    if (signed) bans.acct[signed.name.toLowerCase()] = entry;
+    if (signed) put('acct', signed.name.toLowerCase());
   }
   const account = accountName(acct);
-  if (account) { bans.acct[account.toLowerCase()] = entry; added++; }
+  if (account) { put('acct', account.toLowerCase()); added++; }
   if (added) await ctx.store.put('bans', bans);
+  // (what a sponsor kept out in silence shows is no longer shown to the others — or is again, a silence replaced by an
+  // ordinary ban: every room is told, as shop.js does)
+  if (added && shown) await shopChanged(ctx);
   return added;
 }
+
+/** Every room is told that what the sponsors show may have changed ({t:'shop'}: see shop.js), where it can be. */
+const shopChanged = (ctx) => Promise.resolve(ctx.push?.({ t: 'shop' })).catch(() => {});
 
 /** /api/bans (see the top of this file); null for any other path. */
 export async function bansRoute(req, ctx) {
@@ -98,26 +105,30 @@ export async function bansRoute(req, ctx) {
     if (Number.isInteger(line) && line > 0) {
       // (a ban made from a line of the chat: all that it holds goes at once — heard again at once, on every browser)
       const was = { ip: '', dev: '', devs: [] };
-      let quiet = false;
+      let quiet = false, shownBack = false;
       for (const kind of KINDS) for (const [k, e] of Object.entries(bans[kind])) {
         if (e.line !== line) continue;
-        if (e.quiet) quiet = true;
+        if (e.quiet) { quiet = true; if (kind !== 'ip') shownBack = true; }
         if (kind !== 'acct') was[kind] = k;
         if (Array.isArray(e.devs)) was.devs.push(...e.devs);
         delete bans[kind][k]; had++;
       }
       if (had && quiet) await Promise.resolve(ctx.hush?.({ ip: was.ip, dev: was.dev, devs: [...new Set(was.devs)] }, false)).catch(() => {});
       if (had) await ctx.store.put('bans', bans);
+      if (had && shownBack) await shopChanged(ctx); // (what they sponsor is shown again)
       return out(200, { removed: had });
     }
+    let lifted = false;
     for (const kind of KINDS) {
       const k = kind === 'acct' ? (query.get('acct') || '').toLowerCase() : query.get(kind) || '';
       if (!k || !Object.hasOwn(bans[kind], k)) continue;
-      // (a silence that is lifted: they are heard again at once)
+      // (a silence that is lifted: they are heard again at once — and what they sponsor is shown again, for a browser or an account)
+      if (bans[kind][k].quiet && kind !== 'ip') lifted = true;
       if (bans[kind][k].quiet && kind !== 'acct') await Promise.resolve(ctx.hush?.({ [kind]: k }, false)).catch(() => {});
       delete bans[kind][k]; had++;
     }
     if (had) await ctx.store.put('bans', bans);
+    if (lifted) await shopChanged(ctx); // (what they sponsor is shown again)
     return out(200, { removed: had });
   } else if (method !== 'GET' && method !== 'HEAD') return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD, POST, DELETE' });
   const live = liveBans(await ctx.store.get('bans'), now);

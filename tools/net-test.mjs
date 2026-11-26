@@ -714,8 +714,10 @@ async function testModeration(start, dist) {
     adm.send({ t: 'who' });
     const marked = await adm.wait((m) => m.t === 'who' && m.list.some((p) => p.id === mia.id && p.muted === true));
     const quiet = (json(await request(port, '/api/bans', { headers: key }))?.bans || []).filter((b) => b.name === 'Mia');
-    check('admin: kept out in silence — the visitor stays, sees their own show and is seen waving, but what they write, a score of theirs and their red button reach nobody; the list says so',
-      !!before && mia.code === null && !mia.msgs.some((m) => m.t === 'kicked') && !!show && !!wave && unheard && !!marked && quiet.length === 2 && quiet.every((b) => b.quiet === true) && quiet.some((b) => b.kind === 'dev' && b.key === DEVM), { before, show, wave, unheard, quiet });
+    // (…and what they sponsor is no longer shown to the others: every room is told, as for any change of what the sponsors show)
+    const shopTold = bob.msgs.some((m) => m.t === 'shop');
+    check('admin: kept out in silence — the visitor stays, sees their own show and is seen waving, but what they write, a score of theirs and their red button reach nobody; the list says so; the rooms are told that what the sponsors show may have changed',
+      !!before && mia.code === null && !mia.msgs.some((m) => m.t === 'kicked') && !!show && !!wave && unheard && !!marked && quiet.length === 2 && quiet.every((b) => b.quiet === true) && quiet.some((b) => b.kind === 'dev' && b.key === DEVM) && shopTold, { before, show, wave, unheard, quiet, shopTold });
     mia.ws.close();
     await bob.wait((m) => m.t === 'leave' && m.id === mia.id);
     const mia2 = new Client(port, 'mod', from(6, DEVM));
@@ -1711,8 +1713,23 @@ async function testPaid({ port }) {
   const heard = await ear.wait((m) => m.t === 'say' && /Acme Robots/.test(m.m), 4000), shown = (await owned(randomId(16))).slots['board:cups'];
   const changed = await post('/api/sponsor', { slot: 'board:cups', device: dog, title: 'Acme Robots Inc', subtitle: 'robots, mostly', url: 'https://example.org/acme' });
   await sleep(400);
-  const cheers = ear.msgs.filter((m) => m.t === 'say' && /Acme/.test(m.m)).length;
+  const cheers = ear.msgs.filter((m) => m.t === 'say' && /Acme/.test(m.m)).length, told = ear.msgs.filter((m) => m.t === 'shop').length;
+  // (…and when the fair itself changes it — a place filled from the back office, then taken down; a sponsor kept out in
+  // silence, then let back —: every room is told, once each time — here two rooms)
+  const far = new Client(port, 'elsewhere');
+  await far.hello('Far', 2);
+  const byAdmin = (target, method, body) => request(port, target, { method, headers: { 'content-type': 'application/json', authorization: `Bearer ${ADMIN_KEY}` }, ...(body && { body: JSON.stringify(body) }), from: '127.0.0.86' });
+  const heardShop = () => [ear, far].map((c) => c.msgs.filter((m) => m.t === 'shop').length);
+  const each = async (fn) => { const before = heardShop(), res = await fn(); await sleep(500); return { status: res.status, told: heardShop().map((n, i) => n - before[i]).join() }; };
+  const bySet = await each(() => byAdmin('/api/sponsors', 'POST', { slot: 'gondola:19', set: { title: 'Nineteen Ltd', subtitle: 'filled in by hand', url: 'https://example.org/19' } }));
+  const byQuiet = await each(() => byAdmin('/api/bans', 'POST', { dev: dog, hours: 1, quiet: true }));
+  const byLift = await each(() => byAdmin(`/api/bans?dev=${dog}`, 'DELETE'));
+  const byDown = await each(() => byAdmin('/api/sponsors?slot=gondola:19', 'DELETE'));
   ear.ws.close();
+  far.ws.close();
+  check('every room is told when what the sponsors show changes — a bid taken, a panel filled in, then changed; a place filled in from the back office, then taken down; a sponsor kept out in silence, then let back —, once each time: each page then asks again by itself, and its panels and its wall of thanks follow without a reload',
+    told >= 3 && ear.msgs.filter((m) => m.t === 'shop').every((m) => Object.keys(m).join() === 't') && [bySet, byQuiet, byLift, byDown].every((s) => s.status === 200 && s.told === '1,1'),
+    { told, bySet, byQuiet, byLift, byDown });
   const mails = CF || !fs.existsSync(MAIL_FILE) ? null : fs.readFileSync(MAIL_FILE, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((m) => m.to === 'buyer@example.org' && /^You sponsor the board of Shell Shock/.test(m.subject));
   check('a new sponsor: the bid is taken as they come back; what their panel says goes up at once — without the words the chat hides —; the whole fair is told once, by name, with due praise; changing the panel later says nothing; the sponsor is thanked by e-mail',
     bidPage.status === 200 && json(took)?.given === true && mine?.mine === true && filled.status === 200 && json(filled).state === 'live' && shown?.title === 'Acme Robots' && shown.subtitle === 'quel ********, ce robot' && shown.url === 'https://example.org/acme'
