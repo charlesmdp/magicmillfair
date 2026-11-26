@@ -1321,7 +1321,9 @@ were said to be, a little further for the time gone by, in colours of their own;
 whoever is racing. Boats of visitors do not push each other: each is where its owner's screen says.
 *Jump the Logs* is **a slog now, three times as long**: one climbs slower than one steps aside, something is
 let go at the top every four tenths of a second, the barrels come down almost to the line and the boulders
-to a fifth of the slope, and what hits one carries one further back. The slope is not rushed any more — its
+to a fifth of the slope, and what hits one carries one further back. Its four stretches have a colour each —
+green, yellow, orange, red up to the bell: kerbs, a line, a sign — and whatever rolls wears the colour of the
+stretch where it stops, so one knows what can reach one where one stands. The slope is not rushed any more — its
 bot took eleven seconds, it takes about thirty-three, hit half a dozen times on the way —: it is read. Its
 board takes no time under eighteen seconds (run flat out with nothing in the way: 18.3 s), and the music of
 the climb rises with the climber.) The files of the lab are the lab's: `src/extras/**`,

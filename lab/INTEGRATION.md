@@ -8,7 +8,7 @@ on over the game as it stands, each on its own, and with every switch off the ga
 | `slide` | **Mostly Down**, the water slide | `src/world/zones/games/slide/`, `src/extras/slide.js` | `node tools/slide-test.mjs` |
 | `pond` | **The Endless Pond**, three circuits on the Great Pond: fifteen seconds, twenty, then as long as one can | `src/world/zones/games/pond/`, `src/extras/pond.js` | `node tools/pond-test.mjs` (29) |
 | `boats` | **Harbor Heaven**, radio-controlled boats racing on the Great Pond | `src/world/zones/games/boats/`, `src/extras/boats.js` | `node tools/boats-test.mjs` (18) |
-| `hill` | **Jump the Logs**, up a long slope while logs, barrels and boulders roll down it | `src/world/zones/games/hill/`, `src/extras/hill.js` | `node tools/hill-test.mjs` (12) |
+| `hill` | **Jump the Logs**, up a long slope while logs, barrels and boulders roll down it | `src/world/zones/games/hill/`, `src/extras/hill.js` | `node tools/hill-test.mjs` (13) |
 | `crack` | **Bouncy Rock**, up a cleft between two needles of rock, from wall to wall | `src/world/zones/games/crack/`, `src/extras/crack.js` | `node tools/crack-test.mjs` (27) |
 | `hollow` | **The Nuclear Cave** (it was The Hollow Hill), a race flown under the ground, one lap against the clock | `src/world/zones/games/hollow/`, `src/extras/hollow.js` | `node tools/hollow-test.mjs` (32) |
 | `caves` | The caves are safe places: nearby chat only | `src/extras/caves.js` | `node tools/extras-test.mjs` (15, with the next) |
@@ -140,9 +140,18 @@ game's boards `boats: { order: 'asc', min: 37_000, max: 1800_000 }` (the checks 
 
 A long open slope between the Great Pond and the old tree, sixty-six metres between two ropes, from an arch to a
 bell. One runs up it; things come down it: logs lie across (jumped, or gone round), barrels wander from side to
-side, boulders are wide — and neither is jumped. All are let go at the top, but the boulders are stopped two
-thirds of the way down and the barrels one third: it gets worse as one climbs. What hits carries one back down a
-few metres, never to the start.
+side, boulders are wide — and neither is jumped. All are let go at the top, but each is stopped at one of the
+lines that cut the slope into four stretches — the boulders never come lower than the second line, the barrels
+than the first —: it gets worse as one climbs. What hits carries one back down a few metres, never to the start.
+
+**Each stretch has a colour** — green at the foot, then yellow, orange, red by the bell —: the kerbs along both
+sides, the line across at its foot and the sign beside it. Whatever rolls wears the colour of the stretch where it
+is stopped (painted bands round a log, the hoops of a barrel, a band round a boulder): it never goes past the line
+of its colour. So in a stretch, what can reach one wears its colour or a colour below it (`stageOf` in `Hill.js`;
+the rules in `slope.js` are untouched). Everything that rolls is drawn — one instanced mesh per kind and material,
+as many copies as can roll at once (22 logs, 14 barrels, 14 boulders) —: the pools of seven logs, five barrels and
+four boulders were too small since things roll every four tenths of a second, and the newest ones near the bell
+were not drawn.
 
 **A start every ten seconds, each with its name** (Red, Blue, Green… as for the quad race): what rolls goes by the
 clock of the world and the climbs leave together, so friends who take the same start run side by side with the

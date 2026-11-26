@@ -6,6 +6,7 @@ export const NEWS = [
   {
     date: '26 November 2026',
     items: [
+      ['Jump the Logs, in colours', 'Each of its four stretches has a colour now, from green at the foot to red by the bell — and whatever rolls wears the colour of the line where it stops. In the yellow stretch, mind what is yellow or green.'],
       ['A mushroom cloud of light', 'Those who found the twenty-five relics now raise a golden mushroom cloud in the ring of light, as the animals do — and it has its own medallion after the dragon, in the emotes (T).'],
       ['Beach huts for sponsors', 'Each of the twenty-six beach huts by the pier now has a panel on its roof for a sponsor: $14.50 a month, or $99.50 once, for good. Step onto the sand by a hut, or open the Trading Post.'],
       ['Three games, new names', 'Uphill Battle is now Jump the Logs, Between a Rock is Bouncy Rock, and The Little Regatta is Harbor Heaven. The same games, the same boards of scores.'],

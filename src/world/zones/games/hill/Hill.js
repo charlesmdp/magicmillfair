@@ -2,6 +2,10 @@
 // ropes along the slope, the arch of the start and the bell at the top, the lines where the barrels and the
 // boulders are stopped, what rolls — and a climb is run: a session that drives the player (see
 // PlayerController.driver). What rolls is drawn from the clock of the world: everybody sees the same.
+// Each of the four stretches has a colour — green at the foot, then yellow, orange, red by the bell —: its kerbs
+// along both sides, the line at its foot and its sign; and whatever rolls wears the colour of the stretch where
+// it is stopped (the line of its colour: it never goes past it). So, in a stretch, what can reach one wears its
+// colour or the colours below it.
 import * as THREE from 'three';
 import { Parts } from '../../../props/MeshBuilder.js';
 import { LAYER } from '../../../../render/Shadows.js';
@@ -13,7 +17,13 @@ import { HILL, nextStart, startClimb, stepClimb, slopeAt, rolling, botInput, str
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const CREAM = [1.3, 1.17, 0.9], RED = [0.95, 0.1, 0.12], GOLD = [1.5, 1.05, 0.2], ROPE = [1.1, 0.95, 0.7], NAVY = [0.07, 0.07, 0.2], YELLOW = [1.6, 1.3, 0.12];
 const TONES = { Red: '#e23b2e', Blue: '#2f7fe6', Green: '#2fae4f', Yellow: '#f2c14e', Purple: '#9a5be0', Orange: '#f08a24' };
-const POOL = { log: 7, barrel: 5, boulder: 4 };
+// the colours of the four stretches, from the foot to the bell: as paint, as written, as said
+const STAGE = [[0.15, 0.85, 0.3], [1.6, 1.3, 0.12], [1.6, 0.55, 0.06], [0.95, 0.1, 0.12]];
+const STAGE_HEX = ['#2fae4f', '#f2c14e', '#f08a24', '#e23b2e'], STAGE_NAME = ['green', 'yellow', 'orange', 'red'];
+/** The stretch where a thing that rolls is stopped (its colour): 1 … 4 — what `stretchOf(t.end)` says, counted without a list. */
+const stageOf = (t) => (t.end >= HILL.tiers[2] ? 4 : t.end >= HILL.tiers[1] ? 3 : t.end >= HILL.tiers[0] ? 2 : 1);
+// (how many of each can be rolling at once — over hours of the clock: 17 logs, 10 barrels, 10 boulders —, with room to spare)
+const ROLLING = { log: 22, barrel: 14, boulder: 14 };
 
 export class Hill {
   constructor(world) {
@@ -58,30 +68,80 @@ export class Hill {
       this.group.add(board.mesh);
       return { a, b, y };
     };
-    arch(0, RED, H.name.toUpperCase(), `A START EVERY ${H.every} SECONDS · UP TO THE BELL · MIND WHAT ROLLS`);
+    arch(0, RED, H.name.toUpperCase(), `A START EVERY ${H.every} SECONDS · UP TO THE BELL · WHAT ROLLS STOPS AT THE LINE OF ITS COLOUR`);
     const top = arch(H.length, NAVY, 'THE TOP', '');
     const bell = this.at(H.length + 0.4, 0);
     paint.tint(...GOLD, 1).place(bell.x, top.y - 1.5, bell.z).lathe([[0.03, 0.4], [0.14, 0.36], [0.24, 0.1], [0.34, -0.05], [0.37, -0.12]], 10).pop();
-    // ---- the foot of each stretch, where part of what comes down is stopped: a line painted across, and a board
-    // at the side that says what is beyond
-    for (const [k, text] of [[0, 'STRETCH 2 · BARRELS BEYOND'], [1, 'STRETCH 3 · BOULDERS BEYOND'], [2, 'STRETCH 4 · EVERYTHING AT ONCE']]) {
-      const s = H.tiers[k], p = this.at(s, H.half + 1.6);
+    // ---- the foot of each stretch, where part of what comes down is stopped: a line painted across in the colour
+    // of the stretch above it — what wears that colour stops there —, and a board at the side that says so
+    const sign = (s, k, text, sub) => {
+      const p = this.at(s, H.half + 1.6);
       bark.tint(0.9, 0.85, 0.8, 1).cylinder(p.x, p.y - 0.3, p.z, 0.08, 0.07, 2.3, 6);
-      const board = canvasBoard(512, 128, (ctx, w, hh) => { ctx.fillStyle = '#12122e'; ctx.fillRect(0, 0, w, hh); ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 6; ctx.strokeRect(6, 6, w - 12, hh - 12); ctx.fillStyle = '#f6e7b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '700 50px system-ui, sans-serif'; ctx.fillText(text, w / 2, hh / 2 + 2, w * 0.9); }, 2.2, 0.55, { both: true });
+      const board = canvasBoard(512, 160, (ctx, w, hh) => {
+        ctx.fillStyle = '#12122e'; ctx.fillRect(0, 0, w, hh);
+        ctx.fillStyle = STAGE_HEX[k]; ctx.fillRect(0, 0, 44, hh); ctx.fillRect(w - 44, 0, 44, hh); // (bands of its colour at both ends)
+        ctx.strokeStyle = STAGE_HEX[k]; ctx.lineWidth = 8; ctx.strokeRect(4, 4, w - 8, hh - 8);
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#f6e7b8'; ctx.font = '800 46px system-ui, sans-serif'; ctx.fillText(text, w / 2, hh * 0.38, w - 110);
+        ctx.fillStyle = STAGE_HEX[k]; ctx.font = '700 25px system-ui, sans-serif'; ctx.fillText(sub, w / 2, hh * 0.74, w - 110);
+      }, 2.2, 0.69, { both: true });
       board.mesh.position.set(p.x, p.y + 1.9, p.z); board.mesh.rotation.y = H.yaw; board.mesh.name = 'hill-sign';
       this.group.add(board.mesh);
-      for (let u = -H.half; u <= H.half + 0.01; u += 0.92) { const q = this.at(s - 0.4, u); paint.tint(...(Math.round(u / 0.92) % 2 ? YELLOW : NAVY), 1).box(q.x - 0.3, q.y + 0.01, q.z - 0.1, q.x + 0.3, q.y + 0.05, q.z + 0.1); }
+    };
+    sign(1.2, 0, 'STRETCH 1 · GREEN', 'green rolls all the way down');
+    for (const [k, what] of [[0, 'barrels beyond'], [1, 'boulders beyond'], [2, 'everything at once']]) {
+      const s = H.tiers[k];
+      sign(s, k + 1, `STRETCH ${k + 2} · ${STAGE_NAME[k + 1].toUpperCase()}`, `${STAGE_NAME[k + 1]} stops here · ${what}`);
+      for (let u = -H.half; u <= H.half + 0.01; u += 0.92) { const q = this.at(s - 0.4, u); paint.tint(...(Math.round(u / 0.92) % 2 ? STAGE[k + 1] : NAVY), 1).box(q.x - 0.3, q.y + 0.01, q.z - 0.1, q.x + 0.3, q.y + 0.05, q.z + 0.1); }
+    }
+    // ---- kerbs along both sides, in the colour of each stretch (and cream between): which stretch one is in
+    for (const side of [-1, 1]) {
+      for (let s = 0, k = 0; s < H.length - 0.2; s += 1, k++) {
+        const stage = stretchOf(s + 0.5) - 1, a = this.at(s + 0.05, side * (H.half - 0.12)), b = this.at(s + 0.95, side * (H.half - 0.12));
+        a.y += 0.035; b.y += 0.035;
+        paint.tint(...(k % 2 ? CREAM : STAGE[stage]), 1).beam(a, b, 0.24, 0.07);
+      }
     }
     // ---- the gate, a little before the line: where one asks to climb
     const g = this.at(-3.2, 0);
     this.gate = { x: g.x, y: g.y, z: g.z, yaw: H.yaw };
     this.group.add(parts.toMeshes(mats, { name: 'hill-lane', layers: [LAYER.STATIC_CASTER] }));
-    // ---- what rolls: a few of each, put where the clock says
-    this.pool = {};
-    const make = (kind, build) => { this.pool[kind] = []; for (let k = 0; k < POOL[kind]; k++) { const p = new Parts(); build(p, k); const m = p.toMeshes(mats, { name: `hill-${kind}${k}`, layers: [] }); m.visible = false; this.group.add(m); this.pool[kind].push(m); } };
-    make('log', (p, k) => { const b = p.get('woodDark'), t = 0.85 + 0.2 * ((k * 37) % 5) / 5; b.tint(t, t * 0.95, t * 0.9, 1).rod(V(-0.5, 0, 0), V(0.5, 0, 0), HILL.kinds.log.r, 9); p.get('woodDeck').tint(1.1, 1.0, 0.85, 1).rod(V(-0.502, 0, 0), V(0.502, 0, 0), HILL.kinds.log.r * 0.82, 9); });
-    make('barrel', (p) => { const b = p.get('woodDeck'), r = HILL.kinds.barrel.r; b.tint(1, 0.9, 0.75, 1).rod(V(-0.5, 0, 0), V(-0.17, 0, 0), r * 0.9, 10, { r1: r }).rod(V(-0.17, 0, 0), V(0.17, 0, 0), r, 10).rod(V(0.17, 0, 0), V(0.5, 0, 0), r, 10, { r1: r * 0.9 }); const s = p.get('paint'); for (const x of [-0.3, 0.3]) s.tint(0.3, 0.32, 0.36, 1).rod(V(x - 0.03, 0, 0), V(x + 0.03, 0, 0), r * 1.0, 10, { caps: false }); });
-    make('boulder', (p, k) => { const r = HILL.kinds.boulder.r, t = 0.9 + 0.1 * (k % 3); p.get('rock').tint(t, t, t, 1).lathe([[0, -r], [r * 0.62, -r * 0.8], [r * 0.97, -r * 0.25], [r, r * 0.2], [r * 0.72, r * 0.75], [0, r * 0.98]], 8); });
+    // ---- what rolls: as many of each as can roll at once — one mesh per kind and material, a copy for each thing —,
+    // put where the clock says; its painted bands wear the colour of the stretch where it stops, its wood or its rock
+    // a shade of its own (each copy's colour: instanceColor)
+    this.kinds = {};
+    const make = (kind, build) => {
+      const p = new Parts(), n = ROLLING[kind], meshes = [];
+      build(p);
+      for (const [key, b] of p.map) {
+        const mesh = new THREE.InstancedMesh(b.build(), mats[key], n);
+        mesh.name = `hill-${kind}:${key}`;
+        mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3).fill(1), 3);
+        mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+        mesh.count = 0;
+        mesh.frustumCulled = false; // (its copies are all over the slope)
+        this.group.add(mesh);
+        meshes.push({ key, mesh });
+      }
+      this.kinds[kind] = { meshes };
+    };
+    const r0 = HILL.kinds.log.r, r1 = HILL.kinds.barrel.r, r2 = HILL.kinds.boulder.r;
+    make('log', (p) => {
+      p.get('woodDark').tint(1, 0.95, 0.9, 1).rod(V(-0.5, 0, 0), V(0.5, 0, 0), r0, 9);
+      p.get('woodDeck').tint(1.1, 1.0, 0.85, 1).rod(V(-0.502, 0, 0), V(0.502, 0, 0), r0 * 0.82, 9);
+      for (const x of [-0.36, 0, 0.36]) p.get('paint').tint(1, 1, 1, 1).rod(V(x - 0.035, 0, 0), V(x + 0.035, 0, 0), r0 * 1.05, 9, { caps: false }); // (three painted bands)
+    });
+    make('barrel', (p) => {
+      p.get('woodDeck').tint(1, 0.9, 0.75, 1).rod(V(-0.5, 0, 0), V(-0.17, 0, 0), r1 * 0.9, 10, { r1 }).rod(V(-0.17, 0, 0), V(0.17, 0, 0), r1, 10).rod(V(0.17, 0, 0), V(0.5, 0, 0), r1, 10, { r1: r1 * 0.9 });
+      for (const x of [-0.3, 0, 0.3]) p.get('paint').tint(1, 1, 1, 1).rod(V(x - 0.04, 0, 0), V(x + 0.04, 0, 0), r1 * 1.03, 10, { caps: false }); // (its hoops, painted)
+    });
+    make('boulder', (p) => {
+      p.get('rock').tint(1, 1, 1, 1).lathe([[0, -r2], [r2 * 0.62, -r2 * 0.8], [r2 * 0.97, -r2 * 0.25], [r2, r2 * 0.2], [r2 * 0.72, r2 * 0.75], [0, r2 * 0.98]], 8);
+      // (a painted band round it, both ways: it shows whichever way the boulder has turned)
+      p.get('paint').tint(1, 1, 1, 1).lathe([[r2 * 1.0, -r2 * 0.2], [r2 * 1.03, 0], [r2 * 1.0, r2 * 0.2]], 10);
+      p.get('paint').place(0, 0, 0, 0, 0, Math.PI / 2).lathe([[r2 * 0.99, -r2 * 0.12], [r2 * 1.02, 0], [r2 * 0.99, r2 * 0.12]], 10).pop();
+    });
     this.group.updateMatrixWorld(true);
     world.scene.add(this.group);
     return this;
@@ -92,22 +152,34 @@ export class Hill {
   /** The start one who asks now would leave with (see slope.js). */
   nextStart() { const st = nextStart(this.clock()); return { ...st, tone: TONES[st.name] || '#f2c14e' }; }
 
-  /** Puts what rolls where it is at `clock` (s of the shared clock). */
+  /** Puts what rolls where it is at `clock` (s of the shared clock), each thing in the colour of where it stops. */
   _roll(clock) {
-    const used = { log: 0, barrel: 0, boulder: 0 }, fx = Math.sin(HILL.yaw), fz = Math.cos(HILL.yaw), p = V(0, 0, 0);
+    const used = { log: 0, barrel: 0, boulder: 0 }, p = this._rp || (this._rp = V(0, 0, 0)), m = this._rm || (this._rm = new THREE.Matrix4());
+    const e = this._re || (this._re = new THREE.Euler(0, 0, 0, 'YXZ')), q = this._rq || (this._rq = new THREE.Quaternion()), sc = this._rs || (this._rs = V(1, 1, 1));
     rolling(clock, (t) => {
-      const m = this.pool[t.kind][used[t.kind]++];
-      if (!m) return;
+      const kind = this.kinds[t.kind], i = used[t.kind];
+      if (i >= ROLLING[t.kind]) return;
+      used[t.kind]++;
       this.at(t.s, t.u, p);
-      m.visible = true;
-      m.position.set(p.x, p.y + t.r, p.z);
+      p.y += t.r;
       // (it lies across the slope and turns about that axis as it comes down; a boulder tumbles)
-      m.rotation.set(-t.turn, HILL.yaw, 0, 'YXZ');
-      m.scale.set(t.kind === 'log' ? t.half * 2 : t.kind === 'barrel' ? 1.25 : 1, 1, 1);
-      m.updateMatrixWorld(true);
-      void fx; void fz;
+      q.setFromEuler(e.set(-t.turn, HILL.yaw, 0, 'YXZ'));
+      sc.set(t.kind === 'log' ? t.half * 2 : t.kind === 'barrel' ? 1.25 : 1, 1, 1);
+      m.compose(p, q, sc);
+      const c = STAGE[stageOf(t) - 1], shade = 0.85 + (0.2 * ((t.n * 37) % 5)) / 5;
+      for (const { key, mesh } of kind.meshes) {
+        mesh.setMatrixAt(i, m);
+        if (key === 'paint') mesh.instanceColor.setXYZ(i, c[0], c[1], c[2]);
+        else if (key !== 'woodDeck') mesh.instanceColor.setXYZ(i, shade, shade, shade);
+      }
     });
-    for (const kind of Object.keys(this.pool)) for (let k = used[kind]; k < this.pool[kind].length; k++) this.pool[kind][k].visible = false;
+    for (const [name, kind] of Object.entries(this.kinds)) for (const { mesh } of kind.meshes) { mesh.count = used[name]; mesh.instanceMatrix.needsUpdate = true; mesh.instanceColor.needsUpdate = true; }
+  }
+  /** What rolls at `clock` (s of the shared clock; now by default), in the order it is drawn: [{ kind, stage, s }] (for the checks). */
+  rollingNow(clock = this.clock() / 1000) {
+    const out = [];
+    rolling(clock, (t) => out.push({ kind: t.kind, stage: stageOf(t), s: +t.s.toFixed(1) }));
+    return out;
   }
 
   /**
@@ -141,7 +213,7 @@ export class Hill {
         session.anim = st.knock > 0 ? ANIM.sit : st.h > 0.05 ? ANIM.jump : pl.speed > 0.5 ? ANIM.run : ANIM.idle;
         if (st.over) { S.after += dt; if (!session.over) { session.over = true; session.time = st.time; } if (S.after > 2) session.ended = true; }
         session.line = !S.gone ? `${H.name} · ${start.name} start in ${Math.max(1, Math.ceil(wait))}…`
-          : st.over ? `${H.name} · ${formatTime(st.time)}` : `${formatTime(Math.round(st.clock * 1000))} · stretch ${stretchOf(st.s)} of 4 · ${Math.max(0, Math.round(H.length - st.s))} m to the bell${st.hits ? ` · hit ${st.hits} time${st.hits === 1 ? '' : 's'}` : ''}`;
+          : st.over ? `${H.name} · ${formatTime(st.time)}` : `${formatTime(Math.round(st.clock * 1000))} · stretch ${stretchOf(st.s)} of 4 (${STAGE_NAME[stretchOf(st.s) - 1]}) · ${Math.max(0, Math.round(H.length - st.s))} m to the bell${st.hits ? ` · hit ${st.hits} time${st.hits === 1 ? '' : 's'}` : ''}`;
       },
       /** The camera: behind the climber and above, looking up the slope at what comes. */
       camera: (cam, dt) => {

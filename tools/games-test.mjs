@@ -112,6 +112,22 @@ try {
   await page.waitForFunction(() => !window.__mmf.hillClimb(), null, { timeout: 180000 });
   const hill = await page.evaluate(() => ({ told: window.__told.hill, driver: !!window.__mmf.player.driver }));
   check('the slope is climbed by its bot in the running game, and its time told', hill.told > 9000 && hill.told < 90000 && !hill.driver, `${(hill.told / 1000).toFixed(1)} s`);
+  // (each stretch has a colour, and whatever rolls wears the colour of the stretch where it is stopped: everything
+  // that rolls is drawn — as many copies as things —, its painted bands in that colour)
+  const painted = await page.evaluate(() => {
+    const h = window.__mmf.extras.hill, c = h.clock() / 1000, now = h.rollingNow(c), tones = [[0.15, 0.85, 0.3], [1.6, 1.3, 0.12], [1.6, 0.55, 0.06], [0.95, 0.1, 0.12]], out = { drawn: {}, rolling: {}, wrong: 0, stages: [0, 0, 0, 0], signs: 0 };
+    h._roll(c); // (drawn at that very instant, as a frame does)
+    for (const [kind, k] of Object.entries(h.kinds)) {
+      const things = now.filter((t) => t.kind === kind), paint = k.meshes.find((m) => m.key === 'paint').mesh;
+      out.drawn[kind] = paint.count; out.rolling[kind] = things.length;
+      things.forEach((t, i) => { const c = tones[t.stage - 1]; out.stages[t.stage - 1]++; if (Math.abs(paint.instanceColor.getX(i) - c[0]) > 1e-3 || Math.abs(paint.instanceColor.getZ(i) - c[2]) > 1e-3) out.wrong++; });
+    }
+    h.group.traverse((o) => { if (o.name === 'hill-sign') out.signs++; });
+    return out;
+  });
+  check('on the slope, each stretch has its colour — a sign at the foot of each of the four — and whatever rolls is drawn, every one of them, its bands in the colour of the stretch where it stops',
+    painted.signs === 4 && Object.keys(painted.drawn).every((k) => painted.drawn[k] === painted.rolling[k]) && painted.wrong === 0 && painted.stages.reduce((a, b) => a + b, 0) > 0,
+    JSON.stringify(painted));
   // ---- the regatta: asked for at the stand, it leaves with the next named start — on the clock everybody
   // shares —, the boat sails its three laps by itself and its time is told; somebody else's boat that the network
   // speaks of is shown while it races with the same start, and no longer once nothing is heard of it
