@@ -104,10 +104,14 @@ try {
   if (sky.stage !== 'hidden' || sky.villages || sky.meshes || !sky.gate || sky.word || sky.places) throw new Error(`the sky villages are hidden, yet something of them shows: ${JSON.stringify(sky)}`);
   await page.evaluate(() => document.querySelector('.legal-tabs [data-doc="terms"]').click());
   const terms = await page.evaluate(() => ({ tab: document.querySelector('.legal-tabs .on')?.textContent, sections: document.querySelectorAll('.legal-body section').length }));
+  // (the legal notice: who publishes the site — the company and how to reach it — and who hosts it)
+  await page.evaluate(() => document.querySelector('.legal-tabs [data-doc="notice"]').click());
+  const notice = await page.evaluate(() => ({ tab: document.querySelector('.legal-tabs .on')?.textContent, text: document.querySelector('.legal-body').textContent }));
   await page.evaluate(() => document.querySelector('.legal-x').click());
   const legalClosed = await page.evaluate(() => !document.querySelector('.legal').classList.contains('on'));
-  console.log(`small print: ${JSON.stringify({ extras, legal, terms, legalClosed })}`);
-  if (!extras.full || extras.links !== 'Terms of use,Privacy' || !extras.counted || !legal.open || legal.panel || legal.tab !== 'Privacy' || legal.sections < 5 || legal.names !== 4 || terms.tab !== 'Terms of use' || terms.sections < 5 || !legalClosed) { failed = true; console.log('FAIL: the small print, the full screen control or the script that counts the visits'); }
+  console.log(`small print: ${JSON.stringify({ extras, legal, terms, notice: { tab: notice.tab, chars: notice.text.length }, legalClosed })}`);
+  if (!extras.full || extras.links !== 'Terms of use,Privacy,Legal notice' || !extras.counted || !legal.open || legal.panel || legal.tab !== 'Privacy' || legal.sections < 5 || legal.names !== 4 || terms.tab !== 'Terms of use' || terms.sections < 5
+    || notice.tab !== 'Legal notice' || !/MY BIG LEO/.test(notice.text) || !/SIREN 880 338 827/.test(notice.text) || !/Cloudflare, Inc\./.test(notice.text) || !/101 Townsend Street/.test(notice.text) || !legalClosed) { failed = true; console.log('FAIL: the small print, the full screen control or the script that counts the visits'); }
   // the minimap opens the large map; a click closes it
   await page.click('.minimap');
   await frames(3);

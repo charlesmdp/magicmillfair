@@ -965,7 +965,7 @@ src/
   net/                     multiplayer presence and chat (WebSocket or between-tabs transport, interpolation),
                            Scores.js (the leaderboards)
   ui/                      welcome screen, minimap and large map, chat, action prompts, settings, touch controls;
-                           LegalView.js: the terms of use and the privacy policy (their words: app/legal.js);
+                           LegalView.js: the terms of use, the privacy policy and the legal notice (their words: app/legal.js);
                            SponsorsView.js: the window of the Trading Post, and the photographs the game takes of itself;
                            OasisPicture.js: the picture of the card of a room of one's own
   app/Benchmark.js         benchmark tour
@@ -1158,14 +1158,19 @@ work on the Node server; there, `MAIL_FILE=/some/file` writes each message to th
 it (to try things out — the tests use it). `server/mail.js` holds the message, what an address must look
 like, and both ways of sending.
 
-**The small print.** At the bottom of the settings, *Terms of use* and *Privacy* open a card with two
-tabs (`src/ui/LegalView.js`; the words are in `src/app/legal.js`): a short version at the top of each, then
-sections in plain words — what the fair asks of its visitors, what the shop sells and how a purchase is
-undone, and, for privacy, everything the game keeps and every outside service it uses (Cloudflare, Stripe,
-Anthropic for Billy, and the script that counts the visits). The lines at the top of `legal.js` say who
-runs the game — the company, its registration number, its address — and where to write: both pages show
-them. Keep the pages true: when the
-game starts to use something new, say so there and change the date.
+**The small print.** At the bottom of the settings, *Terms of use*, *Privacy* and *Legal notice* open a card
+with three tabs (`src/ui/LegalView.js`; the words are in `src/app/legal.js`): a short version at the top of
+each, then sections in plain words — what the fair asks of its visitors, what the shop sells and how a purchase
+is undone, and, for privacy, everything the game keeps and every outside service it uses (Cloudflare, Stripe,
+Anthropic for Billy the AI, and the script that counts the visits). The lines at the top of `legal.js` say who
+runs the game — the company, its registration number, its address — and where to write: the pages show
+them. The *Legal notice* (the "mentions légales" a French company's site must carry: law no. 2004-575, art.
+1-1) says who publishes the site and who hosts it (Cloudflare, Inc., its address and telephone); its lines are
+`NOTICE` in `legal.js`, and a line left empty is not shown. **Still to be filled in by the owner**: the legal
+form and the share capital, the town of the trade register (RCS), the VAT number (if the company has one), a
+telephone number, the director of publication, and the consumer mediator the company has joined (required to
+sell to consumers). Keep the pages true: when the game starts to use something new, say so there and change
+the date.
 
 **The script that counts the visits.** The page carries one script from another site
 (`ship-or-die.com/hackathon/verify.js`, with the identifier of this site): the hackathon the game takes

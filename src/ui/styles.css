@@ -274,7 +274,7 @@ html, body {
 #ui .legal-badge { flex: none; width: 48px; height: 48px; border-radius: 50%; background: radial-gradient(circle at 50% 50%, #1b1340 0 17%, transparent 18%), conic-gradient(from -30deg, #1b1340 0 60deg, #f2c14e 60deg 120deg, #1b1340 120deg 180deg, #f2c14e 180deg 240deg, #1b1340 240deg 300deg, #f2c14e 300deg 360deg); border: 3px solid #f2c14e; box-shadow: 0 0 18px rgba(242, 193, 78, 0.35); }
 #ui .legal-sheet h2 { margin: 0; font: 600 24px/1.1 Georgia, 'Times New Roman', serif; color: #ffe9a6; }
 #ui .legal-lead { margin: 4px 0 0; font-size: 13.5px; line-height: 1.4; color: #cfc7e6; }
-#ui .legal-tabs { flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 12px; background: rgba(0, 0, 0, 0.3); margin: 14px 0 12px; }
+#ui .legal-tabs { flex: none; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; padding: 4px; border-radius: 12px; background: rgba(0, 0, 0, 0.3); margin: 14px 0 12px; }
 #ui .legal-tabs button { padding: 9px 6px; border-radius: 9px; border: 0; background: transparent; color: #cfc7e6; font: 600 14px/1 system-ui, sans-serif; }
 #ui .legal-tabs button.on { background: #f2c14e; color: #2a1d05; }
 #ui .legal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-right: 8px; outline: none; scrollbar-width: thin; scrollbar-color: rgba(242, 193, 78, 0.5) transparent; -webkit-user-select: text; user-select: text; }

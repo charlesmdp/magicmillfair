@@ -303,7 +303,7 @@ export class Hud {
         <input type="text" maxlength="16" class="name" autocomplete="off" spellcheck="false" />
         <div class="acct" hidden><h3>Account</h3><p class="acct-info"></p><div class="acct-acts"></div></div>
         <p class="net-info"></p>
-        <p class="legal-links"><button type="button" data-legal="terms">Terms of use</button><span aria-hidden="true">·</span><button type="button" data-legal="privacy">Privacy</button></p>
+        <p class="legal-links"><button type="button" data-legal="terms">Terms of use</button><span aria-hidden="true">·</span><button type="button" data-legal="privacy">Privacy</button><span aria-hidden="true">·</span><button type="button" data-legal="notice">Legal notice</button></p>
         <p class="admin-shows" hidden>Administrator — see a card as visitors do: <button type="button" data-show="account">the account</button><span aria-hidden="true">·</span><button type="button" data-show="pass">the Game Pass</button><span aria-hidden="true">·</span><button type="button" data-show="room">a room of one's own</button></p>
         <p class="version">${VERSION}</p>
       </div>`;

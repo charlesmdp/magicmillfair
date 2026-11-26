@@ -1,17 +1,49 @@
-// The small print of the fair, in plain words: the terms of use and the privacy policy that the settings open
-// (ui/LegalView.js). Keep them true: when the game starts to use something new — a service, a script, a
-// thing it remembers — say so here, and change the date.
+// The small print of the fair, in plain words: the terms of use, the privacy policy and the legal notice that the
+// settings open (ui/LegalView.js). Keep them true: when the game starts to use something new — a service, a
+// script, a thing it remembers — say so here, and change the date.
 //
 // WHO: the lines below say who makes and runs the game (a company, its registration number, its address) and
 // the mailbox people can write to. Left empty, the pages say how to reach the maker without them.
 export const LEGAL = {
-  updated: '25 November 2026',
+  updated: '26 November 2026',
   maker: 'MY BIG LEO',
   operator: 'It is made and run by MY BIG LEO, a company registered in France (SIREN 880 338 827), 14 rue Charles V, Paris, France.',
   contact: 'atomicoasisgame@gmail.com',
 };
 
+// The legal notice (in France, the "mentions légales" of a company's site: law no. 2004-575, art. 1-1): who
+// publishes the site and who hosts it. A line left empty is not shown. Still to be given by the owner (see
+// README, "The small print"): the legal form and the share capital, the town of the trade register (RCS), the VAT
+// number (if the company has one), a telephone number, the director of publication, the consumer mediator.
+export const NOTICE = {
+  company: 'MY BIG LEO',
+  form: '', // (its legal form and share capital, e.g. "SAS with a share capital of €1,000")
+  address: '14 rue Charles V, Paris, France',
+  registration: 'SIREN 880 338 827', // (with the town of its trade register once known, e.g. "RCS Paris 880 338 827")
+  vat: '', // (its intra-community VAT number, e.g. "FR00 880338827")
+  phone: '',
+  director: '', // (the director of publication: the company's legal representative)
+  host: { name: 'Cloudflare, Inc.', address: '101 Townsend Street, San Francisco, CA 94107, United States', phone: '+1 888 993 5273' },
+  mediator: '', // (the consumer mediator the company has joined: its name and its site)
+};
+
 const reach = () => (LEGAL.contact ? `write to ${LEGAL.contact}` : 'ask in the chat for an administrator (their name carries a badge), or write to the address given by whoever sent you here');
+
+/** The legal notice, as LegalView shows it (same shape as the two others). */
+export const LEGAL_NOTICE = () => {
+  const N = NOTICE;
+  return {
+    title: 'Legal notice',
+    lead: 'Who publishes this site, who hosts it, and how to reach them.',
+    short: [`Atomic Oasis is published by ${N.company}${N.address ? `, ${N.address}` : ''}.`, `It is hosted by ${N.host.name}${/\.$/.test(N.host.name) ? '' : '.'}`, LEGAL.contact ? `To reach the publisher: ${LEGAL.contact}.` : 'To reach the publisher: ask in the chat for an administrator.'],
+    sections: [
+      { icon: '🏢', title: 'The publisher', text: [[`${N.company}${N.form ? `, ${N.form}` : ''}`, N.address ? `Registered office: ${N.address}` : '', N.registration, N.vat ? `VAT number: ${N.vat}` : '', N.phone ? `Telephone: ${N.phone}` : '', LEGAL.contact ? `E-mail: ${LEGAL.contact}` : ''].filter(Boolean)] },
+      ...(N.director ? [{ icon: '🖋️', title: 'Director of publication', text: [N.director] }] : []),
+      { icon: '🖥️', title: 'The host', text: [[N.host.name, N.host.address, `Telephone: ${N.host.phone}`]] },
+      ...(N.mediator ? [{ icon: '🤝', title: 'If something goes wrong with a purchase', text: [`Write to us first (${LEGAL.contact}). If we cannot settle it between us, you may turn, free of charge, to the consumer mediator: ${N.mediator}.`] }] : []),
+    ],
+  };
+};
 
 /** Each: { title, lead, short: [the short version], sections: [{ icon, title, text: [a paragraph | [a list]] }] } */
 export const TERMS = () => ({
