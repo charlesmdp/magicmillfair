@@ -168,9 +168,20 @@ try {
     await place(a[0], a[1], toward(a[0], a[1], b2[0], b2[1]));
     await frames(3);
     const y0 = (await state()).y;
-    await walk(46, true);
+    // (run up it until the corner — within five seconds of the game's own time: so many frames were a different
+    // stretch of time from one machine, or one run, to the next, and the robot stopped short or not)
+    await page.keyboard.down('ShiftLeft');
+    await page.keyboard.down('KeyW');
+    const took = await page.evaluate(([bx, bz]) => new Promise((res) => {
+      const app = window.__mmf, t0 = app.engine.time;
+      const tick = () => { const p = app.player.pos, t = app.engine.time - t0; if (Math.hypot(p.x - bx, p.z - bz) < 1.2 || t > 5) res(+t.toFixed(2)); else requestAnimationFrame(tick); };
+      tick();
+    }), [b2[0], b2[1]]);
+    await page.keyboard.up('KeyW');
+    await page.keyboard.up('ShiftLeft');
+    await frames(2);
     const s1 = await state();
-    check('climbs a flight of the stairway', Math.abs(y0 - a[2]) < 0.3 && Math.abs(s1.y - b2[2]) < 0.4 && Math.hypot(s1.x - b2[0], s1.z - b2[1]) < 2.5, `from ${y0.toFixed(1)} to ${s1.y.toFixed(1)} (corner at ${b2[2]})`);
+    check('climbs a flight of the stairway', Math.abs(y0 - a[2]) < 0.3 && Math.abs(s1.y - b2[2]) < 0.4 && Math.hypot(s1.x - b2[0], s1.z - b2[1]) < 2.5 && took <= 5, `from ${y0.toFixed(1)} to ${s1.y.toFixed(1)} (corner at ${b2[2]}) in ${took} s`);
     const top = places.stairs.at(-1), V = places.village;
     await place(top[0], top[1], 90); // from the top of the steps, west into the village
     await frames(3);
