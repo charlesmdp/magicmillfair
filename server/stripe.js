@@ -119,18 +119,19 @@ export async function refundPayment(cfg, pay, why = '', fetcher = fetch) {
 /**
  * The address a buyer gave at the payment page — to tell them later what became of what they paid for (outbid,
  * refunded, taken down): asked of Stripe when it is needed, kept nowhere. `pay`: the payment intent of a payment made
- * once; `customer`: the customer of what is paid by the month. Resolves to an address, or '' (never throws).
+ * once; `customer`: the customer of what is paid by the month. Resolves to an address, or '' (never throws; Stripe
+ * that does not answer within a few seconds is not waited for).
  */
 export async function buyerEmail(cfg, { pay = '', customer = '' } = {}, fetcher = fetch) {
-  const headers = { Authorization: `Bearer ${cfg.key}` };
+  const ask = async (url) => (await fetcher(url, { headers: { Authorization: `Bearer ${cfg.key}` }, signal: AbortSignal.timeout(4000) })).json().catch(() => null);
   try {
     if (typeof pay === 'string' && /^pi_[A-Za-z0-9_]{4,250}$/.test(pay)) {
-      const body = await (await fetcher(`${cfg.api}/v1/checkout/sessions?payment_intent=${encodeURIComponent(pay)}&limit=1`, { headers })).json().catch(() => null);
+      const body = await ask(`${cfg.api}/v1/checkout/sessions?payment_intent=${encodeURIComponent(pay)}&limit=1`);
       const s = Array.isArray(body?.data) ? body.data[0] : null, email = s?.customer_details?.email || s?.customer_email || '';
       if (typeof email === 'string' && email) return email;
     }
     if (typeof customer === 'string' && /^cus_[A-Za-z0-9_]{4,250}$/.test(customer)) {
-      const body = await (await fetcher(`${cfg.api}/v1/customers/${encodeURIComponent(customer)}`, { headers })).json().catch(() => null);
+      const body = await ask(`${cfg.api}/v1/customers/${encodeURIComponent(customer)}`);
       if (typeof body?.email === 'string' && body.email) return body.email;
     }
   } catch { /* Stripe cannot be reached just now: nobody is told by e-mail */ }

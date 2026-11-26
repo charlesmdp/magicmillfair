@@ -1116,13 +1116,16 @@ both and the account is lost — the administrator cannot read a password either
 welcome** to whoever makes an account with an address; **a word of thanks** to whoever takes the Game
 Pass — what it gives, how to stop it — at the address of their account or, failing that, at the one they
 gave at the payment (used for that message and kept nowhere), and to whoever pays for the place of a
-sponsor; **a word when something happens to what a sponsor paid for** — outbid (and refunded in full), a bid
-that came too late (refunded), at a big attraction the big panel taken by another of its five places (their own
-place kept), taken down (with or without the money back; paid by the month: nothing more is charged), refunded
-after all from the back office — at the address of their account or, failing that, the one they gave at the
-payment, which the server asks Stripe for at that moment and keeps nowhere (`sponsorNoticeMail`; the game says it
-too, at their next visit); **a code** to set a new password; to the owner, **a line for each refund** — or for a
-refund Stripe refused, which then waits under *Refunds* (`ownerRefundMail`); and, to the owner, **a line for each new sponsor** (or plaque
+sponsor; **a word when something happens to what a sponsor paid for** — outbid (and refunded in full — or, if
+Stripe refused, on the list of refunds to settle), a bid that came too late (the same), at a big attraction the big panel over its
+board taken by another of its five places, once that one's panel is up, as the game shows it (their own place
+kept), taken down (with or without the money back; paid by the month: "nothing more will be charged" only once
+Stripe has stopped it), refunded after all from the back office — at the address of their account or, failing
+that, the one they gave at the payment, which the server asks Stripe for at that moment and keeps nowhere
+(`sponsorNoticeMail`; it leaves once the answer is given, and the game says it too, at their next visit); **a
+code** to set a new password; to the owner, **a line for each refund** — or for a refund Stripe refused, which
+then waits under *Refunds*, or for a place paid by the month taken down whose subscription Stripe would not stop,
+to be stopped in Stripe itself (`ownerRefundMail`); and, to the owner, **a line for each new sponsor** (or plaque
 bought): the place, what was paid and the name of the buyer's account — nothing of the buyer's address —, at
 the address the owner gives in the back office (*Sponsors*: *E-mail me each new sponsor at*, *Save*; *Send
 a test* tries it, at the address saved; empty, nothing is sent; only the owner sees or sets it) — and a line

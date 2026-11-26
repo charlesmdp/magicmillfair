@@ -85,7 +85,8 @@ ${where ? `<p><a href="${esc(where)}" style="color:#8a5a00">${esc(where)}</a></p
 // ---- the two messages in the colours of the fair -----------------------------------------------------------
 // Everything is in the message: tables and inline styles (what mail readers show), the sign of the fair as a
 // character, no picture, no font and no script from anywhere. Each has its twin in plain text.
-const siteOf = (site) => (/^https?:\/\/[^\s<>"]+$/.test(site || '') ? site : '');
+// (never one that carries a name before an @: "https://fair.example@elsewhere.example" goes elsewhere)
+const siteOf = (site) => { if (!/^https?:\/\/[^\s<>"]+$/.test(site || '')) return ''; try { const u = new URL(site); return u.username || u.password ? '' : site; } catch { return ''; } };
 const INK = '#1b1840', GOLD = '#c99a3a', SUN = '#ffe14d';
 const para = (html) => `<p style="margin:0 0 14px">${html}</p>`;
 const bullets = (lines) => `<table role="presentation" cellpadding="0" cellspacing="0" border="0">${lines.map((l) => `<tr><td style="vertical-align:top;padding:3px 9px 3px 0;color:${GOLD};font-size:15px;line-height:1.5">&#10022;</td><td style="padding:3px 0;font:15px/1.5 Georgia,'Times New Roman',serif;color:${INK}">${esc(l)}</td></tr>`).join('')}</table>`;
@@ -255,39 +256,44 @@ const dollars = (cents) => (cents > 0 ? `$${(cents / 100).toFixed(2).replace(/\.
 /**
  * To a sponsor — at the address of their account or, failing that, the one they gave at the payment (shop.js asks
  * Stripe for it when it is needed; it is kept nowhere) —: something happened to what they paid for. `kind`:
- *   'outbid'    somebody bid more for their place: they are refunded in full (`cents`: what they had bid)
- *   'late'      their bid came too late (somebody bid more just before): refunded in full
- *   'top'       a big attraction: another of its five places now has the highest bid, and the big panel over its
- *               board of scores — they keep their place on the board of the five (`cents`: the bid to beat)
- *   'down'      the fair took their place down (`refunded`: the money given back; `monthly`: paid by the month —
- *               nothing more will be charged; `plaque`; `contact`: where to write about it)
+ *   'outbid'    somebody bid more for their place (`cents`: what they had bid; `refunded`: Stripe gave it back —
+ *               otherwise Stripe refused, and it waits on the fair's list of refunds to settle)
+ *   'late'      their bid came too late (somebody bid more just before): given back the same way
+ *   'top'       a big attraction: another of its five places now went for more — or as much, `tie`, and comes
+ *               first of the five —, and has the big panel over its board of scores; they keep their place among
+ *               the five, on the board beside it (`cents`: what the big panel went for; `first`: their place comes
+ *               first, so as much would take it back)
+ *   'down'      the fair took their place down (`refunded`: the money given back; `monthly`: paid by the month, and
+ *               Stripe has stopped it — nothing more will be charged; `plaque`)
  *   'refunded'  the fair gave back, after all, what was kept when it was taken down
- * `place`: what it is, in words ("the board of Shell Shock"; for 'top', the name of the attraction).
+ * `place`: what it is, in words ("the board of Shell Shock"; for 'top', the name of the attraction). `contact`: where
+ * to write about it.
  */
-export function sponsorNoticeMail(site, name, { kind = 'outbid', place = '', cents = 0, refunded = false, monthly = false, plaque = false, contact = '' } = {}) {
+export function sponsorNoticeMail(site, name, { kind = 'outbid', place = '', cents = 0, refunded = false, monthly = false, plaque = false, tie = false, first = false, contact = '' } = {}) {
   const where = siteOf(site), sum = dollars(cents), hello = name ? `Hello, ${name}.` : 'Hello.';
   const it = plaque ? 'plaque' : 'panel', settle = 'It may take a few days to show on your statement.';
+  const given = (what) => (refunded ? `${what}${sum ? ` of ${sum}` : ''} has been refunded in full. ${settle}` : `Stripe could not refund ${what.toLowerCase()}${sum ? ` of ${sum}` : ''} automatically: it is on the fair's list of refunds to settle.`);
   const words = {
     outbid: {
       subject: `You were outbid on ${place}`,
       lead: `Somebody bid more for ${place}.`,
-      body: [`Your bid${sum ? ` of ${sum}` : ''} has been refunded in full. ${settle}`, 'Want it back? Bid again, from the game: walk up to its board of scores.'],
+      body: [given('Your bid'), 'Want it back? Bid again, from the game: walk up to its board of scores.'],
     },
     late: {
       subject: `Your bid for ${place} came too late`,
       lead: `Somebody bid more for ${place} just before you.`,
-      body: [`Your payment${sum ? ` of ${sum}` : ''} has been refunded in full. ${settle}`, 'You can bid again, from the game: walk up to its board of scores.'],
+      body: [given('Your payment'), 'You can bid again, from the game: walk up to its board of scores.'],
     },
     top: {
-      subject: `Your logo left the big panel of ${place}`,
-      lead: `Somebody bid more for another of the five places of ${place}: the big panel over its board of scores now shows them.`,
-      body: ['You keep your place: your logo is still on the board of the five, beside it.', `To take the big panel back, bid more${sum ? ` than ${sum}` : ''} — from the game, at its board of scores.`],
+      subject: `The big panel of ${place} has a new sponsor`,
+      lead: `Another sponsor of ${place} put in ${tie ? 'as much as you, and their place comes first among the five' : 'more than you'}: the big panel over its board of scores now shows them.`,
+      body: ['You keep your place among the five, on the board beside it.', `The big panel goes to whoever of the five put in the most (when two put in as much, to the place that comes first): it would take ${sum ? (first ? `${sum} or more` : `more than ${sum}`) : 'more than they did'} to have it back.`],
     },
     down: {
       subject: `Your ${it} was taken down`,
       lead: `The fair took your ${it} down: ${place}.`,
       body: [monthly ? (refunded ? `The month you had paid has been refunded, and nothing more will be charged for it. ${settle}` : 'Nothing more will be charged for it.')
-        : refunded ? `Your payment${sum ? ` of ${sum}` : ''} has been refunded in full. ${settle}` : '', contact ? `A question about it? Write to ${contact}.` : ''].filter(Boolean),
+        : refunded ? `Your payment${sum ? ` of ${sum}` : ''} has been refunded in full. ${settle}` : ''].filter(Boolean),
     },
     refunded: {
       subject: 'Your payment has been refunded',
@@ -295,6 +301,7 @@ export function sponsorNoticeMail(site, name, { kind = 'outbid', place = '', cen
       body: [settle],
     },
   }[kind] || { subject: 'About your place at Atomic Oasis', lead: place, body: [] };
+  if (contact) words.body.push(`A question about it? Write to ${contact}.`);
   const because = `You get this message because something was paid for at Atomic Oasis with this address${name ? ` (account "${name}")` : ''}. ${RARELY}`;
   const text = [hello, '', words.lead, ...words.body.flatMap((b) => ['', b]), ...(where ? ['', where] : []), '', because].join('\n');
   const html = dressed({
@@ -309,22 +316,29 @@ ${words.body.map((b) => para(esc(b))).join('\n')}`,
 
 /**
  * To the owner — at the address they gave in the back office —: money was given back (`ok`), or Stripe refused to
- * (`error`: what it said; the payment then waits in the back office, under Refunds). `reason`: 'outbid', 'raised' (the
+ * (`error`: what it said; a payment then waits in the back office, under Refunds). `reason`: 'outbid', 'raised' (the
  * holder raised their own bid: the first payment goes back), 'late', 'down' (taken down: `monthly`, the month that was
- * running), 'later' (given back from the back office).
+ * running — `asked`: the owner asked for it to be given back), 'later' (given back from the back office).
+ * `unstopped`: a place paid by the month was taken down, and Stripe would not stop what is paid for it (`error`).
  */
-export function ownerRefundMail(site, { cents = 0, place = '', reason = '', monthly = false, ok = true, error = '' } = {}) {
+export function ownerRefundMail(site, { cents = 0, place = '', reason = '', monthly = false, ok = true, error = '', asked = true, unstopped = false } = {}) {
   const where = siteOf(site), back = where ? `${where.replace(/\/$/, '')}/admin#sponsors` : '', sum = dollars(cents) || 'a payment';
   const why = { outbid: `its holder was outbid on ${place}`, raised: `its holder raised their own bid on ${place}`, late: `a bid for ${place} came too late`, down: monthly ? `${place} was taken down — the month that was running` : `${place} was taken down`, later: `given back from the back office${place ? ` — ${place}` : ''}` }[reason] || place;
-  const what = ok ? `Refunded: ${sum} — ${why}.` : `Stripe refused to refund ${sum} — ${why}: ${error || 'no reason given'}.`;
-  const next = ok ? 'The sponsor is told too (by e-mail where an address is known, and in the game).'
-    : 'Nothing was given back. It waits in the back office, under Refunds: give it back from there, or in Stripe itself.';
-  const subject = ok ? `Refunded — ${sum} — ${place || 'a payment'}` : `A refund failed — ${place || 'a payment'}`;
+  let what = ok ? `Refunded: ${sum} — ${why}.` : `Stripe refused to refund ${sum} — ${why}: ${error || 'no reason given'}.`;
+  let next = ok ? (reason === 'raised' ? 'Nothing to do: their new bid stands.' : 'The sponsor is told too (by e-mail where an address is known, and in the game).')
+    : monthly ? 'Nothing was given back: give the month back in Stripe itself, if you still mean to.'
+      : 'Nothing was given back. It waits in the back office, under Refunds: give it back from there, or in Stripe itself.';
+  let subject = ok ? `Refunded — ${sum} — ${place || 'a payment'}` : `A refund failed — ${place || 'a payment'}`;
+  if (unstopped) {
+    subject = `A subscription could not be stopped — ${place || 'a place'}`;
+    what = `${place ? `${place[0].toUpperCase()}${place.slice(1)}` : 'A place'} was taken down, but Stripe would not stop what is paid for it every month: ${error || 'no reason given'}.`;
+    next = `It may go on being charged: cancel the subscription in Stripe itself${asked ? ', and give the month back there' : ''}.`;
+  }
   const tail = 'You get this message because this address was given in the back office of Atomic Oasis, to be told of new sponsors. Remove it there to stop.';
   const text = [what, '', next, ...(back ? ['', `The back office: ${back}`] : []), '', tail].join('\n');
   const html = dressed({
     title: subject, preview: what, site: back || site, button: 'Open the back office',
-    body: `<h1 style="margin:0 0 14px;font:700 24px/1.25 Georgia,'Times New Roman',serif;color:${INK}">${esc(ok ? 'A refund' : 'A refund failed')}</h1>
+    body: `<h1 style="margin:0 0 14px;font:700 24px/1.25 Georgia,'Times New Roman',serif;color:${INK}">${esc(unstopped ? 'A subscription still runs' : ok ? 'A refund' : 'A refund failed')}</h1>
 ${para(`<b>${esc(what)}</b>`)}
 ${para(esc(next))}`,
     why: tail,

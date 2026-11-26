@@ -58,10 +58,11 @@ async function startStripe() {
       }
       const sub = /^\/v1\/subscriptions\/(\w+)(\?.*)?$/.exec(req.url);
       if (sub && req.headers.authorization === `Bearer ${STRIPE_KEY}`) {
-        // something paid by the month: asked about (its last payment), or stopped
-        if (req.method === 'DELETE') stripe.cancelled.push(sub[1]);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify(req.method === 'DELETE' ? { id: sub[1], status: 'canceled' } : { id: sub[1], latest_invoice: { id: 'in_test_1', payment_intent: { id: `pi_month_${sub[1]}` } } }));
+        // something paid by the month: asked about (its last payment), or stopped — one "stuck" will not be
+        const stuck = req.method === 'DELETE' && sub[1].startsWith('sub_stuck');
+        if (req.method === 'DELETE' && !stuck) stripe.cancelled.push(sub[1]);
+        res.writeHead(stuck ? 400 : 200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify(stuck ? { error: { message: 'This subscription cannot be cancelled just now.' } } : req.method === 'DELETE' ? { id: sub[1], status: 'canceled' } : { id: sub[1], latest_invoice: { id: 'in_test_1', payment_intent: { id: `pi_month_${sub[1]}` } } }));
       }
       if (req.url === '/v1/billing_portal/sessions' && req.headers.authorization === `Bearer ${STRIPE_KEY}`) {
         stripe.portals.push({ customer: form.get('customer'), back: form.get('return_url') });
@@ -80,7 +81,8 @@ async function startStripe() {
       if (cus && req.method === 'GET') {
         const mine = req.headers.authorization === `Bearer ${STRIPE_KEY}`;
         res.writeHead(mine ? 200 : 401, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify(mine ? { id: cus[1], email: 'buyer@example.org' } : { error: { message: 'Invalid API Key' } }));
+        const given = Object.values(stripe.sessions).find((s) => s.customer === cus[1])?.customer_details?.email; // (the address given at its payment page)
+        return res.end(JSON.stringify(mine ? { id: cus[1], email: given || 'buyer@example.org' } : { error: { message: 'Invalid API Key' } }));
       }
       const one = /^\/v1\/checkout\/sessions\/(cs_\w+)$/.exec(req.url);
       if (one && req.method === 'GET') {
@@ -1793,26 +1795,62 @@ async function testPaid({ port }) {
   {
     // whoever loses something by a bid is told by e-mail too — at the address they gave at the payment, asked of
     // Stripe then and kept nowhere —, and the owner of every refund: outbid (refunded in full); at a big attraction,
-    // the big panel lost to another of its five places (their own place is kept); a bid that came too late (refunded)
+    // the big panel lost to another of its five places once that one's panel is up, as the game shows it (their own
+    // place is kept); a bid that came too late (refunded) — said twice, by Stripe and as the buyer comes back: told once
     const mails = () => (CF || !fs.existsSync(MAIL_FILE) ? null : fs.readFileSync(MAIL_FILE, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)));
-    const seen = mails()?.length ?? 0;
-    const buy = async (item, device, bid) => { const p = await request(port, '/api/checkout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ item, device, bid }), from: '127.0.0.87' }); return { status: p.status, id: `cs_test_${stripe.asked.length}` }; };
+    const seen = mails()?.length ?? 0, fresh = () => mails()?.slice(seen) || null;
+    // (a word to a sponsor leaves once the answer is given: it is waited for, a little)
+    const soon = async (enough) => { for (let i = 0; i < 40 && fresh() && !enough(fresh()); i++) await sleep(50); return fresh(); };
+    const buy = async (item, device, bid, email) => {
+      const p = await request(port, '/api/checkout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ item, device, bid }), from: '127.0.0.87' }), id = `cs_test_${stripe.asked.length}`;
+      if (stripe.sessions[id]) stripe.sessions[id].customer_details = { email }; // (each buyer, the address they gave)
+      return { status: p.status, id };
+    };
     const confirm = async (id) => json(await request(port, '/api/checkout/confirm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ session: id }), from: '127.0.0.88' }));
+    const fill = async (slot, device, title) => (await request(port, '/api/sponsor', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ slot, device, title, subtitle: '', url: '' }), from: '127.0.0.89' })).status;
+    const hook = async (id) => { const raw = JSON.stringify({ id: `evt_${id}`, type: 'checkout.session.completed', data: { object: stripe.sessions[id] } }); return (await request(port, '/api/stripe/webhook', { method: 'POST', headers: { 'content-type': 'application/json', 'stripe-signature': await signWebhook(STRIPE_HOOK, raw) }, body: raw, from: '127.0.0.88' })).status; };
+    const to = (all, who, re) => (all || []).filter((m) => m.to === who && re.test(m.subject));
     const cow = randomId(16), ewe = randomId(16), fox = randomId(16);
-    const over = await buy('board:cups', cow, 900); pay(over.id); const tookCups = await confirm(over.id); // (dog, at $7, is outbid)
-    const third = await buy('board:sky-3', ewe, 600); pay(third.id); const tookThird = await confirm(third.id); // (dog's board:sky-2, at $5, loses the big panel)
-    const first = await buy('board:sky-4', fox, 700), late = await buy('board:sky-4', cow, 650); // (two payment pages open at once)
-    pay(first.id); const tookFourth = await confirm(first.id); // (ewe's board:sky-3 loses the big panel)
-    pay(late.id); const tookLate = await confirm(late.id); // (too late: refunded at once)
+    const over = await buy('board:cups', cow, 900, 'cow@example.org'); pay(over.id); const tookCups = await confirm(over.id); // (dog, at $7, is outbid)
+    const dogUp = await fill('board:sky-2', dog, 'Dog Biscuits'); // (dog's board:sky-2, at $5: its panel is up — it has the big panel)
+    const third = await buy('board:sky-3', ewe, 600, 'ewe@example.org'); pay(third.id); const tookThird = await confirm(third.id);
     await sleep(300);
-    const fresh = mails()?.slice(seen) || null, to = (who, re) => (fresh || []).filter((m) => m.to === who && re.test(m.subject));
-    const outbid = to('buyer@example.org', /^You were outbid on the board of Shell Shock$/), lost = to('buyer@example.org', /^Your logo left the big panel of Mostly Up$/), tooLate = to('buyer@example.org', /^Your bid for the board of Mostly Up \(place 4\) came too late$/);
-    const refunds = to('owner@example.org', /^Refunded — /);
-    check('whoever loses something by a bid is told by e-mail — outbid (refunded in full), the big panel of a big attraction lost to another of its five places (their place kept), a bid that came too late (refunded) — at the address given at the payment, found again at Stripe; and the owner is told of each refund',
-      over.status === 200 && tookCups?.given === true && tookThird?.given === true && tookFourth?.given === true && tookLate?.ok === true && tookLate.given === false
-      && (fresh === null || (outbid.length === 1 && /Your bid of \$7 has been refunded in full/.test(outbid[0].text) && lost.length === 2 && /more than \$6 /.test(lost[0].text) && /more than \$7 /.test(lost[1].text)
+    const before = to(fresh(), 'buyer@example.org', /^The big panel of Mostly Up has a new sponsor$/).length; // (ewe's panel is not up yet: the big panel has not moved)
+    const eweUp = await fill('board:sky-3', ewe, 'Ewe Wool'); // (…now it is: dog's board:sky-2 loses the big panel)
+    const first = await buy('board:sky-4', fox, 700, 'fox@example.org'), late = await buy('board:sky-4', cow, 650, 'cow@example.org'); // (two payment pages open at once)
+    pay(first.id); const tookFourth = await confirm(first.id);
+    const foxUp = await fill('board:sky-4', fox, 'Fox Tails'); // (ewe's board:sky-3 loses the big panel)
+    pay(late.id); const tookLate = await confirm(late.id), lateHook = await hook(late.id); // (too late: refunded at once — said twice, done once)
+    const all = await soon((m) => to(m, 'cow@example.org', /came too late$/).length >= 1 && to(m, 'ewe@example.org', /^The big panel/).length >= 1 && to(m, 'buyer@example.org', /^You were outbid/).length >= 1);
+    await sleep(300);
+    const fin = fresh() || all;
+    const outbid = to(fin, 'buyer@example.org', /^You were outbid on the board of Shell Shock$/), tooLate = to(fin, 'cow@example.org', /^Your bid for the board of Mostly Up \(place 4\) came too late$/);
+    const lostDog = to(fin, 'buyer@example.org', /^The big panel of Mostly Up has a new sponsor$/), lostEwe = to(fin, 'ewe@example.org', /^The big panel of Mostly Up has a new sponsor$/);
+    const refunds = to(fin, 'owner@example.org', /^Refunded — /), notTold = to(fin, 'fox@example.org', /./).filter((m) => !/^You sponsor/.test(m.subject));
+    check('whoever loses something by a bid is told by e-mail, at the address they gave at the payment (found again at Stripe) — outbid (refunded in full); the big panel of a big attraction lost to another of its five places, once that one\'s panel is up (their place kept); a bid that came too late (refunded), said twice and told once —; and the owner is told of each refund',
+      over.status === 200 && tookCups?.given === true && dogUp === 200 && tookThird?.given === true && eweUp === 200 && tookFourth?.given === true && foxUp === 200 && tookLate?.ok === true && tookLate.given === false && lateHook === 200
+      && (fin === null || (outbid.length === 1 && /Your bid of \$7 has been refunded in full/.test(outbid[0].text) && before === 0
+        && lostDog.length === 1 && /put in more than you/.test(lostDog[0].text) && /take \$6 or more to have it back/.test(lostDog[0].text) && lostEwe.length === 1 && /take \$7 or more to have it back/.test(lostEwe[0].text) && notTold.length === 0
         && tooLate.length === 1 && /\$6\.50 has been refunded in full/.test(tooLate[0].text) && refunds.length === 2 && refunds.some((m) => /^Refunded — \$7 — the board of Shell Shock$/.test(m.subject)) && refunds.some((m) => /^Refunded — \$6\.50 — the board of Mostly Up \(place 4\)$/.test(m.subject)))),
-      [over.status, tookCups, tookThird, tookFourth, tookLate, fresh?.map((m) => `${m.to}: ${m.subject}`)]);
+      [over.status, tookCups, dogUp, tookThird, eweUp, tookFourth, foxUp, tookLate, lateHook, before, fin?.map((m) => `${m.to}: ${m.subject}`)]);
+    // taken down by the fair: a bid given back — its sponsor is told so; a place paid by the month whose subscription
+    // Stripe would not stop — its sponsor is not promised that nothing more will be charged, and the owner is told to
+    // stop it in Stripe itself
+    const goat = randomId(16), month = await buy('gondola:22', goat, undefined, 'goat@example.org');
+    if (stripe.sessions[month.id]) stripe.sessions[month.id].subscription = 'sub_stuck_1';
+    pay(month.id); const tookMonth = await confirm(month.id);
+    const owner = { 'content-type': 'application/json', authorization: `Bearer ${ADMIN_KEY}` }, cut = mails()?.length ?? 0;
+    const downMonth = json(await request(port, '/api/sponsors?slot=gondola:22', { method: 'DELETE', headers: owner, from: '127.0.0.86' }));
+    const downBid = json(await request(port, '/api/sponsors?slot=board:sky-4&refund=1', { method: 'DELETE', headers: owner, from: '127.0.0.86' }));
+    const later = mails() && (await soon((m) => to(m, 'goat@example.org', /taken down$/).length >= 1 && to(m, 'fox@example.org', /taken down$/).length >= 1)) && (await sleep(300), mails().slice(cut));
+    const goatDown = to(later, 'goat@example.org', /^Your panel was taken down$/), foxDown = to(later, 'fox@example.org', /^Your panel was taken down$/);
+    const stuck = to(later, 'owner@example.org', /^A subscription could not be stopped — gondola 22 of the big wheel$/), foxBack = to(later, 'owner@example.org', /^Refunded — \$7 — the board of Mostly Up \(place 4\)$/);
+    check('taken down by the fair: its sponsor is told by e-mail — a bid given back, said so; a place paid by the month whose subscription Stripe would not stop, never "nothing more will be charged" — and the owner is told to stop it in Stripe itself',
+      tookMonth?.given === true && downMonth?.removed === 'gondola:22' && downMonth.stopped === false && downBid?.removed === 'board:sky-4' && downBid.refunded === true
+      && (later === null || (goatDown.length === 1 && !/charged/.test(goatDown[0].text) && foxDown.length === 1 && /\$7 has been refunded in full/.test(foxDown[0].text)
+        && stuck.length === 1 && /cannot be cancelled just now/.test(stuck[0].text) && /cancel the subscription in Stripe itself/.test(stuck[0].text) && foxBack.length === 1
+        && to(later, 'ewe@example.org', /./).length === 0)),
+      [tookMonth, downMonth, downBid, later?.map((m) => `${m.to}: ${m.subject}`)]);
   }
 }
 
