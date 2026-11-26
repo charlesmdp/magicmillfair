@@ -985,7 +985,7 @@ async function boot() {
   // The big attractions have up to five sponsors: the highest bid has the panel over the board of scores, and the
   // board beside it lists the five (GamesZone.scoreStand: `roll`). Their places: 'board:<id>' and
   // 'board:<id>-2' … '-5' (server/catalog.js).
-  const MAJOR_GAMES = ['sky', 'race', 'wing', 'slide', 'pond', 'boats', 'hill', 'crack', 'hollow', 'waves', 'lava', 'hive', 'flip', 'spiral', 'cars', 'golf'], rotors = [];
+  const MAJOR_GAMES = ['sky', 'race', 'wing', 'slide', 'pond', 'boats', 'hill', 'crack', 'hollow', 'waves', 'lava', 'hive', 'flip', 'spiral', 'cars', 'golf', 'ages', 'raft', 'walls', 'sneak', 'mine', 'coaster'], rotors = [];
   const gameOf = (id) => String(id).split(':')[1]?.replace(/-\d$/, '') || '';
   /** What a place of a panel weighs: what was bid for it (or what was said to be paid for a place filled by hand); -1 when it is free. */
   const weightOf = (id) => { const v = shop.slots[id]; return v ? v.bid || v.pays?.amount || 0 : -1; };
@@ -1549,12 +1549,13 @@ async function boot() {
   // ---------- what is released, and new versions (app/Updates.js; the switches: RELEASE in app/config.js)
   // The extras of src/extras are loaded when their switch is on — as the game runs when it goes on later;
   // one that goes off again is only undone by loading the page again.
-  const EXTRA = ['slide', 'pond', 'boats', 'hill', 'crack', 'hollow', 'waves', 'lava', 'hive', 'flip', 'spiral', 'cars', 'golf', 'caves', 'stats'];
+  const EXTRA = ['slide', 'pond', 'boats', 'hill', 'crack', 'hollow', 'waves', 'lava', 'hive', 'flip', 'spiral', 'cars', 'golf', 'ages', 'raft', 'walls', 'sneak', 'mine', 'coaster', 'sanctuary', 'caves', 'stats'];
   // (the games among them — each says, while one of its runs is on, which run: app.slideRide(), app.pondRun()…;
   // the seven with a gate are plugged in the same way, by src/extras/plug.js: app.wavesRun(), app.lavaRun()…)
   const LAB_GAMES = {
     slide: 'slideRide', pond: 'pondRun', boats: 'boatRace', hill: 'hillClimb', crack: 'cleftClimb', hollow: 'hollowFlight',
     waves: 'wavesRun', lava: 'lavaRun', hive: 'hiveRun', flip: 'flipRun', spiral: 'spiralRun', cars: 'carsRun', golf: 'golfRun',
+    ages: 'agesRun', raft: 'raftRun', walls: 'wallsRun', sneak: 'sneakRun', mine: 'mineRun', coaster: 'coasterRun',
   };
   const labBusy = () => Object.values(LAB_GAMES).some((run) => !!app[run]?.());
   const applyRelease = (release, before) => {
@@ -1589,6 +1590,12 @@ async function boot() {
     spiral: { title: 'BEST TIMES', sub: 'nineteen turns up to the bell · fastest, falls and all', at: [4.4, -0.5, 0] },
     cars: { title: 'BEST TIMES', sub: 'three laps of the table · fastest', at: [4.4, -0.5, 0] },
     golf: { title: 'FEWEST STROKES', sub: 'nine holes round the acid pond · the fewest strokes, then the fastest', at: [4.4, -0.5, 0], format: golfScore, star: false }, // (no star on the map for the golf)
+    ages: { title: 'FASTEST VICTORIES', sub: 'two armies, five ages · the other base down the soonest', at: [4.4, -0.5, 0] },
+    raft: { title: 'BEST TIMES', sub: 'down the river to the sea · fastest', at: [4.4, -0.5, 0] },
+    walls: { title: 'BEST TIMES', sub: 'through the ruin, along its walls · fastest', at: [4.4, -0.5, 0] },
+    sneak: { title: 'BEST TIMES', sub: 'through the alleys, unseen · fastest', at: [4.4, -0.5, 0] },
+    mine: { title: 'BEST TIMES', sub: 'the whole line of the mine · fastest', at: [4.4, -0.5, 0] },
+    coaster: { title: 'BEST TIMES', sub: 'round every mountain, on the rails · fastest', at: [4.4, -0.5, 0] },
   };
   const labSigns = { group: null, key: null, planted: new Set() };
   /** What follows the building of the extras that were switched on. */

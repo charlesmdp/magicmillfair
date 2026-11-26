@@ -77,6 +77,14 @@ export const BOARDS = {
   spiral: { order: 'asc', min: 144_000, max: 900_000, release: 'spiral' }, // Spiral of Death: from the first step to the bell
   cars: { order: 'asc', min: 16_000, max: 180_000, release: 'cars' }, // Karting Simulator: three laps of the table
   golf: { order: 'asc', min: 9000, max: 63_999, unit: 'strokes', release: 'golf' }, // Balthazar Golf: nine holes, seven strokes a hole at most
+  // …and six more (lab/NEWGAMES.md), each behind its own switch: times, the less the better. (Until a game is built
+  // the figures only hold its place; its checks print the true ones.)
+  ages: { order: 'asc', min: 20_000, max: 1800_000, release: 'ages' }, // War Through the Ages
+  raft: { order: 'asc', min: 20_000, max: 1800_000, release: 'raft' }, // Wild River
+  walls: { order: 'asc', min: 20_000, max: 1800_000, release: 'walls' }, // Run the Walls
+  sneak: { order: 'asc', min: 20_000, max: 1800_000, release: 'sneak' }, // Robots Can See You
+  mine: { order: 'asc', min: 20_000, max: 1800_000, release: 'mine' }, // Little Mine Train
+  coaster: { order: 'asc', min: 20_000, max: 1800_000, release: 'coaster' }, // Hold the Rails!
   run: { order: 'desc', min: 1, max: 60_000, length: 2_000, each: 12 }, // the arcade cabinet: metres run (52 a second at the fastest), and 25 for an isotope now and then
 };
 export const KEPT = { all: 200, month: 100, week: 100, day: 100 }, SHOWN = 10;

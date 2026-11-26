@@ -35,13 +35,14 @@ export const BOARDS = {
   hoop: 'Buzzer Beater', stack: 'Stack It', geiger: 'Geiger Says', fish: 'Hook, Line & Sinker', scram: 'SCRAM!', cups: 'Shell Shock', run: 'Meltdown Run',
   slide: 'Mostly Down', pond: 'The Endless Pond', boats: 'Harbor Heaven', hill: 'Jump the Logs', crack: 'Bouncy Rock', hollow: 'The Nuclear Cave',
   waves: 'Big Tsunami', lava: 'No Touch Lava!', hive: "Bee Fly", flip: 'Mostly Up & Down', spiral: 'Spiral of Death', cars: 'Karting Simulator', golf: 'Balthazar Golf',
+  ages: "War Through the Ages", raft: "Wild River", walls: "Run the Walls", sneak: "Robots Can See You", mine: "Little Mine Train", coaster: "Hold the Rails!",
 };
 /**
  * The big attractions: up to BOARD_PLACES sponsors each — the highest bid has the panel over the board of scores,
  * and the board beside it lists the five (src/main.js, GamesZone.scoreStand). Its places are 'board:<id>' and
  * 'board:<id>-2' … '-5': each an auction of its own. (They have a star on the map, but the golf.)
  */
-export const MAJOR_BOARDS = ['sky', 'race', 'wing', 'slide', 'pond', 'boats', 'hill', 'crack', 'hollow', 'waves', 'lava', 'hive', 'flip', 'spiral', 'cars', 'golf'], BOARD_PLACES = 5;
+export const MAJOR_BOARDS = ['sky', 'race', 'wing', 'slide', 'pond', 'boats', 'hill', 'crack', 'hollow', 'waves', 'lava', 'hive', 'flip', 'spiral', 'cars', 'golf', 'ages', 'raft', 'walls', 'sneak', 'mine', 'coaster'], BOARD_PLACES = 5;
 /** The place of a panel: 'slide-3' → ['slide', 3], 'slide' → ['slide', 1]; null when there is no such place. */
 export const boardPlace = (id) => {
   const m = /^([a-z]+)(?:-([2-9]))?$/.exec(typeof id === 'string' ? id : '');

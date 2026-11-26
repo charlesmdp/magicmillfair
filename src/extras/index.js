@@ -20,6 +20,13 @@ export const EXTRAS = {
   spiral: { name: 'Spiral of Death — a track wound round a tower, up to its bell', load: () => import('./spiral.js') },
   cars: { name: 'Karting Simulator — radio-controlled cars raced on a table, seen from above', load: () => import('./cars.js') },
   golf: { name: 'Balthazar Golf — nine holes of crazy golf round the acid pond', load: () => import('./golf.js') },
+  ages: { name: 'War Through the Ages — two armies on one road, from the stone age to the atom: units, turrets, and an age to reach before the other does', load: () => import('./ages.js') },
+  raft: { name: 'Wild River — a raft down a mountain river to the sea: rapids, rocks, falls', load: () => import('./raft.js') },
+  walls: { name: 'Run the Walls — a ruin one crosses by running along its walls, from wall to wall, and winding time back after a fall', load: () => import('./walls.js') },
+  sneak: { name: 'Robots Can See You — alleys patrolled by robots that see: one slips through unseen', load: () => import('./sneak.js') },
+  mine: { name: 'Little Mine Train — a mine cart through the mountains: lean, brake, jump the gaps', load: () => import('./mine.js') },
+  coaster: { name: 'Hold the Rails! — a roller coaster one drives oneself through every mountain: stray from the rails and one falls', load: () => import('./coaster.js') },
+  sanctuary: { name: 'The Sanctuary — a great hall of stone: a church, a mosque and a synagogue under one roof', load: () => import('./sanctuary.js') },
   caves: { name: 'The caves are safe places: nearby chat only', load: () => import('./caves.js') },
   stats: { name: 'The game in figures: counters, the page /opendata', load: () => import('./stats.js') },
 };
