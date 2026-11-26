@@ -524,7 +524,7 @@ export class Hud {
     }
   }
   /** Everything that opens over the game is closed (something else is about to take the screen). */
-  closeAll() { this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this.toggleBigMap(false); this.closeRoster(); this.toggleChat(false); }
+  closeAll() { this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this.toggleBigMap(false); this.closeRoster(); this.toggleChat(false); this._lowGoes(); }
   /** Whoever has the box of fireworks gets a button for it in the emotes. */
   setFireworks(on) { this.emotes.classList.toggle('fireworks', !!on); }
   /** The mushroom cloud of those who found every relic: how many they found, of how many (it says so until they have them all). */
@@ -553,6 +553,7 @@ export class Hud {
   form(title, lead, fields, save = 'Save') {
     const box = this.hud.querySelector('.chooser'), list = box.querySelector('.list'), close = box.querySelector('.close');
     this._choice?.(null);
+    this._lowGoes(); // (a proposal at the bottom would lie over its fields)
     box.querySelector('h2').textContent = title;
     box.querySelector('.lead').textContent = lead || '';
     list.textContent = '';
@@ -596,6 +597,7 @@ export class Hud {
   choose(title, lead, items) {
     const box = this.hud.querySelector('.chooser'), list = box.querySelector('.list');
     this._choice?.(null);
+    this._lowGoes();
     box.querySelector('h2').textContent = title;
     box.querySelector('.lead').textContent = lead || '';
     list.textContent = '';
@@ -637,6 +639,7 @@ export class Hud {
   thanks(title, lead, rows) {
     const box = this.hud.querySelector('.chooser'), list = box.querySelector('.list'), close = box.querySelector('.close');
     this._choice?.(null);
+    this._lowGoes();
     box.querySelector('h2').textContent = title;
     box.querySelector('.lead').textContent = lead || '';
     list.textContent = '';
@@ -826,7 +829,7 @@ export class Hud {
    */
   showRoster({ people, mode, admin = false, owner = false, details = null, bans = null, admins = null, visitors = null, now = 0, rooms = null, room = null, badge = false, own = null }) {
     const box = this.rosterEl, list = box.querySelector('.list'), bansEl = box.querySelector('.bans'), adminsEl = box.querySelector('.admins'), visitorsEl = box.querySelector('.visitors');
-    if (!this.rosterOpen) { this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this.toggleBigMap(false); this.input.exitLock(); }
+    if (!this.rosterOpen) { this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this.toggleBigMap(false); this._lowGoes(); this.input.exitLock(); }
     box.querySelector('h2').textContent = people.length > 1 ? `Who is here — ${people.length} visitors` : 'Who is here';
     box.querySelector('.see-as').hidden = !admin;
     // (an administrator may let it be known: a badge on their name, for everybody around — 'badge' is emitted)
@@ -1045,8 +1048,10 @@ export class Hud {
   /**
    * A proposal one may take or leave (a room gone quiet offers another): `text`, a button `yes` that calls
    * `fn`, another (`no`) to leave things as they are; it goes away by itself after `ms`. Null takes it away.
+   * `low`: at the bottom of the screen, over the prompts, rather than at the top (on a screen too short for it, at
+   * the top all the same); it gives way to whatever opens over it — a card, the shop, the emotes, the chat.
    */
-  offer(text, yes = '', fn = () => {}, ms = 40000, no = 'Stay here') {
+  offer(text, yes = '', fn = () => {}, ms = 40000, no = 'Stay here', { low = false } = {}) {
     if (!this.offerEl) {
       if (!text) return;
       this.offerEl = el('div', 'offer-bar', '<span class="update-dot" aria-hidden="true"></span><span class="offer-text"></span><button type="button" class="offer-yes"></button><button type="button" class="offer-no">Stay here</button>');
@@ -1054,19 +1059,30 @@ export class Hud {
       for (const ev of ['mousedown', 'touchstart', 'wheel']) this.offerEl.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
       this.root.append(this.offerEl);
     }
-    const bar = this.offerEl;
+    const bar = this.offerEl, hide = () => { bar.classList.remove('on'); this.root.classList.remove('offer-low'); };
     clearTimeout(this._offer);
-    if (!text) { bar.classList.remove('on'); return; }
+    if (!text) { hide(); return; }
     bar.querySelector('.offer-text').textContent = text;
     bar.classList.toggle('long', text.length > 120); // (a long one: its words on a line of their own, over the buttons)
+    if (bar.classList.contains('low') !== !!low) {
+      // (from the top to the bottom, or back: put in its new place at once, hidden — not slid across the screen —, then shown)
+      bar.style.transition = 'none';
+      bar.classList.remove('on');
+      bar.classList.toggle('low', !!low);
+      void bar.offsetWidth;
+      bar.style.transition = '';
+    }
+    this.root.classList.toggle('offer-low', !!low); // (the long notes stand above it meanwhile: styles.css)
     const y = bar.querySelector('.offer-yes');
     y.textContent = yes;
-    y.onclick = () => { bar.classList.remove('on'); fn(); };
+    y.onclick = () => { hide(); fn(); };
     bar.querySelector('.offer-no').textContent = no;
-    bar.querySelector('.offer-no').onclick = () => bar.classList.remove('on');
+    bar.querySelector('.offer-no').onclick = hide;
     requestAnimationFrame(() => bar.classList.add('on'));
-    this._offer = setTimeout(() => bar.classList.remove('on'), ms);
+    this._offer = setTimeout(hide, ms);
   }
+  /** A proposal at the bottom of the screen gives way to what opens over it (a card, the shop, the emotes, the chat). */
+  _lowGoes() { if (this.offerEl?.classList.contains('low') && this.offerEl.classList.contains('on')) this.offer(null); }
 
   /**
    * A card that makes an offer in full — what it is, what it gives, a picture, a button to take it and another to
@@ -1172,6 +1188,7 @@ export class Hud {
   /** `to`: the placeholder when the line goes to a character (then nobody else hears it); else to the room. */
   toggleChat(open = !this.chatOpen, to = '') {
     if (open) {
+      this._lowGoes(); // (a proposal at the bottom would hide the lines of the chat)
       this._chatTo = to;
       this.chanBtn.style.display = to ? 'none' : '';
       this.chatForm.querySelector('.heard').style.display = to ? 'none' : '';
@@ -1232,7 +1249,7 @@ export class Hud {
   }
   setName(n) { this.nameInput.value = n; }
   setCameraMode(free) { this.cameraBtn.setAttribute('aria-pressed', String(free)); this.root.classList.toggle('free', free); }
-  toggleEmotes() { this.emotes.classList.toggle('on'); if (this.emotes.classList.contains('on')) this._zooPictures(); }
+  toggleEmotes() { this.emotes.classList.toggle('on'); if (this.emotes.classList.contains('on')) { this._lowGoes(); this._zooPictures(); } }
   toggleStats() { const b = this.hud.querySelector('[data-sw="stats"]'); b.click(); }
   setStatsVisible(on) { this.statsOn = on; this.statsEl.classList.toggle('on', on); this.hud.querySelector('[data-sw="stats"]').setAttribute('aria-pressed', String(on)); }
   setStats(text) { if (this.statsOn) this.statsEl.textContent = text; }
@@ -1392,7 +1409,7 @@ export class Hud {
   get bigMapOpen() { return this.bigEl.classList.contains('on'); }
   toggleBigMap(open = !this.bigMapOpen) {
     this.bigEl.classList.toggle('on', open);
-    if (open) { this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this._bigSize = ''; }
+    if (open) { this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this._lowGoes(); this._bigSize = ''; }
   }
 
   /**

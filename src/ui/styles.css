@@ -942,6 +942,23 @@ button.pill.players { pointer-events: auto; }
 @media (max-width: 560px) { #ui .offer-bar { flex-wrap: wrap; justify-content: flex-end; } #ui .offer-text { flex: 1 1 100%; } }
 #ui .offer-bar.long { flex-wrap: wrap; justify-content: flex-end; width: min(620px, calc(100% - 24px)); padding: 11px 12px 10px 14px; }
 #ui .offer-bar.long .offer-text { flex: 1 1 calc(100% - 24px); line-height: 1.4; }
+/* (at the bottom of the screen, over the prompts: it rises into view rather than dropping from the top. Its words
+   let a click or a touch through — to the world, to the stick —; only its buttons take them. On touch it stands
+   above two prompts stacked, as the long notes do; and while it is there, the long notes stand above it) */
+#ui .offer-bar.low { top: auto; bottom: calc(200px + var(--safe-b)); transform: translate(-50%, 24px); opacity: 0; pointer-events: none; transition: transform 0.35s ease, opacity 0.35s ease; }
+#ui .offer-bar.low.on { transform: translate(-50%, 0); opacity: 1; }
+#ui .offer-bar.low.on button { pointer-events: auto; }
+.touch #ui .offer-bar.low, #ui.touch .offer-bar.low { bottom: calc(222px + var(--safe-b)); }
+@media (min-height: 520px) {
+  #ui.offer-low .note.long { bottom: calc(340px + var(--safe-b)); }
+  .touch #ui.offer-low .note.long, #ui.touch.offer-low .note.long { bottom: calc(380px + var(--safe-b)); }
+}
+/* (a screen too short to hold it at the bottom with the long notes above it — a phone held sideways, a short
+   window —: at the top, where such a bar always was) */
+@media (max-height: 519.98px) { /* (519.98: a height between 519 and 520 — a zoom, a scaled screen — is held too) */
+  #ui .offer-bar.low, .touch #ui .offer-bar.low, #ui.touch .offer-bar.low { top: calc(62px + var(--safe-t)); bottom: auto; transform: translate(-50%, -24px); }
+  #ui .offer-bar.low.on, .touch #ui .offer-bar.low.on, #ui.touch .offer-bar.low.on { transform: translate(-50%, 0); }
+}
 
 /* ---- a new version, a switch thrown by the owner: the bar that says so and counts down; what is new, once (app/Updates.js) */
 #ui .update-bar { position: absolute; left: 50%; top: calc(10px + var(--safe-t)); z-index: 30; transform: translate(-50%, -160%); display: flex; align-items: center; gap: 12px; max-width: min(680px, calc(100% - 24px)); padding: 9px 10px 9px 14px; border-radius: 14px; background: rgba(20, 16, 52, 0.94); border: 1px solid rgba(242, 193, 78, 0.6); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); color: #f6f1e4; font-size: 13.5px; line-height: 1.35; pointer-events: auto; transition: transform 0.35s ease; }

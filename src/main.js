@@ -1880,7 +1880,7 @@ async function boot() {
     shopView.open({ items: shopItems(), mode: shop.mode, note: account.name ? `It goes to your account, ${account.name}.` : 'It stays in this browser: an account (Settings) keeps it everywhere.' });
     audio.play('pick');
   };
-  /** The payment of the Game Pass, opened at once (from a proposal: the end of the free day, the card that tells what it gives). */
+  /** The payment of the Game Pass, opened at once (from the card that tells what it gives). */
   const buyPass = async () => {
     if (shop.pass) { hud.note(`You hold the ${PASS.name} already — thank you!`, 5000); return; }
     hud.note('Opening the payment page…', 8000);
@@ -2343,13 +2343,16 @@ async function boot() {
           hud.note('Your jetpack is off. Put it back on in the item shop (O).', 5000);
         } else if (shop.open && !shop.owns('jetpack') && !shop.owns('jetlite') && mode === 'walk' && !fair.session && state.time - (app.toldJet || -99) > 8) {
           app.toldJet = state.time;
-          // (said in full once in a while, with the button that opens the payment of the pass; in a word otherwise)
+          // (said in full once in a while — at the bottom of the screen, with the button that opens the item shop, where
+          // the three are —; in a word otherwise)
           if (state.time - (app.toldJetLong || -999) > 90 && !busyNow()) {
             app.toldJetLong = state.time;
+            const lite = price(shop.cost('jetlite')), full = price(shop.cost('jetpack')), pass = `${price(PASS.price)} a month`;
             hud.offer(touch
-              ? `That was your free day of flying — gravity sends its regards. The jetpack comes with the ${PASS.name} (${price(PASS.price)} a month) — or on its own: the Jetpack Lite is ${price(shop.cost('jetlite'))} in the item shop.`
-              : `That was your free day of flying — we hope it was a good one! Gravity sends its regards. The jetpack comes with the ${PASS.name} (${price(PASS.price)} a month, with every hat, four sizes and more colours) — or on its own: the Jetpack Lite is ${price(shop.cost('jetlite'))} in the item shop (O).`, `Get the ${PASS.name}`, () => buyPass(), 22000, 'Not now');
-          } else hud.note(`No jetpack on your back: it comes with the ${PASS.name}, and the Jetpack Lite is ${price(shop.cost('jetlite'))} in the item shop (O).`, 5000);
+              ? `We give everyone a free jetpack for 24 hours, but it looks like your day is over. Feel free to get one in the shop: the Jetpack Lite (${lite}), the Jetpack (${full}) or the ${PASS.name} (${pass}).`
+              : `We give everyone a free jetpack for 24 hours, but it looks like your day is over. Feel free to get one in the item shop: the Jetpack Lite (${lite}), the Jetpack (${full}) — or the ${PASS.name} (${pass}), which comes with the Jetpack Lite.`,
+            'See them in the shop', () => openShop(), 22000, 'Not now', { low: true });
+          } else hud.note(`Your free day with the jetpack is over. The Jetpack Lite (${price(shop.cost('jetlite'))}) and the Jetpack (${price(shop.cost('jetpack'))}) are in the item shop (O).`, 5000);
         }
       }
       const fov = fair.fov ?? (timers.wide ? 104 : engine.width < engine.height ? 68 : 55);

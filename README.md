@@ -398,8 +398,10 @@ eleventh medallion: the **mushroom cloud**, of light too, for those who found ev
   back between two goes — asked for sooner, it says how long is left. Who has both chooses which one is
   on, in the item shop (*Equip* on its card; *Take it off* to fly with none). **Everybody has the light one for a day**:
   the twenty-four hours that follow a first visit (the shop tags it *Free today* and says how long is
-  left; a line in the chat says so on the first visit). After that, pressing jump in the air says — kindly — that the free day is over, and that the light jetpack
-  is $5 in the shop or comes with the Game Pass: the line carries a **Get the Game Pass** button that opens the payment at once.
+  left; a line in the chat says so on the first visit). After that, pressing jump in the air says — kindly, at the bottom of
+  the screen — that everybody gets a free jetpack for 24 hours and that this day is over, with the three ways to keep flying
+  and their prices (the Jetpack Lite, $5; the Jetpack, $30; the Game Pass, $19 a month, which gives the light one): the line
+  carries a **See them in the shop** button that opens the item shop.
 - **Four sizes**: Settings → *Your robot* asks for a size next to the colour — *Pocket* (a tenth smaller),
   *Classic* (everybody's), *Jumbo* (a tenth bigger) or *Titan* (a fifth bigger). Everybody around sees it. The
   three that are not Classic, and two more rows of colours (black among them), belong to the Game Pass:

@@ -749,12 +749,15 @@ try {
       return { noJet: player.noJet, grounded: player.grounded };
     });
     await frames3(4);
-    // (it is said on the bar of the proposals, with a button that opens the payment of the pass)
-    const note3 = await p3.evaluate(() => { const bar = document.querySelector('.offer-bar'); return bar?.classList.contains('on') ? `${bar.querySelector('.offer-text').textContent} [${bar.querySelector('.offer-yes').textContent}]` : document.querySelector('.hud .note').textContent; });
+    // (it is said kindly on the bar of the proposals — at the bottom of the screen —, with a button that opens the item shop)
+    const note3 = await p3.evaluate(() => { const bar = document.querySelector('.offer-bar'); return bar?.classList.contains('on') ? `${bar.querySelector('.offer-text').textContent} [${bar.querySelector('.offer-yes').textContent}]${bar.classList.contains('low') && bar.getBoundingClientRect().top > innerHeight * 0.35 ? ' (low)' : ''}` : document.querySelector('.hud .note').textContent; });
+    await p3.click('.offer-bar .offer-yes').catch(() => {});
+    const shopOpen3 = await p3.waitForSelector('.shop.on', { timeout: 10000 }).then(() => true).catch(() => false);
     await third.close();
-    check('when the subscription ends the pass is handed back (colour, size, hat) and they are told; a day after the first visit the free jetpack is over, and asking for it says where to get one',
-      ended3 === 200 && after3.color === 0 && after3.size === 1 && after3.hat === 0 && !after3.pass && after3.lite === 'trial' && after3.told === 1 && over3.lent === null && !over3.canFly && said3.noJet && /your free day of flying/.test(note3) && /Jetpack Lite is \$5/.test(note3) && /comes with the Game Pass \(\$19 a month/.test(note3) && /\[Get the Game Pass\]$/.test(note3),
-      JSON.stringify({ ended3, after3, over3, said3, note3 }));
+    check('when the subscription ends the pass is handed back (colour, size, hat) and they are told; a day after the first visit the free jetpack is over, and asking for it says so kindly, at the bottom of the screen — the three ways to keep flying, with their prices — and opens the item shop',
+      ended3 === 200 && after3.color === 0 && after3.size === 1 && after3.hat === 0 && !after3.pass && after3.lite === 'trial' && after3.told === 1 && over3.lent === null && !over3.canFly && said3.noJet
+      && /^We give everyone a free jetpack for 24 hours, but it looks like your day is over\./.test(note3) && /Jetpack Lite \(\$5\)/.test(note3) && /the Jetpack \(\$30\)/.test(note3) && /Game Pass \(\$19 a month\)/.test(note3) && /\[See them in the shop\] \(low\)$/.test(note3) && shopOpen3,
+      JSON.stringify({ ended3, after3, over3, said3, note3, shopOpen3 }));
   }
   // ---- a room of one's own (server/urooms.js — switched on for this part, as the owner would): bought by the month
   // with an account, set up from "Who is here", reached by its link; a friend is asked for its password; a score
