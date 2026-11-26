@@ -66,9 +66,11 @@ export class Hill {
       }, a.distanceTo(b), a.distanceTo(b) / 8, { both: true });
       board.mesh.position.set((a.x + b.x) / 2, y - 0.2, (a.z + b.z) / 2); board.mesh.rotation.y = H.yaw; board.mesh.name = 'hill-arch';
       this.group.add(board.mesh);
-      return { a, b, y };
+      return { a, b, y, board: board.mesh };
     };
-    arch(0, RED, H.name.toUpperCase(), `A START EVERY ${H.every} SECONDS · UP TO THE BELL · WHAT ROLLS STOPS AT THE LINE OF ITS COLOUR`);
+    // (the board of the start bears the name of the game: whoever climbs does not see it — from the line, the camera
+    // is behind it and it would hide the slope —, everybody else does; see open)
+    this.title = arch(0, RED, H.name.toUpperCase(), `A START EVERY ${H.every} SECONDS · UP TO THE BELL · WHAT ROLLS STOPS AT THE LINE OF ITS COLOUR`).board;
     const top = arch(H.length, NAVY, 'THE TOP', '');
     const bell = this.at(H.length + 0.4, 0);
     paint.tint(...GOLD, 1).place(bell.x, top.y - 1.5, bell.z).lathe([[0.03, 0.4], [0.14, 0.36], [0.24, 0.1], [0.34, -0.05], [0.37, -0.12]], 10).pop();
@@ -196,8 +198,15 @@ export class Hill {
       step: (dt, pl, control) => {
         const inp = pl.input, wait = (start.at - this.clock()) / 1000;
         if (!S.gone) {
+          // (waiting for the start, on the line: one picks one's spot along it — left, right —, not up the slope yet;
+          // nothing that rolls touches anybody before the start)
+          const lim = H.half - H.body, want = control && !session.auto ? Math.max(-1, Math.min(1, inp.move.x || 0)) * H.side : 0;
+          st.vu += Math.max(-H.accel * dt, Math.min(H.accel * dt, want - st.vu));
+          const u = st.u + st.vu * dt;
+          st.u = Math.max(-lim, Math.min(lim, u));
+          if (st.u !== u) st.vu = 0;
           if (Math.ceil(wait) !== S.last && wait > 0 && wait <= 3) { S.last = Math.ceil(wait); io.play('tick'); }
-          if (wait <= 0) { S.gone = true; st = session.state = startClimb(start.at / 1000, u0); st.clock = Math.min(0.25, -wait); io.play('start'); }
+          if (wait <= 0) { const { u: at, vu } = st; S.gone = true; st = session.state = startClimb(start.at / 1000, at); st.vu = vu; st.clock = Math.min(0.25, -wait); io.play('start'); }
         } else if (session.auto) {
           S.acc += Math.min(dt, 0.25);
           while (S.acc >= H.step && !st.over) { S.acc -= H.step; botInput(st, input); stepClimb(st, H.step, input, events); }
@@ -227,9 +236,10 @@ export class Hill {
       },
       /** The climb is over (or left): the player is let go where they are — at the top, or back at the gate. */
       drop: (pl, rang) => { pl.driver = null; pl.riding = false; pl.pitch = 0; const q = rang ? this.at(H.length + 2.5, st.u) : V(this.gate.x, 0, this.gate.z); pl.teleport(q.x, q.z, H.yaw); session.close(); },
-      close: () => { if (this.session === session) this.session = null; player.pitch = 0; },
+      close: () => { if (this.session === session) { this.session = null; if (this.title) this.title.visible = true; } player.pitch = 0; },
     };
     this.session = session;
+    if (this.title) this.title.visible = false;
     session.step(0, player, false);
     return session;
   }
