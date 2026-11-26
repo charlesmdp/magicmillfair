@@ -27,12 +27,16 @@ export class Collision {
     return c;
   }
 
-  /** Oriented box footprint (yaw around Y, same convention as layout frames). */
+  /**
+   * Oriented box footprint (yaw around Y, same convention as layout frames). Returns what is kept of it, [x, z, hw, hl,
+   * cos, sin, y0, y1]: as with a circle, y0 = 1e9 lets go of it, and putting y0 back brings it back.
+   */
   addBox(x, z, hw, hl, yaw = 0, y0 = -1e9, y1 = 1e9) {
-    const c = Math.cos(yaw), s = Math.sin(yaw);
-    const i = this.boxes.push([x, z, hw, hl, c, s, y0, y1]) - 1;
+    const c = Math.cos(yaw), s = Math.sin(yaw), b = [x, z, hw, hl, c, s, y0, y1];
+    const i = this.boxes.push(b) - 1;
     const ext = Math.abs(hw * c) + Math.abs(hl * s), ezt = Math.abs(hw * s) + Math.abs(hl * c);
     this._insert(x - ext, z - ezt, x + ext, z + ezt, -1 - i);
+    return b;
   }
 
   /** The playable area: a closed polygon [[x, z], …]. Nothing confined can leave it (and the areas added to it). */

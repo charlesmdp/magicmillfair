@@ -17,7 +17,7 @@ import { PLAQUE_COUNT, PLAQUE_WALL, PLAQUE_WALL_COUNT } from '../src/world/layou
 import { RELEASE } from '../src/app/config.js';
 import { describe as describeItem } from '../server/catalog.js';
 import {
-  WALL, DECKS, FLIGHTS, LANDINGS, PIECES, SIGN, point, place, out, eIn, eOut, heightOn, heightNear, wallPosts, outline, arcLength,
+  WALL, DECKS, FLIGHTS, LANDINGS, PIECES, SIGN, point, place, out, eIn, eOut, baseAt, heightOn, heightNear, wallSegments, crowds, outline, arcLength,
   COLUMNS, FIRST, WALL_COUNT, plateOf, idsOf, plateAt, columnAt,
 } from '../src/world/layout/plaquewall.js';
 
@@ -124,11 +124,10 @@ const lowest = (p, f) => { let min = Infinity, at = null; for (let a = p.a0; a <
   col.addCircle(COMPANIONS.x, COMPANIONS.z, 0.3); // (the sign of the companions)
   let on = true;
   for (const p of PIECES) col.addPlatform({ clearance: p.kind === 'flight' && p.g === 0 ? 4 : 1.0, heightAt: (x, z) => (on ? heightOn(p, x, z) : null) });
-  const posts = wallPosts().map(([x, z, r, y0, y1]) => ({ h: col.addCircle(x, z, r, y0, y1), y0 }));
-  { const [sx, sz] = point(SIGN.a, SIGN.e); posts.push({ h: col.addCircle(sx, sz, SIGN.r), y0: -1e9 }); } // (the sign at the foot of the stair)
+  const posts = wallSegments().map(([x, z, hw, hl, yaw, y0, y1]) => ({ h: col.addBox(x, z, hw, hl, yaw, y0, y1), y0 }));
   const area = new Polygon(outline(), { name: 'companions' });
   col.addArea({ name: 'companions', cave: false, contains: (x, z) => on && area.contains(x, z), nearest: (x, z, q) => (on ? area.nearest(x, z, q) : Infinity) });
-  const setOn = (v) => { on = v; for (const p of posts) p.h[3] = v ? p.y0 : 1e9; };
+  const setOn = (v) => { on = v; for (const p of posts) p.h[6] = v ? p.y0 : 1e9; };
 
   /**
    * Walks a path of points [x, z] from y as a walker does: towards each point in turn, 10 cm at a time, pushed out of
@@ -213,6 +212,30 @@ const lowest = (p, f) => { let min = Infinity, at = null; for (let a = p.a0; a <
     return { deepest: +deepest.toFixed(3), round: frames < 900, secs: +(frames / 60).toFixed(1) };
   };
   setOn(false); const pressOff = press(); setOn(true); const pressOn = press();
+  // (and along the stone itself, behind the dog, pressing into it at an angle — both ways round: one slides along it)
+  const slide = (dir, into) => {
+    const w = { x: 0, z: 0 }, a0 = dir > 0 ? 205 : 295;
+    [w.x, w.z] = point(a0, 0.93);
+    let y = E.y + 0.1, frames = 0;
+    for (; frames < 900; frames++) {
+      const { a } = place(w.x, w.z), [nx, nz] = [Math.cos((a * Math.PI) / 180) / E.rx, Math.sin((a * Math.PI) / 180) / E.rz], nl = Math.hypot(nx, nz), ox = nx / nl, oz = nz / nl, tx = -oz * dir, tz = ox * dir;
+      const c = Math.cos((into * Math.PI) / 180), sn = Math.sin((into * Math.PI) / 180), vx = tx * c + ox * sn, vz = tz * c + oz * sn, dist = 4.4 / 60, n = Math.max(1, Math.ceil(dist / 0.22));
+      for (let i = 0; i < n; i++) {
+        const p = { x: w.x + (vx * dist) / n, z: w.z + (vz * dist) / n };
+        col.resolve(p, RAD, y); col.confine(p);
+        const g = col.groundAt(p.x, p.z, y + 0.3);
+        if (g - y > STEP) continue;
+        w.x = p.x; w.z = p.z; y = g;
+      }
+      const { a: now } = place(w.x, w.z);
+      if (dir > 0 ? now > 290 : now < 210) break;
+    }
+    return frames < 900 ? +(frames / 60).toFixed(1) : null;
+  };
+  const slides = [];
+  for (const dir of [1, -1]) for (const into of [10, 30, 50, 64]) { setOn(false); const off = slide(dir, into); setOn(true); const onT = slide(dir, into); slides.push([dir, into, off, onT]); }
+  check('behind the dog, one slides along the stone under the lowest gallery, pressing into it at any angle, both ways round, as one slides along the edge of the ledge without the wall',
+    slides.every(([, , off, onT]) => off === null || (onT !== null && onT <= off * 1.5 + 0.5)), slides);
   check('behind the dog, where its plinth comes near the rim, one goes round it with the wall on as with it off: the stone under the lowest gallery stands back, and nobody is pushed into the plinth',
     pressOn.deepest <= pressOff.deepest + 0.02 && pressOn.round === pressOff.round, { off: pressOff, on: pressOn });
   // where somebody stood on the wall is found again (on the floor they were on, not the one over it): a page that comes back puts them there
@@ -222,6 +245,31 @@ const lowest = (p, f) => { let min = Infinity, at = null; for (let a = p.a0; a <
   setOn(false);
   const [dx, dz] = point(200, mid(DECKS[1])), offDeck = col.walkable(dx, dz), offGround = col.groundAt(dx, dz, 60), [fx, fz] = point(FLIGHTS[0].a0 + 10, mid(FLIGHTS[0]));
   const offFoot = col.groundAt(fx, fz, 50), [rx, rz] = point(165, DECKS[0].lo), held = { x: rx, z: rz };
+  // (the wall coming up while somebody stands on the floor of the ledge, anywhere it was walkable: either they are in
+  // its way — and step aside to the foot of its stair (main.js) — or, whichever way they then step, as a slow frame does
+  // (22 cm at once), they are never pushed through its walls into the stone or the rock)
+  const spots = [];
+  for (let a = 116; a <= 312; a += 1) for (let e = 0.78; e <= 0.956; e += 0.006) {
+    const [x, z] = point(a, e);
+    if (!col.walkable(x, z) || Math.hypot(x - S.x, z - S.z) < 7.47 + RAD) continue;
+    spots.push([x, z]);
+  }
+  const shoved = [];
+  let inWay = 0;
+  for (const [x, z] of spots) {
+    if (crowds(x, z, E.y + 0.2)) { inWay++; continue; }
+    setOn(true);
+    for (let k = 0; k < 8; k++) {
+      const t = (k / 8) * Math.PI * 2, p = { x: x + Math.cos(t) * 0.22, z: z + Math.sin(t) * 0.22 };
+      col.resolve(p, RAD, E.y + 0.2); col.confine(p);
+      const { a, e } = place(p.x, p.z);
+      if (a >= WALL.from - 1 && a <= WALL.to + 1 && e > baseAt(Math.min(WALL.to, Math.max(WALL.from, a)))) shoved.push([+place(x, z).a.toFixed(1), +place(x, z).e.toFixed(3), k]);
+    }
+    setOn(false);
+  }
+  const footFree = !crowds(...point(FLIGHTS[0].a0 - 0.8, (FLIGHTS[0].lo + FLIGHTS[0].hi) / 2), E.y + 0.2);
+  check('when the wall comes up, nobody standing on the floor of the ledge is pushed through it: whoever stands in its way is told to step aside (to the foot of its stair, which is clear), and from anywhere else no step goes through its walls',
+    spots.length > 1000 && !shoved.length && footFree && inWay > 0, { spots: spots.length, inWay, shoved: shoved.slice(0, 6), footFree });
   col.resolve(held, RAD, DECKS[0].y0);
   const floor = walk(ring(100, 195), E.y + 0.2);
   setOn(true);

@@ -1127,12 +1127,14 @@ export class PlacesZone {
    * is asked for (its switch is on), the same one after. Resolves to it.
    */
   buildWall() {
-    return (this._walling ||= import('./PlaqueWall.js').then(({ buildPlaqueWall }) => {
+    // (a download that failed — a new version went online meanwhile — is tried again the next time; a wall that failed
+    // to be built is not: it would only fail again, half built)
+    return (this._walling ||= import('./PlaqueWall.js').catch((err) => { this._walling = null; throw err; }).then(({ buildPlaqueWall }) => {
       const wall = buildPlaqueWall(this);
       this.group.add(wall.group);
       this.wall = wall;
       return wall;
-    }).catch((err) => { this._walling = null; throw err; })); // (a load that failed — a new version online meanwhile — is tried again next time)
+    }));
   }
 
   update(dt, time, camera) {

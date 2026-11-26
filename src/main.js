@@ -1229,17 +1229,31 @@ async function boot() {
   // loaded — the first time its switch is on; its plates are places like those of the plinth (plaque:73 and on),
   // offered on its galleries while it is on. Off, it goes at once (whoever stands on it is put back at the foot of
   // its stair); the plates keep what they hold.
-  // (resumedAt: where a page that came back — from the payment page, a new version — had its visitor standing, and when)
+  // (resumedAt: where a page that came back — from the payment page, a new version — had its visitor standing, which
+  // way they looked, and when)
   let plateWall = null, walling = null, wallWanted = false, resumedAt = null;
+  const toFoot = () => { const f = plateWall.foot; player.teleport(f.x, f.z, f.yaw); rig.snap(player.pos, f.yaw + Math.PI); };
+  // (a visitor who came back where they stood on the wall had nothing to stand on until it was there: they slid down the
+  // rock — put back up there, on the floor they were on, looking the way they looked, if that was a moment ago and they
+  // are still just below it, not sitting anywhere)
+  const putBack = () => {
+    const back = resumedAt;
+    resumedAt = null;
+    if (!back || performance.now() - back.at > 60_000 || !plateWall.holds(back.x, back.z, back.y)) return false;
+    const p = player.pos, h = plateWall.heightNear(back.x, back.z, back.y);
+    if (h === null || player.dead || player.seat || player.cross || player.riding || Math.hypot(p.x - back.x, p.z - back.z) > 14 || p.y > back.y - 0.5 || p.y < plateWall.foot.y - 1) return false;
+    player.teleport(back.x, back.z, back.yaw + Math.PI, h);
+    rig.snap(player.pos, back.yaw);
+    return true;
+  };
   const setWall = (on) => {
-    if (!on && plateWall.on && plateWall.holds(player.pos.x, player.pos.z, player.pos.y)) {
-      const f = plateWall.foot;
-      plateWall.setOn(false);
-      player.teleport(f.x, f.z, f.yaw);
-      rig.snap(player.pos, f.yaw + Math.PI);
-      return;
-    }
+    const was = plateWall.on;
+    if (!on && was && plateWall.holds(player.pos.x, player.pos.z, player.pos.y)) { plateWall.setOn(false); toFoot(); return; }
+    // (coming up, the wall may find somebody in its way — up against where its walls go, or where its lowest flight
+    // stands: they step aside to the foot of its stair first)
+    const inWay = on && !was && plateWall.crowds(player.pos.x, player.pos.z, player.pos.y);
     plateWall.setOn(on);
+    if (on && !was && !putBack() && inWay) toFoot();
   };
   const plaqueWall = (on) => {
     wallWanted = !!on;
@@ -1249,14 +1263,6 @@ async function boot() {
       plateWall = w;
       for (let n = w.first; n < w.first + w.count; n++) places.set(`plaque:${n}`, { what: 'a plaque on the wall of the companions', plaque: n, wall: true, set: (sp) => w.set(n, sp) });
       setWall(wallWanted); // (the switch may have moved while it was being built)
-      // (a visitor who came back where they stood on the wall had nothing to stand on until now: they slid down the
-      // rock — put back up there, on the floor they were on, if that was a moment ago and they have not gone off)
-      const back = resumedAt;
-      resumedAt = null;
-      if (w.on && back && w.holds(back.x, back.z, back.y) && performance.now() - back.at < 60_000 && Math.hypot(player.pos.x - back.x, player.pos.z - back.z) < 14 && !player.dead) {
-        const h = w.heightNear(back.x, back.z, back.y);
-        if (h !== null) { player.teleport(back.x, back.z, player.yaw, h); rig.snap(player.pos, player.yaw + Math.PI); }
-      }
       await applySponsors();
       return w;
     }).catch((err) => { if (!plateWall) walling = null; console.error('[wall]', err); return plateWall; }));
@@ -2455,7 +2461,7 @@ async function boot() {
   if (resume && Number.isFinite(resume.x) && Number.isFinite(resume.z) && !params.has('welcome')) { // (?welcome: the card, whatever)
     // back from a quality change, or from a new version: straight into the world, where we were (and in the same room)
     if (typeof resume.room === 'string') backTo = resume.room;
-    if (Number.isFinite(resume.y)) resumedAt = { x: resume.x, y: resume.y, z: resume.z, at: performance.now() }; // (on the wall of the companions, once it is built)
+    if (Number.isFinite(resume.y)) resumedAt = { x: resume.x, y: resume.y, z: resume.z, yaw: resume.yaw || 0, at: performance.now() }; // (on the wall of the companions, once it is there)
     player.teleport(resume.x, resume.z, (resume.yaw || 0) + Math.PI);
     rig.snap(player.pos, resume.yaw || 0);
     hud.splash.classList.add('done');

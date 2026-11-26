@@ -18,7 +18,7 @@ import { loadImage } from '../../../net/Shop.js';
 import { drawPlate, CELL_W, CELL_H } from './Plaques.js';
 import { NORTH } from '../../layout/layout.js';
 import {
-  WALL, DECKS, FLIGHTS, LANDINGS, PIECES, SIGN, point, place, out, inward, eIn, eOut, baseAt, heightOn, heightNear, wallPosts, outline,
+  WALL, DECKS, FLIGHTS, LANDINGS, PIECES, SIGN, point, place, out, inward, eIn, eOut, baseAt, heightOn, heightNear, wallSegments, crowds, outline,
   COLUMNS, FIRST, WALL_COUNT, plateAt, idsOf, columnAt, arcLength,
 } from '../../layout/plaquewall.js';
 
@@ -192,7 +192,10 @@ export function buildPlaqueWall(zone) {
     for (const [x, z] of [[x0, z0], [x1, z1]]) wood.box(x - 0.045, y, z - 0.045, x + 0.045, y + 1.0, z + 0.045);
   }
 
-  const layers = zone.cast.filter((l) => l !== LAYER.REFLECT); // (nothing here is seen in the pond)
+  // (nothing here is seen in the pond; and its shadows are only those drawn as one goes, near the eye — on a computer:
+  // the map of the shadows drawn once for what never moves is drawn before the wall comes, and is not drawn again for
+  // it, which would leave out whatever is far from the eye at that moment)
+  const layers = zone.cast.filter((l) => l !== LAYER.REFLECT && l !== LAYER.STATIC_CASTER);
   const built = parts.toMeshes(world.materials, { name: 'companions', layers });
   built.updateMatrixWorld(true);
   for (const m of built.children) { m.matrixAutoUpdate = false; m.updateMatrix(); }
@@ -200,11 +203,12 @@ export function buildPlaqueWall(zone) {
 
   // ---- a sign at the foot of the stair
   const S = WALL.stair, footAt = (S.at - 0.8), [fx, fz] = point(footAt, (FLIGHTS[0].lo + FLIGHTS[0].hi) / 2);
-  // (the foot of the stair: where whoever stood on the wall when it went is put back, facing the dog)
-  const foot = { x: fx, y: S.foot, z: fz, yaw: Math.atan2(NORTH.statue.x - fx, NORTH.statue.z - fz) };
-  let signPost = null;
+  // (the foot of the stair: where whoever stood on the wall when it went is put back — or whoever stood in its way when
+  // it came —, facing the stair, the dog behind them)
+  const foot = { x: fx, y: S.foot, z: fz, yaw: Math.atan2(fx - NORTH.statue.x, fz - NORTH.statue.z) };
   {
-    const [gx, gz] = point(SIGN.a, SIGN.e), [tx, tz] = NORTH.stairs[0].points.at(-1), yaw = Math.atan2(tx - gx, tz - gz), W = 1.6, H = 1.0;
+    // (against the stone under the lowest gallery, square to it: whoever comes round the dog reads it)
+    const gx = SIGN.x, gz = SIGN.z, yaw = SIGN.yaw, W = 1.6, H = 1.0;
     const sign = canvasBoard(512, 320, (ctx, w, h) => {
       const serif = "Georgia, 'Times New Roman', serif";
       const bg = ctx.createLinearGradient(0, 0, 0, h); bg.addColorStop(0, '#5b3d1c'); bg.addColorStop(0.5, '#6f4c22'); bg.addColorStop(1, '#3f2a12');
@@ -227,7 +231,6 @@ export function buildPlaqueWall(zone) {
     const post = new Parts();
     post.get('woodDark').tint(0.55, 0.42, 0.3, 1).place(gx, sy, gz, yaw).box(-W / 2 - 0.05, 0.95, -0.024, W / 2 + 0.05, 1.05 + H, -0.006, { tile: 1 }).box(-0.07, -0.3, -0.1, 0.07, 1.0, -0.03, { tile: 1 }).pop();
     group.add(post.toMeshes(world.materials, { name: 'companions-sign', layers }));
-    signPost = [gx, gz];
   }
 
   // ---- the plates: a quad each, one mesh; the picture they are painted from is made when somebody comes near
@@ -258,6 +261,7 @@ export function buildPlaqueWall(zone) {
   // (landed: the cells painted since the picture last went to the card, and for which plate — a plate is pointed at its
   // own cell only once the picture that holds it is on the card: before, the card still has what was there)
   let atlas = null, dirty = false, uploaded = 0, picked = 0, pickedAt = null, queue = [], landed = [];
+  const painting = new Uint32Array(CELLS); // (how many times each cell has been painted: a paint is only good while it is the last)
   const own = (w) => !!w && !w.taken; // (engraved, or waiting for approval: it needs a cell of its own to be read)
   const shownCell = (i) => { const w = what[i]; if (!w) return BARE; if (w.taken) return w.mine ? MINE : TAKEN; const c = cellOf[i]; return c >= 0 && fresh[c] ? c : FAR_CELL; };
   const setUV = (i, c) => {
@@ -278,10 +282,10 @@ export function buildPlaqueWall(zone) {
     if (i < 0) return;
     const w = what[i], logo = w?.logo;
     paintCell(c, w, logo && typeof logo !== 'string' ? logo : null);
-    landed.push([c, i, w]);
+    landed.push([c, i, w, ++painting[c]]);
     if (typeof logo !== 'string' || !logo) return;
     const mine = atlas;
-    loadImage(logo).then((img) => { if (img && atlas === mine && holder[c] === i && what[i] === w) paintCell(c, w, img); });
+    loadImage(logo).then((img) => { if (img && atlas === mine && holder[c] === i && what[i] === w) { paintCell(c, w, img); landed.push([c, i, w, ++painting[c]]); } });
   };
   const release = (c) => { const i = holder[c]; if (i >= 0) { cellOf[i] = -1; holder[c] = -1; fresh[c] = 0; setUV(i, shownCell(i)); } };
   /** The engraved plates nearest to the eye get the cells (the others show an engraved plate that cannot be read from there). */
@@ -331,29 +335,22 @@ export function buildPlaqueWall(zone) {
       heightAt: (x, z) => (on && (x - E.x) ** 2 + (z - E.z) ** 2 < near2 ? heightOn(p, x, z) : null),
     });
   }
-  const posts = wallPosts().map(([x, z, r, y0, y1]) => ({ handle: collision.addCircle(x, z, r, 1e9, y1), y0 }));
-  if (signPost) posts.push({ handle: collision.addCircle(signPost[0], signPost[1], SIGN.r, 1e9, 1e9), y0: -1e9 });
+  const posts = wallSegments().map(([x, z, hw, hl, yaw, y0, y1]) => ({ handle: collision.addBox(x, z, hw, hl, yaw, 1e9, y1), y0 }));
   const ground = new Polygon(outline(), { name: 'companions' });
   collision.addArea({ name: 'companions', cave: false, contains: (x, z) => on && ground.contains(x, z), nearest: (x, z, q) => (on ? ground.nearest(x, z, q) : Infinity) });
 
-  // (the shadows drawn once for what never moves: the wall is in them while it is on — however far the eye is)
-  let lent = false;
-  world.shadows?.hooks?.push({
-    before: (cam, still) => { if (still && on && !group.visible) { group.visible = true; lent = true; } },
-    after: (still) => { if (still && lent) { group.visible = false; lent = false; } },
-  });
   const k = phone ? 0.6 : 1, mid = point((WALL.from + WALL.to) / 2, 1.1);
   return {
     group, first: FIRST, count: WALL_COUNT, foot,
     get on() { return on; },
     /** On: drawn, walked on, bumped into; off: none of it (the plates sold keep what they hold). */
     setOn(v) {
-      const was = on;
       on = !!v;
-      for (const p of posts) p.handle[3] = on ? p.y0 : 1e9;
+      for (const p of posts) p.handle[6] = on ? p.y0 : 1e9;
       if (!on) { group.visible = false; if (atlas) drop(); }
-      if (on !== was) world.bakeShadows?.(); // (the shadows drawn once are drawn again: with the wall, or without it)
     },
+    /** Would the wall, coming up now, be in the way of somebody standing at (x, z, y)? (They step aside to its foot.) */
+    crowds: (x, z, y) => crowds(x, z, y),
     columnAt: (x, z, y) => (on ? columnAt(x, z, y) : null),
     ids: ({ g, k: col }) => idsOf(g, col),
     where: (n) => plateAt(n),
@@ -390,7 +387,7 @@ export function buildPlaqueWall(zone) {
       if (dirty && now - uploaded > 350) {
         atlas.texture.needsUpdate = true; dirty = false; uploaded = now;
         // (what was painted is on the card from this frame on: its plates are pointed at it — if it is still theirs, as it was painted)
-        for (const [c, i, w] of landed) if (holder[c] === i && what[i] === w) { fresh[c] = 1; setUV(i, c); }
+        for (const [c, i, w, n] of landed) if (holder[c] === i && what[i] === w && painting[c] === n) { fresh[c] = 1; setUV(i, c); }
         landed = [];
       }
     },

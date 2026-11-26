@@ -47,13 +47,13 @@ export function arcLength(e, a0, a1, step = 0.25) {
 
 /**
  * Where the stone under the lowest gallery stands at angle a (a distance out): at WALL.base — or further out, behind
- * the dog, where its plinth comes near the rim, so that there is still room to stand between the two (the plinth's
- * collider, PlacesZone._north: 7.47 m round the statue; a walker is 0.76 m wide, a post of the rail 0.16).
+ * the dog, where its plinth comes near the rim, so that there is still room to go between the two (the plinth's
+ * collider, PlacesZone._north: 7.47 m round the statue; a walker is 0.76 m wide, the wall's own skin 0.12).
  */
 const PLINTH = { x: NORTH.statue.x, z: NORTH.statue.z, r: 7.47 };
 export function baseAt(a) {
   let e = WALL.base;
-  for (let i = 0; i < 80; i++) { const [x, z] = point(a, e); if (Math.hypot(x - PLINTH.x, z - PLINTH.z) >= PLINTH.r + 0.92) break; e += out(0.02); }
+  for (let i = 0; i < 80; i++) { const [x, z] = point(a, e); if (Math.hypot(x - PLINTH.x, z - PLINTH.z) >= PLINTH.r + 1.0) break; e += out(0.02); }
   return e;
 }
 
@@ -86,8 +86,14 @@ export function heightNear(x, z, y) {
   for (const p of PIECES) { const h = heightOn(p, x, z); if (h !== null && Math.abs(h - y) < 1.5 && (best === null || Math.abs(h - y) < Math.abs(best - y))) best = h; }
   return best;
 }
-/** The sign at the foot of the stair, on the floor of the ledge (its post is in the way like any post). */
-export const SIGN = { a: S.at - 6, e: eIn(0) - out(0.15), r: 0.3 };
+/**
+ * The sign at the foot of the stair, on the floor of the ledge, against the stone under the lowest gallery and square
+ * to the dog: its middle (angle, distance out), its half width and half depth (it is in the way as a whole: a box).
+ */
+export const SIGN = (() => {
+  const a = S.at - 8, e = W.base - out(0.03), [x, z] = point(a, e), [nx, nz] = inward(a);
+  return { a, e, x, z, hw: 0.9, hl: 0.12, yaw: Math.atan2(nx, nz) };
+})();
 
 /** What of [lo, hi] is left once the spans are taken out of it: [[lo, hi], …]. */
 function gaps(lo, hi, spans) {
@@ -124,27 +130,48 @@ export function railLines() {
 }
 
 /**
- * The collision of the wall, as round posts [x, z, r, y0, y1] (see Collision.addCircle): the rails (a post every 0.4 m
- * or so, each for the height it stands at), the back walls of the galleries (one cannot walk into the rock behind the
- * plates) and the stone under the lowest gallery (nor up the rim of the ledge, under it).
+ * The collision of the wall, as thin smooth walls — oriented boxes [x, z, hw, hl, yaw, y0, y1] (see Collision.addBox),
+ * one every 0.4 m or so along each line, each for the height it stands at: nothing in them to catch on, one slides along
+ * them. The rails; the back walls of the galleries (one cannot walk into the rock behind the plates); the stone under
+ * the lowest gallery (nor up the rim of the ledge under it); the sign at the foot of the stair.
  */
-export function wallPosts(r = 0.08) {
-  const posts = [];
-  const arc = (e, a0, a1, y0, y1, band) => {
-    const n = Math.max(1, Math.ceil(arcLength(e, a0, a1) / 0.4));
-    for (let i = 0; i <= n; i++) { const t = i / n, [x, z] = point(a0 + (a1 - a0) * t, e), y = y0 + (y1 - y0) * t; posts.push([x, z, r, y + band[0], y + band[1]]); }
+export const SKIN = 0.06;
+export function wallSegments() {
+  const segs = [];
+  const line = (pts, band) => {
+    for (let i = 1; i < pts.length; i++) {
+      const [x0, z0, y0] = pts[i - 1], [x1, z1, y1] = pts[i], len = Math.hypot(x1 - x0, z1 - z0);
+      if (len > 1e-3) segs.push([(x0 + x1) / 2, (z0 + z1) / 2, len / 2 + 0.02, SKIN, Math.atan2(-(z1 - z0), x1 - x0), Math.min(y0, y1) + band[0], Math.max(y0, y1) + band[1]]);
+    }
+  };
+  const arc = (eAt, a0, a1, y0, y1) => {
+    const n = Math.max(1, Math.ceil(arcLength(eAt(a0), a0, a1) / 0.4));
+    return Array.from({ length: n + 1 }, (_, i) => { const t = i / n, a = a0 + (a1 - a0) * t, [x, z] = point(a, eAt(a)); return [x, z, y0 + (y1 - y0) * t]; });
   };
   for (const l of railLines()) {
-    if ('e' in l) { arc(l.e, l.a0, l.a1, l.y0, l.y1, [-0.4, 1.15]); continue; }
-    const [x0, z0] = point(l.a, l.lo), [x1, z1] = point(l.a, l.hi), n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 0.4));
-    for (let i = 0; i <= n; i++) posts.push([x0 + ((x1 - x0) * i) / n, z0 + ((z1 - z0) * i) / n, r, l.y - 0.4, l.y + 1.15]);
+    if ('e' in l) line(arc(() => l.e, l.a0, l.a1, l.y0, l.y1), [-0.4, 1.15]);
+    else { const [x0, z0] = point(l.a, l.lo), [x1, z1] = point(l.a, l.hi); line([[x0, z0, l.y], [x1, z1, l.y]], [-0.4, 1.15]); }
   }
-  for (const d of DECKS) arc(d.hi + out(r), W.from, W.to, d.y0, d.y0, [-0.5, 2.9]);
-  // (the stone under the lowest gallery: one does not walk up the rim of the ledge under it — and behind the dog it
-  // stands back, out of the way of whoever goes round the plinth)
-  const n = Math.max(1, Math.ceil(arcLength(W.base, W.from, W.to) / 0.4));
-  for (let i = 0; i <= n; i++) { const a = W.from + ((W.to - W.from) * i) / n, [x, z] = point(a, baseAt(a)); posts.push([x, z, r, E.y - 0.9, E.y + 3.2]); }
-  return posts;
+  for (const d of DECKS) line(arc(() => d.hi + out(SKIN), W.from, W.to, d.y0, d.y0), [-0.5, 2.9]);
+  // (the stone under the lowest gallery — behind the dog, standing back out of the way of whoever goes round the plinth)
+  line(arc(baseAt, W.from, W.to, E.y, E.y), [-0.9, 3.2]);
+  segs.push([SIGN.x, SIGN.z, SIGN.hw, SIGN.hl, SIGN.yaw, E.y - 0.9, E.y + 3.2]);
+  return segs;
+}
+/** How far (x, z) is from the side of segment s (0: inside it). */
+export function awayFrom(s, x, z) {
+  const c = Math.cos(s[4]), n = Math.sin(s[4]), dx = x - s[0], dz = z - s[1], lx = dx * c - dz * n, lz = dx * n + dz * c;
+  return Math.hypot(lx - Math.max(-s[2], Math.min(s[2], lx)), lz - Math.max(-s[3], Math.min(s[3], lz)));
+}
+/**
+ * Would the wall, coming up now, be in the way of somebody standing at (x, z, y) (radius r)? Up against one of its
+ * walls (or inside one), or under its lowest flight, which stands on the floor: they are to step aside first.
+ */
+export function crowds(x, z, y, r = 0.38) {
+  if ((x - E.x) ** 2 + (z - E.z) ** 2 > (E.rx * 1.6) ** 2) return false;
+  if (wallSegments().some((s) => y + 1.2 >= s[5] && y <= s[6] && awayFrom(s, x, z) < r + 0.05)) return true;
+  const f = heightOn(FLIGHTS[0], x, z);
+  return f !== null && f > y + 0.6;
 }
 
 /** The ground the wall covers, for the playable area: its outline [[x, z], …] (every piece is inside it). */
