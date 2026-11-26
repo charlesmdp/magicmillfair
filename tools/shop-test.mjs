@@ -851,6 +851,39 @@ try {
       && again5.kind !== 'pass' && again5.seen === '4' && new Set(shown5.slice(0, 6)).size === 6 && shown5[6] === shown5[0] && shown5[0] === 'You clearly like it here.' && after5 === '4',
       JSON.stringify({ card5, again5, shown5, after5 }));
   }
+  // ---- the card of an account comes by itself too, at its own times — between those of the Game Pass: ten minutes
+  // after the first visit, the first of its six, with what an account gives in four tiles; the administrator's link
+  // shows the six in turn, counting nothing
+  {
+    const ctx6 = await browser.newContext({ viewport: { width: 960, height: 560 }, deviceScaleFactor: 1 });
+    await ctx6.addInitScript(() => { if (!sessionStorage.getItem('mmf.test.set')) { sessionStorage.setItem('mmf.test.set', '1'); localStorage.setItem('mmf.name', 'Stranger'); localStorage.setItem('mmf.first', String(Date.now() - 10.5 * 60_000)); } });
+    const p6 = await ctx6.newPage();
+    p6.on('pageerror', (e) => logs.push(e.message));
+    await p6.goto(`${BASE}/?q=${opt.q || 'low'}&pitch=1&back=1`);
+    await p6.waitForFunction(() => window.__mmf && window.__mmf.ready && window.__mmf.player && window.__mmf.shop.open && window.__mmf.input.enabled, null, { timeout: 240000 });
+    await p6.evaluate(() => window.__mmf.playedFor(100));
+    await p6.waitForFunction(() => document.querySelector('.pitch.on')?.dataset.kind === 'account', null, { timeout: 60000 });
+    const card6 = await p6.evaluate(() => { const b = document.querySelector('.pitch'); return { eyebrow: b.querySelector('.eyebrow').textContent, title: b.querySelector('h2').textContent, perks: [...b.querySelectorAll('.perks li')].map((li) => [li.querySelector('b')?.textContent || '', li.querySelector('span')?.textContent || '']), tiles: getComputedStyle(b.querySelector('.perks')).gridTemplateColumns.split(' ').length, tag: b.querySelector('.cost').textContent, fits: b.querySelector('.sheet').scrollHeight <= b.querySelector('.sheet').clientHeight + 1, yes: b.querySelector('.yes').textContent, no: b.querySelector('.no').textContent, seen: localStorage.getItem('mmf.accountcards'), pass: localStorage.getItem('mmf.passcards') }; });
+    await p6.waitForTimeout(1200);
+    await p6.screenshot({ path: path.join(ROOT, 'tools/preview/shop-account-card.png') });
+    await p6.keyboard.press('Escape');
+    await p6.waitForFunction(() => !document.querySelector('.pitch.on'), null, { timeout: 10000 });
+    const shown6 = [];
+    for (let k = 0; k < 7; k++) {
+      await p6.evaluate(() => window.__mmf.hud.emit('show', 'account'));
+      await p6.waitForFunction(() => document.querySelector('.pitch.on'), null, { timeout: 10000 });
+      shown6.push(await p6.evaluate(() => document.querySelector('.pitch h2').textContent));
+      await p6.keyboard.press('Escape');
+      await p6.waitForFunction(() => !document.querySelector('.pitch.on'), null, { timeout: 10000 });
+    }
+    const after6 = await p6.evaluate(() => localStorage.getItem('mmf.accountcards'));
+    await ctx6.close();
+    check('the card of an account comes by itself, ten minutes after the first visit — before the first of the Game Pass —: what an account gives in four tiles, two by two, its words and a way to say no of its own; the administrator\'s link shows its six in turn, counting nothing',
+      card6.eyebrow === 'Ten minutes in the oasis' && card6.title === 'Shall we remember you?' && card6.perks.length === 4 && card6.perks.every(([w, m]) => w && m) && card6.tiles === 2
+      && card6.tag === 'Free · thirty seconds · no e-mail needed' && card6.fits && card6.yes === 'Create my account' && card6.no === 'Not now' && card6.seen === '1' && !card6.pass
+      && new Set(shown6.slice(0, 6)).size === 6 && shown6[6] === shown6[0] && shown6[0] === 'Shall we remember you?' && after6 === '1',
+      JSON.stringify({ card6, shown6, after6 }));
+  }
   // ---- paying without leaving the game: a server that was given Stripe's publishable key (Stripe's script is a stand-in here)
   {
     const PORT2 = PORT + 2, BASE2 = `http://127.0.0.1:${PORT2}`, STORE2 = path.join(ROOT, 'tools/preview/shop-test-store2.json');

@@ -44,7 +44,7 @@ import { SPAWN, ZONES, CLIMB, RACE, WING, TRACK, PIER } from './world/layout/lay
 import { VILLAGE_PERKS, VILLAGE_PITCH, money } from './world/layout/sponsors.js';
 import { FEATURES, SKY_STAGES, skyAsked } from './app/config.js';
 import { Updates } from './app/Updates.js';
-import { PASS_LINES, passDue } from './app/pitches.js';
+import { PASS_LINES, ACCOUNT_LINES, ACCOUNT_PERKS, passDue, accountDue } from './app/pitches.js';
 import { Soundscape } from './audio/Soundscape.js';
 import { Blast } from './world/effects/Blast.js';
 import { BLAST_EVERY } from '../server/protocol.js';
@@ -58,7 +58,7 @@ const store = {
   del(k, session = false) { try { (session ? sessionStorage : localStorage).removeItem(k); } catch { /* private mode */ } },
 };
 // (when this browser first came here: the cards of the Game Pass are counted from then — app/pitches.js)
-const FIRST = 'mmf.first', PASS_SEEN = 'mmf.passcards';
+const FIRST = 'mmf.first', PASS_SEEN = 'mmf.passcards', ACCOUNT_SEEN = 'mmf.accountcards';
 if (!(Number(store.get(FIRST)) > 0)) store.set(FIRST, String(Date.now()));
 
 const canvas = document.getElementById('view');
@@ -1765,13 +1765,12 @@ async function boot() {
     const wrong = await shop.buy(PASS.id);
     if (wrong) hud.note(wrong, 7000);
   };
-  // ---------- two cards that make an offer in full, once in a while, never in the middle of anything: an account,
-  // to who has played ten minutes without one (once a day at the most); the Game Pass, to who plays without it —
-  // six times at the most, fifteen minutes, one hour, two hours, a day, two days and three days after their first
-  // visit, each time with words of its own (app/pitches.js; `step`: which of the six). (`shown`: the
+  // ---------- two cards that make an offer in full, once in a while, never in the middle of anything — each six
+  // times at the most, counted from the first visit, each time with words of its own (app/pitches.js; `step`:
+  // which of the six): the Game Pass, to who plays without it — fifteen minutes, one hour, two hours, a day, two
+  // days and three days after their first visit —; an account, to who plays without one, in between — ten
+  // minutes, forty, an hour and a half, half a day, a day and a half, two days and a half. (`shown`: the
   // administrator asked to see it — nothing is counted, nothing is checked.)
-  const PITCH_AFTER = { account: 600 }; // seconds of play, in this visit
-  const pitchedToday = (kind) => store.get(`mmf.pitch.${kind}`) === new Date().toDateString();
   const pitchWanted = { account: () => !account.name && !noApi(), pass: () => shop.open && !shop.pass };
   const pitch = async (kind, shown = false, step = 0) => {
     if (hud.pitching) return false;
@@ -1789,21 +1788,16 @@ async function boot() {
       if (taken) buyPass();
       return taken;
     }
-    if (!shown && (pitchedToday(kind) || !pitchWanted[kind]())) return false;
-    if (!shown) store.set(`mmf.pitch.${kind}`, new Date().toDateString());
-    audio.play('pick');
     if (kind === 'account') {
+      if (!shown && !pitchWanted.account()) return false;
+      const k = Math.max(0, Math.min(ACCOUNT_LINES.length - 1, Math.floor(Number(step) || 0))), L = ACCOUNT_LINES[k];
+      if (!shown) store.set(ACCOUNT_SEEN, String(k + 1)); // (this one is passed — and so are those before it)
+      audio.play('pick');
       const taken = await hud.pitch({
-        kind, eyebrow: 'Ten minutes in the oasis', title: 'Shall we remember you?',
-        lead: 'You have been here a while — long enough to have a best score, a favourite bench, maybe a grudge against a boulder. An account keeps all of it, wherever you play from.',
-        perks: [
-          'Your name becomes yours alone: nobody else can play, chat or score under it',
-          'Your scores count for the week, the month and all time — not only for today',
-          'What you buy, your days in a row and your animals of light follow you to any device',
-          'A name and a password: no e-mail needed, no newsletter, no small print with teeth',
-        ],
+        kind, eyebrow: L.eyebrow, title: L.title, lead: L.lead, perks: ACCOUNT_PERKS,
+        tag: 'Free · thirty seconds · no e-mail needed',
         fine: 'Free, and done in less time than the queue for the big wheel.',
-        yes: 'Create my account', no: 'Not now', picture: previewer.shot('', color, 360, 450),
+        yes: 'Create my account', no: L.no, picture: previewer.shot('', color, 360, 450),
       });
       if (taken) accountAction('create');
       return taken;
@@ -1840,25 +1834,25 @@ async function boot() {
     return true;
   };
   hud.roomArt = (w, h) => roomPicture(w, h);
-  const pitchQueue = Object.keys(PITCH_AFTER).map((kind) => ({ kind, at: PITCH_AFTER[kind] }));
   // (the tools play for a long time and must not find a card over what they are doing: on their pages the cards
   // only come by themselves when the address asks for them — ?pitch)
   const pitchAuto = !(import.meta.env.DEV || typeof __LAB__ !== 'undefined' || typeof __TEST__ !== 'undefined') || params.has('pitch');
-  let played = 0, cardAt = -1e9, passLook = -1e9, passPreview = -1; // (passPreview: the last of the six the administrator was shown)
+  let played = 0, cardAt = -1e9, passLook = -1e9, passPreview = -1, accountPreview = -1; // (…Preview: the last of the six the administrator was shown)
   /** Called while one walks about: the clock of the visit, and the card that is due — once nothing else is going on. */
   const playClock = (dt) => {
     played += dt;
     if (!pitchAuto) return;
-    // (the Game Pass: when one of its six times has come — a minute and a half into a visit at the least, never
-    // within four minutes of another card; who comes back after a while gets the last one that is due)
-    const queued = pitchQueue.length && played >= pitchQueue[0].at, look = played >= 90 && played - cardAt >= 240 && played - passLook >= 15;
-    if ((!queued && !look) || busyNow() || hud.rosterOpen || hud.bigMapOpen || hud.pitching) return; // (whether the game is busy is asked only when a card could come)
-    if (queued) { cardAt = played; pitch(pitchQueue.shift().kind); return; }
-    {
-      passLook = played;
-      const k = passDue(Number(store.get(FIRST)), Number(store.get(PASS_SEEN) || 0), Date.now());
-      if (k >= 0 && pitchWanted.pass()) { cardAt = played; pitch('pass', false, k); }
-    }
+    // (a card: when one of its six times has come — a minute and a half into a visit at the least, never within
+    // four minutes of another card; who comes back after a while gets the last one that is due. The Game Pass is
+    // looked at first; when both are due, the account comes at a later look)
+    const look = played >= 90 && played - cardAt >= 240 && played - passLook >= 15;
+    if (!look || busyNow() || hud.rosterOpen || hud.bigMapOpen || hud.pitching) return; // (whether the game is busy is asked only when a card could come)
+    passLook = played;
+    const first = Number(store.get(FIRST)), now = Date.now();
+    const k = passDue(first, Number(store.get(PASS_SEEN) || 0), now);
+    if (k >= 0 && pitchWanted.pass()) { cardAt = played; pitch('pass', false, k); return; }
+    const a = accountDue(first, Number(store.get(ACCOUNT_SEEN) || 0), now);
+    if (a >= 0 && pitchWanted.account()) { cardAt = played; pitch('account', false, a); }
   };
   Object.assign(app, { pitch, playedFor: (seconds) => { if (seconds !== undefined) played = seconds; return played; } });
   shopView
@@ -2046,7 +2040,7 @@ async function boot() {
     .on('say', say)
     .on('roster', () => { showRoster(); refreshRoster(); refreshRooms(); if (mine.on) refreshMine(); })
     .on('myroom', myRoom)
-    .on('show', (kind) => (kind === 'room' ? roomPitch() : kind === 'pass' ? pitch('pass', true, (passPreview = (passPreview + 1) % PASS_LINES.length)) : pitch(kind, true))) // (the Game Pass: each click, the next of its six cards)
+    .on('show', (kind) => (kind === 'room' ? roomPitch() : kind === 'pass' ? pitch('pass', true, (passPreview = (passPreview + 1) % PASS_LINES.length)) : kind === 'account' ? pitch('account', true, (accountPreview = (accountPreview + 1) % ACCOUNT_LINES.length)) : pitch(kind, true))) // (the Game Pass, an account: each click, the next of its six cards)
     .on('putout', (id) => { if (presence?.host) { presence.kick(id); hud.note('Put out: they cannot come back for an hour.', 4500); } })
     .on('room', (to) => changeRoom(to))
     .on('badge', () => {
