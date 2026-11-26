@@ -413,8 +413,8 @@ eleventh medallion: the **mushroom cloud**, of light too, for those who found ev
 - **Flowers**: walk up to a flower and pick it (E): a bouquet grows in your hand, flower by flower. B puts
   it down; swimming loses it. With a bouquet in hand, standing next to another visitor offers to **give it
   to them** (they take it if their hands are free), and at the feet of the golden dog, to lay it there.
-- **Billy**: an alligator lounges in a beanbag chair on the deck of the great pond, a "life coach" badge
-  over his name. Talk to him (the prompt by his chair, then type): a question or anything else on your
+- **Billy the AI**: an alligator lounges in a beanbag chair on the deck of the great pond, a "life coach" badge
+  over his name (*Billy the AI*: an AI answers for him, and says so if asked). Talk to him (the prompt by his chair, then type): a question or anything else on your
   mind, and he answers in one sentence that sails past the point and lands on it. The conversation is
   between the two of you: nobody else sees it (its lines are marked "only you" in the chat), and he
   remembers what the two of you just said — never what somebody else told him. An easel in the flower bed

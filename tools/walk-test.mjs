@@ -882,7 +882,7 @@ try {
     check('…and, on arriving: to the right, a board tells how it all came to this (the story of the opening, another way); beside one, an easel sends everybody to the beach — PLAY ON THE BEACH!, an arrow up the lane on its front —; the easel of the life coach stands in a flower bed of the rock garden, by its path, an arrow on each face — and planks at the mill and by the pond point the rest of the way to Billy',
       arrive.story.there && !arrive.story.left && arrive.story.ahead < 48 && arrive.story.far > 5 && arrive.story.far < 14
       && arrive.beach.there && arrive.beach.left && arrive.beach.far < 3.5 && /^PLAY ON THE BEACH! · GAMES · THE PIER · \d+0 M$/.test(arrive.beach.words) && typeof arrive.beach.turns[0] === 'number' && Math.abs(arrive.beach.turns[0]) < 0.9
-      && arrive.advice.there && arrive.advice.garden && arrive.advice.path < 6 && /^GET LIFE ADVICE · ASK BILLY · \d+0 M$/.test(arrive.advice.words) && arrive.advice.turns.some((t) => typeof t === 'number') && arrive.advice.billy < 20
+      && arrive.advice.there && arrive.advice.garden && arrive.advice.path < 6 && /^GET LIFE ADVICE · ASK BILLY THE AI · \d+0 M$/.test(arrive.advice.words) && arrive.advice.turns.some((t) => typeof t === 'number') && arrive.advice.billy < 20
       && arrive.planks.join() === 'mill: GET LIFE ADVICE,pondside: GET LIFE ADVICE', JSON.stringify({ story: arrive.story, beach: arrive.beach, advice: arrive.advice, planks: arrive.planks }));
   }
   // --- the wooden signposts at the forks of the paths, and the Trading Post: the booth of the sponsors, on the

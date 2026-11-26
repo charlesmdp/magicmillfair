@@ -417,7 +417,7 @@ export function buildNotices(zone) {
   // rest. Each face has the arrow that is true from where it is read: a turn round when the place is behind.
   const easels = [
     { name: 'notice-beach', at: NOTICES.beach, to: NOTICES.beach.to, far: NOTICES.beach.far, lines: ['PLAY ON', 'THE BEACH!'], under: 'GAMES · THE PIER', behind: 'THE BEACH', words: 'PLAY ON THE BEACH! · GAMES · THE PIER' },
-    { name: 'notice-advice', at: NOTICES.advice, to: WAYS.billy.at, far: WAYS.billy.at, lines: ['GET LIFE', 'ADVICE'], under: 'ASK BILLY', behind: 'ASK BILLY', words: 'GET LIFE ADVICE · ASK BILLY' },
+    { name: 'notice-advice', at: NOTICES.advice, to: WAYS.billy.at, far: WAYS.billy.at, lines: ['GET LIFE', 'ADVICE'], under: 'ASK BILLY THE AI', behind: 'BILLY THE AI', words: 'GET LIFE ADVICE · ASK BILLY THE AI' },
   ];
   for (const easel of easels) {
     const ad = easel.at, ady = zone.ground(ad.x, ad.z);

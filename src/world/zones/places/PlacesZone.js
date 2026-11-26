@@ -1107,7 +1107,7 @@ export class PlacesZone {
       if (seat) this.seats.splice(this.seats.indexOf(seat), 1); // that one is taken
       const face = seat ? seat.yaw : D.yaw;
       alligator(cushions, px, y + CHAIR_SEAT - 0.24, pz, face);
-      this.npcs.push({ id: 'alligator', name: 'Billy', x: px, y: y + 1.45, z: pz, reach: 2.6 });
+      this.npcs.push({ id: 'alligator', name: 'Billy the AI', x: px, y: y + 1.45, z: pz, reach: 2.6 });
     }
     for (const [lx, lz] of [[-5.1, -2.3], [0.0, 0.2], [5.2, -2.4], [-2.5, 2.7], [2.6, 2.6]]) { const [px, pz] = at(lx, lz); lowTable(parts, px, y, pz, 0.34); this.colliders.push({ type: 'circle', x: px, z: pz, r: 0.32, y0: y - 0.5, y1: y + 1 }); }
     for (const [lx, lz, tone] of [[-3.9, 1.3, CANDY[5]], [3.9, 1.3, CANDY[1]], [-1.3, -2.4, CANDY[0]]]) { const [px, pz] = at(lx, lz); parasol(parts, px, y, pz, tone, 1.8); this.colliders.push({ type: 'circle', x: px, z: pz, r: 0.1, y0: y - 0.5, y1: y + 3 }); }

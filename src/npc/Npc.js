@@ -8,12 +8,12 @@ import { hasApi, callApi } from '../net/api.js';
 
 const PERSONAS = {
   alligator: {
-    name: 'Billy',
+    name: 'Billy the AI',
     title: 'Life coach',
-    ask: 'Say anything to Billy (only you two hear it)…',
+    ask: 'Talk to Billy the AI (only you two hear it)…',
     greet: [
       'Welcome, champ! Tell me anything: a question, a dream, a bad day. This stays between us.',
-      'Billy, life coach. One sentence from you, one from me, one breakthrough. What is on your mind?',
+      'Billy the AI, life coach. One sentence from you, one from me, one breakthrough. What is on your mind?',
       'I can see you have potential, champ. Mostly in the legs. So, how are we doing today?',
     ],
     rules: [
@@ -23,7 +23,7 @@ const PERSONAS = {
       [/\b(how are you|ça va|comment vas|how do you do)\b/i, ['Living the dream on a beanbag, champ: a sloth takes a month to digest one meal and nobody calls it unproductive.']],
       [/\b(i won|i did it|i beat|best time|record|gagn[ée]|réussi)\b/i, ['A cheetah can only sprint for about half a minute before it must lie down, champ, and you are still standing, so what is next?']],
       [/\b(i lost|i died|i fell|fail|failed|perdu|tomb[ée]|rat[ée])\b/i, ['Sharks are older than trees, champ, and nobody lasts that long by swimming into the same mistake twice, so go round next time and call it growth.']],
-      [/\b(who|what) are you|your name|t'es qui|qui es[- ]tu\b/i, ['I am Billy, and I am the alligator I needed when I was younger.', 'Billy: part alligator, part vision board.']],
+      [/\b(who|what) are you|your name|t'es qui|qui es[- ]tu\b/i, ['I am Billy the AI, and I am the alligator I needed when I was younger.', 'Billy the AI: part alligator, part vision board.']],
       [/\b(waterfall|cascade|chute)\b/i, ['West past the great pond, champ, then upstream like a salmon, a fish that climbs waterfalls on purpose and has never once asked for directions.']],
       [/\b(mostly up|climb|stones?|grimp|pierres?)\b/i, ['One stone at a time, champ: a flea jumps over a hundred times its own length with no vision board, and you only need the next stone.']],
       [/\b(stuck|bloqu|coinc)/i, ['Being stuck is just standing still with ambition: type /kill and start over lighter.']],

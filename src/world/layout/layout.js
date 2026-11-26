@@ -753,7 +753,7 @@ export const WAYS = {
   trading: { text: 'TRADING POST', more: 'SPONSORS', at: [TRADING.x, TRADING.z] },
   mill: { text: 'THE MILL', at: [-118, -14] },
   // (Billy the alligator, life coach, on the deck over the great pond: where its gangway leaves the bank)
-  billy: { text: 'GET LIFE ADVICE', more: 'ASK BILLY', at: [POND_DECK.gangway[0][0], POND_DECK.gangway[0][1]] },
+  billy: { text: 'GET LIFE ADVICE', more: 'ASK BILLY THE AI', at: [POND_DECK.gangway[0][0], POND_DECK.gangway[0][1]] },
 };
 // The signposts of the games that are switched on one by one (the lab's: Signposts.js, buildGameSignposts): a post
 // of their own beside a few of the others, planted when the first of its games is there. `to`: the games a post

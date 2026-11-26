@@ -121,7 +121,7 @@ const RARELY = 'We write very rarely: a welcome, a thank-you for the Game Pass, 
 export function welcomeMail(site, name) {
   const where = siteOf(site);
   const keeps = ['Everything you buy, on every browser you sign in from', 'Your days in a row, and the animals of light they unlock', 'Your robot: its colours and what it wears', 'Your scores, under your own name'];
-  const first = 'The big wheel at the end of the pier. Mostly Up (it is mostly up). And a word with Billy the alligator, life coach.';
+  const first = 'The big wheel at the end of the pier. Mostly Up (it is mostly up). And a word with Billy the AI, the alligator life coach.';
   const lost = 'Forgot the password one day? In the game: Settings, Your account, "Forgot the password" — a code comes to this address.';
   const text = [
     `Welcome to Atomic Oasis, ${name}!`, '',

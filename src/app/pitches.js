@@ -23,7 +23,7 @@ export const PASS_LINES = [
   {
     eyebrow: 'One hour at the end of the world',
     title: 'An hour already — and still in the factory colour?',
-    lead: 'Billy the alligator has noticed, and he is worried about your personal brand. Sixteen more colours, four sizes, every hat: your robot deserves a glow-up.',
+    lead: 'Billy the AI has noticed, and he is worried about your personal brand. Sixteen more colours, four sizes, every hat: your robot deserves a glow-up.',
     no: 'I like my robot plain',
   },
   {
