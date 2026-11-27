@@ -273,6 +273,18 @@ export class Sanctuary {
     rose(shine, V(0, 10.6, FRONT + 0.05), V(1, 0, 0), V(0, 1, 0), 2.3, V(0, 0, 1), 0.5);
     for (let i = 0; i < 24; i++) { const t0 = (i / 24) * TAU, t1 = ((i + 1) / 24) * TAU, r0 = 2.3, r1 = 2.85, q = (r, t, z) => V(r * Math.cos(t), 10.6 + r * Math.sin(t), z); face(out, q(r0, t0, FRONT + 0.22), q(r1, t0, FRONT + 0.22), q(r1, t1, FRONT + 0.22), q(r0, t1, FRONT + 0.22), V(0, 0, 1), i % 2 ? TRIM : BLUSH, plain); face(out, q(r1, t0, FRONT + 0.22), q(r1, t0, FRONT), q(r1, t1, FRONT), q(r1, t1, FRONT + 0.22), (m) => V(m.x, m.y - 10.6, 0), TRIM, plain); face(out, q(r0, t0, FRONT + 0.22), q(r0, t0, FRONT), q(r0, t1, FRONT), q(r0, t1, FRONT + 0.22), (m) => V(-m.x, 10.6 - m.y, 0), OUT, plain); }
     for (let i = 0; i < 12; i++) { const t = (i / 12) * TAU, c = Math.cos(t), s = Math.sin(t), px = -s * 0.07, py = c * 0.07, z = FRONT + 0.14; face(out, V(0.6 * c - px, 10.6 + 0.6 * s - py, z), V(2.3 * c - px, 10.6 + 2.3 * s - py, z), V(2.3 * c + px, 10.6 + 2.3 * s + py, z), V(0.6 * c + px, 10.6 + 0.6 * s + py, z), V(0, 0, 1), TRIM, plain); }
+    // (a column either side of the doorway carries an outer arch of two stones, standing out from the wall)
+    for (const s of [-1, 1]) turn(out, V(s * 2.88, 0, FRONT + 0.5), [[0.34, 0], [0.34, 0.4], [0.22, 0.55], [0.2, D.spring - 0.55], [0.3, D.spring - 0.3], [0.36, D.spring - 0.1], [0.36, D.spring]], 8, TRIM, { paint: plain });
+    { const r0 = 2.6, r1 = 3.16, z1 = FRONT + 0.8, at = (r, t, z) => V(r * Math.cos(t), D.spring + r * Math.sin(t), z);
+      for (let i = 0; i < 16; i++) { const t0 = (i / 16) * Math.PI, t1 = ((i + 1) / 16) * Math.PI;
+        face(out, at(r0, t0, z1), at(r1, t0, z1), at(r1, t1, z1), at(r0, t1, z1), V(0, 0, 1), i % 2 ? TRIM : BLUSH, plain);
+        face(out, at(r0, t0, z1), at(r0, t0, FRONT), at(r0, t1, FRONT), at(r0, t1, z1), (m) => V(-m.x, D.spring - m.y, 0), OUT, plain);
+        face(out, at(r1, t0, z1), at(r1, t0, FRONT), at(r1, t1, FRONT), at(r1, t1, z1), (m) => V(m.x, m.y - D.spring, 0), TRIM, plain); } }
+    // (a row of five small arches under the gable)
+    for (const u of [-3.4, -1.7, 0, 1.7, 3.4]) for (const [h, y0, z, col] of [[0.56, 13.82, FRONT + 0.02, TRIM], [0.4, 13.98, FRONT + 0.04, DARK]]) {
+      const q = [[-h, y0], ...Array.from({ length: 7 }, (_, i) => { const t = Math.PI - (i / 6) * Math.PI; return [h * Math.cos(t), 14.85 + h * Math.sin(t)]; }), [h, y0]];
+      for (let i = 0; i + 1 < q.length; i++) face(out, V(u + q[i][0], y0, z), V(u + q[i + 1][0], y0, z), V(u + q[i + 1][0], q[i + 1][1], z), V(u + q[i][0], q[i][1], z), V(0, 0, 1), col, plain);
+    }
     // (a band of stone across the front, under the rose; the eaves of the gable)
     slab(out, V, -WO, 7.3, FRONT, WO, 7.7, FRONT + 0.25, TRIM, { faces: 'yYZ', paint: plain });
     for (const s of [-1, 1]) face(out, V(0, gable(0) + 0.0, FRONT + 0.3), V(s * WO, gable(WO), FRONT + 0.3), V(s * WO, gable(WO), FRONT - 0.5), V(0, gable(0), FRONT - 0.5), V(0, 1, 0), TRIM, plain);
