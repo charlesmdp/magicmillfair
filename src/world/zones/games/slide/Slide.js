@@ -560,12 +560,18 @@ export class Slide {
       }
       ab.tint(...STEEL, 1).rod(ends[0], ends[1], 0.1, 6);
     }
-    // ---- the rivers: where the low rims begin, what they are for
+    // ---- the rivers: where the low rims begin, what they are for — on a gantry too, its feet on the outer rims
+    // of the two rivers: nothing stands on the low rims one goes over
     {
-      const first = Math.max(...course.sides.filter((ln) => ln.end === 'join').map((ln) => ln.points.find((v) => Math.abs(v.d) < NEAR).ref));
-      const q = lineAt(course.main, first + 4), fq = frameAt(q, { side: [0, 0, 0], up: [0, 0, 0] }), c = over(q, fq, 0, 6.3);
+      const rivers = course.sides.filter((ln) => ln.end === 'join'), first = Math.max(...rivers.map((ln) => ln.points.find((v) => Math.abs(v.d) < NEAR).ref));
+      const q = lineAt(course.main, first + 4), fq = frameAt(q, { side: [0, 0, 0], up: [0, 0, 0] }), H = 6.6, c = over(q, fq, 0, H - 0.8), ends = [];
       hang(sign('THE THREE RIVERS', 'LOW RIMS · HOLD THE STICK TO GO OVER INTO THE NEXT PIPE', 5.4, 1.2, '#12122e'), c.x, c.y, c.z, q.yaw);
-      for (const sg of [-1, 1]) ab.tint(...STEEL, 1).rod(over(q, fq, sg * 1.45, 0.5), over(q, fq, sg * 2.5, 5.75), 0.08, 6);
+      for (const ln of rivers) {
+        const m = lineAt(ln, sideAt(ln, q.s), {}), fm = frameAt(m, { side: [0, 0, 0], up: [0, 0, 0] }), foot = onTrough(m, fm, ln.side * (m.F + WALL - 0.05), -SHELL).clone(), top = V(foot.x, q.y + H, foot.z);
+        ab.tint(...STEEL, 1).rod(foot, top, 0.1, 6);
+        ends.push(top);
+      }
+      ab.tint(...STEEL, 1).rod(ends[0], ends[1], 0.1, 6);
     }
 
     // ---- the gate on the beach: two striped posts, the name over them, a round mat, the board of the times
