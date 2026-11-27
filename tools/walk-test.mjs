@@ -992,7 +992,7 @@ try {
       !!wall.sheet && wall.sheet[0] <= 2048 && wall.above.length === 9 && wall.above.every((d) => d > 0.2 && d < 3) && wall.lean > 15 && wall.lean < 40 && wall.foot > 0.8 && wall.foot < 3 && wall.faces > 0.85 && wall.pond > 15 && wall.pond < 45
       && wall.shown?.title === 'THANKS TO THOSE COMPANIES, THE GAME IS FREE FOR YOU!' && wall.shown.rows.length === 0 && wall.shown.ghosts === 3 && wall.shown.cols === 1, JSON.stringify(wall));
   }
-  // --- the relics of the world before: twenty-five things all over the valley — twenty by the paths and in the
+  // --- the relics of the world before: thirty things all over the valley — twenty by the paths and in the
   // woods, five where one has to go and look (the top of the tower of those who watch the climb, a hollow of the
   // island, the secret cove, the beach of the golden statues, the grotto behind the waterfall). Each is walked up
   // to: the game offers to look at it, looking says its line — and the last, that they were all found: a
@@ -1005,7 +1005,9 @@ try {
       // on at its height: the telescope at the rail of the tower looks out over the drop)
       // (what one walks on at (x, z), about the height y: the floor of a cave when one is under the rock there —
       // the hill over it is another place —, else the ground or the deck)
-      const col = m.world.collision, standAt = (x, z, y) => { const c = col.caveAt(x, z, y + 0.5); return c ? c.floorAt(x, z) : col.spawnHeight(x, z); };
+      // (…and under the deck of the pier — the jukebox is on the sand there — it is the sand, not the planks over it:
+      // what one stands on at that height)
+      const col = m.world.collision, standAt = (x, z, y) => { const c = col.caveAt(x, z, y + 0.5); return c ? c.floorAt(x, z) : col.groundAt(x, z, y + 0.5); };
       const spot = (q) => { for (const k of [1, -1]) { const x = q.x + k * Math.sin(q.yaw) * (q.r + 1), z = q.z + k * Math.cos(q.yaw) * (q.r + 1); if (Math.abs(standAt(x, z, q.y) - q.y) < 1) return [x, z, k]; } return [q.x + Math.sin(q.yaw) * (q.r + 1), q.z + Math.cos(q.yaw) * (q.r + 1), 1]; };
       const cloud = () => document.querySelector('.emotes [data-mushroom]').textContent;
       const frames = (n) => new Promise((res) => { const target = m.frames + n, tick = () => (m.frames >= target ? res() : requestAnimationFrame(tick)); tick(); });
