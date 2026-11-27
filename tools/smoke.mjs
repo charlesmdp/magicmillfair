@@ -208,7 +208,7 @@ try {
     const more = await page.evaluate(() => ({ stars: (window.__mmf.hud.attractions || []).map((a) => a.id).join(), behind: document.querySelector('[data-set="behind"]')?.getAttribute('aria-pressed') }));
     console.log(`offers, emotes, stars: ${JSON.stringify({ cards, emotes, more })}`);
     if (cards.length !== 2 || cards.some((c) => !c.title || c.perks < 3 || !c.yes || !c.busy || !c.closed) || !/account/i.test(cards[0].yes) || !/Game Pass/.test(cards[1].yes)
-      || !emotes.on || emotes.beasts !== 11 || emotes.drawn < 1 || !emotes.cloud?.last || !emotes.cloud.locked || !/of 25 relics/.test(emotes.cloud.words) || !emotes.cloud.pic || more.stars !== 'climb,race,wing' || more.behind !== 'false') { failed = true; console.log('FAIL: the cards that make an offer, the pictures of the animals in the emotes, the stars of the map or the switch of the camera'); }
+      || !emotes.on || emotes.beasts !== 11 || emotes.drawn < 1 || !emotes.cloud?.last || !emotes.cloud.locked || !/of 30 relics/.test(emotes.cloud.words) || !emotes.cloud.pic || more.stars !== 'climb,race,wing' || more.behind !== 'false') { failed = true; console.log('FAIL: the cards that make an offer, the pictures of the animals in the emotes, the stars of the map or the switch of the camera'); }
   }
   // the story of the opening is told once: the browser that has heard it goes straight to the gate the next time
   // (?intro=1 tells it once more). The page tells a robot nothing: this visitor says it is not one.

@@ -1,6 +1,6 @@
 // Pictures of the games of this folder, taken in the running game (a headless browser), to look at what was built.
 //
-//   node tools/game-shots.mjs <id>[,<id>…] [--q=medium] [--size=1280x720] [--out=<folder>] shot…
+//   node tools/game-shots.mjs <id>[,<id>…] [--q=medium] [--size=1280x720] [--out=<folder>] [--nohud] shot…
 //
 // A shot is
 //   name=x,y,z,yaw,pitch     the free camera, put there (degrees, as tools/shots.mjs: yaw 0 looks north, 90 west,
@@ -71,6 +71,7 @@ try {
       await page.evaluate(([id, c]) => { const a = window.__mmf; a.labGames?.[id]?.leave(false); a.setCam(...c); }, [id, s.v.split(',').map(Number)]);
       await frames(8);
     }
+    if ('nohud' in opt) await page.addStyleTag({ content: '#ui { opacity: 0 !important; }' }); // (--nohud: the world alone, for a picture to show elsewhere)
     await page.screenshot({ path: path.join(OUT, `${s.name}.png`) });
     const info = await page.evaluate((id) => { const a = window.__mmf, r = a.labGames?.[id]?.run(), p = a.engine.perf, q = a.player.pos; return { line: r ? r.line : '', calls: p.calls, tris: p.triangles, at: [+q.x.toFixed(1), +q.y.toFixed(1), +q.z.toFixed(1)] }; }, id);
     console.log(`${s.name}: ${JSON.stringify(info)}`);

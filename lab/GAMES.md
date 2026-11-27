@@ -50,7 +50,7 @@ the arch where one asks to play, a sign on a stake); `tools/lib/check.mjs` what 
 PASS / FAIL, the ground of the world). `src/extras/tunes.js` is their music: a tune for each game, in the notation
 of the climb's (`src/audio/tunes.js`), written on the game's own synthesiser while a run is on — the world's music
 steps back meanwhile — with voices that come in as the run goes on (each game hands the player its own rules: the
-tune of one game loads nothing of another); `node tools/tunes-test.mjs` (165) checks the player and the tunes.
+tune of one game loads nothing of another); `node tools/tunes-test.mjs` (175) checks the player and the tunes; `node lab/tools/tune-listen.mjs spiral,flip --out=<folder>` plays a tune on the game's own sound engine, measures it beside the orchestra of the climb and writes it as a .wav to listen to.
 `tools/game-shots.mjs` takes pictures of a game in the running game: `node tools/game-shots.mjs waves
 far=30,26,-78,-115,-28 gate=gate a=play:8` (its top says how).
 

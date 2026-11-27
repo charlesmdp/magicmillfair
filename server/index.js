@@ -22,6 +22,7 @@ import { Room, MAX_FRAME, NEAR, RANGE, cleanRoom, originAllowed, parseOrigins } 
 import { Limiter, LIMITS, BODY_MAX, allowed, parseBody, mayPost, bodyMax } from './api.js';
 import { stripeConfig } from './stripe.js';
 import { restMailer } from './mail.js';
+import { googleConfig } from './google.js';
 import { route, addBan } from './routes.js';
 import { isUserRoom } from './urooms.js';
 import { knock, roomRules, settle, wardrobeOf } from './door.js';
@@ -186,6 +187,7 @@ function buildId() {
 }
 const api = {
   store, limiter, now: () => Date.now(), stripe: STRIPE,
+  google: googleConfig(process.env), // (signing in with Google, where its two secrets were given: google.js)
   mail: MAIL,
   // what is released is said to every room at once; how many are connected; which version is online (release.js, stats.js)
   build: buildId,
@@ -214,7 +216,7 @@ const api = {
     return directory;
   },
   tell: async (name, message) => { rooms.get(name)?.broadcast(JSON.stringify(message)); },
-  flags: { npc: !!NPC.apiKey, admin: !!ADMIN_KEY, shop: STRIPE.mode || 'off', mail: !!MAIL },
+  flags: { npc: !!NPC.apiKey, admin: !!ADMIN_KEY, shop: STRIPE.mode || 'off', mail: !!MAIL, google: !!googleConfig(process.env) },
   // the secret that signs the notes of the runs: given (SCORE_SECRET), or drawn once and kept with the rest
   async secret() {
     if (!this._secret) {
@@ -259,6 +261,7 @@ async function onApi(req, res, pathname, query) {
     method: req.method, path: pathname, query: new URLSearchParams(query), client,
     body: reading ? null : parseBody(raw, max), admin: sameSecret(bearer, ADMIN_KEY), bearer, geo: geoOf(req),
     raw, signature: String(req.headers['stripe-signature'] || ''), site: `${proto}://${host}`,
+    cookie: String(req.headers.cookie || ''), // (read by one route only: the way back from Google — google.js)
   }, api);
   if (out.bytes) return reply(req, res, out.status, out.bytes, out.headers);
   return json(out.status, out.body, out.headers);

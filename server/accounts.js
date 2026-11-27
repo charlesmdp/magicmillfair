@@ -11,6 +11,10 @@
 //        save    { profile }                                 → { account }             (the look, kept for other browsers)
 //        reset   { name, code, password }                    → { account }             (a new password, with the recovery code
 //                                                                                       — or with the code that was mailed)
+//        google  { claim, name?, profile? }                  → { account, created }    (back from Google: google.js. The account
+//                                                                                       Google stands for — or, the first time, a
+//                                                                                       new one under `name`; { needName } when a
+//                                                                                       name has to be chosen first: the claim waits)
 //   and, where the host can send e-mail (mail.js) — elsewhere no address is ever kept:
 //        create  { …, email? }                               the account carries an address (and is welcomed there: mail.js)
 //        email   { email, password }                         → { account }   (signed in: the address is given, changed, or — '' — taken away)
@@ -24,7 +28,9 @@
 // Kept: `acct:<name in lower case>` → { name, salt, hash, code, created, devices: [device…], items: [what was
 // bought], visit: { day, days, best }, profile: { name, color, hat, paint, trail, size }, fails, lock,
 // pass: the Game Pass ({ sub, customer, since } — or { gift: true, until }), first: when they first came (ms),
-// email (an address, when one was given), mail: { code, until } (the code that was mailed), mailed: [when] };
+// email (an address, when one was given), mail: { code, until } (the code that was mailed), mailed: [when],
+// google (the number Google gives its owner for this site, when they sign in that way — such an account may have
+// no password at all: no `hash`, no `code`) }; `goog:<that number>` → { acct } (the account it stands for);
 // `dev:<device>` → { acct } (the account a browser is attached to). A browser without an account keeps the
 // same `pass` and `first` in its own record, `own:<device>` (see shop.js).
 import { randomId, sameSecret } from './token.js';
@@ -32,6 +38,7 @@ import { cleanName } from './protocol.js';
 import { nameOk } from './decency.js';
 import { COLORS, sizeOf } from './items.js';
 import { cleanEmail, maskEmail, codeMail, mailLater, welcomeMail } from './mail.js';
+import { readClaim, dropClaim } from './google.js';
 
 const enc = new TextEncoder();
 const ROUNDS = 100_000, DEVICES = 12, FAILS = 10, LOCK = 15 * 60_000;
@@ -164,7 +171,7 @@ async function attach(store, acct, device, now) {
   if (pass && pass.sub && pass === mine.pass) await store.put(`sub:${pass.sub}`, { device, account: acct.name.toLowerCase(), at: now });
   return next;
 }
-const shown = (acct) => ({ name: acct.name, profile: acct.profile || null, devices: (acct.devices || []).length, ...(acct.email && { email: maskEmail(acct.email) }) });
+const shown = (acct) => ({ name: acct.name, profile: acct.profile || null, devices: (acct.devices || []).length, ...(acct.email && { email: maskEmail(acct.email) }), ...(acct.google && { google: true }), ...(!acct.hash && { passwordless: true }) });
 
 /** Answers /api/account; returns nothing for any other path. `limited(name)`: has this address asked too often? */
 export async function accountRoute(req, ctx, limited) {
@@ -192,8 +199,36 @@ export async function accountRoute(req, ctx, limited) {
     await store.put(keyOf(acct.name), next);
     return out(200, { account: shown(next) });
   }
-  if (action !== 'create' && action !== 'login' && action !== 'reset' && action !== 'email' && action !== 'mailcode') return out(400, { error: 'Unknown action.' });
+  if (action !== 'create' && action !== 'login' && action !== 'reset' && action !== 'email' && action !== 'mailcode' && action !== 'google') return out(400, { error: 'Unknown action.' });
   if (limited('account')) return out(429, { error: 'Too many tries: wait a minute.' }, { 'Retry-After': '60' });
+  if (action === 'google') {
+    // back from Google (google.js): this browser claims what Google said — the game's page does, in the browser
+    // that went there. The account Google stands for is signed in to; the first time there is none: Google is
+    // added to the account this browser is signed in to, or a new account is made under the name asked for
+    const said = await readClaim(store, body.claim, now);
+    if (!said) return out(403, { error: 'That sign-in has expired. Try again.' });
+    const link = await store.get(`goog:${said.sub}`);
+    let acct = link?.acct ? await store.get(`acct:${link.acct}`) : null, created = false;
+    if (acct && acct.google !== said.sub) acct = null; // (an account that let Google go since)
+    if (!acct) {
+      const mine = await accountOf(store, device);
+      if (mine) acct = { ...mine, google: said.sub, ...(ctx.mail && !mine.email && said.email && cleanEmail(said.email) && { email: cleanEmail(said.email) }) };
+      else {
+        // (the name: the one typed on the card, else the one the robot wears — never guessed from Google)
+        const asked = [body.name, said.want].find((n) => typeof n === 'string' && n.trim()), wanted = accountName(asked);
+        if (!wanted || GUEST_NAME.test(wanted)) return out(409, { needName: true, error: asked && !nameOk(String(asked)) ? 'That name cannot be worn here: pick another.' : 'Choose a name for your account: 3 to 16 letters or digits.' });
+        if (await store.get(keyOf(wanted))) return out(409, { needName: true, error: `The name “${wanted}” is taken. Choose another.` });
+        const email = ctx.mail && said.email ? cleanEmail(said.email) : '';
+        acct = { name: wanted, salt: randomId(16), created: now, devices: [], items: [], visit: null, profile: cleanProfile(body.profile), fails: 0, lock: 0, google: said.sub, ...(email && { email }) };
+        created = true;
+      }
+      await store.put(`goog:${said.sub}`, { acct: acct.name.toLowerCase(), at: now });
+    }
+    await dropClaim(store, body.claim, now);
+    const made = await attach(store, acct, device, now);
+    if (created && made.email) mailLater(ctx, { to: made.email, ...welcomeMail(req.site || '', made.name) });
+    return out(200, { account: shown(made), created });
+  }
   if (action === 'email') {
     // the address of an account: given, changed or taken away from a browser that is signed in — with the password
     const acct = await accountOf(store, device);

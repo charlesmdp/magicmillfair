@@ -111,6 +111,38 @@ Worker sees — `"npc": true`, `"admin": true` — without showing any of it.
 | `STRIPE_SECRET_KEY` | **Opens the shop.** The secret key of your Stripe account: `sk_test_…` to try with test cards, `sk_live_…` to sell. Without it nothing is sold and everything is free (see *The shop*). |
 | `STRIPE_WEBHOOK_SECRET` | The signing secret (`whsec_…`) of the webhook that Stripe calls when something is paid, when a month more is paid and when a subscription ends. A payment is also believed when its buyer comes back to the game (the server then asks Stripe itself), so a shop without it still gives what was paid for — but nothing then tells of a buyer who closed the page before coming back, nor of a subscription that ended: its place, its pass or its room would never be handed back. See *The shop* for the steps. |
 | `STRIPE_PUBLISHABLE_KEY` | Optional: Stripe's *publishable* key (`pk_test_…` / `pk_live_…`, of the same mode as the secret key). With it the payment form is shown **inside the game**, on a card, instead of sending the visitor to Stripe's page (see *The shop*, step 5). It is not a secret — browsers are meant to read it — but adding it as one makes it survive deployments. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional: **signing in with Google.** With both, the card of the account has a button "Continue with Google" (and `/api/status` says `"google": true`); without them nothing of it exists. See *Signing in with Google*, below. |
+
+**Signing in with Google** (optional). An account of the game is a name; Google only says "this is the same
+person as last time" — the game asks it for nothing but who signs in and their e-mail address, and never sees a
+Google password (`server/google.js`; `node tools/google-test.mjs`, 16 checks against a stand-in for Google).
+To switch it on:
+
+1. In the [Google Cloud console](https://console.cloud.google.com/), create a project (any name), then
+   *APIs & Services → OAuth consent screen* (it may be called *Google Auth Platform → Branding*): the name of
+   the app as visitors will read it on Google's page ("Atomic Oasis"), an address for support, *External*
+   users. Under *Data access* (scopes) nothing has to be added: `openid` and `email` are there by default.
+   Then **publish the app** (*Audience → Publish app*): left "in testing", only the addresses you list
+   yourself can sign in. With these two scopes Google asks for no review.
+2. *Credentials* (or *Clients*) *→ Create OAuth client ID → Web application*. Under **Authorised redirect
+   URIs** add exactly `https://<your site>/api/google/callback` (the address visitors type, `https`, no slash
+   at the end; one line for each address the site answers on). Google shows a *Client ID* and a *Client
+   secret*.
+3. Give both to the Worker as secrets, as above: `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, then deploy
+   once more.
+
+What a visitor then sees: *Continue with Google* on the card of the account and in the settings; Google's page,
+where they choose an account; and back in the game, signed in. The first time, an account of the game is made
+under the name typed on the card — or the name their robot wears; when that name is taken, or is a visitor's
+("Visitor 42"), the card asks for one. Such an account has no password. Who already has an account with a
+password and uses the button while signed in adds Google to it: both ways in work from then on.
+
+**What a link to the game shows** where it is pasted — a chat, a social network: its title, a line and a picture
+(`public/share.jpg`, 1200 × 630: the pier and its wheel seen from the sea; made again with
+`node tools/game-shots.mjs - --q=high --size=1200x630 --nohud b=190,45,-60,128,-12` and a title laid over it).
+Those who fetch that picture want its whole address: give the build a variable `SITE_URL` (dashboard → the
+Worker → **Settings** → **Build** → *Variables*: `SITE_URL` = `https://<your site>`, no slash at the end), and
+deploy once more. Without it the picture is named from the root of the site, which only some of them accept.
 
 Billy answers whatever is said to him — a question, a hello, a bad day — one line at a time, and follows
 the conversation: the model is sent that line and the three exchanges before it **of the same visitor**. A

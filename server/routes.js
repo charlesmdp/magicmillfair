@@ -40,6 +40,7 @@ import { shopRoute, notifyRoute } from './shop.js';
 import { adminOf, listAdmins, removeAdmin } from './admins.js';
 import { cleanGeo, noteVisit, visitorsReport } from './visitors.js';
 import { accountRoute, visitRecord, accountOf, isAccountName } from './accounts.js';
+import { googleRoute } from './google.js';
 import { localDay, visit } from './visits.js';
 import { readRelease, releaseNews, releaseRoute } from './release.js';
 import { doorRoute } from './door.js';
@@ -304,6 +305,8 @@ export async function route(req, ctx) {
   }
 
   // an account, to keep things from one browser to the next (accounts.js)
+  const google = await googleRoute(req, ctx, limited);
+  if (google) return google;
   const account = await accountRoute(req, ctx, limited);
   if (account) return account;
 

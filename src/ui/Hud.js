@@ -230,6 +230,7 @@ export class Hud {
       <div class="top-left">
         <div class="pill zone">The Mill</div>
         <button class="pill players" type="button" title="Who is here"><span class="dot"></span><span class="count">On your own</span></button>
+        <button class="pill relics" type="button" title="The relics of the world before: how many you have found" hidden><span class="rad" aria-hidden="true">☢</span><span class="n">0 / 30</span></button>
         <button class="pill as-visitor" type="button" title="Back to the administrator's view" hidden>${ICON.cam}<span>Visitor's view · back to admin</span></button>
       </div>
       <div class="top-right">
@@ -241,6 +242,7 @@ export class Hud {
         <button class="icon" data-act="settings" title="Settings" aria-label="Settings">${ICON.gear}</button>
       </div>
       <div class="toast"><small>Now entering</small><span></span></div>
+      <div class="relic-card" role="status"><small>Relic found</small><b></b><div class="pips"></div></div>
       <div class="pill note"></div>
       <div class="pill run" aria-live="off"></div>
       <div class="tags"></div>
@@ -462,6 +464,10 @@ export class Hud {
     this.rosterEl = h.querySelector('.roster');
     this.rosterOpen_ = new Set(); // (the visitors whose every detail is unfolded: "See more")
     h.querySelector('.players').onclick = (e) => { e.currentTarget.blur(); this.emit('roster'); };
+    // (the count of the relics found, always in sight: pressed, it says what they are and what finding them all gives)
+    this.relicsEl = h.querySelector('.relics'); this.relicCard = h.querySelector('.relic-card');
+    this.relicsEl.onclick = (e) => { e.currentTarget.blur(); this.emit('relics'); };
+    for (const ev of ['mousedown', 'touchstart']) this.relicsEl.addEventListener(ev, (e) => e.stopPropagation());
     this.rosterEl.querySelector('.close').onclick = () => this.closeRoster();
     this.rosterEl.querySelector('.see-as').onclick = () => { this.closeRoster(); this.emit('visitorview', true); };
     this.rosterEl.querySelector('.wear').onclick = () => this.emit('badge');
@@ -503,7 +509,7 @@ export class Hud {
    * 'account' is emitted with 'create', 'login', 'reset', 'logout' — or 'email' (`mail`: the server can send
    * e-mails; `email`: the address of the account, most of it hidden).
    */
-  setAccount({ name = null, available = false, mail = false, email = '' } = {}) {
+  setAccount({ name = null, available = false, mail = false, email = '', google = false, viaGoogle = false, passwordless = false } = {}) {
     const box = this.hud.querySelector('.acct'), info = box.querySelector('.acct-info'), acts = box.querySelector('.acct-acts');
     box.hidden = !available;
     acts.textContent = '';
@@ -513,14 +519,19 @@ export class Hud {
       info.append('Signed in as ', el('b', '', ''), '. What you buy, your days in a row and the look of your robot follow you to any browser you sign in from.');
       info.querySelector('b').textContent = name;
       act('Sign out', 'logout');
-      if (mail) {
+      // (an account Google opens, without a password of its own: there is no password to forget, and none to ask
+      // for before its address is changed)
+      if (viaGoogle) info.append(passwordless ? ' You sign in to it with Google: it has no password.' : ' You can also sign in to it with Google.');
+      if (mail && !passwordless) {
         info.append(email ? ` If you forget the password, a code can be mailed to ${email}.` : ' No e-mail is kept for it: with one, a code can be mailed to you if you forget the password.');
         act(email ? 'Change the e-mail' : 'Add an e-mail', 'email', 'quiet');
       }
+      if (google && !viaGoogle) act('Sign in with Google too', 'google', 'quiet');
     } else {
       info.textContent = 'You are playing as a guest: what you buy and earn is kept in this browser only. An account — a name and a password, nothing else — keeps it wherever you sign in.';
       act('Create an account', 'create', 'main');
       act('Sign in', 'login');
+      if (google) act('Continue with Google', 'google');
       act('Forgot the password', 'reset', 'quiet');
     }
   }
@@ -534,8 +545,24 @@ export class Hud {
     b.textContent = found >= total ? '☢ Mushroom cloud' : `☢ Mushroom cloud — find the ${total} relics (${found} found)`;
     b.classList.toggle('locked', found < total);
     this._relics = { found, total };
+    if (this.relicsEl) { this.relicsEl.hidden = !(total > 0); this.relicsEl.querySelector('.n').textContent = `${found} / ${total}`; this.relicsEl.classList.toggle('done', total > 0 && found >= total); }
     const card = this.emotes.querySelector('.zoo .beast.cloud');
     if (card) this._cloudCard(card);
+  }
+  /**
+   * A relic was found for the first time: the count, large, in the middle of the screen for a few seconds — one
+   * dot for each relic there is, those found filled — and the small count at the top left gives a start.
+   */
+  relicFound(found, total) {
+    const c = this.relicCard, pips = c.querySelector('.pips');
+    c.querySelector('small').textContent = found >= total ? 'The last relic — you found them all' : 'Relic found';
+    c.querySelector('b').textContent = `${found} of ${total}`;
+    pips.textContent = '';
+    for (let i = 0; i < total; i++) pips.append(el('i', i < found ? (i === found - 1 ? 'on new' : 'on') : ''));
+    c.classList.add('show');
+    clearTimeout(this._trc);
+    this._trc = setTimeout(() => c.classList.remove('show'), 9000);
+    this.relicsEl.classList.remove('bump'); void this.relicsEl.offsetWidth; this.relicsEl.classList.add('bump');
   }
   /** The tile of the mushroom cloud, after the animals of light: locked — its picture greyed — until every relic is found. */
   _cloudCard(c) {

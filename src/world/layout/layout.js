@@ -793,7 +793,7 @@ export const SIGNPOSTS = [
 // rock, its foot `lift` above the grass. How it leans and bends is the rock's own business (it reads the cliff).
 export const THANKS_WALL = { x: -268.05, z: -82.2, yaw: 70 * DEG, width: 28, height: 10, lift: 1.3 };
 
-// Twenty-five things left over from the world before (zones/games/Relics.js: what each is and says), all over
+// Thirty things left over from the world before (zones/games/Relics.js: what each is and says), all over
 // the valley. (x, z): a wish — the nearest free ground is taken (dry, level, off the path, clear of the trees and
 // of what is built) — or, `fixed`, the very spot (chosen by eye); `by`: [a path, how far along it (0 … 1), how
 // many metres to its side] — it stands on the verge of that path and looks at it; `face`: the point it looks
@@ -832,6 +832,16 @@ export const RELICS = [
   { id: 'postcards', x: 200.4, z: -265.2, face: [199.5, -259] },
   // in the grotto behind the waterfall, against the wall of its great chamber, across from the table
   { id: 'tins', x: -295.0, z: 128.0, y: CAVES[0].nodes[2][3], fixed: true, under: true, face: [-297.5, 123.5] },
+  // …and five more, hidden: under the pier, on the dry sand between its piles, where the deck leaves the promenade
+  (() => { const [x, z] = pierToWorld(16.5, 1.5), f = pierToWorld(16.5, 14); return { id: 'jukebox', x, z, fixed: true, under: true, face: f }; })(),
+  // on the deck of the pier, against its north rail, past the last booth of the walk: it looks across the walk
+  (() => { const [x, z] = pierToWorld(66, -7.3), f = pierToWorld(66, 0); return { id: 'photobooth', x, z, y: PIER.deckY, fixed: true, face: f }; })(),
+  // at the very end of the pier, its back to the sea: it looks at whoever has walked that far
+  (() => { const [x, z] = pierToWorld(130.6, 7), f = pierToWorld(118, 7); return { id: 'fortune', x, z, y: PIER.deckY, fixed: true, face: f }; })(),
+  // in the hollow behind the beach of the secret cove, well away from the bottle: it faces the sea
+  { id: 'television', x: COVE.x - 6.5, z: COVE.z + 13.5, face: [COVE.x + 42, COVE.z] },
+  // on the island of the willow, in the west of the great pond: one swims there (it looks at the pond deck)
+  { id: 'light', x: -199, z: 105.5, face: [POND_DECK.x, POND_DECK.z] },
 ];
 
 // What stands on the way for visitors to read (zones/games/Notices.js): the banner and the rules where one
