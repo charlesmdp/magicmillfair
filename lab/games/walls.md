@@ -70,33 +70,34 @@ every floor a blind arcade — pilasters down to the rock or to the terrace of t
 each two, a pale roll round it; dark arched windows high in the walls; vines down from the tops of the walls and
 over the kerbs; striped awnings of the fair's cloth over six of the saves (only where the wall is high enough and
 no band follows: the camera never has one before it); bunting from mast to mast along the tops of the outer
-walls; merlons, some fallen. One group in the scene, `walls`, of 41,000 triangles in all; what never moves is one merged
-piece (five materials); the four blades, the two fields of spikes and the twelve slabs are small pieces of their
-own, moved only while somebody is within 320 m; the plaques of the saves and the slabs are drawn from within
-110 m only. The rock is grey, boulders on its shore; under the gaps of the outer lap one sees it, 4 m down and more, and
-under those of the inner laps the terrace of the lap outside.
+walls; merlons, some fallen. One group in the scene, `walls`, of 41,000 triangles in all; what never moves is
+one merged piece (five materials); the four blades, the two fields of spikes and the twelve slabs are small
+pieces of their own, moved only while somebody is within 320 m; the plaques of the saves and the slabs are drawn
+from within 110 m only. The rock is grey, boulders on its shore; under the gaps of the outer lap one sees it,
+4 m down and more, and under those of the inner laps the terrace of the lap outside.
 
 **With others.** Several run at once, each on their own clock, and see each other where the network says they
 are; nobody is solid. The blades and the spikes are the same for everybody at every moment. The slabs that give
 way do so for who treads on them only: somebody else's slabs are whole.
 
-**What the checks say** (`node tools/walls-test.mjs`, 31 of 31; its last line is the line of
+**What the checks say** (`node tools/walls-test.mjs`, 32 of 32; its last line is the line of
 `server/scores.js`): the place (water under all of it, the gate dry and inside the bounds); the plan (each lap at
-least 8.1 m over the one outside it, the tallest band 6.6 m; the corners carry nothing but steps); the saves;
-each move does what it says and its gap is a fall without it; each jump may come at any moment of 0.6 to
-0.85 s, the kick from wall to wall of 0.95 s; every blade
-and field of spikes lets one by at a run for at least a quarter of a second at a stretch (a blade always leaves
-one side of the way free: it is read and gone round, never only waited for; the spikes are jumped at any moment);
+least 8.1 m over the one outside it, the tallest band 6.6 m; the corners carry nothing but steps); the line from
+the camera to the runner, followed all along the way and across it, passes clear of every turret and of the
+walls that stand on the right; the saves; each move does what it says and its gap is a fall without it; each jump
+may come at any moment of 0.6 to 0.85 s, the kick from wall to wall of 0.95 s; every blade and field of spikes
+lets one by at a run for at least a quarter of a second at a stretch (on a floor a blade always leaves one side
+of the way free: it is read and gone round; the spikes are jumped at any moment);
 a fall winds back to a footing a stride before the edge, three times, then it is the save; a save fills the
 reserve. **The runner that plays by itself** tries, on a copy of itself and with the same rules, what it could do
 two seconds ahead — a lane, the button now or later, twice, three times — and never presses sooner than a
 quarter of a second after deciding to: it reaches the top without a fall in **48.8 s** (17 presses), whenever it
-starts. **A clumsy one** — a third of its presses never come, most of the others come 0.1 to 0.4 s late — falls one to five
-times, is wound back each time, and reaches the top in 53 to 65 s. Who stands still stays at the start; who only
+starts. **A clumsy one** — a third of its presses never come, most of the others come 0.1 to 0.4 s late — falls
+one to five times, is wound back each time, and reaches the top in 53 to 65 s. Who stands still stays at the start; who only
 runs falls at the second hole. `heatOf(state)` is how far the run has come (it never goes back down after a
 fall). The board: `walls: { order: 'asc', min: 38000, max: 1800000 }` — 38.3 s is the whole way at the speed a
 bar throws one at. In the running game (`node tools/play-test.mjs walls`, 13 of 13) it is offered at its gate,
-played by its bot to the top (49.07 s there), its score told and kept.
+played by its bot to the top (49 s there), its score told and kept.
 
 **What it does not do, and what nobody has seen.**
 
@@ -108,12 +109,12 @@ played by its bot to the top (49.07 s there), its score told and kept.
   been watched in motion. The robot uses the stock clips (run, jump, walk): it does not put its hands on the bar
   nor on an edge.
 - **The blades never force a wait**, and the spikes are simply jumped: what keeps time is read, not waited for.
-  Only the blade over the ledge and the one over the thin ice can shut the way, and the bot was never seen to
-  stop for either.
+  Only the blade over the ledge can shut the way, and the bot was never seen to stop for it.
 - **The ruin has no walls for who is not playing**: it stands in water one may swim in, and a swimmer goes
   through its rock. One cannot walk in it: one is put on it by the game, and taken off.
-- **The slabs fall for who treads on them only**, and the others' robots are shown as the network places them:
-  upright, where they are — not leaning along a wall.
+- **The slabs fall for who treads on them only**, and the others' robots are shown where the network places
+  them: whether their lean along a wall or their swing under a bar shows for the others has not been looked at
+  (two browsers were never run together).
 - The action "Leave the ruin" is shown by the game under the middle of the picture, as in every game of this
   kind: it sits just under the robot.
 - The save at 25 m lies where one takes off for the first band: who jumps before its line is saved only on the
