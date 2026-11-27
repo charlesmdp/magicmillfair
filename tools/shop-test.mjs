@@ -1080,6 +1080,47 @@ try {
         JSON.stringify({ before4, fetched, form4, asked: String(asked4).slice(0, 160), done4, fall4 }));
     } finally { server2.kill(); }
   }
+  // ---- paying takes an account: a visitor who has none is asked for one first, and the payment goes on with it.
+  // (Everywhere above the visitors pay as they are — the tools' pages only ask for the account when the address
+  // says so, ?gate: this is that page.)
+  {
+    const gated = await browser.newContext({ viewport: { width: 960, height: 760 }, deviceScaleFactor: 1 });
+    await gated.route('https://checkout.stripe.test/**', (route) => route.fulfill({ contentType: 'text/html', body: '<title>pay</title>the payment page' }));
+    const g = await gated.newPage();
+    g.on('pageerror', (e) => logs.push(e.message));
+    await g.goto(`${BASE}/?q=${opt.q || 'low'}&gate`);
+    await g.waitForSelector('.card.ready', { timeout: 240000 });
+    await g.click('.go');
+    await g.waitForFunction(() => window.__mmf && window.__mmf.ready && window.__mmf.player && window.__mmf.shop.open, null, { timeout: 60000 });
+    const devG = await g.evaluate(() => localStorage.getItem('mmf.device'));
+    await g.click('.shop-icon');
+    await g.waitForSelector('.shop.on', { timeout: 20000 });
+    await g.evaluate(() => document.querySelector('.shop .card[data-item="hat:wizard"]').click());
+    asked.length = 0;
+    await g.click('.shop .detail .acts .buy');
+    await g.waitForSelector('.account.on', { timeout: 20000 });
+    const cardG = await g.evaluate(() => ({ mode: document.querySelector('.account .sheet').dataset.mode, why: document.querySelector('.account .error').textContent, url: location.href }));
+    const askedBefore = asked.length;
+    // ("Not now": nothing is paid, and one is where one was)
+    await g.evaluate(() => document.querySelector('.account .x').click());
+    await g.waitForFunction(() => !document.querySelector('.account.on'), null, { timeout: 10000 });
+    const afterNo = { asked: asked.length, url: await g.evaluate(() => location.href) };
+    // (the account is made on the card — this server sends no e-mail: a name and a password —, its code is noted, and the payment page opens)
+    await g.click('.shop .detail .acts .buy');
+    await g.waitForSelector('.account.on', { timeout: 20000 });
+    await g.fill('.account input[name="name"]', 'Gated Gus');
+    await g.fill('.account input[name="password"]', 'a-long-password');
+    await g.fill('.account input[name="again"]', 'a-long-password');
+    await g.click('.account .submit');
+    await g.waitForSelector('.account .sheet.is-done', { timeout: 20000 });
+    await Promise.all([g.waitForURL('https://checkout.stripe.test/**', { timeout: 30000 }), g.click('.account .done .ok')]);
+    const acctG = await (await fetch(`${BASE}/api/account?device=${devG}`)).json();
+    await gated.close();
+    check('paying takes an account: a visitor without one is asked for it first — closing the card pays nothing —, and with the account made the payment page opens for what was chosen, from the browser that is now signed in',
+      cardG.mode === 'create' && /Before the payment/.test(cardG.why) && cardG.url.startsWith(BASE) && askedBefore === 0 && afterNo.asked === 0 && afterNo.url.startsWith(BASE)
+      && asked[0]?.get('metadata[item]') === 'hat:wizard' && asked[0].get('metadata[device]') === devG && acctG.account?.name === 'Gated Gus',
+      JSON.stringify({ cardG, askedBefore, afterNo, item: asked[0]?.get('metadata[item]'), account: acctG.account?.name }));
+  }
   check('no error in the page', logs.length === 0, logs.join(' | '));
 } catch (err) {
   check('the test ran to its end', false, String(err && err.stack ? err.stack : err).slice(0, 600));

@@ -443,6 +443,11 @@ button.pill.relics:hover { border-color: rgba(242, 193, 78, 0.7); }
 #ui .account .meter[data-level='4'] b { width: 100%; background: #5fe08a; }
 #ui .account .f-code, #ui .account .f-again, #ui .account .f-email { display: none; }
 #ui .account .sheet[data-mode='reset'] .f-code, #ui .account .sheet[data-mode='create'] .f-again, #ui .account .sheet[data-mode='create'].has-mail .f-email { display: grid; }
+/* "How should we call you?": a name and an address; the link that was mailed: a password, twice */
+#ui .account .sheet[data-mode='join'] .f-email, #ui .account .sheet[data-mode='setpw'] .f-again { display: grid; }
+#ui .account .sheet[data-mode='join'] .f-email em { display: none; }
+#ui .account .sheet[data-mode='join'] .tabs, #ui .account .sheet[data-mode='join'] .f-password, #ui .account .sheet[data-mode='setpw'] .tabs, #ui .account .sheet[data-mode='setpw'] .f-name, #ui .account .sheet[data-mode='setpw'] .links, #ui .account .sheet[data-mode='setpw'] .perks { display: none; }
+#ui .account .sheet[data-mode='join'] .head h2 { font-size: 23px; }
 #ui .account .error { min-height: 18px; margin: 0; font-size: 13px; color: #ff9a86; }
 #ui .account .error.good { color: #a8f08f; }
 #ui .account .error:empty { display: none; }
@@ -459,8 +464,9 @@ button.pill.relics:hover { border-color: rgba(242, 193, 78, 0.7); }
 #ui .account .sheet[data-mode='name'] .tabs, #ui .account .sheet[data-mode='name'] .f-password, #ui .account .sheet[data-mode='name'] .links { display: none; }
 #ui .account .links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 14px; margin: 0; }
 #ui .account .link { padding: 2px 0; border: 0; background: none; color: #ffe9a6; font: 500 13px/1.2 system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-#ui .account .link.mailcode, #ui .account .link.back { display: none; }
-#ui .account .sheet[data-mode='reset'] .link.forgot, #ui .account .sheet[data-mode='create'] .link.forgot { display: none; }
+#ui .account .link.mailcode, #ui .account .link.back, #ui .account .link.have, #ui .account .link.later { display: none; }
+#ui .account .sheet[data-mode='reset'] .link.forgot, #ui .account .sheet[data-mode='create'] .link.forgot, #ui .account .sheet[data-mode='join'] .link.forgot { display: none; }
+#ui .account .sheet[data-mode='join'] .link.have, #ui .account .sheet[data-mode='join'] .link.later { display: inline; }
 #ui .account .sheet[data-mode='reset'] .link.back { display: inline; }
 #ui .account .sheet[data-mode='reset'].has-mail .link.mailcode { display: inline; }
 #ui .account .done { display: none; text-align: center; }
@@ -796,6 +802,11 @@ body.dead #view { filter: grayscale(1) contrast(1.15) brightness(0.72); }
 .acct-acts button { padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.08); font-size: 13px; }
 .acct-acts button.main { border-color: rgba(242, 193, 78, 0.7); background: rgba(242, 193, 78, 0.2); font-weight: 700; }
 .acct-acts button.quiet { border-color: transparent; background: none; color: var(--ink-soft) !important; text-decoration: underline; padding-left: 4px; }
+/* a button that leads to Google: its G before the words; "Continue with Google" is white, as Google asks */
+.acct-acts button.with-g { display: inline-flex; align-items: center; gap: 8px; }
+.acct-acts button.with-g .g { flex: none; }
+.acct-acts button.google { background: #fff; border-color: #dadce0; color: #1f1f1f !important; font-weight: 600; }
+.acct-acts button.google:hover { background: #f4f6fb; }
 .open-shop { width: 100%; padding: 10px 12px; border-radius: 11px; border: 1px solid rgba(242, 193, 78, 0.7); background: linear-gradient(135deg, rgba(242, 193, 78, 0.28), rgba(232, 85, 78, 0.2)); color: var(--ink); font: inherit; font-weight: 700; letter-spacing: 0.02em; }
 .shop { position: absolute; inset: 0; z-index: 18; display: none; pointer-events: auto; flex-direction: column; overflow: hidden; outline: none; color: #fff;
   background: radial-gradient(120% 90% at 85% -10%, #7b3ff2 0%, rgba(123, 63, 242, 0) 55%), radial-gradient(90% 80% at -10% 110%, #0fb5e6 0%, rgba(15, 181, 230, 0) 55%), linear-gradient(160deg, #1b1f6b 0%, #2a1a7a 45%, #14104a 100%); }

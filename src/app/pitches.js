@@ -53,7 +53,7 @@ export const PASS_LINES = [
 ];
 
 /** When each card of an account is due: so long after the first visit (ms) — each between two of the Game Pass. */
-export const ACCOUNT_TIMES = [10 * MIN, 40 * MIN, 90 * MIN, 12 * HOUR, 36 * HOUR, 60 * HOUR];
+export const ACCOUNT_TIMES = [5 * MIN, 40 * MIN, 90 * MIN, 12 * HOUR, 36 * HOUR, 60 * HOUR]; // (the first: five minutes in — "How should we call you?", asked at once: main.js)
 
 /** What each card of an account says (as PASS_LINES). */
 export const ACCOUNT_LINES = [
@@ -100,7 +100,7 @@ export const ACCOUNT_PERKS = [
   ['Your name', 'nobody else can use it'],
   ['Scores that last', 'week, month and all time'],
   ['Every device', 'purchases, streak, animals'],
-  ['No small print', 'a name, a password — done'],
+  ['No small print', 'a name, an e-mail — done'],
 ];
 
 /** The last of `times` whose moment has come since `first` and that was not passed (`seen` passed so far): its number, or -1. */

@@ -38,12 +38,14 @@ check('what the card says the pass gives is what the pass gives: its five lines,
   PASS.summary.length === PASS.perks.length && PASS.summary.every(([what, more]) => what && more && what.length <= 18 && more.length <= 26), PASS.summary.map(([w]) => w).join(', '));
 
 // ---- the cards of an account: six too, each between two of the Game Pass
-check('six cards of an account too, each between two of the Game Pass: ten minutes, forty, an hour and a half, half a day, a day and a half, two days and a half',
-  ACCOUNT_TIMES.join() === [10 * MIN, 40 * MIN, 90 * MIN, 12 * HOUR, 36 * HOUR, 60 * HOUR].join() && ACCOUNT_LINES.length === ACCOUNT_TIMES.length
+// (the first comes five minutes in — "au bout de 5mn de jeu", asked the owner: it is the question itself, "How should we call you?")
+check('six cards of an account too, each between two of the Game Pass: five minutes, forty, an hour and a half, half a day, a day and a half, two days and a half',
+  ACCOUNT_TIMES.join() === [5 * MIN, 40 * MIN, 90 * MIN, 12 * HOUR, 36 * HOUR, 60 * HOUR].join() && ACCOUNT_LINES.length === ACCOUNT_TIMES.length
   && ACCOUNT_TIMES.every((t, k) => t < PASS_TIMES[k] && (k === 0 || t > PASS_TIMES[k - 1])), ACCOUNT_TIMES.map((t) => `${t / MIN} min`).join(', '));
 const acc = (ms, seen = 0) => accountDue(T0, seen, T0 + ms);
 const accCases = {
-  'five minutes in: nothing yet': [acc(5 * MIN), -1],
+  'four minutes in: nothing yet': [acc(4 * MIN), -1],
+  'five minutes in: the first': [acc(5 * MIN), 0],
   'ten minutes in: the first': [acc(10 * MIN), 0],
   'forty-one minutes in, the first seen: the second': [acc(41 * MIN, 1), 1],
   'back the next morning with one seen: the fourth (half a day) — the second and the third are skipped': [acc(14 * HOUR, 1), 3],

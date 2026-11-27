@@ -28,6 +28,8 @@ const ICON = {
 // the emotes on the keys 1 to 0: the six gestures of the model, then cheering on (see EMOTE_LIST)
 const QUICK = ['wave', 'dance', 'thumbsup', 'yes', 'no', 'punch', 'cheer', 'clap', 'hype', 'rage'];
 const hex = (i) => `#${AVATAR_COLORS[((i % 16) + 16) % 16].toString(16).padStart(6, '0')}`;
+/** Google's G (its own drawing and colours, as its guidelines ask), for the buttons that lead to Google. */
+const GOOGLE_G = '<svg class="g" viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>';
 
 // A country, as its two letters say: its flag (an emoji made of the two letters — drawn as a flag wherever
 // the system has them, as the letters themselves elsewhere) and its name in English.
@@ -509,11 +511,13 @@ export class Hud {
    * 'account' is emitted with 'create', 'login', 'reset', 'logout' — or 'email' (`mail`: the server can send
    * e-mails; `email`: the address of the account, most of it hidden).
    */
-  setAccount({ name = null, available = false, mail = false, email = '', google = false, viaGoogle = false, passwordless = false } = {}) {
+  setAccount({ name = null, available = false, mail = false, email = '', google = false, viaGoogle = false, passwordless = false, invited = false } = {}) {
     const box = this.hud.querySelector('.acct'), info = box.querySelector('.acct-info'), acts = box.querySelector('.acct-acts');
     box.hidden = !available;
     acts.textContent = '';
-    const act = (label, what, cls = '') => { const b = el('button', cls); b.type = 'button'; b.textContent = label; b.onclick = () => { this.panel.classList.remove('on'); this.emit('account', what); }; acts.append(b); };
+    const act = (label, what, cls = '') => { const b = el('button', cls); b.type = 'button'; b.textContent = label; b.onclick = () => { this.panel.classList.remove('on'); this.emit('account', what); }; acts.append(b); return b; };
+    // (Google's own G, in its four colours, before the words of a button that leads to Google)
+    const withG = (b) => { b.classList.add('with-g'); b.insertAdjacentHTML('afterbegin', GOOGLE_G); return b; };
     info.textContent = '';
     if (name) {
       info.append('Signed in as ', el('b', '', ''), '. What you buy, your days in a row and the look of your robot follow you to any browser you sign in from.');
@@ -522,16 +526,18 @@ export class Hud {
       // (an account Google opens, without a password of its own: there is no password to forget, and none to ask
       // for before its address is changed)
       if (viaGoogle) info.append(passwordless ? ' You sign in to it with Google: it has no password.' : ' You can also sign in to it with Google.');
+      // (made with a name and an address: its password is still to be chosen, with the link that was mailed)
+      if (!viaGoogle && passwordless && email) { info.append(invited ? ` It has no password yet: a link to choose one was mailed to ${email}.` : ` It has no password yet: "Forgot the password" mails a code to ${email}.`); act('Send the link again', 'invite', 'quiet'); }
       if (mail && !passwordless) {
         info.append(email ? ` If you forget the password, a code can be mailed to ${email}.` : ' No e-mail is kept for it: with one, a code can be mailed to you if you forget the password.');
         act(email ? 'Change the e-mail' : 'Add an e-mail', 'email', 'quiet');
       }
-      if (google && !viaGoogle) act('Sign in with Google too', 'google', 'quiet');
+      if (google && !viaGoogle) withG(act('Sign in with Google too', 'google', 'quiet'));
     } else {
-      info.textContent = 'You are playing as a guest: what you buy and earn is kept in this browser only. An account — a name and a password, nothing else — keeps it wherever you sign in.';
+      info.textContent = mail ? 'You are playing as a guest: what you buy and earn is kept in this browser only. An account — a name and an e-mail, nothing else — keeps it wherever you sign in.' : 'You are playing as a guest: what you buy and earn is kept in this browser only. An account — a name and a password, nothing else — keeps it wherever you sign in.';
       act('Create an account', 'create', 'main');
       act('Sign in', 'login');
-      if (google) act('Continue with Google', 'google');
+      if (google) withG(act('Continue with Google', 'google', 'google'));
       act('Forgot the password', 'reset', 'quiet');
     }
   }

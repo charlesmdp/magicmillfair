@@ -1871,7 +1871,7 @@ async function boot() {
     kit.paint = Math.max(0, PAINTS.indexOf(p.paint)); kit.trail = Math.max(0, TRAILS.indexOf(p.trail));
     if (p.size) { size = SIZES.indexOf(sizeOf(p.size)); store.set('mmf.size', SIZES[size]); }
   };
-  const showAccount = () => hud.setAccount({ name: account.name, available: account.available, mail: account.mail, email: account.email, google: account.google, viaGoogle: account.viaGoogle, passwordless: account.passwordless });
+  const showAccount = () => hud.setAccount({ name: account.name, available: account.available, mail: account.mail, email: account.email, google: account.google, viaGoogle: account.viaGoogle, passwordless: account.passwordless, invited: account.invited });
   /** Signed in (or out): what is owned, the days in a row and the look are asked again. */
   const accountChanged = async () => {
     showAccount();
@@ -1893,7 +1893,9 @@ async function boot() {
   const accountAction = async (what) => {
     if (what === 'logout') { await account.logout(); await accountChanged(); hud.note('Signed out: this browser is a guest again.', 5000); return; }
     // (with Google: the game leaves for Google's page — with the name the robot wears, should this make a new account)
-    if (what === 'google') { hud.note('One moment: off to Google…', 4000); account.toGoogle(!/^Visitor \d+$/.test(name) ? name : ''); return; }
+    if (what === 'google') { hud.note('One moment: off to Google…', 4000); offToGoogle(); return; }
+    // (an account made with a name and an address, whose password is still to be chosen: the link is mailed again)
+    if (what === 'invite') { const done = await account.invite(); hud.note(done.error || `The link is on its way to ${account.email}: it is good for a week. Look in the spam folder too.`, 8000); return; }
     if (what === 'email') {
       // the address of the account: only ever used to mail a code when the password is forgotten
       const got = await hud.form('The e-mail of your account', 'It is only used to send you a code if you forget the password. Leave it empty to take it away. Your password is asked for, so that nobody changes it behind your back.',
@@ -1907,7 +1909,14 @@ async function boot() {
     hud.closeAll();
     input.exitLock();
     input.keys.clear(); // (nothing stays pressed behind the card)
-    accountView.open({ mode: what === 'create' ? 'create' : what === 'reset' ? 'reset' : 'login', name: what === 'create' && !/^Visitor \d+$/.test(name) ? name : '', mail: account.mail, google: account.google });
+    // (a new account: a name and an address where the server sends e-mail — "How should we call you?", a link is
+    // mailed to choose the password —, a name and a password elsewhere; the card's own tabs still lead to the other way)
+    accountView.open({ mode: what === 'create' ? (account.mail ? 'join' : 'create') : what === 'reset' ? 'reset' : 'login', name: what === 'create' && !/^Visitor \d+$/.test(name) ? name : '', mail: account.mail, google: account.google });
+  };
+  /** Off to Google's page — where one stands is kept, to come back there (as for the payment page). `typed`: the name asked for on the card, if any. */
+  const offToGoogle = (typed = '') => {
+    if (input.enabled && !SHOT) store.set('mmf.resume', JSON.stringify({ x: player.pos.x, y: +player.pos.y.toFixed(2), z: player.pos.z, yaw: rig.yaw, room: presence?.room || '' }), true);
+    account.toGoogle(typed || (!/^Visitor \d+$/.test(name) ? name : ''));
   };
   // Signing in with Google (server/google.js): the game leaves for Google's page and comes back with a claim in its
   // address (?google=…), which this browser hands to the server. The first time, the account is made under the
@@ -1918,9 +1927,17 @@ async function boot() {
     if (word === 'expired' || word === 'failed' || word === 'off') { hud.note('Signing in with Google did not work. Try again in a moment.', 7000); return {}; }
     googleClaim = word;
     const done = await account.claim(word, asked || (!/^Visitor \d+$/.test(name) ? name : ''), profileNow());
-    if (done.needName) {
+    if (done.same) {
+      // (this Google address is the address of an account already: it is theirs — the card to sign in to it, its name in the field)
+      googleClaim = '';
       hud.closeAll(); input.exitLock(); input.keys.clear();
-      accountView.open({ mode: 'name', name: '', mail: account.mail, say: asked ? done.error : 'Google knows you now. One thing is left: the name of your account in the oasis.', warn: !!asked });
+      accountView.open({ mode: 'login', name: done.same, mail: account.mail, say: done.error, warn: true });
+      return { error: done.error };
+    }
+    if (done.needName) {
+      // (the name of the new account: what stands before the @ of the Google address is in the field — to keep, or to change)
+      hud.closeAll(); input.exitLock(); input.keys.clear();
+      accountView.open({ mode: 'name', name: asked || done.suggest || '', mail: account.mail, say: asked ? done.error : done.suggest ? 'Google knows you now. One thing is left: the name of your account in the oasis — keep this one, or change it.' : 'Google knows you now. One thing is left: the name of your account in the oasis.', warn: !!asked });
       return { error: done.error };
     }
     if (done.error) { hud.note(done.error, 7000); return { error: done.error }; }
@@ -1932,10 +1949,35 @@ async function boot() {
     return {};
   };
 
+  /** The robot goes by the name of the account that was just made for it ("How should we call you?"). */
+  const wearName = (n) => { if (!n || n === name || !nameOk(n)) return; name = n; hud.setName(name); presence?.setIdentity(name, color); store.set('mmf.name', name); };
+  let pwToken = ''; // (the link of the message that lets a new account choose its password: ?pw=…)
+  let payWaits = null; // (a payment waits for the account that is being made: see shop.gate)
   accountView
-    .on('google', (typed) => account.toGoogle(typed || (!/^Visitor \d+$/.test(name) ? name : '')))
+    .on('google', (typed) => offToGoogle(typed))
+    .on('free', (n) => account.free(n))
     .on('submit', async (mode, d) => {
       if (mode === 'name') return backFromGoogle(googleClaim, d.name);
+      if (mode === 'join') {
+        const made = await account.join(d.name, d.email, { ...profileNow(), name: d.name });
+        if (made.error) return { error: made.error, field: made.field };
+        wearName(account.name);
+        await accountChanged();
+        audio.play('victory');
+        hud.addChat('✦', 5, `Welcome, ${account.name}! Your name is yours now. A link to choose your password is on its way to ${account.email} — it is good for a week (look in the spam folder too).`, true);
+        hud.note(`Welcome, ${account.name}! A link to choose your password is on its way to your e-mail.`, 8000);
+        return {};
+      }
+      if (mode === 'setpw') {
+        const done = await account.setPassword(pwToken, d.password);
+        if (done.error) return { error: done.error };
+        pwToken = '';
+        applyProfile(account.profile);
+        await accountChanged();
+        audio.play('victory');
+        hud.note(`Your password is saved, ${account.name}: this browser is signed in.`, 7000);
+        return {};
+      }
       if (mode === 'create') {
         const made = await account.create(d.name, d.password, profileNow(), d.email);
         if (made.error) return { error: made.error };
@@ -1952,7 +1994,21 @@ async function boot() {
       return {};
     })
     .on('mailcode', (who) => account.mailCode(who))
-    .on('close', () => { document.getElementById('view')?.focus({ preventScroll: true }); });
+    .on('close', () => { document.getElementById('view')?.focus({ preventScroll: true }); const go = payWaits; payWaits = null; go?.(!!account.name); });
+  // Paying takes an account — "quand on paye il faut que ça crée un compte": who is about to pay as a guest is
+  // asked for a name and an address first (ten seconds, no password: the link to choose one is mailed), the
+  // account is made, and the payment goes on. What is bought is never left in one browser alone.
+  // (the tools buy a great deal as plain visitors, to check everything else: on their pages the account is only
+  // asked for when the address says so — ?gate —, as the cards that come by themselves are: see pitchAuto)
+  const gateOn = !(import.meta.env.DEV || typeof __LAB__ !== 'undefined' || typeof __TEST__ !== 'undefined') || params.has('gate');
+  shop.gate = () => {
+    if (account.name || !account.available || SHOT || !gateOn) return true;
+    return new Promise((resolve) => {
+      payWaits = resolve;
+      hud.closeAll(); input.exitLock(); input.keys.clear();
+      accountView.open({ mode: account.mail ? 'join' : 'create', name: !/^Visitor \d+$/.test(name) ? name : '', mail: account.mail, google: account.google, say: 'Before the payment: your account, so that what you buy is never lost. It is free, and takes ten seconds.' });
+    });
+  };
   Object.assign(app, { account, accountAction, accountView, payView, legalView, helpView });
   const equip = (id, on) => {
     const [type, sub] = id.split(':');
@@ -2011,9 +2067,12 @@ async function boot() {
       const k = Math.max(0, Math.min(ACCOUNT_LINES.length - 1, Math.floor(Number(step) || 0))), L = ACCOUNT_LINES[k];
       if (!shown) store.set(ACCOUNT_SEEN, String(k + 1)); // (this one is passed — and so are those before it)
       audio.play('pick');
+      // (the first time — five minutes into the oasis — no card comes before the question: "How should we call
+      // you?", a name and an address, asked at once. Where the server sends no e-mail, the card as before.)
+      if (k === 0 && !shown && account.mail) { accountAction('create'); return true; }
       const taken = await hud.pitch({
         kind, eyebrow: L.eyebrow, title: L.title, lead: L.lead, perks: ACCOUNT_PERKS,
-        tag: 'Free · thirty seconds · no e-mail needed',
+        tag: account.mail ? 'Free · a name and an e-mail · ten seconds' : 'Free · thirty seconds · no e-mail needed',
         fine: 'Free, and done in less time than the queue for the big wheel.',
         yes: 'Create my account', no: L.no, picture: previewer.shot('', color, 360, 450),
       });
@@ -2174,6 +2233,14 @@ async function boot() {
     if (word) {
       try { const u = new URL(location.href); u.searchParams.delete('google'); history.replaceState(null, '', u.pathname + u.search + u.hash); } catch { /* the address stays as it is */ }
       await backFromGoogle(word);
+    }
+    // (the link of the message "choose your password": the card where it is typed — or a word if the link is spent)
+    const pw = params.get('pw');
+    if (pw) {
+      try { const u = new URL(location.href); u.searchParams.delete('pw'); history.replaceState(null, '', u.pathname + u.search + u.hash); } catch { /* the address stays as it is */ }
+      const who = await account.whose(pw);
+      if (who) { pwToken = pw; hud.closeAll(); input.exitLock(); input.keys.clear(); accountView.open({ mode: 'setpw', name: who, mail: account.mail }); }
+      else hud.note('That link has expired, or was used already. Settings, Your account, "Forgot the password" sends a code to your e-mail.', 12000);
     }
     showAccount();
     if (account.name) world.games.setMe(account.name); // (on the boards, "me" is the account when there is one)

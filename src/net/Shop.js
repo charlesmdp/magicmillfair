@@ -85,6 +85,8 @@ export class Shop {
    * (the form is up, or the page leaves).
    */
   async buy(item, bid, life = false) {
+    // (`gate`: what has to be settled before any payment — an account, for who has none: main.js. Refused: nothing happens.)
+    if (this.gate && !(await this.gate(item))) return null;
     if (this.pk && this.onEmbed) {
       const here = await ask('api/checkout', { method: 'POST', body: { item, device: deviceId(), ...(bid && { bid }), ...(life && { life: true }), embed: true } });
       if (here.ok && typeof here.body?.secret === 'string') { if (await this.onEmbed(item, here.body.secret, here.body.id || '')) return null; }
