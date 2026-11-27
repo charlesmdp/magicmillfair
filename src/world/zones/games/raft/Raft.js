@@ -142,13 +142,13 @@ void main() {
   float beds = 0.5 + 0.5 * sin(yb * 1.7) * sin(yb * 0.57 + 1.7);
   float seam = 1.0 - smoothstep(0.0, 0.07, abs(fract(yb * 0.42) - 0.5)) ;
   float steep = 1.0 - smoothstep(0.55, 0.85, N.y);
-  vec3 rock = mix(vec3(0.33, 0.3, 0.27), vec3(0.56, 0.5, 0.43), beds) * grain;
-  rock = mix(rock, rock * vec3(1.16, 0.98, 0.78), n1 * 0.8);
+  vec3 rock = mix(vec3(0.24, 0.215, 0.19), vec3(0.42, 0.37, 0.3), beds) * grain;
+  rock = mix(rock * vec3(0.92, 0.96, 1.02), rock * vec3(1.2, 0.98, 0.74), n1);
   rock *= 1.0 - 0.4 * seam * steep;
   // grass where the ground lies flat enough — the tops, the ledges, the banks —, moss in streaks down the faces
   float green = smoothstep(0.7, 0.86, N.y + 0.14 * (n2 - 0.5)) * vColor.r;
   vec3 grass = mix(vec3(0.16, 0.34, 0.08), vec3(0.4, 0.5, 0.13), n1) * (0.75 + 0.5 * tex.g);
-  float moss = smoothstep(0.42, 0.7, n3) * steep * smoothstep(2.5, 9.0, vWorld.y) * vColor.r * 0.75;
+  float moss = smoothstep(0.34, 0.6, n3) * steep * smoothstep(2.5, 9.0, vWorld.y) * vColor.r * 0.85;
   vec3 albedo = mix(rock, vec3(0.2, 0.37, 0.1) * grain, moss);
   albedo = mix(albedo, grass, green);
   // gravel along the river, sand round the lagoon; dark where it is wet
@@ -207,10 +207,11 @@ export class Raft {
   /** The ground of the headland: its height on a lattice, then pieces of it — each twice: in full, and with a quarter of the points for when it is far. */
   _ground() {
     const L = this.land, nx = Math.floor((L.x1 - L.x0) / CELL) + 1, nz = Math.floor((L.z1 - L.z0) / CELL) + 1, n = nx * nz;
-    const H = new Float32Array(n), kind = new Uint8Array(n), E = new Float32Array(n), top = new Float32Array(n), sea = new Float32Array(n), lvl = new Float32Array(n), o = {};
+    const H = new Float32Array(n), kind = new Uint8Array(n), isle = new Uint8Array(n), E = new Float32Array(n), top = new Float32Array(n), sea = new Float32Array(n), lvl = new Float32Array(n), o = {};
     for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
       const k = j * nx + i; L.at(L.x0 + i * CELL, L.z0 + j * CELL, o);
       H[k] = o.h; kind[k] = o.kind; E[k] = o.e; top[k] = o.top; sea[k] = o.sea; lvl[k] = o.level;
+      if (o.e <= 0.5 && o.h > o.level + 0.2) { kind[k] = 1; E[k] = (o.h - o.level) * 2.2; isle[k] = 1; } // (the island of the fork is land: grass on its back, gravel round it)
     }
     const at = (i, j) => H[clamp(j, 0, nz - 1) * nx + clamp(i, 0, nx - 1)];
     const col = [0, 0, 0, 1], N = V(0, 1, 0), P = V(0, 0, 0);
@@ -220,11 +221,11 @@ export class Raft {
       // how dry: nothing grows in the water, nor within a step of it, nor in the spray of the sea
       const dry = (kind[k] === 0 ? 0 : smooth(0.05, 0.9, e)) * smooth(1.0, 2.2, h);
       // gravel along the water of the river — more of it, and paler, round the lagoon: a beach
-      const river = kind[k] === 1 || kind[k] === 0 ? 1 - smooth(0.2, 1.7 + 1.3 * n1, e) : 0, beach = lvl[k] < 1.2 && h < 2.4 ? smooth(8, 2.5, e) * smooth(2.4, 1.3, h) : 0;
+      const river = kind[k] === 1 || kind[k] === 0 ? 1 - smooth(0.15, 0.9 + 0.9 * n1, e) : 0, beach = lvl[k] < 1.2 && h < 2.4 ? smooth(8, 2.5, e) * smooth(2.4, 1.3, h) : 0;
       // wet and dark: the bed under the water, the foot of the cliffs in the sea
       const under = kind[k] === 0 ? 0.25 + 0.6 * smooth(0, -1.2, h - lvl[k]) : 0, surf = (kind[k] === 4 || sea[k] < 3) ? smooth(1.5, 0.1, h) * 0.8 : 0;
       // how much of the sky reaches the point: less at the foot of a wall, at the bottom of the canyon
-      const deep = Math.max(0, top[k] - h), ao = kind[k] === 3 ? 1 : 1 - 0.42 * smooth(1, 16, deep) * (kind[k] === 4 ? 0.3 : 1);
+      const deep = Math.max(0, top[k] - h), ao = kind[k] === 3 ? 1 : 1 - 0.3 * smooth(1, 16, deep) * (kind[k] === 4 ? 0.3 : 1);
       col[0] = dry; col[1] = Math.max(river * 0.55, beach); col[2] = Math.max(under, surf); col[3] = ao;
       return col;
     };
@@ -274,13 +275,13 @@ export class Raft {
       const s = a.geometry.boundingSphere;
       this._pieces.push({ near: a, far: b, x: s.center.x, y: s.center.y, z: s.center.z, r: s.radius });
     }
-    this._lattice = { H, kind, E, top, sea, lvl, nx, nz };
+    this._lattice = { H, kind, isle, E, top, sea, lvl, nx, nz };
   }
 
   /** A point of the lattice of the ground nearest to a place: { h, kind, e, top, sea, flat (how level it lies, 0 … 1) }. */
   _groundAt(x, z, out = {}) {
     const L = this.land, G = this._lattice, i = clamp(Math.round((x - L.x0) / CELL), 1, G.nx - 2), j = clamp(Math.round((z - L.z0) / CELL), 1, G.nz - 2), k = j * G.nx + i;
-    out.h = G.H[k]; out.kind = G.kind[k]; out.e = G.E[k]; out.top = G.top[k]; out.sea = G.sea[k]; out.level = G.lvl[k];
+    out.h = G.H[k]; out.kind = G.kind[k]; out.isle = G.isle[k]; out.e = G.E[k]; out.top = G.top[k]; out.sea = G.sea[k]; out.level = G.lvl[k];
     out.flat = 1 / Math.hypot((G.H[k - 1] - G.H[k + 1]) / (2 * CELL), 1, (G.H[k - G.nx] - G.H[k + G.nx]) / (2 * CELL));
     return out;
   }
@@ -375,6 +376,7 @@ export class Raft {
     // (a rock that leaves no room along a bank: more of them fill the corner — no raft goes there)
     for (const r of course.rocks) { if (!r.bank) continue; const p = riverAt(course, r.s, {}); for (let k = 0; k < 3; k++) { const u = r.u + r.bank * (r.r * 0.8 + (p.hw - Math.abs(r.u) - r.r) * (0.3 + 0.35 * k)); riverPoint(course, r.s + (R() - 0.5) * 3.4, u, q); list.push({ x: q.x, y: q.y - 0.3, z: q.z, s: 0.7 + 0.6 * R(), squash: 0.8, tone: 0.9 }); } }
     for (const it of course.islands) for (let k = 0; k < 9; k++) { const a = R() * TAU, s = (it.from + it.to) / 2 + Math.cos(a) * ((it.to - it.from) / 2 - 0.5), u = it.u + Math.sin(a) * (it.half - 0.3); riverPoint(course, s, u, q); list.push({ x: q.x, y: q.y + 0.1, z: q.z, s: 0.6 + 0.8 * R(), squash: 0.75, tone: 1 }); }
+    const inStream = list.length;
     // along the banks, and in the sea at the foot of the cliffs
     for (let n = 0; n < 2600 && list.length < 230; n++) {
       const x = this.land.x0 + R() * (this.land.x1 - this.land.x0), z = this.land.z0 + R() * (this.land.z1 - this.land.z0), g = this._groundAt(x, z, o);
@@ -383,7 +385,7 @@ export class Raft {
     }
     // one boulder, in two shapes: a ball of twenty faces pushed in and out
     const shapes = [0, 1].map((v) => {
-      const geo = new THREE.IcosahedronGeometry(1, 1).toNonIndexed(), p = geo.attributes.position, c = new Float32Array(p.count * 4);
+      const geo = new THREE.IcosahedronGeometry(1, v ? 0 : 1).toNonIndexed(), p = geo.attributes.position, c = new Float32Array(p.count * 4);
       for (let i = 0; i < p.count; i++) {
         const x = p.getX(i), y = p.getY(i), z = p.getZ(i), k = 0.78 + 0.42 * noise(x * 1.7 + 11 * v, y * 1.7 + z * 1.3 + 5 * v);
         p.setXYZ(i, x * k, y * k * 0.9, z * k);
@@ -395,7 +397,8 @@ export class Raft {
     });
     const m = new THREE.Matrix4(), e = new THREE.Euler(), qt = new THREE.Quaternion(), sc = V(1, 1, 1), tone = new THREE.Color();
     shapes.forEach((geo, v) => {
-      const mine = list.filter((_, i) => i % 2 === v), mesh = new THREE.InstancedMesh(geo, this.mats.rock, mine.length);
+      // (the boulders of the stream, and one in four of the others, in the rounder shape; the rest in the plainer one)
+      const mine = list.filter((_, i) => (i < inStream || i % 4 === 0 ? 0 : 1) === v), mesh = new THREE.InstancedMesh(geo, this.mats.rock, mine.length);
       mine.forEach((b, i) => { m.compose(V(b.x, b.y, b.z), qt.setFromEuler(e.set((R() - 0.5) * 0.5, R() * TAU, (R() - 0.5) * 0.5)), sc.set(b.s * (0.9 + 0.3 * R()), b.s * b.squash, b.s * (0.9 + 0.3 * R()))); mesh.setMatrixAt(i, m); mesh.setColorAt(i, tone.setRGB(b.tone, b.tone, b.tone)); });
       mesh.name = `raft-stones-${v}`; mesh.matrixAutoUpdate = false; mesh.layers.enable(LAYER.STATIC_CASTER);
       mesh.computeBoundingSphere();
@@ -411,23 +414,25 @@ export class Raft {
       const x = L.x0 + R() * (L.x1 - L.x0), z = L.z0 + R() * (L.z1 - L.z0), g = this._groundAt(x, z, o), w = noise(x / 19 + 3, z / 19 + 8);
       if (g.h < 1.4 || g.kind === 0 || g.kind === 4 || g.flat < 0.72) continue;
       const here = { x, y: g.h - 0.15, z, k: 0.75 + 0.6 * R(), yaw: R() * TAU };
-      if (g.kind === 3 && g.sea > 3.5) { if (R() < 0.2 + 0.5 * w && kinds.pine.length < 150) kinds.pine.push(here); else if (R() < 0.3 && kinds.bush.length < 260) kinds.bush.push(here); }
-      else if (g.kind === 1 && g.e > 2.6) { if (R() < 0.55 && kinds.round.length < 80) kinds.round.push(here); else if (R() < 0.5 && kinds.bush.length < 260) kinds.bush.push(here); }
-      else if (g.kind === 1 && g.e > 1.1 && R() < 0.3 && kinds.bush.length < 260) kinds.bush.push(here);
-      else if (g.kind === 2 && g.flat > 0.86 && R() < 0.6) { if (R() < 0.3 && kinds.round.length < 80) kinds.round.push(here); else if (kinds.bush.length < 260) kinds.bush.push(here); }
+      // (on the island of the fork, bushes only: the river runs on both sides of it, and nothing tall may come between who looks and the raft)
+      if (g.isle) { if (R() < 0.5 && kinds.bush.length < 200) kinds.bush.push(here); }
+      else if (g.kind === 3 && g.sea > 3.5) { if (R() < 0.2 + 0.5 * w && kinds.pine.length < 130) kinds.pine.push(here); else if (R() < 0.3 && kinds.bush.length < 200) kinds.bush.push(here); }
+      else if (g.kind === 1 && g.e > 2.6) { if (R() < 0.55 && kinds.round.length < 70) kinds.round.push(here); else if (R() < 0.5 && kinds.bush.length < 200) kinds.bush.push(here); }
+      else if (g.kind === 1 && g.e > 1.1 && R() < 0.3 && kinds.bush.length < 200) kinds.bush.push(here);
+      else if (g.kind === 2 && g.flat > 0.86 && R() < 0.6) { if (R() < 0.3 && kinds.round.length < 70) kinds.round.push(here); else if (kinds.bush.length < 200) kinds.bush.push(here); }
     }
     const green = (t, dark = 1) => [(0.1 + 0.13 * t) * dark, (0.3 + 0.2 * t) * dark, (0.06 + 0.05 * t) * dark, 1];
-    const blob = (b, x, y, z, r, flat, c) => b.tint(...c).place(x, y, z, r * 7.3).lathe([[0, -r * flat], [r * 0.72, -r * flat * 0.62], [r, 0], [r * 0.7, r * flat * 0.72], [0, r * flat]], 7).pop();
+    const blob = (b, x, y, z, r, flat, c) => b.tint(...c).place(x, y, z, r * 7.3).lathe([[0, -r * flat], [r * 0.9, -r * flat * 0.4], [r * 0.8, r * flat * 0.55], [0, r * flat]], 6).pop();
     const make = {
       pine: (wood, leaf) => {
         wood.tint(0.62, 0.48, 0.38, 1).cylinder(0, -0.3, 0, 0.19, 0.07, 6.6, 6);
-        for (let k = 0; k < 5; k++) { const y = 1.7 + k * 1.15, r = 1.75 - k * 0.3; leaf.tint(...green(0.15 + 0.12 * k, 0.72 + 0.07 * k)).place(0, y, 0, k * 1.3).lathe([[r, 0], [r * 0.55, 0.55], [0.12, 1.5]], 7).pop(); leaf.tint(...green(0, 0.5)).place(0, y, 0, k * 1.3).lathe([[0.1, 0.12], [r, 0]], 7).pop(); }
+        for (let k = 0; k < 4; k++) { const y = 1.7 + k * 1.4, r = 1.8 - k * 0.38; leaf.tint(...green(0.15 + 0.15 * k, 0.72 + 0.08 * k)).place(0, y, 0, k * 1.3).lathe([[r, 0], [r * 0.5, 0.7], [0.1, 1.8]], 6).pop(); leaf.tint(...green(0, 0.5)).place(0, y, 0, k * 1.3).lathe([[0.1, 0.12], [r, 0]], 6).pop(); }
       },
       round: (wood, leaf) => {
         wood.tint(0.7, 0.56, 0.45, 1).cylinder(0, -0.3, 0, 0.17, 0.11, 2.7, 6).rod(V(0, 2.2, 0), V(0.8, 3.3, 0.3), 0.08, 5, { caps: false }).rod(V(0, 2.1, 0), V(-0.7, 3.2, -0.5), 0.08, 5, { caps: false });
         blob(leaf, 0, 4.0, 0, 1.55, 0.72, green(0.75)); blob(leaf, 0.95, 3.5, 0.4, 1.1, 0.7, green(0.5, 0.9)); blob(leaf, -0.85, 3.4, -0.6, 1.15, 0.7, green(0.9, 0.86)); blob(leaf, 0.1, 3.3, -0.9, 0.95, 0.7, green(0.35, 0.8));
       },
-      bush: (wood, leaf) => { blob(leaf, 0, 0.5, 0, 0.75, 0.7, green(0.6)); blob(leaf, 0.55, 0.4, 0.2, 0.55, 0.7, green(0.9, 0.88)); blob(leaf, -0.45, 0.36, -0.3, 0.5, 0.72, green(0.3, 0.82)); },
+      bush: (wood, leaf) => { blob(leaf, 0, 0.45, 0, 0.7, 0.7, green(0.6)); blob(leaf, 0.5, 0.36, 0.2, 0.5, 0.72, green(0.9, 0.86)); },
     };
     const m = new THREE.Matrix4(), qt = new THREE.Quaternion(), up = V(0, 1, 0), sc = V(1, 1, 1), tone = new THREE.Color();
     for (const [name, list] of Object.entries(kinds)) {
