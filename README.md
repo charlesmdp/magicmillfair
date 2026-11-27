@@ -137,6 +137,13 @@ under the name typed on the card — or the name their robot wears; when that na
 ("Visitor 42"), the card asks for one. Such an account has no password. Who already has an account with a
 password and uses the button while signed in adds Google to it: both ways in work from then on.
 
+**What a link to the game shows** where it is pasted — a chat, a social network: its title, a line and a picture
+(`public/share.jpg`, 1200 × 630: the pier and its wheel seen from the sea; made again with
+`node tools/game-shots.mjs - --q=high --size=1200x630 --nohud b=190,45,-60,128,-12` and a title laid over it).
+Those who fetch that picture want its whole address: give the build a variable `SITE_URL` (dashboard → the
+Worker → **Settings** → **Build** → *Variables*: `SITE_URL` = `https://<your site>`, no slash at the end), and
+deploy once more. Without it the picture is named from the root of the site, which only some of them accept.
+
 Billy answers whatever is said to him — a question, a hello, a bad day — one line at a time, and follows
 the conversation: the model is sent that line and the three exchanges before it **of the same visitor**. A
 conversation is one visitor's own: its last exchanges are kept by that visitor's page and nowhere else (the
