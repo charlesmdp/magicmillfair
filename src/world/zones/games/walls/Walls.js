@@ -293,7 +293,7 @@ export class Walls {
       const cy = -L + 0.12, Ro = 0.9, Ri = 0.4, at2 = (r, a, z) => V(Math.cos(a) * r, cy + Math.sin(a) * r, z);
       b.tint(...DARK, 1).box(-0.05, cy - Ri, -0.05, 0.05, 0, 0.05);
       for (let m = 0; m < 12; m++) {
-        const a0 = Math.PI * (1 + (0.5 + m) / 13 - 0.5 / 13), a1 = Math.PI * (1 + (1.5 + m) / 13 - 0.5 / 13), thin = (a) => Ri + (Ro - Ri) * (1 - Math.min(1, Math.abs(a - 1.5 * Math.PI) / (0.5 * Math.PI)) ** 3 * 0.85);
+        const a0 = Math.PI * (1 + (0.5 + m) / 13 - 0.5 / 13), a1 = Math.PI * (1 + (1.5 + m) / 13 - 0.5 / 13), thin = (a) => Ri + (Ro - 0.07 - Ri) * Math.min(1, Math.abs(a - 1.5 * Math.PI) / (0.5 * Math.PI)) ** 3; // (broad at its foot, pointed at its tips)
         for (const z of [-0.035, 0.035]) {
           const q = [at2(thin(a0), a0, z), at2(Ro - 0.07, a0, z), at2(Ro - 0.07, a1, z), at2(thin(a1), a1, z)], e = [at2(Ro - 0.07, a0, z), at2(Ro, a0, 0), at2(Ro, a1, 0), at2(Ro - 0.07, a1, z)];
           if (z > 0) { b.tint(...RED, 1).quad(q[0], q[1], q[2], q[3]); b.tint(...WHITE, 1).quad(e[0], e[1], e[2], e[3]); } else { b.tint(...RED, 1).quad(q[3], q[2], q[1], q[0]); b.tint(...WHITE, 1).quad(e[3], e[2], e[1], e[0]); }
