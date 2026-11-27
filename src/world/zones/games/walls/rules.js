@@ -7,12 +7,14 @@
 // button; the rest is what the stone is painted for:
 //   a band of BLUE stone along a wall   run along this: jump at it at a run and one runs on along it, in a
 //                                       shallow arc, for a little over a second — over what no jump crosses.
+//                                       Beside it a jump is drawn to the wall: one need not aim at the stone.
 //                                       The button kicks off it, to the wall across when there is one
 //   a face of GREEN stone across the way  climb this: run straight at it and one runs two or three steps up
 //                                       it, catches its edge and pulls up — no button. An edge one falls just
 //                                       short of is caught the same way
 //   a GOLD bar across a gap             swing round this: jump into it, and the button lets go — thrown far
-//   RED                                 this hurts: blades that swing across, spikes that come up in time
+//   RED                                 this hurts: blades that swing across — crescents on rods, gone round,
+//                                       waited for, or jumped —, spikes that come up in time
 //   pale cracked slabs                  give way a moment after one sets foot on them: one keeps running
 //   a ledge along the wall              shuffled along, the back to the stone: nobody steps off its side
 // And time winds back: a fall, a blade, a spike — and one's robot goes back along its own path to the last
