@@ -35,7 +35,7 @@
 
 export const AGES = {
   name: 'War Through the Ages',
-  at: { x: -259.5, z: -21.5 }, // the middle of the stage, in the meadow south of the cars' table
+  at: { x: -259.3, z: -18.6 }, // the middle of the stage, in the west meadow, a dozen metres south of the cars' table
   look: -1.85, // the way one looks at it (a heading of the valley: 0 looks south): west, a little north — towards the cliff; the road runs across the picture
   half: { a: 18, v: 4 }, // half its length, half its depth
   rise: 0.6, // its top stands so far over the highest ground under it
@@ -132,6 +132,12 @@ export function startWar(seed = 1) {
   return { seed, clock: 0, acc: 0, over: false, won: false, out: false, time: 0, sides: [side(0), side(1)], shots: [], strikes: [], told: [], uid: 0, ai: null, bot: null };
 }
 
+/** Puts a robot of side `i` on the road, behind those already there: of age `era`, of kind `k` (0 … 2), `p` metres from its own gate. */
+export function putRobot(st, i, era, k, p) {
+  const d = ERAS[era].units[k], u = { id: ++st.uid, side: i, def: d, p, hp: d.hp, cool: 0.35, moving: true, hit: 9, ouch: 9, hurt: 0, swap: 0, born: st.clock };
+  st.sides[i].units.push(u);
+  return u;
+}
 /** The place of a robot along the road, as the stage has it (from the gate of side 0). */
 export const roadOf = (side, p) => (side ? L - p : p);
 /** The place a new turret would take on the base of `s`: a free one, else the oldest of an earlier age; -1: none. */
@@ -214,10 +220,9 @@ function sub(st, ev) {
     if (s.door.length) {
       const d = s.door[0], last = s.units[s.units.length - 1];
       if (!last || last.p - last.def.len / 2 >= W.out + d.len / 2 + W.gap) {
-        s.door.shift();
-        const u = { id: ++st.uid, side: s.i, def: d, p: W.out, hp: d.hp, cool: 0.35, moving: true, hit: 9, ouch: 9, hurt: 0, swap: 0, born: now };
-        s.units.push(u); s.sent++;
-        ev?.push({ type: 'out', side: s.i, unit: u });
+        s.door.shift(); s.sent++;
+        const unit = putRobot(st, s.i, d.era, d.k, W.out);
+        ev?.push({ type: 'out', side: s.i, unit });
       }
     }
   }
@@ -256,7 +261,7 @@ function sub(st, ev) {
     // steps past (the two change places; each takes a moment before it does so again)
     for (let n = 1; n < s.units.length; n++) {
       const a = s.units[n - 1], b = s.units[n];
-      if (RANK[b.def.k] >= RANK[a.def.k] || a.swap > now || b.swap > now || a.p - a.def.len / 2 - (b.p + b.def.len / 2) > W.gap + 0.1) continue;
+      if (RANK[b.def.k] >= RANK[a.def.k] || a.swap > now || b.swap > now || b.p - b.def.len / 2 < 0 || a.p - a.def.len / 2 - (b.p + b.def.len / 2) > W.gap + 0.1) continue; // (not under the porch: on the road)
       const head = a.p + a.def.len / 2, tail = b.p - b.def.len / 2;
       b.p = head - b.def.len / 2; a.p = tail + a.def.len / 2;
       s.units[n - 1] = b; s.units[n] = a;
