@@ -1,5 +1,26 @@
-// The Sanctuary as an extra — not built yet: this file only holds its place (its switch: RELEASE in
-// src/app/config.js, off as it is delivered). See lab/NEWGAMES.md.
+// The Sanctuary as an extra: a great hall of stone at the foot of the cliff of the west meadow — a mosque, a
+// church and a synagogue under one dome — plugged into the running game from outside (its switch: RELEASE in
+// src/app/config.js, off as it is delivered; with it off nothing of it is loaded, built or shown). No game
+// there: one walks in and looks; its music — a slow, deep gospel (TUNES.sanctuary) — plays for who is inside.
+// See lab/NEWGAMES.md and src/world/zones/places/sanctuary/.
+import { Sanctuary } from '../world/zones/places/sanctuary/Sanctuary.js';
+import { tunePlayer } from './tunes.js';
 
-/** Nothing yet. */
-export function attach() { return null; }
+/** Builds the hall in the world of `app` (the game, once it runs), and plays its music for who walks in. Returns it. */
+export function attach(app) {
+  const place = new Sanctuary(app.world).build();
+  app.world.bakeShadows();
+  const tune = tunePlayer(app), heard = { inside: 0 };
+  let playing = false;
+  app.world.zones.push({
+    update: (dt, time, camera) => {
+      place.update(dt, time, camera);
+      const p = app.player.pos, k = app.player.driver ? 0 : place.inside(p.x, p.y, p.z);
+      heard.inside += (k - heard.inside) * 0.05;
+      if (!playing && k > 0.02) { tune.play('sanctuary', { state: heard }); playing = true; }
+      if (playing) { tune.tick(); if (k <= 0 && heard.inside < 0.01) { tune.stop(); playing = false; } }
+    },
+  });
+  app.sanctuary = place;
+  return place;
+}
