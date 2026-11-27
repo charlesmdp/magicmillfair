@@ -27,9 +27,9 @@ const EAVES = P.spring + P.W + 1.4, RIDGE = EAVES + 2.8, RO = P.R + P.T, WO = P.
 
 // ---- the stone and its light
 export const STONE = [0.86, 0.8, 0.69], CREAM = [0.95, 0.9, 0.8], ROSE = [0.8, 0.66, 0.58], SLATE = [0.5, 0.53, 0.58], GOLD = [1.0, 0.76, 0.3];
-const OUT = [0.5, 0.445, 0.35], TRIM = [0.6, 0.545, 0.44], BLUSH = [0.52, 0.4, 0.32], ROOF = [0.3, 0.29, 0.3], DOME = [0.56, 0.47, 0.3], DARK = [0.03, 0.025, 0.02];
+const OUT = [0.43, 0.375, 0.285], TRIM = [0.53, 0.475, 0.375], BLUSH = [0.45, 0.33, 0.26], ROOF = [0.27, 0.26, 0.27], DOME = [0.5, 0.41, 0.25], DARK = [0.03, 0.025, 0.02];
 /** How bright the painted light is shown (the game's eye is wide open: a half is nearly white). */
-const EXPOSE = 0.46;
+const EXPOSE = 0.4;
 /** The glass at the end of each arm: the same lamp for the three chapels (and the rose over the doors). */
 const LAMPS = ARMS.map((a) => { const [x, z] = armPoint(a, 0, a === 0 ? P.chord - 0.6 : P.chord + P.W - 1.2); return { x, y: a === 0 ? 10 : 6.2, z, k: a === 0 ? 0.6 : 0.95, reach: 8.5 }; });
 /** The light that falls on a point of the inside whose face looks the way `n` says: [r, g, b]. */
@@ -324,6 +324,6 @@ export class Sanctuary {
   update(dt, time, camera) {
     if (!this.inner || !camera) return;
     const dx = camera.position.x - P.at.x, dz = camera.position.z - P.at.z;
-    this.inner.visible = dx * dx + dz * dz < 150 * 150;
+    this.inner.visible = dx * dx + dz * dz < 110 * 110;
   }
 }
