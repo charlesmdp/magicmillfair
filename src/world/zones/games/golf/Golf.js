@@ -164,7 +164,7 @@ export class Golf {
       // ---- the felt, its striped kerbs, and the painted skirt under them down to the meadow
       for (const bed of H.beds) {
         const look = bed.look || 'felt', top = (x, z) => wy(bed, x, z) + 0.002;
-        const maxEdge = bed.h ? 0.3 : 0.8, ftone = look === 'deck' ? (bed === H.beds[0] || H.n !== 6 ? [1.1, 0.8, 0.5] : [0.72, 0.5, 0.36]) : bed.isle ? FELT2 : FELT;
+        const maxEdge = bed.h ? 0.42 : 0.8, ftone = look === 'deck' ? (bed === H.beds[0] || H.n !== 6 ? [1.1, 0.8, 0.5] : [0.72, 0.5, 0.36]) : bed.isle ? FELT2 : FELT;
         // (the relief is painted into the felt: darker in the hollows and on what turns from the light, lighter on the crests and on what faces it)
         const relief = (x, z) => { if (!bed.h) return 1; const e = 0.08, h = bed.h(x, z), gx = (bed.h(x + e, z) - bed.h(x - e, z)) / (2 * e), gz = (bed.h(x, z + e) - bed.h(x, z - e)) / (2 * e); return 1 + clamp(h * 0.55, -0.3, 0.3) + clamp((gx * 0.6 + gz * 0.8) * 0.9, -0.3, 0.3); };
         felt(look === 'deck' ? B.deck : B.felt, bed, ftone, top, maxEdge, (x, z) => (look === 'deck' ? 0.92 + 0.1 * hash2(Math.round(x * 5), Math.round(z * 2.2)) : 0.95 + 0.07 * hash2(Math.round(x * 4), Math.round(z * 4))) * relief(x, z));
@@ -230,7 +230,7 @@ export class Golf {
       for (const q of H.zones) {
         const tone = q.kind === 'sand' ? [1.7, 1.08, 0.22] : q.kind === 'ice' ? [0.95, 1.5, 1.95] : [1.9, 0.5, 0.1], on = q.kind === 'ice' ? B.paint : B.felt;
         const rough = H.beds.some((bed) => bed.h), yq = (x, z) => { const f = feltAt(H, x, z); return (f > -Infinity ? f : 0) + 0.005; };
-        felt(on, q, tone, yq, rough ? 0.3 : 0.8, (x, z) => (q.kind === 'sand' ? 0.86 + 0.2 * hash2(Math.round(x * 9), Math.round(z * 9)) : q.kind === 'ice' ? 0.94 + 0.1 * hash2(Math.round(x * 2), Math.round(z * 7)) : Math.round(z * 5) % 2 ? 1 : 0.8));
+        felt(on, q, tone, yq, rough ? 0.45 : 0.8, (x, z) => (q.kind === 'sand' ? 0.86 + 0.2 * hash2(Math.round(x * 9), Math.round(z * 9)) : q.kind === 'ice' ? 0.94 + 0.1 * hash2(Math.round(x * 2), Math.round(z * 7)) : Math.round(z * 5) % 2 ? 1 : 0.8));
       }
       // the pipes: a purple funnel where the ball goes in, a purple spout where it comes out, a post with a purple ball at each
       for (const q of H.pipes) {
@@ -649,13 +649,13 @@ export class Golf {
         const H = HOLES[st.hole], b = st.ball;
         // the robot stands beside the ball as one stands to putt — on the left of the line, square to it (on the right where there is no felt on the left) —, never between the camera and the ball; it walks round as the aim turns
         const dx = Math.sin(st.aim), dz = -Math.cos(st.aim), rx = -dz, rz = dx;
-        let px, pz, side = S.side;
-        for (const l of [S.side * 0.95, S.side * 0.75, -S.side * 0.95, -S.side * 0.75, S.side * 0.55, -S.side * 0.55]) { side = Math.sign(l); px = b.x - dx * 0.08 - rx * l; pz = b.z - dz * 0.08 - rz * l; const f = feltAt(H, px, pz); if (f > -Infinity && Math.abs(f - b.y) < 0.35) break; }
-        if (st.phase === 'aim' || st.phase === 'tee') S.side = side;
-        // (it stays where it is while the ball runs, and goes to the new ball when that has stopped)
-        if (st.phase === 'aim' || st.phase === 'tee' || S.hole < 0) { S.goal[0] = px; S.goal[1] = pz; }
+        let px = b.x, pz = b.z, side = S.side, found = false;
+        for (const l of [S.side * 0.95, S.side * 0.75, -S.side * 0.95, -S.side * 0.75, S.side * 0.55, -S.side * 0.55]) { const x = b.x - dx * 0.08 - rx * l, z = b.z - dz * 0.08 - rz * l, f = feltAt(H, x, z); if (f > -Infinity && Math.abs(f - b.y) < 0.35) { side = Math.sign(l); px = x; pz = z; found = true; break; } }
+        if (found && (st.phase === 'aim' || st.phase === 'tee')) S.side = side;
+        // (it runs after its ball, on the same side of it — and waits where it is while the ball is in the air, in a pipe or lost)
+        if (S.hole < 0 || (found && !b.air && b.pipe < 0 && st.phase !== 'lost' && (side === S.side || st.phase !== 'roll'))) { S.goal[0] = px; S.goal[1] = pz; }
         if (S.hole !== st.hole) { S.hole = st.hole; S.spot[0] = S.goal[0] = px; S.spot[1] = S.goal[1] = pz; S.steered = false; }
-        const gx = S.goal[0] - S.spot[0], gz = S.goal[1] - S.spot[1], k = Math.min(1, dt * 8);
+        const gx = S.goal[0] - S.spot[0], gz = S.goal[1] - S.spot[1], k = Math.min(1, dt * 8, (9 * dt) / (Math.hypot(gx, gz) + 1e-6));
         S.spot[0] += gx * k; S.spot[1] += gz * k;
         const speed = dt > 0 ? Math.hypot(gx * k, gz * k) / dt : 0;
         const wp = toWorld(H, S.spot[0], S.spot[1]), fy = feltAt(H, S.spot[0], S.spot[1]);
@@ -729,7 +729,7 @@ export class Golf {
     };
     this.session = session;
     session.step(0, player, false);
-    io.note(this._intro(HOLES[0]), 4200);
+    io.note(this._intro(HOLES[0]), 6500);
     return session;
   }
 
@@ -825,7 +825,7 @@ export class Golf {
       S.alpha = want;
     } else S.alpha += (want - S.alpha) * Math.min(1, dt * 14);
     const lean = 0.52 * S.side, off = 0.86 * Math.sin(lean), lx = b.x - dx * 0.03 - rx * off, lz = b.z - dz * 0.03 - rz * off, hw = toWorld(H, lx, lz, _w2);
-    pl.visible = true;
+    pl.visible = !hidden && st.phase !== 'roll' || S.swing >= 0;
     pl.position.set(hw[0], by + 0.86 * Math.cos(lean) + 0.07, hw[1]);
     pl.rotation.set(S.alpha, aw, lean, 'YXZ');
   }
@@ -850,7 +850,7 @@ export class Golf {
       else if (d <= 0) { io.play('bell'); io.note(d < 0 ? `${e.strokes} strokes: under par!` : `${e.strokes} strokes: par.`, 2600); }
       else { io.play('checkpoint'); io.note(d === 1 ? `${e.strokes} strokes: one over par.` : `${e.strokes} strokes: ${d} over par.`, 2600); }
     } else if (e.type === 'picked') { io.play('fail'); io.note(`${GOLF.most} strokes: pick up and move on.`, 2800); }
-    else if (e.type === 'tee') { io.play('checkpoint', { volume: 0.4 }); io.note(this._intro(HOLES[e.hole]), 4200); }
+    else if (e.type === 'tee') { io.play('checkpoint', { volume: 0.4 }); io.note(this._intro(HOLES[e.hole]), 6500); }
   }
 }
 
