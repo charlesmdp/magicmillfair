@@ -55,7 +55,14 @@ between), and looks at the rails just ahead of it: the line runs up the screen f
 place for everybody (`instance: 0`), so every car on it is seen whatever its start: `update()` puts a blue car
 under each visitor who rides (`game.crowd.of()`), where its robot is, leaning as the rails lean there, and
 tumbling when that visitor says it is falling (`tell()`: metres along the line, metres across, falling, speed).
-Cars do not run into each other.
+Cars do not run into each other — so **those who leave with the same start go one after the other, two and a
+half seconds apart** (`COASTER.row`; each takes the first place in the row that nobody waiting holds — `tell()`
+says it, with a dice that parts two who took the same at once), and **a car glued to one's own is not drawn**,
+nor its robot (nearer than 6.5 m: in the station before the start, or caught up with on the rails —
+`peer.ghostAt`, honoured by `src/extras/mates.js`). Seen with two browsers on the game's own server
+(`node lab/tools/duo-games.mjs coaster`): before this, two who left together rode one inside the other all the
+way round, the friend's robot in the middle of one's own picture; now one follows the other up the lift, some
+twenty metres behind in a slow headless browser — about thirty-seven at the speed of a real one.
 
 The hand that plays by itself leans against each bend as it comes (it knows the push it will meet when its hand
 gets there), brakes before the bends that would ask more than six tenths of the stick, keeps to the rail that is

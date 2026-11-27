@@ -79,6 +79,9 @@ export function mates(app) {
         let hide = false;
         if (h && mine && mine.game === h.game) hide = h.run !== mine.run;
         else if (h) { const w = watched.get(h.game); hide = !!w && performance.now() - w.at < 500 && h.run !== w.run; }
+        // (…or a game has just said that they stand in one's own place — two cars at one spot of the same rails —:
+        // `peer.ghostAt`, set every frame it is so; it wears off by itself a moment after the game stops saying it)
+        if (!hide && peer.ghostAt && performance.now() - peer.ghostAt < 300) hide = true;
         if (hide !== !!peer.hidden) peer.hidden = hide;
       }
     },

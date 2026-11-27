@@ -451,14 +451,28 @@ export class Coaster {
    */
   open(player, io) {
     const c = this.course, K = COASTER, start = this.nextStart(), st = startRun(c, { wait: Math.max(0.05, start.wait) });
-    const events = [], input = { x: 0, y: 0, boost: false }, pose = {}, S = { cam: null, look: V(0, 0, 0), fov: 62, shake: 0, after: 0, acc: 0, view: 0, stretch: -1, gone: false, time: 0, key: { x: 0, held: 0, dir: 0 }, spark: 0, room: [0, 0] };
+    const events = [], input = { x: 0, y: 0, boost: false }, pose = {}, S = { cam: null, look: V(0, 0, 0), fov: 62, shake: 0, after: 0, acc: 0, view: 0, stretch: -1, gone: false, time: 0, key: { x: 0, held: 0, dir: 0 }, spark: 0, room: [0, 0], row: 0, dice: 1 + Math.floor(Math.random() * 999) };
+    this._rider = player;
     const t = V(0, 0, 0), t2 = V(0, 0, 0), q1 = {}, q2 = {}, q3 = {}, fr = { fwd: [0, 0, 0], side: [0, 0, 0], up: [0, 0, 0] }, gauge = this._gauge();
     this.show.visible = false;
     const session = {
       coaster: this, over: false, ended: false, score: 0, time: 0, line: '', riding: false, anim: ANIM.sit, state: st, auto: false, start, instance: 0,
-      tell: () => [Math.round(st.s), Math.round(st.u * 100) / 100, st.fall > 0 ? 1 : 0, Math.round(st.v)],
+      // (…and, while it waits in the station, its place in the row of those who leave with this start — 1 the first —,
+      // and the dice it threw as it sat down: see `step`)
+      tell: () => [Math.round(st.s), Math.round(st.u * 100) / 100, st.fall > 0 ? 1 : 0, Math.round(st.v), S.gone ? 0 : S.row + 1, S.dice],
       step: (dt, pl, control) => {
-        const inp = pl.input, wait = (start.at - this.clock()) / 1000;
+        const inp = pl.input;
+        // Those who leave with the same start go one after the other, `row` seconds apart: the rails hold one car
+        // at a place, and two that left together rode one inside the other all the way round (seen with two
+        // browsers: the friend's robot in the middle of one's own picture). Each takes the first place of the row
+        // that nobody waiting holds; two who took the same at the same moment are parted by their dice — the
+        // lower stays. Nobody moves once the first of the start has gone. The clock of each starts as it leaves.
+        if (!S.gone && this.clock() < start.at) {
+          const held = new Set(); let clash = false;
+          for (const m of io.mates?.(true) || []) { const k = (m.d?.[4] | 0) - 1; if (k < 0) continue; held.add(k); if (k === S.row && (m.d[5] | 0) < S.dice) clash = true; }
+          if (clash) { let k = S.row + 1; while (held.has(k)) k++; S.row = k; }
+        }
+        const wait = (start.at - this.clock()) / 1000 + S.row * K.row;
         S.time += dt;
         // (the start goes by the clock everybody shares: the rules count the last moment down)
         if (!S.gone) { if (wait > 0.05) st.wait = wait; }
@@ -621,9 +635,14 @@ export class Coaster {
     // ---- the others: whoever rides now, on the rails where its robot is
     let used = 0;
     const who = this.crowd?.of() || [], at = this._near1 || (this._near1 = {});
+    const me = this.session && !this.session.ended ? this._rider?.pos : null, now = performance.now();
     for (const m of who) {
       const p = m.peer;
-      if (used >= this.others.length || !p || !p.visible || p.far || p.hidden) continue;
+      if (!p) continue;
+      // (glued to oneself — in the station before the start, or caught up with on the rails: neither that robot
+      // nor its car is drawn: they would stand in one's own. `ghostAt`, said every frame it is so: see mates.js)
+      if (me && (p.x - me.x) ** 2 + (p.y - me.y) ** 2 + (p.z - me.z) ** 2 < 6.5 * 6.5) { p.ghostAt = now; continue; }
+      if (used >= this.others.length || !p.visible || p.far || p.hidden) continue;
       const on2 = railNear(this.course, p.x, p.z, p.y - 0.4, 9, at);
       if (!on2) continue;
       const r = railAt(on2.line, on2.s, _p), falling = m.d?.[2] > 0;

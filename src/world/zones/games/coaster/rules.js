@@ -24,6 +24,7 @@ export const COASTER = {
   name: 'Hold the Rails!',
   step: 1 / 120,
   every: 10, // seconds between two starts on the clock everybody shares
+  row: 2.5, // seconds between two cars that leave with the same start: one after the other (see Coaster.js)
   // where one asks to play, at the back of the north beach, and which way the gate looks (north: at the station and the lift)
   gate: { x: 38, z: -125, yaw: Math.PI },
   g: 9.81,
