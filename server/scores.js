@@ -84,7 +84,7 @@ export const BOARDS = {
   walls: { order: 'asc', min: 38_000, max: 1800_000, release: 'walls' }, // Run the Walls
   sneak: { order: 'asc', min: 20_000, max: 1800_000, release: 'sneak' }, // Robots Can See You
   mine: { order: 'asc', min: 44_000, max: 1_800_000, release: 'mine' }, // Little Mine Train
-  coaster: { order: 'asc', min: 20_000, max: 1800_000, release: 'coaster' }, // Hold the Rails!
+  coaster: { order: 'asc', min: 100_000, max: 900_000, release: 'coaster' }, // Hold the Rails!: 2.4 km of rail; flat out all the way, by the short way at the fork, with nothing pushing the car off: 100.6 s
   run: { order: 'desc', min: 1, max: 60_000, length: 2_000, each: 12 }, // the arcade cabinet: metres run (52 a second at the fastest), and 25 for an isotope now and then
 };
 export const KEPT = { all: 200, month: 100, week: 100, day: 100 }, SHOWN = 10;

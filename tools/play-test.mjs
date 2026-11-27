@@ -30,6 +30,7 @@ const SPECS = {
   walls: { offer: /Run the Walls/, score: (ms) => ms > 38000 && ms < 900000 },
   sneak: { offer: /Robots Can See You/, score: (ms) => ms > 60000 && ms < 900000 }, // (the whole yard by its bot: two to three minutes)
   mine: { offer: /Little Mine Train/, score: (ms) => ms > 44000 && ms < 900000 }, // (the whole line by its driver: a minute and a quarter on the clock, less its nuggets)
+  coaster: { offer: /Hold the Rails!/, score: (ms) => ms > 100000 && ms < 900000 }, // (the whole line by its bot: two and a half minutes)
 };
 const asked = process.argv.slice(2).filter((a) => SPECS[a]), ids = asked.length ? asked : Object.keys(SPECS);
 
