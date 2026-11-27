@@ -3,7 +3,8 @@
 *Asked for on 26 November 2026: "a rafting in a river" — a raft, a paddle, rapids, rocks, falls, down to the sea.*
 
 A river of its own comes down a headland of rock that stands in the sea against the foot of the northern
-cliffs, north of the golden dog (x 258…516, z -512…-357; nobody walks or swims there). A fall 140 m high drops
+cliffs, north of the golden dog (x 258…524, z -511…-351, 54 m from the dog's ledge at the nearest; nobody walks or
+swims there). A fall 140 m high drops
 from a spring at the brink of the real cliff into its top pool, **the Cauldron**; from there the river winds
 through its own canyon — three long reaches and two hairpins, **648 m, 53.5 m down, 8.6 to 13 m wide** (6.6 m in
 its narrows, 23 m where it forks round an island) — and goes over a last fall of 9.6 m into a lagoon open to the
@@ -50,7 +51,7 @@ run into each other.
 The crew that plays by itself follows the way down from wherever it is (the quickest water that keeps clear of
 the rocks, never asking more than a quarter of a metre across for a metre down), goes straight over the falls
 and braces a quarter of a second before each lip. With a person's limits — it sees what comes 0.25 s late —
-it runs the river clean at its first try in **90.4 s** (six braces, each 0.22 to 0.26 s before it was needed,
+it runs the river clean at its first try in **90.4 s** (90.4 and 90.6 s in the running game) (six braces, each 0.22 to 0.26 s before it was needed,
 in a window 0.55 s wide; never knocked, never over, never held; 10.6 m/s at the fastest). A clumsy crew — half
 a second late, weaving, bracing for one fall in two — gets down in 133 s, knocked eleven times and over three.
 Adrift, a raft takes 222 s (twenty knocks, three times over); paddling straight ahead, 144 s. The quickest
@@ -58,9 +59,11 @@ water all the way, paddled flat out, would take 85.2 s. For the game's boards:
 `raft: { order: 'asc', min: 85_000, max: 900_000 }`.
 
 What it adds to the world (only when it is on): one group, `raft` — the ground of the headland (a lattice of
-1.6 m in 60 pieces, each drawn with a quarter of its points beyond 150 m), the water, the falls, some 230
-boulders and 490 trees and bushes of its own in six instanced meshes, the gantries, the flags, the gate — and
-nine rafts kept apart. No collision: nobody can get there.
+1.6 m in pieces of 26 m, each drawn with a quarter of its points beyond 150 m, with a shader of its own: the
+world's granite in beds, grass where it lies flat), the water, the falls, some 230 boulders and 400 trees and
+bushes of its own in eight instanced meshes, the gantries, the flags, the gate — and nine rafts kept apart. No
+collision: nobody can get there. Not measured: how many triangles of it are in view at once (a count by hand
+says 50 to 80 thousand at the worst, from the river itself).
 
 **What it does not do, and what nobody has seen.** *Nobody has held the stick*: the weight of the raft, the
 lateness of its turning and the half second of the brace are judgements checked by a bot, not felt by a hand —
@@ -69,5 +72,6 @@ from the north beach**: the cape of the golden dog stands between; it is seen fr
 dog's ledge, from the top of the slide and from the sea. Two real players have not been tried together: the
 other rafts were only checked by putting a place of the world back on the river. The river is not drawn on the
 map (the map draws the slide's line only: one line of `attractions()` in `src/main.js` would do it). Its trees
-are its own, plain ones — not the forest's. Beyond the headland to the north the cliffs of the world are only a
-backdrop, and look it from the river's first reach.
+are its own, plain ones — not the forest's. Its outer cliffs are plain beds of rock, and its north shore is cut
+straight along the edge of the world's own ground (z -511.5); beyond it the cliffs of the world are only a
+backdrop, and look it from the river's first reach. The pictures were all taken at the lowest quality.
