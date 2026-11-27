@@ -142,13 +142,13 @@ void main() {
   float beds = 0.5 + 0.5 * sin(yb * 1.7) * sin(yb * 0.57 + 1.7);
   float seam = 1.0 - smoothstep(0.0, 0.07, abs(fract(yb * 0.42) - 0.5)) ;
   float steep = 1.0 - smoothstep(0.55, 0.85, N.y);
-  vec3 rock = mix(vec3(0.27, 0.245, 0.22), vec3(0.46, 0.41, 0.34), beds) * grain;
-  rock = mix(rock, rock * vec3(1.16, 0.98, 0.78), n1 * 0.8);
+  vec3 rock = mix(vec3(0.24, 0.215, 0.19), vec3(0.42, 0.37, 0.3), beds) * grain;
+  rock = mix(rock * vec3(0.92, 0.96, 1.02), rock * vec3(1.2, 0.98, 0.74), n1);
   rock *= 1.0 - 0.4 * seam * steep;
   // grass where the ground lies flat enough — the tops, the ledges, the banks —, moss in streaks down the faces
   float green = smoothstep(0.7, 0.86, N.y + 0.14 * (n2 - 0.5)) * vColor.r;
   vec3 grass = mix(vec3(0.16, 0.34, 0.08), vec3(0.4, 0.5, 0.13), n1) * (0.75 + 0.5 * tex.g);
-  float moss = smoothstep(0.42, 0.7, n3) * steep * smoothstep(2.5, 9.0, vWorld.y) * vColor.r * 0.75;
+  float moss = smoothstep(0.34, 0.6, n3) * steep * smoothstep(2.5, 9.0, vWorld.y) * vColor.r * 0.85;
   vec3 albedo = mix(rock, vec3(0.2, 0.37, 0.1) * grain, moss);
   albedo = mix(albedo, grass, green);
   // gravel along the river, sand round the lagoon; dark where it is wet
@@ -211,6 +211,7 @@ export class Raft {
     for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
       const k = j * nx + i; L.at(L.x0 + i * CELL, L.z0 + j * CELL, o);
       H[k] = o.h; kind[k] = o.kind; E[k] = o.e; top[k] = o.top; sea[k] = o.sea; lvl[k] = o.level;
+      if (o.e <= 0.5 && o.h > o.level + 0.2) { kind[k] = 1; E[k] = (o.h - o.level) * 2.2; } // (the island of the fork is land: grass on its back, gravel round it)
     }
     const at = (i, j) => H[clamp(j, 0, nz - 1) * nx + clamp(i, 0, nx - 1)];
     const col = [0, 0, 0, 1], N = V(0, 1, 0), P = V(0, 0, 0);

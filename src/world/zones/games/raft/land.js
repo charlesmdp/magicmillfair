@@ -25,7 +25,7 @@ export const LAND = {
   // the island to the last pool is a wide green shore on the side of the sea — where the eye rests
   kind: {
     pool: { bank: [4.5, 4.5], cap: 5 }, riffle: { bank: [3.2, 3.2], cap: 6 }, rapid: { bank: [2.8, 2.8], cap: 7.5 }, narrows: { bank: [0.5, 0.5], cap: 13 },
-    fall: { bank: [2.4, 2.4], cap: 8 }, fork: { bank: [3, 3], cap: 5 }, lagoon: { bank: [3.5, 6], cap: 2.2 },
+    fall: { bank: [2.4, 2.4], cap: 8 }, fork: { bank: [3, 3], cap: 5 }, lagoon: { bank: [5, 7], cap: 2.2 },
   },
   // (`soft`: on that side — left, right — no wall behind the bank: a slope of grass. The east end of the headland is
   // such a place: two pools and the great bend between them lie round one meadow, where the eye rests)
@@ -39,6 +39,8 @@ export const LAND = {
   rim: 2.5, // m of top beyond the banks, at the least, before the cliffs of the sea (and half its height over the water more)
   steep: 8, // the cliffs of the sea: so many metres up for one across
   shore: 2.6, // m of rocks along the foot of those cliffs, between the sea and the wall
+  foot: 2.2, // m: the first of the wall is a slope of fallen rock, so wide — a low shore is nothing else
+  bays: 4.5, // m: how far the line of the shore wanders in and out: bays and buttresses
   // the foot of the real cliff, from north to south: [z, x] — west of it the headland runs on into the rock
   cliff: [[-512, 293], [-487, 287], [-469, 281], [-451, 276], [-433, 271], [-421, 269], [-409, 265], [-397, 262], [-380, 257]],
   back: 14, // m: how far behind its spring the pool of the Cauldron goes on, into the real cliff
@@ -82,7 +84,7 @@ export function raftLand(course) {
   // (banks and tops ease from one stretch into the next)
   const eased = (get) => { const raw = S.map(get), out = new Float64Array(raw.length), w = 6; for (let i = 0; i < raw.length; i++) { let sum = 0, c = 0; for (let d = -w; d <= w; d++) { const k = clamp(i + d, 0, raw.length - 1); sum += raw[k]; c++; } out[i] = sum / c; } return out; };
   const bl = eased((q) => q.shape.bank[0]), br = eased((q) => q.shape.bank[1]), cap = eased((q) => q.shape.cap), sl = eased((q) => q.shape.soft?.[0] || 0), sr = eased((q) => q.shape.soft?.[1] || 0);
-  S.forEach((q, i) => { q.bl = bl[i]; q.br = br[i]; q.cap = cap[i]; q.sl = sl[i]; q.sr = sr[i]; q.out = q.hw + Math.max(q.bl, q.br) + LAND.rim + 0.5 * q.cap + LAND.shore + (q.y + q.cap) / LAND.steep; });
+  S.forEach((q, i) => { q.bl = bl[i]; q.br = br[i]; q.cap = cap[i]; q.sl = sl[i]; q.sr = sr[i]; q.out = q.hw + Math.max(q.bl, q.br) + LAND.rim + 0.5 * q.cap + LAND.shore + LAND.foot + LAND.bays * 0.8 + (q.y + q.cap) / LAND.steep; });
   {
     const e = S[S.length - 1];
     for (let d = 2; d <= 34; d += 2) {
@@ -141,14 +143,14 @@ export function raftLand(course) {
     for (const q of seen) far[q.n + 1] = 0;
     if (!near) { out.h = -6; out.e = 99; out.s = 0; out.u = 0; out.level = 0; out.top = -6; out.sea = -99; out.kind = 5; return out; }
     // (the shore wanders; and to the west the headland runs on into the real cliff: no shore there)
-    sea += 2.4 * (fbm(x / 9 + 3.1, z / 9 + 7.7) - 0.5);
+    sea += 2.4 * (fbm(x / 9 + 3.1, z / 9 + 7.7) - 0.5) + 2 * LAND.bays * (noise(x / 27 + 1.7, z / 27 + 0.4) - 0.5);
     const inland = cliffFoot(z) + 5 - x - 3 * Math.max(0, z + 398) - 3 * Math.max(0, -509 - z);
     if (inland > sea) sea = inland;
     sea = Math.min(sea, z + 511.5); // (nothing beyond the northern edge of the world's own ground)
     top += 1.6 * (fbm(x / 17 + 1.3, z / 17 + 4.2) - 0.5);
     let h = Math.min(top, floor), kind = floor < top ? (ne <= 0 ? 0 : ne <= (near ? Math.max(near.bl, near.br) : 0) ? 1 : 2) : 3;
     // the cliffs of the sea: rocks along their foot, then the wall
-    const wall = sea <= 0 ? -6 : sea < LAND.shore ? -1.6 + 2.5 * (sea / LAND.shore) ** 1.5 : 0.9 + LAND.steep * (sea - LAND.shore);
+    const up = sea - LAND.shore, wall = sea <= 0 ? -6 : up < 0 ? -1.6 + 2.5 * (sea / LAND.shore) ** 1.5 : up < LAND.foot ? 0.9 + up : 0.9 + LAND.foot + LAND.steep * (up - LAND.foot);
     if (wall < h) { h = wall; kind = sea <= 0 ? 5 : 4; }
     const dx = x - near.x, dz = z - near.z;
     out.h = h; out.e = ne; out.s = near.s + dx * near.tx + dz * near.tz; out.u = -dx * Math.cos(near.yaw) + dz * Math.sin(near.yaw);
