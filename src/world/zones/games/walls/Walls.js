@@ -290,7 +290,7 @@ export class Walls {
     this.blades = of('blade').map((t) => {
       const parts = new Parts(), b = parts.get('matte');
       // (a crescent on a rod — red, its edge white —, open above: what is behind it stays in sight)
-      const cy = -L + 0.12, Ro = 0.9, Ri = 0.6, at2 = (r, a, z) => V(Math.cos(a) * r, cy + Math.sin(a) * r, z);
+      const cy = -L + 0.12, Ro = 0.9, Ri = 0.4, at2 = (r, a, z) => V(Math.cos(a) * r, cy + Math.sin(a) * r, z);
       b.tint(...DARK, 1).box(-0.05, cy - Ri, -0.05, 0.05, 0, 0.05);
       for (let m = 0; m < 12; m++) {
         const a0 = Math.PI * (1 + (0.5 + m) / 13 - 0.5 / 13), a1 = Math.PI * (1 + (1.5 + m) / 13 - 0.5 / 13), thin = (a) => Ri + (Ro - Ri) * (1 - Math.min(1, Math.abs(a - 1.5 * Math.PI) / (0.5 * Math.PI)) ** 3 * 0.85);
@@ -401,7 +401,7 @@ export class Walls {
    */
   open(player, io) {
     const st = startRun(this.clock() / 1000), events = [], input = { run: 0, side: 0, jump: false }, pose = {}, { saves } = course();
-    const K = { acc: 0, camY: null, camU: 0, hall: 0, after: 0, lean: 0, hint: -1 };
+    const K = { acc: 0, camY: null, camU: 0, hall: 0, after: 0, lean: 0, hint: -1, rush: 0 };
     const _c = V(0, 0, 0), _l = V(0, 0, 0);
     const session = {
       walls: this, over: false, ended: false, score: 0, time: 0, line: '', riding: false, anim: ANIM.idle, state: st, auto: false,
@@ -480,7 +480,9 @@ export class Walls {
         placeAt(st.s + D.ahead, K.camU * 0.6 - 0.3 * (1 - K.hall), pose);
         _l.set(pose.x, S.base + K.camY + 1.1 + Math.max(0, st.y - K.camY) * 0.45, pose.z);
         cam.position.copy(_c); cam.up.set(0, 1, 0); cam.lookAt(_l);
-        return lerp(62, 72, K.hall); // (between two walls it looks wider)
+        // (between two walls it looks wider; along a wall, and thrown from a bar, a little wider still: the rush of it)
+        K.rush += ((st.mode === 'wall' || (st.mode === 'air' && st.vs > S.speed + 0.2) ? 1 : 0) - K.rush) * Math.min(1, dt * 5);
+        return lerp(62, 72, K.hall) + 5 * K.rush;
       },
       /** The run is over (the top), or left: the player is put back at the gate. */
       drop: (pl) => { pl.driver = null; pl.riding = false; pl.pitch = 0; pl.roll = 0; pl.teleport(this.gate.x, this.gate.z, this.gate.yaw); session.close(); },
