@@ -65,8 +65,9 @@ export class Coaster {
   }
 
   /**
-   * The trees of the forest that stand in the way of the rails are taken out while the game is on: those within
-   * five metres of the middle of the line whose crown reaches the cars. (The forest has no way to be asked for
+   * The trees of the forest that stand in the way of the rails are taken out while the game is on: those whose
+   * crown would reach over the rails (within five metres of the middle of the line — further for a tall one: its
+   * crown is wider) and whose top comes up to the cars. (The forest has no way to be asked for
    * that: its lists are reached into — the cells its near trees are drawn from, the billboards of the far ones,
    * what its shadows are baked from; and the trunk of each lets go of who walks, the way the world lets go of a
    * thing taken away while the game runs.) Returns how many.
@@ -76,9 +77,9 @@ export class Coaster {
     if (!forest?.grid || !forest.info || !forest.matrices) return 0;
     const near = {}, gone = new Set(), q = {};
     for (const list of forest.grid.values()) for (let k = list.length - 1; k >= 0; k--) {
-      const i = list[k], o = i * 6, x = forest.info[o], z = forest.info[o + 2], on2 = railNear(c, x, z, null, 5.5, near);
-      if (!on2 || on2.d > 5) continue;
-      if (railAt(on2.line, on2.s, q).y - forest.info[o + 1] > 2 * forest.info[o + 3] + 4) continue; // (the rails pass well over its top)
+      const i = list[k], o = i * 6, x = forest.info[o], z = forest.info[o + 2], tall = 2 * forest.info[o + 3], on2 = railNear(c, x, z, null, 13, near);
+      if (!on2 || on2.d > Math.max(5, 2.5 + 0.32 * tall)) continue;
+      if (railAt(on2.line, on2.s, q).y - forest.info[o + 1] > tall + 1) continue; // (the rails pass over its top)
       list.splice(k, 1); forest.matrices.fill(0, i * 16, i * 16 + 16); gone.add(`${x},${z}`);
     }
     for (const sp of forest.species || []) {
@@ -279,6 +280,18 @@ export class Coaster {
       const [q, f] = sample(g.from - 0.1);
       for (let k = 0; k < 3; k++) paint.tint(...(k % 2 ? WHITE : RED), 1).beam(on(q, f, g.side * COASTER.rail, k * 0.22).clone(), on(q, f, g.side * COASTER.rail, k * 0.22 + 0.22).clone(), 0.3, 0.3, { faces: 'xXyY' });
     }
+    // ---- before a fork: a board in black and white on its side — the short way, the hard one
+    for (const f of c.forks) for (const back of [34, 9]) {
+      const s = Math.max(1, f.from - back), lim = railAt(c, s, _p).lim, { top, p } = post(s, f.side * (lim + 1.5), 3.1, [BLACK, WHITE]);
+      const board = canvasBoard(512, 300, (ctx, w, h) => {
+        ctx.fillStyle = '#16161c'; ctx.fillRect(0, 0, w, h);
+        for (let k = 0; k < 16; k++) { ctx.fillStyle = k % 2 ? '#16161c' : '#f4f1e8'; ctx.fillRect(k * 32, 0, 32, 26); ctx.fillStyle = k % 2 ? '#f4f1e8' : '#16161c'; ctx.fillRect(k * 32, h - 26, 32, 26); }
+        ctx.fillStyle = '#f5c518'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '800 62px system-ui, sans-serif'; ctx.fillText(f.side < 0 ? '◀ SHORT WAY' : 'SHORT WAY ▶', w / 2, 100, w - 30);
+        ctx.fillStyle = '#f4f1e8'; ctx.font = '700 44px system-ui, sans-serif'; ctx.fillText(`${f.name.toUpperCase()} · HARD`, w / 2, 172, w - 30);
+        ctx.font = '600 34px system-ui, sans-serif'; ctx.fillText(f.side < 0 ? 'lean left to take it' : 'lean right to take it', w / 2, 232, w - 30);
+      }, 2.9, 1.7, { both: true });
+      hang(board, V(top.x, top.y - 0.3, top.z), p.yaw + Math.PI, 'coaster-sign-fork');
+    }
     // ---- the finish: an arch over the line, a banner
     {
       const lim = railAt(c, c.finish, _p).lim, a = post(c.finish, -(lim + 1.3), 7.6, [NAVY, WHITE], 0.13), b = post(c.finish, lim + 1.3, 7.6, [NAVY, WHITE], 0.13);
@@ -306,20 +319,20 @@ export class Coaster {
     for (let k = 1; k <= 4; k++) deck.tint(0.95, 0.88, 0.76, 1).box(x0, y - 0.16 - k * 0.42, z1 + (k - 1) * 0.5, x1, y - k * 0.42, z1 + k * 0.5);
     timber.tint(...CREAM, 1).box(x0, d.heightAt(a.x, a.z) - 0.6, z0, x0 + 0.2, y - 0.16, z1).box(x1 - 0.2, d.heightAt(a.x, a.z) - 0.6, z0, x1, y - 0.16, z1);
     // the roof: six striped posts, a ridge, two slopes in red and cream bands
-    const top = y + 3.5;
-    for (const px of [x0 + 0.3, x1 - 0.3]) for (const pz of [z0 + 0.4, (z0 + z1) / 2, z1 - 0.6]) {
+    const top = y + 4.5;
+    for (const px of [x0 + 0.3, x1 - 0.3]) for (const pz of [z0 + 0.4, (z0 + z1) / 2 - 1.5, z1 - 3.6]) {
       for (let h = y, k = 0; h < top; h += 0.6, k++) paint.tint(...(k % 2 ? CREAM : RED), 1).cylinder(px, h, pz, 0.1, 0.1, Math.min(0.6, top - h), 8);
       paint.tint(...GOLD, 1).place(px, top, pz).lathe([[0.001, 0.26], [0.1, 0.22], [0.14, 0.12], [0.1, 0.02], [0.001, 0]], 8).pop();
     }
     for (let k = 0; k < 8; k++) {
-      const za = lerp(z0 - 0.4, z1 + 0.2, k / 8), zb = lerp(z0 - 0.4, z1 + 0.2, (k + 1) / 8), tone = k % 2 ? CREAM : RED;
+      const za = lerp(z0 - 0.4, z1 - 3.4, k / 8), zb = lerp(z0 - 0.4, z1 - 3.4, (k + 1) / 8), tone = k % 2 ? CREAM : RED;
       cloth.tint(...tone, 1).quad(V(x0 - 0.5, top - 0.1, zb), V(x0 - 0.5, top - 0.1, za), V(a.x, top + 1.5, za), V(a.x, top + 1.5, zb)).quad(V(a.x, top + 1.5, zb), V(a.x, top + 1.5, za), V(x1 + 0.5, top - 0.1, za), V(x1 + 0.5, top - 0.1, zb));
     }
-    timber.tint(...WHITE, 1).beam(V(a.x, top + 1.5, z0 - 0.5), V(a.x, top + 1.5, z1 + 0.3), 0.16, 0.2);
+    timber.tint(...WHITE, 1).beam(V(a.x, top + 1.5, z0 - 0.5), V(a.x, top + 1.5, z1 - 3.3), 0.16, 0.2);
     // bulbs along the eaves, bunting from the gate to the roof
-    for (const px of [x0 - 0.5, x1 + 0.5]) for (let k = 0; k <= 12; k++) glow.tint(1.6, 1.3, 0.6, 1).place(px, top - 0.2, lerp(z0 - 0.3, z1 + 0.1, k / 12)).lathe([[0.001, -0.09], [0.08, -0.03], [0.08, 0.03], [0.001, 0.09]], 5).pop();
+    for (const px of [x0 - 0.5, x1 + 0.5]) for (let k = 0; k <= 12; k++) glow.tint(1.6, 1.3, 0.6, 1).place(px, top - 0.2, lerp(z0 - 0.3, z1 - 3.5, k / 12)).lathe([[0.001, -0.09], [0.08, -0.03], [0.08, 0.03], [0.001, 0.09]], 5).pop();
     for (const sg of [-1, 1]) for (let k = 0; k < 9; k++) {
-      const from = V(G.x + sg * 1.9, G.y + 3.2, G.z), to = V(a.x + sg * 4.4, top - 0.1, z1 + 0.2), sag = (t) => from.clone().lerp(to, t).add(V(0, -0.5 * Math.sin(Math.PI * t), 0)), q0 = sag(k / 9), q1 = sag((k + 1) / 9);
+      const from = V(G.x + sg * 1.9, G.y + 3.2, G.z), to = V(a.x + sg * 4.4, top - 0.1, z1 - 3.4), sag = (t) => from.clone().lerp(to, t).add(V(0, -0.5 * Math.sin(Math.PI * t), 0)), q0 = sag(k / 9), q1 = sag((k + 1) / 9);
       paint.tint(0.3, 0.26, 0.22, 1).rod(q0, q1, 0.015, 4, { caps: false });
       cloth.tint(...[RED, CREAM, YELLOW, GREEN, BLUE][k % 5], 1).tri(q0, q1, q0.clone().lerp(q1, 0.5).add(V(0, -0.42, 0)));
     }
@@ -370,15 +383,16 @@ export class Coaster {
     const p = carPose(startRun(this.course));
     this._place(this.show, p.x, p.y, p.z, p.yaw, p.pitch, p.roll);
     // the sparks: a handful of small bright shards, thrown from the outer wheel
-    const N = 14, geo = new THREE.BufferGeometry(), pos = new Float32Array(N * 9), nrm = new Float32Array(N * 9), col = new Float32Array(N * 12), uv = new Float32Array(N * 6);
-    for (let i = 0; i < N * 3; i++) { nrm[i * 3 + 1] = 1; col.set([1.9, 1.3, 0.35, 1], i * 4); }
+    const N = 28, geo = new THREE.BufferGeometry(), pos = new Float32Array(N * 9), nrm = new Float32Array(N * 9), col = new Float32Array(N * 12), uv = new Float32Array(N * 6);
+    for (let i = 0; i < N * 3; i++) { nrm[i * 3 + 1] = 1; col.set(i % 3 ? [2.6, 1.5, 0.3, 1] : [3, 2.6, 1.6, 1], i * 4); }
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); geo.setAttribute('color', new THREE.BufferAttribute(col, 4));
     this.sparks = new THREE.Mesh(geo, this.mats.glow);
     this.sparks.name = 'coaster-sparks'; this.sparks.frustumCulled = false; this.sparks.visible = false; this.sparks.matrixAutoUpdate = false;
     this._shards = Array.from({ length: N }, () => ({ x: 0, y: -999, z: 0, vx: 0, vy: 0, vz: 0, life: 0 }));
     // the board that glows: three metres of the edge, red hot, beside the car that strays
     const hot = new MeshBuilder();
-    hot.tint(2.4, 0.25, 0.12, 1).box(-0.2, -0.02, -1.6, 0.2, 0.04, 1.6);
+    hot.tint(3, 0.5, 0.12, 1).box(-0.24, -0.02, -3, 0.24, 0.05, 3);
+    hot.tint(3.2, 2.2, 0.7, 1).box(-0.09, 0.05, -2.2, 0.09, 0.09, 2.2);
     this.hot = new THREE.Mesh(hot.build(), this.mats.glow);
     this.hot.name = 'coaster-hot'; this.hot.frustumCulled = false; this.hot.visible = false; this.hot.matrixAutoUpdate = false;
     // (added to the scene itself: what culls the group by distance leaves them alone)
@@ -409,9 +423,10 @@ export class Coaster {
     const dot = el.querySelector('b'), text = el.querySelector('span'), bar = el.firstChild;
     let last = '';
     return {
-      set: (u, room, lim, cool, lifted) => {
+      set: (u, room, lim, cool, lifted, edge = 0) => {
         // (the bar is the width of the sleepers; the red ends are where the sparks fly; where a rail is missing, its half is red)
         dot.style.left = `${clamp(50 + (u / lim) * 50, 0, 100).toFixed(1)}%`;
+        const hot = edge > 0.3; if (hot !== dot._hot) { dot._hot = hot; dot.style.background = hot ? '#ff3b1f' : '#ffd23c'; dot.style.boxShadow = hot ? '0 0 12px 4px rgba(255,90,30,.9)' : 'none'; }
         const half = room[1] - room[0] < lim * 1.5 ? (room[0] > -lim + 0.01 ? 'L' : 'R') : '', key = `${half}${cool > 0 ? Math.ceil(cool) : 0}${lifted ? 'l' : ''}`;
         if (key === last) return;
         last = key;
@@ -432,7 +447,7 @@ export class Coaster {
    */
   open(player, io) {
     const c = this.course, K = COASTER, start = this.nextStart(), st = startRun(c, { wait: Math.max(0.05, start.wait) });
-    const events = [], input = { x: 0, y: 0, boost: false }, pose = {}, S = { cam: null, look: V(0, 0, 0), fov: 62, shake: 0, after: 0, acc: 0, view: 1, stretch: -1, gone: false, time: 0, x: 0, spark: 0, room: [0, 0] };
+    const events = [], input = { x: 0, y: 0, boost: false }, pose = {}, S = { cam: null, look: V(0, 0, 0), fov: 62, shake: 0, after: 0, acc: 0, view: 0, stretch: -1, gone: false, time: 0, x: 0, spark: 0, room: [0, 0] };
     const t = V(0, 0, 0), t2 = V(0, 0, 0), q1 = {}, q2 = {}, q3 = {}, fr = { fwd: [0, 0, 0], side: [0, 0, 0], up: [0, 0, 0] }, gauge = this._gauge();
     this.show.visible = false;
     const session = {
@@ -456,6 +471,7 @@ export class Coaster {
         events.length = 0;
         // ---- where the car is, and how it stands
         carPose(st, pose);
+        if (st.fall <= 0) { S.pitch = S.pitch === undefined ? pose.pitch : S.pitch + (pose.pitch - S.pitch) * Math.min(1, dt * 14); S.roll = S.roll === undefined ? pose.roll : S.roll + (pose.roll - S.roll) * Math.min(1, dt * 14); pose.pitch = S.pitch; pose.roll = S.roll; } else { S.pitch = undefined; S.roll = undefined; }
         const falling = st.fall > 0, shake = st.fall <= 0 && st.wait <= 0 ? 0.012 * clamp(st.v / 25, 0, 1.3) * Math.sin(S.time * 41) : 0;
         this._place(this.mine, pose.x, pose.y + shake, pose.z, pose.yaw, pose.pitch, pose.roll + (falling ? 0 : clamp(-st.vu * 0.05, -0.12, 0.12)));
         // ---- the rider, on the bench
@@ -464,11 +480,12 @@ export class Coaster {
         pl.yaw = pose.yaw; pl.pitch = -pose.pitch * 0.9; pl.roll = falling ? 0 : -pose.roll; pl.speed = st.v; pl.grounded = true;
         session.anim = ANIM.sit;
         // ---- where the wheels are: sparks from the outer one near the edge, the board of the edge red hot beside it
-        const edge = falling || st.lifted || st.wait > 0 ? 0 : clamp((Math.abs(st.u) / pose.lim - 0.5) / 0.5, 0, 1), side = Math.sign(st.u) || 1;
-        this._hot(st, edge, side);
-        if (edge > 0.4 && st.v > 5) { S.spark += dt * (20 + 60 * edge); while (S.spark > 1) { S.spark -= 1; this._spark(pose, side, st.v); } }
+        const room = this._room(st, S.room), side = Math.sign(st.u - (room[0] + room[1]) / 2) || 1, left = side > 0 ? room[1] - st.u : st.u - room[0]; // (how far the car is from the end of the sleepers on the side it strays to)
+        const edge = falling || st.lifted || st.wait > 0 || st.over ? 0 : clamp(1 - left / (pose.lim * 0.55), 0, 1);
+        this._hot(st, edge, side, side > 0 ? room[1] : room[0]);
+        if (edge > 0.3 && st.v > 4) { S.spark += dt * (30 + 110 * edge); while (S.spark > 1) { S.spark -= 1; this._spark(pose, side, st.v); } if (edge > 0.75) S.shake = Math.max(S.shake, 0.12); }
         this._sparkle(dt);
-        if (S.gone) gauge.set(falling ? 0 : st.u, this._room(st, S.room), pose.lim, st.cool, st.lifted);
+        if (S.gone) gauge.set(falling ? 0 : st.u, room, pose.lim, st.cool, st.lifted, edge);
         // ---- the line of the run
         const here = c.stretches.findIndex((z) => st.s >= z.from && st.s < z.to);
         if (here !== S.stretch && here >= 0 && S.gone) { S.stretch = here; if (here > 0 && !st.over) io.note(c.stretches[here].name, 2000); }
@@ -487,20 +504,24 @@ export class Coaster {
       camera: (cam, dt) => {
         const line = st.line, q = st.q, falling = st.fall > 0;
         if (!falling) {
-          const back = 7.4 + st.v * 0.09, pb = railAt(line, Math.max(0.2, q - back), q1), pa = railAt(line, Math.min(line.length - 0.5, q + 11 + st.v * 0.6), q2);
-          // (before the start, and on a lift: from in front, on the mountain side, looking back over the car at the valley)
-          const lift = line.lifts.find((l) => q >= l.from && q < l.to), view = st.wait > 1.6 || (lift && (lift.to - q) / K.chain > 2.4 && q - lift.from > 5) ? 1 : 0;
+          // (the rails so far behind, so far ahead — off a fork onto the line it left, or the line it comes back to)
+          const rails = (d, out) => (line !== c && q + d < 0 ? railAt(c, Math.max(0.2, line.from + q + d), out) : line !== c && q + d > line.length ? railAt(c, line.to + q + d - line.length, out) : railAt(line, clamp(q + d, 0.2, line.length - 0.5), out));
+          const flat = 1 / Math.sqrt(1 + pose.rise * pose.rise), back = (8.2 + st.v * 0.07) * (0.35 + 0.65 * flat), pb = rails(-back, q1), pa = rails((4.5 + st.v * 0.1) * flat, q2);
+          // (on a lift: from in front, a little to the mountain side, looking back over the car at the valley)
+          const lift = line.lifts.find((l) => q >= l.from && q < l.to), view = lift && (lift.to - q) / K.chain > 2.4 && q - lift.from > 5 ? 1 : 0;
           S.view += (view - S.view) * Math.min(1, dt * (view ? 1.3 : 2.2));
           const v = smooth(0, 1, S.view);
-          // (as high over the rails behind as the slope asks — and, where the line falls away ahead, high enough to see down it over the car)
-          t.set(pb.x, Math.max(pb.y + (3.3 + st.v * 0.03) * Math.sqrt(1 + pb.rise * pb.rise), pa.y < pose.y ? pose.y + 2.3 : -1e9), pb.z);
-          t2.set(pa.x, lerp(pose.y, pa.y, 0.7) + 0.9, pa.z);
+          // (well above the rails behind — as high over them as the slope asks — and looking at the rails just ahead of the car:
+          // the car sits a little under the middle of the screen, the line runs on from it to the top, bend after bend)
+          // (…and never lower than a little over the car: up a slope the rails ahead are seen over it)
+          t.set(pb.x, Math.max(pb.y + (4.9 + st.v * 0.03) * Math.sqrt(1 + pb.rise * pb.rise), pose.y + 2.7), pb.z);
+          t2.set(pa.x, pa.y + 0.3, pa.z);
           if (v > 0.001) {
-            // (in the station the roof is low and its posts stand close: nearer, and lower)
-            const wait = st.wait > 0, pf = railAt(line, Math.min(line.length - 0.5, q + (wait ? 7 : 9)), q3), away = (Math.sign(-pf.tz * (pf.x - VALLEY.x) + pf.tx * (pf.z - VALLEY.z)) || 1) * (wait ? 2.6 : 4.2);
+            // (it keeps over the sleepers: beside them the trees stand)
+            const pf = rails(6.5 * flat, q3), away = (Math.sign(-pf.tz * (pf.x - VALLEY.x) + pf.tx * (pf.z - VALLEY.z)) || 1) * 1.5;
             const vx = VALLEY.x - pose.x, vz = VALLEY.z - pose.z, vl = Math.hypot(vx, vz) || 1;
-            t.lerp(V(pf.x - pf.tz * away, Math.max(pf.y, pose.y) + (wait ? 2 : 3.4), pf.z + pf.tx * away), v);
-            t2.lerp(V(pose.x + (vx / vl) * 5, pose.y + 0.4, pose.z + (vz / vl) * 5), v);
+            t.lerp(V(pf.x - pf.tz * away, Math.max(pf.y, pose.y) + 3, pf.z + pf.tx * away), v);
+            t2.lerp(V(pose.x + (vx / vl) * 4, pose.y + 0.6, pose.z + (vz / vl) * 4), v);
           }
           if (!S.cam) { S.cam = t.clone(); S.look.copy(t2); } else { S.cam.lerp(t, Math.min(1, dt * 7)); S.look.lerp(t2, Math.min(1, dt * 9)); }
         } else S.look.lerp(t2.set(pose.x, pose.y, pose.z), Math.min(1, dt * 6));
@@ -529,9 +550,9 @@ export class Coaster {
   }
 
   /** The board of the edge, red hot beside a car that strays: the nearer the edge, the brighter. */
-  _hot(st, edge, side) {
+  _hot(st, edge, side, end) {
     if (edge <= 0.02) { this.hot.visible = false; return; }
-    const p = this._at(st.line, st.q, _f, _p), f = _f, m = this.hot.matrix, k = 0.4 + 0.9 * edge, u = side * (p.lim + 0.13);
+    const p = this._at(st.line, st.q, _f, _p), f = _f, m = this.hot.matrix, k = (0.5 + 1.1 * edge) * (edge > 0.75 ? 1 + 0.25 * Math.sin(performance.now() * 0.03) : 1), u = end + side * 0.13;
     m.set(-f.side[0] * k, f.up[0] * k, f.fwd[0], p.x + f.side[0] * u + f.up[0] * -0.13,
       -f.side[1] * k, f.up[1] * k, f.fwd[1], p.y + f.side[1] * u + f.up[1] * -0.13,
       -f.side[2] * k, f.up[2] * k, f.fwd[2], p.z + f.side[2] * u + f.up[2] * -0.13, 0, 0, 0, 1);
@@ -544,7 +565,7 @@ export class Coaster {
     if (!s) return;
     const sy = Math.sin(pose.yaw), cy = Math.cos(pose.yaw), rx = -cy * side, rz = sy * side;
     s.x = pose.x + rx * 0.8 + sy * (Math.random() - 0.5) * 1.6; s.y = pose.y + 0.05; s.z = pose.z + rz * 0.8 + cy * (Math.random() - 0.5) * 1.6;
-    s.vx = rx * (1.5 + 2.5 * Math.random()) + sy * v * 0.35; s.vy = 1.5 + 2.5 * Math.random(); s.vz = rz * (1.5 + 2.5 * Math.random()) + cy * v * 0.35; s.life = 0.25 + 0.2 * Math.random();
+    s.vx = rx * (1.5 + 2.5 * Math.random()) + sy * v * 0.35; s.vy = 2.5 + 4 * Math.random(); s.vz = rz * (1.5 + 2.5 * Math.random()) + cy * v * 0.35; s.life = 0.35 + 0.3 * Math.random();
     this.sparks.visible = true;
   }
 
@@ -554,7 +575,7 @@ export class Coaster {
     let any = false;
     this._shards.forEach((s, i) => {
       if (s.life > 0) { s.life -= dt; s.vy -= 9.81 * dt; s.x += s.vx * dt; s.y += s.vy * dt; s.z += s.vz * dt; any = true; }
-      const y = s.life > 0 ? s.y : -999, k = 0.09;
+      const y = s.life > 0 ? s.y : -999, k = 0.2;
       pos.setXYZ(i * 3, s.x, y + k, s.z); pos.setXYZ(i * 3 + 1, s.x - s.vx * 0.03 - k, y - s.vy * 0.03, s.z - s.vz * 0.03); pos.setXYZ(i * 3 + 2, s.x - s.vx * 0.03 + k, y - s.vy * 0.03, s.z - s.vz * 0.03 + k);
     });
     pos.needsUpdate = true;
@@ -584,7 +605,7 @@ export class Coaster {
     if (!camera || !this._cull) return;
     const cam = camera.position;
     for (const p of this._pieces) {
-      const d = Math.hypot(cam.x - p.x, cam.y - p.y, cam.z - p.z) - p.r, near = d < this._near, far = !near && d < 1500;
+      const d = Math.hypot(cam.x - p.x, cam.y - p.y, cam.z - p.z) - p.r, near = d < this._near, far = !near && d < 3000;
       if (p.near.visible !== near) p.near.visible = near;
       if (p.far.visible !== far) p.far.visible = far;
     }
