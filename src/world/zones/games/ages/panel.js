@@ -59,7 +59,7 @@ const CSS = `
 .ages-flash{position:absolute;inset:0;background:#fff;opacity:0;transition:opacity .9s ease-out}
 .ages-tip{position:absolute;left:50%;transform:translateX(-50%);bottom:100%;margin-bottom:6px;padding:4px 12px;border-radius:999px;background:rgba(20,26,30,.86);border:1px solid rgba(246,231,200,.3);font-size:12px;font-weight:600;white-space:nowrap;opacity:0;transition:opacity .3s}
 .ages-tip.on{opacity:1}
-@media (max-height:520px){.ages-bar{gap:4px;bottom:calc(5px + env(safe-area-inset-bottom,0px));--w:clamp(52px,calc((100vw - 340px)/6 - 5px),74px)}.ages-info{height:24px}.ages-gold b{font-size:16px}.ages-b{height:calc(var(--w)*.86)}.ages-b .n{display:none}.ages-b canvas{top:1px;width:calc(var(--w)*.62);height:calc(var(--w)*.62)}.ages-row{gap:5px}.ages-say{top:calc(52px + env(safe-area-inset-top,0px))}.ages-hp{width:clamp(80px,13vw,140px)}.ages-hp span{display:none}}
+@media (max-height:520px){.ages-bar{gap:4px;bottom:calc(5px + env(safe-area-inset-bottom,0px));--w:clamp(52px,calc((100vw - 340px)/6 - 5px),74px)}.ages-info{height:24px}.ages-gold b{font-size:16px}.ages-b{height:calc(var(--w)*.86)}.ages-b .n{display:none}.ages-b canvas{top:1px;width:calc(var(--w)*.62);height:calc(var(--w)*.62)}.ages-row{gap:5px}.ages-say{top:calc(82px + env(safe-area-inset-top,0px));padding:4px 14px}.ages-hp{width:clamp(80px,13vw,140px)}.ages-hp span{display:none}}
 @media (max-aspect-ratio:1/1){.ages-bar{bottom:calc(178px + env(safe-area-inset-bottom,0px));--w:calc((100vw - 16px)/6 - 5px)}.ages-row{gap:5px}.ages-xp em:first-child{display:none}}
 `;
 const KIND = ['unit', 'unit', 'unit', 'turret', 'blow', 'age'];

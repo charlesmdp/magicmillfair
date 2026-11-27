@@ -22,7 +22,7 @@ const A = AGES, H = A.half, L = W.road, STEP = A.step, TAU = Math.PI * 2;
 const LANE = [0.92, 0.34, 0.62];
 const ROAD = { z0: -0.42, z1: 1.6 };
 /** The camera: so far in front of the middle of the stage, so high over it; what must be in the picture: so wide (half), from so low to so high. */
-const CAM = { v: 31, y: 12.5, wide: 18.5, low: -1.0, lowV: 4.8, high: 8.8, highV: -2 };
+const CAM = { v: 31, y: 12.5, wide: 18.5, low: -1.0, lowV: 4.8, high: 7.9, highV: -2 };
 const RED = [1.05, 0.1, 0.07], CREAM = [1.1, 0.98, 0.72], GILT = [1.2, 0.85, 0.16], GRASS = [[0.17, 0.56, 0.11], [0.21, 0.66, 0.14]], SAND = [0.86, 0.66, 0.36];
 const FLAGS = [[1.4, 0.09, 0.06], [1.4, 1.15, 0.06], [0.06, 0.3, 1.5], [0.12, 1.05, 0.18], [1.4, 0.18, 0.95], [1.45, 0.5, 0.03]];
 /** How much larger than the rules have them the robots are drawn (a brawler and a shooter; a heavy one), and the turrets. */
@@ -321,7 +321,7 @@ export class Ages {
         S.cam = cam;
         const view = { w: window.innerWidth || 1280, h: window.innerHeight || 720 }, r = panel.rect();
         // (the share of the picture the stage may take: under the line of the run, over the buttons)
-        const y0 = Math.min(0.2, 64 / view.h), y1 = clamp((r.top - 10) / view.h, 0.5, 0.94);
+        const y0 = (view.h < 520 ? 34 : 64) / view.h, y1 = clamp((r.top - (view.h < 520 ? 2 : 10)) / view.h, 0.5, 0.94);
         const near = Math.atan2(CAM.y - CAM.low, CAM.v - CAM.lowV), far = Math.atan2(CAM.y - CAM.high, CAM.v - CAM.highV), dist = Math.hypot(CAM.v, CAM.y - 1);
         const need = 2 * Math.atan(Math.tan(Math.atan2(CAM.wide, dist)) / cam.aspect), fit = (near - far) / (y1 - y0), fov = clamp(Math.max(need, fit), 0.3, 1.9);
         // (the middle of what must be seen comes in the middle of the room it has)
@@ -408,7 +408,7 @@ export class Ages {
     (this.blowAt ||= [0, 0])[side] = mid;
     const more = (n) => { while (targets.length < n) targets.push({ x: clamp(mid + (rnd() - 0.5) * 9, -11, 11), z: 0.2 + rnd() * 0.9 }); };
     const fly = (o) => this.fx.push(o);
-    if (e.era === 0) { more(9); for (const t of targets) { const t0 = at - 0.95 - rnd() * 0.3; fly({ kind: 'ball', x0: t.x - dir * (5 + rnd() * 3), y0: 13 + rnd() * 3, z0: t.z - 1.5, x1: t.x, y1: 0.2, z1: t.z, t0, t1: at + rnd() * 0.08, arc: 0, size: 0.26 + rnd() * 0.16, col: [1.6, 0.9, 0.5], trail: [[3, 1.6, 0.3], [3, 2.6, 0.8]], dust: [[0.9, 0.8, 0.7], [3, 1.6, 0.3]] }); } }
+    if (e.era === 0) { more(9); for (const t of targets) { const t0 = at - 0.95 - rnd() * 0.3; fly({ kind: 'ball', x0: t.x - dir * (5 + rnd() * 3), y0: 13 + rnd() * 3, z0: t.z - 1.5, x1: t.x, y1: 0.2, z1: t.z, t0, t1: at + rnd() * 0.08, arc: 0, size: 0.26 + rnd() * 0.16, col: [0.42, 0.26, 0.16], trail: [[2.6, 0.9, 0.12], [2.8, 1.6, 0.3]], dust: [[0.5, 0.45, 0.4], [2.6, 1.0, 0.15]] }); } }
     else if (e.era === 1) { more(6); for (let n = 0; n < 38; n++) { const t = targets[n % targets.length]; fly({ kind: 'streak', x0: own - dir * (1 + rnd() * 3), y0: 2.5 + rnd() * 2, z0: -2 + rnd() * 4, x1: t.x + (rnd() - 0.5) * 1.3, y1: 0.1, z1: t.z + (rnd() - 0.5) * 0.5, t0: at - 1.45 - rnd() * 0.12, t1: at + rnd() * 0.1, arc: 7 + rnd() * 2, size: 0.7, thick: 0.045, col: [1.8, 1.5, 1.0], dust: n % 4 ? null : [[1.4, 1.2, 0.8]] }); } }
     else if (e.era === 2) { more(8); for (const t of targets) { const t0 = at - 1.0 - rnd() * 0.15; fly({ kind: 'ball', x0: own - dir * (2 + rnd() * 3), y0: 3.4, z0: -1 + rnd() * 3, x1: t.x, y1: 0.25, z1: t.z, t0, t1: at + rnd() * 0.08, arc: 2.4, size: 0.24, col: [0.1, 0.1, 0.12], trail: [[1.3, 1.3, 1.3]], dust: [[3, 1.8, 0.4], [0.8, 0.75, 0.7], [0.2, 0.2, 0.2]] }); } for (let n = 0; n < 14; n++) this.bits.add(own - dir * (2 + rnd() * 3), 3.4, -1 + rnd() * 3, dir * (1 + rnd()), 0.6, 0, 1.2, [1.6, 1.6, 1.6], 0.4, -0.1, 1.5); }
     else if (e.era === 3) { more(7); this.raid = { dir, t0: at - 1.7, t1: at + 1.1, from: own - dir * 8, to: -own + dir * 8 }; for (const t of targets) fly({ kind: 'ball', x0: t.x - dir * 2.4, y0: 8.3, z0: 0.6, x1: t.x, y1: 0.25, z1: t.z, t0: at - 0.8 - rnd() * 0.1, t1: at + rnd() * 0.08, arc: 0, size: 0.22, long: 1.7, col: [0.16, 0.18, 0.14], dust: [[3, 1.8, 0.4], [0.5, 0.48, 0.45], [0.2, 0.2, 0.2]] }); }
@@ -439,7 +439,7 @@ export class Ages {
       this.bases[i].forEach((g, era) => {
         g.visible = era === s.age;
         if (!g.visible) return;
-        if (this.fallen === i) { this.sunk = Math.min(1, this.sunk + d / 3.5); g.position.set((rnd() - 0.5) * 0.08 * (1 - this.sunk), -2.6 * this.sunk * this.sunk, 0); g.rotation.z = (i ? -1 : 1) * 0.16 * this.sunk; if (rnd() < 0.8) bits.add(GATE_A[i] + (i ? 1 : -1) * (0.5 + rnd() * 4.5), 0.4 + rnd() * 3, -3 + rnd() * 5, (rnd() - 0.5), 1.5 + rnd() * 2, 0, 1.6, rnd() < 0.3 ? [3, 1.4, 0.3] : [0.5, 0.47, 0.44], 0.5, -0.1, 2); }
+        if (this.fallen === i) { this.sunk = Math.min(1, this.sunk + d / 3.5); g.position.set((rnd() - 0.5) * 0.08 * (1 - this.sunk), -2.6 * this.sunk * this.sunk, 0); g.rotation.z = (i ? -1 : 1) * 0.16 * this.sunk; if (rnd() < 0.8) bits.add(GATE_A[i] + (i ? 1 : -1) * (0.5 + rnd() * 4.5), 0.4 + rnd() * 3, -3 + rnd() * 5, (rnd() - 0.5), 1.5 + rnd() * 2, 0, 1.6, rnd() < 0.3 ? [2.6, 1.0, 0.15] : [0.3, 0.28, 0.26], 0.32, -0.1, 2); }
         else { g.position.set((rnd() - 0.5) * k, 0, (rnd() - 0.5) * k); g.rotation.z = 0; }
       });
       s.turrets.forEach((t, j) => { if (!t || this.fallen === i) return; const r = (this.recoil[i][j] += d); this._turret(i, t.era, j, clamp(r / 0.25, 0, 1)); });
