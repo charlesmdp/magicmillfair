@@ -17,6 +17,7 @@ import { Polygon } from '../../../Areas.js';
 import { canvasBoard } from '../Boards.js';
 import { formatTime } from '../course.js';
 import { CLEFT, wallAt, wetAt, ledgeBox, rocks, startClimb, stepClimb, cleftPoint, leapArc, botInput } from './cleft.js';
+import { sharedNow } from '../../../../net/api.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -38,7 +39,7 @@ export class Cleft {
     this.session = null;
     this.best = 0;
     /** The clock everybody shares (s): the stones come down by it. */
-    this.clock = () => (performance.timeOrigin + performance.now()) / 1000;
+    this.clock = () => sharedNow() / 1000; // (the clock everybody shares: net/api.js)
   }
 
   build() {

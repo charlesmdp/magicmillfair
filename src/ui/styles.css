@@ -342,6 +342,26 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border-radius: 
 }
 .toast small { display: block; font-family: 'Avenir Next', 'Segoe UI', system-ui, sans-serif; font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+/* the relics of the world before: how many were found, always in sight — and, when one is, the count writ large */
+button.pill.relics { cursor: pointer; font: inherit; color: inherit; pointer-events: auto; gap: 6px; }
+button.pill.relics:hover { border-color: rgba(242, 193, 78, 0.7); }
+.pill.relics .rad { color: var(--accent); font-size: 15px; line-height: 1; }
+.pill.relics.done { border-color: rgba(242, 193, 78, 0.85); }
+.pill.relics.bump { animation: relic-bump 1s ease; }
+@keyframes relic-bump { 0% { transform: scale(1); } 25% { transform: scale(1.4); background: rgba(242, 193, 78, 0.92); color: #2a1d05; } 100% { transform: scale(1); } }
+.relic-card {
+  position: absolute; left: 50%; top: calc(15% + var(--safe-t)); transform: translate(-50%, -10px); opacity: 0; pointer-events: none !important; text-align: center;
+  transition: opacity 0.5s ease, transform 0.5s ease; padding: 12px 22px 16px; border-radius: 18px; background: var(--panel); border: 1px solid rgba(242, 193, 78, 0.55);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); width: max-content; max-width: min(420px, calc(100vw - 28px));
+}
+.relic-card.show { opacity: 1; transform: translate(-50%, 0); }
+.relic-card small { display: block; font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); }
+.relic-card b { display: block; font-family: Georgia, 'Times New Roman', serif; font-weight: 400; font-size: clamp(30px, 6vw, 46px); line-height: 1.1; margin: 2px 0 10px; }
+.relic-card .pips { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; max-width: 300px; margin: 0 auto; }
+.relic-card .pips i { width: 13px; height: 13px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.4); }
+.relic-card .pips i.on { background: var(--accent); border-color: transparent; }
+.relic-card .pips i.new { box-shadow: 0 0 0 4px rgba(242, 193, 78, 0.35); animation: relic-pip 1.1s ease 3; }
+@keyframes relic-pip { 50% { transform: scale(1.6); } }
 .note { position: absolute; left: 50%; bottom: calc(96px + var(--safe-b)); transform: translateX(-50%); opacity: 0; transition: opacity 0.4s; pointer-events: none !important; }
 .note.show { opacity: 1; }
 /* (a few lines to read: it wraps, and stands above the prompts rather than under them) */
@@ -410,6 +430,14 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border-radius: 
 #ui .account .submit { padding: 13px 14px; border-radius: 12px; border: 0; background: linear-gradient(180deg, #ffd666, #f2b53a); color: #2a1d05; font: 800 15px/1 system-ui, sans-serif; letter-spacing: 0.03em; cursor: pointer; box-shadow: 0 6px 18px rgba(242, 181, 58, 0.3); }
 #ui .account .submit:hover { filter: brightness(1.06); }
 #ui .account .submit:disabled { opacity: 0.6; cursor: progress; }
+/* signing in with Google: under the form, where the server has it (a white button, Google's own colours on its G) */
+#ui .account .or, #ui .account .google { display: none; }
+#ui .account .sheet.has-google .or { display: flex; align-items: center; gap: 10px; color: #a59fc4; font: 500 12px/1 system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; }
+#ui .account .sheet.has-google .or::before, #ui .account .sheet.has-google .or::after { content: ''; flex: 1; height: 1px; background: rgba(255, 255, 255, 0.16); }
+#ui .account .sheet.has-google .google { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 11px 14px; border-radius: 12px; border: 1px solid #dadce0; background: #fff; color: #1f1f1f; font: 600 15px/1 system-ui, sans-serif; cursor: pointer; }
+#ui .account .sheet.has-google .google:hover { background: #f4f6fb; }
+/* back from Google, the first time: only the name is asked */
+#ui .account .sheet[data-mode='name'] .tabs, #ui .account .sheet[data-mode='name'] .f-password, #ui .account .sheet[data-mode='name'] .links { display: none; }
 #ui .account .links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 14px; margin: 0; }
 #ui .account .link { padding: 2px 0; border: 0; background: none; color: #ffe9a6; font: 500 13px/1.2 system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 #ui .account .link.mailcode, #ui .account .link.back { display: none; }

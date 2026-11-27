@@ -170,6 +170,16 @@ export class Flip {
   near(x, z) { return (x - this.gate.x) ** 2 + (z - this.gate.z) ** 2 < 2.4 * 2.4; }
   /** The start one who asks now leaves with: { n, name, at (ms of the shared clock), wait (s) }. */
   nextStart() { return nextStart(this.clock(), FLIP.every, STARTS, FLIP.count); }
+  /**
+   * The start one would leave with now: the one others are waiting for, as long as it has not left (friends who
+   * ask a second or two apart run together) — else the next. `live`: what the others are in ({ run }: mates.js).
+   */
+  startFor(live) {
+    const next = this.nextStart();
+    if (!live || !Number.isFinite(live.run) || live.run >= next.n) return next;
+    const at = live.run * FLIP.every * 1000, wait = (at - this.clock()) / 1000;
+    return wait > 0.4 ? { n: live.run, name: STARTS[((live.run % STARTS.length) + STARTS.length) % STARTS.length], at, wait } : next;
+  }
 
   /**
    * What the machine shows when nobody runs in it here: the run of the latest start, as far as it has got (it
@@ -247,7 +257,7 @@ export class Flip {
    * spark). The run goes by that clock, not by the frames: who leaves with the same start is at the same girder.
    */
   open(player, io) {
-    const R = FLIP, start = this.nextStart(), st = startRun(start.wait), events = [], input = { flip: false };
+    const R = FLIP, start = this.startFor(io.live?.()), st = startRun(start.wait), events = [], input = { flip: false };
     // what is shown that the rules do not keep: how far round the runner has turned, where it tumbles after a
     // fall, how it drops back in; the other runners as last seen (for which way they move)
     const S = { turn: 0, want: 0, after: 0, acc: 0, last: this.clock(), press: false, fall: null, drop: 0, touch: false, seen: new Map(), boxes: [] }, pos = V(0, 0, 0), t = V(0, 0, 0), look = V(0, 0, 0), here = V(0, 0, 0);
@@ -255,7 +265,9 @@ export class Flip {
     const others = (real) => {
       const list = S.boxes, now = this.clock();
       list.length = 0;
-      for (const p of io.peers?.() || []) {
+      // (only those who left with the same start are in this machine: who took another is at another metre of the
+      // course, on other girders — not shown, and no obstacle: src/extras/mates.js)
+      for (const p of io.mates ? io.mates().map((m) => m.peer) : io.peers?.() || []) {
         here.set(p.x, p.y, p.z).applyMatrix4(this._inv);
         if (here.x < 0.3 || here.x > W - 0.3 || Math.abs(here.z) > 1.3 || here.y < R.low || here.y > R.high) continue;
         const was = S.seen.get(p.id), prev = was && now - was.at < 300 ? was.box : null;
@@ -267,6 +279,8 @@ export class Flip {
     };
     const session = {
       flip: this, over: false, ended: false, score: 0, time: 0, line: '', riding: false, anim: ANIM.idle, state: st, auto: false, start, scroll: st.scroll,
+      // (what the others are told with the start: which way up one runs — the network carries where a robot is, not that)
+      tell: () => [st.g > 0 ? 1 : 0],
       step: (dt, pl, control) => {
         const inp = pl.input, now = this.clock(), real = clamp((now - S.last) / 1000, 0, 0.25);
         S.last = now;
@@ -351,7 +365,20 @@ export class Flip {
   /** Every frame, played or not: the girders go by — one's own run if one runs, the latest start otherwise; the sparks turn. */
   update(dt) {
     this._clock += dt;
-    const s = this.session;
-    this._show(s ? s.scroll : this._idle(this.clock()), s ? s.state.got : null);
+    const s = this.session, R = FLIP;
+    let scroll = s ? s.scroll : null;
+    if (!s) {
+      // (nobody runs here: the machine of those who do, where it has got — who watches sees them on their own
+      // girders, and not the runners of another start, who are at another metre of the course)
+      const live = this.crowd?.live(), since = live ? (this.clock() - live.run * R.every * 1000) / 1000 : -99;
+      if (live && since > -R.count) { scroll = scrollAfter(Math.max(0, since)); this.crowd.watch(live.run); } else scroll = this._idle(this.clock());
+    }
+    this._show(scroll, s ? s.state.got : null);
+    // the other runners: which way up each runs is said by its own browser (mates.js) — the network carries where
+    // a robot is, not that —, and it is drawn so: feet on the underside of a girder, head down
+    const now = new Set();
+    for (const m of this.crowd?.of() || []) { now.add(m.peer); m.peer.roll = m.d[0] ? Math.PI : 0; }
+    if (this._rolled) for (const p of this._rolled) if (!now.has(p)) p.roll = 0;
+    this._rolled = now;
   }
 }
