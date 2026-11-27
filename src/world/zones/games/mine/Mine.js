@@ -56,8 +56,8 @@ export class Mine {
     const gapAt = (s, way) => C.gaps.some((g) => (g.way === -1 || g.way === way) && s > g.s - 0.2 && s < g.s + g.len + 0.2);
     // ---- the lamps of the insides, and the light they paint on the rock
     const lamps = [];
-    for (let s = 44, k = 0; s < L - 30; s += 11, k++) { const kind = kindAt(s, 0); if (INSIDE.has(kind)) lamps.push({ s, way: 0, side: k % 2 ? 1 : -1, kind, p: this.at(s, (k % 2 ? 1 : -1) * (kind === 'lake' ? 5.5 : 1.9), 2.5) }); }
-    for (let s = F.s0 + 9, k = 0; s < F.s0 + F.len - 6; s += 11, k++) lamps.push({ s, way: 1, side: k % 2 ? 1 : -1, kind: 'hall', p: this.at(s, (k % 2 ? 1 : -1) * 1.9, 2.5, 1) });
+    for (let s = 44, k = 0; s < L - 30; s += 11, k++) { const kind = kindAt(s, 0); if (INSIDE.has(kind)) lamps.push({ s, way: 0, side: k % 2 ? 1 : -1, kind, p: this.at(s, (k % 2 ? 1 : -1) * (kind === 'lake' ? 5.5 : 2.0), 3.1) }); }
+    for (let s = F.s0 + 9, k = 0; s < F.s0 + F.len - 6; s += 11, k++) lamps.push({ s, way: 1, side: k % 2 ? 1 : -1, kind: 'hall', p: this.at(s, (k % 2 ? 1 : -1) * 2.0, 3.1, 1) });
     const lit = (p, gain = 1) => {
       let r = DARK[0], g = DARK[1], b = DARK[2];
       for (const l of lamps) { const d2 = (p.x - l.p.x) ** 2 + (p.y - l.p.y) ** 2 + (p.z - l.p.z) ** 2; if (d2 > 400) continue; const w = 1.15 / (1 + d2 / 10), c = LAMP[l.kind]; r += c[0] * w; g += c[1] * w; b += c[2] * w; }
@@ -104,7 +104,7 @@ export class Mine {
     }
 
     // ---- inside: the rock round the line — an arch of facets every two metres, timber sets, lanterns; the lake
-    const SHAPE = { rock: [2.5, 3.9], lift: [2.4, 3.8], hall: [3.3, 4.6], lake: [8.5, 6.2] };
+    const SHAPE = { rock: [2.7, 5.1], lift: [2.6, 5.0], hall: [3.4, 5.3], lake: [8.5, 6.6] };
     const near = (p, way) => { // how far a place is from the other way of the fork (on the map)
       const pts = way ? C.pts : F.pts, j0 = way ? Math.round(F.s0 / C.ds) : 0, j1 = way ? Math.round(F.s1 / C.ds) : pts.length - 1; let best = 1e9;
       for (let j = j0; j <= j1; j += 2) { const d = (pts[j].x - p.x) ** 2 + (pts[j].z - p.z) ** 2; if (d < best) best = d; }
@@ -149,8 +149,8 @@ export class Mine {
         // a set of timber every six metres (not in the great caves)
         if ((cur.kind === 'rock' || cur.kind === 'lift') && Math.round(sc / 2) % 3 === 0) {
           const P = piece(sc, way).get('cave'), t = (p) => { const q = lit(p, 1.5); return [WOOD[0] * q[0] + 0.04, WOOD[1] * q[1] + 0.03, WOOD[2] * q[2] + 0.025, 1]; };
-          const l0 = this.at(sc, -1.75, -0.2, way), l1 = this.at(sc, -1.6, 3.05, way), r0 = this.at(sc, 1.75, -0.2, way), r1 = this.at(sc, 1.6, 3.05, way);
-          P.tint(...t(l1)).beam(l0, l1, 0.24, 0.24); P.tint(...t(r1)).beam(r0, r1, 0.24, 0.24); P.tint(...t(l1.clone().lerp(r1, 0.5))).beam(this.at(sc, -1.95, 3.15, way), this.at(sc, 1.95, 3.15, way), 0.28, 0.26);
+          const l0 = this.at(sc, -2.05, -0.2, way), l1 = this.at(sc, -1.85, 4.25, way), r0 = this.at(sc, 2.05, -0.2, way), r1 = this.at(sc, 1.85, 4.25, way);
+          P.tint(...t(l1)).beam(l0, l1, 0.24, 0.24); P.tint(...t(r1)).beam(r0, r1, 0.24, 0.24); P.tint(...t(l1.clone().lerp(r1, 0.5))).beam(this.at(sc, -2.2, 4.36, way), this.at(sc, 2.2, 4.36, way), 0.28, 0.26);
         }
       }
     };
@@ -161,7 +161,7 @@ export class Mine {
       if (l.kind === 'lake') { for (let k = 0; k < 4; k++) { const base = this.at(l.s + (h1(l.s + k) - 0.5) * 2, l.side * 7.6, 0.4 + h1(l.s * 3 + k) * 1.2); glow.tint(c[0] * 0.6, c[1] * 0.6, c[2] * 0.6, 1).rod(base, V(base.x + (h1(k + l.s) - 0.5) * 1.2, base.y + 1.2 + h1(k * 5 + l.s) * 1.6, base.z + (h1(k * 9 + l.s) - 0.5) * 1.2), 0.2, 5, { r1: 0.02, caps: false }); } continue; }
       const p = l.p;
       glow.tint(c[0] * 1.25, c[1] * 1.1, c[2] * 0.9, 1).box(p.x - 0.12, p.y - 0.17, p.z - 0.12, p.x + 0.12, p.y + 0.17, p.z + 0.12);
-      P.get('cave').tint(0.2, 0.17, 0.15, 1).box(p.x - 0.16, p.y + 0.17, p.z - 0.16, p.x + 0.16, p.y + 0.23, p.z + 0.16).beam(p.clone().add(V(0, 0.23, 0)), this.at(l.s, l.side * 2.3, 2.9, l.way), 0.05, 0.05);
+      P.get('cave').tint(0.2, 0.17, 0.15, 1).box(p.x - 0.16, p.y + 0.17, p.z - 0.16, p.x + 0.16, p.y + 0.23, p.z + 0.16).beam(p.clone().add(V(0, 0.23, 0)), this.at(l.s, l.side * 2.5, 3.5, l.way), 0.05, 0.05);
     }
     // (veins of gold and crystals in the rock, here and there)
     for (let k = 0; k < 70; k++) {
@@ -191,11 +191,11 @@ export class Mine {
     // ---- the boards, before each thing to do: the same colours every time
     const board = (bd) => {
       const way = bd.way === 1 ? 1 : 0, s = Math.max(4, bd.s), inside = INSIDE.has(kindAt(s, way)), P = piece(s, way), b = P.get(inside ? 'glow' : 'paint'), post = P.get(inside ? 'cave' : 'woodDark');
-      const side = bd.kind === 'left' ? -1 : 1, u = side * 1.75, r = railAt(s, way, {}), yaw = r.yaw + Math.PI, mid = this.at(s, u, 2.35, way), dim = inside ? 0.8 : 1;
-      post.tint(0.45, 0.36, 0.3, 1).beam(this.at(s, u, -0.6, way), this.at(s, u, 2.3, way), 0.12, 0.12);
+      const side = bd.kind === 'left' ? -1 : 1, u = side * (inside ? 1.75 : 2.0), r = railAt(s, way, {}), yaw = r.yaw + Math.PI, mid = this.at(s, u, inside ? 3.3 : 2.6, way), dim = inside ? 0.8 : 1;
+      post.tint(0.45, 0.36, 0.3, 1).beam(this.at(s, side * (inside ? 2.45 : 2.0), -0.6, way), this.at(s, side * (inside ? 2.45 : 2.0), inside ? 3.3 : 2.4, way), 0.12, 0.12);
       const back = bd.kind === 'brake' ? [0.9, 0.08, 0.06] : bd.kind === 'hop' ? [1.0, 0.76, 0.04] : bd.kind === 'fork' ? [0.1, 0.6, 0.22] : [0.08, 0.3, 0.85];
-      const ink = bd.kind === 'hop' ? [0.04, 0.04, 0.04] : [1.3, 1.3, 1.25], w = 0.62;
-      b.place(mid.x, mid.y, mid.z, yaw);
+      const ink = bd.kind === 'hop' ? [0.04, 0.04, 0.04] : [1.3, 1.3, 1.25], w = 0.62, big = 1.45;
+      b.push(new THREE.Matrix4().makeRotationY(yaw).scale(V(big, big, 1)).setPosition(mid.x, mid.y, mid.z));
       b.tint(back[0] * dim, back[1] * dim, back[2] * dim, 1).poly([V(-w, -w, 0), V(w, -w, 0), V(w, w, 0), V(-w, w, 0)]);
       b.tint(ink[0] * dim, ink[1] * dim, ink[2] * dim, 1);
       const z = 0.02;
@@ -233,13 +233,13 @@ export class Mine {
       const was = INSIDE.has(C.pts[j - 1].kind), is = INSIDE.has(C.pts[j].kind);
       if (was === is) continue;
       const s = j * C.ds + (is ? -1.2 : 1.2), P = new Parts(), wood = P.get('woodDark'), r = railAt(s, 0, {}), gy = Math.min(ground(r.x, r.z), r.y) - 0.6;
-      for (const side of [-1, 1]) { const foot = this.at(s, side * 2.1, 0); foot.y = gy; wood.tint(1.0, 0.86, 0.72, 1).beam(foot, this.at(s, side * 1.9, 3.5), 0.34, 0.34).tint(0.85, 0.72, 0.6, 1).beam(this.at(s, side * 1.95, 2.0), this.at(s, side * 0.9, 3.45), 0.2, 0.2); }
-      wood.tint(1.05, 0.9, 0.75, 1).beam(this.at(s, -2.6, 3.7), this.at(s, 2.6, 3.7), 0.4, 0.4);
+      for (const side of [-1, 1]) { const foot = this.at(s, side * 2.1, 0); foot.y = gy; wood.tint(1.0, 0.86, 0.72, 1).beam(foot, this.at(s, side * 2.1, 4.6), 0.34, 0.34).tint(0.85, 0.72, 0.6, 1).beam(this.at(s, side * 2.1, 3.0), this.at(s, side * 1.0, 4.55), 0.2, 0.2); }
+      wood.tint(1.05, 0.9, 0.75, 1).beam(this.at(s, -2.8, 4.8), this.at(s, 2.8, 4.8), 0.4, 0.4);
       // (a lantern under the beam; planks to the side)
-      const lp = this.at(s, 0, 3.25); P.get('glow').tint(1.3, 0.9, 0.45, 1).box(lp.x - 0.12, lp.y - 0.3, lp.z - 0.12, lp.x + 0.12, lp.y, lp.z + 0.12);
+      const lp = this.at(s, 0, 4.35); P.get('glow').tint(1.3, 0.9, 0.45, 1).box(lp.x - 0.12, lp.y - 0.3, lp.z - 0.12, lp.x + 0.12, lp.y, lp.z + 0.12);
       this.group.add(P.toMeshes(mats, { name: 'mine-mouth', layers: [] }));
       // (for who does not ride: the dark of the mouth — a black wall just inside the frame)
-      const Q = new Parts(), d = is ? 0.5 : -0.5, a = this.at(s + d, -1.95, -0.3), b = this.at(s + d, 1.95, -0.3), c = this.at(s + d, 1.95, 3.6), e = this.at(s + d, -1.95, 3.6);
+      const Q = new Parts(), d = is ? 0.5 : -0.5, a = this.at(s + d, -2.1, -0.3), b = this.at(s + d, 2.1, -0.3), c = this.at(s + d, 2.1, 4.7), e = this.at(s + d, -2.1, 4.7);
       Q.get('matte').tint(0.012, 0.011, 0.014, 1); if (is) Q.get('matte').quad(a, b, c, e); else Q.get('matte').quad(b, a, e, c);
       this.mouths.add(Q.toMeshes(mats, { name: 'mine-dark', layers: [], castShadow: false }));
     }
@@ -250,7 +250,7 @@ export class Mine {
       const geo = [], add = (p) => geo.push(p.x, p.y, p.z);
       for (let sq = 1; sq < L - 1; sq += 1) {
         if (!INSIDE.has(kindAt(sq, 0)) || !INSIDE.has(kindAt(sq + 1, 0))) continue;
-        const roof = this.at(sq, 0, 4.6).y;
+        const roof = this.at(sq, 0, 5.8).y;
         for (let u = -3.2; u < 3.19; u += 1.6) {
           const q = [this.at(sq, u, 0), this.at(sq, u + 1.6, 0), this.at(sq + 1, u + 1.6, 0), this.at(sq + 1, u, 0)];
           for (const p of q) p.y = ground(p.x, p.z) + 0.3;
@@ -415,9 +415,9 @@ export class Mine {
       /** The camera: behind and above the first cart, on the line it has just run, looking along the rails ahead; it leans with the cart. */
       camera: (cam, dt) => {
         cartPose(st, 0, p);
-        const inside = INSIDE.has(p.kind), way = st.way, back = st.phase === 'wait' ? 6.5 : 6.6 + st.v * 0.09, up = inside ? (p.kind === 'lake' || p.kind === 'hall' ? 3.0 : 2.55) : 3.1;
-        const sb = Math.max(0.5, st.s - back), b = this.at(sb, st.lean * 0.5, up, way && sb >= C.fork.s0 ? 1 : 0), aheadS = st.s + 7 + st.v * 0.45;
-        const onShort = way === 1 && aheadS > C.fork.s0 + C.fork.len, a = onShort ? this.at(C.fork.s1 + aheadS - C.fork.s0 - C.fork.len, 0, 0.9, 0) : this.at(Math.min(C.length, aheadS), 0, 0.9, way);
+        const inside = INSIDE.has(p.kind), way = st.way, back = (inside ? 8.6 : 9.4) + st.v * 0.07, up = inside ? (p.kind === 'lake' ? 4.6 : 3.9) : 5.0;
+        const sb = Math.max(0.5, st.s - back), b = this.at(sb, st.lean * 0.5, up, way && sb >= C.fork.s0 ? 1 : 0), aheadS = st.s + 9 + st.v * 0.5;
+        const onShort = way === 1 && aheadS > C.fork.s0 + C.fork.len, a = onShort ? this.at(C.fork.s1 + aheadS - C.fork.s0 - C.fork.len, 0, 0.3, 0) : this.at(Math.min(C.length, aheadS), 0, 0.3, way);
         t.copy(b);
         if (!S.cam) S.cam = t.clone(); else S.cam.lerp(t, Math.min(1, dt * 9));
         S.look.lerp(a, S.look.lengthSq() ? Math.min(1, dt * 8) : 1);
