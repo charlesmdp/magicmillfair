@@ -24,7 +24,7 @@ const lerp = (a, b, t) => a + (b - a) * t;
 const smooth = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 const CREAM = [1.3, 1.2, 0.98], WHITE = [1.55, 1.52, 1.42], RED = [0.95, 0.1, 0.12], EDGE = [1.5, 0.13, 0.08], GOLD = [1.5, 1.05, 0.2], NAVY = [0.07, 0.07, 0.2];
 const YELLOW = [1.6, 1.3, 0.12], BLACK = [0.06, 0.06, 0.07], GREEN = [0.12, 0.8, 0.28], STEEL = [1.35, 1.4, 1.5], BLUE = [0.12, 0.45, 1.1], TIMBER = [0.9, 0.8, 0.66], RAIL = [0.42, 0.1, 0.08];
-const CHUNK = 60, BENT = 6.5; // metres of line to a piece of the coaster; metres between two bents
+const CHUNK = 180, BENT = 6.5; // metres of line to a piece of the coaster; metres between two bents
 const VALLEY = { x: -40, z: 10 }; // about the middle of the valley: what a lift looks at
 
 const _f = { fwd: [0, 0, 0], side: [0, 0, 0], up: [0, 0, 0] }, _p = {};
@@ -514,7 +514,9 @@ export class Coaster {
           // (well above the rails behind — as high over them as the slope asks — and looking at the rails just ahead of the car:
           // the car sits a little under the middle of the screen, the line runs on from it to the top, bend after bend)
           // (…and never lower than a little over the car: up a slope the rails ahead are seen over it)
-          t.set(pb.x, Math.max(pb.y + (4.9 + st.v * 0.03) * Math.sqrt(1 + pb.rise * pb.rise), pose.y + 2.7), pb.z);
+          // (in the station it keeps under the roof)
+          const high = line === c ? lerp(3, 4.9, smooth(12, 30, q)) : 4.9;
+          t.set(pb.x, Math.max(pb.y + (high + st.v * 0.03) * Math.sqrt(1 + pb.rise * pb.rise), pose.y + 2.7 - (4.9 - high)), pb.z);
           t2.set(pa.x, pa.y + 0.3, pa.z);
           if (v > 0.001) {
             // (it keeps over the sleepers: beside them the trees stand)
