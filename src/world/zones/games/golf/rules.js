@@ -46,11 +46,18 @@ const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const hash = (n, k = 0) => { const s = Math.sin(n * 127.1 + k * 311.7 + 74.7) * 43758.5453; return s - Math.floor(s); };
 const STEP = GOLF.step, R = GOLF.ball, CUP2 = GOLF.cup * GOLF.cup, F = GOLF.friction, G = GOLF.g, TAU = Math.PI * 2;
 const SPEED = 9.4; // m/s: no ball goes faster (less than its own radius a step: it never passes through a kerb)
+const RISE = 0.3, CATCH = 0.25; // m: the steepest face a rolling ball still follows, step after step; how far under a felt a flying ball may come and still land on it
+/** What a surface does to the roll: sand holds the ball back, ice (and steel, and wet boards) lets it slide. */
+export const RUB = { sand: 3.2, ice: 0.28 };
 
 // ---- the shapes of the beds
 const box = (x0, z0, x1, z1) => [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
 const round = (cx, cz, r, n, off = 0) => Array.from({ length: n }, (_, k) => [cx + Math.sin(((k + off) / n) * TAU) * r, cz - Math.cos(((k + off) / n) * TAU) * r]);
 const smooth = (u) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
+/** From 0 at `a` to 1 at `b`, smoothly (a ramp, a tier, the side of a mound). */
+const step = (v, a, b) => smooth((v - a) / (b - a));
+/** A hump: 1 at its middle, 0 from `u` = 1 on, level at both. */
+const bump = (u) => (u <= -1 || u >= 1 ? 0 : (1 - u * u) * (1 - u * u));
 /** The stairs of the temple: three steps of 13 cm, each a smooth rise over 40 cm. */
 export const STAIRS = [-3.5, -6.4, -9.3];
 const stairs = (x, z) => 0.13 * (smooth((STAIRS[0] - z) / 0.4) + smooth((STAIRS[1] - z) / 0.4) + smooth((STAIRS[2] - z) / 0.4));
@@ -143,17 +150,18 @@ export const GROUNDS = {
   kiosk: [-222.3, -77.4, -1.87],
 };
 
-// ---- each hole made ready: its frame, its beds, its cushions
-for (const [i, H] of HOLES.entries()) {
+// ---- each hole made ready: its frame, its beds, its cushions, its surfaces, its pipes
+/** Makes a hole ready to be played: `i` is its number (0 … 8). (The checks make a bare practice bed with it.) */
+export function prepare(H, i) {
   H.n = i;
   H.cos = Math.cos(H.yaw); H.sin = Math.sin(H.yaw);
   H.floor ??= -0.6;
   H.tee = [0, 0];
-  H.walls ||= []; H.blocks ||= []; H.bumpers ||= []; H.movers ||= []; H.links ||= []; H.pools ||= [];
+  H.walls ||= []; H.blocks ||= []; H.bumpers ||= []; H.movers ||= []; H.links ||= []; H.pools ||= []; H.zones ||= []; H.pipes ||= [];
   // (how far from its middle a mover can stop a ball, along the lane: a paddle of the wheel swings to and fro)
   for (const m of H.movers) m.band = m.hd + (m.kind === 'wheel' ? m.r * Math.sin(m.max) : 0);
   const walls = [];
-  const wall = (ax, az, bx, bz, bed, high) => { const dx = bx - ax, dz = bz - az, l = Math.hypot(dx, dz); walls.push({ ax, az, dx, dz, il2: 1 / (l * l), nx: -dz / l, nz: dx / l, x0: Math.min(ax, bx), x1: Math.max(ax, bx), z0: Math.min(az, bz), z1: Math.max(az, bz), bed, high }); };
+  const wall = (ax, az, bx, bz, bed, high, base) => { const dx = bx - ax, dz = bz - az, l = Math.hypot(dx, dz); walls.push({ ax, az, dx, dz, il2: 1 / (l * l), nx: -dz / l, nz: dx / l, x0: Math.min(ax, bx), x1: Math.max(ax, bx), z0: Math.min(az, bz), z1: Math.max(az, bz), bed, high, base }); };
   for (const bed of H.beds) {
     bed.y ||= 0; bed.open ||= []; bed.air ||= [];
     bed.n = bed.poly.length;
@@ -161,10 +169,14 @@ for (const [i, H] of HOLES.entries()) {
     bed.x0 = Math.min(...bed.xs); bed.x1 = Math.max(...bed.xs); bed.z0 = Math.min(...bed.zs); bed.z1 = Math.max(...bed.zs);
     for (let k = 0; k < bed.n; k++) if (!bed.open.includes(k)) wall(...bed.poly[k], ...bed.poly[(k + 1) % bed.n], bed, GOLF.kerb);
   }
-  for (const [x0, z0, x1, z1, high] of H.blocks) { wall(x0, z0, x1, z0, H.beds[0], high); wall(x1, z0, x1, z1, H.beds[0], high); wall(x1, z1, x0, z1, H.beds[0], high); wall(x0, z1, x0, z0, H.beds[0], high); }
-  for (const [ax, az, bx, bz, high] of H.walls) wall(ax, az, bx, bz, H.beds.find((b) => b.isle) || H.beds[0], high);
+  // (a block stands on the bed under its middle; a wall on the island or the first bed, or from the height it gives: the face of a level over a lower one)
+  for (const [x0, z0, x1, z1, high] of H.blocks) { const bed = bedAt(H, (x0 + x1) / 2, (z0 + z1) / 2, 99) || H.beds[0]; wall(x0, z0, x1, z0, bed, high); wall(x1, z0, x1, z1, bed, high); wall(x1, z1, x0, z1, bed, high); wall(x0, z1, x0, z0, bed, high); }
+  for (const [ax, az, bx, bz, high, base] of H.walls) wall(ax, az, bx, bz, H.beds.find((b) => b.isle) || H.beds[0], high, base);
   H.cushions = walls;
+  for (const z of H.zones) { z.n = z.poly.length; z.xs = Float64Array.from(z.poly, (q) => q[0]); z.zs = Float64Array.from(z.poly, (q) => q[1]); z.x0 = Math.min(...z.xs); z.x1 = Math.max(...z.xs); z.z0 = Math.min(...z.zs); z.z1 = Math.max(...z.zs); z.rub = RUB[z.kind] || 1; }
+  for (const q of H.pipes) { q.r ??= 0.22; q.time ??= 1.2; q.speed ??= 1.6; q.max ??= 4.5; q.steps = Math.round(q.time / STEP); }
   if (H.acid) H.acid = [...toLocal(H, GOLF.acid.x, GOLF.acid.z), GOLF.acid.r];
+  return H;
 }
 
 /** A place of a hole, in the world: [x, z]. */
@@ -192,6 +204,19 @@ function bedAt(H, x, z, top) {
     if (y <= top && y > _fy) { _fy = y; best = bed; }
   }
   return best;
+}
+/** Is (x, z) of a hole in its water — or within `pad` of it? (A pool is round: x, z, radius; or a basin with straight sides: x0, z0, x1, z1.) */
+export function wet(H, x, z, pad = 0) {
+  for (let i = 0; i < H.pools.length; i++) {
+    const q = H.pools[i];
+    if (q.length === 3 ? (x - q[0]) * (x - q[0]) + (z - q[1]) * (z - q[1]) < (q[2] + pad) * (q[2] + pad) : x > q[0] - pad && x < q[2] + pad && z > q[1] - pad && z < q[3] + pad) return true;
+  }
+  return false;
+}
+/** How much the surface at (x, z) of a hole holds a rolling ball back: 1 on felt, more on sand, less on ice. */
+export function rubAt(H, x, z) {
+  for (let i = 0; i < H.zones.length; i++) { const q = H.zones[i]; if (q.rub !== 1 && x >= q.x0 && x <= q.x1 && z >= q.z0 && z <= q.z1 && inPoly(q, x, z)) return q.rub; }
+  return 1;
 }
 /** The height of the felt at (x, z) of a hole (-Infinity: none). */
 export function feltAt(H, x, z) { bedAt(H, x, z, 99); return _fy; }
@@ -235,7 +260,7 @@ export function moverAt(m, tw, out = {}) {
 
 // ---- the ball
 /** A ball at rest at (x, z) of a hole. */
-export function ballAt(H, x, z, b = {}) { b.x = x; b.z = z; b.y = feltAt(H, x, z); b.vx = 0; b.vz = 0; b.vy = 0; b.air = false; b.lip = false; return b; }
+export function ballAt(H, x, z, b = {}) { b.x = x; b.z = z; b.y = feltAt(H, x, z); b.vx = 0; b.vz = 0; b.vy = 0; b.air = false; b.lip = false; b.pipe = -1; b.wait = 0; return b; }
 
 function collide(H, b, tw, ev) {
   // the cushions: the kerbs of the beds, the walls of the mill, the paws of the dog, the dog's bowl, the boards of the island
@@ -245,7 +270,7 @@ function collide(H, b, tw, ev) {
     if (b.x < w.x0 - R || b.x > w.x1 + R || b.z < w.z0 - R || b.z > w.z1 + R) continue;
     const t = clamp(((b.x - w.ax) * w.dx + (b.z - w.az) * w.dz) * w.il2, 0, 1), px = w.ax + w.dx * t, pz = w.az + w.dz * t, ex = b.x - px, ez = b.z - pz, d2 = ex * ex + ez * ez;
     if (d2 >= R * R) continue;
-    const base = w.bed.h ? w.bed.y + w.bed.h(px, pz) : w.bed.y;
+    const base = w.base !== undefined ? w.base : w.bed.h ? w.bed.y + w.bed.h(px, pz) : w.bed.y;
     if (b.y >= base + w.high || b.y < base - 0.3) continue; // (over it, or already under the bed)
     const d = Math.sqrt(d2), nx = d > 1e-9 ? ex / d : w.nx, nz = d > 1e-9 ? ez / d : w.nz;
     b.x = px + nx * R; b.z = pz + nz * R;
@@ -303,12 +328,21 @@ export const ROLLS = 0, RESTS = 1, HOLED = 2, ACID = 3, OUT = 4, WATER = 5;
  */
 export function ballStep(H, b, tw, ev) {
   const dt = STEP;
+  if (b.pipe >= 0) {
+    // in a pipe: it comes out at the other end, after a moment, the way the pipe points
+    if (--b.wait > 0) return ROLLS;
+    const q = H.pipes[b.pipe];
+    b.x = q.out[0]; b.z = q.out[1]; b.y = feltAt(H, b.x, b.z); b.vx = Math.sin(q.aim) * q.speed; b.vz = -Math.cos(q.aim) * q.speed; b.vy = 0; b.air = false;
+    if (ev) ev.push({ type: 'out', n: b.pipe });
+    b.pipe = -1;
+    return ROLLS;
+  }
   if (b.air) {
     // in the air: it comes down on felt that was under it — or on nothing
     const y0 = b.y;
     b.vy -= G * dt; b.x += b.vx * dt; b.z += b.vz * dt; b.y += b.vy * dt;
     collide(H, b, tw, ev);
-    if (bedAt(H, b.x, b.z, y0 + 0.02) && b.y <= _fy) {
+    if (bedAt(H, b.x, b.z, y0 + CATCH) && b.y <= _fy) {
       const hit = -b.vy;
       b.y = _fy;
       if (hit > 1.4) { b.vy = hit * 0.32; b.vx *= 0.86; b.vz *= 0.86; if (ev) ev.push({ type: 'land', speed: hit }); } else {
@@ -318,8 +352,8 @@ export function ballStep(H, b, tw, ev) {
     } else if (b.y < H.floor) return H.acid && (b.x - H.acid[0]) ** 2 + (b.z - H.acid[1]) ** 2 < H.acid[2] * H.acid[2] ? ACID : OUT;
     return ROLLS;
   }
-  // on the felt: the slope pulls it, the felt slows it
-  const bed = bedAt(H, b.x, b.z, b.y + 0.06);
+  // on the felt: the slope pulls it, the felt slows it (sand more, ice less)
+  const bed = bedAt(H, b.x, b.z, b.y + 0.06), F = H.zones.length ? GOLF.friction * rubAt(H, b.x, b.z) : GOLF.friction;
   let ax = 0, az = 0;
   if (bed && bed.h) { const e = 0.01; ax = (-GOLF.slope * (bed.h(b.x + e, b.z) - bed.h(b.x - e, b.z))) / (2 * e); az = (-GOLF.slope * (bed.h(b.x, b.z + e) - bed.h(b.x, b.z - e))) / (2 * e); }
   const sp = Math.hypot(b.vx, b.vz), pull = Math.hypot(ax, az);
@@ -330,14 +364,20 @@ export function ballStep(H, b, tw, ev) {
     const ox = b.vx, oz = b.vz, f = (F * dt) / sp;
     b.vx += ax * dt - ox * f; b.vz += az * dt - oz * f;
     if (b.vx * ox + b.vz * oz <= 0 && pull <= F) { b.vx = 0; b.vz = 0; settle(H, b); return RESTS; }
+    const s2 = b.vx * b.vx + b.vz * b.vz; if (s2 > SPEED * SPEED) { const k = SPEED / Math.sqrt(s2); b.vx *= k; b.vz *= k; } // (down a long slope)
   }
   b.x += b.vx * dt; b.z += b.vz * dt;
   collide(H, b, tw, ev);
-  if (!bedAt(H, b.x, b.z, b.y + 0.06)) { b.air = true; return ROLLS; } // (off an edge without a kerb)
+  if (!bedAt(H, b.x, b.z, b.y + RISE)) { b.air = true; return ROLLS; } // (off an edge without a kerb)
   const fall = b.y + b.vy * dt - 0.5 * G * dt * dt;
   if (_fy < fall - 1e-5) { b.air = true; b.y = fall; b.vy -= G * dt; return ROLLS; } // (the felt drops away faster than it falls: off a crest, off a lip)
   b.vy = (_fy - b.y) / dt; b.y = _fy;
-  for (let i = 0; i < H.pools.length; i++) { const p = H.pools[i]; if ((b.x - p[0]) ** 2 + (b.z - p[1]) ** 2 < p[2] * p[2]) return WATER; }
+  if (H.pools.length && wet(H, b.x, b.z)) return WATER;
+  // a pipe takes a ball that rolls into its mouth (not one that flies over it at full speed)
+  for (let i = 0; i < H.pipes.length; i++) {
+    const q = H.pipes[i], ex = b.x - q.in[0], ez = b.z - q.in[1];
+    if (ex * ex + ez * ez < q.r * q.r && b.vx * b.vx + b.vz * b.vz <= q.max * q.max) { b.pipe = i; b.wait = q.steps; b.x = q.in[0]; b.z = q.in[1]; b.vx = 0; b.vz = 0; b.vy = 0; if (ev) ev.push({ type: 'pipe', n: i }); return ROLLS; }
+  }
   // the cup: it takes a ball that crosses it slowly enough — the nearer its middle, the faster that may be
   const cx = b.x - H.cup[0], cz = b.z - H.cup[1], d2 = cx * cx + cz * cz;
   if (d2 < CUP2) {
@@ -352,29 +392,34 @@ export function ballStep(H, b, tw, ev) {
 }
 
 // ---- how far from the cup: the way round the kerbs, on a grid
-const CELL = 0.2, CLEAR = 0.15;
+const CELL = 0.2, CLEAR = 0.15, CLIMB = 0.17; // (m: a place of the grid to the next one, at most so much higher)
 /** The map of a hole: for each place of a grid, how far the cup is by the felt (and which place comes next on the way). */
 function mapOf(H) {
   if (H.map) return H.map;
   let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
   for (const bed of H.beds) { x0 = Math.min(x0, bed.x0); x1 = Math.max(x1, bed.x1); z0 = Math.min(z0, bed.z0); z1 = Math.max(z1, bed.z1); }
   const i0 = Math.floor(x0 / CELL) - 1, j0 = Math.floor(z0 / CELL) - 1, nx = Math.ceil(x1 / CELL) + 2 - i0, nz = Math.ceil(z1 / CELL) + 2 - j0, N = nx * nz;
-  const ok = new Uint8Array(N), dist = new Float64Array(N).fill(Infinity), next = new Int32Array(N).fill(-1), leap = new Uint8Array(N);
+  const ok = new Uint8Array(N), dist = new Float64Array(N).fill(Infinity), next = new Int32Array(N).fill(-1), leap = new Uint8Array(N), ht = new Float32Array(N);
   for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
     const x = (i + i0) * CELL, z = (j + j0) * CELL;
     if (!bedAt(H, x, z, 99)) continue;
+    const y = (ht[j * nx + i] = _fy);
     let free = true;
-    for (const w of H.cushions) { const t = clamp(((x - w.ax) * w.dx + (z - w.az) * w.dz) * w.il2, 0, 1); if (Math.hypot(x - w.ax - w.dx * t, z - w.az - w.dz * t) < CLEAR) { free = false; break; } }
+    for (const w of H.cushions) {
+      const t = clamp(((x - w.ax) * w.dx + (z - w.az) * w.dz) * w.il2, 0, 1); if (Math.hypot(x - w.ax - w.dx * t, z - w.az - w.dz * t) >= CLEAR) continue;
+      const base = w.base !== undefined ? w.base : w.bed.h ? w.bed.y + w.bed.h(x, z) : w.bed.y;
+      if (y < base + w.high && y >= base - 0.3) { free = false; break; } // (a kerb of another level is not in the way of this one)
+    }
     for (const m of H.bumpers) if (Math.hypot(x - m[0], z - m[1]) < m[2] + CLEAR) free = false;
-    for (const p of H.pools) if (Math.hypot(x - p[0], z - p[1]) < p[2] + CLEAR) free = false;
-    for (const k of H.blocks) if (x > k[0] && x < k[2] && z > k[1] && z < k[3]) free = false;
+    if (wet(H, x, z, CLEAR)) free = false;
+    for (const k of H.blocks) if (x > Math.min(k[0], k[2]) && x < Math.max(k[0], k[2]) && z > Math.min(k[1], k[3]) && z < Math.max(k[1], k[3])) free = false;
     if (free) ok[j * nx + i] = 1;
   }
-  const M = (H.map = { i0, j0, nx, nz, ok, dist, next, leap });
+  const M = (H.map = { i0, j0, nx, nz, ok, dist, next, leap, ht });
   const node = (x, z) => nearest(M, x, z);
   // from the cup outwards (the links are taken backwards: they lead to the cup, not from it)
   const from = new Map();
-  for (const [ax, az, bx, bz, cost] of H.links) { const a = node(ax, az), b = node(bx, bz); if (a >= 0 && b >= 0) (from.get(b) || from.set(b, []).get(b)).push([a, cost]); }
+  for (const [ax, az, bx, bz, cost] of [...H.links, ...H.pipes.map((q) => [...q.in, ...q.out, 0.6])]) { const a = node(ax, az), b = node(bx, bz); if (a >= 0 && b >= 0) (from.get(b) || from.set(b, []).get(b)).push([a, cost]); }
   const heap = [], put = (d, n) => { heap.push([d, n]); let k = heap.length - 1; while (k > 0) { const p = (k - 1) >> 1; if (heap[p][0] <= heap[k][0]) break; [heap[p], heap[k]] = [heap[k], heap[p]]; k = p; } };
   const take = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let k = 0; for (;;) { let c = 2 * k + 1; if (c >= heap.length) break; if (c + 1 < heap.length && heap[c + 1][0] < heap[c][0]) c++; if (heap[k][0] <= heap[c][0]) break; [heap[k], heap[c]] = [heap[c], heap[k]]; k = c; } } return top; };
   const c0 = node(H.cup[0], H.cup[1]);
@@ -386,7 +431,7 @@ function mapOf(H) {
     for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
       if (!di && !dj) continue;
       const a = i + di, b = j + dj; if (a < 0 || b < 0 || a >= nx || b >= nz) continue;
-      const m = b * nx + a; if (!ok[m]) continue;
+      const m = b * nx + a; if (!ok[m] || ht[n] - ht[m] > CLIMB) continue; // (one comes down a drop, not up it)
       const nd = d + CELL * (di && dj ? Math.SQRT2 : 1);
       if (nd < dist[m]) { dist[m] = nd; next[m] = n; leap[m] = 0; put(nd, m); }
     }
@@ -417,9 +462,15 @@ function clearLine(H, ax, az, bx, bz) {
   for (let k = 1; k <= n; k++) {
     const x = ax + ((bx - ax) * k) / n, z = az + ((bz - az) * k) / n;
     if (!bedAt(H, x, z, 99)) return false;
-    for (const w of H.cushions) { if (x < w.x0 - R || x > w.x1 + R || z < w.z0 - R || z > w.z1 + R) continue; const t = clamp(((x - w.ax) * w.dx + (z - w.az) * w.dz) * w.il2, 0, 1); if (Math.hypot(x - w.ax - w.dx * t, z - w.az - w.dz * t) < R * 0.9 && k < n) return false; }
+    const y = _fy;
+    for (const w of H.cushions) {
+      if (x < w.x0 - R || x > w.x1 + R || z < w.z0 - R || z > w.z1 + R) continue;
+      const t = clamp(((x - w.ax) * w.dx + (z - w.az) * w.dz) * w.il2, 0, 1); if (Math.hypot(x - w.ax - w.dx * t, z - w.az - w.dz * t) >= R * 0.9 || k >= n) continue;
+      const base = w.base !== undefined ? w.base : w.bed.h ? w.bed.y + w.bed.h(x, z) : w.bed.y;
+      if (y < base + w.high && y >= base - 0.3) return false;
+    }
     for (const m of H.bumpers) if (Math.hypot(x - m[0], z - m[1]) < m[2] + R) return false;
-    for (const p of H.pools) if (Math.hypot(x - p[0], z - p[1]) < p[2] + R) return false;
+    if (wet(H, x, z, R)) return false;
   }
   return true;
 }
@@ -450,12 +501,15 @@ export function sightLine(H, x, z, aim, far, out) {
   const dx = Math.sin(aim), dz = -Math.cos(aim);
   let best = far, nx = 0, nz = 0;
   for (const w of H.cushions) {
-    if (w.bed.isle || w.high > 0.5 !== w.high > 0.5) continue;
     // the line of the cushion, pushed out by the radius of the ball towards where the ball is
     const side = (x - w.ax) * w.nx + (z - w.az) * w.nz >= 0 ? 1 : -1, ox = w.ax + w.nx * R * side, oz = w.az + w.nz * R * side, den = dx * w.dz - dz * w.dx;
     if (Math.abs(den) < 1e-9) continue;
     const t = ((ox - x) * w.dz - (oz - z) * w.dx) / den, u = ((ox - x) * dz - (oz - z) * dx) / den;
-    if (t > 1e-6 && t < best && u >= -0.02 && u <= 1.02) { best = t; nx = w.nx * side; nz = w.nz * side; }
+    if (!(t > 1e-6 && t < best && u >= -0.02 && u <= 1.02)) continue;
+    // (a kerb of another level — over the ball there, or under it — does not stop it)
+    const hx = x + dx * Math.max(0, t - 0.06), hz = z + dz * Math.max(0, t - 0.06), fy = feltAt(H, hx, hz), base = w.base !== undefined ? w.base : w.bed.h ? w.bed.y + w.bed.h(hx, hz) : w.bed.y;
+    if (fy > -Infinity && (fy >= base + w.high || fy < base - 0.3)) continue;
+    best = t; nx = w.nx * side; nz = w.nz * side;
   }
   for (const m of H.bumpers) {
     const ex = m[0] - x, ez = m[1] - z, along = ex * dx + ez * dz, off2 = ex * ex + ez * ez - along * along, rr = (m[2] + R) * (m[2] + R);
@@ -464,7 +518,7 @@ export function sightLine(H, x, z, aim, far, out) {
     if (t > 1e-6 && t < best) { best = t; nx = (x + dx * t - m[0]) / (m[2] + R); nz = (z + dz * t - m[1]) / (m[2] + R); }
   }
   // (the end of the felt, where no kerb stops the ball)
-  for (let t = 0.1; t < best; t += 0.1) if (!bedAt(H, x + dx * t, z + dz * t, 99) || H.pools.some((p) => (x + dx * t - p[0]) ** 2 + (z + dz * t - p[1]) ** 2 < p[2] * p[2])) { best = t; nx = 0; nz = 0; break; }
+  for (let t = 0.1; t < best; t += 0.1) if (!bedAt(H, x + dx * t, z + dz * t, 99) || wet(H, x + dx * t, z + dz * t)) { best = t; nx = 0; nz = 0; break; }
   if (out) { out[0] = x + dx * best; out[1] = z + dz * best; const vn = dx * nx + dz * nz; out[2] = nx || nz ? dx - 2 * vn * nx : 0; out[3] = nx || nz ? dz - 2 * vn * nz : 0; }
   return best;
 }
@@ -704,3 +758,6 @@ export function botRound(t0 = 0, clumsy = 0, limit = 900, events = null) {
   for (let n = 0; n < limit / STEP && !st.over; n++) { botInput(st, input); stepRound(st, STEP, input, events); }
   return st;
 }
+
+// (the nine holes are made ready once everything above is defined)
+for (const [i, H] of HOLES.entries()) prepare(H, i);
