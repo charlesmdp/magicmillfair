@@ -289,9 +289,9 @@ function sub(st, dt, input, events) {
     // off the rails: a moment on the ground, then back on them at the last signal (or, after three tries, at the next)
     st.off -= dt;
     if (st.off > 0) return;
-    let n = Math.max(0, st.save), skipped = false;
-    if (st.tries >= M.off.tries && n + 1 < C.signals.length) { n++; skipped = true; st.tries = 0; st.save = n; }
-    Object.assign(st, { phase: 'run', s: C.signals[n].s, way: 0, v: M.off.speed, lean: 0, tip: 0, y: 0, vy: 0, air: false });
+    let n = Math.max(0, st.save), skipped = false, home = false;
+    if (st.tries >= M.off.tries) { skipped = true; st.tries = 0; if (n + 1 < C.signals.length) st.save = ++n; else home = true; } // (after the last signal: set down on the straight home)
+    Object.assign(st, { phase: 'run', s: home ? C.length - 5.5 : C.signals[n].s, way: 0, v: M.off.speed, lean: 0, tip: 0, y: 0, vy: 0, air: false });
     events?.push({ type: 'back', signal: n, skipped });
     return;
   }
