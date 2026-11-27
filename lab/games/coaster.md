@@ -72,8 +72,11 @@ What it adds to the world (only when it is on): one group, `coaster` — the lin
 twice (within 170 m: rails, sleepers, the red boards, stringers, every bent with its girts and crosses; beyond:
 two rails and the legs, drawn out to 3 km so that the coaster is seen on the mountains from anywhere in the
 valley), the pylons and boards in one mesh, the station — and ten cars kept apart (one's own, eight for the
-others, the one that waits). TRIANGLES. No collision: one walks through the station; nobody can get to the
-rest. **It takes 165 trees out of the forest while it is on**: those whose crown would reach over the rails.
+others, the one that waits). Counted in the running game: 41 to 54 thousand triangles of it are handed to the
+renderer while one rides (55 to 78 meshes), 36 thousand in 44 meshes while one walks in the valley — before the
+renderer leaves out what is not in view —, 110 thousand in all. Each frame while nobody rides: thirteen
+distances, the boards within reach, and who plays. No collision: one walks through the station; nobody can get
+to the rest. **It takes 165 trees out of the forest while it is on**: those whose crown would reach over the rails.
 The forest has no way to be asked for that, so its lists are reached into from `Coaster.js` (`_clearing`: the
 cells its near trees are drawn from, the billboards of the far ones, what its shadows are baked from, and the
 trunk of each lets go of who walks, the way the world lets go of a thing taken away): a `forest.clear(x, z, r)`
@@ -82,10 +85,19 @@ would be the clean way, and it is the one thing here that leans on how the game 
 **What it does not do, and what nobody has seen.** *Nobody has held the stick*: how hard a bend pushes, how
 late the car answers, whether a metre is too little at the end and a metre and a half too much at the start are
 judgements checked by a bot, not felt by a hand — and a bot leans against a bend by reading its radius, which a
-person only sees coming. On a keyboard the stick is all or nothing (it is eased over a tenth of a second): a
-bend that asks for a third of the stick is tapped, not held; this may feel twitchy, and only a hand will say.
-Nobody has played it on a telephone; the frame rate on a real device was not measured (the pictures were taken
-with a software renderer). DUO. The line is long for a first try: 2 min 27 s clean, three lifts in it (34 s of
+person only sees coming. **On a keyboard the stick is all or nothing**: a key tapped counts for six tenths of
+the stick, held a third of a second for the whole (`keyStick`), and a hand that only presses keys — where the
+steady hand would hold more than four tenths of the stick — rides the line clean in the rules; whether tapping
+through a bend feels like driving or like twitching, only a hand will say. Other hands, tried in the rules
+only: 0.35 s late instead of 0.25, still clean; 0.45 s late, eight falls; a shaky one, one or two; never
+braking, eight; never bursting, three (all at the Leap, then carried on). So it is a game of reflexes at its
+end, and may be too quick for some: the tolerance of the last kilometre (1 m) and how hard the bends push
+(`COASTER.lim`, `steer`, `grip`) are the three figures to turn. Nobody has played it on a telephone; the frame
+rate on a real device was not measured (the pictures were taken with a software renderer). Two browsers on the
+game's own server (`node lab/tools/duo-games.mjs coaster --late=10`) each said "with Bob", "with Alice", and
+each saw the other's robot on the lift, sixty metres off, their clocks a fifth of a second apart; the other's
+car is too small in those pictures to be told, so it was looked at by putting a rider on the rails by hand (a
+blue car, twenty metres ahead on the Flank). **Two people have not ridden together.** The line is long for a first try: 2 min 27 s clean, three lifts in it (34 s of
 chain in all): its owner should say first whether the lifts are a rest or a wait. What is weakest: the last
 kilometre runs through the forest of the southern slopes, where trees still stand close on both sides and the
 view ahead is shorter than on the bare rock of the north and the west; the sparks are small; the fork's rails

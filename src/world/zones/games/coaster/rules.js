@@ -46,6 +46,7 @@ export const COASTER = {
   lost: { keep: 0.12 }, // m: where a rail is missing, how far on the side of the other the middle of the car must stay
   lean: 0.15, // m: at a fork, how far on its side the car must be to take it
   stop: 8, // m/s²: how hard the car is stopped once the clock has stopped
+  key: { first: 0.6, grow: 0.3, ease: 0.08 }, // a key held for the stick: so much of it at once, the whole after so long (s); it comes and goes in so long (s)
 };
 
 const DEG = Math.PI / 180;
@@ -368,6 +369,19 @@ function gapNeed(line, g) {
 }
 
 // ---------------------------------------------------------------------------------------------- a run
+
+/**
+ * A key is all or nothing: what it is worth as a stick. Tapped, it is six tenths of it — a nudge —; held a third
+ * of a second, the whole. `k` ({ x, held, dir }) is kept by who asks; `raw` is the stick as it is read (-1 … 1: a
+ * stick that is not at its end is taken as it is). Returns the stick for stepRun.
+ */
+export function keyStick(k, raw, dt) {
+  const K = COASTER.key, dir = Math.abs(raw) > 0.99 ? Math.sign(raw) : 0;
+  if (dir && dir === k.dir) k.held += dt; else { k.dir = dir; k.held = 0; }
+  const want = dir ? dir * (K.first + (1 - K.first) * Math.min(1, k.held / K.grow)) : clamp(raw, -1, 1);
+  k.x += clamp(want - k.x, -dt / K.ease, dt / K.ease);
+  return k.x;
+}
 
 /** A car in the station, waiting `wait` seconds for its start: see stepRun. */
 export function startRun(c, { wait = 0 } = {}) {

@@ -16,7 +16,7 @@ import { ANIM } from '../../../../player/Character.js';
 import { canvasBoard } from '../Boards.js';
 import { formatTime } from '../course.js';
 import { gateArch, nextStart, STARTS, worldClock } from '../gates.js';
-import { COASTER, course, railAt, frameAt, railNear, rampAt, startRun, stepRun, carPose, botInput } from './rules.js';
+import { COASTER, course, railAt, frameAt, railNear, rampAt, startRun, stepRun, carPose, botInput, keyStick } from './rules.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -447,7 +447,7 @@ export class Coaster {
    */
   open(player, io) {
     const c = this.course, K = COASTER, start = this.nextStart(), st = startRun(c, { wait: Math.max(0.05, start.wait) });
-    const events = [], input = { x: 0, y: 0, boost: false }, pose = {}, S = { cam: null, look: V(0, 0, 0), fov: 62, shake: 0, after: 0, acc: 0, view: 0, stretch: -1, gone: false, time: 0, x: 0, spark: 0, room: [0, 0] };
+    const events = [], input = { x: 0, y: 0, boost: false }, pose = {}, S = { cam: null, look: V(0, 0, 0), fov: 62, shake: 0, after: 0, acc: 0, view: 0, stretch: -1, gone: false, time: 0, key: { x: 0, held: 0, dir: 0 }, spark: 0, room: [0, 0] };
     const t = V(0, 0, 0), t2 = V(0, 0, 0), q1 = {}, q2 = {}, q3 = {}, fr = { fwd: [0, 0, 0], side: [0, 0, 0], up: [0, 0, 0] }, gauge = this._gauge();
     this.show.visible = false;
     const session = {
@@ -462,9 +462,9 @@ export class Coaster {
           S.acc += Math.min(dt, 0.25);
           while (S.acc >= K.step) { S.acc -= K.step; botInput(st, 'steady', input); stepRun(st, K.step, input, events); }
         } else {
-          // (a key is all or nothing: the stick it stands for comes over in a tenth of a second)
-          S.x += clamp((control ? clamp(inp.move.x, -1, 1) : 0) - S.x, -dt * 9, dt * 9);
-          input.x = S.x; input.y = control ? clamp(inp.move.y, -1, 1) : 0; input.boost = control && !!inp.jump;
+          // (a key is all or nothing: tapped it is a nudge, held it is the whole stick — see keyStick; a finger on the glass is taken as it is)
+          const raw = control ? clamp(inp.move.x, -1, 1) : 0;
+          input.x = inp.isTouch ? raw : keyStick(S.key, raw, dt); input.y = control ? clamp(inp.move.y, -1, 1) : 0; input.boost = control && !!inp.jump;
           stepRun(st, dt, input, events);
         }
         for (const e of events) this._tell(e, st, io, S);

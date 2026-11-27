@@ -5,7 +5,7 @@
 // the run; a hand with a person's limits rides it clean, and nobody gets round by doing nothing.
 // usage: node tools/coaster-test.mjs            (its last line is its line for server/scores.js)
 import { ground } from './lib/check.mjs';
-import { COASTER, WAY, course, railAt, railPoint, railNear, frameAt, pushAt, lightAt, roomAt, rampAt, capAt, startRun, stepRun, carPose, heatOf, botInput, botRun, fastest } from '../src/world/zones/games/coaster/rules.js';
+import { COASTER, WAY, course, railAt, railPoint, railNear, frameAt, pushAt, lightAt, roomAt, rampAt, capAt, startRun, stepRun, carPose, heatOf, botInput, botRun, fastest, keyStick } from '../src/world/zones/games/coaster/rules.js';
 import { BOUNDS, GLADE, COVE, NORTH } from '../src/world/layout/layout.js';
 import { slideCourse, SLIDE } from '../src/world/zones/games/slide/track.js';
 import { RAFT } from '../src/world/zones/games/raft/rules.js';
@@ -206,6 +206,15 @@ let line = '';
   check('a good first clean run takes two to four minutes', steady.time > 120_000 && steady.time < 240_000, steady.stretches.filter((q, i) => i % 3 === 1).map((q) => `${q.name} at ${q.t} s`).join(' · '));
   check('the same hand without the delay, braking later, taking the short way at the fork, is quicker — and nobody beats the line ridden flat out by the short way with nothing pushing the car off', keen.over && keen.falls === 0 && keen.took.join() === '1' && steady.took.join() === '0' && keen.time < steady.time - 4000 && least < keen.time - 5000, `keen ${sec(keen.time)}; flat out ${sec(least)}`);
   check('nobody gets round by doing nothing: the stick untouched, the chain takes the car up and the first bend throws it off — again and again; it is carried to the end flag by flag, and takes three times as long', clumsy.over && clumsy.falls >= 15 && clumsy.time > steady.time * 2.5, `${sec(clumsy.time)}, off the rails ${clumsy.falls} times`);
+  // a keyboard: keys, not a stick — a key is pressed where the steady hand would hold more than four tenths of the stick
+  {
+    const k = { x: 0, held: 0, dir: 0 }, b = { x: 0, y: 0, boost: false };
+    const keys = botRun(c, (st, input) => { botInput(st, 'steady', b); input.x = keyStick(k, Math.abs(b.x) > 0.4 ? Math.sign(b.x) : 0, K.step); input.y = b.y > 0.5 ? 1 : b.y < -0.5 ? -1 : 0; input.boost = b.boost; });
+    const tap = { x: 0, held: 0, dir: 0 }; for (let t = 0; t < 0.1; t += K.step) keyStick(tap, 1, K.step);
+    const hold = { x: 0, held: 0, dir: 0 }; for (let t = 0; t < 0.5; t += K.step) keyStick(hold, 1, K.step);
+    check('keys will do for a stick: a key tapped is a nudge, held it is the whole stick — and a hand that only has keys, all or nothing, rides the line too', keys.over && keys.falls <= 2 && tap.x > 0.5 && tap.x < 0.8 && hold.x === 1 && keyStick({ x: 0, held: 0, dir: 0 }, 0.3, 1) === 0.3,
+      `${sec(keys.time)}, ${keys.falls} fall${keys.falls === 1 ? '' : 's'}, ${(keys.worst * 100).toFixed(0)} % of the tolerance at the nearest; a tap of a tenth of a second is ${tap.x.toFixed(2)} of the stick`);
+  }
   // never a moment narrower than a quarter of a second: the burst before the gap that needs one
   const g = c.gaps[c.gaps.length - 1], flag = c.flags.findLast((f) => f.s < g.from - 20);
   const tryAt = (when) => { const st = put(flag.s, 0, K.fall.v); let pressed = false; const seen = run(st, 14, (q, input) => { botInput(q, 'steady', input); input.boost = false; if (!pressed && q.clock >= when) { input.boost = true; pressed = true; } }, (q, ev) => ev.some((e) => e.type === 'land' || e.type === 'fall')); return seen.some((e) => e.type === 'land'); };
