@@ -87,8 +87,8 @@ const segDist = (x, z, ax, az, bx, bz) => { const t = Math.max(0, Math.min(1, ((
   check('three lifts, one for each range: the chain takes the car up, and the eyes rest', c.lifts.length === 3 && rises.every((r) => r > 40), rises.map((r, i) => `${r.toFixed(0)} m in ${((railAt(c, c.lifts[i].to).t - railAt(c, c.lifts[i].from).t) / K.chain).toFixed(0)} s`).join(', '));
   const gaps = c.flags.slice(1).map((f, i) => f.s - c.flags[i].s - c.lifts.reduce((sum, l) => sum + Math.max(0, Math.min(f.s, l.to) - Math.max(c.flags[i].s, l.from)), 0)), bad = c.flags.filter((f) => c.gaps.some((g) => f.s > g.from - g.run - 4 && f.s < g.to + 2) || c.lost.some((g) => f.s > g.from - 5 && f.s < g.to + 2));
   check('a flag on a pylon every so often: a save never further than 150 m of rails one has to hold (a lift is not counted), none where the rails are broken', c.flags.length >= 14 && Math.max(...gaps) < 150 && bad.length === 0 && c.flags[0].s < 10, `${c.flags.length} flags, ${Math.round(Math.max(...gaps))} m apart at the most`);
-  check('eight kinds of moment at least: lifts, a first drop, banked bends, crests that lighten, a whirl over itself, a switchback, a dive into a hollow, gaps to fly, rails missing, a horseshoe, a last dive',
-    c.gaps.length >= 3 && c.lost.length >= 3 && c.stretches.length >= 12 && P.some((p) => p.kv < -0.02) && P.some((p) => p.kv > 0.02) && P.some((p) => Math.abs(p.bank) > 0.45),
+  check('eight kinds of moment at least: lifts, a first drop, banked bends, crests that lighten, a whirl over itself and a fork that cuts it, a switchback, a dive into a hollow, gaps to fly, rails missing, a horseshoe, a last dive',
+    c.gaps.length >= 3 && c.lost.length >= 3 && c.forks.length >= 1 && c.stretches.length >= 12 && P.some((p) => p.kv < -0.02) && P.some((p) => p.kv > 0.02) && P.some((p) => Math.abs(p.bank) > 0.45),
     `${c.stretches.length} stretches · ${c.gaps.length} gaps (${c.gaps.map((g) => (g.to - g.from).toFixed(0)).join(', ')} m), ${c.lost.length} stretches with a rail missing (${c.lost.map((g) => (g.to - g.from).toFixed(0)).join(', ')} m)`);
   check('what is in the way never moves: the line is the same for everybody, try after try', JSON.stringify(course().gaps) === JSON.stringify(c.gaps) && course() === c && WAY.length > 40);
   // the gate
@@ -156,12 +156,40 @@ const segDist = (x, z, ax, az, bx, bz) => { const t = Math.max(0, Math.min(1, ((
   check('a flag passed is a save: fallen beyond it, one is back at it — rolling, in the middle of the rails, the burst at hand again', evf.some((e) => e.type === 'boost') && evf.some((e) => e.type === 'flag' && e.n === 2) && Math.abs(sv.s - f.s) < 1 && sv.u === 0 && sv.v === K.fall.v && sv.cool <= 0 && sv.set > 0);
 }
 
+// ---------------------------------------------------------------------------------------------- the fork
+{
+  const f = c.forks[0], F = f.points, a = railAt(c, f.from), b = railAt(c, f.to), e = F[F.length - 1];
+  const turn = (x, y) => Math.abs(Math.atan2(Math.sin(x - y), Math.cos(x - y)));
+  let low = 1e9; const q = {};
+  for (let s = 0; s <= f.length; s += 1) { const p = railAt(f, s); for (const u of [-2.4, 0, 2.4]) { railPoint(f, s, u, 0, q); low = Math.min(low, p.y - height(q.x, q.z)); } }
+  check('a fork: another way leaves the line and comes back to it — rail to rail, heading to heading, over the ground all the way', c.forks.length === 1 && Math.hypot(F[0].x - a.x, F[0].z - a.z, F[0].y - a.y) < 0.3 && Math.hypot(e.x - b.x, e.z - b.z, e.y - b.y) < 0.3 && turn(F[2].yaw, a.yaw) < 0.06 && turn(F[F.length - 3].yaw, b.yaw) < 0.06 && low > 2.5,
+    `"${f.name}": from metre ${f.from.toFixed(0)} of the line to metre ${f.to.toFixed(0)}, ${low.toFixed(0)} m over the ground at the least`);
+  const longWay = P.filter((p) => p.s >= f.from && p.s <= f.to), rLong = 1 / Math.max(...longWay.map((p) => Math.abs(p.k))), rShort = 1 / Math.max(...F.map((p) => Math.abs(p.k)));
+  const railLong = railAt(c, f.to).t - railAt(c, f.from).t;
+  check('the short way is the hard one: far shorter, tighter, steeper, with less room on its sleepers', f.track < railLong - 100 && rShort < rLong - 4 && Math.max(...F.map((p) => Math.abs(p.rise))) > 0.8 && F[10].lim < railAt(c, f.from).lim - 0.1,
+    `${f.track.toFixed(0)} m of rail instead of ${railLong.toFixed(0)}; bends of ${rShort.toFixed(0)} m instead of ${rLong.toFixed(0)}, down a slope of ${(Math.atan(Math.max(...F.map((p) => Math.abs(p.rise)))) * 57.3).toFixed(0)}°; ${F[10].lim.toFixed(2)} m of room instead of ${railAt(c, f.from).lim.toFixed(2)}`);
+  const take = (u) => { const st = put(f.from - 6, u, 11); const seen = run(st, 3, (z, input) => { z.v = 11; z.u = u; z.vu = 0; void input; }, (z, ev) => ev.some((x) => x.type === 'fork')); return { st, e: seen.find((x) => x.type === 'fork') }; };
+  const left = take(f.side * 0.4), mid = take(0), right = take(-f.side * 0.4);
+  check('one leans to choose: on its side of the rails where it leaves, the car takes the fork; in the middle, or on the other side, it keeps to the line', left.e?.short === true && left.st.line === f && mid.e?.short === false && mid.st.line === c && right.e?.short === false, `it leaves on the ${f.side < 0 ? 'left' : 'right'}: ${K.lean} m on that side is enough`);
+  // ridden to its end, it is the line again; fallen from, one is back at a flag of the line
+  const through = put(f.from - 6, f.side * 0.4, 11), evt = run(through, 20, (z, input) => { botInput(z, 'keen', input); }, (z) => z.line === c && z.s > f.to + 5);
+  const off = put(f.from - 6, f.side * 0.4, 11), evo = run(off, 20, (z, input) => { input.y = 1; if (z.line === f && z.q > 12) input.x = 1; }, (z, ev) => ev.some((x) => x.type === 'back'));
+  check('ridden to its end it is the line again, further on; fallen from, one is back on the line at the last flag', !evt.some((x) => x.type === 'fall') && through.line === c && through.s > f.to && evo.some((x) => x.type === 'fall') && off.line === c && c.flags.some((g) => Math.abs(g.s - off.s) < 1),
+    `back at metre ${off.s.toFixed(0)} of the line`);
+}
+
 // ---------------------------------------------------------------------------------------------- the others, the starts, the music
 {
-  let worst = 0; const q = {}, o = {};
-  for (let s = 8; s < c.length - 8; s += 5) for (const u of [-1, 0, 1]) { railPoint(c, s, u, 0.4, q); const back = railNear(c, q.x, q.z, q.y, 8, o); worst = Math.max(worst, back ? Math.hypot(back.s - s, back.u - u) : 99); }
+  // (a place of the line, or of the fork, is found again — on whichever of the two runs there: where they part and meet they are one)
+  let worst = 0, steep = 0; const q = {}, o = {}, w2 = {};
+  for (const line of [c, ...c.forks]) for (let s = 8; s < line.length - 8; s += line === c ? 5 : 2) for (const u of [-1, 0, 1]) {
+    railPoint(line, s, u, 0.4, q); const back = railNear(c, q.x, q.z, q.y, 8, o); if (back) railPoint(back.line, back.s, back.u, 0.4, w2);
+    const far = back ? Math.hypot(w2.x - q.x, w2.y - q.y, w2.z - q.z) : 99;
+    // (where the fork parts from the line and comes back to it, a place may be found on either: the two are a step apart there)
+    if (line === c && !c.forks.some((f) => (s > f.from - 3 && s < f.from + 14) || (s > f.to - 14 && s < f.to + 3))) worst = Math.max(worst, far); else steep = Math.max(steep, far);
+  }
   const pose = carPose(put(900, 0.5, 15)), there = railNear(c, pose.x, pose.z, pose.y);
-  check('the others see one\'s car where one is: a place of the world is found again on the line, anywhere along it — at the Whirl too, where the height tells the two rails apart', worst < 0.8 && Math.abs(there.s - 900) < 0.6 && Math.abs(there.u - 0.5) < 0.2 && railNear(c, K.gate.x, K.gate.z + 12, 4) === null, `${worst.toFixed(2)} m off at the worst`);
+  check('the others see one\'s car where one is: a place of the world is found again on the line, anywhere along it — at the Whirl too, where the height tells the two rails apart', worst < 1 && steep < 2.5 && there.line === c && Math.abs(there.s - 900) < 0.6 && Math.abs(there.u - 0.5) < 0.2 && railNear(c, K.gate.x, K.gate.z + 12, 4) === null, `${worst.toFixed(2)} m off at the worst on the line, ${steep.toFixed(2)} m where the Plunge leaves it and comes back (the car is put under its rider: only how it leans is read from the rails found)`);
   const a = startRun(c, { wait: 4.2 }), ev = run(a, 6, (st, input) => { input.y = 1; });
   check('a start every ten seconds: one waits for it in the station, counted in, and the clock starts with it', K.every === 10 && ev.filter((e) => e.type === 'tick').map((e) => e.n).join() === '3,2,1' && ev.some((e) => e.type === 'go') && Math.abs(a.clock - 1.8) < 0.05 && a.s > c.start, `the clock at ${a.clock.toFixed(2)} s, 1.8 s after the start`);
   const w = startRun(c, { wait: 3 }), h0 = heatOf(w), hs = [];
@@ -176,7 +204,7 @@ let line = '';
   check('a hand with a person\'s limits — what it does, it does a quarter of a second late — rides the whole line clean at its first try: never off the rails', steady.over && steady.falls === 0, `${sec(steady.time)}, ${steady.boosts} bursts, ${steady.fast.toFixed(1)} m/s at the fastest`);
   check('…and never by a hair: its wheels stay well inside the sleepers all along', steady.worst < 0.85, `${(steady.worst * 100).toFixed(0)} % of the tolerance at the nearest`);
   check('a good first clean run takes two to four minutes', steady.time > 120_000 && steady.time < 240_000, steady.stretches.filter((q, i) => i % 3 === 1).map((q) => `${q.name} at ${q.t} s`).join(' · '));
-  check('the same hand without the delay, braking later, is quicker — and nobody beats the line ridden flat out with nothing pushing the car off', keen.over && keen.falls === 0 && keen.time < steady.time - 4000 && least < keen.time - 5000, `keen ${sec(keen.time)}; flat out ${sec(least)}`);
+  check('the same hand without the delay, braking later, taking the short way at the fork, is quicker — and nobody beats the line ridden flat out by the short way with nothing pushing the car off', keen.over && keen.falls === 0 && keen.took.join() === '1' && steady.took.join() === '0' && keen.time < steady.time - 4000 && least < keen.time - 5000, `keen ${sec(keen.time)}; flat out ${sec(least)}`);
   check('nobody gets round by doing nothing: the stick untouched, the chain takes the car up and the first bend throws it off — again and again; it is carried to the end flag by flag, and takes three times as long', clumsy.over && clumsy.falls >= 15 && clumsy.time > steady.time * 2.5, `${sec(clumsy.time)}, off the rails ${clumsy.falls} times`);
   // never a moment narrower than a quarter of a second: the burst before the gap that needs one
   const g = c.gaps[c.gaps.length - 1], flag = c.flags.findLast((f) => f.s < g.from - 20);

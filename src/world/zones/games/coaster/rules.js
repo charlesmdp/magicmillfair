@@ -90,7 +90,7 @@ export const WAY = [
   [-486, -126, 20, 210.5],
   [-486, -170, 20, 209.5],
   [-432, -170, 20, 207],
-  [-432, -136, 0, 183.5],
+  [-432, -136, 0, 183.5, 'plunge'],
   [-440, -100, 50, 201, 'hump2'],
   [-444, -72, 55, 180.5],
   [-446, -45, 50, 150.5],
@@ -144,20 +144,30 @@ const FLAGS = [
 const GAPS = [['drop1', 18, 7, 0.8, 10], ['hollow', 10, 16, 1.5, 12], ['leap', 14, 12, 0.6, 10]];
 // a rail missing: [name, metres after it, how long (m), which rail (-1: the left one)]: one keeps to the other
 const LOST = [['hump1', -14, 28, 1], ['west', 46, 30, -1], ['hump3', 58, 26, 1], ['dive', 34, 30, 1]];
+// a fork: another way between two places of the line (each a name and metres after it), which leaves it on that
+// `side` (-1: on the left) — who is on that side of the rails there takes it. Its way-points lie between the two
+// ([x, z, radius, height]); `lim`: how much of the line's tolerance it has. The short way is the hard one.
+const FORKS = [
+  // the Plunge: instead of the Whirl, straight down to where it comes out — a tight S on a slope of forty degrees
+  { name: 'The Plunge', from: ['whirl', -5], to: ['plunge', -5], side: -1, lim: 0.85, way: [[-446, -168.5, 0, 217], [-446, -159.1, 13, 212.5], [-432, -151.8, 13, 197]] },
+];
 
 // ---------------------------------------------------------------------------------------------- laying a line
 
-/** Runs a box filter of `half` samples to each side twice over `a` (a triangle, then: what changes eases in and out). Ends are held. */
-function ease(a, half) {
+/**
+ * Runs a box filter of `half` samples to each side twice over `a` (a triangle, then: what changes eases in and
+ * out). Beyond its ends the series is taken to stay as it ends — or, `on` true, to go on as it was going (a line
+ * that ends straight then ends where it was laid, and as steep).
+ */
+function ease(a, half, on = false) {
   half = Math.max(1, Math.round(half));
   let src = a;
+  const n = a.length;
   for (let pass = 0; pass < 2; pass++) {
-    const out = new Float64Array(src.length), sum = new Float64Array(src.length + 1);
-    for (let i = 0; i < src.length; i++) sum[i + 1] = sum[i] + src[i];
-    for (let i = 0; i < src.length; i++) {
-      const lo = Math.max(0, i - half), hi = Math.min(src.length - 1, i + half);
-      out[i] = (sum[hi + 1] - sum[lo] + src[0] * Math.max(0, half - i) + src[src.length - 1] * Math.max(0, i + half - (src.length - 1))) / (2 * half + 1);
-    }
+    const out = new Float64Array(n), at = (i) => (i < 0 ? (on ? 2 * src[0] - src[Math.min(n - 1, -i)] : src[0]) : i >= n ? (on ? 2 * src[n - 1] - src[Math.max(0, 2 * (n - 1) - i)] : src[n - 1]) : src[i]);
+    let sum = 0;
+    for (let j = -half; j <= half; j++) sum += at(j);
+    for (let i = 0; i < n; i++) { out[i] = sum / (2 * half + 1); sum += at(i + half + 1) - at(i - half); }
     src = out;
   }
   return src;
@@ -196,8 +206,8 @@ export function lay(way, { knee = 7, round = 5 } = {}) {
   // ---- eased: the corners come on little by little (the line is drawn again half a metre apart, then smoothed)
   const total0 = dist, m = Math.round(total0 / H), xs = new Float64Array(m + 1), zs = new Float64Array(m + 1);
   for (let i = 0, j = 0; i <= m; i++) { const d = (total0 * i) / m; while (j < raw.length - 2 && raw[j + 1].d < d) j++; const a = raw[j], b = raw[j + 1], t = b.d > a.d ? (d - a.d) / (b.d - a.d) : 0; xs[i] = lerp(a.x, b.x, t); zs[i] = lerp(a.z, b.z, t); }
-  const ex = ease(xs, round / H / 2), ez = ease(zs, round / H / 2), acc = new Float64Array(m + 1);
-  // (the two ends stay where they were laid, and leave as they were laid: the filter holds them)
+  const ex = ease(xs, round / H / 2, true), ez = ease(zs, round / H / 2, true), acc = new Float64Array(m + 1);
+  // (the two ends stay where they were laid, and leave as they were laid)
   for (let i = 1; i <= m; i++) acc[i] = acc[i - 1] + Math.hypot(ex[i] - ex[i - 1], ez[i] - ez[i - 1]);
   const total = acc[m], N = Math.round(total), step = total / N, P = [];
   for (let i = 0, j = 0; i <= N; i++) { const d = i * step; while (j < m - 1 && acc[j + 1] < d) j++; const t = acc[j + 1] > acc[j] ? (d - acc[j]) / (acc[j + 1] - acc[j]) : 0; P.push({ s: d, x: lerp(ex[j], ex[j + 1], t), z: lerp(ez[j], ez[j + 1], t) }); }
@@ -212,7 +222,7 @@ export function lay(way, { knee = 7, round = 5 } = {}) {
   // ---- its heights: a ramp from node to node, the knees rounded
   const ys = new Float64Array(N + 1);
   for (let i = 0, j = 0; i <= N; i++) { const s = P[i].s; while (j < nodes.length - 2 && nodes[j + 1][0] < s) j++; const a = nodes[j], b = nodes[j + 1]; ys[i] = lerp(a[1], b[1], clamp((s - a[0]) / Math.max(1e-6, b[0] - a[0]), 0, 1)); }
-  const y = ease(ys, knee / step);
+  const y = ease(ys, knee / step, true);
   let track = 0;
   for (let i = 0; i <= N; i++) {
     const p = P[i], a = Math.max(0, i - 1), b = Math.min(N, i + 1);
@@ -251,6 +261,13 @@ export function course() {
   built = { ...main, main, lifts, flags, gaps, lost, forks: [], stretches, start: flags[0].s, finish: at('finish'), top: Math.max(...P.map((p) => p.y)), end: P[P.length - 1] };
   built.main = built;
   for (const g of gaps) g.need = gapNeed(built, g);
+  // ---- the forks: each laid from the line, where it leaves it, to the line, where it comes back
+  for (const f of FORKS) {
+    const from = at(...f.from), to = at(...f.to), a = railAt(built, from, {}), b = railAt(built, to, {});
+    const line = lay([[a.x, a.z, 0, a.y], ...f.way, [b.x, b.z, 0, b.y]], { knee: 4, round: 4 });
+    for (const p of line.points) p.lim = railAt(built, lerp(from, to, p.s / line.length), _a).lim * f.lim;
+    built.forks.push({ ...line, name: f.name, from, to, side: f.side, lifts: [], gaps: [], lost: [], forks: [] });
+  }
   return built;
 }
 
@@ -548,7 +565,11 @@ export function botInput(st, how = 'steady', out = { x: 0, y: 0, boost: false })
     // ---- across: where it wants to be, and the push it will meet when its hand gets there
     let aim = 0;
     for (const g of line.lost) if (st.q < g.to && g.from - st.q < Math.max(26, v * 1.9)) aim = -g.side * 0.62;
-    if (line === c) for (const f of c.forks) if (st.q < f.from && f.from - st.q < Math.max(30, v * 2)) aim = (keen ? 1 : -1) * f.side * 0.55;
+    // (a fork ahead: the keen takes the short way, the steady keeps to the line — each on its side of the rails in good time)
+    let fork = null;
+    if (line === c) for (const f of c.forks) if (st.q < f.from && f.from - st.q < Math.max(40, v * 2.6)) { aim = (keen ? 1 : -1) * f.side * 0.55; if (keen) fork = f; }
+    /** The rails `d` metres on, by the way it will take: onto the fork it means to take, and off a fork back onto the line. */
+    const on = (d, out) => { const s = st.q + d; return fork && s >= fork.from ? railAt(fork, Math.min(fork.length, s - fork.from), out) : line !== c && s > line.length ? railAt(c, line.to + s - line.length, out) : railAt(line, s, out); };
     const pa = railAt(line, st.q + v * cosp * (lag + 0.08), _c), auth = K.steer * Math.min(1, lightAt(pa, v));
     const kp = keen ? 16 : 7.5, kd = keen ? 5.4 : 2.9;
     now.x = clamp((-pushAt(pa, v) - kp * (st.u + st.vu * lag * 0.5 - aim) - kd * st.vu) / auth, -1, 1);
@@ -559,7 +580,7 @@ export function botInput(st, how = 'steady', out = { x: 0, y: 0, boost: false })
     const wish = jump ? jump.need * 1.12 + 1.5 : 0, lip = jump ? jump.from - st.q : Infinity;
     let y = 1, room = K.top;
     for (let d = 0; d <= reach; d += 2.5) {
-      const r = railAt(line, st.q + d, _c);
+      const r = on(d, _c);
       let cap = capAt(r, share);
       for (const g of line.lost) if (st.q + d > g.from - 6 && st.q + d < g.to) cap = Math.min(cap, capAt(r, share * 0.6));
       if (d >= lip) cap = Math.max(cap, wish + 2); // (what comes after a gap is not braked for before it)
@@ -572,7 +593,7 @@ export function botInput(st, how = 'steady', out = { x: 0, y: 0, boost: false })
     if (jump && v < wish && y > 0) { if (st.cool <= 0 && lip / Math.max(4, v) < 2.2 && room > 6) now.boost = true; }
     else if (!jump && y > 0 && st.cool <= 0 && !st.lifted && room > (keen ? 7 : 10)) {
       let clear = true;
-      for (let d = reach; d <= reach + v * 2.2 + 20; d += 4) { const r = railAt(line, st.q + d, _c); if (capAt(r, share) < v + 8) { clear = false; break; } }
+      for (let d = reach; d <= reach + v * 2.2 + 20; d += 4) { if (capAt(on(d, _c), share) < v + 8) { clear = false; break; } }
       if (clear && !liftAt(line, st.q + v * 1.5)) now.boost = true;
     }
     now.y = y;
@@ -611,17 +632,17 @@ export function botRun(c, how = 'steady', limit = 900) {
  */
 export function fastest(c) {
   const K = COASTER;
-  let t = 0, v = 0, cool = 0, boost = 0, s = c.start;
-  const skip = c.forks.reduce((sum, f) => sum + Math.max(0, (f.to - f.from) - f.length), 0);
-  for (let n = 0; n < 4e6 && s < c.finish - skip; n++) {
-    const p = railAt(c, s, _c), cosp = 1 / Math.sqrt(1 + p.rise * p.rise), lift = liftAt(c, s), dt = K.step;
+  let t = 0, v = 0, cool = 0, boost = 0, line = c, q = c.start;
+  for (let n = 0; n < 4e6 && !(line === c && q >= c.finish); n++) {
+    const p = railAt(line, q, _c), cosp = 1 / Math.sqrt(1 + p.rise * p.rise), lift = liftAt(line, q), dt = K.step, before = q;
     if (lift) v += clamp(lift.v - v, -9 * dt, 9 * dt); else {
       if (cool <= 0) { boost = K.boost.time; cool = K.boost.rest; }
       let a = -K.g * p.rise * cosp - K.roll - K.drag * v * v + K.run * Math.max(0, 1 - v / K.runTop);
       if (boost > 0) { a += K.boost.push; boost -= dt; }
       v = clamp(v + a * dt, K.creep, K.top);
     }
-    cool -= dt; s += v * cosp * dt; t += dt;
+    cool -= dt; q += v * cosp * dt; t += dt;
+    if (line === c) { for (const f of c.forks) if (before < f.from && q >= f.from && f.length < f.to - f.from) { line = f; q -= f.from; break; } } else if (q >= line.length) { q = line.to + q - line.length; line = c; }
   }
   return Math.round(t * 1000);
 }
