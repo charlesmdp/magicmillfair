@@ -58,21 +58,25 @@ const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 // A way-point: [x, z, radius of the corner there (m), height of the rails there (m over the sea), name]. A name
 // is what the rest hangs on: the lifts, the flags, the gaps, the names of the stretches.
 export const WAY = [
-  // ---- the station, at the back of the north beach, and the first lift: straight up the face of the mountain
+  // ---- the station, at the back of the north beach, and the first lift: straight up the face of the mountain,
+  // then round to the west, still climbing
   [38, -129, 0, 5.6, 'station'],
   [38, -147, 0, 5.6, 'lift1'],
-  [38, -262, 0, 134, 'top1'],
-  // ---- the north range, heading west: a level breath, a wide turn to the left, the first drop down the flank
-  [38, -276, 0, 134],
-  [38, -312, 26, 134, 'drop1'],
-  [0, -308.6, 0, 129],
-  [-52, -304, 50, 111, 'dip1'],
-  [-92, -272, 45, 97.5],
-  [-140, -277, 60, 113.5, 'hump1'],
-  [-178, -266, 60, 112],
-  [-208, -272, 40, 112.5, 'lift2'],
+  [38, -262, 0, 134],
+  [38, -320, 40, 157],
+  [-4, -320, 0, 172, 'top1'],
+  // ---- the north range, heading west: a level breath, the first drop, then high along the flank — north of
+  // the bare terraces where the Little Mine Train runs in the open, and well above them
+  [-16, -320, 0, 172, 'drop1'],
+  [-58, -326, 0, 138, 'dip1'],
+  [-100, -334, 55, 154.5],
+  [-145, -328, 55, 152.5, 'hump1'],
+  [-178, -327, 55, 159.5],
+  [-208, -331, 55, 147.5],
+  [-240, -327, 55, 162],
+  [-268, -326, 40, 160.5, 'lift2'],
   // ---- the second lift, up to the heights of the north-west
-  [-300, -292, 40, 180],
+  [-300, -300, 40, 181],
   [-418, -292, 0, 225, 'top2'],
   [-442, -292, 0, 225],
   // ---- the western range, from north to south
@@ -131,13 +135,13 @@ const STRETCHES = [
 ];
 // a flag: [name of a way-point, metres after it, what the pylon is called]
 const FLAGS = [
-  ['station', 6, 'the station'], ['top1', 4, 'the top of the first lift'], ['dip1', 0, 'the Flank'], ['hump1', 28, 'the Flank'], ['top2', 4, 'the top of the second lift'],
+  ['station', 6, 'the station'], ['top1', 4, 'the top of the first lift'], ['dip1', 0, 'the Flank'], ['hump1', 28, 'the Flank'], ['lift2', -34, 'the Flank'], ['top2', 4, 'the top of the second lift'],
   ['west', 28, 'the High Line'], ['whirl', 8, 'the Whirl'], ['whirl', 96, 'the Whirl'], ['hump2', -30, 'the Western Wall'], ['switch', -44, 'the Switchback'], ['brink', -40, 'the brink'], ['hollow', 34, 'the Hollow'],
   ['top3', 4, 'the top of the last lift'], ['south', 62, 'the Rattler'], ['hump3', 24, 'Last Legs'], ['hump4', -44, 'Last Legs'], ['hump4', 34, 'the Horseshoe'], ['shoe', 34, 'the Horseshoe'], ['leap', 40, 'the Leap'],
 ];
 // a gap in the rails: [name, metres after it, how long it is (m), how high its ramp lifts the car (m), over how many
 // metres]: one flies it, off the ramp — fast enough, or one falls short
-const GAPS = [['drop1', 50, 7, 0.8, 10], ['hollow', 10, 16, 1.5, 12], ['leap', 14, 12, 0.6, 10]];
+const GAPS = [['drop1', 18, 7, 0.8, 10], ['hollow', 10, 16, 1.5, 12], ['leap', 14, 12, 0.6, 10]];
 // a rail missing: [name, metres after it, how long (m), which rail (-1: the left one)]: one keeps to the other
 const LOST = [['hump1', -14, 28, 1], ['west', 46, 30, -1], ['hump3', 58, 26, 1], ['dive', 34, 30, 1]];
 

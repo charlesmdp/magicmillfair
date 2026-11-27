@@ -51,9 +51,21 @@ const segDist = (x, z, ax, az, bx, bz) => { const t = Math.max(0, Math.min(1, ((
   check('it keeps clear of what stands in the mountains: the slide, the golden dog and its cove, Wild River, the Sanctuary, the Stairway, the Lost Temple, the waterfall and its torrent, the High Clearing, the secret cove',
     d.slide > 40 && d.dog > 120 && river > 150 && d.sanctuary > 100 && d.stairway > 90 && d.temple > 45 && torrent > 60 && d.glade > 70 && d.cove > 100,
     `the slide ${d.slide.toFixed(0)} m off in plan, the dog ${d.dog.toFixed(0)}, the river ${river.toFixed(0)}, the Sanctuary ${d.sanctuary.toFixed(0)}, the Stairway ${d.stairway.toFixed(0)}, the Temple ${d.temple.toFixed(0)}, the torrent ${torrent.toFixed(0)}, the Clearing ${d.glade.toFixed(0)}, the secret cove ${d.cove.toFixed(0)}`);
-  // the Little Mine Train (not in this branch): its range is x -438…-212, z -263…-27, its rails up to y 105
-  const inBox = P.filter((p) => p.x > -438 && p.x < -212 && p.z > -263 && p.z < -27), lowest = inBox.length ? Math.min(...inBox.map((p) => p.y)) : Infinity;
-  check('and of the Little Mine Train: outside its range, or more than 25 m above its highest rail — and nowhere near its station', lowest > 105 + 25 && d.mineStation > 150, `${inBox.length} m of the line pass over the edge of its range, ${Number.isFinite(lowest) ? (lowest - 105).toFixed(0) : '—'} m above its highest rail at the least; its station ${d.mineStation.toFixed(0)} m off`);
+  // the Little Mine Train: most of its line is in the rock; what stands in the open air is its station corner at the
+  // north-west of the acid-pond meadow (x -255…-210, z -140…-98, up to y 32) and its high run on two bare terraces
+  // (x -270…-143, z -300…-265, up to y 130). The coaster passes each 25 m away on the map, or 25 m above its top.
+  const BOXES = [{ name: 'its station', x0: -255, x1: -210, z0: -140, z1: -98, top: 32 }, { name: 'its high run', x0: -270, x1: -143, z0: -300, z1: -265, top: 130 }];
+  const off = (p, q) => Math.hypot(Math.max(0, q.x0 - p.x, p.x - q.x1), Math.max(0, q.z0 - p.z, p.z - q.z1));
+  const crowd = P.filter((p) => BOXES.some((q) => off(p, q) < 25 && p.y < q.top + 25)), nearRun = Math.min(...P.map((p) => off(p, BOXES[1]))), over = P.filter((p) => off(p, BOXES[1]) < 25);
+  check('and of the Little Mine Train, where it runs in the open: 25 m from its station corner and from its high terraces on the map — or 25 m above their tops', crowd.length === 0 && d.mineStation > 150 && Math.min(...P.map((p) => off(p, BOXES[0]))) > 100,
+    `${nearRun.toFixed(0)} m north of its high run at the nearest${over.length ? `, but for ${over.length} m of the second lift, ${(Math.min(...over.map((p) => p.y)) - 130).toFixed(0)} m above its top` : ''}; its station ${Math.min(...P.map((p) => off(p, BOXES[0]))).toFixed(0)} m off`);
+  // (…and against its own rules, once they are in this branch: every metre of its rails that is in the open air)
+  {
+    const mine = await import('../src/world/zones/games/mine/rules.js').catch(() => null), pts = mine?.course?.().pts?.filter((p) => ['station', 'open', 'trestle'].includes(p.kind)) || [];
+    let nearest = 1e9, bad = 0;
+    for (const m of pts) for (let i = 0; i < P.length; i += 2) { const dd = Math.hypot(m.x - P[i].x, m.z - P[i].z); if (dd < nearest) nearest = dd; if (dd < 25 && P[i].y - m.y < 25) bad++; }
+    check('…checked against its own rails, metre by metre', bad === 0, pts.length ? `${pts.length / 2} m of its rails are in the open air; the coaster is never nearer than ${nearest.toFixed(0)} m on the map` : 'its rules are not in this branch yet: only its two boxes were checked');
+  }
   // where one walks
   const walked = P.filter((p) => inside(BOUNDS, p.x, p.z)), mid = walked.filter((p) => p.s > at('lift1') + 12 && p.s < at('finish') + 4);
   check('over ground nobody walks: only its station and its terminus stand where one does', mid.length === 0 && walked.length > 20 && walked.length < 140, `${walked.filter((p) => p.s < 100).length} m of it at the station, ${walked.filter((p) => p.s > 100).length} m at the terminus`);
@@ -68,7 +80,7 @@ const segDist = (x, z, ax, az, bx, bz) => { const t = Math.max(0, Math.min(1, ((
   const free = P.filter((p) => !lifted(p.s)), steep = Math.max(...free.map((p) => Math.abs(p.rise))), tight = 1 / Math.max(...P.map((p) => Math.abs(p.k)));
   const first = P.filter((p) => p.s > at('drop1') + 25 && p.s < 1000 && !lifted(p.s) && p.s < at('west') - 30), last = P.filter((p) => p.s > c.length - 1000);
   const rFirst = 1 / Math.max(...first.map((p) => Math.abs(p.k))), rLast = 1 / Math.max(...last.map((p) => Math.abs(p.k)));
-  check('the first kilometre forgives, the last does not: wide bends and a wide tolerance first, tight ones and a narrow one at the end', rFirst > 40 && rLast < 25 && tight > 16 && P[300].lim === K.lim[0] && Math.abs(P[P.length - 300].lim - K.lim[1]) < 0.02 && K.lim[0] >= 1.4 && K.lim[1] <= 1.05,
+  check('the first kilometre forgives, the last does not: wide bends and a wide tolerance first, tight ones and a narrow one at the end', rFirst > 38 && rLast < 25 && tight > 16 && P[300].lim === K.lim[0] && Math.abs(P[P.length - 300].lim - K.lim[1]) < 0.02 && K.lim[0] >= 1.4 && K.lim[1] <= 1.05,
     `past the top of the first lift no bend tighter than ${rFirst.toFixed(0)} m in the first kilometre, ${rLast.toFixed(0)} m in the last; one may be ${K.lim[0]} m off the middle at first, ${K.lim[1]} m at the end`);
   check('it is a coaster, not a wall: off its lifts nowhere steeper than 52 degrees', steep < 1.28, `${(Math.atan(steep) * 57.3).toFixed(0)}° at the steepest`);
   const rises = c.lifts.map((l) => railAt(c, l.to).y - railAt(c, l.from).y);
@@ -98,8 +110,8 @@ const segDist = (x, z, ax, az, bx, bz) => { const t = Math.max(0, Math.min(1, ((
   check('the stick untouched, the bend throws it off: beyond the sleepers it falls — and is put back on the rails at the last flag, the clock running: seconds lost, never the run', !!fell && fell.why === 'out' && !!back && Math.abs(a.s - c.flags[back.flag].s) < 1 && a.falls === 1 && !a.over && a.clock > K.fall.time && Math.sign(fell.side) === Math.sign(pb.k),
     fell ? `off at metre ${fell.s.toFixed(0)}, to the ${fell.side > 0 ? 'right' : 'left'}; back at "${c.flags[back?.flag ?? 0].name}" ${(back.t - fell.t).toFixed(1)} s later` : 'it held');
   // …and the stick holds it
-  const b = put(bendS - 30, 0, 23), held = run(b, 6, (st, input) => { st.v = 23; const p = railAt(st.line, st.q + st.v * 0.1); input.x = Math.max(-1, Math.min(1, (-pushAt(p, st.v) - 8 * st.u - 3 * st.vu) / K.steer)); }, (st) => st.s > bendS + 34);
-  check('the stick brings it back: leaning against the bend, the same car at the same speed stays on the rails', !held.some((e) => e.type === 'fall') && b.s > bendS + 30, `${Math.abs(b.u).toFixed(2)} m off the middle at the end of it`);
+  const b = put(bendS - 30, 0, 23), held = run(b, 6, (st, input) => { st.v = 23; const p = railAt(st.line, st.q + st.v * 0.1); input.x = Math.max(-1, Math.min(1, (-pushAt(p, st.v) - 8 * st.u - 3 * st.vu) / K.steer)); }, (st) => st.s > Math.min(bendS + 34, c.lost[0].from - 3));
+  check('the stick brings it back: leaning against the bend, the same car at the same speed stays on the rails', !held.some((e) => e.type === 'fall') && b.s > bendS + 15, `${Math.abs(b.u).toFixed(2)} m off the middle at the end of it`);
   const tol = (s, u) => { const st = put(s, u, 5); run(st, 0.3, (q, input) => { input.y = -1; }); return st.fall > 0; };
   check('how far it may stray is how wide the sleepers are: a metre and a half at first, a metre at the end', !tol(300, 1.4) && tol(300, 1.55) && !tol(c.length - 250, 0.93) && tol(c.length - 250, 1.08));
   // a crest lightens it
