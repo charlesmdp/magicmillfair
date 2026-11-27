@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ground, ROOT } from './lib/check.mjs';
-import { BOUNDS } from '../src/world/layout/layout.js';
+import { BOUNDS, THANKS_WALL } from '../src/world/layout/layout.js';
 import { MINE, course, railAt, stretchAt, startRun, stepRun, cartPose, heatOf, botInput, naiveInput, botRun } from '../src/world/zones/games/mine/rules.js';
 
 const results = [];
@@ -74,8 +74,14 @@ const run = (st, secs, drive, stop) => { const input = { x: 0, y: 0, hop: false 
   for (const [name, [x, z]] of Object.entries(places)) for (let j = 0; j < C.n; j += 2) { const p = C.pts[j]; if (!OPEN.has(p.kind)) continue; const d = Math.hypot(p.x - x, p.z - z); if (d < close[1]) close = [name, d]; }
   const walked = C.pts.filter((p, j) => OPEN.has(p.kind) && j * C.ds > 200 && j * C.ds < L - 200 && inside(p.x, p.z)).length;
   check('it keeps in the mountains west and north-west of the valley — its high run over ground nobody walks — and away from what the valley has there already', x0 > -445 && x1 < -140 && z0 > -305 && z1 < -20 && close[1] > 11 && walked === 0, `x ${x0.toFixed(0)} … ${x1.toFixed(0)}, z ${z0.toFixed(0)} … ${z1.toFixed(0)}, ${y0.toFixed(0)} … ${y1.toFixed(0)} m over the sea; in the open never nearer than ${close[1].toFixed(0)} m to ${close[0]}`);
+  {
+    // the wall of thanks, in the cliff west of the meadow: nothing of the line stands before it, nor at its ends
+    const W = THANKS_WALL, nx = Math.sin(W.yaw), nz = Math.cos(W.yaw); let nearest = 999, before = 0;
+    for (let j = 0; j < C.n; j += 2) { const p = C.pts[j]; if (!OPEN.has(p.kind)) continue; const dx = p.x - W.x, dz = p.z - W.z, out = dx * nx + dz * nz, along = Math.abs(-dx * nz + dz * nx); nearest = Math.min(nearest, Math.hypot(dx, dz)); if (out > -4 && out < 40 && along < W.width / 2 + 6) before++; }
+    check('the wall of thanks is left alone: nothing of the line stands before it, nor by its ends', before === 0 && nearest > W.width / 2 + 8 && Math.hypot(M.gate.x - W.x, M.gate.z - W.z) > 30, `the nearest rail in the open is ${nearest.toFixed(0)} m from its middle (it is ${W.width} m wide); the gate ${Math.hypot(M.gate.x - W.x, M.gate.z - W.z).toFixed(0)} m`);
+  }
   const G = M.gate, here = height(G.x, G.z);
-  check('one asks on the meadow before the platform: ground one can walk to, flat, no tree in the way, a few steps from the train', inside(G.x, G.z) && inside(G.x + 3, G.z) && here > 20 && Math.abs(height(G.x + 2, G.z) - here) < 0.6 && trees(G.x, G.z, 2.5) === 0 && Math.hypot(G.x - M.station.x, G.z - (M.station.z - M.wait)) < 12 && Math.abs(M.station.y - here) < 2, `gate at (${G.x}, ${G.z}), ground ${here.toFixed(1)} m; the rails ${(M.station.y - here).toFixed(1)} m higher`);
+  check('one asks on the meadow before the platform: ground one can walk to, flat, no tree in the way, a few steps from the train', inside(G.x, G.z) && inside(G.x + 3, G.z) && here > 20 && Math.abs(height(G.x + 2, G.z) - here) < 0.6 && trees(G.x, G.z, 2.5) === 0 && Math.hypot(G.x - railAt(M.wait, 0, {}).x, G.z - railAt(M.wait, 0, {}).z) < 12 && Math.abs(railAt(M.wait, 0, {}).y - here) < 3.5, `gate at (${G.x}, ${G.z}), ground ${here.toFixed(1)} m; the platform stands on posts, its rails ${(railAt(M.wait, 0, {}).y - here).toFixed(1)} m higher`);
 }
 {
   // ---- what is on the line
@@ -86,7 +92,7 @@ const run = (st, secs, drive, stop) => { const input = { x: 0, y: 0, hop: false 
   check('each board is passed a second and more before what it tells of', lead > 1.0, `${lead.toFixed(2)} s at the least, at the speed the train has by itself`);
   let far = 0; for (let i = 1; i < C.signals.length; i++) far = Math.max(far, C.signals[i].s - C.signals[i - 1].s);
   const tight = C.signals.filter((g) => hops.some((t) => t.way !== 1 && t.s > g.s - 2 && t.s < g.s + 12));
-  check('a signal every sixty metres or so, the first at the head of the lift, none just before a gap or a rock', C.signals.length >= 14 && far < 85 && Math.abs(C.signals[0].s - C.top) < 5 && tight.length === 0 && L - C.signals[C.signals.length - 1].s < 90, `${C.signals.length} signals, never more than ${far.toFixed(0)} m apart`);
+  check('a signal every sixty metres or so, the first at the head of the lift, none just before a gap or a rock', C.signals.length >= 12 && far < 85 && Math.abs(C.signals[0].s - C.top) < 5 && tight.length === 0 && L - C.signals[C.signals.length - 1].s < 90, `${C.signals.length} signals, never more than ${far.toFixed(0)} m apart`);
   const sides = { 0: 0, 1: 0, '-1': 0, 2: 0 }; for (const g of C.nuggets) sides[g.side]++;
   check('nuggets all along: some between the rails, some to lean to, some to hop to', C.nuggets.length >= 30 && sides[0] > 3 && sides[1] > 5 && sides[-1] > 5 && sides[2] > 4 && C.nuggets.every((g, i) => g.id === i), `${C.nuggets.length} nuggets (${sides[0]} between the rails, ${sides[-1]} left, ${sides[1]} right, ${sides[2]} high), ${(C.nuggets.length * M.nugget.give / 1000).toFixed(0)} s to be had`);
   check('the fork: the long way round to the left, the short way straight on — shorter by twenty metres and more, broken twice, a rock between', F.s1 - F.s0 - F.len > 20 && C.gaps.filter((g) => g.way === 1).length === 2 && C.rocks.filter((r) => r.way === 1).length === 1 && Math.hypot(F.pts[F.m].x - railAt(F.s1, 0, {}).x, F.pts[F.m].z - railAt(F.s1, 0, {}).z) < 0.05, `${(F.s1 - F.s0).toFixed(0)} m round, ${F.len.toFixed(0)} m straight on`);
@@ -94,7 +100,7 @@ const run = (st, secs, drive, stop) => { const input = { x: 0, y: 0, hop: false 
 {
   // ---- the start, the lift, the speed
   const st = startRun(), ev = run(st, 40, null, (q, e) => e.some((x) => x.type === 'top')), go = ev.find((e) => e.type === 'go'), top = ev.find((e) => e.type === 'top');
-  check('a count of three, and the train is hauled out of the station, up the lift and over its head: a quarter of a minute to read the keys', !!go && Math.abs(go.at - M.count) < 0.02 && !!top && top.at - go.at > 11 && top.at - go.at < 18 && st.offs === 0, `${(top.at - go.at).toFixed(1)} s from the platform to where the chain lets go, ${(railAt(C.top, 0, {}).y - M.station.y).toFixed(0)} m higher`);
+  check('a count of three, and the train is hauled out of the station, up the lift and over its head: a quarter of a minute to read the keys', !!go && Math.abs(go.at - M.count) < 0.02 && !!top && top.at - go.at > 11 && top.at - go.at < 19 && st.offs === 0, `${(top.at - go.at).toFixed(1)} s from the platform to where the chain lets go, ${(railAt(C.top, 0, {}).y - M.station.y).toFixed(0)} m higher`);
   const lazy = startRun({ wait: 0 }); run(lazy, 20, (q, inp) => { inp.x = 1; inp.y = -1; inp.hop = true; }, (q) => q.s > C.head - 20);
   const lazy2 = running(C.head + 4, M.haul.over); run(lazy2, 2, (q, inp) => { inp.x = -1; inp.y = -1; inp.hop = true; });
   check('while the chain has it nothing one does matters: one cannot tip, brake or hop there — not on the lift, not round its head', lazy.offs === 0 && lazy.y === 0 && lazy.v > M.haul.lift - 0.5 && lazy2.offs === 0 && lazy2.y === 0 && lazy2.v > M.haul.over - 0.5);
@@ -147,7 +153,7 @@ const run = (st, secs, drive, stop) => { const input = { x: 0, y: 0, hop: false 
   const mid = C.nuggets.find((n) => n.side === 0 && n.way !== 1 && n.s > C.top), a = running(mid.s - 3, 9); run(a, 0.6);
   const side = C.nuggets.find((n) => n.side === 1 && n.s > C.top && n.way !== 1 && Math.abs(railAt(n.s, 0, {}).k) < 0.01), b = running(side.s - 4, 9), c = running(side.s - 4, 9); run(b, 0.7, (q, inp) => { inp.x = 1; }); run(c, 0.7);
   const high = C.nuggets.find((n) => n.side === 2 && n.way !== 1), d = running(high.s - 9 * 0.42, 9), e = running(high.s - 9 * 0.42, 9); run(d, 0.1, (q, inp, t) => { inp.hop = t < 0.05; }); const dy = d.y; run(d, 0.5);
-  check('nuggets: those between the rails are taken as one passes, those beside by leaning to them, those above by hopping — half a second off the time for each', a.got[mid.id] === 1 && b.got[side.id] === 1 && !c.got[side.id] && d.got[high.id] === 1 && dy > 0, `${M.nugget.give} ms each`);
+  check('nuggets: those between the rails are taken as one passes, those beside by leaning to them, those above by hopping — a quarter of a second off the time for each', a.got[mid.id] === 1 && b.got[side.id] === 1 && !c.got[side.id] && d.got[high.id] === 1 && dy > 0, `${M.nugget.give} ms each`);
   // the fork
   const l = running(F.s0 - 12, 10), r = running(F.s0 - 12, 10), el = run(l, 12, (q, inp) => { inp.x = Math.sign(railAt(q.s + 3, q.way, {}).k); }, (q) => q.s > F.s1 + 2 || q.phase === 'off'), er = run(r, 12, (q, inp, t) => { inp.x = q.s < F.s0 + 1 ? 1 : 0; const next = [...C.gaps.filter((x) => x.way === 1).map((x) => x.s + x.len / 2), ...C.rocks.filter((x) => x.way === 1).map((x) => x.s)].sort((p, q2) => p - q2).find((x) => x > q.s + 1); inp.hop = next !== undefined && next - q.s < q.v * 0.43 && next - q.s > q.v * 0.36; }, (q) => (q.way === 0 && q.s > F.s1 + 2) || q.phase === 'off');
   const tl = el.length ? el[el.length - 1].at : 0, fl = el.find((x) => x.type === 'fork'), fr = er.find((x) => x.type === 'fork');
@@ -160,7 +166,7 @@ const run = (st, secs, drive, stop) => { const input = { x: 0, y: 0, hop: false 
   for (let k = 0; k < acts.length;) { const n = 1 + (k % 5); let last = acts[k]; for (let j = 0; j < n && k < acts.length; j++, k++) { last = acts[k]; stepRun(two, M.step, last, null); } }
   check('the same asks give the same run, however the time is cut', Math.abs(one.s - two.s) < 1e-9 && one.v === two.v && one.nuggets === two.nuggets, `${one.s.toFixed(2)} m after forty seconds`);
   const t0 = Date.now(), steady = botRun('steady'), bold = botRun('bold'), clumsy = botRun('clumsy'), naive = botRun(naiveInput, 900);
-  check('a driver with a person\'s limits — it does what it decided a quarter of a second earlier — gets round without leaving the rails: a minute and a half', steady.over && steady.offs === 0 && steady.clock > 80 && steady.clock < 115 && steady.short === 0 && steady.nuggets >= 20, `${steady.clock.toFixed(1)} s on the clock, ${steady.nuggets} nuggets of ${C.nuggets.length}: ${(steady.time / 1000).toFixed(2)} s; top speed ${(steady.top * 3.6).toFixed(0)} km/h (worked out in ${((Date.now() - t0) / 1000).toFixed(1)} s)`);
+  check('a driver with a person\'s limits — it does what it decided a quarter of a second earlier — gets round without leaving the rails: a minute and a quarter', steady.over && steady.offs === 0 && steady.clock > 72 && steady.clock < 115 && steady.short === 0 && steady.nuggets >= 20, `${steady.clock.toFixed(1)} s on the clock, ${steady.nuggets} nuggets of ${C.nuggets.length}: ${(steady.time / 1000).toFixed(2)} s; top speed ${(steady.top * 3.6).toFixed(0)} km/h (worked out in ${((Date.now() - t0) / 1000).toFixed(1)} s)`);
   check('a bold one lets it run and takes the short way: seconds faster, and still on the rails', bold.over && bold.offs <= 1 && bold.short >= 1 && bold.time < steady.time - 3000, `${(bold.time / 1000).toFixed(2)} s, off the rails ${bold.offs}×`);
   check('a clumsy one — late, leaning when the bend is under it, hopping by guess — leaves the rails a few times and still gets home', clumsy.over && clumsy.offs >= 3 && clumsy.offs <= 20 && clumsy.time > steady.time * 1.25, `${(clumsy.time / 1000).toFixed(1)} s, off the rails ${clumsy.offs}× (${[...new Set(clumsy.why.map((w) => w.why))].join(', ')})`);
   const first = C.bends.find((b) => b.s > C.top + 30 && b.need > M.lean.slack + 0.25);

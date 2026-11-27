@@ -83,7 +83,7 @@ export const BOARDS = {
   raft: { order: 'asc', min: 85_000, max: 900_000, release: 'raft' }, // Wild River: 644 m of river; the quickest water all the way, paddled flat out, takes 85 s
   walls: { order: 'asc', min: 20_000, max: 1800_000, release: 'walls' }, // Run the Walls
   sneak: { order: 'asc', min: 20_000, max: 1800_000, release: 'sneak' }, // Robots Can See You
-  mine: { order: 'asc', min: 42_000, max: 1_800_000, release: 'mine' }, // Little Mine Train
+  mine: { order: 'asc', min: 44_000, max: 1_800_000, release: 'mine' }, // Little Mine Train
   coaster: { order: 'asc', min: 20_000, max: 1800_000, release: 'coaster' }, // Hold the Rails!
   run: { order: 'desc', min: 1, max: 60_000, length: 2_000, each: 12 }, // the arcade cabinet: metres run (52 a second at the fastest), and 25 for an isotope now and then
 };

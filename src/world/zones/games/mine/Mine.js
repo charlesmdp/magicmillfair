@@ -266,30 +266,41 @@ export class Mine {
       }
     }
 
-    // ---- the station: a platform of planks under a roof, steps, crates and barrels of ore
+    // ---- the station: a platform of planks under a striped roof, on posts over the sloping meadow; steps down to
+    // the gate; crates and barrels of ore. (The platform is on the left of the rails: the side of the meadow.)
     {
-      const P = new Parts(), deck = P.get('woodDeck'), wood = P.get('woodDark'), paint = P.get('paint'), S0 = MINE.station, x0 = S0.x + 1.0, x1 = S0.x + 4.2, z0 = S0.z - 29, z1 = S0.z - 3, y = S0.y + 0.3;
-      deck.tint(1.0, 0.92, 0.8, 1).box(x0, y - 0.14, z0, x1, y, z1);
-      for (let z = z0 + 0.6; z < z1; z += 3.1) for (const x of [x0 + 0.2, x1 - 0.2]) { const g = ground(x, z) - 0.4; wood.tint(0.8, 0.7, 0.6, 1).box(x - 0.12, g, z - 0.12, x + 0.12, y - 0.14, z + 0.12); }
-      // (steps down to the meadow, facing the gate)
-      for (let k = 0; k < 6; k++) deck.tint(0.95, 0.86, 0.74, 1).box(x1 + k * 0.42, y - 0.14 - (k + 1) * 0.24, MINE.gate.z - 1.4, x1 + (k + 1) * 0.42, y - (k + 1) * 0.24, MINE.gate.z + 1.4);
-      // (the roof: posts, a ridge, two slopes of red and cream boards)
-      const rz0 = z0 + 3, rz1 = z1 - 6, top = y + 3.1;
-      for (let z = rz0; z <= rz1 + 0.1; z += (rz1 - rz0) / 3) for (const x of [x0 + 0.35, x1 - 0.35]) wood.tint(1.0, 0.86, 0.7, 1).box(x - 0.11, y, z - 0.11, x + 0.11, top, z + 0.11);
-      for (let z = rz0 - 0.8, k = 0; z < rz1 + 0.8; z += 1.0, k++) {
-        const tone = k % 2 ? [1.25, 1.12, 0.86] : [0.9, 0.12, 0.1], zz = Math.min(z + 1.0, rz1 + 0.8), mx = (x0 + x1) / 2;
-        paint.tint(tone[0] * 0.5, tone[1] * 0.5, tone[2] * 0.5, 1).quad(V(x0 - 0.7, top - 0.05, zz), V(x0 - 0.7, top - 0.05, z), V(mx, top + 0.95, z), V(mx, top + 0.95, zz)).quad(V(mx, top + 0.95, zz), V(mx, top + 0.95, z), V(x1 + 0.7, top - 0.05, z), V(x1 + 0.7, top - 0.05, zz));
-        paint.tint(...tone, 1).quad(V(x0 - 0.7, top - 0.07, z), V(x0 - 0.7, top - 0.07, zz), V(mx, top + 0.93, zz), V(mx, top + 0.93, z)).quad(V(mx, top + 0.93, z), V(mx, top + 0.93, zz), V(x1 + 0.7, top - 0.07, zz), V(x1 + 0.7, top - 0.07, z));
+      const P = new Parts(), deck = P.get('woodDeck'), wood = P.get('woodDark'), paint = P.get('paint'), glow = P.get('glow');
+      const s0 = 11, s1 = 29, u0 = -1.05, u1 = -4.3, dv = 0.32, vE = dv + 3.05, vR = dv + 4.0, uR = (u0 + u1) / 2;
+      for (let s = s0 + 0.25; s < s1; s += 0.5) deck.tint(...(Math.round(s * 2) % 3 ? [1.0, 0.92, 0.8] : [0.9, 0.82, 0.7]), 1).beam(this.at(s, u0, dv - 0.07), this.at(s, u1, dv - 0.07), 0.48, 0.14);
+      for (let s = s0 + 0.5; s <= s1; s += 3.4) {
+        const feet = [u0 - 0.15, u1 + 0.15].map((u) => { const t = this.at(s, u, dv - 0.14); return [V(t.x, ground(t.x, t.z) - 0.4, t.z), t]; });
+        for (const [foot, top] of feet) wood.tint(0.8, 0.7, 0.6, 1).beam(foot, top, 0.2, 0.2);
+        wood.tint(0.72, 0.62, 0.54, 1).beam(this.at(s, u0 - 0.15, dv - 0.3), this.at(s, u1 + 0.15, dv - 0.3), 0.14, 0.2);
+        if (feet[1][1].y - feet[1][0].y > 2) wood.tint(0.66, 0.56, 0.48, 1).beam(feet[0][0].clone().setY(feet[0][0].y + 0.7), feet[1][1].clone().setY(feet[1][1].y - 0.3), 0.1, 0.14);
       }
-      wood.tint(0.9, 0.78, 0.64, 1).box((x0 + x1) / 2 - 0.1, top + 0.86, rz0 - 0.9, (x0 + x1) / 2 + 0.1, top + 1.02, rz1 + 0.9);
+      // (steps down to the meadow, towards the gate)
+      for (let k = 0; k < 18; k++) {
+        const u = u1 - 0.21 - 0.42 * k, v = dv - 0.07 - 0.24 * (k + 1), a = this.at(18.4, u, v), b = this.at(21.6, u, v);
+        deck.tint(0.95, 0.86, 0.74, 1).beam(a, b, 0.42, 0.14);
+        for (const q of [a, b]) wood.tint(0.7, 0.6, 0.52, 1).beam(V(q.x, ground(q.x, q.z) - 0.3, q.z), q, 0.12, 0.12);
+        if (a.y - 0.2 < Math.max(ground(a.x, a.z), ground(b.x, b.z))) break;
+      }
+      // (the roof: posts, a ridge, two slopes of red and cream boards — dark underneath)
+      for (const s of [13, 17.67, 22.33, 27]) for (const u of [u0 - 0.3, u1 + 0.3]) wood.tint(1.0, 0.86, 0.7, 1).beam(this.at(s, u, dv), this.at(s, u, vE), 0.2, 0.2);
+      for (let s = 12.2, k = 0; s < 27.75; s += 1.0, k++) {
+        const e = Math.min(s + 1.0, 27.8), tone = k % 2 ? [1.25, 1.12, 0.86] : [0.9, 0.12, 0.1], dark = [tone[0] * 0.45, tone[1] * 0.45, tone[2] * 0.45];
+        const L0 = this.at(s, u1 - 0.7, vE), L1 = this.at(e, u1 - 0.7, vE), R0 = this.at(s, uR, vR), R1 = this.at(e, uR, vR), E0 = this.at(s, u0 + 0.7, vE), E1 = this.at(e, u0 + 0.7, vE), dn = V(0, -0.03, 0);
+        paint.tint(...tone, 1).quad(L0, R0, R1, L1).quad(R0, E0, E1, R1);
+        paint.tint(...dark, 1).quad(L0.clone().add(dn), L1.clone().add(dn), R1.clone().add(dn), R0.clone().add(dn)).quad(R0.clone().add(dn), R1.clone().add(dn), E1.clone().add(dn), E0.clone().add(dn));
+        if (k % 2 === 0) { const bulb = this.at(s + 0.5, u1 - 0.72, vE - 0.16); glow.tint(...[[1.2, 0.25, 0.2], [1.2, 0.95, 0.3], [0.3, 0.9, 0.5], [0.3, 0.6, 1.2]][(k / 2) % 4], 1).cube(bulb.x, bulb.y, bulb.z, 0.13, 0.15, 0.13); }
+      }
+      wood.tint(0.9, 0.78, 0.64, 1).beam(this.at(12.0, uR, vR + 0.02), this.at(28.0, uR, vR + 0.02), 0.2, 0.18);
+      for (const s of [13, 17.67, 22.33, 27]) { wood.tint(0.85, 0.72, 0.6, 1).beam(this.at(s, u0 - 0.3, vE - 0.1), this.at(s, u1 + 0.3, vE - 0.1), 0.14, 0.16); const l = this.at(s, uR, vE - 0.4); glow.tint(1.3, 0.95, 0.5, 1).cube(l.x, l.y, l.z, 0.22, 0.34, 0.22); }
       // (crates, barrels, a heap of ore that glints)
-      for (const [dx, dz, w] of [[2.4, -26.5, 0.8], [2.5, -25.4, 0.6], [1.9, -5.2, 0.7]]) wood.tint(0.95, 0.8, 0.6, 1).box(S0.x + dx, y, S0.z + dz, S0.x + dx + w, y + w, S0.z + dz + w);
-      for (const [dx, dz] of [[3.4, -27.2], [3.5, -4.6], [2.9, -4.1]]) paint.tint(0.55, 0.3, 0.16, 1).cylinder(S0.x + dx, y, S0.z + dz, 0.32, 0.32, 0.9, 10);
-      for (let k = 0; k < 9; k++) P.get('glow').tint(0.9, 0.62, 0.1, 1).cube(S0.x + 2.2 + h1(k) * 0.9, y + 0.12 + h1(k * 3) * 0.3, S0.z - 24 + h1(k * 7) * 0.9, 0.2, 0.2, 0.2);
-      // (lanterns under the roof, bunting bulbs along its edge)
-      for (let z = rz0; z <= rz1 + 0.1; z += (rz1 - rz0) / 3) P.get('glow').tint(1.3, 0.95, 0.5, 1).cube((x0 + x1) / 2, top + 0.2, z, 0.22, 0.34, 0.22);
-      for (let z = rz0 - 0.6, k = 0; z < rz1 + 0.7; z += 0.9, k++) P.get('glow').tint(...[[1.2, 0.25, 0.2], [1.2, 0.95, 0.3], [0.3, 0.9, 0.5], [0.3, 0.6, 1.2]][k % 4], 1).cube(x1 + 0.72, top - 0.16, z, 0.12, 0.14, 0.12);
-      // (buffers at the end of the line would stop nothing: the line is a loop — a striped post marks the finish)
+      for (const [s, u, w] of [[12.2, -3.4, 0.8], [13.1, -3.6, 0.6], [27.6, -3.3, 0.7]]) { const q = this.at(s, u, dv); wood.tint(0.95, 0.8, 0.6, 1).box(q.x - w / 2, q.y, q.z - w / 2, q.x + w / 2, q.y + w, q.z + w / 2); }
+      for (const [s, u] of [[12.6, -2.3], [27.9, -2.2], [27.2, -2.6]]) { const q = this.at(s, u, dv); paint.tint(0.55, 0.3, 0.16, 1).cylinder(q.x, q.y, q.z, 0.32, 0.32, 0.9, 10); }
+      for (let k = 0; k < 9; k++) { const q = this.at(26 + h1(k) * 0.9, -3.3 - h1(k * 7) * 0.7, dv + 0.1 + h1(k * 3) * 0.3); glow.tint(0.9, 0.62, 0.1, 1).cube(q.x, q.y, q.z, 0.2, 0.2, 0.2); }
+      // (the line is a loop: two striped posts mark where the clock stops)
       const fin = C.finish;
       for (const side of [-1, 1]) for (let k = 0; k < 6; k++) paint.tint(...(k % 2 ? [1.3, 1.25, 1.1] : [0.08, 0.08, 0.08]), 1).beam(this.at(fin, side * 1.3, -0.6 + k * 0.5), this.at(fin, side * 1.3, -0.1 + k * 0.5), 0.14, 0.14);
       const G = MINE.gate, gy = ground(G.x, G.z);
@@ -410,13 +421,13 @@ export class Mine {
         if (S.saidFor > 0) S.saidFor -= dt;
         session.line = st.phase === 'wait' ? `${MINE.name} · the ${start.name} train leaves in ${Math.max(1, Math.ceil(st.wait))}…`
           : st.over ? `${MINE.name} · ${formatTime(st.time)} · ${st.nuggets} nugget${st.nuggets === 1 ? '' : 's'}${st.offs ? ` · off the rails ${st.offs}×` : ' · never off the rails'}`
-            : `${formatTime(Math.round(st.clock * 1000) + st.cost)} · ${name} · ${kmh} km/h · ${st.nuggets} nugget${st.nuggets === 1 ? '' : 's'}${st.offs ? ` · +${st.offs * MINE.off.cost / 1000} s` : ''}${warn}`;
+            : `${formatTime(Math.max(0, Math.round(st.clock * 1000) + st.cost - st.nuggets * MINE.nugget.give))} · ${name} · ${kmh} km/h · ${st.nuggets} nugget${st.nuggets === 1 ? '' : 's'}${st.offs ? ` · off the rails ${st.offs}×` : ''}${warn}`;
       },
       /** The camera: behind and above the first cart, on the line it has just run, looking along the rails ahead; it leans with the cart. */
       camera: (cam, dt) => {
         cartPose(st, 0, p);
         const inside = INSIDE.has(p.kind), way = st.way, back = (inside ? 8.6 : 9.4) + st.v * 0.07, up = inside ? (p.kind === 'lake' ? 4.6 : 3.9) : 5.0;
-        const sb = Math.max(0.5, st.s - back), b = this.at(sb, st.lean * 0.5, up, way && sb >= C.fork.s0 ? 1 : 0), aheadS = st.s + 9 + st.v * 0.5;
+        const sb = st.s - back < 0.5 ? (st.home ? st.s - back + C.length : 0.5) : st.s - back, b = this.at(sb, st.lean * 0.5, up, way && sb >= C.fork.s0 ? 1 : 0), aheadS = st.s + 9 + st.v * 0.5;
         const onShort = way === 1 && aheadS > C.fork.s0 + C.fork.len, a = onShort ? this.at(C.fork.s1 + aheadS - C.fork.s0 - C.fork.len, 0, 0.3, 0) : this.at(Math.min(C.length, aheadS), 0, 0.3, way);
         t.copy(b);
         if (!S.cam) S.cam = t.clone(); else S.cam.lerp(t, Math.min(1, dt * 9));

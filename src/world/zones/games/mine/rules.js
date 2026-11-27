@@ -11,7 +11,7 @@
 //   let run  the stick pushed forward — faster, where the line allows
 //   hop      the button, pressed (an edge): over a gap in the rails, over a rock on them
 //   choose   at the fork one leans right for the short way — the hard one; otherwise the long way round
-// Nuggets along the line take half a second each off the time (some hang beside the rails: lean to them; some
+// Nuggets along the line take a quarter of a second each off the time (some hang beside the rails: lean to them; some
 // above: hop). Off the rails: back on them at the last signal, three seconds added — never the whole run.
 //
 // The line is laid like a toy track: so many metres straight, a bend of so many degrees — then its bends and its
@@ -23,15 +23,15 @@ export const MINE = {
   name: 'Little Mine Train',
   step: 1 / 120,
   every: 10, // s between two starts (gates.js: nextStart)
-  station: { x: -263, z: -60, y: 30.4, yaw: Math.PI }, // where the line begins — and ends: the south end of the platform, looking north
-  gate: { x: -257.2, z: -70, yaw: -Math.PI / 2 }, // where one asks, on the meadow before the platform
+  station: { x: -220, z: -130.9, y: 24.9, yaw: -0.698 }, // where the line begins — and ends: the north-east end of the platform, looking south-west along the foot of the mountain
+  gate: { x: -224.8, z: -108.8, yaw: -2.269 }, // where one asks, on the meadow before the platform (north of the golf, clear of the wall of thanks)
   wait: 20, // m along the line: where the first cart waits
-  haul: { out: 9, lift: 19, over: 10.5, pull: 8 }, // m/s out of the station, up the lift, and over its head to where the chain lets go; how fast the chain takes it (m/s²)
+  haul: { out: 10, lift: 22, over: 11, pull: 9 }, // m/s out of the station, up the lift, and over its head to where the chain lets go; how fast the chain takes it (m/s²)
   roll: { free: 8.5, slope: 35, run: 11.5, runSlope: 50, gain: 0.6, most: 3, drag: 0.25, brake: 9, least: 4.5, top: 26 }, // the speed it tends to by itself, and let run; how it gets there; the brake
   lean: { rate: 6, hold: 9, slack: 0.35, tip: 1.8, right: 1.5 }, // how fast one leans; m/s² across that a full lean holds; what needs no lean; how fast it tips, and rights itself
   hop: { up: 4.2, g: 9.81, rock: 0.3 }, // the hop: 0.86 s in the air, 0.9 m high; how high a rock is
   off: { time: 1.7, cost: 3000, speed: 6, tries: 3 }, // off the rails: s before one is put back, ms added, the speed one is put back with; so many times after the same signal and one is set down at the next
-  nugget: { give: 500, lean: 0.45, high: 0.35 }, // ms off the time for each; how far one leans, how high one hops, to take one
+  nugget: { give: 250, lean: 0.45, high: 0.35 }, // ms off the time for each; how far one leans, how high one hops, to take one
   cart: { gap: 2.1, n: 3 }, // m between two carts of the train
   count: 3,
 };
@@ -53,13 +53,16 @@ const B = (deg, r, drop = 0, kind, o = {}) => ({ len: Math.abs(deg) * DEG * r, t
 //   station · open (on the ground, on low timber) · trestle (high over the ground) · rock (a tunnel) · lift ·
 //   hall (a great cave) · lake
 const OUT = [
-  S(30, 0, 'station', { name: 'The Station' }),
-  S(1.5, 0, 'open'),
-  S(7.5, 0, 'rock'),
-  B(-15, 25, 0, 'rock', { name: 'The Lift' }),
-  S(88, -50, 'lift'),
-  S(44, -30, 'lift'),
-  S(14.8, -15.6, 'lift'),
+  S(12, -2, 'station', { name: 'The Station' }),
+  S(18, 0, 'station'),
+  S(3, -0.3, 'open'),
+  B(55, 11, -1, 'open'),
+  B(35, 11, 0, 'rock', { name: 'The Lift' }),
+  S(3.64, 0, 'rock'),
+  B(35, 25, 0, 'rock'),
+  S(74, -43, 'lift'),
+  S(44, -38, 'lift'),
+  S(14.3, -16.95, 'lift'),
   S(8, -0.2, 'rock', { head: true }),
   B(105, 14, 0.3, 'rock'),
   S(25.5, 0.3, 'rock', { free: true }),
@@ -78,30 +81,27 @@ const OUT = [
   S(30, 6.5, 'rock', { name: 'The Lantern Tunnel', things: [['nug', 12, 0], ['nug', 20, 0]] }),
   S(46, 2.8, 'rock', { things: [['gap', 4, 2.6], ['nug', 5.3, 2], ['nug', 12, 1], ['nug', 16, -1], ['rock', 22], ['nug', 22, 2], ['nug', 36, 0], ['nug', 42, 0]] }),
   // the fork — the long way round to the left, the short way straight on, broken
-  B(-90, 14, 1.5, 'hall', { name: 'The Fork', fork: 'in' }),
-  B(180, 14, 3, 'hall', { things: [['nug', 12, 1], ['nug', 22, 1], ['nug', 32, 1]] }),
-  B(-90, 14, 1.5, 'hall', { fork: 'out' }),
-  S(10, 0.6, 'rock'),
+  B(-90, 14, 2, 'hall', { name: 'The Fork', fork: 'in' }),
+  B(180, 14, 4, 'hall', { things: [['nug', 12, 1], ['nug', 22, 1], ['nug', 32, 1]] }),
+  B(-90, 14, 2, 'hall', { fork: 'out' }),
+  S(12.25, 0.6, 'rock'),
   B(-90, 18, 1.4, 'rock'),
   // the drop into the dark
-  S(70, 41.7, 'rock', { name: 'The Drop', things: [['nug', 14, 0], ['nug', 28, 0], ['nug', 42, 0], ['nug', 56, 0]] }),
-  S(20, 1.6, 'rock'),
+  S(70, 48, 'rock', { name: 'The Drop', things: [['nug', 14, 0], ['nug', 28, 0], ['nug', 42, 0], ['nug', 56, 0]] }),
+  S(11.75, 1.6, 'rock'),
   // the lake under the mountain
-  S(23.5, 0.2, 'lake', { name: 'The Lake' }),
-  B(45, 22, 0.1, 'lake', { things: [['nug', 6, 1], ['nug', 12, 1]] }),
-  S(60, 0.3, 'lake', { things: [['gap', 14, 2.4], ['nug', 15.2, 2], ['nug', 28, -1], ['nug', 34, 1], ['rock', 46], ['nug', 46, 2]] }),
-  B(-135, 16, 0.2, 'lake', { things: [['nug', 10, -1], ['nug', 20, -1], ['nug', 30, -1]] }),
+  S(45, 0.4, 'lake', { name: 'The Lake', things: [['gap', 8, 2.4], ['nug', 9.2, 2], ['nug', 18, -1], ['nug', 24, 1], ['rock', 38], ['nug', 38, 2]] }),
+  B(-140, 20, 0.3, 'lake', { things: [['nug', 10, -1], ['nug', 20, -1], ['nug', 30, -1], ['nug', 40, -1]] }),
 ];
-// … and the last of it, laid so that it ends where the line began: the last run of bends, and home along the foot
+// … and the last of it, laid so that it ends where the line began: the last run of bends, and home round a boulder to the platform
 const HOME = [
-  B(90, 14, 3.5, 'rock', { name: 'The Last Bends' }),
-  B(-90, 13, 3.5, 'rock', { things: [['nug', 10, -1]] }),
-  B(90, 12, 3.5, 'rock', { things: [['nug', 9, 1]] }),
-  B(-90, 13, 3, 'rock'),
-  S(10, 1, 'rock'),
-  B(-8.5, 13, 0.2, 'rock'),
-  B(-81.5, 13, 1.8, 'open', { name: 'Home' }),
-  S(20, 0.3, 'open'),
+  B(90, 14, 4.6, 'rock', { name: 'The Last Bends' }),
+  B(-90, 13, 4.6, 'rock', { things: [['nug', 10, -1]] }),
+  B(90, 12, 4.6, 'rock', { things: [['nug', 9, 1]] }),
+  S(10, 1.2, 'rock'),
+  B(20, 10, 0.25, 'rock'),
+  B(70, 10, 0.65, 'open', { name: 'Home' }),
+  S(6, 0.2, 'open'),
 ];
 const KINDS = ['station', 'open', 'trestle', 'rock', 'lift', 'hall', 'lake'];
 
@@ -185,7 +185,7 @@ export function course() {
   }
   gaps.sort((p, q) => p.s - q.s); rocks.sort((p, q) => p.s - q.s); nuggets.sort((p, q) => p.s - q.s);
   nuggets.forEach((g, i) => { g.id = i; });
-  const head = begin.get(OUT.find((q) => q.head)), top = begin.get(OUT.find((q) => q.free)), finish = length - 9;
+  const head = begin.get(OUT.find((q) => q.head)), top = begin.get(OUT.find((q) => q.free)), finish = length - 2;
   // ---- the speed the train has left to itself (nobody leans, nothing tips): what the boards are worked out from
   const free = new Float32Array(pts.length);
   { let v = M.haul.over; for (let j = Math.round(top / DS); j < pts.length; j++) { free[j] = v; v = Math.max(M.roll.least, v + accel(v, pts[j].slope, 0) * (DS / v)); } for (let j = 0; j < Math.round(top / DS); j++) free[j] = M.haul.over; }
@@ -211,7 +211,7 @@ export function course() {
   boards.sort((p, q) => p.s - q.s);
   // ---- the signals: a save every sixty metres or so, where the line is straight and nothing is close ahead
   const signals = [{ s: top + 2 }];
-  for (let s = top + 55; s < finish - 36; s += 58) {
+  for (let s = top + 55; s < finish - 75; s += 58) {
     let best = s, bad = 1e9;
     for (let d = -18; d <= 18; d += 1.5) {
       const q = s + d; let cost = Math.abs(d) * 0.02;
@@ -223,7 +223,7 @@ export function course() {
     signals.push({ s: best });
     s = best;
   }
-  signals.push({ s: length - 21 }); // (the last, on the straight home)
+  signals.push({ s: length - 30 }); // (the last, before the bend home)
   signals.forEach((g, i) => { g.id = i; });
   laid = { length, ds: DS, n: pts.length, pts, stretches, gaps, rocks, nuggets, signals, boards, bends, fork, head, top, finish, free, kinds: KINDS };
   return laid;
@@ -297,7 +297,7 @@ function sub(st, dt, input, events) {
   }
   const r = railAt(st.s, st.way, _r), hauled = st.s < C.top, ix = clamp(input?.x || 0, -1, 1), iy = hauled || st.over ? 0 : clamp(input?.y || 0, -1, 1);
   // ---- the speed
-  if (st.over) st.v = Math.max(0, st.v - 7 * dt * (st.v > 3 ? 1 : 0.5));
+  if (st.over) { const far = (st.home ? M.wait - st.s : C.length - st.s + M.wait); st.v = Math.min(Math.max(1.2, st.v - 6 * dt), Math.sqrt(Math.max(0.02, 2 * 3.5 * far))); } // (over the line: on, slowing, to its place at the platform)
   else if (hauled) { const want = st.s > C.head - 14 ? M.haul.over : r.kind === 'lift' ? M.haul.lift : M.haul.out; st.v += clamp(want - st.v, -M.haul.pull * dt, M.haul.pull * dt); }
   else if (!st.air) st.v = clamp(st.v + accel(st.v, r.slope, iy) * dt, M.roll.least, M.roll.top);
   st.braking = iy < -0.3 && !st.air && st.v > M.roll.least + 0.05;
@@ -336,7 +336,8 @@ function sub(st, dt, input, events) {
   const n = stretchAt(st.s);
   if (n !== st.stretch) { st.stretch = n; events?.push({ type: 'stretch', n }); }
   if (!st.over && st.s >= C.finish) { st.over = true; st.time = Math.max(1000, Math.round(st.clock * 1000) + st.cost - st.nuggets * M.nugget.give); events?.push({ type: 'finish', time: st.time }); }
-  if (st.over && (st.v <= 0.01 || st.s >= C.length - 0.6)) { st.v = 0; st.phase = 'done'; }
+  if (st.over && !st.home && st.s >= C.length - 0.01) { st.s -= C.length; st.home = true; } // (the line is a loop: its end is its beginning)
+  if (st.over && st.home && st.s >= M.wait - 0.05) { st.v = 0; st.phase = 'done'; }
 }
 function off(st, why, events) {
   st.phase = 'off'; st.off = MINE.off.time; st.why = why; st.offs++; st.tries++; st.cost += MINE.off.cost; st.air = false; st.vy = 0;
@@ -347,6 +348,7 @@ function off(st, why, events) {
 export function cartPose(st, i = 0, out = {}) {
   const C = course(), F = C.fork;
   let s = st.s - i * MINE.cart.gap, way = st.way;
+  if (s < 0 && st.home) s += C.length; // (home again: the carts behind are still on the last of the line)
   // (a cart behind the first may still be on the other side of an end of the short way)
   if (way === 1 && s < F.s0) way = 0;
   else if (way === 0 && st.short && st.s >= F.s1 && s < F.s1 && st.wasShort) { s = F.s0 + F.len - (F.s1 - s); way = 1; }
