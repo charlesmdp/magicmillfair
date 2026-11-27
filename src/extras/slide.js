@@ -74,5 +74,7 @@ export function attach(app) {
     },
   });
   Object.assign(app, { slide, rideSlide: start, leaveSlide: leave, slideRide: () => ride });
+  // (what the tools that play a game by itself and take pictures of it ask for: tools/game-shots.mjs)
+  (app.labGames ||= {}).slide = { game: slide, start: () => { start(); return ride; }, leave, run: () => ride };
   return slide;
 }
