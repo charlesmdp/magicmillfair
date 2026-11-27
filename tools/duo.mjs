@@ -10,6 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import { stubOutside } from './lib/outside.mjs';
+import { packKit } from '../server/items.js';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -121,7 +122,7 @@ try {
   const rocket = await until(() => bob.page.evaluate(() => { const s = window.__mmf.world.sparks; return s.rockets.length || s.count > 20 ? true : null; }), 20000);
   await alice.page.evaluate(() => { const a = window.__mmf; a.equip('paint:gold', false); a.equip('trail:confetti', false); });
   const kitOff = await until(() => bob.page.evaluate(() => { const it = [...window.__mmf.avatars.items.values()][0]; return it && !it.character.paint && !it.trail ? true : null; }), 20000);
-  check('Bob sees what Alice wears from the shop — her paint, her trail — and the firework she lights', !!kitSeen && kitSeen.kit === 17 && !!rocket && !!kitOff, JSON.stringify({ kitSeen, rocket, kitOff }));
+  check('Bob sees what Alice wears from the shop — her paint, her trail — and the firework she lights', !!kitSeen && kitSeen.kit === packKit({ paint: 1, trail: 2 }) && !!rocket && !!kitOff, JSON.stringify({ kitSeen, rocket, kitOff }));
   // her size, a hat of the second dozen, a seat on the ground: all of it reaches Bob (nothing is sold on this
   // server: everything is everybody's, the sizes of the Game Pass too)
   await alice.page.evaluate(() => { const a = window.__mmf; a.hud.handlers.size(3); a.equip('hat:party', true); });
