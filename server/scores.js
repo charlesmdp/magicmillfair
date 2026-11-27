@@ -55,7 +55,7 @@ export const BOARDS = {
   cups: { order: 'desc', min: 1, max: 9999, length: 5_000, each: 25 }, // the cup that hides the core: every round has to be watched
   // Mostly Down, the water slide (an extra: src/extras/slide.js): from the top to the sea. `release`: the board
   // only exists once that switch is on (src/app/config.js: RELEASE)
-  slide: { order: 'asc', min: 30_000, max: 3600_000, release: 'slide' },
+  slide: { order: 'asc', min: 40_000, max: 3600_000, release: 'slide' }, // (its fastest bot — lying back, both shortcuts, every spark — needs 74.6 s)
   // …and the lab's other games (src/extras), each behind its own switch — the rules are those its checks print:
   // The Endless Pond is scored by how long one held, in ms (the more the better: `unit` says it is a time, and
   // a run cannot be over sooner than it claims to have lasted); the others are times, the less the better
