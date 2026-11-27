@@ -24,8 +24,8 @@ export const MINE = {
   step: 1 / 120,
   every: 10, // s between two starts (gates.js: nextStart)
   station: { x: -220, z: -130.9, y: 24.9, yaw: -0.698 }, // where the line begins — and ends: the north-east end of the platform, looking south-west along the foot of the mountain
-  gate: { x: -224.8, z: -108.8, yaw: -2.269 }, // where one asks, on the meadow before the platform (north of the golf, clear of the wall of thanks)
-  wait: 20, // m along the line: where the first cart waits
+  gate: { x: -219.9, z: -113.6, yaw: -2.269 }, // where one asks, on the meadow before the platform (north of the golf, clear of the wall of thanks)
+  wait: 18, // m along the line: where the first cart waits
   haul: { out: 10, lift: 22, over: 11, pull: 9 }, // m/s out of the station, up the lift, and over its head to where the chain lets go; how fast the chain takes it (m/s²)
   roll: { free: 8.5, slope: 35, run: 11.5, runSlope: 50, gain: 0.6, most: 3, drag: 0.25, brake: 9, least: 4.5, top: 26 }, // the speed it tends to by itself, and let run; how it gets there; the brake
   lean: { rate: 6, hold: 9, slack: 0.35, tip: 1.8, right: 1.5 }, // how fast one leans; m/s² across that a full lean holds; what needs no lean; how fast it tips, and rights itself

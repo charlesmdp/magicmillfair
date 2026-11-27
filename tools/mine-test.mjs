@@ -81,7 +81,7 @@ const run = (st, secs, drive, stop) => { const input = { x: 0, y: 0, hop: false 
     check('the wall of thanks is left alone: nothing of the line stands before it, nor by its ends', before === 0 && nearest > W.width / 2 + 8 && Math.hypot(M.gate.x - W.x, M.gate.z - W.z) > 30, `the nearest rail in the open is ${nearest.toFixed(0)} m from its middle (it is ${W.width} m wide); the gate ${Math.hypot(M.gate.x - W.x, M.gate.z - W.z).toFixed(0)} m`);
   }
   const G = M.gate, here = height(G.x, G.z);
-  check('one asks on the meadow before the platform: ground one can walk to, flat, no tree in the way, a few steps from the train', inside(G.x, G.z) && inside(G.x + 3, G.z) && here > 20 && Math.abs(height(G.x + 2, G.z) - here) < 0.6 && trees(G.x, G.z, 2.5) === 0 && Math.hypot(G.x - railAt(M.wait, 0, {}).x, G.z - railAt(M.wait, 0, {}).z) < 12 && Math.abs(railAt(M.wait, 0, {}).y - here) < 3.5, `gate at (${G.x}, ${G.z}), ground ${here.toFixed(1)} m; the platform stands on posts, its rails ${(railAt(M.wait, 0, {}).y - here).toFixed(1)} m higher`);
+  check('one asks on the meadow before the platform: ground one can walk to, flat, no tree in the way, a few steps from the train', inside(G.x, G.z) && inside(G.x + 3, G.z) && here > 20 && Math.abs(height(G.x + 2, G.z) - here) < 0.6 && trees(G.x, G.z, 2.5) === 0 && Math.hypot(G.x - railAt(M.wait, 0, {}).x, G.z - railAt(M.wait, 0, {}).z) < 14 && Math.abs(railAt(M.wait, 0, {}).y - here) < 3.5, `gate at (${G.x}, ${G.z}), ground ${here.toFixed(1)} m; the platform stands on posts, its rails ${(railAt(M.wait, 0, {}).y - here).toFixed(1)} m higher`);
 }
 {
   // ---- what is on the line

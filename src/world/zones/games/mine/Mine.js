@@ -56,11 +56,16 @@ export class Mine {
     const gapAt = (s, way) => C.gaps.some((g) => (g.way === -1 || g.way === way) && s > g.s - 0.2 && s < g.s + g.len + 0.2);
     // ---- the lamps of the insides, and the light they paint on the rock
     const lamps = [];
-    for (let s = 44, k = 0; s < L - 30; s += 11, k++) { const kind = kindAt(s, 0); if (INSIDE.has(kind)) lamps.push({ s, way: 0, side: k % 2 ? 1 : -1, kind, p: this.at(s, (k % 2 ? 1 : -1) * (kind === 'lake' ? 5.5 : 2.0), 3.1) }); }
+    const drop = (() => { const i = C.stretches.findIndex((q) => q.name === 'The Drop'); return { from: C.stretches[i].from, to: C.stretches[i + 1].from - 30 }; })();
+    for (let s = 44, k = 0; s < L - 12; k++) {
+      const kind = kindAt(s, 0), fast = s > drop.from && s < drop.to; // (down the drop: a lamp on each wall every five metres — they fly past)
+      if (INSIDE.has(kind)) for (const side of fast ? [-1, 1] : [k % 2 ? 1 : -1]) lamps.push({ s, way: 0, side, kind, p: this.at(s, side * (kind === 'lake' ? 5.5 : 2.0), 3.1) });
+      s += fast ? 5 : kind === 'lake' ? 11 : 8;
+    }
     for (let s = F.s0 + 9, k = 0; s < F.s0 + F.len - 6; s += 11, k++) lamps.push({ s, way: 1, side: k % 2 ? 1 : -1, kind: 'hall', p: this.at(s, (k % 2 ? 1 : -1) * 2.0, 3.1, 1) });
     const lit = (p, gain = 1) => {
       let r = DARK[0], g = DARK[1], b = DARK[2];
-      for (const l of lamps) { const d2 = (p.x - l.p.x) ** 2 + (p.y - l.p.y) ** 2 + (p.z - l.p.z) ** 2; if (d2 > 400) continue; const w = 1.15 / (1 + d2 / 10), c = LAMP[l.kind]; r += c[0] * w; g += c[1] * w; b += c[2] * w; }
+      for (const l of lamps) { const d2 = (p.x - l.p.x) ** 2 + (p.y - l.p.y) ** 2 + (p.z - l.p.z) ** 2; if (d2 > 400) continue; const w = 1.0 / (1 + d2 / 10), c = LAMP[l.kind]; r += c[0] * w; g += c[1] * w; b += c[2] * w; }
       return [Math.min(1.5, r * gain), Math.min(1.5, g * gain), Math.min(1.5, b * gain), 1];
     };
 
@@ -71,16 +76,23 @@ export class Mine {
         if (gapAt(s + 0.5, way)) continue;
         for (const side of [-1, 1]) {
           const a = this.at(s, side * GAUGE, 0.12, way), b = this.at(e, side * GAUGE, 0.12, way), c = inside ? lit(a, 1.6) : null;
-          iron.tint(...(inside ? [RUST[0] * c[0] + 0.05, RUST[1] * c[1] + 0.03, RUST[2] * c[2] + 0.02] : RUST), 1).beam(a, b, 0.08, 0.1);
+          iron.tint(...(inside ? [RUST[0] * (c[0] + 0.5) + 0.05, RUST[1] * (c[1] + 0.45) + 0.03, RUST[2] * (c[2] + 0.4) + 0.02] : RUST), 1).beam(a, b, 0.08, 0.1);
         }
         const m = this.at(s + 0.5, 0, 0, way), c = inside ? lit(m, 1.3) : null;
-        wood.tint(...(inside ? [WOOD[0] * c[0] + 0.03, WOOD[1] * c[1] + 0.025, WOOD[2] * c[2] + 0.02] : [0.85, 0.75, 0.68]), 1).beam(this.at(s + 0.5, -0.78, 0, way), this.at(s + 0.5, 0.78, 0, way), 0.2, 0.12);
+        wood.tint(...(inside ? [WOOD[0] * (c[0] + 0.2) + 0.03, WOOD[1] * (c[1] + 0.18) + 0.025, WOOD[2] * (c[2] + 0.16) + 0.02] : [0.85, 0.75, 0.68]), 1).beam(this.at(s + 0.5, -0.78, 0, way), this.at(s + 0.5, 0.78, 0, way), 0.2, 0.12);
       }
     };
     lay(0, L, 0); lay(F.s0, F.s0 + F.len, 1);
 
     // ---- outside: the timber the line stands on — low bents over the ground, tall braced ones over the gullies
     const spiral = (() => { const i = C.stretches.findIndex((q) => q.name === 'The Spiral'); return { from: C.stretches[i].from, to: C.stretches[i + 1].from }; })();
+    // (the rock the line winds round: where it stands, how thick it is at each height)
+    const needle = (() => {
+      const a = railAt(spiral.from + 12, 0, {}), b = railAt(spiral.from + 12 + 40.8, 0, {}), x = (a.x + b.x) / 2, z = (a.z + b.z) / 2;
+      const base = Math.min(...[0, 1, 2, 3, 4, 5, 6, 7].map((k) => ground(x + Math.cos(k * 0.785) * 7, z + Math.sin(k * 0.785) * 7))) - 1.5, top = a.y + 7.5;
+      return { x, z, base, top, r: (y) => 2.0 + 5.0 * clamp(1 - (y - base) / (top - base), 0, 1) ** 0.85 };
+    })();
+    this.needle = needle;
     for (let s = 2; s < L - 1; s += 3) {
       const kind = kindAt(s, 0);
       if (INSIDE.has(kind)) continue;
@@ -88,16 +100,28 @@ export class Mine {
       // (two stringers under the sleepers)
       for (const side of [-1, 1]) wood.tint(0.8, 0.7, 0.62, 1).beam(this.at(s - 1.5, side * 0.5, -0.15), this.at(s + 1.5, side * 0.5, -0.15), 0.14, 0.2);
       if (Math.round((s - 2) / 3) % 2) continue;
-      const wound = s > spiral.from - 2 && s < spiral.to + 2; // (round the rock the line passes under itself: plain posts, the turn below runs between them)
-      const feet = [-1, 1].map((side) => { const up = top.y - ground(top.x + rx * side * 0.9, top.z + rz * side * 0.9), splay = wound ? 1.15 + Math.max(0, up) * 0.11 : 0.9 + Math.max(0, up) * 0.09, x = top.x + rx * side * splay, z = top.z + rz * side * splay; return { side, x, z, y: ground(x, z) - 0.5 }; });
+      const wound = s > spiral.from - 2 && s < spiral.to + 2;
+      if (wound) {
+        // (round the rock the line passes under itself: a post on the outside only, clear of the turn below, and
+        // on the inside a bracket and a strut from the rock)
+        const inner = Math.sign(r.k) || -1, dx = top.x - needle.x, dz = top.z - needle.z, far = Math.hypot(dx, dz) || 1, rock = (y, off) => V(needle.x + (dx / far) * (needle.r(y) - off), y, needle.z + (dz / far) * (needle.r(y) - off));
+        const out = this.at(s, -inner * 1.75, -0.25), foot = V(out.x, ground(out.x, out.z) - 0.5, out.z);
+        wood.tint(0.9, 0.8, 0.7, 1).beam(foot, out, 0.26, 0.26);
+        wood.tint(1.0, 0.88, 0.76, 1).beam(this.at(s, -inner * 1.9, -0.3), this.at(s, inner * 1.05, -0.3), 0.22, 0.22);
+        wood.tint(0.78, 0.68, 0.6, 1).beam(V(out.x, out.y - 1.5, out.z), this.at(s, -inner * 0.5, -0.36), 0.12, 0.16);
+        wood.tint(0.95, 0.84, 0.72, 1).beam(this.at(s, inner * 1.0, -0.3), rock(top.y - 0.3, 0.5), 0.2, 0.24);
+        wood.tint(0.78, 0.68, 0.6, 1).beam(this.at(s, inner * 0.9, -0.42), rock(top.y - 2.7, 0.4), 0.14, 0.18);
+        continue;
+      }
+      const feet = [-1, 1].map((side) => { const up = top.y - ground(top.x + rx * side * 0.9, top.z + rz * side * 0.9), splay = 0.9 + Math.max(0, up) * 0.09, x = top.x + rx * side * splay, z = top.z + rz * side * splay; return { side, x, z, y: ground(x, z) - 0.5 }; });
       const high = top.y - Math.min(feet[0].y, feet[1].y);
       if (high < 0.75) continue;
       const thick = high > 6 ? 0.26 : 0.2;
-      for (const f of feet) wood.tint(0.9, 0.8, 0.7, 1).beam(V(f.x, f.y, f.z), V(top.x + rx * f.side * (wound ? 1.05 : 0.8), top.y - 0.2, top.z + rz * f.side * (wound ? 1.05 : 0.8)), thick, thick);
+      for (const f of feet) wood.tint(0.9, 0.8, 0.7, 1).beam(V(f.x, f.y, f.z), V(top.x + rx * f.side * 0.8, top.y - 0.2, top.z + rz * f.side * 0.8), thick, thick);
       wood.tint(1.0, 0.88, 0.76, 1).beam(V(top.x - rx * 1.05, top.y - 0.3, top.z - rz * 1.05), V(top.x + rx * 1.05, top.y - 0.3, top.z + rz * 1.05), 0.22, 0.22);
       // (every four metres down: a tie across, and a brace)
       const post = (f, y) => { const t = clamp((y - f.y) / (top.y - 0.2 - f.y), 0, 1); return V(f.x + (top.x + rx * f.side * 0.8 - f.x) * t, y, f.z + (top.z + rz * f.side * 0.8 - f.z) * t); };
-      for (let y = top.y - 4, k = 0; !wound && y > Math.max(feet[0].y, feet[1].y) + 1; y -= 4, k++) {
+      for (let y = top.y - 4, k = 0; y > Math.max(feet[0].y, feet[1].y) + 1; y -= 4, k++) {
         wood.tint(0.78, 0.68, 0.6, 1).beam(post(feet[0], y), post(feet[1], y), 0.12, 0.18);
         wood.tint(0.7, 0.6, 0.52, 1).beam(post(feet[k % 2], y), post(feet[1 - (k % 2)], Math.min(top.y - 0.4, y + 4)), 0.1, 0.14);
       }
@@ -137,7 +161,7 @@ export class Mine {
           // the floor: ballast between the walls — or, in the cave of the lake, black water with the line on piles
           const fl = piece(sc - 1, way).get('cave'), a = prev.row[0], b = prev.row[prev.row.length - 1], c = cur.row[cur.row.length - 1], d = cur.row[0];
           if (cur.kind === 'lake') {
-            const w = (p) => { const q = lit(V(p.x, p.y + 1, p.z), 0.5); return [0.01 + q[0] * 0.25, 0.04 + q[1] * 0.5, 0.06 + q[2] * 0.6, 1]; }, up = (p) => V(p.x, p.y + 1.1, p.z);
+            const w = (p) => { const q = lit(V(p.x, p.y + 1, p.z), 0.5); return [0.004 + q[0] * 0.06, 0.016 + q[1] * 0.2, 0.026 + q[2] * 0.3, 1]; }, up = (p) => V(p.x, p.y + 1.1, p.z);
             piece(sc - 1, way).get('glow').quad(up(a.p), up(b.p), up(c.p), up(d.p), { colors: [w(a.p), w(b.p), w(c.p), w(d.p)] });
             for (const side of [-1, 1]) fl.tint(0.3, 0.24, 0.2, 1).beam(this.at(sc - 1, side * 0.7, -0.1, way), this.at(sc - 1, side * 0.7, -1.4, way), 0.2, 0.2);
           } else {
@@ -216,16 +240,15 @@ export class Mine {
       P.get('glow').tint(0.15, 1.1, 0.3, 1).box(top.x - 0.13, top.y, top.z - 0.13, top.x + 0.13, top.y + 0.3, top.z + 0.13);
     }
 
-    // ---- the rock the line winds round: a needle standing on the terrace
+    // ---- the rock the line winds round: a needle of granite standing on the terrace, lighter towards its head
     {
-      const sp = C.stretches.find((q) => q.name === 'The Spiral'), a = railAt(sp.from + 12, 0, {}), b = railAt(sp.from + 12 + 40.8, 0, {}), cx = (a.x + b.x) / 2, cz = (a.z + b.z) / 2, base = Math.min(...[0, 1, 2, 3, 4, 5, 6, 7].map((k) => ground(cx + Math.cos(k * 0.785) * 9, cz + Math.sin(k * 0.785) * 9))) - 1.5, top = a.y + 6;
-      const P = piece(sp.from + 30, 0), rock = P.get('stoneWet'), n = 7;
-      this.needle = { x: cx, z: cz };
+      const P = piece(spiral.from + 30, 0), rock = P.get('cave'), n = 9, N = needle;
       for (let i = 0; i < n; i++) {
-        const y0 = base + ((top - base) * i) / n, y1 = base + ((top - base) * (i + 1)) / n, r0 = 7.6 * (1 - i / n) ** 0.8 + 1.6 + h1(i * 3) * 1.1, r1 = 7.6 * (1 - (i + 1) / n) ** 0.8 + 1.6 + h1(i * 3 + 3) * 1.1, t = 0.55 + 0.5 * (i / n);
-        rock.tint(0.62 * t, 0.56 * t, 0.5 * t, 1).place(cx + (h1(i) - 0.5) * 1.2, 0, cz + (h1(i + 9) - 0.5) * 1.2, i * 0.9).cylinder(0, y0, 0, r0, i === n - 1 ? 0.6 : r1, y1 - y0, 9).pop();
+        const y0 = N.base + ((N.top - N.base) * i) / n, y1 = N.base + ((N.top - N.base) * (i + 1)) / n, t = 0.62 + 0.55 * (i / n), k = 1 + (h1(i * 3) - 0.5) * 0.22;
+        rock.tint(0.86 * t, 0.8 * t, 0.74 * t, 1).place(N.x + (h1(i) - 0.5) * 0.9, 0, N.z + (h1(i + 9) - 0.5) * 0.9, i * 1.1 + h1(i) * 2, (h1(i + 4) - 0.5) * 0.07, (h1(i + 5) - 0.5) * 0.07).cylinder(0, y0 - 0.3, 0, N.r(y0) * k, i === n - 1 ? 0.5 : N.r(y1) * (1 + (h1(i * 3 + 3) - 0.5) * 0.22), y1 - y0 + 0.3, 7).pop();
       }
-      world.collision?.addCircle?.(cx, cz, 8);
+      // (a few blocks fallen at its foot)
+      for (let k = 0; k < 5; k++) { const a = k * 1.3 + 0.4, d = N.r(N.base + 2) + 0.6 + h1(k) * 1.2, x = N.x + Math.cos(a) * d, z = N.z + Math.sin(a) * d, w = 0.7 + h1(k * 5) * 0.9; rock.tint(0.6, 0.56, 0.52, 1).place(x, ground(x, z) - 0.3, z, k * 2.1, 0.2, 0.1).lathe([[0, 0], [w, 0.1], [w * 0.9, w * 0.7], [w * 0.4, w * 1.2], [0, w * 1.3]], 6).pop(); }
     }
 
     // ---- the mouths: a frame of timber where the line goes into the rock or comes out of it, dark behind
@@ -251,8 +274,8 @@ export class Mine {
       for (let sq = 1; sq < L - 1; sq += 1) {
         if (!INSIDE.has(kindAt(sq, 0)) || !INSIDE.has(kindAt(sq + 1, 0))) continue;
         const roof = this.at(sq, 0, 5.8).y;
-        for (let u = -3.2; u < 3.19; u += 1.6) {
-          const q = [this.at(sq, u, 0), this.at(sq, u + 1.6, 0), this.at(sq + 1, u + 1.6, 0), this.at(sq + 1, u, 0)];
+        for (let u = -2.4; u < 2.39; u += 1.2) {
+          const q = [this.at(sq, u, 0), this.at(sq, u + 1.2, 0), this.at(sq + 1, u + 1.2, 0), this.at(sq + 1, u, 0)];
           for (const p of q) p.y = ground(p.x, p.z) + 0.3;
           if (Math.min(...q.map((p) => p.y)) > roof) continue;
           add(q[0]); add(q[2]); add(q[1]); add(q[0]); add(q[3]); add(q[2]);
@@ -280,7 +303,7 @@ export class Mine {
       }
       // (steps down to the meadow, towards the gate)
       for (let k = 0; k < 18; k++) {
-        const u = u1 - 0.21 - 0.42 * k, v = dv - 0.07 - 0.24 * (k + 1), a = this.at(18.4, u, v), b = this.at(21.6, u, v);
+        const u = u1 - 0.21 - 0.42 * k, v = dv - 0.07 - 0.24 * (k + 1), a = this.at(11.6, u, v), b = this.at(14.8, u, v);
         deck.tint(0.95, 0.86, 0.74, 1).beam(a, b, 0.42, 0.14);
         for (const q of [a, b]) wood.tint(0.7, 0.6, 0.52, 1).beam(V(q.x, ground(q.x, q.z) - 0.3, q.z), q, 0.12, 0.12);
         if (a.y - 0.2 < Math.max(ground(a.x, a.z), ground(b.x, b.z))) break;
@@ -383,7 +406,7 @@ export class Mine {
    */
   open(player, io) {
     const C = course(), start = this.nextStart(), st = startRun({ wait: Math.max(0.05, start.wait) }), events = [], input = { x: 0, y: 0, hop: false };
-    const S = { cam: null, look: V(0, 0, 0), fov: 64, shake: 0, acc: 0, last: 99, gone: false, said: '', saidFor: 0, roll: 0, back: 7 }, p = {}, t = V(0, 0, 0), q = {};
+    const S = { cam: null, look: V(0, 0, 0), fov: 64, shake: 0, acc: 0, last: 99, gone: false, said: '', saidFor: 0, roll: 0, back: 9.4, up: 5 }, p = {}, t = V(0, 0, 0), q = {};
     this.lightNuggets();
     this.inside.visible = true; this.mouths.visible = false;
     const session = {
@@ -426,7 +449,9 @@ export class Mine {
       /** The camera: behind and above the first cart, on the line it has just run, looking along the rails ahead; it leans with the cart. */
       camera: (cam, dt) => {
         cartPose(st, 0, p);
-        const inside = INSIDE.has(p.kind), way = st.way, back = (inside ? 8.6 : 9.4) + st.v * 0.07, up = inside ? (p.kind === 'lake' ? 4.6 : 3.9) : 5.0;
+        const inside = INSIDE.has(p.kind), way = st.way, wound = C.stretches[st.stretch]?.name === 'The Spiral';
+        S.back += ((wound ? 7.4 : (inside ? 8.6 : 9.4) + st.v * 0.07) - S.back) * Math.min(1, dt * 2); S.up += ((wound ? 3.5 : inside ? (p.kind === 'lake' ? 4.6 : 3.9) : 5.0) - S.up) * Math.min(1, dt * 2);
+        const back = S.back, up = S.up;
         const sb = st.s - back < 0.5 ? (st.home ? st.s - back + C.length : 0.5) : st.s - back, b = this.at(sb, st.lean * 0.5, up, way && sb >= C.fork.s0 ? 1 : 0), aheadS = st.s + 9 + st.v * 0.5;
         const onShort = way === 1 && aheadS > C.fork.s0 + C.fork.len, a = onShort ? this.at(C.fork.s1 + aheadS - C.fork.s0 - C.fork.len, 0, 0.3, 0) : this.at(Math.min(C.length, aheadS), 0, 0.3, way);
         t.copy(b);
