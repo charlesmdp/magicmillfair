@@ -191,8 +191,9 @@ export class Sanctuary {
       }
       // (tall windows of coloured glass in its side walls)
       for (const s of [-1, 1]) for (const v of a === 0 ? [12.6] : [12.6, 16.9]) lancet(inn, A(a, s * (P.W - 0.06), 2.2, v), A(a, 0, 0, s), V(0, 1, 0), 1.2, 3.3, axis, n * 7 + s + Math.round(v), 0.95);
-      // (the floor of the arm: flags of two stones)
-      surf(inn, span(-P.W, P.W, 8), span(0, 1, 9), (u, t) => { const v0 = Math.sqrt(12.5 * 12.5 - u * u) - 0.03; return A(a, u, -0.012, v0 + (P.chord - v0) * t); }, { want: V(0, 1, 0), bond: false, jitter: 0.035, shade: 0, base: (i, j) => ((i + j) % 2 ? CREAM : ROSE) });
+      // (the floor of the arm: flags of two stones — a finger lower than the floors of the middle and of the half circle,
+      // and a little under both: no seam shows)
+      surf(inn, span(-P.W, P.W, 8), span(0, 1, 9), (u, t) => { const v0 = Math.sqrt(12.5 * 12.5 - u * u) - 0.3; return A(a, u, -0.015, v0 + (P.chord + 0.3 - v0) * t); }, { want: V(0, 1, 0), bond: false, jitter: 0.035, shade: 0, base: (i, j) => ((i + j) % 2 ? CREAM : ROSE) });
       if (a === 0) return;
       // (the half circle of a chapel, and its half dome)
       const prof = [...span(0, P.spring, 9).map((y) => [P.W, y]), ...Array.from({ length: 8 }, (_, k) => { const t = ((k + 1) / 8) * HALF; return [P.W * Math.cos(t), P.spring + P.W * Math.sin(t)]; })];

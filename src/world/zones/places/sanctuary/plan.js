@@ -61,6 +61,7 @@ export function room(lx, lz, m = 0) {
  * doorway, the landing before it and the stair down to the meadow (a slope, under the steps that are drawn).
  */
 export function floorAt(x, z) {
+  if ((x - P.at.x) ** 2 + (z - P.at.z) ** 2 > 48 * 48) return null; // (asked for every step taken anywhere in the valley: far from it, answered at once)
   const [lx, lz] = toLocal(x, z);
   if (room(lx, lz, -0.4)) return P.floor;
   if (Math.abs(lx) <= P.door.half + 0.2 && lz > P.chord - 0.5 && lz <= FRONT + 0.1) return P.floor; // the doorway
@@ -76,7 +77,7 @@ export function floorAt(x, z) {
  * by this).
  */
 export function inside(x, y, z) {
-  if (y < P.floor - 3.5 || y > P.floor + 32) return 0;
+  if (y < P.floor - 3.5 || y > P.floor + 32 || (x - P.at.x) ** 2 + (z - P.at.z) ** 2 > 48 * 48) return 0;
   const [lx, lz] = toLocal(x, z), r = Math.hypot(lx, lz);
   if (Math.abs(lx) <= P.steps.half && lz > P.chord) return Math.max(0, 0.1 * (1 - (lz - FRONT) / 9)); // the doorway, the stair
   if (!room(lx, lz, -0.5)) return 0;
