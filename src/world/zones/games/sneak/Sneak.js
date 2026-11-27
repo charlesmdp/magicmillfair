@@ -16,10 +16,10 @@ import { V, clamp, gateArch, worldClock } from '../gates.js';
 import { SNEAK, BOXES, CORES, GATES, SAVES, ROOMS, TOWER, DOOR, VIEWERS, ROBOTS, poseAt, reach, startRun, stepRun, botInput, timeOf, coresOf } from './rules.js';
 
 const S = SNEAK, STEP = S.step, TAU = Math.PI * 2;
-const CALM = [0.06, 0.4, 0.62], WARY = [0.95, 0.6, 0.04], RED = [1.15, 0.07, 0.03], LIGHT = [0.75, 0.7, 0.42];
+const CALM = [0.07, 0.5, 0.9], WARY = [0.95, 0.6, 0.04], RED = [1.15, 0.07, 0.03], LIGHT = [0.75, 0.7, 0.42];
 // what the boxes of the rules are drawn as: so high, in these colours
 const HIGH = { cont: 1.55, wall: 1.25, fence: 1.05, gate: 1.4, crate: 0.75, bags: 0.62, grass: 0.8 };
-const PAINTS = [[0.85, 0.24, 0.14], [0.12, 0.42, 0.5], [0.9, 0.62, 0.12], [0.16, 0.25, 0.5], [0.55, 0.6, 0.62], [0.5, 0.2, 0.34], [0.2, 0.45, 0.25]];
+const PAINTS = [[0.9, 0.2, 0.1], [0.08, 0.45, 0.55], [0.95, 0.6, 0.08], [0.12, 0.22, 0.6], [0.5, 0.55, 0.6], [0.55, 0.15, 0.4], [0.15, 0.5, 0.22]];
 const LAMPS = [[-13, 31], [3, 31], [13.5, 20.6], [-13.5, 20.6], [0, 17], [11, 7.6], [-11, 7.6], [-13.5, 3.5], [-1.2, -4.6], [12.5, -4.5], [13.6, -7.4], [-13.6, -7.4], [-13.6, -17.6], [1.6, -17.8], [-13.8, -21.4], [13.8, -21.4], [-13.5, -31], [13.5, -31], [0, -28.2]];
 const rnd = (a, b = 0) => { let h = (Math.imul(a | 0, 0x9E3779B1) ^ Math.imul((b | 0) + 0x7F4A7C15, 0x85EBCA6B)) | 0; h ^= h >>> 15; h = Math.imul(h, 0x2C1B3C6D); h ^= h >>> 12; return (h >>> 0) / 4294967296; };
 const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
@@ -71,17 +71,17 @@ export class Sneak {
     yard.name = 'sneak-yard'; yard.position.set(S.at.x, this.floor, S.at.z); yard.rotation.y = S.yaw;
     const HX = S.half.x + 1.2, HZ = S.half.z + 1.2;
     // ---- the quay: a slab on piles, its edge striped
-    matte.tint(0.32, 0.33, 0.36, 1).box(-HX, -0.7, -HZ, HX, -0.02, HZ);
+    matte.tint(0.1, 0.105, 0.12, 1).box(-HX, -0.7, -HZ, HX, -0.02, HZ);
     for (let x = -HX + 1; x <= HX - 1; x += (2 * HX - 2) / 4) for (let z = -HZ + 1; z <= HZ - 1; z += (2 * HZ - 2) / 8) wood.tint(0.3, 0.24, 0.2, 1).cylinder(x, -7, z, 0.3, 0.3, 6.4, 8);
-    for (let i = 0, n = 44; i < n; i++) { const z0 = -HZ + (i * 2 * HZ) / n, z1 = z0 + (2 * HZ) / n, c = i % 2 ? [1.5, 1.2, 0.15] : [0.08, 0.08, 0.09]; for (const s of [-1, 1]) paint.tint(...c, 1).box(s > 0 ? HX - 0.35 : -HX, -0.02, z0, s > 0 ? HX : -HX + 0.35, 0.03, z1); }
+    for (let i = 0, n = 44; i < n; i++) { const z0 = -HZ + (i * 2 * HZ) / n, z1 = z0 + (2 * HZ) / n, c = i % 2 ? [0.9, 0.7, 0.08] : [0.05, 0.05, 0.06]; for (const s of [-1, 1]) paint.tint(...c, 1).box(s > 0 ? HX - 0.35 : -HX, -0.02, z0, s > 0 ? HX : -HX + 0.35, 0.03, z1); }
     // ---- the paving: slabs of a metre, dark, the warm pools of the lamps painted on them; brighter at the saves
     const lit = (x, z) => { let w = 0; for (const [lx, lz] of LAMPS) { const d2 = (x - lx) ** 2 + (z - lz) ** 2; w += Math.exp(-d2 / 14); } return Math.min(1, w); };
     for (let x = -15; x < 15; x++) for (let z = -32; z < 32; z++) {
-      const w = lit(x + 0.5, z + 0.5), k = 0.9 + 0.2 * rnd(x + 40, z + 40), room = z >= 19 ? 0 : z >= 6 ? 1 : z >= -6 ? 2 : z >= -19 ? 3 : 4, base = room % 2 ? [0.2, 0.22, 0.3] : [0.23, 0.24, 0.3];
-      matte.tint((base[0] + 0.5 * w) * k, (base[1] + 0.33 * w) * k, (base[2] + 0.1 * w) * k, 1).box(x + 0.02, -0.02, z + 0.02, x + 0.98, 0, z + 0.98);
+      const w = lit(x + 0.5, z + 0.5), k = 0.9 + 0.2 * rnd(x + 40, z + 40), room = z >= 19 ? 0 : z >= 6 ? 1 : z >= -6 ? 2 : z >= -19 ? 3 : 4, base = room % 2 ? [0.05, 0.056, 0.09] : [0.062, 0.066, 0.096];
+      matte.tint((base[0] + 0.3 * w) * k, (base[1] + 0.19 * w) * k, (base[2] + 0.05 * w) * k, 1).box(x + 0.02, -0.02, z + 0.02, x + 0.98, 0, z + 0.98);
     }
     // (the saves: a white square with a green heart; the door out: a striped mat)
-    for (const s of SAVES) { paint.tint(1.5, 1.5, 1.4, 1).box(s.x - 0.9, 0, s.z - 0.6, s.x + 0.9, 0.012, s.z + 0.6); glow.tint(0.3, 1.6, 0.5, 1).box(s.x - 0.55, 0.012, s.z - 0.3, s.x + 0.55, 0.02, s.z + 0.3); }
+    for (const s of SAVES) { paint.tint(0.8, 0.8, 0.75, 1).box(s.x - 0.9, 0, s.z - 0.6, s.x + 0.9, 0.012, s.z + 0.6); glow.tint(0.3, 1.6, 0.5, 1).box(s.x - 0.55, 0.012, s.z - 0.3, s.x + 0.55, 0.02, s.z + 0.3); }
     for (let i = 0; i < 6; i++) paint.tint(...(i % 2 ? [1.6, 1.3, 0.15] : [0.1, 0.1, 0.1]), 1).box(-1.2 + i * 0.4, 0, -31.9, -0.8 + i * 0.4, 0.012, -30.9);
     // ---- what stands in the yard, cut low: one sees over it into every alley
     const gates = [];
@@ -94,35 +94,35 @@ export class Sneak {
         for (let j = 0; j < n; j++) {
           const a0 = (along ? b.x0 : b.z0) + (j * len) / n + (j ? 0.04 : 0), a1 = (along ? b.x0 : b.z0) + ((j + 1) * len) / n - (j < n - 1 ? 0.04 : 0), c = PAINTS[Math.floor(rnd(i, j) * PAINTS.length)], hh = h + 0.12 * (rnd(i + 9, j) - 0.5);
           const x0 = along ? a0 : b.x0, x1 = along ? a1 : b.x1, z0 = along ? b.z0 : a0, z1 = along ? b.z1 : a1;
-          paint.tint(c[0] * 0.75, c[1] * 0.75, c[2] * 0.75, 1).box(x0, 0, z0, x1, hh, z1);
-          paint.tint(c[0] * 1.5 + 0.06, c[1] * 1.5 + 0.06, c[2] * 1.5 + 0.06, 1).box(x0 + 0.1, hh, z0 + 0.1, x1 - 0.1, hh + 0.05, z1 - 0.1);
+          paint.tint(c[0] * 0.4, c[1] * 0.4, c[2] * 0.4, 1).box(x0, 0, z0, x1, hh, z1);
+          paint.tint(c[0] * 0.66 + 0.02, c[1] * 0.66 + 0.02, c[2] * 0.66 + 0.02, 1).box(x0 + 0.1, hh, z0 + 0.1, x1 - 0.1, hh + 0.05, z1 - 0.1);
           const ribs = Math.max(2, Math.round((a1 - a0) / 1.0));
-          for (let r = 1; r < ribs; r++) { const q = a0 + ((a1 - a0) * r) / ribs; if (along) paint.tint(c[0] * 1.05, c[1] * 1.05, c[2] * 1.05, 1).box(q - 0.05, hh + 0.05, z0 + 0.12, q + 0.05, hh + 0.09, z1 - 0.12); else paint.tint(c[0] * 1.05, c[1] * 1.05, c[2] * 1.05, 1).box(x0 + 0.12, hh + 0.05, q - 0.05, x1 - 0.12, hh + 0.09, q + 0.05); }
+          for (let r = 1; r < ribs; r++) { const q = a0 + ((a1 - a0) * r) / ribs; if (along) paint.tint(c[0] * 0.48, c[1] * 0.48, c[2] * 0.48, 1).box(q - 0.05, hh + 0.05, z0 + 0.12, q + 0.05, hh + 0.09, z1 - 0.12); else paint.tint(c[0] * 0.48, c[1] * 0.48, c[2] * 0.48, 1).box(x0 + 0.12, hh + 0.05, q - 0.05, x1 - 0.12, hh + 0.09, q + 0.05); }
         }
       } else if (b.look === 'wall') {
-        matte.tint(0.5, 0.47, 0.44, 1).box(b.x0, 0, b.z0, b.x1, h, b.z1);
-        matte.tint(1.15, 1.08, 0.95, 1).box(b.x0 - 0.04, h, b.z0 - 0.04, b.x1 + 0.04, h + 0.08, b.z1 + 0.04);
+        matte.tint(0.2, 0.19, 0.19, 1).box(b.x0, 0, b.z0, b.x1, h, b.z1);
+        matte.tint(0.62, 0.58, 0.5, 1).box(b.x0 - 0.04, h, b.z0 - 0.04, b.x1 + 0.04, h + 0.08, b.z1 + 0.04);
       } else if (b.look === 'fence') {
         const along = b.x1 - b.x0 >= b.z1 - b.z0, len = along ? b.x1 - b.x0 : b.z1 - b.z0, n = Math.max(1, Math.round(len / 2));
-        matte.tint(0.2, 0.23, 0.26, 1).box(b.x0 + 0.1, 0, b.z0 + 0.1, b.x1 - 0.1, h - 0.1, b.z1 - 0.1);
-        paint.tint(1.3, 1.05, 0.15, 1).box(b.x0, h - 0.1, b.z0, b.x1, h, b.z1);
+        matte.tint(0.1, 0.12, 0.14, 1).box(b.x0 + 0.1, 0, b.z0 + 0.1, b.x1 - 0.1, h - 0.1, b.z1 - 0.1);
+        paint.tint(0.85, 0.66, 0.08, 1).box(b.x0, h - 0.1, b.z0, b.x1, h, b.z1);
         for (let j = 0; j <= n; j++) { const q = (along ? b.x0 : b.z0) + (j * len) / n, px = along ? q : (b.x0 + b.x1) / 2, pz = along ? (b.z0 + b.z1) / 2 : q; matte.tint(0.12, 0.13, 0.15, 1).box(px - 0.12, 0, pz - 0.12, px + 0.12, h + 0.1, pz + 0.12); }
       } else if (b.look === 'crate') {
         const along = b.x1 - b.x0 >= b.z1 - b.z0, len = along ? b.x1 - b.x0 : b.z1 - b.z0, n = Math.max(1, Math.round(len / 0.75));
         for (let j = 0; j < n; j++) {
           const a0 = (along ? b.x0 : b.z0) + (j * len) / n + 0.02, a1 = (along ? b.x0 : b.z0) + ((j + 1) * len) / n - 0.02, k = 0.85 + 0.3 * rnd(i, j + 5);
           const x0 = along ? a0 : b.x0, x1 = along ? a1 : b.x1, z0 = along ? b.z0 : a0, z1 = along ? b.z1 : a1;
-          wood.tint(1.5 * k, 1.05 * k, 0.55 * k, 1).box(x0, 0, z0, x1, h, z1);
-          paint.tint(1.9 * k, 1.45 * k, 0.8 * k, 1).box(x0 + 0.07, h, z0 + 0.07, x1 - 0.07, h + 0.03, z1 - 0.07);
+          wood.tint(0.8 * k, 0.55 * k, 0.28 * k, 1).box(x0, 0, z0, x1, h, z1);
+          paint.tint(1.05 * k, 0.78 * k, 0.4 * k, 1).box(x0 + 0.07, h, z0 + 0.07, x1 - 0.07, h + 0.03, z1 - 0.07);
         }
       } else if (b.look === 'bags') {
         // a wall of sandbags: two rows of fat bags, the upper set back
         const len = b.x1 - b.x0, n = Math.max(2, Math.round(len / 0.7));
-        for (let row = 0; row < 2; row++) for (let j = 0; j < n - row; j++) { const x0 = b.x0 + ((j + row * 0.5) * len) / n, k = 0.85 + 0.25 * rnd(i + row, j); matte.tint(1.05 * k, 0.92 * k, 0.62 * k, 1).box(x0 + 0.03, row * 0.3, b.z0 + row * 0.06, x0 + len / n - 0.03, row * 0.3 + 0.31, b.z1 - row * 0.06); }
+        for (let row = 0; row < 2; row++) for (let j = 0; j < n - row; j++) { const x0 = b.x0 + ((j + row * 0.5) * len) / n, k = 0.85 + 0.25 * rnd(i + row, j); matte.tint(0.62 * k, 0.54 * k, 0.34 * k, 1).box(x0 + 0.03, row * 0.3, b.z0 + row * 0.06, x0 + len / n - 0.03, row * 0.3 + 0.31, b.z1 - row * 0.06); }
       } else if (b.look === 'grass') {
         // a planter of timber, and tall grass in it
         wood.tint(0.7, 0.45, 0.25, 1).box(b.x0, 0, b.z0, b.x1, 0.12, b.z1);
-        for (let x = b.x0 + 0.15; x < b.x1; x += 0.3) for (let z = b.z0 + 0.15; z < b.z1; z += 0.3) { const k = 0.7 + 0.6 * rnd(x * 10, z * 10), hh = 0.5 + 0.4 * rnd(x * 7, z * 13); matte.tint(0.25 * k, 0.95 * k, 0.3 * k, 1).box(x - 0.07, 0.1, z - 0.07, x + 0.07, hh, z + 0.07); }
+        for (let x = b.x0 + 0.15; x < b.x1; x += 0.3) for (let z = b.z0 + 0.15; z < b.z1; z += 0.3) { const k = 0.7 + 0.6 * rnd(x * 10, z * 10), hh = 0.5 + 0.4 * rnd(x * 7, z * 13); matte.tint(0.14 * k, 0.6 * k, 0.18 * k, 1).box(x - 0.07, 0.1, z - 0.07, x + 0.07, hh, z + 0.07); }
       }
     });
     // ---- lamps: a post, a warm head (its pool is painted on the paving)
