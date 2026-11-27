@@ -8,6 +8,7 @@ import { Track, wrapAngle } from './interp.js';
 import { BroadcastTransport } from './transports/BroadcastTransport.js';
 import { WebSocketTransport } from './transports/WebSocketTransport.js';
 import { maskChat, nameOk } from '../../server/decency.js';
+import { KIT_MAX } from '../../server/items.js';
 import { deviceId } from './device.js';
 import { heardRelay } from './api.js';
 
@@ -114,7 +115,7 @@ export class Presence {
     this.host = false; this.member = '';
     this.name = cleanName(name ?? stored('mmf.name'), '') || `Visitor ${10 + Math.floor(Math.random() * 90)}`;
     this.color = int(color, 31, int(parseInt(stored('mmf.color'), 10), 31, Math.floor(Math.random() * 16)));
-    this.kit = int(kit, 255); // what the avatar shows besides its hat: its paint, its trail (see server/items.js)
+    this.kit = int(kit, KIT_MAX); // what the avatar shows besides its hat: its paint, its trail (see server/items.js)
     this._persist();
     this.id = 0; // own id in the room (0 until connected)
     this.mode = 'offline';
@@ -410,7 +411,7 @@ export class Presence {
   }
 
   setIdentity(name, color, kit = this.kit) {
-    this.kit = int(kit, 255);
+    this.kit = int(kit, KIT_MAX);
     this.name = cleanName(name, this.name);
     this.color = int(color, 31, this.color);
     this._persist();
@@ -666,7 +667,7 @@ export class Presence {
   // Adds a peer, or updates the identity of a known one. `stamp` (server time) is only given by a welcome.
   _join(info, stamp) {
     if (!info || !Number.isInteger(info.id) || info.id === this.id) return false;
-    const name = cleanName(info.name), color = int(info.color, 31), kit = int(info.k, 255), admin = info.ad === 1; // (admin: an administrator who lets it be known)
+    const name = cleanName(info.name), color = int(info.color, 31), kit = int(info.k, KIT_MAX), admin = info.ad === 1; // (admin: an administrator who lets it be known)
     let peer = this.peers.get(info.id);
     const known = !!peer;
     if (!known) this.peers.set(info.id, (peer = { id: info.id, name, color, kit, admin, x: 0, y: 0, z: 0, yaw: 0, anim: 0, flags: 0, speed: 0, visible: false, far: false }));

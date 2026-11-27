@@ -8,7 +8,10 @@ import { MeshBuilder } from '../world/props/MeshBuilder.js';
 import { surfaceMaterial } from '../render/SurfaceMaterial.js';
 import { LAYER } from '../render/Shadows.js';
 
-/** Hats, in the order of their number on the network (4 bits: at most 16 entries, 'none' included; never reorder). */
+/**
+ * Hats, in the order of their number on the network (5 bits: at most 32 entries, 'none' included; never reorder,
+ * append — and add the same name to HAT_IDS in server/wardrobe.js and its card to server/items.js).
+ */
 export const HATS = [
   { id: 'none', name: 'No hat' },
   { id: 'cap', name: 'Cap', premium: true },
@@ -23,6 +26,12 @@ export const HATS = [
   { id: 'chef', name: "Chef's hat", premium: true },
   { id: 'propeller', name: 'Propeller cap', premium: true },
   { id: 'party', name: 'Party hat', premium: true },
+  { id: 'halo', name: 'Halo', premium: true },
+  { id: 'jester', name: "Jester's hat", premium: true },
+  { id: 'antlers', name: 'Antlers', premium: true },
+  { id: 'sombrero', name: 'Sombrero', premium: true },
+  { id: 'mortarboard', name: 'Graduation cap', premium: true },
+  { id: 'cone', name: 'Traffic cone', premium: true },
 ];
 /** Other things meant to be sold one day. */
 export const EXTRAS = { jetpack: { name: 'Jetpack', premium: true } };
