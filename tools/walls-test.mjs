@@ -83,6 +83,9 @@ const press = (u, ...at) => { const left = at.slice(); return (st, input) => { i
   // a wall run along: the gap of 6.5 m at 28.5
   const w1 = go(runner(25.5), 38, press(-1.4, 27.8)), w2 = go(runner(25.5), 38, press(0.4, 27.8)), w3 = go(runner(25.5), 38, press(-1.4)), band = of('wall')[0];
   const ride = w1.seen.find((e) => e.type === 'wall'), off = w1.seen.find((e) => e.type === 'off' || e.type === 'land');
+  // (one need not aim at the stone: beside a band a jump is drawn to the wall, from the middle of the way, the stick straight up)
+  const drawn = go(runner(25.5, 0.6), 38, press(null, 27.6));
+  check('beside a band a jump is drawn to the wall: from the middle of the way, the stick straight up, the same press takes it — the stick pushed away is what refuses it', !drawn.out && drawn.has('wall') && w2.out === 'fall', `from 0.6 m right of the middle: taken at ${drawn.seen.find((e) => e.type === 'wall')?.at.toFixed(1)} m`);
   check('a band of blue stone: jumped at at a run, it is run along over the gap — away from it, or without the jump, the same gap is a fall', !w1.out && !!ride && !!off && off.at - ride.at > 4 && w2.out === 'fall' && w3.out === 'fall', ride ? `taken at ${ride.at.toFixed(1)} m, left at ${off.at.toFixed(1)}: ${(off.at - ride.at).toFixed(1)} m along it in ${(off.t - ride.t).toFixed(2)} s; the band ${band.s0}–${band.s1} m, the gap 28.5–35` : 'no wall');
   // wall to wall: the gap of 16 m at 91.5
   const k1 = go(runner(89.2), 109, press(-1.4, 90.6, 96)), k2 = go(runner(89.2), 109, press(-1.4, 90.6));

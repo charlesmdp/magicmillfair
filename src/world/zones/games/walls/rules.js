@@ -312,7 +312,13 @@ function sub(st, dt, input, events) {
   } else if (st.mode === 'air') {
     const want = run * S.speed;
     if (want > st.vs) st.vs = Math.min(want, st.vs + S.push * dt); else if (run < -0.2 && want < st.vs) st.vs = Math.max(want * 0.5, st.vs - S.push * dt);
-    if (st.kick > 0) st.kick -= dt; else st.vu += clamp(side * S.side - st.vu, -S.accel * dt, S.accel * dt);
+    if (st.kick > 0) st.kick -= dt;
+    else {
+      // (beside a band, a jump is drawn to the wall unless the stick says otherwise: one need not aim at the stone)
+      let pull = 0;
+      if (st.sprung && st.vs >= S.wall.least) for (const d of [-1, 1]) if (!pull && st.lastWall !== d && side * d > -0.3 && wallFor(st, d)) pull = d;
+      st.vu += clamp((pull || side) * S.side - st.vu, -S.accel * dt, S.accel * dt);
+    }
     if (st.coy > 0) st.coy -= dt;
     if (st.wcoy > 0) st.wcoy -= dt;
     if (st.want > 0 && st.coy > 0) { st.y = Math.max(st.y, st.gy - 0.05); jumpOff(st, run, events); }
