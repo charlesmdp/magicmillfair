@@ -376,8 +376,8 @@ export class Walls {
     this.deck = { clearance: 1.2, heightAt: (x, z) => (x >= Lg.x0 && x <= Lg.x1 && z >= Lg.z0 && z <= Lg.z1 ? D : x >= Rp.x0 && x <= Rp.x1 && z > Lg.z1 && z <= Rp.z1 + 0.35 ? lerp(D, Rp.y1, clamp((z - Lg.z1) / (Rp.z1 - Lg.z1), 0, 1)) : null) };
     world.collision.addPlatform(this.deck);
     // (the board of the best times and the board of its sponsors stand on the landing, along its north rail, facing who comes up the ramp)
-    this.boardSpot = { x: 81.7, z: Lg.z0 + 0.6, yaw: 0 };
-    this.rollSpot = { x: 78.6, z: Lg.z0 + 0.6 };
+    this.boardSpot = { x: 83.2, z: Lg.z0 + 0.6, yaw: 0 };
+    this.rollSpot = { x: 80.1, z: Lg.z0 + 0.6 };
     this.board = canvasBoard(512, 256, (ctx, w, h) => {
       ctx.fillStyle = '#10243a'; ctx.fillRect(0, 0, w, h); ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 8; ctx.strokeRect(7, 7, w - 14, h - 14);
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
