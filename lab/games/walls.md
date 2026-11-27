@@ -24,9 +24,11 @@ painted for, and the paint never changes its meaning:
 
 - **a band of blue along a wall is run along**: jumped at at a run, it carries one on along it in a shallow arc
   for 1.15 s — 8.4 m, over gaps of 6.5 to 7.5 m that no jump crosses. One is taken by it from three quarters of
-  a metre off the wall, and from 0.7 m before the band begins. **On it, the button kicks off** to the other side, and for
-  0.8 s the kick carries one across whatever the stick says: to the band of the wall that stands there, in the
-  two halls (the kick may come at any moment of 0.95 s). Pushed away from the wall, the stick lets go of it.
+  a metre off the wall, and from 0.7 m before the band begins — and **one need not aim at the stone**: beside a
+  band a jump is drawn to the wall, the stick straight up; only the stick pushed away refuses it. **On it, the
+  button kicks off** to the other side, and for 0.8 s the kick carries one across whatever the stick says: to
+  the band of the wall that stands there, in the two halls (the kick may come at any moment of 0.95 s). Pushed
+  away from the wall, the stick lets go of it.
 - **a face of green across the way is run up**: run straight at — or pushed at from a standstill at its foot —
   one runs two or three steps up it (6.2 m/s), catches its edge and pulls up (0.3 s). No button. Nine faces, 1
   to 3 m (one runs up 3.5 m). **An edge one falls just short of is caught** the same way, when within 1.3 m of
@@ -68,18 +70,21 @@ every floor a blind arcade — pilasters down to the rock or to the terrace of t
 each two, a pale roll round it; dark arched windows high in the walls; vines down from the tops of the walls and
 over the kerbs; striped awnings of the fair's cloth over six of the saves (only where the wall is high enough and
 no band follows: the camera never has one before it); bunting from mast to mast along the tops of the outer
-walls; merlons, some fallen. One group in the scene, `walls`; what never moves is one merged piece
-(five materials); the four blades, the two fields of spikes and the twelve slabs are small pieces of their own,
-moved only while somebody is within 320 m.
+walls; merlons, some fallen. One group in the scene, `walls`, of 41,000 triangles in all; what never moves is one merged
+piece (five materials); the four blades, the two fields of spikes and the twelve slabs are small pieces of their
+own, moved only while somebody is within 320 m; the plaques of the saves and the slabs are drawn from within
+110 m only. The rock is grey, boulders on its shore; under the gaps of the outer lap one sees it, 4 m down and more, and
+under those of the inner laps the terrace of the lap outside.
 
 **With others.** Several run at once, each on their own clock, and see each other where the network says they
 are; nobody is solid. The blades and the spikes are the same for everybody at every moment. The slabs that give
 way do so for who treads on them only: somebody else's slabs are whole.
 
-**What the checks say** (`node tools/walls-test.mjs`, 29 of 29; its last line is the line of
+**What the checks say** (`node tools/walls-test.mjs`, 31 of 31; its last line is the line of
 `server/scores.js`): the place (water under all of it, the gate dry and inside the bounds); the plan (each lap at
 least 8.1 m over the one outside it, the tallest band 6.6 m; the corners carry nothing but steps); the saves;
-each move does what it says and its gap is a fall without it; the kick from wall to wall has 0.95 s; every blade
+each move does what it says and its gap is a fall without it; each jump may come at any moment of 0.6 to
+0.85 s, the kick from wall to wall of 0.95 s; every blade
 and field of spikes lets one by at a run for at least a quarter of a second at a stretch (a blade always leaves
 one side of the way free: it is read and gone round, never only waited for; the spikes are jumped at any moment);
 a fall winds back to a footing a stride before the edge, three times, then it is the save; a save fills the
@@ -113,4 +118,6 @@ played by its bot to the top (49.07 s there), its score told and kept.
   kind: it sits just under the robot.
 - The save at 25 m lies where one takes off for the first band: who jumps before its line is saved only on the
   far side of the gap (a fall in between winds back to before the line all the same).
+- **No columns to hop**, which the first sketch of the game named: a jump here is as long as the run before it
+  (4.2 to 4.9 m), and landing on a column a stride long would ask for a press timed to a tenth of a second.
 - No sound of its own: the game's jump, land, hit, checkpoint and victory.

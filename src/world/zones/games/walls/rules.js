@@ -37,6 +37,9 @@ export const WALLS = {
   half: 1.7, reach: 1.45, // the way: half its width; how far from its middle one goes (the wall, a kerb)
   // its plan: a snail's shell of straight sides, each turned left into the next by a quarter circle
   plan: { a: 42, b: 30, inset: 7.5, r: 5, sides: 9 },
+  // the top of the wall on the left of each side (m over the foot of the ruin): the terrace the next lap in stands on;
+  // the turret at a corner rises `turret` over the higher of its two walls
+  tops: [7, 11, 14.9, 14.9, 17, 27.5, 27.5, 27.5, 27.5], turret: 2.6,
   step: 1 / 120,
   speed: 7, back: 3.2, start: 0.22, stop: 0.18, // m/s forward, backward; s from standing to that speed, and back
   side: 4.6, accel: 40, // across: m/s, m/s²

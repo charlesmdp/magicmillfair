@@ -20,8 +20,8 @@ const S = WALLS, H = S.half, C = S.at, TAU = Math.PI * 2;
 const OUT = H + 0.4; // the outer edge of the way: its kerb
 const DEEP = -S.base - 1; // under the rock
 // the top of the wall on the left of each side, and what is under the way there: the rock, or the terrace of the lap outside
-const TOPS = [7, 11, 14.9, 14.9, 17, 27.5, 27.5, 27.5, 27.5], UNDER = [DEEP, DEEP, DEEP, DEEP, 7, 11, 14.9, 14.9, 17];
-const SAND = [1.22, 1.04, 0.76], PALE = [1.42, 1.27, 0.98], DUSK = [0.86, 0.7, 0.5], BLUE = [0.1, 0.4, 1.35], SKY = [0.55, 0.85, 1.5], GREEN = [0.1, 0.8, 0.36], LIME = [0.6, 1.4, 0.5], RED = [1.25, 0.08, 0.08], GOLD = [1.7, 1.2, 0.18], WHITE = [1.6, 1.55, 1.45], DARK = [0.16, 0.13, 0.11];
+const TOPS = S.tops, UNDER = TOPS.map((_, k) => (k < 4 ? DEEP : TOPS[k - 4]));
+const SAND = [1.32, 1.13, 0.83], PALE = [1.5, 1.35, 1.05], DUSK = [0.9, 0.74, 0.53], BLUE = [0.1, 0.4, 1.35], SKY = [0.55, 0.85, 1.5], GREEN = [0.1, 0.8, 0.36], LIME = [0.6, 1.4, 0.5], RED = [1.25, 0.08, 0.08], GOLD = [1.7, 1.2, 0.18], WHITE = [1.6, 1.55, 1.45], DARK = [0.16, 0.13, 0.11];
 const LEAF = [[0.2, 0.5, 0.13], [0.34, 0.72, 0.2], [0.14, 0.38, 0.12]], CLOTH = [[1.25, 0.16, 0.12], [1.55, 1.42, 1.12], [0.12, 0.42, 1.2], [1.6, 1.15, 0.2], [0.14, 0.75, 0.36]];
 const WHY = { fall: 'A fall!', blade: 'Caught by a blade!', spikes: 'Onto the spikes!' };
 const _p = {}, _q = {};
@@ -146,13 +146,13 @@ export class Walls {
         const T = TOPS[k], lo = UNDER[k] - 0.3, s1 = Math.min(p.s1, LENGTH + 2.2), keep = k >= 5, back = keep ? 9.5 : 3.75, s0 = k ? p.s0 : -5;
         wallFace(stone, s0, s1, -H, lo, T, 1, SAND, { seed: k });
         if (!k) { cross(stone, s0, -H - back, -H, lo, T, -1, SAND, 0.6, 1); top(pave, s0, p.s0, -H - back, -H, T, mul(SAND, 0.92)); }
-        if (k >= 4) top(pave, p.s0 - 0.5, s1 + 0.5, -H, OUT + 0.3, UNDER[k] - 0.02, mul(DUSK, 0.62)); // (under an inner lap, the terrace of the lap outside: the bottom of its gaps)
+        if (k >= 4) top(pave, p.s0 - 0.5, s1 + 0.5, -H, OUT, UNDER[k] - 0.02, mul(DUSK, 0.62)); // (under an inner lap, the terrace of the lap outside: the bottom of its gaps)
         // (windows high in it, dark, where there is room over the heads and over the bands; vines down from its top)
         for (let row = 0; row < (keep ? 2 : 1); row++) for (let s = p.s0 + 2.4; s < s1 - 1.4; s += 4.2) {
           const yTop = T - 1.0 - row * 3.5, yBot = yTop - 1.9;
           if (yBot < Math.max(pathY(s - 1.5), pathY(s + 1.5)) + 4.4 || bands.some((t) => t.side < 0 && s > t.s0 - 1.2 && s < t.s1 + 1.2 && t.y1 > yBot - 0.6)) continue;
           arch(s, 0.5, yBot, yTop, -H, 1, 0.3);
-          stone.tint(...PALE, 1); wallFace(stone, s - 0.75, s + 0.75, -H + 0.16, yBot - 0.2, yBot, 1, PALE, { plain: true }); top(stone, s - 0.75, s + 0.75, -H, -H + 0.16, yBot, PALE);
+          wallFace(stone, s - 0.75, s + 0.75, -H + 0.16, yBot - 0.2, yBot, 1, PALE, { plain: true }); top(stone, s - 0.75, s + 0.75, -H, -H + 0.16, yBot, PALE);
         }
         for (let s = p.s0 + 1.5 + 3 * hash(k * 7.7); s < s1 - 1.5; s += 4.5 + 5 * hash(s * 1.3 + k)) {
           const room = Math.min(...[-1, 0, 1].map((d) => T - Math.max(pathY(s + d) + 2.7, ...bands.filter((t) => t.side < 0 && s > t.s0 - 1.5 && s < t.s1 + 1.5).map((t) => t.y1 + 0.5))));
@@ -169,7 +169,7 @@ export class Walls {
           top(stone, s, s + 1.5, -H - 0.5, -H, T + h, PALE); cross(stone, s, -H - 0.5, -H, T, T + h, -1, SAND); cross(stone, s + 1.5, -H - 0.5, -H, T, T + h, 1, SAND);
         }
       } else {
-        const T = Math.max(TOPS[k], TOPS[k + 1]) + 2.6, lo = Math.min(UNDER[k], UNDER[k + 1]) - 0.3, c = placeAt(p.s0, -S.plan.r, _q), r = S.plan.r - H, n = Math.round((T - lo) / 0.9);
+        const T = Math.max(TOPS[k], TOPS[k + 1]) + S.turret, lo = Math.min(UNDER[k], UNDER[k + 1]) - 0.3, c = placeAt(p.s0, -S.plan.r, _q), r = S.plan.r - H, n = Math.round((T - lo) / 0.9);
         for (let j = 0; j < n; j++) stone.tint(...mul(SAND, (0.72 + 0.34 * Math.min(1, (j / n) * 1.6)) * (0.92 + 0.14 * hash(j + k * 9)))).cylinder(c.x, S.base + lo + ((T - lo) * j) / n, c.z, r, r, (T - lo) / n, 22, { capTop: false, capBottom: false });
         stone.tint(...PALE, 1).cylinder(c.x, S.base + T - 0.7, c.z, r + 0.22, r + 0.22, 0.45, 22, { capTop: true });
         stone.tint(...mul(SAND, 0.9), 1).cylinder(c.x, S.base + T - 0.25, c.z, r, r, 0.01, 22, { capTop: true });
@@ -177,7 +177,7 @@ export class Walls {
         for (let m = 0; m < 9; m++) if (hash(m * 3.3 + k) > 0.28) { const a = (m / 9) * TAU, h = 0.7 + 0.6 * hash(m + k * 5); stone.tint(...PALE, 1).place(c.x + Math.cos(a) * (r - 0.1), S.base + T - 0.25, c.z + Math.sin(a) * (r - 0.1), -a).box(-0.3, 0, -0.55, 0.3, h, 0.55).pop(); }
       }
     });
-    // ---- the keep's roof ends in a ruined tower beyond the last floor: a drum, a dark door, a broken crown, a flag
+    // ---- beyond the last floor, over the keep, a ruined tower: a drum, a broken crown, a flag
     {
       const c = placeAt(LENGTH + 5.4, -1.2, _q), r = 3.3, T = 36.5, lo = 27.2;
       for (let j = 0; j < 10; j++) stone.tint(...mul(SAND, 0.8 + 0.03 * j + 0.08 * hash(j * 5.1)), 1).cylinder(c.x, S.base + lo + ((T - lo) * j) / 10, c.z, r, r - (j > 7 ? 0.1 : 0), (T - lo) / 10, 20, { capTop: j === 9 });
@@ -256,7 +256,8 @@ export class Walls {
       stone.tint(...DUSK, 1).beam(P(t.s, -H, t.y + 1.5), P(t.s, OUT + 0.15, t.y + 0.05), 0.12, 0.12);
       stone.tint(...DUSK, 1).beam(P(t.s, -H, t.y + 1.5), P(t.s, -H, t.y - 0.6), 0.2, 0.2);
     }
-    // ---- the saves: a line of gold and white across the way, a banner on a mast, a sign
+    // ---- the saves: a line of gold and white across the way, a banner of gold cloth down the wall, a plaque
+    this.plaques = [];
     saves.forEach((v, n) => {
       for (let j = 0; j < 8; j++) { const u0 = -H + ((H + OUT) * j) / 8, u1 = -H + ((H + OUT) * (j + 1)) / 8; top(paint, v.s - 0.16, v.s + 0.16, u0, u1, v.y + 0.012, j % 2 ? GOLD : WHITE); }
       // (a banner of gold cloth down the wall, and a sign that stands out from it over the way: the open side stays clear)
@@ -271,7 +272,7 @@ export class Walls {
         }
         for (const s of [a, b]) paint.tint(...DARK, 1).beam(P(s, uo, yo), P(s, -H, yw + 0.55), 0.03, 0.03);
       }
-      { const p = P(v.s, -H + 0.07, v.y + 3.68 + 0.39), q = placeAt(v.s, 0, _q); stakeSign(this.group, paint, p.x, p.y, p.z, Math.atan2(-q.dz, q.dx), `${n + 1} · ${v.name.toUpperCase()}`, { w: 2.3, h: 0.46, up: -0.39, back: '#0f3d2a' }); }
+      { const p = P(v.s, -H + 0.07, v.y + 3.68 + 0.39), q = placeAt(v.s, 0, _q); this.plaques.push(stakeSign(this.group, paint, p.x, p.y, p.z, Math.atan2(-q.dz, q.dx), `${n + 1} · ${v.name.toUpperCase()}`, { w: 2.3, h: 0.46, up: -0.39, back: '#0f3d2a' }).mesh); }
     });
     // ---- the top of the tower: a brazier of gold
     {
@@ -319,9 +320,9 @@ export class Walls {
     });
     // The slabs that give way: pale, cracked, each a piece of its own — they tremble, then drop
     {
-      const parts = new Parts(), b = parts.get('paving'), d = parts.get('matte');
+      const parts = new Parts(), b = parts.get('paving'), d = b;
       b.tint(...PALE, 1).box(-OUT + 0.04, -0.22, -0.62, H - 0.04, 0, 0.62);
-      for (const [x0, z0, x1, z1] of [[-1.2, -0.5, -0.3, 0.1], [-0.3, 0.1, 0.2, -0.3], [0.2, -0.3, 1.1, 0.4], [-0.3, 0.1, -0.5, 0.55]]) d.tint(0.5, 0.4, 0.3, 1).beam(V(x0, 0.004, z0), V(x1, 0.004, z1), 0.05, 0.006);
+      for (const [x0, z0, x1, z1] of [[-1.2, -0.5, -0.3, 0.1], [-0.3, 0.1, 0.2, -0.3], [0.2, -0.3, 1.1, 0.4], [-0.3, 0.1, -0.5, 0.55]]) d.tint(0.3, 0.24, 0.18, 1).beam(V(x0, 0.004, z0), V(x1, 0.004, z1), 0.05, 0.006);
       const proto = parts.toMeshes(mats, { name: 'walls-slab', layers: [] });
       this.slabs = of('floor', 'crumble').map((t) => {
         const m = proto.clone(), at = placeAt((t.s0 + t.s1) / 2, 0, {});
@@ -372,15 +373,17 @@ export class Walls {
       const at = st ? trodAt(st, q.t.id) : undefined, age = at === undefined ? -1 : st.total - at, drop = age > S.crumble ? 0.5 * S.g * (age - S.crumble) ** 2 : 0;
       if (q.age === age && age < 0) continue;
       q.age = age;
-      q.m.visible = drop < 30;
+      q.m.visible = drop < 30 && this.shown !== false;
       q.m.position.set(q.x, q.y - drop + (age >= 0 && !drop ? Math.sin(age * 90) * 0.025 : 0), q.z); q.m.rotation.z = drop * 0.04; q.m.updateMatrixWorld(true);
     }
   }
 
   /** Every frame: what moves is where the clock says — only while somebody is near enough to see it. */
   update(dt, time, cam) {
-    const st = this.session?.state;
-    if (!st && cam && (cam.position.x - C.x) ** 2 + (cam.position.z - C.z) ** 2 > 320 * 320) return;
+    const st = this.session?.state, d2 = cam ? (cam.position.x - C.x) ** 2 + (cam.position.z - C.z) ** 2 : 0, near = !!st || d2 < 110 * 110;
+    // (the plaques of the saves and the slabs are small: drawn from near only)
+    if (near !== this.shown) { this.shown = near; for (const m of this.plaques) m.visible = near; for (const q of this.slabs) q.m.visible = near; }
+    if (!st && d2 > 320 * 320) return;
     this._place(st ? st.t0 + st.total : this.clock() / 1000, st);
   }
 

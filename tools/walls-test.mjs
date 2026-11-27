@@ -71,6 +71,22 @@ const press = (u, ...at) => { const left = at.slice(); return (st, input) => { i
   check('each stretch teaches or tests one thing, then they mix: eight kinds of moment in all', ['face', 'wall', 'wall on the right', 'pole', 'blade', 'spikes', 'crumble', 'ledge'].every((k) => all.has(k)) && kinds.every((k) => k.length >= 1 || true), kinds.map((k, i) => `${i + 1} ${S.names[i]}: ${k.join(' + ') || 'holes'}`).join(' · '));
   // (the camera comes in between the walls of a hall before one is between them, and stays in until it is out)
   const cam = halls.every(([a, b]) => hallAt(a - 1.5) > 0.98 && hallAt(b + S.cam.back) > 0.98 && hallAt(a - 11) < 0.02 && hallAt(b + S.cam.back + 7) < 0.02);
+  {
+    // the line from the camera to the runner, all along the way and across it: it never enters a turret, nor a wall that stands on the right
+    const D = S.cam, mix = (a, b, t) => a + (b - a) * t, r0 = S.plan.r - H, towers = arcs.map((p, k) => ({ ...placeAt(p.s0, -S.plan.r, {}), top: Math.max(S.tops[k], S.tops[k + 1]) + S.turret + 1.4 })), slabs = of('wall').filter((t) => t.side > 0);
+    const pathY = (s) => { let y = 0; for (const t of of('floor')) if (t.s0 <= s) y = t.s1 >= s ? t.y0 + ((t.y1 - t.y0) * (s - t.s0)) / (t.s1 - t.s0) : t.y1; return y; };
+    const side = (s) => PLAN.findIndex((p) => s < p.s1);
+    let turret = Infinity, slab = Infinity, where = '';
+    for (let s = saves[0].s; s <= LENGTH; s += 0.25) for (const u of [-1.4, 0, 1.4]) {
+      const h = hallAt(s), out = mix(D.out, D.hall.out, h) + u * 0.3, c = placeAt(s - D.back, out, {}), p = placeAt(s, u, {}), straight = s - D.back >= 0 && side(s - D.back) === side(s), y = pathY(s), eye = y + mix(D.up, D.hall.up, h);
+      for (let k = 1; k < 32; k++) {
+        const f = k / 32, x = mix(c.x, p.x, f), z = mix(c.z, p.z, f), yy = mix(eye, y + 0.9, f);
+        for (const a of towers) { const d = Math.hypot(x - a.x, z - a.z) - r0; if (yy < a.top && d < turret) { turret = d; where = `${s.toFixed(1)} m`; } }
+        if (straight) { const si = mix(s - D.back, s, f), ui = mix(out, u, f); for (const t of slabs) if (si > t.s0 - 0.7 && si < t.s1 + 0.7) slab = Math.min(slab, Math.max(H - ui, ui - (H + 0.6))); }
+      }
+    }
+    check('nothing is ever between the camera and the runner: all along the way, wherever across it one runs, the line from the one to the other passes clear of every turret and of the walls that stand on the right', turret > 0.1 && slab > 0.1, `${turret.toFixed(2)} m from a turret at the nearest (at ${where}), ${slab.toFixed(2)} m from a wall on the right`);
+  }
   check('where a wall stands on the right the camera comes in over the middle of the way before the runner is between the two, and stays there until it has left them behind: no wall is ever between it and the runner', halls.length === 2 && cam, halls.map(([a, b]) => `${a}–${b} m`).join(', '));
 }
 {
