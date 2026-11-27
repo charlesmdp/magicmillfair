@@ -296,7 +296,7 @@ export class Ages {
         }
         if (S.count > 0) {
           S.count -= Math.min(dt, 0.25); queue.length = 0;
-          if (S.count <= 0) { io.play('start'); panel.say('To war!', 'age', 1400); panel.tip(touch ? 'Shooters bring a base down — send sturdy robots before them' : 'Shooters bring a base down — send sturdy robots before them · keys 1 … 6', 9000); }
+          if (S.count <= 0) { io.play('start'); panel.say('To war!', 'age', 1400); }
         } else if (!st.over) {
           for (const b of queue) { if (press(st, 0, b)) { panel.done(b); io.play(b === 4 ? 'rocket' : b === 5 ? 'checkpoint' : b === 3 ? 'press' : 'click', { volume: b < 3 ? 0.5 : 0.8 }); } else { panel.nope(b); io.play('tick', { volume: 0.35, rate: 0.7 }); } }
           queue.length = 0;
@@ -304,7 +304,7 @@ export class Ages {
         }
         for (const e of events) this._tell(e, st, io, S);
         events.length = 0;
-        pl.pos.set(this.stand.x, this.stand.y, this.stand.z); pl.vel?.set(0, 0, 0); pl.yaw = this.stand.yaw; pl.pitch = 0; pl.roll = 0; pl.speed = 0; pl.grounded = true;
+        pl.pos.set(this.stand.x, this.stand.y - (this.fallen === 0 ? 2.6 * this.sunk * this.sunk : 0), this.stand.z); pl.vel?.set(0, 0, 0); // (on the roof of one's base — and down with it if it falls) pl.yaw = this.stand.yaw; pl.pitch = 0; pl.roll = 0; pl.speed = 0; pl.grounded = true;
         session.anim = ANIM.idle;
         if (st.over) {
           S.after += dt;
