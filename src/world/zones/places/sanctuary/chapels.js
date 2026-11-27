@@ -94,8 +94,7 @@ export function furnish(k) {
       for (let i = 0; i + 1 < pts.length; i++) face(inn, F(pts[i][0], pts[i][1], z - 0.03), F(pts[i + 1][0], pts[i + 1][1], z - 0.03), F(rim[i + 1][0], rim[i + 1][1], z - 0.03), F(rim[i][0], rim[i][1], z - 0.03), front, GOLD);
       { const at = F(0, 2.35, z - 0.2); turn(inn, at, [[0.02, -0.16], [0.11, -0.08], [0.14, 0.04], [0.08, 0.16], [0.02, 0.22]], 6, FLAME, { paint: plain }); slab(inn, F, -0.008, 2.57, z - 0.208, 0.008, 3.5, z - 0.192, GOLD); }
       // (a crescent of gold over it)
-      { const R = 0.34, r = 0.28, d = 0.12, cy = 4.95, n = 14; slab(inn, F, -0.025, 4.25, z + 0.1, 0.025, cy - R, z + 0.15, GOLD);
-        for (let i = 0; i < n; i++) { const o = (s) => { const t = ((39.3 - s * 258.6) * Math.PI) / 180; return F(R * Math.cos(t), cy + R * Math.sin(t), z + 0.12); }, q = (s) => { const t = ((19.9 - s * 219.8) * Math.PI) / 180; return F(r * Math.cos(t), cy + d + r * Math.sin(t), z + 0.12); }; face(thin, o(i / n), o((i + 1) / n), q((i + 1) / n), q(i / n), front, GOLD); } }
+
       stop(a, 0, C + W - 0.3, 1.6, 0.35);
       // ---- the pulpit of steps, to the right of the niche: a small gate, seven steps between two rails, a seat under a pointed roof
       { const x0 = -3.5, x1 = -2.55, v0 = C - 0.6, run = 0.42, rise = 0.3, n = 7, top = n * rise, vt = v0 + n * run;
@@ -103,7 +102,10 @@ export function furnish(k) {
         slab(inn, F, x0, 0, vt, x1, top, vt + 0.9, WOOD2, { faces: 'xXYZ' });
         for (const x of [x0 - 0.05, x1 - 0.03]) for (const v of [vt + 0.02, vt + 0.8]) slab(inn, F, x, top, v, x + 0.08, top + 1.9, v + 0.08, WOOD);
         turn(inn, F((x0 + x1) / 2, top + 1.9, vt + 0.45), [[0.72, 0], [0.72, 0.1], [0.5, 0.3], [0.22, 0.8], [0.03, 1.25]], 8, TEAL);
-        turn(inn, F((x0 + x1) / 2, top + 3.15, vt + 0.45), [[0.01, 0], [0.09, 0.06], [0.09, 0.14], [0.01, 0.2]], 6, GOLD);
+        turn(inn, F((x0 + x1) / 2, top + 3.15, vt + 0.45), [[0.01, 0], [0.09, 0.06], [0.09, 0.14], [0.03, 0.2], [0.03, 0.42]], 6, GOLD);
+        // (a crescent of gold on its point, its horns up)
+        { const R = 0.36, r = 0.3, d = 0.13, cx = (x0 + x1) / 2, cy = top + 3.15 + 0.42 + R, n = 14, zz = vt + 0.45;
+          for (let i = 0; i < n; i++) { const o = (q) => { const t = ((39.3 - q * 258.6) * Math.PI) / 180; return F(cx + R * Math.cos(t), cy + R * Math.sin(t), zz); }, e = (q) => { const t = ((19.9 - q * 219.8) * Math.PI) / 180; return F(cx + r * Math.cos(t), cy + d + r * Math.sin(t), zz); }; face(thin, o(i / n), o((i + 1) / n), e((i + 1) / n), e(i / n), front, [1.25, 0.95, 0.38]); } }
         for (const x of [x0 - 0.05, x1 - 0.03]) slab(inn, F, x, 0, v0 - 0.1, x + 0.08, 2.3, v0, WOOD);
         slab(inn, F, x0 - 0.05, 2.1, v0 - 0.1, x1 + 0.05, 2.45, v0, TEAL);
         stop(a, (x0 + x1) / 2, (v0 + vt + 0.9) / 2, (x1 - x0) / 2 + 0.06, (vt + 0.9 - v0) / 2); }
@@ -156,7 +158,7 @@ export function furnish(k) {
       face(inn, F(-1.1, 2.96, z - 0.03), F(1.1, 2.96, z - 0.03), F(1.1, 3.06, z - 0.03), F(-1.1, 3.06, z - 0.03), front, GOLD);
       stop(a, 0, C + 4.1, 1.8, 0.75);
       // ---- the light that never goes out, hung before the ark
-      { const at = F(0, 4.75, C + 2.9); turn(inn, at, [[0.02, -0.2], [0.13, -0.08], [0.17, 0.06], [0.12, 0.2], [0.03, 0.28]], 8, [1.5, 0.35, 0.12], { paint: plain }); turn(inn, at, [[0.05, 0.28], [0.09, 0.32], [0.02, 0.4]], 6, GOLD); slab(inn, F, -0.01, 5.15, C + 2.89, 0.01, 7 + Math.sqrt(W * W - 2.9 * 2.9), C + 2.91, GOLD); }
+      { const at = F(0, 4.05, C + 2.9); turn(inn, at, [[0.02, -0.2], [0.13, -0.08], [0.17, 0.06], [0.12, 0.2], [0.03, 0.28]], 8, [1.5, 0.35, 0.12], { paint: plain }); turn(inn, at, [[0.05, 0.28], [0.09, 0.32], [0.02, 0.4]], 6, GOLD); slab(inn, F, -0.01, 4.45, C + 2.89, 0.01, 7 + Math.sqrt(W * W - 2.9 * 2.9), C + 2.91, GOLD); }
       // ---- the lamp of seven branches, of gold, beside the ark
       { const mx = 3.0, mz = C + 3.0, yc = 1.3, top = 1.85, ribbon = (p0, p1, w = 0.035) => { const d = [p1[0] - p0[0], p1[1] - p0[1]], l = Math.hypot(d[0], d[1]) || 1, nx = (-d[1] / l) * w, ny = (d[0] / l) * w; face(thin, F(mx + p0[0] - nx, p0[1] - ny, mz), F(mx + p0[0] + nx, p0[1] + ny, mz), F(mx + p1[0] + nx, p1[1] + ny, mz), F(mx + p1[0] - nx, p1[1] - ny, mz), front, GOLD); };
         turn(inn, F(mx, 0, mz), [[0.34, 0], [0.32, 0.06], [0.12, 0.16], [0.05, 0.34]], 8, GOLD);
