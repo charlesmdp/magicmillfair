@@ -344,7 +344,8 @@ the ball as it runs, comes round gently when the aim jumps, and is lifted over w
 the ball (a wall, the dog, a wheel: five places, from low to nearly overhead). When a hole begins it shows the
 whole hole from above for three seconds (less if one aims at once), and again **for as long as the stick is
 pushed forward (W)**. The robot stands beside the ball, square to the line — on the side the way does not turn
-to, and where there is felt — and runs after its ball; the gauge is a bar held low on the screen. **The relief is painted**: the felt has a
+to, and where there is felt — and runs after its ball; the gauge is a bar held low on the screen (on a telephone held upright it stands
+along the right edge, clear of the map and the buttons). **The relief is painted**: the felt has a
 grid (a line every half metre), and wherever it rises or falls there are lines of equal height every 10 cm —
 light above the level of the tee, dark below — and the felt itself is lighter on what faces the light. Colours
 mean the same everywhere: yellow sand slows, pale blue ice (or steel) slides, an orange ramp is one to jump

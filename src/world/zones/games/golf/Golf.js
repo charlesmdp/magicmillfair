@@ -731,7 +731,7 @@ export class Golf {
     };
     this.session = session;
     session.step(0, player, false);
-    io.note(this._intro(HOLES[0]), 6500);
+    io.note(this._intro(HOLES[0]), 4800);
     return session;
   }
 
@@ -765,14 +765,16 @@ export class Golf {
     return true;
   }
 
-  /** The gauge: a board held before the camera, low on the screen, under the ball. */
+  /** The gauge: a board held before the camera — low on the screen, under the ball; on a screen held upright (a telephone), standing along its right edge, clear of what is at the bottom of it. */
   _gauge(cam) {
     const g = this.gauge.mesh;
     if (!g.visible) return;
-    const d = 2, hh = Math.tan((cam.fov * Math.PI) / 360) * d, wide = Math.min(0.82, hh * cam.aspect * 1.25);
+    const d = 2, hh = Math.tan((cam.fov * Math.PI) / 360) * d, hw = hh * cam.aspect, tall = cam.aspect < 0.8, wide = tall ? hh * 0.72 : Math.min(0.82, hw * 1.25);
     g.quaternion.copy(cam.quaternion);
+    if (tall) g.quaternion.multiply(_r.setFromAxisAngle(_z, Math.PI / 2));
     g.scale.setScalar(wide / 1.7);
-    g.position.copy(cam.position).addScaledVector(_f.set(0, 0, -1).applyQuaternion(cam.quaternion), d).addScaledVector(_u.set(0, 1, 0).applyQuaternion(cam.quaternion), -hh * 0.76);
+    g.position.copy(cam.position).addScaledVector(_f.set(0, 0, -1).applyQuaternion(cam.quaternion), d).addScaledVector(_u.set(0, 1, 0).applyQuaternion(cam.quaternion), tall ? hh * 0.06 : -hh * 0.76);
+    if (tall) g.position.addScaledVector(_f.set(1, 0, 0).applyQuaternion(cam.quaternion), hw - wide * 0.11 - hh * 0.035);
   }
 
   _show(st, S, dt, time, cam, w) {
@@ -852,7 +854,7 @@ export class Golf {
       else if (d <= 0) { io.play('bell'); io.note(d < 0 ? `${e.strokes} strokes: under par!` : `${e.strokes} strokes: par.`, 2600); }
       else { io.play('checkpoint'); io.note(d === 1 ? `${e.strokes} strokes: one over par.` : `${e.strokes} strokes: ${d} over par.`, 2600); }
     } else if (e.type === 'picked') { io.play('fail'); io.note(`${GOLF.most} strokes: pick up and move on.`, 2800); }
-    else if (e.type === 'tee') { io.play('checkpoint', { volume: 0.4 }); io.note(this._intro(HOLES[e.hole]), 6500); }
+    else if (e.type === 'tee') { io.play('checkpoint', { volume: 0.4 }); io.note(this._intro(HOLES[e.hole]), 4800); }
   }
 }
 
