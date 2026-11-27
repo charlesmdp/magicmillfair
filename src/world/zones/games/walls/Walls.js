@@ -347,10 +347,37 @@ export class Walls {
     this.blob.rotation.x = -Math.PI / 2; this.blob.visible = false; this.blob.renderOrder = 5; this.blob.name = 'walls-blob';
     this.group.add(this.blob);
 
-    // ---- the gate, on the shore at the south-east end of the south beach, looking at the ruin; one's best time beside it
-    const gx = S.gate.x, gz = S.gate.z, gy = this.data.heightAt(gx, gz), yaw = Math.atan2(C.x - gx, C.z - gz), gate = new Parts();
-    gateArch(this.group, gate.get('paint'), gx, gy, gz, yaw, S.name.toUpperCase(), 'ALONG THE WALLS OF THE RUIN TO THE TOP OF ITS TOWER · A FALL WINDS TIME BACK', { width: 4, tone: [0.1, 0.4, 1.2] });
-    this.group.add(gate.toMeshes(mats, { name: 'walls-gate', layers: [LAYER.STATIC_CASTER] }));
+    // ---- the landing: planks on piles out over the water from the bank, of the fair's painted timber — a ramp onto it
+    // from the shore, a rail with a bulb on every post, the gate at its seaward end looking at the ruin
+    const Lg = S.landing, Rp = Lg.ramp, D = Lg.y, gx = S.gate.x, gz = S.gate.z, yaw = Math.atan2(C.x - gx, C.z - gz), gate = new Parts();
+    {
+      const deck = gate.get('woodDeck'), dark = gate.get('woodDark'), wet = gate.get('woodWet'), lp = gate.get('paint'), lg = gate.get('glow'), CREAM = [1.3, 1.17, 0.9];
+      for (let x = Lg.x0, k = 0; x < Lg.x1 - 1e-6; x += 0.45, k++) deck.tint(...(k % 2 ? [1.34, 1.2, 0.94] : [1.18, 1.06, 0.84]), 1).box(x, D - 0.09, Lg.z0, Math.min(Lg.x1, x + 0.43), D, Lg.z1);
+      for (let x = Rp.x0 + 0.18; x < Rp.x1; x += 0.36) deck.tint(1.26, 1.13, 0.88, 1).beam(V(x, Rp.y1 - 0.045, Rp.z1 + 0.25), V(x, D - 0.045, Lg.z1 - 0.02), 0.34, 0.09);
+      for (const z of [Rp.z1 - 0.3, (Rp.z1 + Lg.z1) / 2]) { const y = lerp(D, Rp.y1, (z - Lg.z1) / (Rp.z1 - Lg.z1)); lp.tint(...CREAM, 1).box(Rp.x0, y, z - 0.04, Rp.x1, y + 0.035, z + 0.04); } // (cleats across it: a foothold)
+      // (what carries it: two beams along, three across, a pile under each crossing, down into the bed)
+      for (const z of [Lg.z0 + 0.5, Lg.z1 - 0.5]) dark.tint(1.3, 1.15, 0.95, 1).box(Lg.x0, D - 0.31, z - 0.11, Lg.x1, D - 0.09, z + 0.11);
+      for (const x of [Lg.x0 + 0.6, (Lg.x0 + Lg.x1) / 2, Lg.x1 - 0.6]) {
+        dark.tint(1.3, 1.15, 0.95, 1).box(x - 0.1, D - 0.5, Lg.z0, x + 0.1, D - 0.31, Lg.z1);
+        for (const z of [Lg.z0 + 0.5, Lg.z1 - 0.5]) { const g = Math.min(this.data.heightAt(x, z), 0) - 1.2; wet.tint(1.2, 1.05, 0.85, 1).cylinder(x, g, z, 0.17, 0.15, D - 0.3 - g, 8); }
+      }
+      // (painted boards along its sides; the rail — cream posts, a red hand rail, a blue one under it —, open where the ramp comes on)
+      for (const z of [Lg.z0 - 0.03, Lg.z1 + 0.03]) lp.tint(...(z < Lg.z0 ? [0.95, 0.1, 0.12] : [0.1, 0.4, 1.2]), 1).box(Lg.x0, D - 0.3, Math.min(z, z + (z < Lg.z0 ? -0.03 : 0.03)), Lg.x1, D + 0.02, Math.max(z, z + (z < Lg.z0 ? -0.03 : 0.03)));
+      const post = (x, z) => { lp.tint(...CREAM, 1).box(x - 0.06, D, z - 0.06, x + 0.06, D + 1.06, z + 0.06); lg.tint(1, 0.95, 0.7, 1).cube(x, D + 1.15, z, 0.14, 0.14, 0.14); };
+      const bars = (x0, z0, x1, z1) => { lp.tint(0.95, 0.1, 0.12, 1).beam(V(x0, D + 1.0, z0), V(x1, D + 1.0, z1), 0.08, 0.07); lp.tint(0.1, 0.4, 1.2, 1).beam(V(x0, D + 0.52, z0), V(x1, D + 0.52, z1), 0.06, 0.06); };
+      const zn = Lg.z0 + 0.07, zs = Lg.z1 - 0.07, xw = Lg.x0 + 0.07, xe = Lg.x1 - 0.07;
+      for (let x = xw; x <= xe + 1e-6; x += (xe - xw) / 6) { post(x, zn); if (x > Rp.x1 + 0.2) post(x, zs); }
+      post(Rp.x1 + 0.12, zs); post(Rp.x0 - 0.12, zs); post(xw, zs); post(xw, (zn + zs) / 2); post(xe, (zn + zs) / 2);
+      bars(xw, zn, xe, zn); bars(Rp.x1 + 0.12, zs, xe, zs); bars(xw, zs, Rp.x0 - 0.12, zs); bars(xw, zn, xw, zs); bars(xe, zn, xe, zs);
+    }
+    gateArch(this.group, gate.get('paint'), gx, D, gz, yaw, S.name.toUpperCase(), 'ALONG THE WALLS OF THE RUIN TO THE TOP OF ITS TOWER · A FALL WINDS TIME BACK', { width: 4, tone: [0.1, 0.4, 1.2] });
+    this.group.add(gate.toMeshes(mats, { name: 'walls-gate', layers: [LAYER.STATIC_CASTER, LAYER.REFLECT] }));
+    // (one walks onto it from the bank, by the ramp; nothing holds one on it but its rail, which is only painted wood: who steps off swims)
+    this.deck = { clearance: 1.2, heightAt: (x, z) => (x >= Lg.x0 && x <= Lg.x1 && z >= Lg.z0 && z <= Lg.z1 ? D : x >= Rp.x0 && x <= Rp.x1 && z > Lg.z1 && z <= Rp.z1 + 0.35 ? lerp(D, Rp.y1, clamp((z - Lg.z1) / (Rp.z1 - Lg.z1), 0, 1)) : null) };
+    world.collision.addPlatform(this.deck);
+    // (the board of the best times and the board of its sponsors stand on the landing, along its north rail, facing who comes up the ramp)
+    this.boardSpot = { x: 83.2, z: Lg.z0 + 0.6, yaw: 0 };
+    this.rollSpot = { x: 80.1, z: Lg.z0 + 0.6 };
     this.board = canvasBoard(512, 256, (ctx, w, h) => {
       ctx.fillStyle = '#10243a'; ctx.fillRect(0, 0, w, h); ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 8; ctx.strokeRect(7, 7, w - 14, h - 14);
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -358,11 +385,10 @@ export class Walls {
       ctx.fillStyle = '#ffffff'; ctx.font = '700 84px Georgia, serif'; ctx.fillText(this.best ? formatTime(this.best) : '—', w / 2, 138);
       ctx.fillStyle = '#c9d2ff'; ctx.font = '500 26px system-ui, sans-serif'; ctx.fillText(this.best ? 'from the first step, falls and all' : 'nobody has stood on the tower yet', w / 2, 214, w * 0.9);
     }, 1.7, 0.85, { both: true });
-    // (to the left of the gate and a little back: the water is close on that side, the board keeps to dry ground)
-    const bx = gx + Math.cos(yaw) * 2.3 - Math.sin(yaw) * 2.6, bz = gz - Math.sin(yaw) * 2.3 - Math.cos(yaw) * 2.6;
-    this.board.mesh.position.set(bx, this.data.heightAt(bx, bz) + 1.25, bz); this.board.mesh.rotation.y = yaw - 0.3; this.board.mesh.name = 'walls-board';
+    // (one's own best time: a small board on the south rail, by the gate)
+    this.board.mesh.position.set(84.4, D + 1.5, Lg.z1 - 0.1); this.board.mesh.rotation.y = Math.PI; this.board.mesh.name = 'walls-board';
     this.group.add(this.board.mesh);
-    this.gate = { x: gx, y: gy, z: gz, yaw };
+    this.gate = { x: gx, y: D, z: gz, yaw };
     this.group.updateMatrixWorld(true);
     world.scene.add(this.group);
     this._place(this.clock() / 1000, null);
@@ -486,7 +512,7 @@ export class Walls {
         return lerp(62, 72, K.hall) + 5 * K.rush;
       },
       /** The run is over (the top), or left: the player is put back at the gate. */
-      drop: (pl) => { pl.driver = null; pl.riding = false; pl.pitch = 0; pl.roll = 0; pl.teleport(this.gate.x, this.gate.z, this.gate.yaw); session.close(); },
+      drop: (pl) => { pl.driver = null; pl.riding = false; pl.pitch = 0; pl.roll = 0; pl.teleport(this.gate.x, this.gate.z, this.gate.yaw, this.gate.y); session.close(); }, // (back on the landing, under its arch)
       close: () => { if (this.session === session) this.session = null; this.blob.visible = false; this.trail.visible = false; player.pitch = 0; player.roll = 0; this._place(this.clock() / 1000, null); },
     };
     this.session = session;

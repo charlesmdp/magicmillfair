@@ -13,12 +13,17 @@ sea. **The way is the ruin**: it winds round it and inwards like a snail's shell
 one before and 8 m and more over it. So the wall is always on the left and the sky on the right, and the camera
 rides on the open side, behind the runner and a little above (6.2 m back, 3.5 m out, 3.3 m up): nothing is ever
 between it and the runner. Where a wall stands on the right as well — the two halls — it comes in over the middle
-of the way before the runner is between the two, and goes out again after. One asks to play on the shore
-at the south-east end of the south beach, at (79, 99) — past the quay of *Robots Can See You*, whose gate is at
-(60, 80): 27 m from that arch, 15.6 m from the mine mouth, 9 m south of the quay. From there the line to
-the ruin passes clear of the quay, and the tower of the spiral stands to its left (10° off: it hides the north
-wing of the ruin, not its keep). The ground there is dark rock at the foot of a wooded bank, not sand. One is
-put at the foot of the ruin, and let go at the gate again.
+of the way before the runner is between the two, and goes out again after. One asks to play on **a
+landing of timber** at the south-east end of the south beach, past the quay of *Robots Can See You*: planks on
+six piles, 11 × 4.5 m (x 77…88, z 93.7…98.2), one level 2.8 m over the sea, out over the water from the bank
+toward the ruin — a ramp of planks onto it from the bank at (80, 100.4), a rail of the fair's paint (cream posts
+with a bulb on each, a red hand rail, a blue one), the board of the best times and the board of its sponsors
+along the north rail of its landward half, one's own best time on the south rail, and **the arch at its seaward
+end, at (86.6, 95.95), facing the ruin**. It is declared to the collision as a platform: one walks onto it from
+the shore, and is put back under its arch after a run. 3.7 m of water lie between it and the quay (z ≤ 90); the
+mine mouth is 15.2 m from the arch, the cleft 30 m, the arch of the robots 31 m. From the arch the line to the
+ruin passes 6 m clear of the quay, and the tower of the spiral stands 10° to its left: it hides the north wing
+of the ruin, not its keep.
 
 **The stick and one button.** Stick up runs (7 m/s), down steps back, aside goes across the way (3.4 m wide: the
 wall on the left, a kerb on the right — nobody falls off the side of a floor). The button jumps (1.5 m up,
@@ -86,8 +91,9 @@ are; nobody is solid. The blades and the spikes are the same for everybody at ev
 way do so for who treads on them only: somebody else's slabs are whole.
 
 **What the checks say** (`node tools/walls-test.mjs`, 34 of 34; its last line is the line of
-`server/scores.js`): the place (water under all of it; the gate dry, inside the bounds, 15 m and more from every other arch, the
-line from it to the ruin clear of the quay and beside the tower of the spiral); the plan (each lap at
+`server/scores.js`): the place (water under all of it; the landing's deck over all the ground under it, the head of its ramp on the
+bank, the quay well clear; the gate on it 15 m and more from every other arch, the line from it to the ruin clear
+of the quay and beside the tower of the spiral); the plan (each lap at
 least 8.1 m over the one outside it, the tallest band 6.6 m; the corners carry nothing but steps); the line from
 the camera to the runner, followed all along the way and across it, passes clear of every turret and of the
 walls that stand on the right; the saves; each move does what it says and its gap is a fall without it; each jump
@@ -123,13 +129,13 @@ played by its bot to the top (49 s there), its score told and kept.
 - **The slabs fall for who treads on them only**, and the others' robots are shown where the network places
   them: whether their lean along a wall or their swing under a bar shows for the others has not been looked at
   (two browsers were never run together).
-- **The gate's place is the least bad, not a good one.** It was on the sand at (64, 84) until the quay of the
-  robots was built 6 m from it and across the line to the ruin. Where it stands now is dark rock at the foot of a
-  wooded bank, the quay 9 m to the north, the mine mouth 15.6 m to the south-east: the only stretch of the south
-  beach 15 m from every other arch from which the ruin shows (further north the tower of the spiral stands
-  before it). The ground slopes 2 m across the arch; the board of scores stands up the bank to its right, under
-  the trees; and in the one picture taken there with the game's own camera behind the player, that camera sat
-  right behind the robot's head, squeezed by the bank. Nobody has walked to it from the sand.
+- **The landing has been seen in pictures, not walked.** The gate was first on the sand at (64, 84) — until the
+  quay of the robots was built 6 m from it and across the line to the ruin —, then on the dark rock of the bank at
+  (79, 99), which was steep, shaded and squeezed the camera; the landing takes it out over the water. The checks
+  put the player on its deck (2.80 m over the sea) and find the boards' feet on it; nobody has walked the ramp
+  from the bank by hand: the bank beside it is steep (2 m of rise in 3), and whether the shore path brings one to
+  the head of the ramp without a scramble has not been tried. The rail is painted wood only: who steps past it
+  swims. The follow camera on the deck has the two boards close on its left (picture 7).
 - The action "Leave the ruin" is shown by the game under the middle of the picture, as in every game of this
   kind: it sits just under the robot.
 - The save at 25 m lies where one takes off for the first band: who jumps before its line is saved only on the
