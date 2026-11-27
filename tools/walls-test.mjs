@@ -49,15 +49,21 @@ const press = (u, ...at) => { const left = at.slice(); return (st, input) => { i
   const half = Math.hypot(Math.max(-ext[0], ext[1]), Math.max(-ext[2], ext[3])), toSpiral = Math.hypot(C.x - SPIRAL.at.x, C.z - SPIRAL.at.z), toCleft = Math.hypot(C.x - CLEFT.at.x, C.z - CLEFT.at.z), head = pierToWorld(PIER.length, 0), toPier = Math.hypot(C.x - head[0], C.z - head[1]);
   check('the ruin stands in the sea: water under all of it, and room about it — the tower of the spiral, the cleft, the head of the pier are well away', wet === n && toSpiral > half + 30 && toCleft > half + 30 && toPier > half + 30,
     `${Math.round(ext[1] - ext[0])} × ${Math.round(ext[3] - ext[2])} m at (${C.x}, ${C.z}), the bed ${(-deep).toFixed(0)} m down at the most; ${Math.round(toSpiral)} m from the spiral, ${Math.round(toCleft)} m from the cleft, ${Math.round(toPier)} m from the head of the pier`);
-  const g = S.gate, gy = height(g.x, g.z);
+  const g = S.gate;
   // (the other arches of the south beach, and what stands between it and the ruin: the quay of the robots, the tower of the spiral)
   const arches = { 'the spiral': SPIRAL.gate, 'the robots': SNEAK.gate, 'Mostly Up': { x: 0, z: 80 }, 'the cleft': CLEFT.at, 'the mine mouth': { x: 89, z: 111 } }, near = Object.entries(arches).map(([name, a]) => [name, Math.hypot(g.x - a.x, g.z - a.z)]).sort((a, b) => a[1] - b[1]);
   const quay = { x0: 74, x1: 138, z0: 60, z1: 90 };
   let clear = Infinity;
   for (let k = 0; k <= 400; k++) { const x = g.x + ((C.x - g.x) * k) / 400, z = g.z + ((C.z - g.z) * k) / 400; clear = Math.min(clear, Math.hypot(Math.max(quay.x0 - x, 0, x - quay.x1), Math.max(quay.z0 - z, 0, z - quay.z1))); }
   const deg = (p) => (Math.atan2(p.z - g.z, p.x - g.x) * 180) / Math.PI, toRuin = deg(C), toTower = deg(SPIRAL.at), core = (Math.asin(SPIRAL.core / Math.hypot(SPIRAL.at.x - g.x, SPIRAL.at.z - g.z)) * 180) / Math.PI;
-  check('its gate is on dry ground one can walk to, at the south-east end of the south beach: 15 m and more from every other arch, and the ruin really in sight from it — the line to its middle passes clear of the quay of the robots and beside the tower of the spiral', gy > 0.6 && gy < 9 && inside(g.x, g.z, BOUNDS) && near[0][1] >= 15 && clear > 5 && Math.abs(toRuin - toTower) > core + 4,
-    `(${g.x}, ${g.z}), ${gy.toFixed(1)} m over the sea, ${Math.round(Math.hypot(g.x - C.x, g.z - C.z))} m from the ruin; the nearest arches: ${near.slice(0, 3).map(([name, d]) => `${name} ${d.toFixed(1)} m`).join(', ')}; the line to the ruin ${clear.toFixed(1)} m from the quay, ${Math.abs(toRuin - toTower).toFixed(1)}° from the middle of the tower (its wall ±${core.toFixed(1)}°)`);
+  // (the landing it stands on: its deck over all that is under it, the head of its ramp on the bank)
+  const Lg = S.landing, Rp = Lg.ramp;
+  let under = -Infinity;
+  for (let x = Lg.x0; x <= Lg.x1 + 1e-6; x += 0.5) for (let z = Lg.z0; z <= Lg.z1 + 1e-6; z += 0.5) under = Math.max(under, height(x, z));
+  const bank = height((Rp.x0 + Rp.x1) / 2, Rp.z1), onDeck = g.x > Lg.x0 + 1 && g.x < Lg.x1 - 1 && g.z > Lg.z0 + 0.5 && g.z < Lg.z1 - 0.5;
+  check('its gate stands at the seaward end of a landing of planks on piles, out over the water from the bank at the south-east end of the south beach: the deck well over the sea and over all the ground under it, the head of its ramp on the bank, the quay of the robots well clear of it; 15 m and more from every other arch; and the ruin really in sight — the line to its middle passes clear of the quay and beside the tower of the spiral',
+    onDeck && Lg.y >= 2.5 && under < Lg.y - 0.5 && Math.abs(bank - Rp.y1) < 0.45 && Lg.z0 >= quay.z1 + 3 && inside(g.x, g.z, BOUNDS) && near[0][1] >= 15 && clear > 5 && Math.abs(toRuin - toTower) > core + 4,
+    `the gate at (${g.x}, ${g.z}) on a deck ${Lg.x1 - Lg.x0} × ${(Lg.z1 - Lg.z0).toFixed(1)} m, ${Lg.y} m over the sea, the ground under it ${under.toFixed(1)} m at the highest, the bank ${bank.toFixed(2)} m at the head of the ramp (the ramp ${Rp.y1}); ${(Lg.z0 - quay.z1).toFixed(1)} m of water to the quay; ${Math.round(Math.hypot(g.x - C.x, g.z - C.z))} m from the ruin; the nearest arches: ${near.slice(0, 3).map(([name, d]) => `${name} ${d.toFixed(1)} m`).join(', ')}; the line to the ruin ${clear.toFixed(1)} m from the quay, ${Math.abs(toRuin - toTower).toFixed(1)}° from the middle of the tower (its wall ±${core.toFixed(1)}°)`);
 }
 {
   // ---- the way

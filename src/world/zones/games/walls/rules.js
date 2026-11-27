@@ -34,7 +34,11 @@ const frac = (v) => v - Math.floor(v);
 export const WALLS = {
   name: 'Run the Walls',
   at: { x: 258, z: 100 }, // the middle of the ruin, in the sea off the south beach
-  gate: { x: 79, z: 99 }, // where one asks to run: on the shore at the south-east end of the south beach, past the quay of the robots, the ruin in sight across the water
+  // where one asks to run: at the seaward end of a landing of planks on piles, out over the water from the bank at the
+  // south-east end of the south beach — past the quay of the robots, the ruin in sight across the bay. The landing:
+  // its deck (m over the sea), and the ramp that comes onto it from the bank
+  gate: { x: 86.6, z: 95.95 },
+  landing: { x0: 77, x1: 88, z0: 93.7, z1: 98.2, y: 2.8, ramp: { x0: 79.1, x1: 80.9, z1: 100.4, y1: 2.9 } },
   base: 6, // m over the sea: the foot of the way
   half: 1.7, reach: 1.45, // the way: half its width; how far from its middle one goes (the wall, a kerb)
   // its plan: a snail's shell of straight sides, each turned left into the next by a quarter circle
