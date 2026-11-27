@@ -9,12 +9,16 @@
 //   tools/<id>-test.mjs      its checks, without a browser: node tools/<id>-test.mjs
 import * as THREE from 'three';
 import { canvasBoard } from './Boards.js';
+import { sharedNow } from '../../../net/api.js';
 
 export const V = (x, y, z) => new THREE.Vector3(x, y, z);
 export const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 export const lerp = (a, b, t) => a + (b - a) * t;
-/** The clock everybody shares (ms): what moves by itself, and the starts, are counted on it. */
-export const worldClock = () => performance.timeOrigin + performance.now();
+/**
+ * The clock everybody shares (ms): what moves by itself, and the starts, are counted on it. It is the server's
+ * (net/api.js) — not this device's, which may be seconds from another's: two visitors would then see two seas.
+ */
+export const worldClock = sharedNow;
 
 /** The start one who asks at `now` (ms of the shared clock) leaves with: { n, name, at (ms), wait (s) } — the first far enough ahead. */
 export function nextStart(now, every, names, least = 3) {

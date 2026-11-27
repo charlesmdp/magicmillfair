@@ -14,10 +14,15 @@ export function attach(app) {
   return plug(app, lava, {
     id: 'lava', rules,
     more: true, // (the score is how long one held)
-    label: (game) => { const next = game.nextStart(); return `Play ${LAVA.name} — ${next.name} start in ${Math.max(1, Math.ceil(next.wait))} s`; },
+    // (one crater, one round: while others play a round that can still be joined, that is the one one is put in)
+    label: (game) => {
+      const live = game.crowd?.live(), next = game.roundFor(live), names = live && next.n === live.run ? game.crowd.of().filter((m) => m.run === live.run).map((m) => m.peer.name) : [];
+      const who = names.length ? ` with ${names.length > 2 ? `${names.length} others` : names.join(' and ')}` : '';
+      return next.wait > 0 ? `Play ${LAVA.name}${who} — ${next.name} start in ${Math.max(1, Math.ceil(next.wait))} s` : `Join the round${who} — ${LAVA.name}, ${next.name} start, ${Math.ceil(-next.wait)} s in`;
+    },
     leave: 'Leave the crater', left: 'Round left.',
     keys: (touch, run) => (touch
-      ? `You leave with the ${run.start.name} start · stick: run over the columns · the arrow jumps: one level up, never two — or over a gap of one column · the lava only rises, and covers what it reaches · columns come up where it glows: the whiter, the higher · keep high, and keep a way on · now and then a double rise: it is said ahead`
-      : `You leave with the ${run.start.name} start · W A S D: run over the columns · Space jumps: one level up, never two — or over a gap of one column · the lava only rises, and covers what it reaches · columns come up where it glows: the whiter, the higher · keep high, and keep a way on · now and then a double rise: it is said ahead · E: leave · H: these keys again`),
+      ? `${run.start.wait > 0 ? `You leave with the ${run.start.name} start` : 'You join the round that is on: your time counts from now'} · stick: run over the columns · the arrow jumps: one level up, never two — or over a gap of one column · the lava only rises, and covers what it reaches · columns come up where it glows: the whiter, the higher · keep high, and keep a way on · now and then a double rise: it is said ahead`
+      : `${run.start.wait > 0 ? `You leave with the ${run.start.name} start` : 'You join the round that is on: your time counts from now'} · W A S D: run over the columns · Space jumps: one level up, never two — or over a gap of one column · the lava only rises, and covers what it reaches · columns come up where it glows: the whiter, the higher · keep high, and keep a way on · now and then a double rise: it is said ahead · E: leave · H: these keys again`),
   });
 }

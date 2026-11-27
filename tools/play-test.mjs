@@ -102,7 +102,7 @@ try {
     check(`${id}: and the player is let go at the gate, the camera given back`, !done.driver && done.fov === null && Math.hypot(done.x - built.gate.x, done.z - built.gate.z) < 1.5);
   }
   const after = await world();
-  check('each adds one group to the world, one action and one thing that goes by the clock; each has its board, its panel and its star (but the golf)', after.groups === ids.length && after.games === ids.length && after.sources === before.sources + ids.length && after.zones === before.zones + ids.length && after.stands === ids.length && after.slots === ids.length && after.stars === ids.filter((id) => SPECS[id].star !== false).length, after);
+  check('each adds one group to the world, one action and one thing that goes by the clock (and, once for them all, what tells who shares a run with whom: src/extras/mates.js); each has its board, its panel and its star (but the golf)', after.groups === ids.length && after.games === ids.length && after.sources === before.sources + ids.length && after.zones === before.zones + ids.length + 1 && after.stands === ids.length && after.slots === ids.length && after.stars === ids.filter((id) => SPECS[id].star !== false).length, after);
   check('nothing was reported wrong by the browser', errors.length === 0, errors.slice(0, 3).join(' | '));
 } finally {
   await browser.close();

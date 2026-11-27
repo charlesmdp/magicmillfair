@@ -103,15 +103,19 @@ export class RemoteAvatars {
     for (const it of this.items.values()) {
       const { peer, character, tag } = it;
       const root = character.root;
-      const dist = peer.visible ? Math.hypot(peer.x - cam.x, peer.y - cam.y, peer.z - cam.z) : Infinity;
+      // (`hidden`: a game says so — that visitor is in the same game as oneself but in another run of it, on other
+      // columns: src/extras/mates.js. Neither the robot nor its name is drawn meanwhile)
+      const dist = peer.visible && !peer.hidden ? Math.hypot(peer.x - cam.x, peer.y - cam.y, peer.z - cam.z) : Infinity;
       const near = dist < FAR;
       // out of sight (with a margin: its shadow may still be in view): known, placed, but not drawn nor animated
       const seen = near && (dist < 6 || _frustum.intersectsSphere(_sphere.set(_v.set(peer.x, peer.y + 1, peer.z), 3.2)));
       root.visible = seen;
       let tagOn = false;
       if (near) {
-        root.position.set(peer.x, peer.y, peer.z);
-        root.rotation.y = peer.yaw;
+        // (`roll`, `lift`: a game says how that robot stands in it — head down in the machine of girders —, which the
+        // network does not carry)
+        root.position.set(peer.x, peer.y + (peer.lift || 0), peer.z);
+        root.rotation.set(0, peer.yaw, peer.roll || 0);
       }
       if (seen) {
         character.setAnim(peer.anim, peer.speed);
@@ -133,16 +137,19 @@ export class RemoteAvatars {
           const level = this.world.data.waterAt(peer.x, peer.z);
           if (level > -500) this.world.ripples.trail(peer.id, this.world.engine.time, dt, peer.x, level, peer.z, peer.speed, true);
         }
-        if (dist < TAG_RANGE && !character.look.disguise) {
-          _v.set(peer.x, peer.y + 2.05, peer.z).project(camera);
-          if (_v.z > -1 && _v.z < 1 && Math.abs(_v.x) < 1.1 && Math.abs(_v.y) < 1.1) {
-            tagOn = true;
-            const x = (_v.x * 0.5 + 0.5) * width, y = (-_v.y * 0.5 + 0.5) * height;
-            tag.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%)`;
-            tag.style.opacity = Math.min(1, (TAG_RANGE - dist) / 18).toFixed(2);
-          }
-        }
       } else it.late = 0;
+      // (`tagAt`: a game shows the name over what that visitor steers — its boat —, not over the robot that stands
+      // on the bank, in sight or not; `tagOff`: no name at all meanwhile)
+      const at = peer.tagAt, far = at ? Math.hypot(at.x - cam.x, at.y - cam.y, at.z - cam.z) : dist;
+      if ((seen || (at && near)) && far < (at ? 160 : TAG_RANGE) && !character.look.disguise && !peer.tagOff) {
+        if (at) _v.set(at.x, at.y, at.z).project(camera); else _v.set(peer.x, peer.y + (peer.roll ? 0.35 : 2.05) + (peer.lift || 0), peer.z).project(camera);
+        if (_v.z > -1 && _v.z < 1 && Math.abs(_v.x) < 1.1 && Math.abs(_v.y) < 1.1) {
+          tagOn = true;
+          const x = (_v.x * 0.5 + 0.5) * width, y = (-_v.y * 0.5 + 0.5) * height;
+          tag.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%)`;
+          tag.style.opacity = at ? '1' : Math.min(1, (TAG_RANGE - dist) / 18).toFixed(2);
+        }
+      }
       if (tagOn !== it.shown) { it.shown = tagOn; tag.style.display = tagOn ? '' : 'none'; }
     }
   }

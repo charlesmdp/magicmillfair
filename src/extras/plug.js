@@ -20,7 +20,11 @@
 //       state                       its state, as the rules keep it
 //       anim, riding: false         how the avatar holds itself
 //       drop(player, done)          lets the player go, where one should be then; close()
-//   io: { play(name, options), note(text, ms), splash(x, y, z, strength), peers() (the other visitors in sight) }
+//       instance (optional)         which run of the game this is, when not `start.n`: those who share it see each other
+//       tell() (optional)           → up to six numbers the others are told with it, a few times a second
+//   io: { play(name, options), note(text, ms), splash(x, y, z, strength), peers() (the other visitors in sight),
+//         mates() (those of them who share one's run: [{ id, peer, run, d }]), live() (the run most play now) }
+//   game.crowd (given by plug): { of(), live(), watch(run) } — who plays the game now, for what it shows to who only watches
 //
 // Its board of scores is the game's to keep, as for every extra that is a game (main.js: LAB_GAMES, LAB_BOARD —
 // the stand by the gate, its sponsor's panel, the star on the map; server/scores.js: what a score is). The stand
@@ -30,6 +34,7 @@
 // over, app.<id>Done(score, state).
 import { keysHelp } from './help.js';
 import { TUNES, tunePlayer } from './tunes.js';
+import { mates } from './mates.js';
 
 /**
  * Plugs a game into the running game: the action at its gate, the session while it is played, the line of the
@@ -45,7 +50,11 @@ export function plug(app, game, o) {
   const { world, player, hud } = app, KEY = `mmf.${o.id}.best`;
   const read = () => { try { return parseInt(localStorage.getItem(KEY), 10) || 0; } catch { return 0; } };
   game.setBest?.(read());
-  let run = null, saved = false, told = false, eye = null;
+  let run = null, saved = false, told = false, eye = null, withNow = '';
+  // who plays this game now, and who shares one's own run of it (mates.js): only those are shown while one plays
+  const crowd = mates(app);
+  /** Which run of the game a session is: a start, a round — 0 when the game is one place for everybody. */
+  const instanceOf = (s) => (Number.isFinite(s.instance) ? s.instance : Number.isFinite(s.start?.n) ? s.start.n : 0);
   const tune = TUNES[o.id] ? tunePlayer(app) : null; // its music while a run is on (tunes.js)
   const io = {
     play: (name, options) => app.audio?.play(name, options),
@@ -53,12 +62,18 @@ export function plug(app, game, o) {
     splash: (x, y, z, strength = 1) => world.ripples?.splash(app.engine.time, x, y, z, strength),
     // the other visitors one sees, where the game shows them at this moment: [{ id, name, x, y, z, yaw }] — a game
     // in which players get in each other's way reads them (what the network carries: a tenth of a second late)
-    peers: () => { const list = []; if (app.presence) for (const p of app.presence.peers.values()) if (p.visible && !p.far) list.push(p); return list; },
+    peers: () => { const list = []; if (app.presence) for (const p of app.presence.peers.values()) if (p.visible && !p.far && !p.hidden) list.push(p); return list; },
+    // those of them who share one's run of this game — the same start, the same round: [{ id, peer, run, d }]
+    // (`d`: the numbers their own session tells, see `tell` below); `all`: whoever plays this game, in any run
+    mates: (all = false) => crowd.of(o.id).filter((m) => (all || m.mine) && m.peer.visible && !m.peer.far),
+    // the run most of those who play now are in — to join them rather than leave alone: { run, n, d } or null
+    live: () => crowd.live(o.id),
   };
   const leave = (done) => {
     if (!run) return;
     const s = run;
-    run = null; saved = false;
+    run = null; saved = false; withNow = '';
+    crowd.quiet();
     tune?.stop();
     app.fair.fov = null;
     hud.setRun(null);
@@ -98,7 +113,12 @@ export function plug(app, game, o) {
       eye = camera;
       app.fair.fov = run.camera(camera, dt);
       camera.updateMatrixWorld();
-      hud.setRun(run.line);
+      // (the others are told which run this is, a few times a second — and what the session says of itself:
+      // session.tell() → up to six numbers; the line of the run says who shares it)
+      crowd.say(o.id, instanceOf(run), run.tell?.() || []);
+      const names = crowd.names(o.id), w = names.length ? ` · with ${names.length > 2 ? `${names.length} others` : names.join(' and ')}` : '';
+      if (w !== withNow) { if (w && !withNow) hud.note(`${names.join(', ')} ${names.length > 1 ? 'play' : 'plays'} with you.`, 2600); withNow = w; }
+      hud.setRun(run.line ? run.line + w : run.line);
       tune?.tick();
       if (run.over && !saved) {
         saved = true;
@@ -112,5 +132,7 @@ export function plug(app, game, o) {
   // (what the game asks, to know that a run is on — and what the checks play it with)
   app[`${o.id}Run`] = () => run;
   (app.labGames ||= {})[o.id] = { game, start, leave, run: () => run };
+  // (the game may ask who plays it even while nobody here does: to show those who only watch the run that is on)
+  game.crowd = { of: () => crowd.of(o.id), live: () => crowd.live(o.id), watch: (n) => crowd.watch(o.id, n) };
   return game;
 }

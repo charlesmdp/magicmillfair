@@ -21,9 +21,12 @@ export class Account {
     this.profile = null; // the look it keeps: { name, color, hat, paint, trail }
     this.mail = false; // can the server send e-mails (a code to set a new password)?
     this.email = ''; // the address of the account, most of it hidden (j•••@e•••.org); '' when it has none
+    this.google = false; // can one sign in with Google here? (the server was given what it takes: server/google.js)
+    this.viaGoogle = false; // is this account one that Google stands for?
+    this.passwordless = false; // …and has it no password of its own?
   }
 
-  _take(body) { const a = body?.account || null; this.name = a ? a.name : null; this.profile = a ? a.profile : null; this.email = (a && a.email) || ''; }
+  _take(body) { const a = body?.account || null; this.name = a ? a.name : null; this.profile = a ? a.profile : null; this.email = (a && a.email) || ''; this.viaGoogle = !!(a && a.google); this.passwordless = !!(a && a.passwordless); }
   _wrong(res) { return res.body?.error || (res.status === 0 ? 'The server cannot be reached.' : 'It did not work. Try again.'); }
 
   /** Is this browser signed in? Resolves to this. */
@@ -31,6 +34,7 @@ export class Account {
     const api = await hasApi();
     this.available = !!api;
     this.mail = !!api?.mail;
+    this.google = !!api?.google;
     if (!this.available) return this;
     try {
       const res = await fetch(`${BASE}api/account?device=${deviceId()}`);
@@ -77,7 +81,24 @@ export class Account {
     return {};
   }
 
-  async logout() { await post({ action: 'logout' }); this.name = null; this.profile = null; this.email = ''; }
+  /**
+   * Leaves the game for Google's page, where the visitor says who they are; the page comes back with a claim in
+   * its address (?google=…: see `claim`). `name`: the name asked for, should this make a new account.
+   */
+  toGoogle(name = '') { location.assign(`${BASE}api/google/start${name ? `?name=${encodeURIComponent(name)}` : ''}`); }
+
+  /**
+   * Back from Google: claims what it said for this browser — signs in to the account Google stands for, or makes
+   * one under `name`. Resolves to { created } or { error, needName (a name has to be chosen first: the claim waits) }.
+   */
+  async claim(claim, name, profile) {
+    const res = await post({ action: 'google', claim, ...(name && { name }), profile });
+    if (!res.ok) return { error: this._wrong(res), needName: !!res.body?.needName };
+    this._take(res.body);
+    return { created: !!res.body.created };
+  }
+
+  async logout() { await post({ action: 'logout' }); this.name = null; this.profile = null; this.email = ''; this.viaGoogle = false; this.passwordless = false; }
 
   /** Keeps the look of the robot on the account (nothing happens for a guest). */
   async save(profile) { if (this.name) { const res = await post({ action: 'save', profile }); if (res.ok) this.profile = profile; } }

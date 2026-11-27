@@ -14,6 +14,7 @@ import { ANIM } from '../../../../player/Character.js';
 import { canvasBoard } from '../Boards.js';
 import { formatTime } from '../course.js';
 import { POND, waysOf, startRun, stepRun, runPose, score, driftAt, armAt, fireflyAt, botInput, fairStart } from './ring.js';
+import { sharedNow } from '../../../../net/api.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const TAU = Math.PI * 2;
@@ -31,7 +32,7 @@ export class Pond {
     this.session = null;
     this.best = 0; // this visitor's best run: how long they held (ms)
     /** The clock of the world (s): what moves on the ponds moves by it, the same for everybody. */
-    this.clock = () => (performance.timeOrigin + performance.now()) / 1000;
+    this.clock = () => sharedNow() / 1000; // (the clock everybody shares: net/api.js)
   }
 
   build() {

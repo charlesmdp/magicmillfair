@@ -13,13 +13,16 @@ import { surfaceMaterial } from '../../../../render/SurfaceMaterial.js';
 import { PIER, pierToWorld } from '../../../layout/layout.js';
 import { formatTime } from '../course.js';
 import { V, clamp, worldClock, nextStart, STARTS, gateArch } from '../gates.js';
-import { LAVA, CONE, CELLS, FIELD, PULSES, UNDER, GLOW, RISING, twice, makeRound, lavaAt, columnAt, startRun, stepRun, botInput } from './rules.js';
+import { LAVA, CONE, CELLS, FIELD, PULSES, UNDER, GLOW, RISING, UP, twice, makeRound, lavaAt, columnAt, topAt, startRun, stepRun, botInput } from './rules.js';
 
 const TAU = Math.PI * 2;
 const TONES = { Red: '#e23b2e', Blue: '#2f7fe6', Green: '#2fae4f', Yellow: '#f2c14e', Purple: '#9a5be0', Orange: '#f08a24' };
 const INNER = FIELD + 1.9; // m from the middle: where the lava meets the rock of the crater as a round begins
 const VIEW = { back: 16, up: 18, ahead: -2.6 }; // the camera: so far behind the middle of the field, so high over the lava; where it looks, past the middle
 const SHOW = 120; // s: who only watches is shown a round that began so long ago at most
+// s: a round that left less than so long ago can still be joined (the way on is sure for the first eleven rises:
+// later than that a newcomer would only be put in the lava) — one takes it where it is, and is scored from then
+const JOIN = PULSES[LAVA.fair - 1] - 3;
 const EMBERS = 40, PUFFS = 12, BUBBLES = 14, SPURTS = 3, DROPS = 5; // (a spurt throws so many drops)
 // (numbers drawn from whole numbers: what is built is the same on every device)
 const rnd = (a, b = 0) => { let h = (Math.imul(a | 0, 0x9E3779B1) ^ Math.imul((b | 0) + 0x7F4A7C15, 0x85EBCA6B)) | 0; h ^= h >>> 15; h = Math.imul(h, 0x2C1B3C6D); h ^= h >>> 12; h = Math.imul(h, 0x297A2D39); h ^= h >>> 15; return (h >>> 0) / 4294967296; };
@@ -312,6 +315,20 @@ export class Lava {
   near(x, z) { return (x - this.gate.x) ** 2 + (z - this.gate.z) ** 2 < 2.4 * 2.4; }
   /** The start one who asks now would leave with: { n, name, at (ms), wait (s), tone }. */
   nextStart() { const st = nextStart(this.clock(), LAVA.every, STARTS); return { ...st, tone: TONES[st.name] || '#f2c14e' }; }
+  /** The start of round `n`, whenever that is: { n, name, at (ms of the shared clock), wait (s; negative once it has left), tone }. */
+  startOf(n) { const at = n * LAVA.every * 1000, name = STARTS[((n % STARTS.length) + STARTS.length) % STARTS.length]; return { n, name, at, wait: (at - this.clock()) / 1000, tone: TONES[name] || '#f2c14e' }; }
+  /**
+   * The round one would be put in now. **One crater, one round**: while others play a round that can still be
+   * joined (it has not left yet, or left less than JOIN seconds ago: there is still a sure way on), that is the
+   * one — everybody stands on the same columns, whenever they came; else the next start. `live`: what the others
+   * play ({ run }: src/extras/mates.js), if anybody does.
+   */
+  roundFor(live) {
+    const next = this.nextStart();
+    if (!live || !Number.isFinite(live.run) || live.run === next.n) return next;
+    const st = this.startOf(live.run);
+    return st.wait > -JOIN && st.wait < LAVA.every + 4 ? st : next;
+  }
 
   /** Puts the lava and the columns where `round` has them at `t` (s from its start); `time`: for what only trembles and glows. */
   _draw(round, t, time) {
@@ -350,7 +367,14 @@ export class Lava {
     if (!s && camera && (camera.position.x - L.at.x) ** 2 + (camera.position.z - L.at.z) ** 2 > 320 * 320) return; // (too far to tell)
     const now = this.clock() / 1000;
     if (s) this._draw(s.state.round, s.state.clock, now);
-    else { const n = Math.floor(now / SHOW) * Math.round(SHOW / L.every); this._draw(makeRound(n), now - n * L.every, now); }
+    else {
+      // (nobody here plays: the round the others are in, if anybody is — who watches from the pier sees them on
+      // their columns —, else the latest to have left on an even two minutes)
+      const live = this.crowd?.live(), n = live && now - live.run * L.every < SHOW && now - live.run * L.every > -L.every ? live.run : Math.floor(now / SHOW) * Math.round(SHOW / L.every);
+      if (!this._shown || this._shown.n !== n) this._shown = makeRound(n);
+      if (live && n === live.run) this.crowd.watch(n);
+      this._draw(this._shown, now - n * L.every, now);
+    }
     // ---- embers: each goes up from somewhere in the lava, again and again
     const m = this._m, col = this.embers.instanceColor.array, base = L.level + this.shown.pool;
     for (let k = 0; k < EMBERS; k++) {
@@ -410,12 +434,29 @@ export class Lava {
    * held, ms), ended, drop(player), close(), auto (true: it plays by itself).
    */
   open(player, io) {
-    const L = LAVA, start = this.nextStart(), events = [], input = { x: 0, y: 0, jump: false };
+    const L = LAVA, start = this.roundFor(io.live?.()), events = [], input = { x: 0, y: 0, jump: false };
     const middle = CELLS.map((c, i) => (c.ring <= 1 ? i : -1)).filter((i) => i >= 0);
-    const st = startRun(start.n, Math.max(0, (start.at - this.clock()) / 1000), middle[Math.floor(Math.random() * middle.length)]);
-    const S = { gone: false, last: 9, after: 0, acc: 0, sunk: 0, rises: 0, told: 0, count: 9, shake: 0, said: 0, cam: 0, look: V(0, 0, 0), eye: V(0, 0, 0) };
+    // (`from`: the round had left already — so many seconds ago: one is put on its highest dry column, the nearest
+    // to the middle, and what one held is counted from there)
+    const from = Math.max(0, (this.clock() - start.at) / 1000);
+    let cell = middle[Math.floor(Math.random() * middle.length)];
+    if (from > 0) {
+      const round = makeRound(start.n), lava = lavaAt(round, from + 1.5), o = {};
+      let bestTop = -Infinity, bestD = Infinity;
+      for (let c = 0; c < CELLS.length; c++) {
+        columnAt(round, c, from, o, lavaAt(round, from));
+        if (o.state !== UP || o.top <= lava * L.lv + L.burn + 0.3) continue;
+        const d = Math.hypot(CELLS[c].x, CELLS[c].z);
+        if (o.top > bestTop + 0.05 || (Math.abs(o.top - bestTop) <= 0.05 && d < bestD)) { bestTop = o.top; bestD = d; cell = c; }
+      }
+    }
+    const st = startRun(start.n, Math.max(0, (start.at - this.clock()) / 1000), cell);
+    if (from > 0) { st.clock = from; st.h = topAt(st.round, cell, from); }
+    const S = { gone: from > 0, from, last: 9, after: 0, acc: 0, sunk: 0, rises: 0, told: 0, count: 9, shake: 0, said: 0, cam: 0, look: V(0, 0, 0), eye: V(0, 0, 0) };
     const session = {
       game: this, over: false, ended: false, score: 0, line: '', start, riding: false, anim: ANIM.idle, state: st, auto: false,
+      // (what the others are told of this run, with its round: still on the columns, or in the lava)
+      tell: () => [st.over ? 0 : 1],
       step: (dt, pl, control) => {
         const inp = pl.input, real = (this.clock() - start.at) / 1000, wait = -real;
         if (!S.gone) {
@@ -424,14 +465,17 @@ export class Lava {
           if (wait <= 0) { S.gone = true; io.play('start'); }
           if (!st.over) st.clock = Math.min(real, 0.25) - Math.min(dt, 0.25);
         }
+        // (once the round has left, its time is still the clock everybody shares, not a count of this browser's
+        // frames: a browser that stutters catches up, and those who share the round see the lava rise together)
+        const due = S.gone && !st.over ? clamp(real - st.clock, 0, 0.25) : Math.min(dt, 0.25);
         if (session.auto) {
-          S.acc += Math.min(dt, 0.25);
+          S.acc += due;
           while (S.acc >= L.step && !st.over) { S.acc -= L.step; botInput(st, input); stepRun(st, L.step, input, events); }
         } else if (!st.over) {
           input.x = control ? inp.move.x : 0; input.y = control ? inp.move.y : 0; input.jump = control && !!inp.jump;
-          stepRun(st, dt, input, events);
+          stepRun(st, due, input, events);
         }
-        for (const e of events) this._tell(e, io);
+        for (const e of events) this._tell(e, io, S.from);
         events.length = 0;
         // ---- the lava: how high it is, how soon it rises again; a word before the first rise, a sound at each
         const lava = lavaAt(st.round, st.clock), level = Math.floor(lava + 1e-9), rising = lava - level > 1e-9, soon = level < st.round.high ? PULSES[level] - st.clock : Infinity;
@@ -456,7 +500,7 @@ export class Lava {
         if (st.over) {
           // in the lava: one goes down into it, and that is the end of the round
           S.after += dt; S.sunk = Math.min(1.5, S.sunk + dt * 0.75);
-          if (!session.over) { session.over = true; session.score = st.clock > 0 ? st.time : 0; }
+          if (!session.over) { session.over = true; session.score = st.clock > 0 ? Math.max(0, st.time - Math.round(S.from * 1000)) : 0; }
           if (S.after > 2) session.ended = true;
         }
         pl.pos.set(L.at.x + st.x, L.level + st.h - S.sunk, L.at.z + st.z);
@@ -465,7 +509,7 @@ export class Lava {
         session.anim = st.over ? ANIM.dead : !st.ground ? ANIM.jump : pl.speed > 0.6 ? ANIM.run : ANIM.idle;
         session.line = st.over ? `${L.name} · held ${formatTime(session.score)}`
           : !S.gone ? `${L.name} · ${start.name} start in ${Math.max(1, Math.ceil(wait))}…`
-            : `level ${level + (rising ? 1 : 0)} · ${formatTime(Math.max(0, Math.round(st.clock * 1000)))} · ${rising ? 'the lava rises!' : soon === Infinity ? 'the lava has it all' : `the lava rises${twice(level + 2) ? ' TWICE' : ''} in ${Math.max(1, Math.ceil(soon))} s${soon < 1 ? '!' : ''}`}`;
+            : `level ${level + (rising ? 1 : 0)} · ${formatTime(Math.max(0, Math.round((st.clock - S.from) * 1000)))} · ${rising ? 'the lava rises!' : soon === Infinity ? 'the lava has it all' : `the lava rises${twice(level + 2) ? ' TWICE' : ''} in ${Math.max(1, Math.ceil(soon))} s${soon < 1 ? '!' : ''}`}`;
         S.pool = lava * L.lv;
       },
       /**
@@ -492,14 +536,15 @@ export class Lava {
       close: () => { if (this.session === session) this.session = null; },
     };
     this.session = session;
+    if (from > 0) io.note(`You join the round that is on (${start.name} start): the lava is already at level ${Math.floor(lavaAt(st.round, from) + 1e-9)}.`, 3600);
     session.step(0, player, false);
     S.cam = S.pool || 0;
     return session;
   }
 
-  _tell(e, io) {
+  _tell(e, io, from = 0) {
     if (e.type === 'jump') io.play('jump', { volume: 0.5 });
     else if (e.type === 'land') io.play('land', { volume: 0.35 });
-    else if (e.type === 'out') { io.play('fail'); io.note(e.time > 0 ? `In the lava! You held ${formatTime(e.time)}.` : 'In the lava before the round had even left.', 3200); }
+    else if (e.type === 'out') { io.play('fail'); io.note(e.time > 0 ? `In the lava! You held ${formatTime(Math.max(0, e.time - Math.round(from * 1000)))}.` : 'In the lava before the round had even left.', 3200); }
   }
 }

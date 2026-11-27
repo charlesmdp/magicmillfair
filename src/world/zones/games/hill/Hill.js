@@ -13,6 +13,7 @@ import { ANIM } from '../../../../player/Character.js';
 import { canvasBoard } from '../Boards.js';
 import { formatTime } from '../course.js';
 import { HILL, nextStart, startClimb, stepClimb, slopeAt, rolling, botInput, stretchOf } from './slope.js';
+import { sharedNow } from '../../../../net/api.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const CREAM = [1.3, 1.17, 0.9], RED = [0.95, 0.1, 0.12], GOLD = [1.5, 1.05, 0.2], ROPE = [1.1, 0.95, 0.7], NAVY = [0.07, 0.07, 0.2], YELLOW = [1.6, 1.3, 0.12];
@@ -34,7 +35,7 @@ export class Hill {
     this.session = null;
     this.best = 0;
     /** The clock everybody shares (ms): the starts and what rolls are counted on it. */
-    this.clock = () => performance.timeOrigin + performance.now();
+    this.clock = sharedNow; // (the clock everybody shares: net/api.js)
   }
 
   /** A place of the slope in the world: its point on the ground. */
