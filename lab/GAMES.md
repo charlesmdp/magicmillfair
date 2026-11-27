@@ -50,9 +50,40 @@ the arch where one asks to play, a sign on a stake); `tools/lib/check.mjs` what 
 PASS / FAIL, the ground of the world). `src/extras/tunes.js` is their music: a tune for each game, in the notation
 of the climb's (`src/audio/tunes.js`), written on the game's own synthesiser while a run is on — the world's music
 steps back meanwhile — with voices that come in as the run goes on (each game hands the player its own rules: the
-tune of one game loads nothing of another); `node tools/tunes-test.mjs` (165) checks the player and the tunes.
+tune of one game loads nothing of another); `node tools/tunes-test.mjs` (175) checks the player and the tunes; `node lab/tools/tune-listen.mjs spiral,flip --out=<folder>` plays a tune on the game's own sound engine, measures it beside the orchestra of the climb and writes it as a .wav to listen to.
 `tools/game-shots.mjs` takes pictures of a game in the running game: `node tools/game-shots.mjs waves
 far=30,26,-78,-115,-28 gate=gate a=play:8` (its top says how).
+
+## Several at once: one game, seen the same by all
+
+Asked for by the owner after playing with a friend ("on voit le nom du robot qui bouge sans cesse", "chacun joue
+mais pas sur la même carte"). Four things hold for every game of this folder:
+
+- **One clock.** `worldClock()` (`gates.js`) and the clocks of the pond, the cleft and the slope are the server's
+  (`sharedNow`, `src/net/api.js`), not the device's — and it is refined by what the relay says ten times a second
+  (`heardRelay`: the message that took the least time on its way tells how far ahead the server is, to a few
+  hundredths of a second; the clock is never made to jump). Two devices whose clocks are four seconds apart see
+  the same waves (`node lab/tools/duo-games.mjs waves --skew=4000`).
+- **The names are where the robots are.** The other visitors are placed, and their names laid out, once the world
+  has had its turn (`src/main.js`): a game sets its camera there, and the names were being laid out for the camera
+  of the walk — beside the robots, never still. A game may also say where a name goes (`peer.tagAt`: over a boat),
+  that there is none (`peer.tagOff`), that a robot is head down (`peer.roll`) or not shown (`peer.hidden`):
+  `src/net/RemoteAvatars.js`.
+- **Who shares a run sees each other; who does not is not shown.** Each browser says a few times a second which run
+  of which game it is in (`src/extras/mates.js`, through the small relayed message the boats use). `plug` does it
+  for a game: a session's run is `session.instance`, else `session.start.n`, else 0 (one place for everybody);
+  `session.tell()` adds up to six numbers. `io.mates()` are those who share one's run, `io.live()` the run most
+  play now; the line of the run says "with Bob"; `game.crowd` gives the same to what the game shows to who only
+  watches (`crowd.watch(run)`: only those of that run are seen in it).
+- **Never two maps in one place.** No Touch Lava!: one crater, one round — who arrives while a round is on joins
+  it (until its eleventh rise: later a newcomer would only be put in the lava), on its highest dry column, and is
+  scored from then; who only watches sees that round. Mostly Up & Down: friends take the start that is waited for;
+  only those of one's start are in one's machine and are solid; a runner who runs head down is drawn so. Bee Fly:
+  a run is one's own (the cells that gave way are), so the others are not shown meanwhile. Harbor Heaven: the
+  names are over the boats.
+
+`node lab/tools/duo-games.mjs <id> [--late=6] [--at=4,12,25] [--skew=ms]` plays a game with two browsers on the
+game's own server and photographs both screens. **What nobody has done: two people playing together.**
 
 ## Trying them
 

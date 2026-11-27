@@ -46,8 +46,10 @@ page) and `src/extras/<id>.js` is an empty shell: **building a game is filling i
   the bot does, **what it does not do and what nobody has seen**.
 - Its own lines, and only those, in the shared lists: `LAB_BOARD` in `src/main.js` (title, sub, where the board
   stands), its line of `server/scores.js`, of `SWITCH` in `public/admin/admin.js`, of `SPECS` in
-  `tools/play-test.mjs` (then `node tools/play-test.mjs <id>` passes). Its music is not yours to write
-  (`src/extras/tunes.js` is done afterwards, for all).
+  `tools/play-test.mjs` (then `node tools/play-test.mjs <id>` passes). Its music is written already
+  (`TUNES.<id>` in `src/extras/tunes.js`: `plug` plays it by itself, given `rules` in its options); what it asks
+  of you is one function exported by your rules, **`heatOf(state)` → 0 … 1**: how far a run has come, or how
+  tense it is (the instruments come in with it).
 - Nothing else is touched: not another game, not the ground of the world, not a file of the game. If the game
   itself has to change, say so in your report.
 

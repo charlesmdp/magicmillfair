@@ -17,6 +17,13 @@ const RULES = { spiral, waves, hive, lava, flip, cars, golf };
 const MOST = 8; // notes at once, at the most (of the 24 the game's music shares), counted as the game counts them
 check('a tune for each of the seven games', IDS.every((id) => TUNES[id]), Object.keys(TUNES).join(' '));
 
+// ---------- every tune there is reads — those of the games that are still being built among them
+for (const id of Object.keys(TUNES)) {
+  let sc = null, why = '';
+  try { sc = score(TUNES[id]); } catch (e) { why = e.message; }
+  if (!IDS.includes(id)) check(`${id}: its score reads, sixteen bars, every note in a sensible range`, sc && sc.bars === 16 && sc.events.every((e) => e.hz > 10 && e.hz < 8000 && e.len > 0 && (e.midi === null || (e.midi >= 24 && e.midi <= 100))), why || `${sc?.events.length} notes, ${TUNES[id].bpm} bpm`);
+}
+
 // ---------- the scores
 for (const id of IDS) {
   const tune = TUNES[id];
@@ -28,7 +35,9 @@ for (const id of IDS) {
   const pitched = sc.events.filter((e) => e.midi !== null), lo = Math.min(...pitched.map((e) => e.midi)), hi = Math.max(...pitched.map((e) => e.midi));
   check(`${id}: every note in a sensible range`, lo >= 28 && hi <= 100 && sc.events.every((e) => e.hz > (e.midi === null && !e.wave.match(/^(maj|min|dom)/) ? 25 : 10) && e.hz < 8000 && e.len > 0), `MIDI ${lo} … ${hi}`);
   check(`${id}: every note inside its turn`, sc.events.every((e) => e.beat >= 0 && e.beat < sc.length && e.bar < sc.bars), sc.length);
-  check(`${id}: a handful of parts`, sc.parts.length >= 3 && sc.parts.length <= 6, sc.parts.length);
+  // (the tunes written as an orchestra have more of them — but their drums and their standing players take no voice)
+  const voiced = sc.parts.filter((p) => !p.kit && !p.standing).length;
+  check(`${id}: a handful of parts that take a voice`, voiced >= 3 && voiced <= 7 && sc.parts.length <= 14, `${voiced} of ${sc.parts.length}`);
 }
 
 // ---------- the player, against a pretend sound engine
@@ -75,7 +84,7 @@ for (const id of IDS) {
     const expected = [];
     for (let k = 0; k < 4; k++) for (const e of sc.events) {
       const at = LEAD + (k * sc.length + e.beat) * spb;
-      if (at < seen.last + AHEAD - 1e-7 && (sc.parts[e.part].from || 0) <= heat && heat < (sc.parts[e.part].to ?? 2)) expected.push([at, e.hz]);
+      if (at < seen.last + AHEAD - 1e-7 && (sc.parts[e.part].from || 0) <= heat && heat < (sc.parts[e.part].to ?? 2) && !sc.parts[e.part].kit && !sc.parts[e.part].standing) expected.push([at, e.hz]);
     }
     // every expected note once, at its time, nothing else: the last tick wrote up to its own clock and a third of a second
     const order = (a, b) => a[0] - b[0] || a[1] - b[1];
@@ -103,7 +112,7 @@ for (const id of IDS) {
 }
 
 // ---------- as the run warms up, the parts come in on their bar lines, never in the middle of a phrase
-for (const id of ['hive', 'cars', 'golf', 'flip']) {
+for (const id of ['hive', 'cars', 'golf', 'waves']) { // (tunes whose tempo does not change with the heat: the beat of a note is read from its time)
   const tune = TUNES[id], sc = score(tune), heat = tune.heat, spb = 60 / tune.bpm;
   let h = 0;
   tune.heat = () => h;
@@ -125,7 +134,54 @@ for (const id of ['hive', 'cars', 'golf', 'flip']) {
     const head = sc.events.find((x) => x.part === part && x.bar >= segment % sc.bars);
     if (head !== e && sc.parts[part].from) bad.push(`${part}@${bar}`);
   }
-  check(`${id}: as it warms up every part comes in at the head of its phrase`, first.size === sc.parts.length && !bad.length, bad.join(' ') || `${first.size} parts`);
+  check(`${id}: as it warms up every part comes in at the head of its phrase`, first.size === sc.parts.filter((q) => !q.kit && !q.standing).length && !bad.length, bad.join(' ') || `${first.size} parts`);
+}
+
+// ---------- the tunes written as an orchestra: their drums and their standing players, on an engine that can make them
+{
+  const made = { osc: [], hits: 0, cymbals: 0, filters: 0, sends: 0 };
+  const full = () => {
+    const f = fakeApp(), ctx = f.ctx;
+    const param = () => ({ value: 0, sets: [], targets: [], setValueAtTime(v, t) { this.sets.push([v, t]); }, exponentialRampToValueAtTime() {}, setTargetAtTime(v, t) { this.targets.push([v, t]); }, cancelScheduledValues() {} });
+    const node = (more) => ({ connect() {}, disconnect() { this.gone = true; }, start() { this.started = true; }, stop() { this.stopped = true; }, ...more });
+    ctx.createGain = () => node({ gain: param() });
+    ctx.createOscillator = () => { const o = node({ frequency: param(), detune: param(), type: 'sine' }); made.osc.push(o); return o; };
+    ctx.createBiquadFilter = () => { made.filters++; return node({ type: '', frequency: param(), Q: param() }); };
+    ctx.createBufferSource = () => node({ buffer: null, loop: false, start(when) { this.started = true; if (when > 0) made.cymbals++; } });
+    f.audio.music.bank = { get: () => ({}) };
+    f.audio.music.send = node({ gain: param(), connect() { made.sends++; } });
+    f.audio.music.shapes = { warm() {}, dress(o, w) { o.wave = w; } };
+    f.audio.music.rand = () => 0.5;
+    f.audio.musicBus = node({ gain: param() });
+    return f;
+  };
+  for (const id of ['spiral', 'flip']) {
+    const tune = TUNES[id], sc = score(tune), undo = pin(tune, HOT);
+    made.osc.length = 0; made.cymbals = 0; made.filters = 0;
+    const f = full(), p = tunePlayer(f.app), spb = 60 / (tune.bpm * (1 + (tune.accel || 0))), secs = 2 * sc.length * spb;
+    p.play(id, { state: HOT }, RULES[id]);
+    let last = 0;
+    for (; f.ctx.currentTime < secs; f.ctx.currentTime += 1 / 60) { p.tick(); last = f.ctx.currentTime; }
+    // what the score says of them by then
+    const due = (pick) => { let n = 0; for (let k = 0; k < 3; k++) for (const e of sc.events) if (pick(sc.parts[e.part]) && LEAD + (k * sc.length + e.beat) * spb < last + AHEAD - 1e-7) n++; return n; };
+    const standing = made.osc.filter((o) => o.wave), drum = made.osc.find((o) => !o.wave);
+    const struck = standing.reduce((a, o) => a + o.frequency.sets.length, 0);
+    check(`${id}: its standing players are struck where the score says — one oscillator a line, none made per note`, standing.length === sc.parts.filter((q) => q.standing).length && struck === due((q) => q.standing) && struck > 100, `${struck} strikes on ${standing.length} oscillators`);
+    check(`${id}: its big drum falls where the score says, on one oscillator and one loop of noise`, !!drum && drum.frequency.sets.length === due((q) => q.kit === 'drum' || q.kit === 'kick') && drum.frequency.sets.length > 20, drum?.frequency.sets.length);
+    check(`${id}: a cymbal at the head of every eighth bar, and a little of the room behind the music`, made.cymbals === due((q) => q.kit === 'cymbal') && made.cymbals >= 2 && tune.room > 0, `${made.cymbals} cymbals`);
+    const all = [...made.osc];
+    p.stop();
+    await new Promise((r) => setTimeout(r, 700));
+    check(`${id}: stopped, what was made for its drums and its players is stopped and let go`, all.every((o) => o.stopped && o.gone), '');
+    undo();
+  }
+  // the tune of the spiral is not kept from who keeps falling in the first turns
+  const cold = spiral.startRun(0);
+  check('spiral: who is still at the foot after a minute hears the theme all the same', TUNES.spiral.heat(cold, 60, spiral) >= 0.29 && TUNES.spiral.heat(cold, 2, spiral) < 0.05 && TUNES.spiral.parts.find((q) => q.line === 'theme').from <= 0.29, TUNES.spiral.heat(cold, 60, spiral).toFixed(2));
+  // the theme of the flip turns over: every other phrase is the one before, mirrored
+  const th = TUNES.flip.theme.split('|').map((bar) => bar.trim().split(/\s+/).map((n) => n.split(':')[0]));
+  const up = (bar) => { const m = th[bar].map((n) => ({ c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11 }[n[0]] + (n.includes('#') ? 1 : 0) + 12 * parseInt(n.at(-1), 10))); return Math.sign(m.at(-1) - m[0]); };
+  check('flip: its tune goes up, and comes back upside down', up(0) === 1 && up(4) === -1 && up(8) === 1 && up(12) === -1, [0, 4, 8, 12].map(up).join(' '));
 }
 
 // ---------- when nothing should be heard
@@ -173,7 +229,9 @@ const range = (id, states) => {
 {
   const a = spiral.startRun(0), b = { ...spiral.startRun(0), s: spiral.LENGTH / 2 }, c = { ...spiral.startRun(0), s: spiral.LENGTH };
   const hs = range('spiral', [a, b, c, { ...a, s: -1 }, { ...a, s: spiral.LENGTH * 2 }]);
-  check('spiral: heat follows the metres climbed', hs[0] < 0.05 && Math.abs(hs[1] - 0.5) < 0.05 && hs[2] > 0.95, '');
+  // (the metres climbed — and never less than what the time spent gives: thirty seconds in, a little under a fifth)
+  const pure = [a, b, c].map((st) => TUNES.spiral.heat(st, 0, spiral));
+  check('spiral: heat follows the metres climbed', pure[0] < 0.05 && Math.abs(pure[1] - 0.5) < 0.05 && pure[2] > 0.95 && hs[0] > 0.1 && hs[0] < 0.3 && Math.abs(hs[1] - 0.5) < 0.05, pure.map((h) => h.toFixed(2)).join(' '));
   const st = spiral.startRun(0), inp = { side: 0, run: 0, jump: false, down: false, crouch: false };
   for (let i = 0; i < 60 * 40; i++) { spiral.botInput(st, inp); spiral.stepRun(st, 1 / 60, inp); }
   range('spiral', [st]);
