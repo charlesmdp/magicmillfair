@@ -32,7 +32,7 @@ const frac = (v) => v - Math.floor(v);
 export const WALLS = {
   name: 'Run the Walls',
   at: { x: 258, z: 100 }, // the middle of the ruin, in the sea off the south beach
-  gate: { x: 56, z: 88 }, // where one asks to run: on the south beach, the ruin in sight
+  gate: { x: 64, z: 84 }, // where one asks to run: on the sand of the south beach, the ruin in sight across the water
   base: 6, // m over the sea: the foot of the way
   half: 1.7, reach: 1.45, // the way: half its width; how far from its middle one goes (the wall, a kerb)
   // its plan: a snail's shell of straight sides, each turned left into the next by a quarter circle
@@ -50,7 +50,7 @@ export const WALLS = {
   fall: 3.6, down: 0.6, ready: 0.2, // m under the last footing a fall is a fall; s on the ground with no rewind left; s before the legs answer again
   rewinds: 3, trail: 4, wind: 2, // in reserve; a place kept every so many steps; how fast time runs back
   tall: 1.3, along: 0.28, across: 0.22, // a runner
-  cam: { back: 7.6, out: 4.3, up: 5.2, ahead: 2.6, hall: { out: 0.35, up: 6.9 } }, // the camera: behind, on the open side, above — between two walls it comes in over the middle of the way
+  cam: { back: 6.2, out: 3.5, up: 3.3, ahead: 1.8, hall: { out: 0.3, up: 5.4 } }, // the camera: behind, on the open side, above — between two walls it comes in over the middle of the way
   names: ['First Steps', 'Along the Wall', 'Up the Wall', 'Wall to Wall', 'The Bars', 'Blades and Spikes', 'Giving Way', 'The Ledge', 'Run and Climb', 'The Roofless Hall', 'Thin Ice', 'The Tower'],
 };
 const S = WALLS, H = S.half, R = S.reach;

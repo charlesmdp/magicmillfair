@@ -21,7 +21,7 @@ const OUT = H + 0.4; // the outer edge of the way: its kerb
 const DEEP = -S.base - 1; // under the rock
 // the top of the wall on the left of each side, and what is under the way there: the rock, or the terrace of the lap outside
 const TOPS = [7, 11, 14.9, 14.9, 17, 27.5, 27.5, 27.5, 27.5], UNDER = [DEEP, DEEP, DEEP, DEEP, 7, 11, 14.9, 14.9, 17];
-const SAND = [1.5, 1.32, 1.02], PALE = [1.72, 1.56, 1.26], DUSK = [1.02, 0.86, 0.66], BLUE = [0.1, 0.4, 1.35], SKY = [0.55, 0.85, 1.5], GREEN = [0.1, 0.8, 0.36], LIME = [0.6, 1.4, 0.5], RED = [1.25, 0.08, 0.08], GOLD = [1.7, 1.2, 0.18], WHITE = [1.6, 1.55, 1.45], DARK = [0.16, 0.13, 0.11];
+const SAND = [1.22, 1.04, 0.76], PALE = [1.42, 1.27, 0.98], DUSK = [0.86, 0.7, 0.5], BLUE = [0.1, 0.4, 1.35], SKY = [0.55, 0.85, 1.5], GREEN = [0.1, 0.8, 0.36], LIME = [0.6, 1.4, 0.5], RED = [1.25, 0.08, 0.08], GOLD = [1.7, 1.2, 0.18], WHITE = [1.6, 1.55, 1.45], DARK = [0.16, 0.13, 0.11];
 const WHY = { fall: 'A fall!', blade: 'Caught by a blade!', spikes: 'Onto the spikes!' };
 const _p = {}, _q = {};
 /** A point of the way: metre `s`, `u` across (to the right), `y` over the foot of the ruin. */
@@ -57,7 +57,7 @@ export class Walls {
 
   build() {
     const world = this.world, mats = world.materials, core = new Parts(), { things, saves } = course();
-    const stone = core.get('drystone'), pave = core.get('paving'), paint = core.get('matte'), rock = core.get('rock'), glow = core.get('glow');
+    const stone = core.get('paving'), pave = stone, paint = core.get('matte'), rock = core.get('rock'), glow = core.get('glow');
     const of = (kind, form) => things.filter((t) => t.kind === kind && (form === undefined || t.form === form));
     const num = (v, s) => (typeof v === 'function' ? v(s) : v);
     /**
@@ -193,10 +193,11 @@ export class Walls {
     // ---- the saves: a line of gold and white across the way, a banner on a mast, a sign
     saves.forEach((v, n) => {
       for (let j = 0; j < 8; j++) { const u0 = -H + ((H + OUT) * j) / 8, u1 = -H + ((H + OUT) * (j + 1)) / 8; top(paint, v.s - 0.16, v.s + 0.16, u0, u1, v.y + 0.012, j % 2 ? GOLD : WHITE); }
-      const p = P(v.s, OUT - 0.12, v.y), q = P(v.s + 1, OUT - 0.12, v.y);
-      paint.tint(...WHITE, 1).cylinder(p.x, p.y, p.z, 0.05, 0.04, 3.4, 6);
-      for (const flip of [1, -1]) { const f = [V(p.x, p.y + 3.35, p.z), V(q.x, p.y + 3.0, q.z), V(p.x, p.y + 2.65, p.z)]; paint.tint(...(n % 2 ? BLUE : GOLD), 1).tri(...(flip > 0 ? f : [f[0], f[2], f[1]])); }
-      if (n) stakeSign(this.group, paint, p.x, p.y, p.z, placeAt(v.s, 0, _q).yaw + Math.PI, `SAVE ${n + 1} · ${v.name.toUpperCase()}`, { w: 2.1, h: 0.46, up: 2.2, back: '#0f3d2a' });
+      // (a banner of gold cloth down the wall, and a sign that stands out from it over the way: the open side stays clear)
+      wallFace(paint, v.s - 0.45, v.s + 0.45, -H + 0.04, v.y + 1.2, v.y + 3.9, 1, GOLD, { plain: true });
+      wallFace(paint, v.s - 0.45, v.s + 0.45, -H + 0.05, v.y + 3.55, v.y + 3.9, 1, WHITE, { plain: true });
+      paint.tint(...GOLD, 1).tri(P(v.s - 0.45, -H + 0.04, v.y + 1.2), P(v.s, -H + 0.04, v.y + 0.75), P(v.s + 0.45, -H + 0.04, v.y + 1.2));
+      if (n) { const p = P(v.s + 0.6, -H + 1.25, v.y + 3.92); paint.tint(...DARK, 1).beam(P(v.s + 0.6, -H, v.y + 4.05), P(v.s + 0.6, -H + 2.4, v.y + 4.05), 0.07, 0.07); stakeSign(this.group, paint, p.x, p.y, p.z, placeAt(v.s, 0, _q).yaw + Math.PI, `SAVE ${n + 1} · ${v.name.toUpperCase()}`, { w: 2.1, h: 0.46, up: -0.17, back: '#0f3d2a' }); }
     });
     // ---- the top of the tower: a brazier of gold
     {
@@ -392,7 +393,7 @@ export class Walls {
         placeAt(st.s + D.ahead, K.camU * 0.6 - 0.3 * (1 - K.hall), pose);
         _l.set(pose.x, S.base + K.camY + 1.1 + Math.max(0, st.y - K.camY) * 0.45, pose.z);
         cam.position.copy(_c); cam.up.set(0, 1, 0); cam.lookAt(_l);
-        return 64;
+        return 62;
       },
       /** The run is over (the top), or left: the player is put back at the gate. */
       drop: (pl) => { pl.driver = null; pl.riding = false; pl.pitch = 0; pl.roll = 0; pl.teleport(this.gate.x, this.gate.z, this.gate.yaw); session.close(); },
