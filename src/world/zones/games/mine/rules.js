@@ -23,8 +23,8 @@ export const MINE = {
   name: 'Little Mine Train',
   step: 1 / 120,
   every: 10, // s between two starts (gates.js: nextStart)
-  station: { x: -263, z: -54, y: 31.3, yaw: Math.PI }, // where the line begins — and ends: the south end of the platform, looking north
-  gate: { x: -257.2, z: -64, yaw: -Math.PI / 2 }, // where one asks, on the meadow before the platform
+  station: { x: -263, z: -60, y: 31.3, yaw: Math.PI }, // where the line begins — and ends: the south end of the platform, looking north
+  gate: { x: -257.2, z: -70, yaw: -Math.PI / 2 }, // where one asks, on the meadow before the platform
   wait: 20, // m along the line: where the first cart waits
   haul: { out: 5, lift: 11.5, pull: 5 }, // m/s out of the station and up the lift; how fast the chain takes it (m/s²)
   roll: { free: 8.5, slope: 35, run: 11.5, runSlope: 50, gain: 0.6, most: 3, drag: 0.25, brake: 9, least: 4.5, top: 26 }, // the speed it tends to by itself, and let run; how it gets there; the brake
@@ -55,48 +55,48 @@ const B = (deg, r, drop = 0, kind, o = {}) => ({ len: Math.abs(deg) * DEG * r, t
 const OUT = [
   S(30, 0, 'station', { name: 'The Station' }),
   S(9, 0, 'open'),
-  B(-37, 25, 0, 'rock', { name: 'The Lift' }),
-  S(78, -73.5, 'lift'),
-  S(8, -0.7, 'rock'),
-  B(82, 14, 0.5, 'rock'),
+  B(-30, 25, 0, 'rock', { name: 'The Lift' }),
+  S(92, -73.5, 'lift'),
+  S(8, -0.3, 'rock'),
+  B(105, 14, 0.4, 'rock'),
+  S(12, 0.2, 'rock'),
   // a first gentle run in the open, along the flank
-  S(30, 2, 'open', { name: 'The High Line', things: [['nug', 10, 0], ['nug', 16, 0], ['nug', 22, 0]] }),
-  B(-18, 45, 1, 'open'),
-  S(22, 1.5, 'open', { things: [['nug', 5, 1], ['nug', 11, 1], ['nug', 17, 1]] }),
-  B(22, 40, 1, 'open'),
-  S(20, 1, 'open', { things: [['nug', 5, -1], ['nug', 11, -1]] }),
-  // a trestle: a long bend out over the slope, a gap in it
-  B(100, 22, 2.5, 'trestle', { name: 'The Trestle' }),
-  S(26, 1.5, 'trestle', { things: [['nug', 3, 0], ['gap', 12, 2.6], ['nug', 13.3, 2]] }),
-  // a spiral round a rock: once and a half, going down
-  B(540, 13, 14, 'trestle', { name: 'The Spiral', things: [['nug', 20, 1], ['nug', 45, 1], ['nug', 70, 1], ['nug', 95, 1]] }),
-  S(22, 0.5, 'open'),
+  S(14, 0.4, 'open', { name: 'The High Line', things: [['nug', 2, 0], ['nug', 8, 0]] }),
+  B(-16, 40, 0.5, 'open'),
+  S(20, 0.5, 'open', { things: [['nug', 3, 1], ['nug', 9, 1], ['nug', 15, 1]] }),
+  B(46, 30, 0.5, 'open'),
+  S(8, 0.3, 'open', { things: [['nug', 2, 0], ['nug', 7, 0]] }),
+  // a trestle: a horseshoe out over the slope, a gap in it
+  B(180, 17, 5, 'trestle', { name: 'The Trestle', things: [['nug', 14, 1], ['nug', 26, 1], ['nug', 38, 1]] }),
+  S(24, 1.5, 'trestle', { things: [['gap', 9, 2.6], ['nug', 10.3, 2]] }),
+  // a spiral round a rock: once and three quarters, going down
+  B(-630, 13, 12, 'trestle', { name: 'The Spiral', things: [['nug', 20, -1], ['nug', 50, -1], ['nug', 80, -1], ['nug', 110, -1]] }),
+  S(14, 0.3, 'open'),
   // under the mountain: a tunnel of lanterns, a rock on the rails
-  B(-110, 20, 2, 'rock', { name: 'The Lantern Tunnel' }),
-  S(34, 2, 'rock', { things: [['rock', 20], ['nug', 20, 2]] }),
+  B(-90, 20, 1.5, 'rock', { name: 'The Lantern Tunnel' }),
+  S(32, 2.5, 'rock', { things: [['nug', 4, 1], ['nug', 9, -1], ['rock', 22], ['nug', 22, 2]] }),
   // the fork — the long way round to the left, the short way straight on, broken
   B(-90, 14, 1.5, 'hall', { name: 'The Fork', fork: 'in' }),
   B(180, 14, 3, 'hall', { things: [['nug', 12, 1], ['nug', 22, 1], ['nug', 32, 1]] }),
   B(-90, 14, 1.5, 'hall', { fork: 'out' }),
-  S(22, 1.5, 'rock'),
+  S(10, 0.6, 'rock'),
+  B(-90, 18, 1.4, 'rock'),
   // the drop into the dark
   S(52, 21, 'rock', { name: 'The Drop', things: [['nug', 14, 0], ['nug', 26, 0], ['nug', 38, 0]] }),
   S(30, 1, 'rock'),
-  B(70, 22, 1, 'rock'),
   // the lake under the mountain
-  S(20, 0.5, 'lake', { name: 'The Lake', things: [['nug', 8, -1], ['nug', 14, 1]] }),
-  B(-55, 18, 0.5, 'lake'),
-  S(30, 0.5, 'lake', { things: [['gap', 12, 2.4], ['nug', 13.2, 2], ['rock', 25]] }),
-  B(60, 16, 0.5, 'lake', { things: [['nug', 6, 1], ['nug', 12, 1]] }),
-  S(24, 0.5, 'lake', { things: [['gap', 13, 2.6], ['nug', 14.3, 2]] }),
+  S(24, 0.3, 'lake', { name: 'The Lake' }),
+  B(45, 22, 0.4, 'lake', { things: [['nug', 6, 1], ['nug', 12, 1]] }),
+  S(20, 0.4, 'lake', { things: [['gap', 8, 2.4], ['nug', 9.2, 2]] }),
+  B(-135, 16, 0.6, 'lake', { things: [['nug', 10, -1], ['nug', 20, -1], ['nug', 30, -1]] }),
+  S(18, 0.3, 'lake', { things: [['rock', 9], ['nug', 9, 2]] }),
 ];
 // … and the last of it, laid so that it ends where the line began: the last run of bends, and home along the foot
 const HOME = [
-  B(-70, 15, 3, 'rock', { name: 'The Last Bends' }),
-  B(75, 13, 3, 'rock', { things: [['nug', 9, 1]] }),
-  S(12, 1.5, 'rock', { things: [['rock', 6], ['nug', 6, 2]] }),
-  B(-80, 12, 3, 'rock', { things: [['nug', 9, -1]] }),
-  B(85, 12, 3, 'rock'),
+  B(90, 14, 3.5, 'rock', { name: 'The Last Bends' }),
+  B(-90, 13, 3.5, 'rock', { things: [['nug', 10, -1]] }),
+  B(90, 12, 3.5, 'rock', { things: [['nug', 9, 1]] }),
+  B(-90, 13, 3, 'rock'),
   S(10, 1, 'rock'),
   B(-90, 13, 2, 'open', { name: 'Home' }),
   S(20, 0.3, 'open'),
@@ -177,8 +177,8 @@ export function course() {
     fork.pts = sp; fork.m = m;
     for (const p of pts) if (p.of && (p.of.fork || (p.of.turn === 180))) p.fork = true;
     const s = fork.s0;
-    gaps.push({ s: s + 15, len: 2.8, way: 1 }, { s: s + 38, len: 2.8, way: 1 }); rocks.push({ s: s + 27, way: 1 });
-    nuggets.push({ s: s + 16.4, side: 2, way: 1 }, { s: s + 27, side: 2, way: 1 }, { s: s + 39.4, side: 2, way: 1 }, { s: s + 8, side: 0, way: 1 }, { s: s + 46, side: 0, way: 1 });
+    gaps.push({ s: s + 11, len: 2.8, way: 1 }, { s: s + 45, len: 2.8, way: 1 }); rocks.push({ s: s + 29, way: 1 });
+    nuggets.push({ s: s + 12.4, side: 2, way: 1 }, { s: s + 29, side: 2, way: 1 }, { s: s + 46.4, side: 2, way: 1 }, { s: s + 5, side: 0, way: 1 }, { s: s + 53, side: 0, way: 1 });
     for (const t of [...gaps, ...rocks, ...nuggets]) if (t.way === undefined) t.way = t.s > fork.s0 && t.s < fork.s1 ? 0 : -1; // (-1: on the line itself, whichever way one took)
   }
   gaps.sort((p, q) => p.s - q.s); rocks.sort((p, q) => p.s - q.s); nuggets.sort((p, q) => p.s - q.s);
@@ -368,8 +368,9 @@ const LATE = { steady: 0.25, bold: 0.25, clumsy: 0.5 };
 export function botInput(st, kind = 'steady', out = { x: 0, y: 0, hop: false }) {
   const M = MINE, C = course(), F = C.fork, bot = st.bot || (st.bot = { q: [], seed: 7 }), late = LATE[kind] ?? 0.25;
   const ask = { x: 0, y: 0, hop: false };
+  if (st.phase === 'off') bot.hopped = 0;
   if (st.phase === 'run' && !st.over && st.s >= C.top - 2) {
-    const v = Math.max(st.v, M.roll.least), ahead = late + 0.2, way = st.way, at = (d) => railAt(st.s + d, way, _b), need = (k) => (v * v * Math.abs(k)) / M.lean.hold;
+    const v = Math.max(st.v, M.roll.least), ahead = late + 0.2, way = st.way, at = (d) => (way === 1 && st.s + d > F.s0 + F.len ? railAt(F.s1 + st.s + d - F.s0 - F.len, 0, _b) : railAt(st.s + d, way, _b)), need = (k) => (v * v * Math.abs(k)) / M.lean.hold;
     const mine = (t) => t.way === -1 || t.way === way || (st.s < F.s0 && t.way === (kind === 'bold' ? 1 : 0));
     if (kind === 'clumsy') {
       const r = at(0);
