@@ -3,15 +3,19 @@
 //
 // Nine holes of crazy golf on a little walk round the pond of acid of the north-western meadow, each the valley
 // in miniature: the big red button, the swan pond, the temple stairs, the water mill, the floating stones of Mostly
-// Up, the golden dog, the big wheel of the pier, a plank over the acid and the island with its boulder. Each is a
-// bed of felt in a striped kerb, built level (but for its own slopes) half a metre over the meadow, with one idea
-// of its own; none is holed by putting straight down its lane. One putts: the stick turns the aim left and right, a gauge swings up and down by itself
-// (held back, the stick slows it), and the jump hits at the strength the gauge shows. On the tee the aim is the
-// tee's own axis, straight down the lane; further on it points along the way to the cup. The ball rolls and slows
-// on the felt, runs down what slopes, comes back off a cushion with most of its speed, and drops into the cup
-// when it crosses it slowly enough (a fast one lips out). Off the bed, in the water or in the acid, it is put back
-// where it was hit from, with one stroke more. Seven strokes at most a hole, then on to the next. The fewer strokes the
-// better; the time of the round breaks ties.
+// Up, the golden dog, the big wheel of the pier, a plank over the acid and the island with its boulder. Each is
+// felt in a striped kerb, raised half a metre and more over the meadow, and a real hole of crazy golf: levels
+// joined by ramps and stairs, humps and mounds, a green that falls away, doors in walls, sand that holds the ball
+// back and ice that lets it slide, water and acid that cost a stroke, a ramp to jump from, stones to hop, pipes
+// that carry the ball elsewhere, things that go by the clock — and nearly always two ways, a long safe one and a
+// short one that is not. None is holed by putting straight down its lane, and no stroke is strong enough to play a
+// hole in one go: one plays it in stages. One putts: the stick turns the aim left and right, a gauge swings up
+// and down by itself (held back, the stick slows it), and the jump hits at the strength the gauge shows. On the
+// tee the aim is the tee's own axis, straight down the lane; further on it points along the way to the cup. The
+// ball rolls and slows on the felt, runs down what slopes, flies off what ends in the air, comes back off a
+// cushion with most of its speed, and drops into the cup when it crosses it slowly enough (a fast one lips out).
+// Off the bed, in the water or in the acid, it is put back where it was hit from, with one stroke more. Nine
+// strokes at most a hole, then on to the next. The fewer strokes the better; the time of the round breaks ties.
 //
 // Places: each hole has a frame of its own, in metres from its tee: the hole lies towards -z, `x` is to the right
 // of who looks down it, `y` is counted from its felt. `at` (its tee) and `yaw` (its heading: 0 north, a quarter
@@ -26,27 +30,27 @@ export const GOLF = {
   stand: { x: -225.2, z: -71.3, yaw: 1.27 }, // the board of scores: on the left of the gate (as one looks through it), facing those who come; not on the right, where the acid puts back those it dissolved
   step: 1 / 120,
   ball: 0.085, cup: 0.19, // their radius (m): a ball one sees from above the whole hole
-  take: 2.4, // m/s: the fastest ball the cup takes, when it crosses its very middle
+  take: 1.7, // m/s: the fastest ball the cup takes, when it crosses its very middle
   friction: 1.6, // m/s²: what the felt takes from a rolling ball
   g: 9.8, slope: 7, // m/s²: in the air; down a slope (a rolling ball takes five sevenths of it)
   cushion: 0.8, // the share of its speed a cushion gives back
   kerb: 0.14, // m: how high a kerb stands over the felt (a ball that flies higher goes over it)
   raise: 0.5, // m: how high the felt stands, at least, over the meadow
   sweep: 1.1, slow: 0.4, // s: the gauge from nothing to full; its pace when the stick is held back
-  reach: [0.4, 22], // m on level felt: the least and the most of the gauge (the most is less near the cup)
+  reach: [0.4, 11], // m on level felt: the least and the most of the gauge (the most is less near the cup): no stroke carries a ball up three flights of stairs, or through sand and up a ramp
   turn: [0.3, 2.4, 1.7], // rad/s: how fast the aim turns at first, how much faster each second the stick is held, at most
-  most: 7, // strokes a hole
+  most: 9, // strokes a hole
   wait: { tee: 0.9, lost: 0.9, holed: 1.5, picked: 1.2 }, // s: before one may aim, before the ball is back, before the next hole
   cycle: 1386, // s: after so long everything that moves is back where it was (the clock of the world is read modulo this)
 };
-/** The board of scores: strokes × 1000 + seconds (at most 999). Nine holes in one each, at best; nine times seven strokes, at worst. */
-export const BOARD = { order: 'asc', min: 9000, max: 63999 };
+/** The board of scores: strokes × 1000 + seconds (at most 999). Nine holes in one each, at best; nine times nine strokes, at worst. */
+export const BOARD = { order: 'asc', min: 9000, max: 81999 };
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const hash = (n, k = 0) => { const s = Math.sin(n * 127.1 + k * 311.7 + 74.7) * 43758.5453; return s - Math.floor(s); };
 const STEP = GOLF.step, R = GOLF.ball, CUP2 = GOLF.cup * GOLF.cup, F = GOLF.friction, G = GOLF.g, TAU = Math.PI * 2;
 const SPEED = 9.4; // m/s: no ball goes faster (less than its own radius a step: it never passes through a kerb)
-const RISE = 0.3, CATCH = 0.25; // m: the steepest face a rolling ball still follows, step after step; how far under a felt a flying ball may come and still land on it
+const RISE = 0.3, CATCH = 0.12; // m: the steepest face a rolling ball still follows, step after step; how far under a felt a flying ball may come and still land on it
 /** What a surface does to the roll: sand holds the ball back, ice (and steel, and wet boards) lets it slide. */
 export const RUB = { sand: 3.2, ice: 0.28 };
 
@@ -58,15 +62,17 @@ const smooth = (u) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
 const step = (v, a, b) => smooth((v - a) / (b - a));
 /** A hump: 1 at its middle, 0 from `u` = 1 on, level at both. */
 const bump = (u) => (u <= -1 || u >= 1 ? 0 : (1 - u * u) * (1 - u * u));
-/** The stairs of the temple: three steps of 13 cm, each a smooth rise over 40 cm. */
-export const STAIRS = [-3.5, -6.4, -9.3];
-const stairs = (x, z) => 0.13 * (smooth((STAIRS[0] - z) / 0.4) + smooth((STAIRS[1] - z) / 0.4) + smooth((STAIRS[2] - z) / 0.4));
+/** The stairs of the temple: three flights of 32 cm, each a smooth rise over 80 cm (their middles). */
+export const STAIRS = [-3.6, -6.5, -9.4];
+const stairs = (x, z) => 0.32 * (step(z, STAIRS[0] + 0.4, STAIRS[0] - 0.4) + step(z, STAIRS[1] + 0.4, STAIRS[1] - 0.4) + step(z, STAIRS[2] + 0.4, STAIRS[2] - 0.4));
+/** The boardwalk below the pier: level with the deck where one comes down to it and where one comes back up, half a metre under it between the two. */
+const walk = (x, z) => -0.5 * step(z, -1.7, -3.2) * (1 - step(z, -9.4, -10.4));
+/** The ramp before the swan pond, on the right of the lane: it rises a quarter of a metre in one, steeper and steeper, and ends in the air. */
+const kicker = (x, z) => (z > -1.6 || z < -2.72 ? 0 : 0.24 * (1.6 + z) * (1.6 + z) * (z < -2.6 ? 1 - step(z, -2.6, -2.72) : 1) * step(x, 0.15, 0.4));
 /** The dog's hill: the lane runs down 60 cm before its legs. */
 const hill = (x, z) => -0.6 * smooth((-1.6 - z) / 1.4);
 /** The ramp of the ninth: the last two metres of its lane rise half a metre, and end in the air. */
 const ramp = (x, z) => (z < -5.6 ? 0.25 * (-5.6 - z) : 0);
-/** The green of the island: a shallow bowl round its middle (the cup is not there: a ball for it must be slow). */
-const bowl = (x, z) => 0.06 * Math.max(0, Math.hypot(x, z + 10.2) - 0.3);
 const ISLE = round(0, -10.2, 1.3, 20, 0.5); // (a side of it, not a corner, faces the ramp)
 const ALL = [0, 1, 2, 3];
 /** The dog's bowl: an octagon, a side of it to the tee. */
@@ -75,55 +81,93 @@ export const BOWL = round(0, -6.7, 0.24, 8, 0.5);
 /**
  * The nine holes, each after a place of the valley (`place`), in miniature. `beds`: the felt — `poly` (its
  * outline), `open` (the sides without a kerb), `air` (the sides with nothing under them), `y` (how high it lies
- * over the felt of the tee), `h` (its relief), `look` ('deck': planks; 'stone': a floating stone). `blocks`: what
- * stands on the felt (x0, z0, x1, z1, height). `walls`: more cushions (x, z, x, z, height). `bumpers`: (x, z,
- * radius). `pools`: water (x, z, radius): a ball that rolls into it is lost. `movers`: what goes by the clock.
- * `links`: what the felt alone does not join (x, z → x, z, as so many metres). `view`: how far the camera turns from the heading of the hole. `acid`: the pond is
- * its hazard. At the tee the aim is the tee's own axis, straight down the lane: on no hole is that the line.
+ * over the felt of the tee), `h` (its relief: any shape that has no step in it — a face may be as steep as one
+ * likes), `look` ('deck': planks; 'stone': a floating stone). `blocks`: what stands on the felt (x0, z0, x1, z1,
+ * height). `walls`: more cushions (x, z, x, z, height — and, for the face of a level over a lower one, the height
+ * of its foot: a ball above it goes over and down, one below comes back off it). `bumpers`: (x, z, radius).
+ * `pools`: water — round (x, z, radius) or with straight sides (x0, z0, x1, z1): a ball that rolls into it is
+ * lost. `zones`: surfaces (`kind`: 'sand' slows, 'ice' slides, 'kick' only says that the ramp there is one to
+ * jump from; `poly`). `pipes`: `in` (the mouth: x, z; `r` its radius), `out`, `aim` and `speed` (how it comes
+ * out), `time` (s inside). `movers`: what goes by the clock. `links`: what the felt alone does not join — a hop, a
+ * jump (x, z → x, z, as so many metres). `view`: how far the camera turns from the heading of the hole. `acid`:
+ * the pond is its hazard. At the tee the aim is the tee's own axis, straight down the lane: on no hole is that
+ * the line. Par is what the player with a person's hand needs (see the end of this file, and tools/golf-test.mjs).
  */
 export const HOLES = [
-  { name: 'The Big Red Button', place: 'the big red button', tip: 'go round the button: it kicks', par: 2, at: [-230, -73.5], yaw: Math.PI / 2, cup: [0.62, -9.1],
-    beds: [{ poly: box(-1.3, 1.2, 1.3, -10.6) }],
-    bumpers: [[0, -4.9, 0.42]] },
-  { name: 'The Swan Pond', place: 'the great pond and its swans', tip: 'by the left of the pond, when the swan has passed', par: 3, at: [-244, -73.5], yaw: Math.PI / 2, cup: [0.55, -10.5], view: -0.15,
-    beds: [{ poly: box(-1.5, 1.2, 1.5, -11.8) }],
-    pools: [[0.3, -5.6, 1.12]],
-    movers: [{ kind: 'slide', look: 'swan', z: -5.6, x0: -0.1, hw: 0.28, hd: 0.15, amp: 1.05, period: 7, phase: 0.1, high: 0.4 }] },
-  { name: 'The Temple Stairs', place: 'the waterfall and the stairway to the temple', tip: 'three steps up: too soft and it rolls back', par: 3, at: [-254, -78.2], yaw: 0, cup: [-0.45, -11.2],
-    beds: [{ poly: box(-1.3, 1.2, 1.3, -12.6), h: stairs }] },
-  { name: 'The Water Mill', place: 'the old mill and its water wheel', tip: 'under the paddles and through the door', par: 3, at: [-250.5, -95.5], yaw: -Math.PI / 2, cup: [0.5, -10.8],
-    beds: [{ poly: box(-1.3, 1.2, 1.3, -12.4) }],
-    blocks: [[-1.3, -5.9, -0.35, -4.7, 1.3], [0.35, -5.9, 1.3, -4.7, 1.3]],
+  // 1 — three buttons that kick, in a triangle one threads; a wall across the lane with its door on the right, in a bed of sand that goes on up the ramp; a green half a step up, crowned, the cup on its left
+  { name: 'The Big Red Button', place: 'the big red button', tip: 'between the buttons (they kick), through the door on the right, up the sandy ramp onto the green', par: 3, at: [-230, -73.5], yaw: Math.PI / 2, cup: [-0.6, -9.75],
+    beds: [{ poly: [[-1.3, 1.2], [1.3, 1.2], [1.3, -9.7], [0.4, -10.6], [-1.3, -10.6]], h: (x, z) => 0.32 * step(z, -7.3, -8.3) + 0.1 * bump(Math.hypot(x + 0.1, z + 9.6) / 1.1) }],
+    bumpers: [[0, -3.3, 0.36], [-0.72, -4.9, 0.3], [0.72, -4.9, 0.3]],
+    walls: [[-1.3, -6.2, 0.45, -6.2, 0.3]],
+    zones: [{ kind: 'sand', poly: box(-1.3, -5.9, 1.3, -8.3) }] },
+  // 2 — the short way: off the ramp, over the pond (too soft: in it), down into the sand; the long one: round by the left, where the swan glides; the green is a terrace with no kerb behind it
+  { name: 'The Swan Pond', place: 'the great pond and its swans', tip: 'off the ramp and over the pond — or round by the left, when the swan has passed; no kerb behind the green', par: 3, at: [-244, -73.5], yaw: Math.PI / 2, cup: [-0.7, -10.7], view: -0.15,
+    beds: [{ poly: box(-1.5, 1.2, 1.5, -11.8), open: [2], h: (x, z) => kicker(x, z) + 0.3 * step(z, -8.2, -9.0) }],
+    pools: [[0.35, -4.1, 1.0]],
+    zones: [{ kind: 'kick', poly: box(0.3, -1.6, 1.5, -2.7) }, { kind: 'sand', poly: box(-1.5, -5.4, 1.5, -7.4) }],
+    movers: [{ kind: 'slide', look: 'swan', z: -4.1, x0: -0.1, hw: 0.28, hd: 0.15, amp: 1.05, period: 7, phase: 0.1, high: 0.4 }],
+    links: [[0.9, -2.4, 0.9, -5.5, 2.2]] },
+  // 3 — three flights of stairs, a balustrade across each landing with its door on the other side from the one before, a basin in a dead corner, the cup inside the temple's three walls
+  { name: 'The Temple Stairs', place: 'the waterfall and the stairway to the temple', tip: 'three flights up, a door on each landing (too soft and it rolls back down); the cup is inside the temple, which opens to the back', par: 3, at: [-254, -78.2], yaw: 0, cup: [-0.3, -11.5],
+    beds: [{ poly: box(-1.3, 1.2, 1.3, -12.6), h: stairs }],
+    // (a balustrade on each landing; and the three walls of the temple round the cup, open to the back)
+    walls: [[-0.4, -5.4, 1.3, -5.4, 0.7], [-1.3, -8.3, 0.4, -8.3, 0.7], [-0.9, -10.9, 0.3, -10.9, 0.7], [-0.9, -10.9, -0.9, -11.95, 0.7], [0.3, -10.9, 0.3, -11.95, 0.7]],
+    pools: [[0.75, -4.7, 0.36]] },
+  // 4 — the short way: under the paddles and through the door, gently: the mill pond lies just behind it; the long one: round by the left, over a ridge; the green is a tier up
+  { name: 'The Water Mill', place: 'the old mill and its water wheel', tip: 'under the paddles, through the door — softly: the mill pond is behind it — or round by the left, over the ridge', par: 4, at: [-250.5, -95.5], yaw: -Math.PI / 2, cup: [0.55, -11.5],
+    beds: [{ poly: [[-1.3, 1.2], [1.3, 1.2], [1.3, -12.4], [-1.3, -12.4], [-1.3, -9.2], [-4.2, -9.2], [-4.2, -1.4], [-1.3, -1.4]], h: (x, z) => (x < -1.45 ? 0.35 * bump((z + 5.3) / 1.6) : 0) + (z < -9.6 ? 0.25 * step(z, -9.6, -10.3) : 0) }],
+    blocks: [[-1.3, -5.9, -0.35, -4.7, 1.3], [0.35, -5.9, 1.3, -4.7, 1.3], [-1.6, -7.8, -1.3, -2.8, 0.3]],
+    pools: [[-0.55, -7.7, 0.55, -6.8]],
+    zones: [{ kind: 'sand', poly: box(-4.2, -2.1, -1.6, -3.3) }, { kind: 'sand', poly: box(-4.2, -7.9, -3.1, -9.2) }],
     movers: [{ kind: 'wheel', n: 4, z: -4.0, r: 1.0, up: 1.08, hw: 0.45, hd: 0.05, period: 6, max: 0.33, high: 0.4 }] },
-  { name: 'The Floating Stones', place: 'the floating stones of Mostly Up', tip: 'firm enough to hop the gaps, soft enough to stop', par: 3, at: [-235, -99.8], yaw: -Math.PI / 2, cup: [-0.65, -9.8], floor: -1.4, lift: 0.45,
+  // 5 — stones in the air, each lower than the last, a kerb behind each to stop the ball: straight on, then left, then on down to the green stone; the short way hops the widest gap from the first stone straight into the green's sand
+  { name: 'The Floating Stones', place: 'the floating stones of Mostly Up', tip: 'hop on, then left, then on: a kerb behind each stone stops the ball — or one long hop over the right of the first stone', par: 3, at: [-235, -99.8], yaw: -Math.PI / 2, cup: [-0.2, -10.0], floor: -1.8, lift: 0.3,
     beds: [
-      { poly: box(-1.1, 1.2, 1.1, -2.4), open: [2], air: [2] },
-      { poly: box(-0.7, -2.75, 0.7, -4.6), y: -0.2, open: [0, 2], air: ALL, look: 'stone' },
-      { poly: box(-0.7, -4.95, 0.7, -6.8), y: -0.4, open: [0, 2], air: ALL, look: 'stone' },
-      { poly: box(-1.3, -7.15, 1.3, -10.8), y: -0.6, open: [0], air: ALL, look: 'stone' }],
-    links: [[0, -2.2, 0, -2.95, 0.75], [0, -4.4, 0, -5.15, 0.75], [0, -6.6, 0, -7.35, 0.75]] },
-  { name: 'The Golden Dog', place: 'the golden dog on its cliff', tip: 'down the hill, under the dog, off the corner', par: 3, at: [-221.5, -97.5], yaw: -2.03, cup: [-4.5, -8.3], view: -0.55,
-    beds: [{ poly: [[-1.2, 1.2], [1.2, 1.2], [1.2, -7.8], [-0.2, -9.2], [-6, -9.2], [-6, -6.4], [-1.2, -6.4]], h: hill }],
+      { poly: box(-1.1, 1.2, 1.1, -2.0), open: [2], air: [2] },
+      { poly: [[-0.9, -2.35], [0.9, -2.35], [0.9, -4.4], [0, -4.4], [-0.9, -4.4]], y: -0.2, open: [0, 2, 4], air: [0, 1, 2, 3, 4], look: 'stone' },
+      { poly: box(-2.65, -3.0, -1.25, -6.2), y: -0.4, open: [1, 2], air: ALL, look: 'stone' },
+      { poly: [[-2.65, -6.55], [-1.1, -6.55], [-1.1, -6.0], [0.9, -6.0], [0.9, -10.6], [-1.0, -10.6], [-1.0, -8.8], [-2.65, -8.8]], y: -0.8, open: [0, 1, 2], air: [0, 1, 2, 3, 4, 5, 6, 7], look: 'stone' }],
+    zones: [{ kind: 'sand', poly: box(-1.1, -6.0, 0.9, -8.8) }],
+    links: [[0, -1.8, 0, -2.55, 0.75], [-0.7, -3.6, -1.45, -3.6, 0.75], [-1.9, -6.0, -1.9, -6.75, 0.75], [0.45, -4.2, 0.45, -6.2, 3.0]] },
+  // 6 — down the hill, between the dog's paws, off the corner, through the door of a wall — or into the kennel pipe on the way down; the cup stands on a mound that falls away all round
+  { name: 'The Golden Dog', place: 'the golden dog on its cliff', tip: 'down the hill and under the dog, off the corner, through the door — or into the pipe on the right of the hill; the cup is on top of the mound', par: 3, at: [-221.5, -97.5], yaw: -2.03, cup: [-4.7, -7.8], view: -0.55,
+    beds: [{ poly: [[-1.2, 1.2], [1.2, 1.2], [1.2, -7.8], [-0.2, -9.2], [-6, -9.2], [-6, -6.4], [-1.2, -6.4]], h: (x, z) => hill(x, z) + 0.42 * bump(Math.hypot(x + 4.7, z + 7.8) / 1.3) }],
     blocks: [[-1.2, -5.0, -0.5, -4.3, 1.0], [0.5, -5.0, 1.2, -4.3, 1.0]],
-    // (its bowl, in the way of who putts straight)
-    walls: BOWL.map((p, k) => [...p, ...BOWL[(k + 1) % 8], 0.22]) },
-  { name: 'The Big Wheel', place: 'the grand pier and its big wheel', tip: 'the gondolas come down across the lane', par: 3, at: [-209.5, -86.5], yaw: 1.3, cup: [-0.55, -10.7],
-    beds: [{ poly: box(-1.2, 1.2, 1.2, -12.4), look: 'deck' }],
+    // (its bowl, in the way of who putts straight; and the wall across the way to the mound, its door at the top)
+    walls: [...BOWL.map((p, k) => [...p, ...BOWL[(k + 1) % 8], 0.22, -0.6]), [-2.6, -9.2, -2.6, -7.55, 0.3, -0.6]],
+    zones: [{ kind: 'sand', poly: [[-1.2, -5.5], [1.2, -5.5], [1.2, -7.8], [-0.2, -9.2], [-1.2, -9.2]] }],
+    pipes: [{ in: [0.88, -2.9], out: [-1.5, -8.6], aim: -Math.PI / 2, speed: 1.3, r: 0.19 }] },
+  // 7 — the pier: no rail between the wheels (off its left side, the sea), the gondolas come down across the lane, a hump-back between the two; a boardwalk below on the right is the long way; sand, then the pier head: a plate of steel with nothing behind it nor on its left
+  { name: 'The Big Wheel', place: 'the grand pier and its big wheel', tip: 'between the gondolas and over the hump, no rail to the sea — or down to the boardwalk on the right; the pier head is polished steel: it slides, and nothing stops the ball at its end', par: 3, at: [-209.5, -86.5], yaw: 1.3, cup: [-0.9, -11.3],
+    beds: [
+      { poly: [[-1.2, 1.2], [1.2, 1.2], [1.2, -0.3], [1.2, -1.7], [1.2, -9.4], [1.2, -10.5], [1.2, -11.4], [1.2, -12.4], [-1.2, -12.4], [-1.2, -9.4], [-1.2, -2.0]], open: [2, 3, 4, 5, 6, 7, 8, 9], air: [6, 7, 8, 9], look: 'deck', h: (x, z) => 0.35 * bump((z + 5.6) / 1.1) },
+      { poly: box(1.2, -0.3, 2.4, -11.4), open: [3], look: 'deck', h: walk }],
     blocks: [[-1.2, -3.65, -0.55, -3.35, 0.9], [0.55, -3.65, 1.2, -3.35, 0.9], [-1.2, -7.85, -0.55, -7.55, 0.9], [0.55, -7.85, 1.2, -7.55, 0.9]],
+    walls: [[1.2, -2.5, 1.2, -9.7, 0.45, -0.5]],
+    zones: [{ kind: 'ice', poly: box(-1.2, -9.6, 1.2, -12.4) }, { kind: 'sand', poly: box(-1.2, -8.5, 1.2, -9.5) }],
     movers: [
       { kind: 'sail', look: 'gondola', n: 6, z: -3.5, r: 2.2, up: 2.75, hw: 0.28, hd: 0.2, period: 14, max: 0.22, high: 0.45 },
       { kind: 'sail', look: 'gondola', n: 6, z: -7.7, r: 2.2, up: 2.75, hw: 0.28, hd: 0.2, period: 11, max: 0.22, high: 0.45 }] },
-  { name: 'The Plank', place: 'the acid pond', tip: 'no kerb over the acid', par: 4, at: [-231, -84.9], yaw: Math.PI / 2, cup: [0.4, -10.4], acid: true, floor: -0.7,
+  // 8 — the plank over the acid, a wrecking ball swinging across it; the long way is the sandy shore on the right; the green is crowned, with nothing on its acid sides
+  { name: 'The Plank', place: 'the acid pond', tip: 'the plank has no kerb and a ball swings across it — or round by the sandy shore; sand where the plank lands, no kerb on the acid side of the green', par: 4, at: [-231, -84.9], yaw: Math.PI / 2, cup: [1.0, -10.4], acid: true, floor: -0.7,
     beds: [
-      { poly: [[-1.2, 1.2], [1.2, 1.2], [1.2, -1.8], [0.4, -1.8], [-0.4, -1.8], [-1.2, -1.8]], open: [3] },
-      { poly: box(-0.4, -1.75, 0.4, -8.05), open: ALL, air: ALL, look: 'deck' },
-      { poly: [[-0.9, -8], [-0.4, -8], [0.4, -8], [1.7, -8], [1.7, -11.6], [-0.9, -11.6]], open: [1] }] },
-  { name: 'The Acid Test', place: 'the island and its rolling boulder', tip: 'up the ramp, over the acid, onto the island', par: 4, at: [-246.2, -82], yaw: -Math.PI / 2, cup: [0.5, -10.4], acid: true, floor: -0.75, lift: 0.1,
+      { poly: [[-1.2, 1.2], [1.2, 1.2], [1.2, -0.6], [1.2, -1.8], [0.32, -1.8], [-0.32, -1.8], [-1.2, -1.8]], open: [2, 4] },
+      { poly: box(-0.32, -1.75, 0.32, -8.05), open: ALL, air: ALL, look: 'deck' },
+      { poly: [[-0.9, -8], [-0.32, -8], [0.32, -8], [1.7, -8], [1.7, -8.4], [1.7, -9.6], [1.7, -11.6], [-0.9, -11.6]], open: [1, 4, 6, 7], air: [6, 7], h: (x, z) => 0.26 * bump(Math.hypot(x - 0.9, z + 10.3) / 1.5) },
+      { poly: [[1.2, -0.6], [3.4, -0.6], [3.4, -9.6], [1.7, -9.6], [1.7, -8.4], [2.2, -8.4], [2.2, -1.8], [1.2, -1.8]], open: [3, 7], h: (x, z) => 0.22 * bump((z + 5.0) / 1.5) }],
+    zones: [{ kind: 'sand', poly: box(2.2, -2.6, 3.4, -4.4) }, { kind: 'sand', poly: box(2.2, -6.0, 3.4, -7.6) }, { kind: 'sand', poly: box(-0.9, -8.0, 1.7, -9.0) }],
+    movers: [{ kind: 'slide', look: 'ball', z: -4.9, x0: 0, hw: 0.22, hd: 0.22, amp: 1.0, period: 5.5, phase: 0, high: 0.5 }] },
+  // 9 — a boulder rolls across the run-up; up the ramp, over the acid, onto the island (boards only right behind it), where the cup lies in a nest of low walls open to the back; the long way: a pocket of sand on the right and the smugglers' pipe, which comes out on the island
+  { name: 'The Acid Test', place: 'the island and its rolling boulder', tip: 'past the boulder, up the ramp, over the acid, onto the island — or the pipe in the sandy pocket on the right; the cup is in a nest that opens to the back', par: 4, at: [-246.2, -82], yaw: -Math.PI / 2, cup: [0.2, -10.6], acid: true, floor: -0.75, lift: 0.1,
     beds: [
-      { poly: [[-1.1, 1.2], [1.1, 1.2], [1.1, -5.6], [1.1, -7.6], [-1.1, -7.6], [-1.1, -5.6]], open: [3], h: ramp },
-      { poly: ISLE, y: -0.42, h: bowl, air: ISLE.map((_, k) => k), isle: true }],
-    // (the back of the island is boarded up: a ball that comes in hard stops there and drops onto the green)
-    walls: [16, 17, 18, 19, 0, 1, 2].map((k) => [...ISLE[k], ...ISLE[(k + 1) % 20], 0.9]),
+      { poly: [[-1.1, 1.2], [1.1, 1.2], [1.1, -1.4], [3.0, -1.4], [3.0, -4.4], [1.1, -4.4], [1.1, -5.6], [1.1, -7.6], [-1.1, -7.6], [-1.1, -5.6]], open: [7], h: ramp },
+      { poly: ISLE, y: -0.42, air: ISLE.map((_, k) => k), isle: true }],
+    blocks: [[1.1, -4.4, 1.25, -2.5, 0.3]],
+    // (the back of the island is boarded up, but only right behind it; and the cup lies in a nest of three low walls that opens to those boards: one comes at it from behind, or off them)
+    walls: [...[17, 18, 19, 0, 1].map((k) => [...ISLE[k], ...ISLE[(k + 1) % 20], 0.9]), [-0.25, -10.3, 0.65, -10.3, 0.3], [-0.25, -10.3, -0.25, -10.8, 0.3], [0.65, -10.3, 0.65, -10.8, 0.3]],
+    zones: [{ kind: 'sand', poly: box(1.3, -1.4, 3.0, -2.9) }],
+    pipes: [{ in: [1.62, -4.0], out: [-0.8, -10.2], aim: Math.PI / 2, speed: 0.9, time: 1.6, r: 0.2 }],
+    movers: [{ kind: 'slide', look: 'boulder', z: -3.4, x0: 0, hw: 0.3, hd: 0.3, amp: 0.72, period: 4.5, phase: 0.3, high: 0.6 }],
     links: [[0, -7.4, 0, -9.3, 2.5]] },
 ];
 
@@ -371,7 +415,7 @@ export function ballStep(H, b, tw, ev) {
   if (!bedAt(H, b.x, b.z, b.y + RISE)) { b.air = true; return ROLLS; } // (off an edge without a kerb)
   const fall = b.y + b.vy * dt - 0.5 * G * dt * dt;
   if (_fy < fall - 1e-5) { b.air = true; b.y = fall; b.vy -= G * dt; return ROLLS; } // (the felt drops away faster than it falls: off a crest, off a lip)
-  b.vy = (_fy - b.y) / dt; b.y = _fy;
+  b.vy = Math.min((_fy - b.y) / dt, 0.6 * Math.hypot(b.vx, b.vz), 3.5); b.y = _fy; // (it rises as the felt does — but a face too steep to be a ramp does not throw it into the sky)
   if (H.pools.length && wet(H, b.x, b.z)) return WATER;
   // a pipe takes a ball that rolls into its mouth (not one that flies over it at full speed)
   for (let i = 0; i < H.pipes.length; i++) {
@@ -415,7 +459,7 @@ function mapOf(H) {
     for (const k of H.blocks) if (x > Math.min(k[0], k[2]) && x < Math.max(k[0], k[2]) && z > Math.min(k[1], k[3]) && z < Math.max(k[1], k[3])) free = false;
     if (free) ok[j * nx + i] = 1;
   }
-  const M = (H.map = { i0, j0, nx, nz, ok, dist, next, leap, ht });
+  const M = (H.map = { H, i0, j0, nx, nz, ok, dist, next, leap, ht });
   const node = (x, z) => nearest(M, x, z);
   // from the cup outwards (the links are taken backwards: they lead to the cup, not from it)
   const from = new Map();
@@ -439,17 +483,36 @@ function mapOf(H) {
   }
   return M;
 }
-/** The place of the grid nearest to (x, z) that can be stood on (-1: none within three quarters of a metre). */
+/** Is there a cushion between (ax, az) and (bx, bz), for a ball on felt `y` high? */
+function cut(H, ax, az, bx, bz, y) {
+  const ex = bx - ax, ez = bz - az;
+  for (const w of H.cushions) {
+    if (Math.max(ax, bx) < w.x0 || Math.min(ax, bx) > w.x1 || Math.max(az, bz) < w.z0 || Math.min(az, bz) > w.z1) continue;
+    const den = ex * w.dz - ez * w.dx; if (Math.abs(den) < 1e-12) continue;
+    const t = ((w.ax - ax) * w.dz - (w.az - az) * w.dx) / den, u = ((w.ax - ax) * ez - (w.az - az) * ex) / den;
+    if (t < 0 || t > 1 || u < 0 || u > 1) continue;
+    const px = w.ax + w.dx * u, pz = w.az + w.dz * u, base = w.base !== undefined ? w.base : w.bed.h ? w.bed.y + w.bed.h(px, pz) : w.bed.y;
+    if (y < base + w.high && y >= base - 0.3) return true;
+  }
+  return false;
+}
+/** The place of the grid nearest to (x, z) that can be stood on — on the same side of every cushion (-1: none within three quarters of a metre). */
 function nearest(M, x, z) {
   const ci = Math.round(x / CELL) - M.i0, cj = Math.round(z / CELL) - M.j0;
-  let best = -1, least = Infinity;
-  for (let dj = -4; dj <= 4; dj++) for (let di = -4; di <= 4; di++) {
-    const i = ci + di, j = cj + dj; if (i < 0 || j < 0 || i >= M.nx || j >= M.nz || !M.ok[j * M.nx + i]) continue;
-    const d = Math.hypot((i + M.i0) * CELL - x, (j + M.j0) * CELL - z) + (M.dist[j * M.nx + i] === Infinity ? 0 : M.dist[j * M.nx + i]);
-    if (d < least) { least = d; best = j * M.nx + i; }
+  for (let tries = 0; tries < 8; tries++) {
+    let best = -1, least = Infinity;
+    for (let dj = -4; dj <= 4; dj++) for (let di = -4; di <= 4; di++) {
+      const i = ci + di, j = cj + dj, n = j * M.nx + i; if (i < 0 || j < 0 || i >= M.nx || j >= M.nz || !M.ok[n] || _ban.includes(n)) continue;
+      const d = Math.hypot((i + M.i0) * CELL - x, (j + M.j0) * CELL - z) + (M.dist[n] === Infinity ? 0 : M.dist[n]);
+      if (d < least) { least = d; best = n; }
+    }
+    if (best < 0 || !cut(M.H, x, z, (best % M.nx + M.i0) * CELL, (Math.floor(best / M.nx) + M.j0) * CELL, M.ht[best])) { _ban.length = 0; return best; }
+    _ban.push(best);
   }
-  return best;
+  _ban.length = 0;
+  return -1;
 }
+const _ban = [];
 /** How far the cup is from (x, z) by the felt, round the kerbs (m; 60: one cannot get there from here). */
 export function farFrom(H, x, z) {
   const M = mapOf(H), n = nearest(M, x, z);
@@ -541,7 +604,7 @@ export const reachFor = (d) => clamp(2.2 * d + 2.5, 5, GOLF.reach[1]);
  * by hole), `total`, `clock` (s), and at the end `over`, `time` (s) and `score`.
  */
 export function startRound(t0 = 0) {
-  const st = { t0, clock: 0, acc: 0, steps: 0, hole: 0, phase: 'tee', wait: GOLF.wait.tee, strokes: new Array(HOLES.length).fill(0), holed: new Array(HOLES.length).fill(false), total: 0, ball: {}, from: [0, 0], aim: 0, held: 0, dir: 0, gauge: 0, since: 0, far: GOLF.reach[1], power: 0, want: false, over: false, time: 0, score: 0, clumsy: 0, bot: null };
+  const st = { t0, clock: 0, acc: 0, steps: 0, hole: 0, phase: 'tee', wait: GOLF.wait.tee, strokes: new Array(HOLES.length).fill(0), holed: new Array(HOLES.length).fill(false), total: 0, ball: {}, from: [0, 0], aim: 0, held: 0, dir: 0, gauge: 0, since: 0, far: GOLF.reach[1], power: 0, want: false, over: false, time: 0, score: 0, lost: 0, clumsy: 0, skill: 0, bot: null };
   ballAt(HOLES[0], 0, 0, st.ball);
   return st;
 }
@@ -569,7 +632,7 @@ function nextHole(st, events) {
 }
 /** The ball of a round is put down on the tee of hole `n` (the rules do it from hole to hole; the pictures of the holes ask for one at will). */
 export function teeOff(st, n) {
-  st.hole = n; st.bot = null;
+  st.hole = n; st.bot = null; st.lost = 0;
   ballAt(HOLES[n], 0, 0, st.ball);
   st.from[0] = 0; st.from[1] = 0; st.aim = 0;
   st.phase = 'tee'; st.wait = GOLF.wait.tee;
@@ -613,7 +676,7 @@ function sub(st, input, events) {
     else if (code === ACID || code === OUT || code === WATER) {
       // lost: one stroke more (never more than seven), and back where it was hit from
       if (st.strokes[st.hole] < GOLF.most) { st.strokes[st.hole]++; st.total++; }
-      st.phase = 'lost'; st.wait = GOLF.wait.lost;
+      st.phase = 'lost'; st.wait = GOLF.wait.lost; st.lost++;
       if (events) events.push({ type: 'lost', what: code === ACID ? 'acid' : code === WATER ? 'water' : 'out', x: b.x, z: b.z, y: b.y });
     }
   } else if (st.phase === 'tee') {
@@ -629,12 +692,24 @@ function sub(st, input, events) {
 }
 
 // ---------------------------------------------------------------------------------------------------------
-// A player that plays by itself — the proof that every hole can be holed. It does what one does with one's eyes:
-// it plays the putt forward with the rules above, for every aim round the way to the cup and every strength the
-// gauge will show in the coming swing — and, where something moves, for the very moment of the hit —, keeps the
-// one that ends in the cup, or nearest to it by the felt, and makes it finer. Then it turns the aim there and
-// waits for the gauge. `st.clumsy` (a seed) makes it a clumsy one: it looks less closely, its aim is a few
-// degrees off and its finger a little early or late.
+// Players that play by themselves. All three do what one does with one's eyes: they play the putt forward with
+// the rules above, for every aim round the way to the cup and every strength the gauge will show in the coming
+// swing — and, where something moves, for the very moment of the hit. Then they turn the aim there and wait for
+// the gauge.
+//  - The perfect one (`st.skill` 0) keeps the putt that ends in the cup, or nearest to it by the felt, makes it
+//    finer, and hits it exactly. It is the proof that every hole can be finished, and finds the fewest strokes
+//    there can be: bank shots no person would try, holed. It is not what a round is worth.
+//  - The one with a person's hand (`st.skill` 1; `st.clumsy`: its seed) knows its hand is not sure: of the best
+//    few putts it keeps the one that still ends well a little to either side and a little softer or firmer — the
+//    long safe way rather than the short one over the water, unless that one forgives. And then its hand is a
+//    person's: the aim a degree or two off, the strength five hundredths of the gauge or so — a finger a
+//    twentieth of a second early or late (drawn from the seed and the stroke). Who has lost a ball on a hole
+//    plays the next ones there with more room to spare.
+//  - The clumsy one (`st.skill` 2) looks less closely, and its hand is worse: some four degrees, some nine hundredths.
+/** The hand of each: how far apart the aims it tries (degrees) and how many to either side, how many of the best it weighs, and how unsure its aim (rad) and its strength (a share of it) are. */
+export const HANDS = [null, { fan: 4, span: 22, top: 8, aim: 0.03, power: 0.05 }, { fan: 6, span: 15, top: 6, aim: 0.065, power: 0.09 }];
+/** A draw from a bell curve (mean 0, spread 1, never beyond 2.5), from a seed. */
+const bell = (n, k) => clamp(Math.sqrt(-2 * Math.log(Math.max(1e-9, hash(n, k)))) * Math.cos(TAU * hash(n, k + 17)), -2.5, 2.5);
 
 const THINK = 40, EVERY = 6, SWING = Math.round((2 * GOLF.sweep) / STEP), LIMIT = 2400;
 const _b = {};
@@ -647,7 +722,7 @@ function tryPutt(st, B, aim, k) {
   B.sims++;
   B.end = code;
   if (code === HOLED) return (B.safe ? 3 : 1000) - k * 0.01 - n * 0.001;
-  if (code === ACID || code === OUT || code === WATER) return -B.here - 7;
+  if (code === ACID || code === OUT || code === WATER) return -B.here - 7 * (B.care || 1);
   return -farFrom(H, b.x, b.z) - k * 0.002;
 }
 /** How many steps it takes to turn the aim by `a` radians. */
@@ -665,9 +740,9 @@ function* search(st, B) {
   for (let k = 1; k <= THINK + SWING + 80; k++) { g += STEP / GOLF.sweep; if (g >= 2) g -= 2; c += STEP; B.gauge.push(g); B.clock.push(c); }
   // when to hit: every few steps of a whole swing of the gauge (where nothing moves, each strength once is enough)
   const whens = [], seen = new Set();
-  for (let k = THINK + 6; k < THINK + 6 + SWING; k += EVERY) { if (!H.movers.length) { const p = Math.round(gaugeOf(B.gauge[k]) * 26); if (seen.has(p)) continue; seen.add(p); } whens.push(k); }
+  for (let k = THINK + 6; k < THINK + 6 + SWING; k += B.hand ? EVERY * 2 : EVERY) { if (!H.movers.length) { const p = Math.round(gaugeOf(B.gauge[k]) * 26); if (seen.has(p)) continue; seen.add(p); } whens.push(k); }
   const fits = (a, k) => k >= THINK + turnSteps(Math.abs(a - st.aim)) + 1 && k < B.gauge.length - 1;
-  const span = B.safe ? 15 : 24, fan = B.safe ? 6 : 4;
+  const K = B.hand, span = K ? K.span : 24, fan = K ? K.fan : 4, per = SWING / 2; // (steps of the gauge from nothing to full)
   let found = null;
   scan: for (const k of whens) {
     for (let j = 0; j <= span * 2; j++) {
@@ -681,12 +756,13 @@ function* search(st, B) {
   }
   tries.sort((p, q) => q.v - p.v);
   if (!found && B.safe) {
-    // the clumsy one: of the best few, the one that still ends well a little to either side and a little early or late
+    // a hand that is not sure: of the best few, the one that still ends well a little to either side and a little softer or firmer
     const top = [];
-    for (const t of tries) { if (top.length >= 6) break; if (top.every((o) => Math.abs(o.a - t.a) > 0.1 || Math.abs(o.k - t.k) > 12)) top.push(t); }
+    for (const t of tries) { if (top.length >= K.top) break; if (top.every((o) => Math.abs(o.a - t.a) > 0.06 || Math.abs(o.k - t.k) > 8)) top.push(t); }
     for (const t of top) {
-      let sum = t.v, n = 1;
-      for (const [da, dk] of [[0.035, 0], [-0.035, 0], [0, 4], [0, -4]]) { if (!fits(t.a + da, t.k + dk)) continue; sum += tryPutt(st, B, t.a + da, t.k + dk); n++; yield; }
+      const da = K.aim * B.care, dk = Math.max(2, Math.round(K.power * per * B.care));
+      let sum = t.v * 2, n = 2;
+      for (const [qa, qk] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1.8, 0], [-1.8, 0], [0, 1.8], [0, -1.8], [1, 1], [-1, 1], [1, -1], [-1, -1]]) { const a = t.a + qa * da, k = t.k + Math.round(qk * dk); if (!fits(a, k)) continue; sum += tryPutt(st, B, a, k); n++; yield; }
       t.w = sum / n;
       if (!found || t.w > found.w) found = t;
     }
@@ -714,10 +790,11 @@ function* search(st, B) {
   }
   found ||= { a: way, k: THINK + 40, v: 0 };
   if (B.safe) {
-    // … and its hand is not sure
-    const n = st.clumsy * 31 + st.total * 7 + st.hole;
-    found.a += (hash(n, 1) * 2 - 1) * 0.044;
-    found.k = clamp(found.k + Math.round((hash(n, 2) * 2 - 1) * 4), THINK + turnSteps(Math.abs(found.a - st.aim)) + 1, B.gauge.length - 2);
+    // … and then the hand: the aim a little off, the strength a little more or less than meant
+    const n = st.clumsy * 31 + st.total * 7 + st.hole * 131;
+    found = { ...found };
+    found.a += bell(n, 1) * K.aim;
+    found.k = clamp(found.k + Math.round(bell(n, 2) * K.power * per), THINK + turnSteps(Math.abs(found.a - st.aim)) + 1, B.gauge.length - 2);
   }
   B.aim = found.a; B.at = B.from + found.k; B.worth = found.v;
 }
@@ -729,10 +806,11 @@ export function botInput(st, out = { x: 0, y: 0, jump: false }) {
   let B = st.bot;
   if (!B || B.stroke !== st.total || B.hole !== st.hole) {
     const H = HOLES[st.hole];
-    B = st.bot = { stroke: st.total, hole: st.hole, from: st.steps, safe: !!st.clumsy, sims: 0, here: farFrom(H, st.ball.x, st.ball.z), aim: st.aim, at: Infinity, run: null, left: THINK };
+    const hand = st.clumsy ? HANDS[st.skill || 2] : null;
+    B = st.bot = { stroke: st.total, hole: st.hole, from: st.steps, safe: !!hand, hand, care: 1 + 0.5 * Math.min(4, st.lost), sims: 0, here: farFrom(H, st.ball.x, st.ball.z), aim: st.aim, at: Infinity, run: null, left: THINK };
     B.run = search(st, B);
     // (so many putts tried at each step that the search is over when the thinking is)
-    B.each = Math.ceil(((H.movers.length ? SWING / EVERY : 27) * (B.safe ? 31 : 49) + 220) / (THINK - 2));
+    B.each = Math.ceil(((H.movers.length ? SWING / EVERY : 27) * (hand ? hand.span * 2 + 1 : 49) + 400) / (THINK - 2));
   }
   if (B.run) {
     for (let n = 0; n < B.each; n++) if (B.run.next().done) { B.run = null; break; }
@@ -751,10 +829,10 @@ export function botInput(st, out = { x: 0, y: 0, jump: false }) {
   return out;
 }
 
-/** Plays a round with the bot (`clumsy`: the seed of a clumsy one; 0: the careful one). Returns its state. `limit`: seconds. */
-export function botRound(t0 = 0, clumsy = 0, limit = 900, events = null) {
+/** Plays a round with a bot (`seed` 0: the perfect one; else `skill` 1: a person's hand, 2: a clumsy one, drawn from the seed). Returns its state. `limit`: seconds. */
+export function botRound(t0 = 0, seed = 0, limit = 900, events = null, skill = 2) {
   const st = startRound(t0), input = { x: 0, y: 0, jump: false };
-  st.clumsy = clumsy;
+  st.clumsy = seed; st.skill = seed ? skill : 0;
   for (let n = 0; n < limit / STEP && !st.over; n++) { botInput(st, input); stepRound(st, STEP, input, events); }
   return st;
 }

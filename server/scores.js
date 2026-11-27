@@ -76,7 +76,7 @@ export const BOARDS = {
   flip: { order: 'asc', min: 67_000, max: 600_000, length: 84_000, added: 600_000, release: 'flip' },
   spiral: { order: 'asc', min: 144_000, max: 900_000, release: 'spiral' }, // Spiral of Death: from the first step to the bell
   cars: { order: 'asc', min: 16_000, max: 180_000, release: 'cars' }, // Karting Simulator: three laps of the table
-  golf: { order: 'asc', min: 9000, max: 63_999, unit: 'strokes', release: 'golf' }, // Balthazar Golf: nine holes, seven strokes a hole at most
+  golf: { order: 'asc', min: 9000, max: 81_999, unit: 'strokes', release: 'golf' }, // Balthazar Golf: nine holes, nine strokes a hole at most
   // …and six more (lab/NEWGAMES.md), each behind its own switch: times, the less the better. (Until a game is built
   // the figures only hold its place; its checks print the true ones.)
   ages: { order: 'asc', min: 80_000, max: 900_000, release: 'ages' }, // War Through the Ages: the time of the victory — nothing found wins in under two minutes, and a war is called off after fifteen
