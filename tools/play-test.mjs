@@ -27,6 +27,7 @@ const SPECS = {
   golf: { offer: /Balthazar Golf/, score: (n) => n > 0, star: false }, // (the golf has no star on the map)
   ages: { offer: /War Through the Ages/, score: (ms) => ms > 80000 && ms < 900000 }, // (a whole war by its bot: two or three minutes)
   raft: { offer: /Wild River/, score: (ms) => ms > 60000 && ms < 900000 },
+  mine: { offer: /Little Mine Train/, score: (ms) => ms > 40000 && ms < 900000 }, // (the whole line by its driver: a minute and a half)
 };
 const asked = process.argv.slice(2).filter((a) => SPECS[a]), ids = asked.length ? asked : Object.keys(SPECS);
 

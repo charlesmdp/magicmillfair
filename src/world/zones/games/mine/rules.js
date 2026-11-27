@@ -23,7 +23,7 @@ export const MINE = {
   name: 'Little Mine Train',
   step: 1 / 120,
   every: 10, // s between two starts (gates.js: nextStart)
-  station: { x: -263, z: -60, y: 31.3, yaw: Math.PI }, // where the line begins — and ends: the south end of the platform, looking north
+  station: { x: -263, z: -60, y: 30.4, yaw: Math.PI }, // where the line begins — and ends: the south end of the platform, looking north
   gate: { x: -257.2, z: -70, yaw: -Math.PI / 2 }, // where one asks, on the meadow before the platform
   wait: 20, // m along the line: where the first cart waits
   haul: { out: 5, lift: 11.5, pull: 5 }, // m/s out of the station and up the lift; how fast the chain takes it (m/s²)
@@ -59,9 +59,9 @@ const OUT = [
   S(92, -73.5, 'lift'),
   S(8, -0.3, 'rock'),
   B(105, 14, 0.4, 'rock'),
-  S(12, 0.2, 'rock'),
+  S(22, 0.3, 'rock'),
   // a first gentle run in the open, along the flank
-  S(14, 0.4, 'open', { name: 'The High Line', things: [['nug', 2, 0], ['nug', 8, 0]] }),
+  S(4, 0.3, 'open', { name: 'The High Line' }),
   B(-16, 40, 0.5, 'open'),
   S(20, 0.5, 'open', { things: [['nug', 3, 1], ['nug', 9, 1], ['nug', 15, 1]] }),
   B(46, 30, 0.5, 'open'),
