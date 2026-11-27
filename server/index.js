@@ -159,6 +159,8 @@ const store = {
     return this.data;
   },
   async get(key) { return (await this.load())[key]; },
+  /** Every record whose key begins with `prefix`: [[key, value]…] (the back office lists the accounts with it). */
+  async list(prefix = '') { return Object.entries(await this.load()).filter(([k]) => k.startsWith(prefix)); },
   async put(key, value) { (await this.load())[key] = value; return this.save(); },
   async delete(key) { delete (await this.load())[key]; return this.save(); },
   save() {
