@@ -299,13 +299,17 @@ export class Coaster {
       const banner = canvasBoard(1024, 220, (ctx, w, h) => { ctx.fillStyle = '#1b1340'; ctx.fillRect(0, 0, w, h); ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 10; ctx.strokeRect(10, 10, w - 20, h - 20); ctx.fillStyle = '#f6e7b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = "700 130px Georgia, 'Times New Roman', serif"; ctx.fillText('FINISH', w / 2, h / 2 + 6); }, 2 * lim + 2.2, (2 * lim + 2.2) * 0.215, { both: true });
       hang(banner, a.top.clone().lerp(b.top, 0.5).add(V(0, -0.5, 0)), a.p.yaw, 'coaster-sign-finish');
     }
-    // ---- over the foot of each lift: a blue board
+    // ---- before the foot of each lift: a blue board over the line, high enough for the camera to pass under (the first stands at the end of the station's roof)
     for (const l of c.lifts) {
-      const lim = railAt(c, l.from, _p).lim, a = post(l.from + 3, -(lim + 1.3), 7.4, [BLUE, WHITE], 0.11), b = post(l.from + 3, lim + 1.3, 7.4, [BLUE, WHITE], 0.11);
+      const at = Math.max(2, l.from - (l === c.lifts[0] ? 1 : 8)), lim = railAt(c, at, _p).lim, a = post(at, -(lim + 1.3), 7.4, [BLUE, WHITE], 0.11), b = post(at, lim + 1.3, 7.4, [BLUE, WHITE], 0.11);
       const banner = canvasBoard(512, 128, (ctx, w, h) => { ctx.fillStyle = '#0e2a66'; ctx.fillRect(0, 0, w, h); ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 7; ctx.strokeRect(7, 7, w - 14, h - 14); ctx.fillStyle = '#f6e7b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '700 60px system-ui, sans-serif'; ctx.fillText('LIFT · HANDS OFF', w / 2, h / 2 + 3, w - 40); }, 2 * lim + 2.2, (2 * lim + 2.2) * 0.25, { both: true });
       hang(banner, a.top.clone().lerp(b.top, 0.5).add(V(0, -0.45, 0)), a.p.yaw, 'coaster-sign-lift');
       for (let k = 0; k <= 6; k++) { const q = a.top.clone().lerp(b.top, k / 6); glow.tint(1.6, 1.3, 0.6, 1).place(q.x, q.y + 0.12, q.z).lathe([[0.001, -0.08], [0.07, -0.03], [0.07, 0.03], [0.001, 0.08]], 5).pop(); }
     }
+    // ---- bulbs up both sides of every lift, on the boards of the edge, and along the arch of the finish: a fair, seen from the beach
+    const bulb = (q) => glow.tint(1.7, 1.35, 0.6, 1).place(q.x, q.y, q.z).lathe([[0.001, -0.1], [0.1, 0], [0.001, 0.1]], 4).pop();
+    for (const l of c.lifts) for (let s = l.from + 5; s < l.to - 2; s += 6) for (const sg of [-1, 1]) { const [p, f] = sample(s); bulb(on(p, f, sg * (p.lim + 0.13), -0.03)); }
+    { const lim = railAt(c, c.finish, _p).lim, [p, f] = sample(c.finish); for (let k = 0; k <= 8; k++) bulb(on(p, f, lerp(-(lim + 1.3), lim + 1.3, k / 8), 7.75)); }
     this.group.add(parts.toMeshes(this.mats, { name: 'coaster-marks', layers: [] }));
   }
 
@@ -508,7 +512,7 @@ export class Coaster {
           const rails = (d, out) => (line !== c && q + d < 0 ? railAt(c, Math.max(0.2, line.from + q + d), out) : line !== c && q + d > line.length ? railAt(c, line.to + q + d - line.length, out) : railAt(line, clamp(q + d, 0.2, line.length - 0.5), out));
           const flat = 1 / Math.sqrt(1 + pose.rise * pose.rise), back = (8.2 + st.v * 0.07) * (0.35 + 0.65 * flat), pb = rails(-back, q1), pa = rails((4.5 + st.v * 0.1) * flat, q2);
           // (on a lift: from in front, a little to the mountain side, looking back over the car at the valley)
-          const lift = line.lifts.find((l) => q >= l.from && q < l.to), view = lift && (lift.to - q) / K.chain > 2.4 && q - lift.from > 5 ? 1 : 0;
+          const lift = line.lifts.find((l) => q >= l.from && q < l.to), view = lift && (lift.to - q) / K.chain > 2.4 && q - lift.from > 14 ? 1 : 0;
           S.view += (view - S.view) * Math.min(1, dt * (view ? 1.3 : 2.2));
           const v = smooth(0, 1, S.view);
           // (well above the rails behind — as high over them as the slope asks — and looking at the rails just ahead of the car:
@@ -523,6 +527,8 @@ export class Coaster {
             const pf = rails(6.5 * flat, q3), away = (Math.sign(-pf.tz * (pf.x - VALLEY.x) + pf.tx * (pf.z - VALLEY.z)) || 1) * 1.5;
             const vx = VALLEY.x - pose.x, vz = VALLEY.z - pose.z, vl = Math.hypot(vx, vz) || 1;
             t.lerp(V(pf.x - pf.tz * away, Math.max(pf.y, pose.y) + 3, pf.z + pf.tx * away), v);
+            // (on its way round it swings out to the side: it does not pass over the car's head)
+            const out = Math.sin(Math.PI * v) * 4 * Math.sign(away); t.x -= pf.tz * out; t.z += pf.tx * out;
             t2.lerp(V(pose.x + (vx / vl) * 4, pose.y + 0.6, pose.z + (vz / vl) * 4), v);
           }
           if (!S.cam) { S.cam = t.clone(); S.look.copy(t2); } else { S.cam.lerp(t, Math.min(1, dt * 7)); S.look.lerp(t2, Math.min(1, dt * 9)); }
