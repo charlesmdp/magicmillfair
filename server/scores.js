@@ -79,7 +79,7 @@ export const BOARDS = {
   golf: { order: 'asc', min: 9000, max: 63_999, unit: 'strokes', release: 'golf' }, // Balthazar Golf: nine holes, seven strokes a hole at most
   // …and six more (lab/NEWGAMES.md), each behind its own switch: times, the less the better. (Until a game is built
   // the figures only hold its place; its checks print the true ones.)
-  ages: { order: 'asc', min: 20_000, max: 1800_000, release: 'ages' }, // War Through the Ages
+  ages: { order: 'asc', min: 80_000, max: 900_000, release: 'ages' }, // War Through the Ages: the time of the victory — nothing found wins in under two minutes, and a war is called off after fifteen
   raft: { order: 'asc', min: 85_000, max: 900_000, release: 'raft' }, // Wild River: 644 m of river; the quickest water all the way, paddled flat out, takes 85 s
   walls: { order: 'asc', min: 20_000, max: 1800_000, release: 'walls' }, // Run the Walls
   sneak: { order: 'asc', min: 20_000, max: 1800_000, release: 'sneak' }, // Robots Can See You
