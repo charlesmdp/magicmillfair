@@ -147,7 +147,7 @@ let bots = [];
   // ---- a clumsy one, and one who does nothing
   const clumsy = [1, 2, 3].map((seed) => botRun(seed * 11.3, { clumsy: true, seed }));
   const best = Math.max(...bots.map((b) => b.time));
-  check('a clumsy player — it runs everywhere, never crouches, never waits — is caught again and again, and still ends at the door: a mistake costs seconds, not the run', clumsy.every((st) => st.over && !st.out && st.caught >= 5 && st.time > best), clumsy.map((st) => `${fmt(st.time)} (caught ${st.caught} times)`).join(', '));
+  check('a clumsy player — it runs everywhere, never crouches, never waits — is caught again and again, and still ends at the door: a mistake costs seconds, not the run', clumsy.every((st) => st.over && !st.out && st.caught >= 2 && st.time > best + 30_000) && clumsy.reduce((a, st) => a + st.caught, 0) >= 15, clumsy.map((st) => `${fmt(st.time)} (caught ${st.caught} times)`).join(', '));
   const idle = startRun(0); run(idle, 120, null);
   const dither = startRun(0); run(dither, 120, (s, i, t) => { i.x = Math.sin(t * 2) > 0 ? 1 : -1; });
   check('standing still wins nothing: no time runs, nothing is reached; nor does walking up and down at the start', !idle.over && !idle.started && idle.clock === 0 && timeOf(idle) === 0 && !dither.over && dither.save === 0 && dither.started, `idle: ${idle.clock} s; up and down: ${dither.clock.toFixed(0)} s on the clock, still in the first room`);
