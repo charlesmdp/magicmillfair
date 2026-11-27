@@ -138,6 +138,8 @@ export function putRobot(st, i, era, k, p) {
   st.sides[i].units.push(u);
   return u;
 }
+/** How far a war has come, 0 … 1 — the age one's own side has reached: 0 in the stone age, 1 in the atom age (its music reads it: an instrument more with every age). */
+export const heatOf = (st) => (st && st.sides ? st.sides[0].age / (ERAS.length - 1) : 0);
 /** The place of a robot along the road, as the stage has it (from the gate of side 0). */
 export const roadOf = (side, p) => (side ? L - p : p);
 /** The place a new turret would take on the base of `s`: a free one, else the oldest of an earlier age; -1: none. */
