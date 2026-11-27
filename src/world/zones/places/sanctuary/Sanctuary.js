@@ -257,7 +257,7 @@ export class Sanctuary {
         for (const v of [v0 + 3.4, v1 - 1.4 - (a === 0 ? 5.4 : 0)]) {
           slab(out, F, s * WO, DEEP, v - 0.75, s * (WO + 1.5), 5.2, v + 0.75, OUT, { faces: s < 0 ? 'xzZ' : 'XzZ', paint: plain });
           slab(out, F, s * WO, 5.2, v - 0.65, s * (WO + 1.0), 9.6, v + 0.65, OUT, { faces: s < 0 ? 'xzZ' : 'XzZ', paint: plain });
-          for (const [y0, y1, d0, d1, hw] of [[5.2, 5.9, 1.5, 1.0, 0.75], [9.6, 10.5, 1.0, 0.0, 0.65]]) face(out, F(s * (WO + d0), y0, v - hw), F(s * (WO + d0), y0, v + hw), F(s * (WO + d1), y1, v + hw), F(s * (WO + d1), y1, v - hw), V(0, 1, 0), TRIM, plain);
+          for (const [y0, y1, d0, d1, hw] of [[5.2, 5.9, 1.5, 1.0, 0.75], [9.6, 10.5, 1.0, 0.0, 0.65]]) face(out, F(s * (WO + d0), y0, v - hw), F(s * (WO + d0), y0, v + hw), F(s * (WO + d1), y1, v + hw), F(s * (WO + d1), y1, v - hw), V(0, 1, 0), OUT, plain, [0.93, 0.93, 0.93, 0.93]);
         }
         for (const v of a === 0 ? [12.6] : [12.6, 16.9]) lancet(shine, F(s * (WO + 0.03), 2.2, v), F(0, 0, -s).sub(F(0, 0, 0)), V(0, 1, 0), 1.2, 3.3, off, n * 7 + s + Math.round(v), 0.42);
         // (the roof: slabs of stone)
