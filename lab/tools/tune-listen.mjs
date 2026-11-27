@@ -34,7 +34,7 @@ await page.exposeFunction('report', (line) => console.log(line));
 await page.exposeFunction('saveWav', (name, base64) => { if (OUT) fs.writeFileSync(path.join(OUT, `${name}.wav`), Buffer.from(base64, 'base64')); });
 try {
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/tune-listen.html`);
-  await page.evaluate(pageMain, { ids, seconds: +(opt.seconds || 14), heats: String(opt.heats || '0.05,0.5,1').split(',').map(Number), wav: !!OUT });
+  await page.evaluate(pageMain, { ids, seconds: +(opt.seconds || 14), heats: String(opt.heats || '0.05,0.5,1').split(',').map(Number), wav: !!OUT, long: +(opt.long || 46) });
 } catch (err) { console.log('FAIL:', err.message); }
 await browser.close();
 await server.close();
@@ -105,16 +105,17 @@ async function pageMain(o) {
       tune.heat = () => h;
       const p = tunePlayer({ audio: null }), app = { audio: null };
       const player = tunePlayer(app);
-      const buf = await render(o.seconds, null, (audio) => { if (!app.audio) { app.audio = audio; player.play(id, { state: {} }, null); } player.tick(); });
+      const buf = await render(o.seconds, null, (audio) => { if (!app.audio) { app.audio = audio; player.play(id, { state: { inside: h } }, null); } player.tick(); });
       void p;
       say('  ' + line(`${id} at ${h}`, measure(buf)));
     }
     if (o.wav) {
       // the whole of it, as a run warms up: forty-five seconds from the first note to everything
-      const secs = 46, app = { audio: null }, player = tunePlayer(app);
+      const secs = +(o.long || 46), app = { audio: null }, player = tunePlayer(app);
       let now = 0;
+      const st = { inside: 0 };
       tune.heat = () => Math.min(1, now / 38);
-      const buf = await render(secs, null, (audio, t) => { now = t; if (!app.audio) { app.audio = audio; player.play(id, { state: {} }, null); } player.tick(); });
+      const buf = await render(secs, null, (audio, t) => { now = t; st.inside = Math.min(1, t / 38); if (!app.audio) { app.audio = audio; player.play(id, { state: st }, null); } player.tick(); });
       const m = measure(buf, 1);
       await window.saveWav(id, wav(buf, Math.min(4, 0.9 / Math.max(0.05, m.peak))));
       say(`  written: ${id}.wav (${secs} s, the run warming up from nothing to everything; made ${(Math.min(4, 0.9 / Math.max(0.05, m.peak))).toFixed(1)} times louder for listening)`);

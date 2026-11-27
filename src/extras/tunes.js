@@ -34,7 +34,8 @@ const or = (v, secs, span) => (Number.isFinite(v) ? sat(v) : sat(secs / span));
 //   kit: 'drum' | 'kick' | 'hat' | 'snare' | 'cymbal' — drums made of a low note that drops and of filtered noise;
 //        their pattern is hits: 'x' a full one, 'o' a soft one, 'r' a rest (`vel`: how hard, 1 unless said);
 //   standing: true — a line of one note at a time on an oscillator that never stops (each note re-tunes and
-//        strikes it; `lp`: a low-pass over it, Hz): the pulse of the low strings, an arpeggio.
+//        strikes it; `lp`: a low-pass over it, Hz; `glide`: it slides to each note, in so many seconds — a voice):
+//        the pulse of the low strings, an arpeggio, somebody humming.
 // `mod: [n, r]`: a part that plays only in the bars whose number leaves r when divided by n (a run into every
 // fourth bar line, a cymbal at the head of every eighth). `room` (a tune): how much of it goes to the room behind
 // the game's music (its two echoes: Music.send) — none unless said.
@@ -214,6 +215,35 @@ export const TUNES = {
       { line: 'theme', shift: 12, wave: 'chime', vel: 0.03, from: 0.55, every: 8, gate: 0.5, attack: 0.004, release: 0.08 },
     ],
     heat: (st, secs, R) => or(st?.hole / ((R?.HOLES?.length ?? NaN) - 1), secs, 400), // the holes played
+  },
+
+  /**
+   * The Sanctuary (a place, not a game: src/extras/sanctuary.js plays it for who walks in): a slow gospel in D flat,
+   * in twelve-eight — the deep pedal of an organ and its chords from the door on; then a bass voice that hums the
+   * tune, sliding from note to note; a piano rocking in threes; a heartbeat of a drum; and, under the dome, the
+   * choir that takes the tune up an octave above the hum, a held third over it, a bell at the head of each phrase.
+   * The fourth chord turns minor before it comes home, and the last two bars are an amen. Its heat is how far
+   * inside one stands; so is how loud it is.
+   */
+  sanctuary: {
+    bpm: 168, beats: 12, room: 0.34,
+    chords: 'Db Db7 Gb Gbm Db Bbm Ebm Ab7 Db Db7 Gb Gbm Db Ab7 Gb Db',
+    theme: 'f4:6 eb4:3 db4:3 | f4:6 ab4:3 b4:3 | bb4:9 ab4:3 | a4:6 gb4:6 | f4:9 eb4:3 | db4:6 f4:6 | gb4:6 eb4:3 gb4:3 | f4:3 eb4:9 | '
+      + 'ab4:6 f4:3 ab4:3 | b4:6 ab4:6 | bb4:6 db5:6 | db5:3 a4:9 | ab4:6 f4:6 | gb4:6 eb4:6 | gb4:3 f4:3 eb4:3 db4:3 | db4:12',
+    parts: [
+      { pattern: '1:12', root: 24, wave: 'flute', vel: 0.11, gate: 0.97, attack: 0.5, release: 0.12 },
+      { pattern: '1:12', root: 36, wave: 'bourdon', vel: 0.1, gate: 0.97, attack: 0.4, release: 0.12 },
+      { pattern: 'c:12', root: 0, wave: 'chord', vel: 0.05, gate: 0.96, attack: 0.6, release: 0.1, cents: -6 },
+      { pattern: 'c:12', root: 12, wave: 'chord', vel: 0.028, from: 0.08, gate: 0.96, attack: 0.7, release: 0.1, cents: 7 },
+      { line: 'theme', shift: -12, wave: 'reed', standing: true, lp: 620, glide: 0.07, vel: 0.2, from: 0.15, every: 8, gate: 0.94, attack: 0.09, release: 0.16 },
+      { pattern: '1 5 8 10 8 5 1 5 8 10 8 5', root: 48, wave: 'piano', vel: 0.045, from: 0.3, gate: 1, attack: 0.006, sustain: 0.35, decay: 0.3, release: 0.08 },
+      { kit: 'drum', pattern: 'x:6 o:6', vel: 0.4, from: 0.4 },
+      { line: 'theme', wave: 'principal', standing: true, lp: 1500, glide: 0.06, vel: 0.07, from: 0.55, every: 8, gate: 0.94, attack: 0.12, release: 0.2 },
+      { pattern: '3:12', root: 60, wave: 'principal', standing: true, lp: 1300, glide: 0.15, vel: 0.04, from: 0.7, gate: 0.96, attack: 0.3, release: 0.25 },
+      { pattern: '8:12', root: 60, wave: 'chime', vel: 0.035, mod: [8, 0], from: 0.7, gate: 0.3, attack: 0.004, release: 0.5 },
+    ],
+    heat: (st) => sat(st?.inside ?? 0),
+    level: (st) => sat(0.2 + 0.65 * sat((st?.inside ?? 0) * 1.6)),
   },
 };
 
@@ -404,7 +434,7 @@ export function tunePlayer(app) {
         else if (p.standing) {
           // (a player that never stops: re-tuned and struck)
           const l = lines[e.part];
-          if (l) { l.o.frequency.setValueAtTime(e.hz, when); l.g.gain.setTargetAtTime(p.vel * (0.85 + 0.15 * heat), when, p.attack ?? 0.004); l.g.gain.setTargetAtTime(0, when + Math.max(0.02, len), p.release ?? 0.04); }
+          if (l) { if (p.glide) l.o.frequency.setTargetAtTime(e.hz, when, p.glide); else l.o.frequency.setValueAtTime(e.hz, when); l.g.gain.setTargetAtTime(p.vel * (0.85 + 0.15 * heat), when, p.attack ?? 0.004); l.g.gain.setTargetAtTime(0, when + Math.max(0.02, len), p.release ?? 0.04); }
         } else m.tone(bus, e.wave, e.hz, when, len, p.vel * (0.85 + 0.15 * heat), p.attack ?? 0.01, p.sustain ?? 1, p.decay ?? 0, p.release ?? 0.05, p.cents || 0);
       }
     }
@@ -436,6 +466,8 @@ export function tunePlayer(app) {
         const secs = ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - began) / 1000;
         let heat = 0;
         try { heat = sat(tune.heat ? tune.heat(run?.state, secs, rules) : 0); } catch { heat = sat(secs / 120); }
+        // (a tune may say how loud it is, from the same state: the music of a place, nearer or further)
+        if (tune.level) { try { bus.gain.setTargetAtTime(sat(tune.level(run?.state, secs, rules)), now, 0.35); } catch { /* as it was */ } }
         write(a, heat);
       } catch { /* the music never stops a game */ }
     },
