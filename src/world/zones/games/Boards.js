@@ -101,8 +101,12 @@ export function drawScores(ctx, w, h, { title, sub, lists, format, me, room = nu
     ctx.fillText(shrink(ctx, key === 'all' ? `♛  ${label}  ♛` : label, pw - 52, 26, 800, SANS), x0 + pw / 2, y0 - 6 + head / 2 + 1);
     const list = from ? from[period] : null;
     if (!list || !list.length) {
+      // (a score made without an account is on the list of the day only — server/scores.js —: the three other
+      // lists say so while they are empty, where one looks for one's score and does not find it)
+      const cy = y0 + head + (ph - head) / 2, kept = !!list && period !== 'day';
       ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'; ctx.font = `600 25px ${SANS}`;
-      ctx.fillText(list ? (period === 'all' ? 'Be the first!' : 'Nobody yet — your turn') : '…', x0 + pw / 2, y0 + head + (ph - head) / 2);
+      ctx.fillText(list ? (period === 'all' ? 'Be the first!' : 'Nobody yet — your turn') : '…', x0 + pw / 2, cy - (kept ? 15 : 0));
+      if (kept) { ctx.fillStyle = 'rgba(255, 255, 255, 0.42)'; ctx.font = `600 19px ${SANS}`; ctx.fillText('with a free account, your score stays here', x0 + pw / 2, cy + 19); }
       return;
     }
     list.slice(0, rows).forEach((e, i) => {

@@ -22,6 +22,8 @@
 //       drop(player, done)          lets the player go, where one should be then; close()
 //       instance (optional)         which run of the game this is, when not `start.n`: those who share it see each other
 //       tell() (optional)           → up to six numbers the others are told with it, a few times a second
+//       unseen (optional)           true while one's own robot is left out of one's own picture (it would stand
+//                                   before what one looks at); the others see it all the same
 //   io: { play(name, options), note(text, ms), splash(x, y, z, strength), peers() (the other visitors in sight),
 //         mates() (those of them who share one's run: [{ id, peer, run, d }]), live() (the run most play now) }
 //   game.crowd (given by plug): { of(), live(), watch(run) } — who plays the game now, for what it shows to who only watches
@@ -79,6 +81,7 @@ export function plug(app, game, o) {
     hud.setRun(null);
     keysHelp(app).clear();
     s.drop(player, !!done);
+    if (s.unseen !== undefined && app.me) app.me.root.visible = true;
     // (a game may have turned the camera about its own axis — a view from straight above does —: it is given back upright)
     if (eye) { eye.up.set(0, 1, 0); eye.updateMatrixWorld(); }
     if (!done) hud.note(o.left || 'Game left.', 2500);
@@ -113,6 +116,7 @@ export function plug(app, game, o) {
       eye = camera;
       app.fair.fov = run.camera(camera, dt);
       camera.updateMatrixWorld();
+      if (run.unseen !== undefined && app.me) app.me.root.visible = !run.unseen;
       // (the others are told which run this is, a few times a second — and what the session says of itself:
       // session.tell() → up to six numbers; the line of the run says who shares it)
       crowd.say(o.id, instanceOf(run), run.tell?.() || []);
