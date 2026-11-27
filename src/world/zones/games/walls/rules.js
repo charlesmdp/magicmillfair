@@ -33,7 +33,7 @@ export const WALLS = {
   name: 'Run the Walls',
   at: { x: 258, z: 100 }, // the middle of the ruin, in the sea off the south beach
   gate: { x: 56, z: 88 }, // where one asks to run: on the south beach, the ruin in sight
-  base: 3.2, // m over the sea: the foot of the way
+  base: 6, // m over the sea: the foot of the way
   half: 1.7, reach: 1.45, // the way: half its width; how far from its middle one goes (the wall, a kerb)
   // its plan: a snail's shell of straight sides, each turned left into the next by a quarter circle
   plan: { a: 42, b: 30, inset: 7.5, r: 5, sides: 9 },
@@ -129,7 +129,7 @@ export function course() {
   // ---- 3 · Up the Wall: faces of green stone, the last one beyond a hole
   save(60.7); to(64); up(2.6); floor(5); up(3); floor(4); gap(2.6); up(1.3); corner(1);
   // ---- 4 · Wall to Wall: a wall stands on the right as well — kick from one to the other
-  save(); to(91.5); band(-1, 90.3, 99.5, 5.8); band(1, 101, 109, 5.8); gap(16); floor(4);
+  save(); to(91.5); band(-1, 90.3, 99.5, 4.6); band(1, 101, 109, 4.6); gap(16); floor(4);
   // ---- 5 · The Bars: a gold bar over each gap
   save(108.6); pole(114.6); gap(7.5); floor(2.8); pole(124.9); gap(7.2); corner(2);
   // ---- 6 · Blades and Spikes: what keeps time
