@@ -16,8 +16,10 @@ export function attach(app) {
     label: () => `Play ${GOLF.name}`,
     leave: 'Leave the course',
     left: 'Round left.',
+    // (the keys, and no more than a screen held upright can show without hiding the hole: what sand, ice and pipes
+    // do is said again by the note of each hole that has them)
     keys: (touch) => (touch
-      ? `Stick left / right: aim the line of dots (the view turns with it) · stick forward, held: the whole hole from above · stick back: slows the gauge · the arrow (jump) putts at the strength the gauge shows · yellow sand slows, pale blue ice slides, a purple pipe carries the ball to its other end · water, gaps and the acid cost a stroke · near the cup a slow ball drops, a fast one lips out · ${GOLF.most} strokes at most a hole`
-      : `A D (or the arrows): aim the line of dots (the view turns with it) · W, held: the whole hole from above · S: slows the gauge · Space putts at the strength the gauge shows · yellow sand slows, pale blue ice slides, a purple pipe carries the ball to its other end · water, gaps and the acid cost a stroke · near the cup a slow ball drops, a fast one lips out · ${GOLF.most} strokes at most a hole · E: leave · H: these keys again`),
+      ? 'Stick left / right: aim · stick forward, held: the whole hole from above · stick back: slows the gauge · the arrow (jump): putt, as hard as the gauge shows · sand slows, ice slides, a pipe carries the ball · water, a gap, acid: a stroke lost'
+      : 'A D (or the arrows): aim · W, held: the whole hole from above · S: slows the gauge · Space: putt, as hard as the gauge shows · sand slows, ice slides, a pipe carries the ball · water, a gap, acid: a stroke lost · E: leave · H: these keys again'),
   });
 }

@@ -629,7 +629,7 @@ export class Golf {
     const _t = V(0, 0, 0), _c = V(0, 0, 0), _d = V(0, 0, 0), _w = [0, 0, 0, 0], _l = [0, 0];
     const self = this;
     const session = {
-      golf: this, over: false, ended: false, score: 0, line: '', riding: false, anim: ANIM.idle, state: st, auto: false,
+      golf: this, over: false, ended: false, score: 0, line: '', riding: false, anim: ANIM.idle, state: st, auto: false, unseen: false,
       step: (dt, pl, control) => {
         const inp = pl.input;
         if (!st.over) {
@@ -719,6 +719,9 @@ export class Golf {
         }
         cam.position.copy(_d); cam.up.set(0, 1, 0); cam.lookAt(_t);
         self._gauge(cam);
+        // (on a screen held upright the picture is no wider than the lane: one's robot, beside the ball, would hide
+        // half of the hole while one aims — it is left out of one's own picture then, and is back as the ball leaves)
+        session.unseen = cam.aspect < 0.8 && C.view < 0.4 && (st.phase === 'aim' || st.phase === 'tee');
         return 54;
       },
       /** What belongs to the round is put where it is: the ball, its ring, the dots, the gauge, the putter. */
