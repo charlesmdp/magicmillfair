@@ -41,6 +41,7 @@ export const LAND = {
   shore: 2.6, // m of rocks along the foot of those cliffs, between the sea and the wall
   // the foot of the real cliff, from north to south: [z, x] — west of it the headland runs on into the rock
   cliff: [[-512, 293], [-487, 287], [-469, 281], [-451, 276], [-433, 271], [-421, 269], [-409, 265], [-397, 262], [-380, 257]],
+  back: 14, // m: how far behind its spring the pool of the Cauldron goes on, into the real cliff
   grid: 16, // m: the squares the river is sorted into, for looking it up
   reach: 66, // m: how far from the river anything of the headland is
 };
@@ -88,6 +89,14 @@ export function raftLand(course) {
       const t = d / 34;
       S.push({ x: e.x + e.tx * d, z: e.z + e.tz * d, s: e.s + d, y: e.y * (1 - t), hw: e.hw + 7 * t, tx: e.tx, tz: e.tz, yaw: e.yaw, deep: 1, shape: e.shape, bl: e.bl * (1 - t), br: e.br * (1 - t), cap: e.cap * (1 - 0.7 * t), out: Math.max(0, e.out * (1 - smooth(0, 0.8, t))), sl: 0, sr: 0, n: S.length, mouth: true });
     }
+  }
+  {
+    // (and back from its spring into the real cliff: the Cauldron has no shore of its own on that side — the face of
+    // the cliff rises out of its water, and the great fall comes down it)
+    const a = S[0], head = [];
+    for (let d = LAND.back; d >= 2; d -= 2) head.push({ ...a, x: a.x - a.tx * d, z: a.z - a.tz * d, s: -d, head: true });
+    S.unshift(...head);
+    S.forEach((q, i) => { q.n = i; });
   }
   const grid = new Map(), G = LAND.grid, key = (i, j) => (i + 512) * 4096 + j + 512;
   let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
