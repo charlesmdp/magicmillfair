@@ -323,7 +323,7 @@ let built = null;
  *                'boost'    arrows of light on the water, `half` m to each side and `len` m long: who rides over
  *                           them is thrown forward
  *   sparks     [{ x, y, z, ref (the metre of the main line it hangs by), line (the line it hangs over, -2: in
- *              the air), air }]: each one caught takes a quarter of a second off one's time
+ *              the air), air (then `yaw`: the way one flies past it) }]: each one caught takes a quarter of a second off one's time
  *   helices    [{ name, x, z, r, from, to, top, bottom, turn, arc }]: what the line winds round (`arc`: a bend
  *              of the oval — the mast that stands at (x, z) holds it too)
  *   finish     where the clock stops (metres along the main line): the end of the trough
@@ -582,7 +582,7 @@ export function slideCourse() {
   for (const o of IN_AIR) {
     const f = falls.find((q) => q.id === o.from), ln = f ? main : sides.find((q) => q.key === o.from), p = lineAt(ln, f ? f.from : ln.length);
     const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
-    sparks.push({ x: p.x + fx * o.ahead - fz * o.aside, y: p.y + 0.3 - o.down, z: p.z + fz * o.ahead + fx * o.aside, ref: (f ? f.to : refAt(ln, ln.length)) + 2, line: -2, air: true, from: o.from });
+    sparks.push({ x: p.x + fx * o.ahead - fz * o.aside, y: p.y + 0.3 - o.down, z: p.z + fz * o.ahead + fx * o.aside, ref: (f ? f.to : refAt(ln, ln.length)) + 2, line: -2, air: true, from: o.from, yaw: p.yaw });
   }
   sparks.sort((a, b) => a.ref - b.ref);
   sparks.from = sparks[0].ref - 30; sparks.to = sparks[sparks.length - 1].ref + 30; // (the metres of the course along which there are any)

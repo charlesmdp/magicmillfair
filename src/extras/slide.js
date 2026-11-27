@@ -46,8 +46,8 @@ export function attach(app) {
     ride = slide.open(player, io);
     player.driver = ride;
     app.audio?.play('teleport');
-    keysHelp(app).set(app.input.isTouch ? 'Keep to the water · the stick steers (in the air too) · the arrow jumps · up: lie back, faster · down: brake'
-      : 'Keep to the water · A / D or the arrows steer (in the air too) · Space jumps · W or Shift: lie back, faster · S: brake · E: leave · H: these keys again');
+    keysHelp(app).set(app.input.isTouch ? 'Keep to the water · the stick steers (in the air too) · the arrow jumps · up: lie back, faster · down: brake · at a fall, steer to choose the pipe you land in · hold the stick to go over a low rim into the pipe beside'
+      : 'Keep to the water · A / D or the arrows steer (in the air too) · Space jumps · W or Shift: lie back, faster · S: brake · At a fall, steer to choose the pipe you land in · Hold A or D to go over a low rim into the pipe beside · E: leave · H: these keys again');
   };
   world.actionSources.push((p) => {
     if (ride) return ride.over ? null : { label: 'Leave the slide', run: () => leave(false) };
