@@ -1,16 +1,19 @@
 // Checks of Balthazar Golf, without a browser: the nine beds lie in their rectangle of the meadow, half a metre
 // over it, clear of each other and of the pond (but for the two over the acid), and so do the path, the bunting,
 // the benches and the kiosk; the arch and the stand on ground one can walk; a ball rolls and stops where the
-// friction says, bounces off a cushion, is taken by the cup when slow and not when fast, rolls back down a step too
-// high for it, is lost in the swan pond, between two floating stones, in the acid or off the bed with a stroke more;
-// what moves is the same for everybody; at every tee the aim is the tee's own axis and no putt along it, at any
-// strength, holes the ball; the player that plays by itself holes every hole within its par, a clumsy one in seven
-// at most; seven strokes and on; the same round at any frame rate; the score and its line of the board.
+// friction says — sooner in sand, later on ice —, bounces off a cushion, is taken by the cup when slow and not when
+// fast, rolls back down a flight of stairs too high for it, flies off a ramp, is carried by a pipe, comes down a
+// level and not back up, is lost in the water, between two floating stones, in the acid or off the bed with a
+// stroke more; what moves is the same for everybody; at every tee the aim is the tee's own axis and no putt along
+// it, at any strength, holes the ball. Three players that play by themselves: a perfect one (every hole can be
+// finished, and the fewest strokes there can be), one with a person's hand (what a round is worth: near par) and
+// a clumsy one (well over par, but it finishes); so many strokes and on; the same round at any frame rate; the
+// score and its line of the board.
 // usage: node tools/golf-test.mjs
 import { check, done, ground } from './lib/check.mjs';
 import { BOARDS as SERVER } from '../server/scores.js';
 import { ACID } from '../src/world/layout/layout.js';
-import { GOLF, BOARD, HOLES, STAIRS, GROUNDS, toWorld, toLocal, levelOf, feltAt, moverAt, ballAt, ballStep, ROLLS, RESTS, HOLED, ACID as LOST_ACID, OUT, WATER, speedOf, gaugeOf, reachFor, farFrom, aimFrom, startRound, stepRound, botInput, botRound, scoreOf, formatScore, lineOf } from '../src/world/zones/games/golf/rules.js';
+import { GOLF, BOARD, HOLES, STAIRS, GROUNDS, RUB, HANDS, prepare, toWorld, toLocal, levelOf, feltAt, rubAt, wet, moverAt, ballAt, ballStep, ROLLS, RESTS, HOLED, ACID as LOST_ACID, OUT, WATER, speedOf, gaugeOf, reachFor, farFrom, aimFrom, startRound, stepRound, botInput, botRound, scoreOf, formatScore, lineOf } from '../src/world/zones/games/golf/rules.js';
 
 const G = GOLF, STEP = G.step;
 const height = await ground();
@@ -27,6 +30,10 @@ const apart = (A, B) => { let least = 99; for (const [P, Q] of [[A, B], [B, A]])
 /** Plays `secs` seconds of a round (the rules take at most a quarter of a second at a time). */
 const wait = (st, secs, ev = null) => { for (let t = 0; t < secs; t += 1 / 60) stepRound(st, 1 / 60, null, ev); };
 const _in = { x: 0, y: 0, jump: false };
+/** A bare bed to try the ball on: level felt in a kerb, a strip of sand and a strip of ice along it. */
+const FLAT = prepare({ name: 'practice', place: 'nowhere', tip: '', par: 2, at: [0, 0], yaw: 0, cup: [0.6, -9.1], beds: [{ poly: [[-1.3, 1.2], [3.3, 1.2], [3.3, -10.6], [-1.3, -10.6]] }], zones: [{ kind: 'sand', poly: [[1.4, 1.2], [2.3, 1.2], [2.3, -10.6], [1.4, -10.6]] }, { kind: 'ice', poly: [[2.4, 1.2], [3.3, 1.2], [3.3, -10.6], [2.4, -10.6]] }] }, 0);
+/** A ball of hole `H` rolled from (x, z) at (vx, vz) to the end: { code, b, ev, far (the least z it reached) }. */
+const roll = (H, x, z, vx, vz, t0 = 0, most = 4800) => { const b = ballAt(H, x, z), ev = []; b.vx = vx; b.vz = vz; let code = ROLLS, far = z, top = 0, n = 0; for (; n < most && code === ROLLS; n++) { code = ballStep(H, b, t0 + n * STEP, ev); far = Math.min(far, b.z); top = Math.max(top, b.y); } return { code, b, ev, far, top, n }; };
 /** A round with the ball at rest at the tee of hole `n`, aiming, as the rules would have it. */
 const onHole = (n, t0 = 0) => { const st = startRound(t0); st.hole = n; ballAt(HOLES[n], 0, 0, st.ball); st.phase = 'tee'; st.wait = 0; stepRound(st, STEP * 2, null); return st; };
 /** A putt at strength `p` along `aim`, played to the end of the stroke. Returns the events. */
@@ -74,57 +81,82 @@ const putt = (st, aim, p, ev = []) => { st.aim = aim; st.gauge = p; st.since = 1
   const back = HOLES.every((H) => { const w = toWorld(H, 3.1, -4.4), l = toLocal(H, w[0], w[1]); return Math.hypot(l[0] - 3.1, l[1] + 4.4) < 1e-9; });
   check('the frame of a hole: world and local are the one the other', back);
   check('every tee is on its felt, every cup too, and one can get from one to the other by the felt', HOLES.every((H) => feltAt(H, 0, 0) > -Infinity && feltAt(H, H.cup[0], H.cup[1]) > -Infinity && farFrom(H, 0, 0) < 60), HOLES.map((H) => farFrom(H, 0, 0).toFixed(1)).join(' '));
-  check('and harder: par 2 to 4, never lower than the hole before by more than one', HOLES.every((H, i) => H.par >= 2 && H.par <= 4 && (!i || H.par >= HOLES[i - 1].par - 1)) && HOLES.at(-1).par === 4 && HOLES[0].par === 2, HOLES.map((H) => H.par).join(''));
+  check('par 3 to 5 a hole, the last two no lower than the first two', HOLES.every((H) => H.par >= 3 && H.par <= 5) && HOLES[7].par + HOLES[8].par >= HOLES[0].par + HOLES[1].par, `${HOLES.map((H) => H.par).join('')}: par ${HOLES.reduce((a, H) => a + H.par, 0)}`);
+  const kinds = { 'more than one level': (H) => H.beds.some((b) => b.y) || H.beds.some((b) => b.h), 'a wall with a door': (H) => H.walls.some((w) => w[4] >= 0.3 && w[5] !== -0.5), 'buttons that kick': (H) => H.bumpers.length > 0, sand: (H) => H.zones.some((z) => z.kind === 'sand'), 'ice or steel': (H) => H.zones.some((z) => z.kind === 'ice'), water: (H) => H.pools.length > 0, acid: (H) => !!H.acid, 'a pipe': (H) => H.pipes.length > 0, 'something that moves': (H) => H.movers.length > 0, 'a jump or a hop': (H) => H.links.length > 0, 'an edge with no kerb': (H) => H.beds.some((b) => b.air.length > 0) };
+  const count = Object.entries(kinds).map(([k, f]) => `${k}: ${HOLES.filter(f).map((H) => H.n + 1).join('')}`);
+  check('what the holes are made of: levels, sand, ice, water, acid, pipes, things that move, jumps, edges with no kerb — each on two holes at least (ice and the buttons on one), and every hole has three kinds or more', Object.entries(kinds).every(([k, f]) => HOLES.filter(f).length >= (k === 'ice or steel' || k === 'buttons that kick' ? 1 : 2)) && HOLES.every((H) => Object.values(kinds).filter((f) => f(H)).length >= 3), count.join(' · '));
 }
 {
   // ---- the ball
-  const H = HOLES[0], b = ballAt(H, -0.9, 0), ev = [], v = Math.sqrt(2 * G.friction * 6);
-  b.vz = -v; let n = 0, code = ROLLS; for (; n < 99999 && code === ROLLS; n++) code = ballStep(H, b, 0, ev);
+  const H = FLAT, v = Math.sqrt(2 * G.friction * 6), r0 = roll(H, -0.9, 0, 0, -v), b = r0.b;
   const run = -b.z, want = (v * v) / (2 * G.friction);
-  check('a ball rolls and stops: on level felt it goes v²/2f, and takes v/f seconds', code === RESTS && Math.abs(run - want) < 0.06 && Math.abs(n * STEP - v / G.friction) < 0.05 && Math.hypot(b.vx, b.vz) === 0, `${run.toFixed(2)} m of ${want.toFixed(2)}, ${(n * STEP).toFixed(2)} s`);
-  const c = ballAt(H, 0, -3), bounce = []; c.vx = 3.5; c.vz = 0; for (let k = 0; k < 400 && c.vx > 0; k++) ballStep(H, c, 0, bounce);
+  check('a ball rolls and stops: on level felt it goes v²/2f, and takes v/f seconds', r0.code === RESTS && Math.abs(run - want) < 0.06 && Math.abs(r0.n * STEP - v / G.friction) < 0.05 && Math.hypot(b.vx, b.vz) === 0, `${run.toFixed(2)} m of ${want.toFixed(2)}, ${(r0.n * STEP).toFixed(2)} s`);
+  const sand = roll(H, 1.85, 0, 0, -v), ice = roll(H, 2.85, 0, 0, -3);
+  check('sand holds it back and ice lets it slide: the same hit goes three times less far in sand; on ice a soft one goes three times further than on felt', rubAt(H, 1.85, -3) === RUB.sand && rubAt(H, 2.85, -3) === RUB.ice && rubAt(H, 0, -3) === 1 && Math.abs(-sand.b.z - want / RUB.sand) < 0.06 && Math.abs(-ice.b.z - 9 / (2 * G.friction * RUB.ice)) < 0.3, `felt ${run.toFixed(2)} m, sand ${(-sand.b.z).toFixed(2)} m; at 3 m/s: felt ${(9 / (2 * G.friction)).toFixed(2)} m, ice ${(-ice.b.z).toFixed(2)} m`);
+  const c = ballAt(H, 0, -3), bounce = []; c.vx = -3.5; c.vz = 0; for (let k = 0; k < 400 && c.vx < 0; k++) ballStep(H, c, 0, bounce);
   const hitAt = bounce.find((e) => e.type === 'bounce')?.speed ?? 0;
-  check('it bounces off a cushion: back with most of its speed, and never through', c.vx < 0 && hitAt > 2 && Math.abs(Math.abs(c.vx) / hitAt - G.cushion) < 0.03 && c.x <= H.beds[0].x1, `${hitAt.toFixed(2)} m/s in, ${(-c.vx).toFixed(2)} out`);
-  let through = 0; for (const H2 of HOLES) for (let a = 0; a < 40; a++) { const q = ballAt(H2, 0, 0); const sp = 9.4; q.vx = Math.sin(a * 0.157) * sp; q.vz = -Math.cos(a * 0.157) * sp; for (let k = 0; k < 600; k++) { const r = ballStep(H2, q, k * STEP, null); if (r !== ROLLS) break; if (Math.abs(q.x) > 12 || q.z < -16 || q.z > 6) { through++; break; } } }
+  check('it bounces off a cushion: back with most of its speed, and never through', c.vx > 0 && hitAt > 2 && Math.abs(Math.abs(c.vx) / hitAt - G.cushion) < 0.03 && c.x >= H.beds[0].x0, `${hitAt.toFixed(2)} m/s in, ${c.vx.toFixed(2)} out`);
+  let through = 0; for (const H2 of HOLES) for (let a = 0; a < 40; a++) { const q = ballAt(H2, 0, 0); const sp = 9.4; q.vx = Math.sin(a * 0.157) * sp; q.vz = -Math.cos(a * 0.157) * sp; for (let k = 0; k < 600; k++) { const r = ballStep(H2, q, k * STEP, null); if (r !== ROLLS) break; if (Math.abs(q.x) > 14 || q.z < -24 || q.z > 8) { through++; break; } } }
   check('the fastest ball (9.4 m/s) in every direction from every tee stays on its bed or is lost off an open edge — it never goes through a kerb', through === 0, `${through} through`);
   // the cup
-  const cup = H.cup, slow = ballAt(H, cup[0], cup[1] + 0.25); slow.vz = -1.0; let r1 = ROLLS; for (let k = 0; k < 400 && r1 === ROLLS; k++) r1 = ballStep(H, slow, 0, null);
+  const cup = H.cup, slow = roll(H, cup[0], cup[1] + 0.25, 0, -1.0, 0, 400);
   const fast = ballAt(H, cup[0], cup[1] + 0.5); fast.vz = -5; let r2 = ROLLS, lips = [], passed = false; for (let k = 0; k < 300 && r2 === ROLLS; k++) { r2 = ballStep(H, fast, 0, lips); if (fast.z < cup[1] - 0.4) { passed = true; break; } }
-  check('the cup takes a ball that is slow enough, and a fast one lips over it (never in at 5 m/s)', r1 === HOLED && r2 !== HOLED && passed && lips.some((e) => e.type === 'lip'), `slow: ${r1}, fast: ${r2}`);
+  check('the cup takes a ball that is slow enough, and a fast one lips over it (never in at 5 m/s)', slow.code === HOLED && r2 !== HOLED && passed && lips.some((e) => e.type === 'lip'), `slow: ${slow.code}, fast: ${r2}`);
   const arrive = (off, sp) => { const q = ballAt(H, cup[0] + off, cup[1] + 1.2); q.vz = -Math.sqrt(sp * sp + 2 * G.friction * 1.2); let r = ROLLS; for (let k = 0; k < 300 && r === ROLLS && q.z > cup[1] - 0.4; k++) r = ballStep(H, q, 0, null); return r === HOLED; };
-  check('and a ball too fast for it goes over: 1.9 m/s drops across the middle, 4.5 m/s does not', arrive(0, 1.9) && !arrive(0, 4.5), `${arrive(0, 1.9)} / ${arrive(0, 4.5)}`);
+  check(`and a ball too fast for it goes over: ${G.take - 0.3} m/s drops across the middle, ${G.take + 1.3} m/s does not — nor near the rim`, arrive(0, G.take - 0.3) && !arrive(0, G.take + 1.3) && !arrive(0.16, G.take + 1.3) && arrive(0.15, 0.6), `${arrive(0, G.take - 0.3)} / ${arrive(0, G.take + 1.3)} / ${arrive(0.16, G.take + 1.3)} / ${arrive(0.15, 0.6)}`);
+  check(`no stroke is stronger than ${G.reach[1]} m of level felt: not enough to climb the three flights of the temple, nor to cross sand and climb a ramp`, speedOf(1, G.reach[1]) < 6 && speedOf(1, reachFor(30)) === speedOf(1, G.reach[1]) && speedOf(1, reachFor(0.5)) < speedOf(1, reachFor(3)), `${speedOf(1, G.reach[1]).toFixed(2)} m/s at the most; ${speedOf(1, reachFor(0.5)).toFixed(2)} m/s half a metre from the cup`);
   // slopes: the stairs of the temple give a soft ball back; the dog's hill speeds one up
-  const h3 = HOLES[2], end = (v) => { const q = ballAt(h3, 0.6, -0.5); q.vz = -v; let far = 0; for (let k = 0; k < 4800; k++) { if (ballStep(h3, q, 0, null) !== ROLLS) break; far = Math.min(far, q.z); } return { z: q.z, far }; };
-  let back = null, up = null; for (let v = 1.5; v < 9; v += 0.05) { const r = end(v); if (!back && r.far < STAIRS[0] - 0.15 && r.z > STAIRS[0]) back = v; if (!up && r.z < STAIRS[2] - 0.4) up = v; }
-  check('on the stairs a ball too soft for a step climbs it a little and rolls back down; a firm one gets to the top', back && up && back < up, `rolls back from ${back?.toFixed(2)} m/s, to the top from ${up?.toFixed(2)} m/s`);
-  const h6 = HOLES[5], q6 = ballAt(h6, 0, -1.9); q6.vz = -1.2; let top6 = 0; for (let k = 0; k < 600; k++) { ballStep(h6, q6, 0, null); top6 = Math.max(top6, Math.hypot(q6.vx, q6.vz)); }
+  const h3 = HOLES[2], end = (v0) => roll(h3, -0.9, -0.5, 0, -v0);
+  let back = null, up = null; for (let v0 = 1.5; v0 < 5.9; v0 += 0.05) { const r = end(v0); if (!back && r.far < STAIRS[0] + 0.25 && r.b.z > STAIRS[0] + 0.4) back = v0; if (!up && r.code === RESTS && r.b.z < STAIRS[0] - 0.4 && r.b.y > 0.3) up = v0; }
+  check('on the stairs a ball too soft for a flight climbs it a little and rolls back down; a firm one stays on the landing above', back && up && back < up, `rolls back from ${back?.toFixed(2)} m/s, onto the landing from ${up?.toFixed(2)} m/s`);
+  const all3 = roll(h3, -0.9, 0, 0, -speedOf(1, G.reach[1]));
+  check('and the hardest putt there is does not get up all three (nor through the balustrades)', all3.b.y < feltAt(h3, 0, -12) - 0.2, `it ends ${all3.b.y.toFixed(2)} m up of ${feltAt(h3, 0, -12).toFixed(2)}`);
+  const top6 = (() => { const q6 = ballAt(HOLES[5], 0, -1.9); q6.vz = -1.2; let top = 0; for (let k = 0; k < 600; k++) { ballStep(HOLES[5], q6, 0, null); top = Math.max(top, Math.hypot(q6.vx, q6.vz)); } return top; })();
   check('down the dog\'s hill a ball gathers speed', top6 > 2, `1.2 m/s at the top, ${top6.toFixed(2)} m/s at most`);
-  // water: the swan pond takes a ball
-  const h2 = HOLES[1], p2 = h2.pools[0], w2 = ballAt(h2, p2[0], p2[1] + p2[2] + 0.6); w2.vz = -2.5; let r2w = ROLLS; for (let k = 0; k < 600 && r2w === ROLLS; k++) r2w = ballStep(h2, w2, 0, null);
-  check('a ball that rolls into the swan pond is lost in it', r2w === WATER, `code ${r2w}`);
+  const h6 = HOLES[5], m6 = h6.cup, foot = roll(h6, m6[0] + 1.25, m6[1], -1.6, 0), over = (() => { const q = ballAt(h6, m6[0] + 1.25, m6[1] + 0.3); q.vx = -4.2; let least = 9; for (let k = 0; k < 2400 && ballStep(h6, q, 0, null) === ROLLS; k++) least = Math.min(least, q.x); return { b: { x: least } }; })();
+  check('the dog\'s green falls away all round: a putt too soft up the mound rolls back to its foot, one too hard goes over the top and down the other side', foot.code === RESTS && Math.hypot(foot.b.x - m6[0], foot.b.z - m6[1]) > 0.9 && over.b.x < m6[0] - 0.6, `soft: ${Math.hypot(foot.b.x - m6[0], foot.b.z - m6[1]).toFixed(2)} m from the cup; hard: ${(m6[0] - over.b.x).toFixed(2)} m beyond it`);
+  // water: the swan pond takes a ball; the ramp before it throws one over
+  const h2 = HOLES[1], p2 = h2.pools[0], w2 = roll(h2, -0.3, -2.0, 0, -2.5, 0, 600);
+  check('a ball that rolls into the swan pond is lost in it', w2.code === WATER && wet(h2, p2[0], p2[1]) && !wet(h2, p2[0] + p2[2] + 0.1, p2[1]), `code ${w2.code}`);
   const st2 = onHole(1), e2 = putt(st2, 0, 0.5); wait(st2, G.wait.lost + 0.2, e2);
   check('… a stroke more, and back on the tee, aiming down the lane again', e2.some((x) => x.type === 'lost' && x.what === 'water') && st2.strokes[1] === 2 && st2.phase === 'aim' && st2.aim === 0 && st2.ball.x === 0 && st2.ball.z === 0, `${st2.strokes[1]} strokes, ${st2.phase}`);
-  // the floating stones: too soft and it drops between two; firm enough and it hops onto the green
-  const h5 = HOLES[4], hop = (p) => { const q = onHole(4), e = putt(q, 0, p); return e.some((x) => x.type === 'lost') ? 'lost' : q.ball.z < -7.15 || q.holed[4] ? 'green' : 'stone'; };
+  const jumps = []; for (let v0 = 3.0; v0 <= 5.9; v0 += 0.1) { const r = roll(h2, 0.9, -0.8, 0, -v0, 0, 1200); jumps.push(r.code === WATER ? 'w' : r.b.z < p2[1] - p2[2] ? (r.top > 0.3 ? 'J' : 'j') : '-'); }
+  check('off the ramp before the pond: too soft and the ball is in the water, firm enough and it flies over it into the sand beyond', jumps.includes('w') && jumps.includes('J') && jumps.indexOf('w') < jumps.indexOf('J') && rubAt(h2, 0.9, p2[1] - p2[2] - 0.6) === RUB.sand, jumps.join(''));
+  // the floating stones: too soft and it drops before the first; firm enough and it hops onto it, and the kerb behind stops it
+  const hop = (p) => { const q = onHole(4), e = putt(q, -0.1, p); return e.some((x) => x.type === 'lost') ? 'lost' : q.ball.z < -2.3 && q.ball.y < -0.1 ? 'stone' : 'tee'; };
   const hops = Array.from({ length: 50 }, (_, k) => hop(0.05 + k * 0.01));
-  check('the floating stones: too soft and the ball drops between two of them, firm enough and it hops them onto the green', hops.includes('lost') && hops.includes('green') && hops.indexOf('lost') < hops.indexOf('green'), `lost at ${hops.filter((h) => h === 'lost').length} strengths of 50, on the green from ${(0.05 + hops.indexOf('green') * 0.01).toFixed(2)}`);
+  check('the floating stones: too soft and the ball drops into the gap, firm enough and it hops onto the next stone, where the kerb behind stops it', hops.includes('lost') && hops.includes('stone') && hops.indexOf('lost') < hops.indexOf('stone') && hops.filter((h) => h === 'stone').length > 12, `lost at ${hops.filter((h) => h === 'lost').length} strengths of 50, on the stone at ${hops.filter((h) => h === 'stone').length}, from ${(0.05 + hops.indexOf('stone') * 0.01).toFixed(2)}`);
+  // a pipe: in at one end, out at the other after a moment, the way it points
+  const pipes = HOLES.flatMap((H2) => H2.pipes.map((q) => { const r = roll(H2, q.in[0], q.in[1] + q.r + 0.12, 0, -0.9, 0, 2400), out = r.ev.findIndex((e) => e.type === 'out'), fromOut = Math.hypot(r.b.x - q.out[0], r.b.z - q.out[1]), along = (r.b.x - q.out[0]) * Math.sin(q.aim) - (r.b.z - q.out[1]) * Math.cos(q.aim); return { n: H2.n + 1, ok: r.ev.some((e) => e.type === 'pipe') && out >= 0 && r.code === RESTS && fromOut < 1.2 && along > 0.1 && r.n * STEP > q.time, d: fromOut, t: r.n * STEP }; }));
+  check('a pipe carries the ball: it rolls into the mouth, is gone a moment, and comes out at the other end rolling the way the pipe points', pipes.length >= 2 && pipes.every((q) => q.ok), pipes.map((q) => `hole ${q.n}: out and ${q.d.toFixed(2)} m on, ${q.t.toFixed(1)} s`).join(' · '));
+  const fastIn = (() => { const H2 = HOLES[5], q = H2.pipes[0], r = roll(H2, q.in[0], q.in[1] + 0.6, 0, -6, 0, 60); return r.ev.some((e) => e.type === 'pipe'); })();
+  check('but a ball that crosses the mouth at full speed goes over it', !fastIn);
+  // levels: the pier and the boardwalk below it
+  const h7 = HOLES[6], down = roll(h7, 0.6, -5.0, 2.0, 0), upAgain = roll(h7, 1.8, -6.0, -3.0, 0), sea = roll(h7, -0.6, -5.0, -2.0, 0);
+  check('levels: off the right of the pier the ball comes down onto the boardwalk (not lost); from the boardwalk it does not get back up the side; off the left, the sea', down.code === RESTS && down.b.y < -0.4 && upAgain.code === RESTS && upAgain.b.y < -0.4 && upAgain.b.x > 1.2 && sea.code === OUT, `down to ${down.b.y.toFixed(2)} m, stays at ${upAgain.b.y.toFixed(2)} m, left: code ${sea.code}`);
+  const dist7 = [farFrom(h7, 1.8, -6.0), farFrom(h7, 0.6, -6.0)];
+  check('and the way to the cup knows it: from the boardwalk it is the way round, by the ramp at its end — longer than from the deck above', dist7[0] > dist7[1] + 0.4 && dist7[0] < 60, `${dist7[0].toFixed(1)} m from the boardwalk, ${dist7[1].toFixed(1)} m from the deck beside it`);
+  const wall3 = [farFrom(h3, -0.2, -8.15), farFrom(h3, -0.2, -8.45)];
+  check('nor does it go through a wall: just before a balustrade the cup is further than just behind it, by the door', wall3[0] > wall3[1] + 1, `${wall3[0].toFixed(1)} m before, ${wall3[1].toFixed(1)} m behind`);
 }
 {
   // ---- the acid, and off the bed
   const st = onHole(8), ev = [];
-  const sweep = []; for (let p = 0.3; p <= 0.62; p += 0.02) { const q = onHole(8), e = putt(q, 0, p); sweep.push({ p, lost: e.find((x) => x.type === 'lost')?.what, holed: e.some((x) => x.type === 'holed') }); }
+  // (from just before the ramp of the ninth, at every speed: short of the island, on it, or beyond)
+  const h9 = HOLES[8], isle = h9.beds.find((b) => b.isle), fly = []; for (let v0 = 2.6; v0 <= 5.9; v0 += 0.15) { const r = roll(h9, 0.4, -4.6, 0, -v0, 0, 2400); fly.push(r.code === LOST_ACID ? 'a' : r.code === OUT ? 'o' : r.b.y < isle.y + 0.1 && r.b.z < -8.8 ? 'I' : '-'); }
+  check('the ramp over the acid: too short and the ball is in it, firm enough and it lands on the island', fly.includes('a') && fly.includes('I') && fly.indexOf('a') < fly.indexOf('I'), fly.join(''));
+  const sweep = []; for (let p = 0.7; p <= 1.0001; p += 0.05) { const q = onHole(8, 1.1), e = putt(q, 0, p); sweep.push({ p, lost: e.find((x) => x.type === 'lost')?.what, holed: e.some((x) => x.type === 'holed') }); }
   const short = sweep.find((s) => s.lost === 'acid');
-  check('the ramp over the acid: too short and the ball is in it (a stroke more, and back where it was hit from)', !!short, sweep.map((s) => `${s.p.toFixed(2)}:${s.lost || (s.holed ? 'in' : '-')}`).join(' '));
-  const q = onHole(8); const e = putt(q, 0, short?.p ?? 0.4), at = [q.ball.x, q.ball.z];
+  check('from its tee no putt reaches the island: the hardest ones end in the acid (a stroke more, and back where it was hit from), softer ones before the ramp', !!short && sweep.every((s) => !s.holed), sweep.map((s) => `${s.p.toFixed(2)}:${s.lost || (s.holed ? 'in' : '-')}`).join(' '));
+  const q = onHole(8, 1.1); const e = putt(q, 0, short?.p ?? 1), at = [q.ball.x, q.ball.z];
   wait(q, G.wait.lost + 0.2, e);
   check('lost in the acid: one stroke for the hit and one more, the ball back at the tee at rest, ready to aim', q.strokes[8] === 2 && q.total === 2 && Math.hypot(q.ball.x, q.ball.z) < 1e-9 && q.phase === 'aim' && e.some((x) => x.type === 'back'), `${q.strokes[8]} strokes, ${q.phase}`);
     const p8 = onHole(7), e8 = []; ballAt(HOLES[7], 0, -4, p8.ball); p8.from = [0, -4]; p8.strokes[7] = 1; p8.total = 1; p8.phase = 'roll'; p8.ball.vx = 2;
   wait(p8, 3, e8);
   const gone = e8.find((x) => x.type === 'lost');
   check('off the plank (it has no kerb) the ball falls into the acid: a stroke more, and back where it was hit from, at rest', gone?.what === 'acid' && p8.strokes[7] === 2 && p8.total === 2 && p8.ball.x === 0 && p8.ball.z === -4 && p8.phase === 'aim', `${gone?.what}, ${p8.strokes[7]} strokes, ${p8.phase}`);
-  const out = ballAt(HOLES[8], 0, -3); out.vz = -7; let lost = ROLLS; for (let k = 0; k < 2000 && lost === ROLLS; k++) lost = ballStep(HOLES[8], out, 0, null);
-  const ret = ballAt(HOLES[8], 1.0, -5.0); ret.vx = 3; let lost2 = ROLLS; for (let k = 0; k < 2000 && lost2 === ROLLS; k++) lost2 = ballStep(HOLES[8], ret, 0, null);
-  check('a ball that flies off the ramp beyond the pond is lost as well, as one that is not in the acid (off the bed)', lost === OUT || lost === LOST_ACID || lost === HOLED || lost === RESTS, `code ${lost}`);
+  const g8 = HOLES[7], off8 = roll(g8, 0.4, -10.2, -3.2, 0), kept8 = roll(g8, 0.4, -10.2, 3.2, 0);
+  check('the green of the plank has no kerb on its acid sides: a putt too hard that way is lost; the other way a kerb keeps it', (off8.code === OUT || off8.code === LOST_ACID) && kept8.code === RESTS, `codes ${off8.code} and ${kept8.code}`);
   const kept = onHole(0); putt(kept, 0.3, 0.7); check('a hole with kerbs all round never loses the ball', kept.phase !== 'lost' && kept.strokes[0] === 1);
 }
 {
@@ -133,8 +165,11 @@ const putt = (st, aim, p, ev = []) => { st.aim = aim; st.gauge = p; st.since = 1
   check('what moves is where the clock of the world says, and the same again after a whole cycle of it', same && HOLES.flatMap((H) => H.movers).every((m) => Math.abs((G.cycle / m.period) % 1) < 1e-9 || Math.abs((G.cycle / m.period) % 1 - 1) < 1e-9), `${HOLES.flatMap((H) => H.movers).map((m) => m.period).join(' ')} s into ${G.cycle}`);
   const sail = HOLES[3].movers[0], on = []; for (let k = 0; k < 600; k++) on.push(moverAt(sail, k * 0.01, {}).on);
   check('the paddles of the mill wheel let the ball through between two of them, and stop it while one sweeps the lane', on.filter(Boolean).length / 600 > 0.2 && on.filter(Boolean).length / 600 < 0.5, `${(on.filter(Boolean).length / 6).toFixed(0)}% of the time shut`);
-  const a = botRound(0, 0).strokes.join(), b = botRound(G.cycle, 0).strokes.join(), c = botRound(G.cycle * 3, 0).strokes.join();
-  check('a round that begins a whole cycle later is the same round: the same for everybody', a === b && b === c, a);
+  const a = botRound(0, 3, 900, null, 1).strokes.join(), b = botRound(G.cycle, 3, 900, null, 1).strokes.join(), c = botRound(1.5, 3, 900, null, 1).strokes.join();
+  check('a round that begins a whole cycle later is the same round, hand and all — the same for everybody; one that begins a second and a half later is not', a === b && a !== c, `${a} · ${c}`);
+  const swing = HOLES[7].movers[0], inWay = []; for (let k = 0; k < 550; k++) { const v = moverAt(swing, k * 0.01, {}); inWay.push(Math.abs(v.x) < v.hw + HOLES[7].beds[1].x1 + 0.085); }
+  const boulder = HOLES[8].movers[0], lane = []; for (let k = 0; k < 450; k++) { const v = moverAt(boulder, k * 0.01, {}); lane.push(v.x); }
+  check('the wrecking ball swings right across the plank and clear of it on either side; the boulder rolls from kerb to kerb of the ninth', inWay.includes(true) && inWay.includes(false) && Math.max(...lane) > 0.6 && Math.min(...lane) < -0.6 && Math.max(...lane) + boulder.hw < 1.1, `in the way of the plank ${((inWay.filter(Boolean).length / inWay.length) * 100).toFixed(0)}% of the time`);
   const swan = HOLES[1].movers[0], gap = [-HOLES[1].beds[0].x1 + 0.085, HOLES[1].pools[0][0] - HOLES[1].pools[0][2] - 0.085], shut = [];
   for (let k = 0; k < 700; k++) { const v = moverAt(swan, k * 0.01, {}); shut.push(v.x - v.hw - 0.085 < gap[1] && v.x + v.hw + 0.085 > gap[0]); }
   const sf = shut.filter(Boolean).length / 7;
@@ -153,32 +188,41 @@ const putt = (st, aim, p, ev = []) => { st.aim = aim; st.gauge = p; st.since = 1
   check('once off the tee, the aim points along the way to the cup', later.phase === 'aim' && later.aim !== 0, later.aim.toFixed(2));
 }
 {
-  // ---- the bot, hole by hole
-  const rows = [];
+  // ---- the perfect one, hole by hole: every hole can be finished; the fewest strokes there can be
+  const rows = [], PAR = HOLES.reduce((a, H) => a + H.par, 0);
   for (const [i, H] of HOLES.entries()) {
-    const ts = H.movers.length ? [0, 1.7, 3.1, 4.9, 8.3, 13.7] : [0, 5.3];
-    const got = ts.map((t0) => { const st = onHole(i, t0); st.hole = i; for (let k = 0; k < 120 * 120 && st.hole === i && !st.over; k++) { botInput(st, _in); stepRound(st, STEP, _in, null); if (st.holed[i]) break; } return st.strokes[i]; });
+    const ts = H.movers.length ? [0, 1.7, 3.1, 8.3, 13.7] : [0, 5.3];
+    const got = ts.map((t0) => { const st = onHole(i, t0); st.hole = i; for (let k = 0; k < 120 * 240 && st.hole === i && !st.over; k++) { botInput(st, _in); stepRound(st, STEP, _in, null); if (st.holed[i]) break; } return st.holed[i] ? st.strokes[i] : 99; });
     rows.push({ n: i + 1, got });
   }
-  check('the player that plays by itself holes every hole within its par, whenever it begins', rows.every((r, i) => r.got.every((s) => s <= HOLES[i].par)), rows.map((r) => `${r.n}:${[...new Set(r.got)].join('/')}`).join(' '));
-  const t0 = Date.now(), runs = [0, 3, 8].map((t) => botRound(t, 0)), clumsy = [1, 2, 3, 4, 5, 6].map((s) => botRound(s * 11.3, s));
-  check('a round of the careful one: all nine holed, in par or better as a whole, in under three minutes of play', runs.every((r) => r.over && r.holed.every(Boolean) && r.total <= HOLES.reduce((a, H) => a + H.par, 0) && r.time < 180 && r.time > 25), runs.map((r) => `${r.total} strokes ${r.time.toFixed(0)} s`).join(' · '));
-  check('a clumsy one never needs more than seven strokes on a hole, and its round ends within three minutes', clumsy.every((r) => r.over && r.strokes.every((s) => s >= 1 && s <= G.most) && r.time < 180), clumsy.map((r) => `${r.total} (${r.strokes.join('')}) ${r.time.toFixed(0)} s`).join(' · '));
-  check('clumsier means more strokes, and it still holes most holes', clumsy.some((r) => r.total > runs[0].total) && clumsy.every((r) => r.holed.filter(Boolean).length >= 6), `${Date.now() - t0} ms of thinking`);
-  const mix = runs[0].strokes.map((s, i) => s <= HOLES[i].par).every(Boolean);
-  check('a hole in one is possible on the first hole and the second', botRound(0, 0).strokes[0] <= 2 && mix);
+  const fewest = rows.map((r) => Math.min(...r.got));
+  check('the perfect player holes every hole, whenever it begins, never over par — and never in one', rows.every((r, i) => r.got.every((s) => s <= HOLES[i].par && s >= 2)), rows.map((r) => `${r.n}:${[...new Set(r.got)].join('/')}`).join(' '));
+  check('the fewest strokes there can be (what it found): two a hole or more, well under par as a whole — bank shots and exact strengths no hand has', fewest.reduce((a, c) => a + c, 0) <= PAR - 5, `${fewest.join(' ')} = ${fewest.reduce((a, c) => a + c, 0)} of par ${PAR}`);
+  const t0 = Date.now(), runs = [0, 3].map((t) => botRound(t, 0));
+  check('a round of the perfect one: all nine holed, under par, in under four minutes of play', runs.every((r) => r.over && r.holed.every(Boolean) && r.total < PAR && r.time < 240 && r.time > 40), runs.map((r) => `${r.total} strokes ${r.time.toFixed(0)} s`).join(' · '));
+  // ---- the one with a person's hand: what a round is worth
+  const mean = (l) => l.reduce((a, c) => a + c, 0) / l.length, sorted = (l) => [...l].sort((a, c) => a - c);
+  const hand = Array.from({ length: 12 }, (_, k) => botRound(k * 7.3 + 1, k + 1, 900, null, 1)), tot = hand.map((r) => r.total), perHole = HOLES.map((H, i) => mean(hand.map((r) => r.strokes[i])));
+  check(`a person's hand (the aim ${(HANDS[1].aim * 57.3).toFixed(1)}° off or so, the strength ${HANDS[1].power * 100} hundredths of the gauge, drawn from a seed): twelve rounds, each finished`, hand.every((r) => r.over && r.time < 600) && mean(hand.map((r) => r.holed.filter(Boolean).length)) > 8.5, `${sorted(tot).join(' ')} strokes; ${mean(hand.map((r) => r.time)).toFixed(0)} s a round`);
+  check(`… near par (${PAR}), not far under: their mean within three strokes of it, the middle one not under by more than two, ten of the twelve within five strokes of it (a lucky round happens)`, Math.abs(mean(tot) - PAR) <= 3 && sorted(tot)[6] >= PAR - 2 && tot.filter((t) => Math.abs(t - PAR) <= 5).length >= 10, `mean ${mean(tot).toFixed(1)}, least ${sorted(tot)[0]}, middle ${sorted(tot)[6]}, most ${sorted(tot)[11]}`);
+  check('… hole by hole: its mean within a stroke of the par of each, three to five strokes on most', perHole.every((m, i) => Math.abs(m - HOLES[i].par) <= 1) && perHole.filter((m) => m >= 2.75 && m <= 5).length >= 6, perHole.map((m, i) => `${i + 1}:${m.toFixed(1)}/${HOLES[i].par}`).join(' '));
+  check('… and it never holes in one, and seldom in two', hand.every((r) => r.strokes.every((s) => s >= 2)) && mean(hand.map((r) => r.strokes.filter((s) => s === 2).length)) < 4, `${mean(hand.map((r) => r.strokes.filter((s) => s === 2).length)).toFixed(1)} holes in two a round`);
+  // ---- the clumsy one
+  const clumsy = [1, 2, 3, 4, 5, 6, 7, 8].map((s) => botRound(s * 11.3, s, 900, null, 2)), ctot = clumsy.map((r) => r.total);
+  check(`a clumsy one never needs more than ${G.most} strokes on a hole (it picks up), and its round ends`, clumsy.every((r) => r.over && r.strokes.every((s) => s >= 1 && s <= G.most) && r.time < 800), clumsy.map((r) => `${r.total} (${r.strokes.join('')})`).join(' · '));
+  check('clumsier means more strokes: well over par, and over the person\'s hand — but it finishes most holes within the limit', mean(ctot) >= PAR + 5 && mean(ctot) > mean(tot) + 3 && mean(clumsy.map((r) => r.holed.filter(Boolean).length)) >= 7.5 && clumsy.every((r) => r.holed.filter(Boolean).length >= 6), `mean ${mean(ctot).toFixed(1)} strokes; ${mean(clumsy.map((r) => r.holed.filter(Boolean).length)).toFixed(1)} holes of 9 finished; ${Date.now() - t0} ms of thinking`);
 }
 {
-  // ---- seven strokes and on
-  const st = startRound(0), ev = []; const taps = []; // (a tap of nothing: it goes 0.4 m)
+  // ---- so many strokes and on
+  const st = startRound(0), ev = []; const taps = []; // (a tap of nothing, one way and back: it goes 0.4 m)
   wait(st, 1.2, ev);
-  for (let k = 0; k < 7; k++) { putt(st, 0, 0, ev); taps.push(st.phase); wait(st, 0.05, ev); }
-  check('seven strokes at most a hole: the ball is picked up, and one goes on to the next', st.strokes[0] === 7 && st.phase === 'picked' && ev.some((e) => e.type === 'picked'), `${st.strokes[0]} strokes, ${st.phase}`);
+  for (let k = 0; k < G.most; k++) { putt(st, k % 2 ? Math.PI : 0, 0, ev); taps.push(st.phase); wait(st, 0.05, ev); }
+  check(`${G.most} strokes at most a hole: the ball is picked up, and one goes on to the next`, G.most === 9 && st.strokes[0] === G.most && st.phase === 'picked' && ev.some((e) => e.type === 'picked'), `${st.strokes[0]} strokes, ${st.phase}`);
   wait(st, G.wait.picked + 0.05, ev);
-  check('and the player is put at the next tee after a moment, the ball down there at rest', st.hole === 1 && st.phase === 'tee' && st.total === 7 && Math.hypot(st.ball.x, st.ball.z) === 0 && ev.some((e) => e.type === 'tee' && e.hole === 1), `${st.hole + 1}, ${st.phase}`);
-  const bad = onHole(7); for (let k = 0; k < 9 && bad.hole === 7 && bad.phase === 'aim'; k++) { putt(bad, 0.5, 0.6); wait(bad, G.wait.lost + 0.1); }
-  check('a stroke lost to the acid counts, and never takes a hole past seven: the ball is picked up at the seventh', bad.strokes[7] === 7 && bad.total === 7 && (bad.phase === 'picked' || bad.phase === 'tee'), `${bad.strokes[7]} strokes`);
-  const line = lineOf(onHole(3));   check('the line of the run reads "hole 4 of 9 · par 3 · stroke 1 · 0 so far"', line === 'hole 4 of 9 · par 3 · stroke 1 · 0 so far', line);
+  check('and the player is put at the next tee after a moment, the ball down there at rest', st.hole === 1 && st.phase === 'tee' && st.total === G.most && Math.hypot(st.ball.x, st.ball.z) === 0 && ev.some((e) => e.type === 'tee' && e.hole === 1), `${st.hole + 1}, ${st.phase}`);
+  const bad = onHole(7); for (let k = 0; k < 9 && bad.hole === 7 && bad.phase === 'aim'; k++) { putt(bad, 0.13, 0.5); wait(bad, G.wait.lost + 0.1); }
+  check(`a stroke lost to the acid counts, and never takes a hole past ${G.most}: the ball is picked up there`, bad.strokes[7] === G.most && bad.total === G.most && bad.lost >= 4 && (bad.phase === 'picked' || bad.phase === 'tee'), `${bad.strokes[7]} strokes, ${bad.lost} balls lost`);
+  const line = lineOf(onHole(3));   check(`the line of the run reads "hole 4 of 9 · par ${HOLES[3].par} · stroke 1 · 0 so far"`, line === `hole 4 of 9 · par ${HOLES[3].par} · stroke 1 · 0 so far`, line);
 }
 {
   // ---- any frame rate
@@ -192,12 +236,12 @@ const putt = (st, aim, p, ev = []) => { st.aim = aim; st.gauge = p; st.since = 1
 {
   // ---- the score and its board
   check('score = strokes × 1000 + seconds (at most 999)', scoreOf(31, 127.9) === 31127 && scoreOf(9, 5000) === 9999 && scoreOf(12, -3) === 12000);
-  check('a score is written "31 strokes (2:07)"', formatScore(31127) === '31 strokes (2:07)' && formatScore(9005) === '9 strokes (0:05)' && formatScore(63999) === '63 strokes (16:39)', formatScore(31127));
+  check('a score is written "31 strokes (2:07)"', formatScore(31127) === '31 strokes (2:07)' && formatScore(9005) === '9 strokes (0:05)' && formatScore(81999) === '81 strokes (16:39)', formatScore(31127));
   const st = botRound(0, 0), fromRound = st.score;
   check('the score of a round is what its strokes and its time say, and lies on the board', fromRound === scoreOf(st.total, st.time) && fromRound >= BOARD.min && fromRound <= BOARD.max, `${fromRound} = ${formatScore(fromRound)}`);
   const line = { order: 'asc', min: HOLES.length * 1000, max: HOLES.length * G.most * 1000 + 999 };
-  check('the board of scores in rules.js is the one these rounds give: nine holes in one at least, seven strokes on all nine at most, the fewer the better', BOARD.order === line.order && BOARD.min === line.min && BOARD.max === line.max && BOARD.min <= fromRound && fromRound < BOARD.max, JSON.stringify(BOARD));
+  check(`the board of scores in rules.js is the one these rounds give: nine holes in one at least (no hole can be, but no fewer could ever be), ${G.most} strokes on all nine at most, the fewer the better`, BOARD.order === line.order && BOARD.min === line.min && BOARD.max === line.max && BOARD.min <= fromRound && fromRound < BOARD.max, JSON.stringify(BOARD));
   { const S = SERVER.golf || {}; check('the server keeps its board by the same line (server/scores.js), behind its switch', S.order === BOARD.order && S.min === BOARD.min && S.max === BOARD.max && S.release === 'golf' && S.unit === 'strokes', JSON.stringify(S)); }
-  console.log(`      for the board of scores: golf: { order: '${line.order}', min: ${line.min}, max: ${line.max} }`);
+  console.log(`      for the board of scores (server/scores.js): golf: { order: '${line.order}', min: ${line.min}, max: ${line.max}, unit: 'strokes' }`);
 }
 done();

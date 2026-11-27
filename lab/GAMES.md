@@ -14,7 +14,7 @@ They borrow the *mechanics* of games one knows — never their look, their names
 | `flip` | **Mostly Up & Down** — one runs on the spot in a machine of travelling girders, and one key turns gravity over | a tall frame in the sea along the south side of the pier; the gate on the south beach at (41.1, 42.8) | `node tools/flip-test.mjs` (45) |
 | `spiral` | **Spiral of Death** — a track wound round a tower: obstacles worse every turn, up to the bell | a tower in the south of the bay, at (168, 84); the gate on the south beach at (52, 71) | `node tools/spiral-test.mjs` (52) |
 | `cars` | **Karting Simulator** — radio-controlled cars raced on a table, seen from above | the meadow south of the acid pond: a table at (-243.5, -55.8), the arch at (-243.5, -45.9) | `node tools/cars-test.mjs` (40) |
-| `golf` | **Balthazar Golf** — nine holes of crazy golf round the acid pond | round the acid pond (-236, -82); the gate at (-225.5, -75.6) | `node tools/golf-test.mjs` (52) |
+| `golf` | **Balthazar Golf** — nine holes of crazy golf round the acid pond | round the acid pond (-236, -82); the gate at (-225.5, -75.6) | `node tools/golf-test.mjs` (69) |
 
 `node tools/play-test.mjs` plays all seven in the running game, in a headless browser: with its switch off
 nothing of a game is in the world; switched on the way the game does it, it is built, its board of scores by its
@@ -331,37 +331,71 @@ drifts nor meets a jet. The table is only seen (one walks through it).
 
 ### Balthazar Golf (`golf`)
 
-*Reworked after its owner played it ("make it belong to our world, a little harder, and aim straight at the start").*
+*Rebuilt after its owner played it again ("change the tilt of the camera: one cannot see the slopes; and make
+the holes enormously more complex, so that it is harder").*
 
 Nine holes of crazy golf round the acid pond (inside x -264 … -204, z -114 … -71; the gate, a striped ticket
 kiosk and the board of scores make its entrance at (-225.5, -75.6)). **Each hole takes after a place of the
-valley**, in miniature and in the paint of the fair; the beds stand half a metre over the meadow on painted
-skirts, a path of planks goes from hole to hole, a rope on stakes keeps one off the acid, and there are poles
-with bunting and bulbs, benches, flower tubs.
+valley**, in miniature and in the paint of the fair; the beds stand half a metre and more over the meadow on
+painted skirts, a path of planks goes from hole to hole, a rope on stakes keeps one off the acid, and there are
+poles with bunting and bulbs, benches, flower tubs. The whole course is 19 meshes, 56 000 triangles.
 
-| | | after | par |
+**The camera is the one of who putts**: 3.8 m behind the ball and 2 m over it, looking along the aim (the
+line of dots always goes straight up the screen; the view turns with the stick, as one with the aim). It follows
+the ball as it runs, comes round gently when the aim jumps, and is lifted over what would stand between it and
+the ball (a wall, the dog, a wheel: five places, from low to nearly overhead). When a hole begins it shows the
+whole hole from above for three seconds (less if one aims at once), and again **for as long as the stick is
+pushed forward (W)**. The robot stands beside the ball, square to the line — on the side the way does not turn
+to, and where there is felt — and runs after its ball; the gauge is a bar held low on the screen (on a telephone held upright it stands
+along the right edge, clear of the map and the buttons). **The relief is painted**: the felt has a
+grid (a line every half metre), and wherever it rises or falls there are lines of equal height every 10 cm —
+light above the level of the tee, dark below — and the felt itself is lighter on what faces the light. Colours
+mean the same everywhere: yellow sand slows, pale blue ice (or steel) slides, an orange ramp is one to jump
+from, blue water and the green acid cost a stroke, a pipe is purple at both ends.
+
+| | | what it asks | par |
 |---|---|---|---|
-| 1 | The Big Red Button | the big red button: it kicks the ball back | 2 |
-| 2 | The Swan Pond | the great pond: one passes on its left once the swan has glided by | 3 |
-| 3 | The Temple Stairs | the stairway to the temple: three steps, a soft ball rolls back down | 3 |
-| 4 | The Water Mill | the mill: paddles sweep the lane, then a narrow door through it | 3 |
-| 5 | The Floating Stones | Mostly Up: the ball must hop two gaps onto lower stones | 3 |
-| 6 | The Golden Dog | the golden dog: down a hill, between its legs, off a cushion round the corner | 3 |
-| 7 | The Big Wheel | the grand pier: the gondolas of two wheels come down through the lane | 3 |
-| 8 | The Plank | the acid pond: a plank 0.8 m wide over it | 4 |
-| 9 | The Acid Test | the island and its boulder: a ramp over the acid to an island green | 4 |
+| 1 | The Big Red Button | three buttons that kick, in a triangle; a wall across with its door on the right, in sand that goes on up a ramp; a crowned green half a step up | 3 |
+| 2 | The Swan Pond | short: off the orange ramp, over the pond, down into sand — long: round by the left where the swan glides; the green is a terrace with no kerb behind it | 3 |
+| 3 | The Temple Stairs | three flights of 32 cm (too soft: it rolls back down), a balustrade on each landing with its door on the other side from the last, a basin in a dead corner; the cup inside the temple's three walls, open to the back | 3 |
+| 4 | The Water Mill | short: under the paddles and through the door, softly — the mill pond lies right behind it; long: round by the left, through sand and over a ridge; the green is a tier up | 4 |
+| 5 | The Floating Stones | stones in the air, each lower, a kerb behind each to stop the ball: on, then left, then on down to the green stone — or one long hop over the right of the first stone, into the green's sand | 3 |
+| 6 | The Golden Dog | down the hill, between the paws, sand to the corner, through the door of a wall — or the kennel pipe on the right of the hill; the cup on top of a mound that falls away all round | 3 |
+| 7 | The Big Wheel | the pier: no rail between the two wheels (off the left, the sea), gondolas across the lane, a hump-back — or down to the boardwalk on the right; then sand, and a pier head of steel with nothing behind it | 3 |
+| 8 | The Plank | a plank 64 cm wide over the acid, a wrecking ball swinging across it — or round by the sandy shore; sand where the plank lands, a crowned green with no kerb on its acid sides | 4 |
+| 9 | The Acid Test | past a boulder that rolls across the run-up, up the ramp, over the acid onto the island — or the pipe in the sandy pocket on the right; the cup lies in a nest of low walls that opens to the back | 4 |
 
-The ball is putted: the stick aims (a line of dots shows the way), a gauge swings up and down by itself, the
-jump key hits at the strength it shows (stick back slows the gauge). **At the tee the aim points straight down
-the lane** — never along the line that holes the ball: on no hole does a putt straight down the lane go in, at
-any strength. The ball rolls with friction, follows the slopes, comes back off the cushions, is taken by the
-cup when it goes slowly enough; in the water, in the acid or off the bed it comes back where it was hit from,
-a stroke more. Seven strokes at most a hole, then on. The score is the strokes, time breaking ties:
-`strokes × 1000 + seconds`, written "31 strokes (2:07)". Par is 28.
+The ball is putted: the stick aims, a gauge swings up and down by itself, the jump key hits at the strength it
+shows (stick back slows the gauge). **At the tee the aim points straight down the lane** — never the line: on
+no hole does a putt straight down the lane go in, at any strength. **No stroke is stronger than 11 m of level
+felt** (it was 22): a hole is played in stages — nothing carries a ball up three flights, or through sand and
+up a ramp. The ball rolls with friction (3.2 times more in sand, 0.28 times on ice), follows the slopes, flies
+off what ends in the air, comes back off the cushions, is carried by a pipe from its mouth to its spout, comes
+down a level and not back up; the cup takes it only below 1.7 m/s (it was 2.4). In the water, in the acid or
+off the bed it comes back where it was hit from, a stroke more. **Nine strokes at most a hole** (it was seven),
+then on. The score is the strokes, time breaking ties: `strokes × 1000 + seconds`, written "31 strokes (2:07)".
+**Par is 30.**
 
-Its bot aims by playing the putt forward with the rules and still holes every one in one (9 strokes, 55 s) —
-which no person will; clumsy bots take 16 to 20 strokes. For the game's boards:
-`golf: { order: 'asc', min: 9000, max: 63999 }`.
+**Three players that play by themselves** (`botRound(t0, seed, limit, events, skill)`; `node
+tools/golf-test.mjs` prints what they score):
 
-What nobody knows yet: how hard the holes feel to a person (par 28 is a judgement from the odds of a random
-putt, not from play). The meadow's grass pokes through the path of planks in places.
+- the **perfect** one plays every putt forward with the rules and hits it exactly. It is only the proof that
+  every hole can be finished and the measure of the fewest strokes there can be: **2 2 2 2 2 3 2 2 2 = 19**
+  (never a hole in one); a round of 20 strokes in 81 s. It is what `session.auto` plays (the play test).
+- the one with **a person's hand** plans the same way but chooses the putt that still ends well a little to
+  either side, and then its hand is off — the aim by 1.7° or so, the strength by five hundredths of the gauge,
+  drawn from a seed. Twelve rounds: **22 25 27 28 28 28 28 29 29 30 31 32** (mean 28.1, par 30); hole by hole
+  2.8 2.6 3.3 3.5 2.8 3.1 3.1 3.5 3.4. It plans far better than a person does (it knows what a slope will do):
+  **a person will need more** — the par is rounded up from it on the three holes with a carry over water or acid.
+- the **clumsy** one (4° and nine hundredths, looks less closely): **29 to 46, mean 40.4**; it finishes 8.5
+  holes of 9 within the nine strokes.
+
+For the game's boards: `golf: { order: 'asc', min: 9000, max: 81999, unit: 'strokes' }` (nine holes in one at
+least — none can be, but nothing below it could ever be —, nine strokes on all nine at most).
+
+What nobody knows yet: **no person has played these holes** — everything above is bots and pictures. The
+gauge's feel at 11 m, whether the stages read as a plan or as a wall one runs into, whether the camera's lift
+over the dog and the wheels is comfortable in motion, how the low view sits on a telephone held upright: all
+unseen. The outlines of the beds are nearly those of before (the meadow round them was not re-surveyed for
+room), so the holes are complex in what they hold, not wide. The meadow's grass pokes through the path of
+planks in places, as before.
