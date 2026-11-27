@@ -58,7 +58,9 @@ it gets through in 2 min 05 to 2 min 37, never caught. A clumsy one — it runs 
 only ten metres ahead and leaves as soon as nothing looks there — is caught 3 to 21 times and still ends at the
 door, in 3 min 30 to 10 min 30. Standing still, no time runs and nothing is reached.
 
-`node tools/sneak-test.mjs`: 30 checks. `node tools/play-test.mjs sneak`: see below.
+`node tools/sneak-test.mjs`: 30 checks. `node tools/play-test.mjs sneak`: 13 of 13 — built behind its switch, its
+board by the gate, left half-way without a trace, played to the door by its own player in the running game
+(2 min 28) and the score on its board.
 
 **What it does not do, and what nobody has seen.**
 
@@ -71,3 +73,8 @@ door, in 3 min 30 to 10 min 30. Standing still, no time runs and nothing is reac
 - There is no crouching pose in the game's avatar: crouched, one's robot leans forward and sinks a little.
 - The yard is painted for the night (dark paving, warm pools under the lamps) but lit by the day of the world:
   no new kind of light was made.
+- It is plain still: boxes for containers, crates and sandbags, a planter of green sticks for the grass, no
+  sheds, no signs, no sound of its own (the game's ticks and bells). The robots are one shape, and turn whole
+  when they hear (no head of their own).
+- The quay stands 5 m south of where the machine of *Mostly Up & Down* stands when that game is on: the two have
+  not been seen together.
