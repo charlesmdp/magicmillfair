@@ -80,6 +80,7 @@ export class Mine {
     lay(0, L, 0); lay(F.s0, F.s0 + F.len, 1);
 
     // ---- outside: the timber the line stands on — low bents over the ground, tall braced ones over the gullies
+    const spiral = (() => { const i = C.stretches.findIndex((q) => q.name === 'The Spiral'); return { from: C.stretches[i].from, to: C.stretches[i + 1].from }; })();
     for (let s = 2; s < L - 1; s += 3) {
       const kind = kindAt(s, 0);
       if (INSIDE.has(kind)) continue;
@@ -87,15 +88,16 @@ export class Mine {
       // (two stringers under the sleepers)
       for (const side of [-1, 1]) wood.tint(0.8, 0.7, 0.62, 1).beam(this.at(s - 1.5, side * 0.5, -0.15), this.at(s + 1.5, side * 0.5, -0.15), 0.14, 0.2);
       if (Math.round((s - 2) / 3) % 2) continue;
-      const feet = [-1, 1].map((side) => { const up = top.y - ground(top.x + rx * side * 0.9, top.z + rz * side * 0.9), splay = 0.9 + Math.max(0, up) * 0.09, x = top.x + rx * side * splay, z = top.z + rz * side * splay; return { side, x, z, y: ground(x, z) - 0.5 }; });
+      const wound = s > spiral.from - 2 && s < spiral.to + 2; // (round the rock the line passes under itself: plain posts, the turn below runs between them)
+      const feet = [-1, 1].map((side) => { const up = top.y - ground(top.x + rx * side * 0.9, top.z + rz * side * 0.9), splay = wound ? 1.15 + Math.max(0, up) * 0.11 : 0.9 + Math.max(0, up) * 0.09, x = top.x + rx * side * splay, z = top.z + rz * side * splay; return { side, x, z, y: ground(x, z) - 0.5 }; });
       const high = top.y - Math.min(feet[0].y, feet[1].y);
       if (high < 0.75) continue;
       const thick = high > 6 ? 0.26 : 0.2;
-      for (const f of feet) wood.tint(0.9, 0.8, 0.7, 1).beam(V(f.x, f.y, f.z), V(top.x + rx * f.side * 0.8, top.y - 0.2, top.z + rz * f.side * 0.8), thick, thick);
+      for (const f of feet) wood.tint(0.9, 0.8, 0.7, 1).beam(V(f.x, f.y, f.z), V(top.x + rx * f.side * (wound ? 1.05 : 0.8), top.y - 0.2, top.z + rz * f.side * (wound ? 1.05 : 0.8)), thick, thick);
       wood.tint(1.0, 0.88, 0.76, 1).beam(V(top.x - rx * 1.05, top.y - 0.3, top.z - rz * 1.05), V(top.x + rx * 1.05, top.y - 0.3, top.z + rz * 1.05), 0.22, 0.22);
       // (every four metres down: a tie across, and a brace)
       const post = (f, y) => { const t = clamp((y - f.y) / (top.y - 0.2 - f.y), 0, 1); return V(f.x + (top.x + rx * f.side * 0.8 - f.x) * t, y, f.z + (top.z + rz * f.side * 0.8 - f.z) * t); };
-      for (let y = top.y - 4, k = 0; y > Math.max(feet[0].y, feet[1].y) + 1; y -= 4, k++) {
+      for (let y = top.y - 4, k = 0; !wound && y > Math.max(feet[0].y, feet[1].y) + 1; y -= 4, k++) {
         wood.tint(0.78, 0.68, 0.6, 1).beam(post(feet[0], y), post(feet[1], y), 0.12, 0.18);
         wood.tint(0.7, 0.6, 0.52, 1).beam(post(feet[k % 2], y), post(feet[1 - (k % 2)], Math.min(top.y - 0.4, y + 4)), 0.1, 0.14);
       }
@@ -216,7 +218,7 @@ export class Mine {
 
     // ---- the rock the line winds round: a needle standing on the terrace
     {
-      const sp = C.stretches.find((q) => q.name === 'The Spiral'), a = railAt(sp.from + 12, 0, {}), b = railAt(sp.from + 12 + 40.8, 0, {}), cx = (a.x + b.x) / 2, cz = (a.z + b.z) / 2, base = ground(cx, cz) - 1.5, top = a.y + 7;
+      const sp = C.stretches.find((q) => q.name === 'The Spiral'), a = railAt(sp.from + 12, 0, {}), b = railAt(sp.from + 12 + 40.8, 0, {}), cx = (a.x + b.x) / 2, cz = (a.z + b.z) / 2, base = Math.min(...[0, 1, 2, 3, 4, 5, 6, 7].map((k) => ground(cx + Math.cos(k * 0.785) * 9, cz + Math.sin(k * 0.785) * 9))) - 1.5, top = a.y + 6;
       const P = piece(sp.from + 30, 0), rock = P.get('stoneWet'), n = 7;
       this.needle = { x: cx, z: cz };
       for (let i = 0; i < n; i++) {
@@ -240,19 +242,26 @@ export class Mine {
       const Q = new Parts(), d = is ? 0.5 : -0.5, a = this.at(s + d, -1.95, -0.3), b = this.at(s + d, 1.95, -0.3), c = this.at(s + d, 1.95, 3.6), e = this.at(s + d, -1.95, 3.6);
       Q.get('matte').tint(0.012, 0.011, 0.014, 1); if (is) Q.get('matte').quad(a, b, c, e); else Q.get('matte').quad(b, a, e, c);
       this.mouths.add(Q.toMeshes(mats, { name: 'mine-dark', layers: [], castShadow: false }));
-      // (for who rides in: the ground of the world is not drawn where the line passes through it — an unseen
-      // sheet just above it is drawn before it, and the ground behind is left out)
-      if (is) {
-        const geo = [], add = (p) => geo.push(p.x, p.y, p.z);
-        for (let d2 = 0.7; d2 < 11; d2 += 1) for (let u = -2.6; u < 2.6; u += 1.3) {
-          const q = [this.at(s + d2, u, 0), this.at(s + d2, u + 1.3, 0), this.at(s + d2 + 1, u + 1.3, 0), this.at(s + d2 + 1, u, 0)];
+    }
+    // (for who rides: the ground of the world is not drawn where an inside comes up through it — at the mouths, and
+    // wherever a tunnel runs shallower than its own roof: an unseen sheet just above the ground is drawn before
+    // it, and the ground behind is left out)
+    {
+      const geo = [], add = (p) => geo.push(p.x, p.y, p.z);
+      for (let sq = 1; sq < L - 1; sq += 1) {
+        if (!INSIDE.has(kindAt(sq, 0)) || !INSIDE.has(kindAt(sq + 1, 0))) continue;
+        const roof = this.at(sq, 0, 4.6).y;
+        for (let u = -3.2; u < 3.19; u += 1.6) {
+          const q = [this.at(sq, u, 0), this.at(sq, u + 1.6, 0), this.at(sq + 1, u + 1.6, 0), this.at(sq + 1, u, 0)];
           for (const p of q) p.y = ground(p.x, p.z) + 0.3;
-          if (Math.min(...q.map((p) => p.y)) > this.at(s + d2, 0, 4.4).y) continue;
+          if (Math.min(...q.map((p) => p.y)) > roof) continue;
           add(q[0]); add(q[2]); add(q[1]); add(q[0]); add(q[3]); add(q[2]);
         }
+      }
+      if (geo.length) {
         const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(geo, 3));
         const hole = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ colorWrite: false, side: THREE.DoubleSide }));
-        hole.name = 'mine-hole'; hole.renderOrder = 4; hole.matrixAutoUpdate = false;
+        hole.name = 'mine-hole'; hole.renderOrder = 4; hole.matrixAutoUpdate = false; hole.frustumCulled = false;
         this.inside.add(hole);
       }
     }

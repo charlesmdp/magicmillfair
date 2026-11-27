@@ -26,9 +26,9 @@ export const MINE = {
   station: { x: -263, z: -60, y: 30.4, yaw: Math.PI }, // where the line begins — and ends: the south end of the platform, looking north
   gate: { x: -257.2, z: -70, yaw: -Math.PI / 2 }, // where one asks, on the meadow before the platform
   wait: 20, // m along the line: where the first cart waits
-  haul: { out: 5, lift: 11.5, pull: 5 }, // m/s out of the station and up the lift; how fast the chain takes it (m/s²)
+  haul: { out: 9, lift: 19, over: 10.5, pull: 8 }, // m/s out of the station, up the lift, and over its head to where the chain lets go; how fast the chain takes it (m/s²)
   roll: { free: 8.5, slope: 35, run: 11.5, runSlope: 50, gain: 0.6, most: 3, drag: 0.25, brake: 9, least: 4.5, top: 26 }, // the speed it tends to by itself, and let run; how it gets there; the brake
-  lean: { rate: 5, hold: 9, slack: 0.35, tip: 2.2, right: 1.5 }, // how fast one leans; m/s² across that a full lean holds; what needs no lean; how fast it tips, and rights itself
+  lean: { rate: 6, hold: 9, slack: 0.35, tip: 1.8, right: 1.5 }, // how fast one leans; m/s² across that a full lean holds; what needs no lean; how fast it tips, and rights itself
   hop: { up: 4.2, g: 9.81, rock: 0.3 }, // the hop: 0.86 s in the air, 0.9 m high; how high a rock is
   off: { time: 1.7, cost: 3000, speed: 6, tries: 3 }, // off the rails: s before one is put back, ms added, the speed one is put back with; so many times after the same signal and one is set down at the next
   nugget: { give: 500, lean: 0.45, high: 0.35 }, // ms off the time for each; how far one leans, how high one hops, to take one
@@ -54,27 +54,29 @@ const B = (deg, r, drop = 0, kind, o = {}) => ({ len: Math.abs(deg) * DEG * r, t
 //   hall (a great cave) · lake
 const OUT = [
   S(30, 0, 'station', { name: 'The Station' }),
-  S(9, 0, 'open'),
-  B(-30, 25, 0, 'rock', { name: 'The Lift' }),
-  S(92, -73.5, 'lift'),
-  S(8, -0.3, 'rock'),
-  B(105, 14, 0.4, 'rock'),
-  S(22, 0.3, 'rock'),
-  // a first gentle run in the open, along the flank
-  S(4, 0.3, 'open', { name: 'The High Line' }),
-  B(-16, 40, 0.5, 'open'),
-  S(20, 0.5, 'open', { things: [['nug', 3, 1], ['nug', 9, 1], ['nug', 15, 1]] }),
-  B(46, 30, 0.5, 'open'),
-  S(8, 0.3, 'open', { things: [['nug', 2, 0], ['nug', 7, 0]] }),
-  // a trestle: a horseshoe out over the slope, a gap in it
-  B(180, 17, 5, 'trestle', { name: 'The Trestle', things: [['nug', 14, 1], ['nug', 26, 1], ['nug', 38, 1]] }),
-  S(24, 1.5, 'trestle', { things: [['gap', 9, 2.6], ['nug', 10.3, 2]] }),
-  // a spiral round a rock: once and three quarters, going down
-  B(-630, 13, 12, 'trestle', { name: 'The Spiral', things: [['nug', 20, -1], ['nug', 50, -1], ['nug', 80, -1], ['nug', 110, -1]] }),
-  S(14, 0.3, 'open'),
-  // under the mountain: a tunnel of lanterns, a rock on the rails
-  B(-90, 20, 1.5, 'rock', { name: 'The Lantern Tunnel' }),
-  S(32, 2.5, 'rock', { things: [['nug', 4, 1], ['nug', 9, -1], ['rock', 22], ['nug', 22, 2]] }),
+  S(1.5, 0, 'open'),
+  S(7.5, 0, 'rock'),
+  B(-15, 25, 0, 'rock', { name: 'The Lift' }),
+  S(88, -50, 'lift'),
+  S(44, -30, 'lift'),
+  S(14.8, -15.6, 'lift'),
+  S(8, -0.2, 'rock', { head: true }),
+  B(105, 14, 0.3, 'rock'),
+  S(25.5, 0.3, 'rock', { free: true }),
+  // a first gentle run in the open, across a high terrace
+  S(4, 0.1, 'open', { name: 'The High Line', things: [['nug', 2, 0]] }),
+  B(12, 30, 0.15, 'open', { things: [['nug', 1, 1], ['nug', 5, 1]] }),
+  S(6, 0.1, 'open', { things: [['nug', 3, 0]] }),
+  B(-12, 30, 0.15, 'open', { things: [['nug', 1, -1], ['nug', 5, -1]] }),
+  S(4, 0.1, 'open'),
+  // a trestle over the saddle: nuggets to lean to and to hop to — nothing yet that throws one off
+  S(78, 2.4, 'trestle', { name: 'The Trestle', things: [['nug', 8, 1], ['nug', 14, 1], ['nug', 26, -1], ['nug', 32, -1], ['nug', 44, 2], ['nug', 58, 2], ['nug', 68, 0], ['nug', 74, 0]] }),
+  // a spiral round a rock: once and a half, going down
+  B(-540, 13, 10.5, 'trestle', { name: 'The Spiral', things: [['nug', 20, -1], ['nug', 45, -1], ['nug', 70, -1], ['nug', 95, -1]] }),
+  S(5, 1.2, 'open'),
+  // down into the ground: a tunnel of lanterns, a gap in the rails, a rock on them
+  S(30, 6.5, 'rock', { name: 'The Lantern Tunnel', things: [['nug', 12, 0], ['nug', 20, 0]] }),
+  S(46, 2.8, 'rock', { things: [['gap', 4, 2.6], ['nug', 5.3, 2], ['nug', 12, 1], ['nug', 16, -1], ['rock', 22], ['nug', 22, 2], ['nug', 36, 0], ['nug', 42, 0]] }),
   // the fork — the long way round to the left, the short way straight on, broken
   B(-90, 14, 1.5, 'hall', { name: 'The Fork', fork: 'in' }),
   B(180, 14, 3, 'hall', { things: [['nug', 12, 1], ['nug', 22, 1], ['nug', 32, 1]] }),
@@ -82,14 +84,13 @@ const OUT = [
   S(10, 0.6, 'rock'),
   B(-90, 18, 1.4, 'rock'),
   // the drop into the dark
-  S(52, 21, 'rock', { name: 'The Drop', things: [['nug', 14, 0], ['nug', 26, 0], ['nug', 38, 0]] }),
-  S(30, 1, 'rock'),
+  S(70, 41.7, 'rock', { name: 'The Drop', things: [['nug', 14, 0], ['nug', 28, 0], ['nug', 42, 0], ['nug', 56, 0]] }),
+  S(20, 1.6, 'rock'),
   // the lake under the mountain
-  S(24, 0.3, 'lake', { name: 'The Lake' }),
-  B(45, 22, 0.4, 'lake', { things: [['nug', 6, 1], ['nug', 12, 1]] }),
-  S(20, 0.4, 'lake', { things: [['gap', 8, 2.4], ['nug', 9.2, 2]] }),
-  B(-135, 16, 0.6, 'lake', { things: [['nug', 10, -1], ['nug', 20, -1], ['nug', 30, -1]] }),
-  S(18, 0.3, 'lake', { things: [['rock', 9], ['nug', 9, 2]] }),
+  S(23.5, 0.2, 'lake', { name: 'The Lake' }),
+  B(45, 22, 0.1, 'lake', { things: [['nug', 6, 1], ['nug', 12, 1]] }),
+  S(60, 0.3, 'lake', { things: [['gap', 14, 2.4], ['nug', 15.2, 2], ['nug', 28, -1], ['nug', 34, 1], ['rock', 46], ['nug', 46, 2]] }),
+  B(-135, 16, 0.2, 'lake', { things: [['nug', 10, -1], ['nug', 20, -1], ['nug', 30, -1]] }),
 ];
 // … and the last of it, laid so that it ends where the line began: the last run of bends, and home along the foot
 const HOME = [
@@ -98,7 +99,8 @@ const HOME = [
   B(90, 12, 3.5, 'rock', { things: [['nug', 9, 1]] }),
   B(-90, 13, 3, 'rock'),
   S(10, 1, 'rock'),
-  B(-90, 13, 2, 'open', { name: 'Home' }),
+  B(-8.5, 13, 0.2, 'rock'),
+  B(-81.5, 13, 1.8, 'open', { name: 'Home' }),
   S(20, 0.3, 'open'),
 ];
 const KINDS = ['station', 'open', 'trestle', 'rock', 'lift', 'hall', 'lake'];
@@ -183,10 +185,10 @@ export function course() {
   }
   gaps.sort((p, q) => p.s - q.s); rocks.sort((p, q) => p.s - q.s); nuggets.sort((p, q) => p.s - q.s);
   nuggets.forEach((g, i) => { g.id = i; });
-  const top = begin.get(OUT[4]), finish = length - 9;
+  const head = begin.get(OUT.find((q) => q.head)), top = begin.get(OUT.find((q) => q.free)), finish = length - 9;
   // ---- the speed the train has left to itself (nobody leans, nothing tips): what the boards are worked out from
   const free = new Float32Array(pts.length);
-  { let v = M.haul.lift; for (let j = Math.round(top / DS); j < pts.length; j++) { free[j] = v; v = Math.max(M.roll.least, v + accel(v, pts[j].slope, 0) * (DS / v)); } for (let j = 0; j < Math.round(top / DS); j++) free[j] = M.haul.lift; }
+  { let v = M.haul.over; for (let j = Math.round(top / DS); j < pts.length; j++) { free[j] = v; v = Math.max(M.roll.least, v + accel(v, pts[j].slope, 0) * (DS / v)); } for (let j = 0; j < Math.round(top / DS); j++) free[j] = M.haul.over; }
   // ---- the bends: where one must lean, where one must brake first
   const bends = [], need = (j) => (free[j] ** 2 * Math.abs(pts[j].k)) / M.lean.hold;
   for (let j = Math.round(top / DS) + 4; j < pts.length; j++) {
@@ -198,14 +200,18 @@ export function course() {
   }
   // ---- the boards: a lean arrow before each bend, a brake sign before what is too sharp, a hop sign before each gap and rock, one for the fork
   const boards = [];
-  for (const bd of bends) { boards.push({ s: bd.s - 20, kind: bd.dir > 0 ? 'right' : 'left', way: bd.s > fork.s0 && bd.s < fork.s1 ? 0 : -1 }); if (bd.brake) boards.push({ s: bd.s - 36, kind: 'brake', way: -1 }); }
-  for (const g of gaps) boards.push({ s: g.s - 17, kind: 'hop', way: g.way });
-  for (const r of rocks) boards.push({ s: r.s - 17, kind: 'hop', way: r.way });
-  boards.push({ s: fork.s0 - 30, kind: 'fork', way: -1 });
+  const lead = (s) => clamp(free[clamp(Math.round(s / DS), 0, pts.length - 1)] * 1.8, 18, 38); // (two seconds or so before, at the speed the train has there)
+  for (const bd of bends) { boards.push({ s: bd.s - lead(bd.s), to: bd.s, kind: bd.dir > 0 ? 'right' : 'left', way: bd.s > fork.s0 && bd.s < fork.s1 ? 0 : -1 }); if (bd.brake) boards.push({ s: bd.s - lead(bd.s) - 14, to: bd.s, kind: 'brake', way: bd.s > fork.s0 && bd.s < fork.s1 ? 0 : -1 }); }
+  for (const g of gaps) boards.push({ s: g.s - (g.way === 1 ? 14 : lead(g.s)), to: g.s, kind: 'hop', way: g.way });
+  for (const r of rocks) boards.push({ s: r.s - (r.way === 1 ? 14 : lead(r.s)), to: r.s, kind: 'hop', way: r.way });
+  boards.push({ s: fork.s0 - 34, to: fork.s0, kind: 'fork', way: -1 });
+  boards.sort((p, q) => p.s - q.s);
+  // (two boards never stand in one place: the earlier one is moved back)
+  for (let i = boards.length - 2; i >= 0; i--) { const nx = boards.slice(i + 1).find((q) => q.way === boards[i].way || q.way === -1 || boards[i].way === -1); if (nx && nx.s - boards[i].s < 6) boards[i].s = nx.s - 6; }
   boards.sort((p, q) => p.s - q.s);
   // ---- the signals: a save every sixty metres or so, where the line is straight and nothing is close ahead
   const signals = [{ s: top + 2 }];
-  for (let s = top + 55; s < finish - 30; s += 58) {
+  for (let s = top + 55; s < finish - 36; s += 58) {
     let best = s, bad = 1e9;
     for (let d = -18; d <= 18; d += 1.5) {
       const q = s + d; let cost = Math.abs(d) * 0.02;
@@ -217,8 +223,9 @@ export function course() {
     signals.push({ s: best });
     s = best;
   }
+  signals.push({ s: length - 21 }); // (the last, on the straight home)
   signals.forEach((g, i) => { g.id = i; });
-  laid = { length, ds: DS, n: pts.length, pts, stretches, gaps, rocks, nuggets, signals, boards, bends, fork, top, finish, free, kinds: KINDS };
+  laid = { length, ds: DS, n: pts.length, pts, stretches, gaps, rocks, nuggets, signals, boards, bends, fork, head, top, finish, free, kinds: KINDS };
   return laid;
 }
 const LINK = { _kind: 'rock', name: 'The Deep Line' };
@@ -291,7 +298,7 @@ function sub(st, dt, input, events) {
   const r = railAt(st.s, st.way, _r), hauled = st.s < C.top, ix = clamp(input?.x || 0, -1, 1), iy = hauled || st.over ? 0 : clamp(input?.y || 0, -1, 1);
   // ---- the speed
   if (st.over) st.v = Math.max(0, st.v - 7 * dt * (st.v > 3 ? 1 : 0.5));
-  else if (hauled) { const want = r.kind === 'lift' || st.s > 46 ? M.haul.lift : M.haul.out; st.v += clamp(want - st.v, -M.haul.pull * dt, M.haul.pull * dt); }
+  else if (hauled) { const want = st.s > C.head - 14 ? M.haul.over : r.kind === 'lift' ? M.haul.lift : M.haul.out; st.v += clamp(want - st.v, -M.haul.pull * dt, M.haul.pull * dt); }
   else if (!st.air) st.v = clamp(st.v + accel(st.v, r.slope, iy) * dt, M.roll.least, M.roll.top);
   st.braking = iy < -0.3 && !st.air && st.v > M.roll.least + 0.05;
   // ---- the lean, and the cart that tips
