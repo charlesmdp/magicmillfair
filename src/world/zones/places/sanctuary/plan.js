@@ -22,7 +22,7 @@ export const PLAN = {
   oculus: 2.3, // the eye of the dome: its radius
   door: { half: 2.0, spring: 4.6 }, // the doorway: half its width; its arch springs here
   steps: { n: 24, run: 0.6, half: 7.5 }, // the stair up to the doors
-  towers: { half: 2.9, height: 23, spire: 8 },
+  towers: { half: 2.9, height: 23 }, // the two towers of the front: half their width, how high their walls are
 };
 /** The three chapels: which way each lies (the angle of its arm from the arm of the doors). */
 export const CHAPELS = [

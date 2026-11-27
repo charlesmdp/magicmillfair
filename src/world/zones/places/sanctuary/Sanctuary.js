@@ -27,7 +27,7 @@ const EAVES = P.spring + P.W + 1.4, RIDGE = EAVES + 2.8, RO = P.R + P.T, WO = P.
 
 // ---- the stone and its light
 export const STONE = [0.86, 0.8, 0.69], CREAM = [0.95, 0.9, 0.8], ROSE = [0.8, 0.66, 0.58], SLATE = [0.5, 0.53, 0.58], GOLD = [1.0, 0.76, 0.3];
-const OUT = [0.4, 0.338, 0.24], TRIM = [0.5, 0.44, 0.335], BLUSH = [0.43, 0.3, 0.225], ROOF = [0.27, 0.26, 0.27], DOME = [0.5, 0.41, 0.25], DARK = [0.03, 0.025, 0.02];
+const OUT = [0.4, 0.338, 0.24], TRIM = [0.5, 0.44, 0.335], BLUSH = [0.43, 0.3, 0.225], ROOF = [0.15, 0.185, 0.24], DOME = [0.5, 0.41, 0.25], DARK = [0.03, 0.025, 0.02];
 /** How bright the painted light is shown (the game's eye is wide open: a half is nearly white). */
 const EXPOSE = 0.4;
 /** The glass at the end of each arm: the same lamp for the three chapels (and the rose over the doors). */
@@ -114,6 +114,7 @@ export class Sanctuary {
       sanctuaryStone: surfaceMaterial({ normalMap: grain, name: 'sanctuary-stone', rough: 0.92, spec: 0.05, normalScale: 0.7, uvScale: 0.5 }),
       sanctuaryIn: surfaceMaterial({ name: 'sanctuary-inside', color: [0, 0, 0], rough: 1, spec: 0, emissive: [1, 1, 1] }),
       sanctuaryThin: surfaceMaterial({ name: 'sanctuary-thin', color: [0, 0, 0], rough: 1, spec: 0, emissive: [1, 1, 1], side: THREE.DoubleSide }),
+      sanctuaryRay: surfaceMaterial({ name: 'sanctuary-ray', color: [0, 0, 0], rough: 1, spec: 0, emissive: [1, 1, 1], fade: true, side: THREE.DoubleSide }),
     };
     const M = new THREE.Matrix4().makeRotationY(P.yaw).setPosition(P.at.x, P.floor, P.at.z);
     const outP = new Parts(), inP = new Parts();
@@ -128,6 +129,15 @@ export class Sanctuary {
     for (let i = 0; i <= 96; i++) { const t = (i / 96) * TAU; if (jamb.has(i)) angles.push(t - EPS, t + EPS); else angles.push(t); }
     const archAt = (t) => { for (const a of ARMS) { const d = Math.atan2(Math.sin(t - a), Math.cos(t - a)); if (Math.abs(d) < a0 - EPS / 2) return P.spring + Math.sqrt(Math.max(0, P.W * P.W - (P.R * Math.sin(d)) ** 2)); } return 0; };
     surf(inn, angles, span(0, P.cornice, 18), (t, y) => V(P.R * Math.sin(t), Math.max(y, archAt(t)), P.R * Math.cos(t)), { want: middle(8), key: 1 });
+    // (a thin band of gold and blue runs round it under the cornice)
+    surf(inn, span(0, TAU, 96), [12.78, 13.1], (t, y) => V((P.R - 0.04) * Math.sin(t), y, (P.R - 0.04) * Math.cos(t)), { want: middle(8), bond: false, jitter: 0.04, shade: 0, base: (i) => (i % 2 ? GOLD : i % 4 ? [0.12, 0.2, 0.6] : [0.1, 0.45, 0.5]) });
+    // (a column with its capital at each jamb of the four arches)
+    const columns = [];
+    for (const a of ARMS) for (const s of [-1, 1]) {
+      const t = a + s * (a0 + 0.062), at = V((P.R - 0.46) * Math.sin(t), 0, (P.R - 0.46) * Math.cos(t));
+      turn(inn, at, [[0.46, 0], [0.46, 0.22], [0.36, 0.3], [0.4, 0.42], [0.3, 0.55], [0.27, P.spring - 0.95], [0.3, P.spring - 0.85], [0.3, P.spring - 0.72], [0.42, P.spring - 0.42], [0.5, P.spring - 0.2], [0.5, P.spring]], 10, ROSE);
+      columns.push([at.x, at.z, 0.38, 0.38, t]);
+    }
     // (its cornice, the drum and its windows)
     const ring = (b, profile, sides, want, o = {}) => surf(b, span(0, TAU, sides), profile.map((_, i) => i), (t, i) => V(profile[i][0] * Math.sin(t), profile[i][1], profile[i][0] * Math.cos(t)), { want, bond: false, jitter: 0.02, ...o });
     ring(inn, [[P.R, P.cornice - 0.9], [P.R - 0.18, P.cornice - 0.8], [P.R - 0.18, P.cornice - 0.55], [P.R - 0.5, P.cornice - 0.25], [P.R - 0.5, P.cornice], [P.R - 0.1, P.cornice + 0.02]], 96, middle(6), { base: CREAM });
@@ -149,6 +159,9 @@ export class Sanctuary {
     const eyeY = TOP + P.R * Math.sin(fMax);
     ring(inn, [[P.oculus + 0.5, eyeY - 0.12], [P.oculus, eyeY - 0.02], [P.oculus, eyeY + 1.5]], 32, middle(eyeY - 3), { base: [1.6, 1.5, 1.3] });
     ring(shine, [[0.001, eyeY + 1.5], [P.oculus + 0.05, eyeY + 1.5]], 24, V(0, -1, 0), { base: [1.9, 1.85, 1.7], paint: plain });
+    // (the light that comes down from it: a shaft of dust, down to the floor)
+    { const ray = mk(inP, 'sanctuaryRay'), beam = (p) => [1.25, 1.14, 0.86, p.y > 14 ? 0.42 : p.y > 5 ? 0.3 : 0.16];
+      surf(ray, span(0, TAU, 20), [0.06, 8, eyeY + 0.2], (t, y) => { const r = P.oculus - 0.15 + (2.9 - P.oculus) * (1 - y / eyeY); return V(r * Math.sin(t), y, r * Math.cos(t)); }, { want: middle(10), bond: false, jitter: 0, shade: 0, paint: beam }); }
     // (the windows of the drum: sixteen panes of coloured glass)
     const GLASS = [[0.05, 0.17, 0.9], [1.0, 0.5, 0.05], [0.8, 0.05, 0.07], [0.06, 0.55, 0.22], [1.0, 0.84, 0.45]];
     /** A window of coloured glass: panes in a pointed frame, from `o` (its foot, in the middle), `x` to its right, `y` up. */
@@ -169,10 +182,17 @@ export class Sanctuary {
       { const band = (r0, r1, lift) => { const ts = span(0, Math.PI, 24), at = (t, r) => { const u = r * Math.cos(t), rr = P.R - lift; return A(a, u, P.spring + r * Math.sin(t), Math.sqrt(rr * rr - u * u)); }; for (let i = 0; i < 24; i++) face(inn, at(ts[i], r0), at(ts[i + 1], r0), at(ts[i + 1], r1), at(ts[i], r1), middle(4), i % 2 ? CREAM : ROSE); };
         band(P.W - 0.16, P.W + 0.42, 0.1);
         for (const s of [-1, 1]) { const rr = P.R - 0.1, vv = (u) => Math.sqrt(rr * rr - u * u), u0 = s * (P.W - 0.16), u1 = s * (P.W + 0.42); for (let j = 0; j < 9; j++) { const y0 = (j * P.spring) / 9, y1 = ((j + 1) * P.spring) / 9; face(inn, A(a, u0, y0, vv(u0)), A(a, u1, y0, vv(u1)), A(a, u1, y1, vv(u1)), A(a, u0, y1, vv(u0)), middle(4), j === 8 || j === 0 ? ROSE : CREAM); } } }
+      // (two lamps hang from the crown of its vault)
+      for (const v of [13.4, 17.6]) {
+        const at = A(a, 0, 6.6, v);
+        slab(inn, (x, y, z) => A(a, x, y, z), -0.012, 7.25, v - 0.012, 0.012, P.spring + P.W - 0.02, v + 0.012, GOLD);
+        turn(inn, at, [[0.03, 0.66], [0.2, 0.56], [0.26, 0.5], [0.26, 0.44]], 8, GOLD);
+        turn(inn, at, [[0.02, -0.12], [0.16, 0], [0.22, 0.2], [0.2, 0.44]], 8, [1.25, 0.86, 0.36], { paint: plain });
+      }
       // (tall windows of coloured glass in its side walls)
       for (const s of [-1, 1]) for (const v of a === 0 ? [12.6] : [12.6, 16.9]) lancet(inn, A(a, s * (P.W - 0.06), 2.2, v), A(a, 0, 0, s), V(0, 1, 0), 1.2, 3.3, axis, n * 7 + s + Math.round(v), 0.95);
       // (the floor of the arm: flags of two stones)
-      surf(inn, span(-P.W, P.W, 8), span(0, 1, 9), (u, t) => { const v0 = Math.sqrt(P.R * P.R - u * u) - 0.4; return A(a, u, 0, v0 + (P.chord - v0) * t); }, { want: V(0, 1, 0), bond: false, jitter: 0.035, shade: 0, base: (i, j) => ((i + j) % 2 ? CREAM : ROSE) });
+      surf(inn, span(-P.W, P.W, 8), span(0, 1, 9), (u, t) => { const v0 = Math.sqrt(12.5 * 12.5 - u * u) - 0.03; return A(a, u, -0.012, v0 + (P.chord - v0) * t); }, { want: V(0, 1, 0), bond: false, jitter: 0.035, shade: 0, base: (i, j) => ((i + j) % 2 ? CREAM : ROSE) });
       if (a === 0) return;
       // (the half circle of a chapel, and its half dome)
       const prof = [...span(0, P.spring, 9).map((y) => [P.W, y]), ...Array.from({ length: 8 }, (_, k) => { const t = ((k + 1) / 8) * HALF; return [P.W * Math.cos(t), P.spring + P.W * Math.sin(t)]; })];
@@ -297,7 +317,8 @@ export class Sanctuary {
     slab(out, V, -WO, 7.3, FRONT, WO, 7.7, FRONT + 0.25, TRIM, { faces: 'yYZ', paint: plain });
     for (const s of [-1, 1]) face(out, V(0, gable(0) + 0.0, FRONT + 0.3), V(s * WO, gable(WO), FRONT + 0.3), V(s * WO, gable(WO), FRONT - 0.5), V(0, gable(0), FRONT - 0.5), V(0, 1, 0), TRIM, plain);
     for (const s of [-1, 1]) face(out, V(0, gable(0), FRONT + 0.3), V(s * WO, gable(WO), FRONT + 0.3), V(s * WO, gable(WO) - 0.45, FRONT + 0.3), V(0, gable(0) - 0.45, FRONT + 0.3), V(0, 0, 1), TRIM, plain);
-    // (the towers: square, in three stages, a belfry of two arches a side, a spire of stone)
+    // (the towers: square, in three stages, a belfry of two arches a side, a small dome like the great one —
+    // towers such as stand by a church, a mosque or a synagogue alike)
     const Tw = P.towers, tz = FRONT - Tw.half + 0.9;
     for (const s of [-1, 1]) {
       const tx = s * (WO + Tw.half), ys = courses(Tw.height), corner = [[-1, -1], [1, -1], [1, 1], [-1, 1], [-1, -1]];
@@ -310,9 +331,15 @@ export class Sanctuary {
         const o2 = V(tx + nx * (Tw.half + 0.03), 0, tz + nz * (Tw.half + 0.03));
         for (const y of [3.2, 10]) face(out, o2.clone().addScaledVector(x, -0.22).setY(y), o2.clone().addScaledVector(x, 0.22).setY(y), o2.clone().addScaledVector(x, 0.22).setY(y + 2.6), o2.clone().addScaledVector(x, -0.22).setY(y + 2.6), V(nx, 0, nz), dark, plain);
       }
-      const top = V(tx, Tw.height + 0.4 + Tw.spire, tz), hh = Tw.half + 0.05, y = Tw.height + 0.4;
-      for (let e = 0; e < 4; e++) { const p0 = V(tx + hh * corner[e][0], y, tz + hh * corner[e][1]), p1 = V(tx + hh * corner[e + 1][0], y, tz + hh * corner[e + 1][1]), m0 = p0.clone().lerp(top, 0.5), m1 = p1.clone().lerp(top, 0.5), w = (m) => V(m.x - tx, 0.5, m.z - tz); face(out, p0, p1, m1, m0, w, ROOF, plain, [0.95, 0.95, 1.05, 1.05]); face(out, m0, m1, top, top, w, ROOF, plain, [1.05, 1.05, 1.15, 1.15]); }
-      out.tint(0.95, 0.62, 0.12, 1).place(tx, top.y + 0.25, tz).lathe([[0.01, -0.3], [0.22, -0.2], [0.3, 0], [0.22, 0.2], [0.01, 0.3]], 8).pop();
+      // (its head: a low round drum, a small dome like the great one, a ball of gold)
+      { const y = Tw.height + 0.4, r = Tw.half - 0.35, cap = [[r + 0.1, 0], [r + 0.1, 0.25], [r, 0.3], [r, 1.5], [r + 0.22, 1.62], [r + 0.22, 1.85], [r - 0.05, 1.95]];
+        for (let i = 1; i <= 9; i++) { const f = (i / 9) * 1.42; cap.push([(r - 0.05) * Math.cos(f) + 0.02, 1.95 + (r - 0.05) * 1.18 * Math.sin(f)]); }
+        const tip = cap[cap.length - 1][1];
+        cap.push([0.12, tip + 0.25], [0.08, tip + 0.75]);
+        turn(out, V(tx, y, tz), cap.slice(0, 7), 12, TRIM, { paint: plain });
+        turn(out, V(tx, y, tz), cap.slice(6), 12, DOME, { paint: plain, shade: 0.02 });
+        for (let e = 0; e < 8; e++) { const t = (e / 8) * TAU, o = V(tx + (r + 0.02) * Math.sin(t), 0, tz + (r + 0.02) * Math.cos(t)), x = V(Math.cos(t), 0, -Math.sin(t)); face(out, o.clone().addScaledVector(x, -0.22).setY(y + 0.5), o.clone().addScaledVector(x, 0.22).setY(y + 0.5), o.clone().addScaledVector(x, 0.22).setY(y + 1.3), o.clone().addScaledVector(x, -0.22).setY(y + 1.3), V(Math.sin(t), 0, Math.cos(t)), DARK, plain); }
+        out.tint(0.95, 0.62, 0.12, 1).place(tx, y + tip + 1.0, tz).lathe([[0.01, -0.3], [0.22, -0.2], [0.3, 0], [0.22, 0.2], [0.01, 0.3]], 8).pop(); }
     }
     // (the stair: a landing, and steps down to the meadow between two cheeks of stone)
     const St = P.steps;
@@ -343,7 +370,7 @@ export class Sanctuary {
     col.addPlatform({ heightAt: floorAt, clearance: 1.2 });
     const put = ([lx, lz, hw, hl, yaw], y0, y1) => { const [x, z] = toWorld(lx, lz); col.addBox(x, z, hw, hl, yaw + P.yaw, y0, y1); };
     for (const b of walls()) put(b);
-    for (const b of solid) put(b, P.floor - 1, P.floor + 4);
+    for (const b of [...solid, ...columns]) put(b, P.floor - 1, P.floor + 4);
     return this;
   }
 
