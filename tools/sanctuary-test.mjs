@@ -66,12 +66,19 @@ try {
     p = await walk([mid[0], mid[1], 0], way);
     check(`from the middle one walks into the ${id}, up to what it turns to`, near(p, way[way.length - 1]) && Math.abs(p.y - PLAN.floor) < 0.1 && p.inside >= 0.5, { at: [p.x, p.y, p.z].map((v) => +v.toFixed(1)), inside: +p.inside.toFixed(2) });
   }
-  const beyond = toWorld(16 * Math.SQRT1_2, 16 * Math.SQRT1_2);
-  p = await walk([mid[0], mid[1], 0], [beyond]);
+  // (from beyond the round bench, straight at the round wall between two arms)
+  const from = toWorld(7 * Math.SQRT1_2, 7 * Math.SQRT1_2), beyond = toWorld(17 * Math.SQRT1_2, 17 * Math.SQRT1_2);
+  p = await walk([from[0], from[1], 0], [beyond]);
   const r = Math.hypot(p.x - PLAN.at.x, p.z - PLAN.at.z);
-  check('a wall stops one: walking at the round wall between two arms, one stays in the hall', r < PLAN.R && r > 6, { fromTheMiddle: +r.toFixed(2) });
-  p = await walk([DOOR.x, DOOR.z, DOOR.yaw], [toWorld(PLAN.W + PLAN.T + 3, PLAN.chord - 4)]);
-  check('and the front wall, beside the doors, lets nobody through', (() => { const dx = p.x - PLAN.at.x, dz = p.z - PLAN.at.z, lz = dx * Math.sin(PLAN.yaw) + dz * Math.cos(PLAN.yaw); return lz > PLAN.chord + PLAN.T - 0.2; })(), { at: [p.x, p.z].map((v) => +v.toFixed(1)) });
+  check('a wall stops one: walking at the round wall between two arms, one stays in the hall', r < PLAN.R && r > PLAN.R - 1.5, { fromTheMiddle: +r.toFixed(2), wall: PLAN.R });
+  // (on the landing, beside the doorway, straight at the front wall)
+  const beside = toWorld(4.4, PLAN.chord + PLAN.T + 1.2);
+  p = await walk([beside[0], beside[1], DOOR.yaw], [toWorld(4.4, PLAN.chord - 5)]);
+  const lz = (p.x - PLAN.at.x) * Math.sin(PLAN.yaw) + (p.z - PLAN.at.z) * Math.cos(PLAN.yaw);
+  check('and the front wall, beside the doors, lets nobody through', lz > PLAN.chord + PLAN.T, { before: +(lz - PLAN.chord - PLAN.T).toFixed(2) });
+  // (the round bench stops one too: from the middle, towards a length of it)
+  p = await walk([mid[0], mid[1], 0], [toWorld(8 * Math.SQRT1_2, 8 * Math.SQRT1_2)]);
+  check('the round bench is solid: one walks round it', Math.hypot(p.x - PLAN.at.x, p.z - PLAN.at.z) < 3.0, { fromTheMiddle: +Math.hypot(p.x - PLAN.at.x, p.z - PLAN.at.z).toFixed(2) });
   await frames(4);
   check('nothing complained', errors.length === 0, errors.slice(0, 3).join(' | '));
 } finally {
