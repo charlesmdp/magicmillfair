@@ -273,8 +273,13 @@ export function course() {
   rope(b + 37, 5, 0); hole(b + 42, 1.6); rope(b + 43.6, 5.5, -0.85); bare.push([b + 37, b + 49.1]); high(b + 55);
   // ---- 16 · Low Bridge: (a landing) boards come down the track on a cable
   b = 15 * TURN;
-  trolley(b + 8, b + 27, 3.4, 3.5); low(b + 13); low(b + 20.5); crumbles(b + 29, 10);
-  trolley(b + 40, b + 59, 3.2, 3.5, 0.7); low(b + 44); hole(b + 50, 2.4); low(b + 56);
+  // (a board to slide under, straight off the landing: the turn keeps as much in the way as the one before it, now
+  // that its second cable is half as long and carries one board at a time)
+  high(b + 6.6); trolley(b + 8, b + 27, 3.4, 3.5); low(b + 13); low(b + 20.5); crumbles(b + 29, 10);
+  // (the second cable ends just before the hole — its boards leave from the edge one jumps from, and the planks
+  // between the hole and the gate of the Pistons carry one hurdle and nothing else: the owner's wish)
+  // (…and that hurdle stands far enough from the hole for a quarter of a second to press the key, landed from it)
+  trolley(b + 40, b + 49.4, 3.2, 3.5, 0.7); low(b + 44); hole(b + 50, 2.4); low(b + 57.2);
   // ---- 17 · Pistons
   b = 16 * TURN;
   // (each row a wave: who passes the first as it draws back finds the next drawing back as well, at a run)

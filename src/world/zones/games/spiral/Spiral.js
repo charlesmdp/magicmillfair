@@ -138,11 +138,19 @@ export class Spiral {
       }
     }
     // ---- under the stretches of planks over nothing, a net of dark cloth: against it they show, and the turn below does not
-    for (const [s0, s1] of bare) for (let s = s0; s < s1 + 0.5; s += 1.5) {
-      chunk(s);
-      const e = Math.min(s1 + 0.5, s + 1.5);
-      paint.tint(0.035, 0.05, 0.13, 1).quad(at(s, -H, -3.1), at(s, H, -3.1), at(e, H, -3.1), at(e, -H, -3.1));
-      paint.tint(0.035, 0.05, 0.13, 1).quad(at(s, H, -3.12), at(s, -H, -3.12), at(e, -H, -3.12), at(e, H, -3.12));
+    // (it hangs three metres under them — well into the picture of who runs the turn below, between their eye and
+    // themselves: "la rampe du dessus gêne la vue", said the owner of the turns under the tightrope and under the
+    // last straw. So each length of it is a piece apart, not drawn while one runs under it — taken away and put
+    // back where the tower hides it, or behind one's back; for everybody else it is there as ever)
+    const nets = [];
+    for (const [s0, s1] of bare) for (let p0 = s0; p0 < s1 + 0.5; p0 += 12) {
+      const p1 = Math.min(s1 + 0.5, p0 + 12), cloth = new Parts(), dye = cloth.get('paint');
+      for (let s = p0; s < p1; s += 1.5) {
+        const e = Math.min(p1, s + 1.5);
+        dye.tint(0.035, 0.05, 0.13, 1).quad(at(s, -H, -3.1), at(s, H, -3.1), at(e, H, -3.1), at(e, -H, -3.1));
+        dye.tint(0.035, 0.05, 0.13, 1).quad(at(s, H, -3.12), at(s, -H, -3.12), at(e, -H, -3.12), at(e, H, -3.12));
+      }
+      nets.push({ parts: cloth, from: p0 - TURN - 18, to: p1 - TURN + 12 });
     }
     // ---- what holds it: a beam and a strut from the wall, twelve to a turn
     for (let s = S0 + 0.4; s < S1; s += TURN / 12) {
@@ -325,6 +333,13 @@ export class Spiral {
       this.chunks.push({ a: o.a, b: o.b, casts });
       return { mesh: m, from: o.from, to: o.to };
     });
+    // (the nets under the planks over nothing: see where they are woven, above)
+    this.nets = nets.map((o, k) => {
+      const m = o.parts.toMeshes(mats, { name: `spiral-net${k}`, layers: [] });
+      m.traverse((x) => { if (x.isMesh) x.castShadow = false; });
+      this.group.add(m);
+      return { mesh: m, from: o.from, to: o.to };
+    });
 
     // ---- what moves: each kind built once and drawn as instances where the clock says (see _place)
     /** A kind of moving thing: its pieces built in the frame of `pose` (+x up the track, +z towards the rail), as many as `max` at once. */
@@ -464,7 +479,13 @@ export class Spiral {
     for (const t of K.door) if (near(t)) { pose(t.s, doorAt(t, now)); put(this.doors); }
     for (const t of K.cannon) if (near(t)) { const u = cannonAt(t, now); if (u < H + 2.6) { pose(t.s, u, t.y); _o.rotation.z -= (u * 4) % TAU; put(this.balls[t.high ? 1 : 0]); } }
     for (const t of K.ram) if (near(t)) { const e = ramAt(t, now); pose(t.s, t.side < 0 ? -H + e : H - e); put(this.rams[t.side < 0 ? 0 : 1]); }
-    for (const t of K.trolley) if (near(t)) trolleysOf(t, now, (s) => { pose(s, 0, 0, true); _o.rotation.z += Math.sin(now * 5 + s) * 0.04; put(this.boards); });
+    for (const t of K.trolley) if (near(t)) {
+      trolleysOf(t, now, (s) => { pose(s, 0, 0, true); _o.rotation.z += Math.sin(now * 5 + s) * 0.04; put(this.boards); });
+      // (the next board comes down onto the top of its cable seven tenths of a second before it leaves: it harms
+      // nobody yet, and is seen coming even by who stands right under the gallows)
+      const w = t.every - ((((now - t.off) % t.every) + t.every) % t.every);
+      if (w < 0.7) { pose(t.s1, 0, (w / 0.7) * 1.3, true); put(this.boards); }
+    }
     for (const t of K.crumble) if (near(t) && t.s1 > F - 30 && t.s0 < F + 50) {
       // (a plank that gives way: it trembles once trodden on, then drops, and is gone)
       const k = st ? trodAt(st, t.id) : undefined, age = k === undefined ? -1 : st.total - k, drop = age > S.crumble ? 0.5 * S.g * (age - S.crumble) ** 2 : 0;
@@ -490,6 +511,7 @@ export class Spiral {
     for (const { b, s } of this.banners) b.mesh.visible = Math.abs(s - F) < NEAR;
     // (the gallery over the barrels: not drawn while one runs below it — for everybody else, there as ever)
     for (const o of this.cutaways) o.mesh.visible = !(st && F > o.from && F < o.to);
+    for (const o of this.nets) o.mesh.visible = !(st && F > o.from && F < o.to); // (nor the net one runs under)
     // (only the pieces of the gallery about the camera cast a shadow, and the one over it: the rest is far, and dear)
     for (const c of this.chunks) { const cast = F > c.a - 1.5 * TURN && F < c.b + 0.5 * TURN; for (const o of c.casts) o.castShadow = cast; }
   }
