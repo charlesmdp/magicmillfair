@@ -510,10 +510,15 @@ function aimAgain(st) {
 function nextHole(st, events) {
   st.hole++;
   if (st.hole >= HOLES.length) { st.hole = HOLES.length - 1; st.over = true; st.phase = 'over'; st.score = scoreOf(st.total, st.time); if (events) events.push({ type: 'over', score: st.score, strokes: st.total, time: st.time }); return; }
-  ballAt(HOLES[st.hole], 0, 0, st.ball);
+  teeOff(st, st.hole);
+  if (events) events.push({ type: 'tee', hole: st.hole });
+}
+/** The ball of a round is put down on the tee of hole `n` (the rules do it from hole to hole; the pictures of the holes ask for one at will). */
+export function teeOff(st, n) {
+  st.hole = n; st.bot = null;
+  ballAt(HOLES[n], 0, 0, st.ball);
   st.from[0] = 0; st.from[1] = 0; st.aim = 0;
   st.phase = 'tee'; st.wait = GOLF.wait.tee;
-  if (events) events.push({ type: 'tee', hole: st.hole });
 }
 function pickUp(st, events) { st.phase = 'picked'; st.wait = GOLF.wait.picked; st.time = st.clock; if (events) events.push({ type: 'picked', hole: st.hole, strokes: st.strokes[st.hole] }); }
 
