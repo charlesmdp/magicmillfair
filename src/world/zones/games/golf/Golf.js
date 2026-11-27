@@ -18,7 +18,7 @@ import { LAYER } from '../../../../render/Shadows.js';
 import { ANIM } from '../../../../player/Character.js';
 import { canvasBoard } from '../Boards.js';
 import { V, clamp, lerp, gateArch, stakeSign, worldClock } from '../gates.js';
-import { GOLF, HOLES, GROUNDS, STAIRS, toWorld, toLocal, levelOf, feltAt, moverAt, gaugeOf, sightLine, startRound, stepRound, teeOff, botInput, lineOf, formatScore } from './rules.js';
+import { GOLF, HOLES, GROUNDS, STAIRS, toWorld, toLocal, levelOf, feltAt, moverAt, gaugeOf, sightLine, wayFrom, startRound, stepRound, teeOff, botInput, lineOf, formatScore } from './rules.js';
 
 const R = GOLF.ball, TAU = Math.PI * 2, STEP = GOLF.step;
 const FELT = [0.13, 0.8, 0.19], FELT2 = [0.11, 0.7, 0.2], TEE = [0.05, 0.4, 0.1], STONE = [1.1, 1.0, 0.9], CREAM = [1.65, 1.5, 1.2];
@@ -27,7 +27,7 @@ const TONES = [[1.55, 0.15, 0.12], [0.3, 0.6, 1.55], [1.6, 1.15, 0.2], [0.2, 0.9
 const DOTS = 44, KERB = 0.2, MOVERS = 104, GANTRY = 2.3; // (how high the beam the wrecking ball hangs from)
 const mul = (c, k) => c.map((v) => v * k);
 /** The camera of who putts: how far behind the ball, how high over it, how far ahead of it it looks — from the lowest (nothing in the way) to the highest (lifted over what stands between it and the ball). */
-const VIEWS = [[3.7, 1.75, 2.9], [3.4, 2.5, 2.4], [2.9, 3.3, 1.8], [2.3, 4.1, 1.1], [1.5, 4.9, 0.5]];
+const VIEWS = [[3.8, 2.0, 3.0], [3.4, 2.6, 2.4], [2.9, 3.3, 1.8], [2.3, 4.1, 1.1], [1.5, 4.9, 0.5]];
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 const hash2 = (a, b) => { const s = Math.sin(a * 127.1 + b * 311.7 + 74.7) * 43758.5453; return s - Math.floor(s); };
@@ -623,7 +623,7 @@ export class Golf {
   /** A round is asked for: the player is put at the first tee. `io`: { play, note, splash }. Returns the session — the driver of the player (see src/extras/plug.js). */
   open(player, io) {
     const st = startRound((worldClock() / 1000) % GOLF.cycle), events = [], input = { x: 0, y: 0, jump: false };
-    const S = { acc: 0, after: 0, spot: [0, 0], goal: [0, 0], hole: -1, walk: 0, alpha: 0, swing: -1, from: 0, ended: false, told: false, peek: false, steered: false, side: 1 };
+    const S = { acc: 0, after: 0, spot: [0, 0], goal: [0, 0], hole: -1, walk: 0, alpha: 0, swing: -1, from: 0, ended: false, told: false, peek: false, steered: false, side: 1, stroke: -1 };
     // the camera: which hole it is on, since when, its heading (an aim of the hole), the ball as it follows it, how far it is lifted, how much of the view from above is shown
     const C = { hole: -1, t: 0, yaw: 0, aim: 0, x: 0, y: 0, z: 0, ground: 0, lift: 0, view: 1, plan: true, skip: false };
     const _t = V(0, 0, 0), _c = V(0, 0, 0), _d = V(0, 0, 0), _w = [0, 0, 0, 0], _l = [0, 0];
@@ -649,6 +649,8 @@ export class Golf {
         const H = HOLES[st.hole], b = st.ball;
         // the robot stands beside the ball as one stands to putt — on the left of the line, square to it (on the right where there is no felt on the left) —, never between the camera and the ball; it walks round as the aim turns
         const dx = Math.sin(st.aim), dz = -Math.cos(st.aim), rx = -dz, rz = dx;
+        // (when a stroke is to be played it takes the side the way does not turn to: it is never before what one aims at)
+        if (S.stroke !== st.total * 16 + st.hole && (st.phase === 'aim' || st.phase === 'tee')) { S.stroke = st.total * 16 + st.hole; const w = wayFrom(H, b.x, b.z, _l), off = rx * (w[0] - b.x) + rz * (w[1] - b.z); S.side = off < -0.12 ? -1 : 1; }
         let px = b.x, pz = b.z, side = S.side, found = false;
         for (const l of [S.side * 0.95, S.side * 0.75, -S.side * 0.95, -S.side * 0.75, S.side * 0.55, -S.side * 0.55]) { const x = b.x - dx * 0.08 - rx * l, z = b.z - dz * 0.08 - rz * l, f = feltAt(H, x, z); if (f > -Infinity && Math.abs(f - b.y) < 0.35) { side = Math.sign(l); px = x; pz = z; found = true; break; } }
         if (found && (st.phase === 'aim' || st.phase === 'tee')) S.side = side;

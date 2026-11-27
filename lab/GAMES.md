@@ -336,15 +336,15 @@ Nine holes of crazy golf round the acid pond (inside x -264 … -204, z -114 …
 kiosk and the board of scores make its entrance at (-225.5, -75.6)). **Each hole takes after a place of the
 valley**, in miniature and in the paint of the fair; the beds stand half a metre and more over the meadow on
 painted skirts, a path of planks goes from hole to hole, a rope on stakes keeps one off the acid, and there are
-poles with bunting and bulbs, benches, flower tubs. The whole course is 19 meshes.
+poles with bunting and bulbs, benches, flower tubs. The whole course is 19 meshes, 56 000 triangles.
 
-**The camera is the one of who putts**: 3.7 m behind the ball and 1.75 m over it, looking along the aim (the
+**The camera is the one of who putts**: 3.8 m behind the ball and 2 m over it, looking along the aim (the
 line of dots always goes straight up the screen; the view turns with the stick, as one with the aim). It follows
 the ball as it runs, comes round gently when the aim jumps, and is lifted over what would stand between it and
 the ball (a wall, the dog, a wheel: five places, from low to nearly overhead). When a hole begins it shows the
 whole hole from above for three seconds (less if one aims at once), and again **for as long as the stick is
-pushed forward (W)**. The robot stands beside the ball, square to the line — on the side where there is felt —
-and runs after its ball; the gauge is a bar held low on the screen. **The relief is painted**: the felt has a
+pushed forward (W)**. The robot stands beside the ball, square to the line — on the side the way does not turn
+to, and where there is felt — and runs after its ball; the gauge is a bar held low on the screen. **The relief is painted**: the felt has a
 grid (a line every half metre), and wherever it rises or falls there are lines of equal height every 10 cm —
 light above the level of the tee, dark below — and the felt itself is lighter on what faces the light. Colours
 mean the same everywhere: yellow sand slows, pale blue ice (or steel) slides, an orange ramp is one to jump
