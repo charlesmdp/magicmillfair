@@ -13,9 +13,12 @@ sea. **The way is the ruin**: it winds round it and inwards like a snail's shell
 one before and 8 m and more over it. So the wall is always on the left and the sky on the right, and the camera
 rides on the open side, behind the runner and a little above (6.2 m back, 3.5 m out, 3.3 m up): nothing is ever
 between it and the runner. Where a wall stands on the right as well — the two halls — it comes in over the middle
-of the way before the runner is between the two, and goes out again after. One asks to play on the sand of the
-south beach, at (64, 84), 18 m from the gate of the spiral, the ruin in sight through the arch; one is put at its
-foot, and let go at the gate again.
+of the way before the runner is between the two, and goes out again after. One asks to play on the shore
+at the south-east end of the south beach, at (79, 98) — past the quay of *Robots Can See You*, whose gate is at
+(60, 80): 26 m from that arch, 16 m from the mine mouth, 8 m south of the quay's corner. From there the line to
+the ruin passes clear of the quay, and the tower of the spiral stands to its left (10° off: it hides the north
+wing of the ruin, not its keep). The ground there is dark rock at the foot of a wooded bank, not sand. One is
+put at the foot of the ruin, and let go at the gate again.
 
 **The stick and one button.** Stick up runs (7 m/s), down steps back, aside goes across the way (3.4 m wide: the
 wall on the left, a kerb on the right — nobody falls off the side of a floor). The button jumps (1.5 m up,
@@ -83,7 +86,8 @@ are; nobody is solid. The blades and the spikes are the same for everybody at ev
 way do so for who treads on them only: somebody else's slabs are whole.
 
 **What the checks say** (`node tools/walls-test.mjs`, 34 of 34; its last line is the line of
-`server/scores.js`): the place (water under all of it, the gate dry and inside the bounds); the plan (each lap at
+`server/scores.js`): the place (water under all of it; the gate dry, inside the bounds, 15 m and more from every other arch, the
+line from it to the ruin clear of the quay and beside the tower of the spiral); the plan (each lap at
 least 8.1 m over the one outside it, the tallest band 6.6 m; the corners carry nothing but steps); the line from
 the camera to the runner, followed all along the way and across it, passes clear of every turret and of the
 walls that stand on the right; the saves; each move does what it says and its gap is a fall without it; each jump

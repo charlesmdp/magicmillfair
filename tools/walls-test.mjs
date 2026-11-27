@@ -11,6 +11,7 @@ import { BOARDS as SERVER } from '../server/scores.js';
 import { BOUNDS, PIER, pierToWorld } from '../src/world/layout/layout.js';
 import { SPIRAL } from '../src/world/zones/games/spiral/rules.js';
 import { CLEFT } from '../src/world/zones/games/crack/cleft.js';
+import { SNEAK } from '../src/world/zones/games/sneak/rules.js';
 import { WALLS, BOARD, LENGTH, PLAN, course, placeAt, floorAt, hallAt, stretchOf, bladeAt, spikesAt, startRun, stepRun, botInput, botRun, heatOf, fastest } from '../src/world/zones/games/walls/rules.js';
 
 const S = WALLS, C = S.at, H = S.half;
@@ -49,7 +50,14 @@ const press = (u, ...at) => { const left = at.slice(); return (st, input) => { i
   check('the ruin stands in the sea: water under all of it, and room about it — the tower of the spiral, the cleft, the head of the pier are well away', wet === n && toSpiral > half + 30 && toCleft > half + 30 && toPier > half + 30,
     `${Math.round(ext[1] - ext[0])} × ${Math.round(ext[3] - ext[2])} m at (${C.x}, ${C.z}), the bed ${(-deep).toFixed(0)} m down at the most; ${Math.round(toSpiral)} m from the spiral, ${Math.round(toCleft)} m from the cleft, ${Math.round(toPier)} m from the head of the pier`);
   const g = S.gate, gy = height(g.x, g.z);
-  check('its gate is on dry ground one can walk to, on the south beach, the ruin in sight across the water', gy > 0.6 && gy < 9 && inside(g.x, g.z, BOUNDS) && Math.hypot(g.x - SPIRAL.gate.x, g.z - SPIRAL.gate.z) > 9, `(${g.x}, ${g.z}), ${gy.toFixed(1)} m over the sea, ${Math.round(Math.hypot(g.x - C.x, g.z - C.z))} m from the ruin, ${Math.hypot(g.x - SPIRAL.gate.x, g.z - SPIRAL.gate.z).toFixed(0)} m from the gate of the spiral`);
+  // (the other arches of the south beach, and what stands between it and the ruin: the quay of the robots, the tower of the spiral)
+  const arches = { 'the spiral': SPIRAL.gate, 'the robots': SNEAK.gate, 'Mostly Up': { x: 0, z: 80 }, 'the cleft': CLEFT.at, 'the mine mouth': { x: 89, z: 111 } }, near = Object.entries(arches).map(([name, a]) => [name, Math.hypot(g.x - a.x, g.z - a.z)]).sort((a, b) => a[1] - b[1]);
+  const quay = { x0: 74, x1: 138, z0: 60, z1: 90 };
+  let clear = Infinity;
+  for (let k = 0; k <= 400; k++) { const x = g.x + ((C.x - g.x) * k) / 400, z = g.z + ((C.z - g.z) * k) / 400; clear = Math.min(clear, Math.hypot(Math.max(quay.x0 - x, 0, x - quay.x1), Math.max(quay.z0 - z, 0, z - quay.z1))); }
+  const deg = (p) => (Math.atan2(p.z - g.z, p.x - g.x) * 180) / Math.PI, toRuin = deg(C), toTower = deg(SPIRAL.at), core = (Math.asin(SPIRAL.core / Math.hypot(SPIRAL.at.x - g.x, SPIRAL.at.z - g.z)) * 180) / Math.PI;
+  check('its gate is on dry ground one can walk to, at the south-east end of the south beach: 15 m and more from every other arch, and the ruin really in sight from it — the line to its middle passes clear of the quay of the robots and beside the tower of the spiral', gy > 0.6 && gy < 9 && inside(g.x, g.z, BOUNDS) && near[0][1] >= 15 && clear > 5 && Math.abs(toRuin - toTower) > core + 4,
+    `(${g.x}, ${g.z}), ${gy.toFixed(1)} m over the sea, ${Math.round(Math.hypot(g.x - C.x, g.z - C.z))} m from the ruin; the nearest arches: ${near.slice(0, 3).map(([name, d]) => `${name} ${d.toFixed(1)} m`).join(', ')}; the line to the ruin ${clear.toFixed(1)} m from the quay, ${Math.abs(toRuin - toTower).toFixed(1)}° from the middle of the tower (its wall ±${core.toFixed(1)}°)`);
 }
 {
   // ---- the way

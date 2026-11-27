@@ -347,7 +347,7 @@ export class Walls {
     this.blob.rotation.x = -Math.PI / 2; this.blob.visible = false; this.blob.renderOrder = 5; this.blob.name = 'walls-blob';
     this.group.add(this.blob);
 
-    // ---- the gate, on the south beach, looking at the ruin; one's best time beside it
+    // ---- the gate, on the shore at the south-east end of the south beach, looking at the ruin; one's best time beside it
     const gx = S.gate.x, gz = S.gate.z, gy = this.data.heightAt(gx, gz), yaw = Math.atan2(C.x - gx, C.z - gz), gate = new Parts();
     gateArch(this.group, gate.get('paint'), gx, gy, gz, yaw, S.name.toUpperCase(), 'ALONG THE WALLS OF THE RUIN TO THE TOP OF ITS TOWER · A FALL WINDS TIME BACK', { width: 4, tone: [0.1, 0.4, 1.2] });
     this.group.add(gate.toMeshes(mats, { name: 'walls-gate', layers: [LAYER.STATIC_CASTER] }));
@@ -358,7 +358,8 @@ export class Walls {
       ctx.fillStyle = '#ffffff'; ctx.font = '700 84px Georgia, serif'; ctx.fillText(this.best ? formatTime(this.best) : '—', w / 2, 138);
       ctx.fillStyle = '#c9d2ff'; ctx.font = '500 26px system-ui, sans-serif'; ctx.fillText(this.best ? 'from the first step, falls and all' : 'nobody has stood on the tower yet', w / 2, 214, w * 0.9);
     }, 1.7, 0.85, { both: true });
-    const bx = gx + Math.cos(yaw) * 3.1 - Math.sin(yaw) * 0.6, bz = gz - Math.sin(yaw) * 3.1 - Math.cos(yaw) * 0.6;
+    // (to the left of the gate and a little back: the water is close on that side, the board keeps to dry ground)
+    const bx = gx + Math.cos(yaw) * 2.3 - Math.sin(yaw) * 2.6, bz = gz - Math.sin(yaw) * 2.3 - Math.cos(yaw) * 2.6;
     this.board.mesh.position.set(bx, this.data.heightAt(bx, bz) + 1.25, bz); this.board.mesh.rotation.y = yaw - 0.3; this.board.mesh.name = 'walls-board';
     this.group.add(this.board.mesh);
     this.gate = { x: gx, y: gy, z: gz, yaw };
