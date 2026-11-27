@@ -3,14 +3,17 @@
 // got past, the ride is the same on every device and plays as it should — the water carries, the walls slow,
 // one jumps the rolls and the gaps, gets by the propellers of the long pool and round its buffers, keeps out of
 // the whirlpools; over the rim one flies, and rides on from whatever trough one comes down into — the pipe
-// beside the pool, a turn of the slide below — or is put back when the count runs out — and a bot gets down
-// it: carefully without a scratch, boldly through every shortcut.
+// beside the pool, a turn of the slide below — or is put back when the count runs out; the slide itself falls
+// three times, from pool to pool, with pipes beside the pools that one steers the fall into, and comes back as
+// three rivers with low rims between them — and a bot gets down it: carefully without a scratch, boldly
+// through every shortcut, by the pipes of sparks, by the rapids — and so does one with a person's hands, a
+// quarter of a second late.
 // usage: node tools/slide-test.mjs
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
-import { SLIDE, WALL, MILL, PIPE, slideCourse, lineAt, lineOf, frameAt, rimAt, gapAt, sliderAt, propAt } from '../src/world/zones/games/slide/track.js';
+import { SLIDE, WALL, MILL, PIPE, POOL, MOUTH, NEAR, slideCourse, lineAt, lineOf, frameAt, rimAt, gapAt, sliderAt, propAt, refAt, sideAt, asideAt, overRim } from '../src/world/zones/games/slide/track.js';
 import { RIDE, startRide, stepRide, ridePose, rideFall, botInput, botRun, rideProgress } from '../src/world/zones/games/slide/ride.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -84,10 +87,14 @@ const beside = (x, y, z) => {
   }
   check('where the line passes over itself there is room underneath', closest > 5, `least height between two passes: ${closest.toFixed(1)} m`);
   // after the launch, wherever it runs straight something is going on: the long pool, a pool of whirlpools, the run-up to a gap or the landing after it
-  const busy = (s) => course.mills.some((z) => s > z.from - 12 && s < z.to + 10) || course.basins.some((z) => s > z.from - 8 && s < z.to + 8) || course.gaps.some((g) => s > g.from - 34 && s < g.to + 24);
+  const busy = (s) => course.mills.some((z) => s > z.from - 12 && s < z.to + 10) || course.basins.some((z) => s > z.from - 8 && s < z.to + 8) || course.gaps.some((g) => s > g.from - 34 && s < g.to + 24)
+    || course.falls.some((f) => s > f.from - 34 && s < f.to + f.pool + 14) || course.sides.some((ln) => s > ln.from - 4 && s < ln.to + 4); // (…a fall, the pool under it, a pipe to choose beside)
   let idle = 0, longest = 0, runLen = 0;
   for (const p of P) { if (p.s > 46 && Math.abs(p.k) < 0.006 && !busy(p.s)) { idle++; runLen++; longest = Math.max(longest, runLen); } else runLen = 0; }
   check('after the launch it never runs straight with nothing going on', idle / P.length < 0.03 && longest < 20, `${idle} m in all, ${longest} m at most`);
+  // (the oval of the Cascade and of the Three Rivers is laid on the first turn of the Corkscrew: it comes back to where it left)
+  const stood = { 'Round the Dog': [240.1, -330.6], 'The Corkscrew': [238, -284.5], 'The Whirlpool': [122.6, -132.5] }, off = course.helices.filter((h) => !h.arc).map((h) => Math.hypot(h.x - stood[h.name][0], h.z - stood[h.name][1]));
+  check('the new stretches are an oval out over the sea and back: every helix stands where it always stood', off.length === 3 && Math.max(...off) < 0.4 && course.length > 1500, `${course.length.toFixed(0)} m now; the helices within ${Math.max(...off).toFixed(2)} m of their places`);
   check('the trough is 15 % wider than the first one, and its rim a full radian up', Math.abs(SLIDE.radius / 1.85 - 1.15) < 0.005 && SLIDE.rim === 1, `${(2 * R * Math.sin(SLIDE.rim)).toFixed(1)} m from rim to rim where it is plain`);
   // it opens out: the long pool, the pool of the whirlpools, small pools round the whirlpools of the plain stretches
   const widest = (z) => Math.max(...P.filter((p) => p.s >= z.from && p.s <= z.to).map((p) => 2 * (p.F + R * Math.sin(SLIDE.rim))));
@@ -138,23 +145,25 @@ for (const f of course.forks) {
 // ------------------------------------------------------------------------------------------------ what lies and moves in the water
 {
   const kinds = {}; for (const t of course.things) kinds[t.kind] = (kinds[t.kind] || 0) + 1;
-  check('rolls, rolls that slide, arms that turn, whirlpools, propellers, buffers and padding — and no buoy left', ['bar', 'slider', 'spinner', 'whirl', 'prop', 'bumper', 'block'].every((k) => kinds[k] >= 3) && Object.keys(kinds).length === 7 && course.forks.every((f) => course.things.some((t) => t.line === f.id)), JSON.stringify(kinds));
+  check('rolls, rolls that slide, arms that turn, whirlpools, propellers, buffers, padding, and arrows that throw one forward — and no buoy left', ['bar', 'slider', 'spinner', 'whirl', 'prop', 'bumper', 'block', 'boost'].every((k) => kinds[k] >= 3) && Object.keys(kinds).length === 8 && course.forks.every((f) => course.things.some((t) => t.line === f.id)), JSON.stringify(kinds));
   check('some of it moves', of('slider').length + of('spinner').length >= 8 && of('slider').every((t) => t.amp > 0.3 && t.period > 1) && of('spinner').every((t) => Math.abs(t.period) > 1.5), `${of('slider').length} sliders, ${of('spinner').length} spinners`);
   const inZone = (s) => course.mills.some((z) => s > z.from && s < z.to) || course.basins.some((z) => s > z.from && s < z.to);
   check('nothing on the launch, at the very end, on the way into a shortcut, nor before or after a gap',
     mainThings.every((t) => t.s > 46 && t.s < course.finish - 12 && !course.forks.some((f) => t.s > f.from - 44 && t.s < f.from + 16) && (inZone(t.s) || !course.gaps.some((g) => t.s > g.from - 26 && t.s < g.to + 12))));
+  check('…nor before a fall or in the pool under it; and of the three rivers, the one in the middle is the plain one', mainThings.every((t) => !course.falls.some((f) => t.s > f.from - 30 && t.s < f.to + f.pool) && !course.sides.some((ln) => ln.end === 'join' && t.s > ln.from && t.s < ln.to && Math.abs(asideAt(ln, sideAt(ln, t.s))) < NEAR)));
   // a whirlpool leaves a way round, on the water, on one side at least
   const way = (t) => { const F = lineAt(course.main, t.s).F; return Math.max(F + SLIDE.stream - (t.u + t.core), F + SLIDE.stream + (t.u - t.core)); };
   check('every whirlpool lies in a pool of its own, with a way round it on the water', of('whirl').every((t) => lineAt(course.main, t.s).D > 0.5 && way(t) > 2 * RIDE.body + 0.3), `the narrowest way round: ${Math.min(...of('whirl').map(way)).toFixed(2)} m (a rider is ${(2 * RIDE.body).toFixed(1)} m wide)`);
   const apex = (RIDE.jump * RIDE.jump) / (2 * RIDE.g);
-  check('what is to be jumped is low enough, and what is not is too tall', course.things.every((t) => (t.kind === 'block' || t.kind === 'bumper' ? t.h > apex + 0.3 : t.kind === 'whirl' || t.h < apex - 0.15)), `rolls ${of('bar')[0].h} m, arms ${of('spinner')[0].h} m, blades ${of('prop')[0].h} m; padding ${of('block')[0].h} m, buffers ${of('bumper')[0].h} m; a jump goes ${apex.toFixed(2)} m up`);
+  check('what is to be jumped is low enough, and what is not is too tall', course.things.every((t) => (t.kind === 'block' || t.kind === 'bumper' ? t.h > apex + 0.3 : t.kind === 'whirl' || t.kind === 'boost' || t.h < apex - 0.15)), `rolls ${of('bar')[0].h} m, arms ${of('spinner')[0].h} m, blades ${of('prop')[0].h} m; padding ${of('block')[0].h} m, buffers ${of('bumper')[0].h} m; a jump goes ${apex.toFixed(2)} m up`);
   // something to do something about every so often
-  const ev = [0, ...mainThings.map((t) => t.s), ...course.gaps.map((g) => g.from), ...course.forks.map((f) => f.from), course.finish].sort((x, y) => x - y);
+  // (…or a lip to go over, a pipe to choose, and what lies in the rivers beside)
+  const ev = [0, ...mainThings.map((t) => t.s), ...course.gaps.map((g) => g.from), ...course.forks.map((f) => f.from), ...course.falls.map((f) => f.from), ...course.things.filter((t) => lineOf(course, t.line).key).map((t) => refAt(lineOf(course, t.line), t.s)), course.finish].sort((x, y) => x - y);
   const ways = ev.slice(1).map((v, i) => v - ev[i]);
   check('there is never long with nothing in the way', Math.max(...ways) < 100 && ways.reduce((x, y) => x + y, 0) / ways.length < 45, `${ways.length - 1} things to deal with; ${Math.round(ways.reduce((x, y) => x + y, 0) / ways.length)} m apart on average, ${Math.round(Math.max(...ways))} m at most`);
   const marks = course.marks.map((m) => m.s);
-  check('the arches one is put back at come in order, the first at the top, none in the mouth of a shortcut nor in a gap',
-    marks[0] === 0 && marks.every((s, i) => i === 0 || s > marks[i - 1] + 30) && marks.every((s) => !course.forks.some((f) => s > f.from - 10 && s < f.from + 16) && !gapAt(course, -1, s)), marks.map((s) => s.toFixed(0)).join(' '));
+  check('the arches one is put back at come in order, the first at the top, one a little before every fall, none in the mouth of a shortcut nor in a gap',
+    marks[0] === 0 && marks.every((s, i) => i === 0 || s > marks[i - 1] + 30) && course.falls.every((f) => marks.some((s) => s > f.from - 20 && s < f.from - 6)) && marks.every((s) => !course.forks.some((f) => s > f.from - 10 && s < f.from + 16) && !gapAt(course, -1, s)), marks.map((s) => s.toFixed(0)).join(' '));
 }
 
 // ------------------------------------------------------------------------------------------------ the gaps
@@ -270,6 +279,155 @@ const only = (t, fn) => { const things = course.things; course.things = [].conca
   check('off the end of the pipe, slow or fast, one comes down on the water of the slide — well within the count', ends.every((r) => r.ok && Math.abs(r.u) < r.wide + WALL - 0.4 && r.air < RIDE.out - 0.3), ends.map((r) => `${(r.v * 3.6).toFixed(0)} km/h: ${Math.abs(r.u).toFixed(1)} m from the middle after ${r.air.toFixed(2)} s`).join(' · '));
 }
 
+// ------------------------------------------------------------------------------------------------ the Cascade
+const side = (key) => course.sides.find((ln) => ln.key === key);
+/** A rider put in a line other than the main one, `s` metres along it, going at `v`. */
+const riderIn = (ln, s, v) => { const st = riderAt(0, v); Object.assign(st, { line: ln.id, s, floor: lineAt(ln, s).F, mark: Math.max(0, course.marks.findLastIndex((m) => m.s <= refAt(ln, s))) }); return st; };
+/** Until one has come down in a trough again, or been put back. */
+const down = (q, ev) => ev.some((e) => (e.type === 'land' && e.hop) || e.type === 'back');
+{
+  const F = course.falls, [A, B, C] = F;
+  check('the Cascade: the trough ends in the air three times — five metres down, five, then eight — and goes on from right under each lip as a pool of deep water',
+    F.length === 3 && Math.abs(A.drop - 5) < 0.2 && Math.abs(B.drop - 5) < 0.2 && Math.abs(C.drop - 8) < 0.2
+    && F.every((f) => { const lip = lineAt(course.main, f.from), low = lineAt(course.main, f.to); return Math.hypot(lip.x - low.x, lip.z - low.z) < 1.5 && low.F > POOL.floor - 0.1 && low.D >= POOL.depth - 0.01 && lineAt(course.main, f.to + f.pool - 1).F > POOL.floor - 0.1 && lineAt(course.main, f.to + f.pool + POOL.narrow + 1).F < 0.05; }),
+    F.map((f) => `${f.name}: ${f.drop.toFixed(1)} m down at metre ${f.from.toFixed(0)}, a pool ${(2 * (POOL.floor + R * Math.sin(SLIDE.rim))).toFixed(1)} m wide and ${f.pool} m long`).join(' · '));
+  // whoever does nothing goes over each lip and comes down in the pool: slowly or fast, from the middle or from a wall
+  const plain = F.flatMap((f) => [RIDE.carry, 8, 14, 20, 26].flatMap((v) => [-1.3, 0, 1.3].map((u) => {
+    const st = riderAt(f.from - 5, v, u), seen = run(st, 4, null, down), land = seen.find((e) => e.type === 'land' && e.hop), out = seen.find((e) => e.type === 'out'), air = land && out ? land.at - out.at : 9;
+    return { ok: !!land && land.line === -1 && land.soft && !land.flat && st.falls === 0, air, into: st.s - f.to, left: f.out - air, kept: st.v / v };
+  })));
+  check('over a fall, whoever does nothing comes down in the pool below — slowly or fast, from the middle or from a wall — softly, with time to spare',
+    plain.every((r) => r.ok && r.into > 0.5 && r.left > 0.5 && r.kept > 0.8), `in the air ${Math.min(...plain.map((r) => r.air)).toFixed(2)} to ${Math.max(...plain.map((r) => r.air)).toFixed(2)} s, down ${Math.min(...plain.map((r) => r.into)).toFixed(0)} to ${Math.max(...plain.map((r) => r.into)).toFixed(0)} m beyond the lip; ${Math.min(...plain.map((r) => r.left)).toFixed(1)} s of the count left at the least`);
+  // in the air one steers, and the ring of light says where one comes down
+  {
+    const st = riderAt(A.from - 5, 16);
+    let said = null;
+    run(st, 4, (q, i) => { i.steer = q.fly && !said ? 0.6 : 0; if (q.fly && !said && q.fly.t > 0.5) { const f = rideFall(q); said = f && { ...f }; } }, down);
+    const pose = ridePose(st, {}), miss = said ? Math.hypot(said.x - pose.x, said.z - pose.z) : 9;
+    check('a fall is steered: half a second of the stick and one comes down a good way aside — where the ring of light said one would', !!said && said.ok && miss < 0.9 && Math.abs(st.u) > 0.5 && st.falls === 0, said ? `${Math.abs(st.u).toFixed(1)} m from the middle of the pool; the ring was ${miss.toFixed(2)} m off` : 'nothing said');
+  }
+  // …from the middle of the trough the pool is too wide to miss, whatever one does with the stick…
+  {
+    const st = riderAt(A.from - 5, 16);
+    run(st, 4, (q, i) => { i.steer = q.fly ? 1 : 0; }, down);
+    check('from the middle of the trough, the stick held right over all through the fall, one still comes down in the pool — on its wall', st.line === -1 && !st.fly && st.falls === 0 && Math.abs(st.u) > POOL.floor, `${Math.abs(st.u).toFixed(1)} m from the middle of a pool whose floor is ${POOL.floor} m wide to each side`);
+  }
+  // …but who goes over the lip up a wall and steers on that way falls past it: put back at the arch before the lip — seconds, not the run
+  {
+    const st = riderAt(A.from - 5, 16, 1.3), t0 = st.clock;
+    const seen = run(st, 12, (q, i) => { i.steer = q.falls ? 0 : 1; }, (q) => q.falls > 0 && !q.fly && q.s > A.to + 2), back = seen.find((e) => e.type === 'back'), mark = back ? course.marks[back.mark].s : 0;
+    check('who steers a fall right past the pool is put back at the arch before the lip — and has lost seconds, not the run', !!back && mark > A.from - 20 && mark < A.from - 6 && st.falls === 1 && st.line === -1 && st.clock - t0 < 7, back ? `back ${(A.from - mark).toFixed(0)} m before the lip; in the pool ${(st.clock - t0).toFixed(1)} s after first going over it` : 'never put back');
+  }
+}
+
+// ------------------------------------------------------------------------------------------------ the pipes beside the pools
+{
+  const [, B, C] = course.falls, L2 = side('L2'), L3 = side('L3'), R3 = side('R3'), open = R * Math.sin(SLIDE.rim);
+  const over = (ln, s) => lineAt(ln, s).y - lineAt(course.main, refAt(ln, s)).y;
+  check('three pipes hang beside the pools, their mouths flared and deep: the Balcony under the second fall, the Spark Run and the Rapids on either side under the third — each higher than its pool',
+    course.sides.length === 3 && L2.under === 'B' && L3.under === 'C' && R3.under === 'C' && L2.side < 0 && L3.side < 0 && R3.side > 0
+    && course.sides.every((ln) => ln.points[0].F > MOUTH.floor - 0.05 && ln.points[0].soft && Math.abs(Math.abs(ln.points[0].d) - 5.5) < 0.05)
+    && Math.abs(over(L2, 1) - 1.5) < 0.3 && Math.abs(over(L3, 1) - 2.5) < 0.3 && Math.abs(over(R3, 1) - 2.5) < 0.3,
+    course.sides.map((ln) => `${ln.name}: ${ln.length.toFixed(0)} m, ${Math.abs(ln.points[0].d).toFixed(1)} m ${ln.side < 0 ? 'to the left' : 'to the right'}, ${over(ln, 1).toFixed(1)} m over the pool`).join(' · '));
+  check('…and none of them is in the way of who goes straight on: only who steers comes down in one', course.falls.every((f) => [8, 14, 20, 26].every((v) => [-1.3, 0, 1.3].every((u) => { const st = riderAt(f.from - 5, v, u); run(st, 4, null, down); return st.line === -1 && st.falls === 0; }))));
+  // each is reached from the lip above by steering the fall — a bot does it, at the speed of who sits up and of who lies back
+  const reach = (from, how, key, v) => { const st = riderAt(from, v), seen = run(st, 8, (q, i) => botInput(q, how, i), down), land = seen.find((e) => e.type === 'land' && e.hop), out = seen.find((e) => e.type === 'out'); return { ok: !!land && lineOf(course, land.line).key === key && land.soft && !land.flat && st.falls === 0, air: land && out ? land.at - out.at : 0 }; };
+  const got = [[B.from - 30, { way: 'sparks' }, 'L2'], [C.from - 30, { way: 'sparks' }, 'L3'], [C.from - 30, { way: 'rush' }, 'R3']].map(([from, how, key]) => [13, 17, 21].map((v) => reach(from, how, key, v)));
+  check('each is reached from the lip above by steering the fall, slowly or fast: up the wall on its side before the lip, the stick held in the air', got.every((list) => list.every((r) => r.ok)), ['the Balcony', 'the Spark Run', 'the Rapids'].map((n, i) => `${n}: ${got[i].map((r) => (r.ok ? `${r.air.toFixed(2)} s` : 'missed')).join(', ')}`).join(' · '));
+  // the Balcony keeps its height over the Great Fall and ends in the air beyond it: the long fall
+  const end = L2.points[L2.points.length - 1], pool = lineAt(course.main, end.ref + 14), mouth = lineAt(L3, sideAt(L3, end.ref + 14));
+  const off = (drive) => { const st = riderIn(L2, L2.length - 12, 16), seen = run(st, 6, drive, down), land = seen.find((e) => e.type === 'land' && e.hop), out = seen.find((e) => e.type === 'out'); return { line: land ? land.line : -9, air: land && out ? land.at - out.at : 0, soft: !!land && land.soft && !land.flat, kind: out?.kind }; };
+  const ahead = off(null), aside = off((q, i) => { i.steer = q.fly ? 1 : 0; });
+  check('the Balcony runs on over the Great Fall and ends in the air beyond its lip — the longest fall of the ride: straight on into the Spark Run, or steered into the pool',
+    refAt(L2, L2.length) > C.to && end.y - pool.y > 9 && end.y - mouth.y > 6.5 && ahead.kind === 'off' && ahead.line === L3.id && ahead.soft && aside.line === -1 && aside.soft && ahead.air > 1.1 && aside.air > 1.3 && L2.out > aside.air + 0.6,
+    `${(end.y - pool.y).toFixed(1)} m over the pool, ${(end.y - mouth.y).toFixed(1)} m over the mouth of the Spark Run: ${ahead.air.toFixed(2)} s in the air straight on, ${aside.air.toFixed(2)} s steered into the pool (${L2.out.toFixed(1)} s allowed)`);
+  // each can be left over its rim too: down into the pool it hangs beside
+  const jumped = [L2, L3, R3].map((ln) => { const st = riderIn(ln, 4, 12), seen = run(st, 6, (q, i) => { i.steer = q.fly || q.line !== ln.id ? 0 : -ln.side; }, down), land = seen.find((e) => e.type === 'land' && e.hop); return !!land && land.line === -1 && st.falls === 0; });
+  check('…and each can be left as one likes: over its rim on the side of the pool — while it runs beside the pool — one comes down in the pool', jumped.every(Boolean));
+  // where a pipe hangs over the edge of a pool, it clears its rim
+  let least = 1e9;
+  for (const ln of course.sides) for (const p of ln.points) {
+    if (Math.abs(p.d) < NEAR) continue;
+    for (const q of P) { if (q.tag.gap || Math.abs(q.s - p.ref) > 30 || Math.hypot(q.x - p.x, q.z - p.z) > q.F + p.F + 2 * open) continue; least = Math.min(least, Math.abs(p.y - q.y)); }
+  }
+  check('where a pipe hangs over the edge of a pool, it clears its rim', least > 1.2, `${least.toFixed(1)} m of height between them at the least`);
+}
+
+// ------------------------------------------------------------------------------------------------ the three rivers
+{
+  const L3 = side('L3'), R3 = side('R3'), rivers = [L3, R3];
+  const zone = rivers.map((ln) => { const near = ln.points.filter((p) => Math.abs(p.d) < NEAR); return { from: near[0].ref, to: near[near.length - 1].ref }; });
+  const mid = (zone[0].from + zone[0].to) / 2, rim = rimAt(course.main, mid, -1), high = R * (1 - Math.cos(rim / R));
+  check('after the far bend the three pipes run side by side: a low rim parts each river from the one in the middle, for a hundred metres',
+    zone.every((z) => z.to - z.from > 90) && Math.abs(Math.abs(asideAt(L3, sideAt(L3, mid))) - 2.6) < 0.05 && rim < WALL - 0.5 && rim > SLIDE.shore && Math.abs(rimAt(L3, sideAt(L3, mid), 1) - rim) < 0.02 && Math.abs(rimAt(R3, sideAt(R3, mid), -1) - rim) < 0.02 && rimAt(L3, sideAt(L3, mid), -1) > WALL - 0.01,
+    `${(zone[0].to - zone[0].from).toFixed(0)} m; the rim between two ${high.toFixed(2)} m high (the rim of a trough: ${(R * (1 - Math.cos(SLIDE.rim))).toFixed(2)} m), the water of each ${(2 * SLIDE.stream).toFixed(1)} m wide`);
+  // over a low rim at will: a key held does it, in either direction; a tap does not
+  const hop = (ln, to, steer, held) => {
+    const st = ln.id < 0 ? riderAt(mid - 20, 16) : riderIn(ln, sideAt(ln, mid - 20), 16);
+    let t1 = -1;
+    const seen = run(st, 4, (q, i, t) => { i.steer = t < held ? steer : clamp((0 - q.u) * 2.8 - q.w * 0.6, -1, 1); if (t1 < 0 && q.line === to.id) t1 = t; }, (q, ev) => ev.some((e) => e.type === 'out' || e.type === 'back'));
+    return { ok: st.line === to.id && !st.fly && st.falls === 0 && Math.abs(st.u) < 0.6, at: t1, lanes: seen.filter((e) => e.type === 'lane').length };
+  };
+  const over = [hop(course.main, L3, -1, 0.7), hop(course.main, R3, 1, 0.7), hop(L3, course.main, 1, 0.7), hop(R3, course.main, -1, 0.7)], tap = [hop(course.main, course.main, -1, 0.25), hop(L3, L3, 1, 0.25)];
+  check('one goes over a low rim at will — from the middle into either river, and back: the stick held for the better part of a second', over.every((r) => r.ok && r.lanes === 1 && r.at > 0.3 && r.at < 0.75), over.map((r) => `${r.at.toFixed(2)} s`).join(' · '));
+  check('…a push of a quarter of a second is forgiven: one stays in one\'s pipe', tap.every((r) => r.ok && r.lanes === 0));
+  const holds = [0.7, 0.85, 1.0, 1.15, 1.3].map((h) => hop(course.main, L3, -1, h));
+  check('…and it asks for no narrow moment: held for anything between two thirds of a second and twice that, one is in the next pipe and stays there', holds.every((r) => r.ok && r.lanes === 1));
+  // the outer rim of a river is a rim like any other: over it, one is out
+  {
+    const st = riderIn(L3, sideAt(L3, mid - 20), 16), seen = run(st, 5, (q, i) => { i.steer = -1; }, (q, ev) => ev.some((e) => e.type === 'back'));
+    check('the outer rim of a river is a rim like any other: over it one is out, and put back at the last arch', seen.some((e) => e.type === 'out' && e.kind === 'side') && st.falls === 1 && st.line === -1);
+  }
+  // at the end the three are one again, without a jolt
+  const joins = rivers.map((ln) => {
+    const st = riderIn(ln, ln.length - 6, 16);
+    let before = null, jolt = 0;
+    const seen = run(st, 2, (q, i) => { hold(0)(q, i); const now = ridePose(q, {}); if (before) jolt = Math.max(jolt, Math.hypot(now.x - before.x, now.y - before.y, now.z - before.z) - q.v * RIDE.step * 1.5); before = now; }, (q) => q.line === -1 && q.s > ln.to + 6);
+    return { ok: st.line === -1 && seen.some((e) => e.type === 'join') && st.falls === 0 && !seen.some((e) => e.type === 'out'), jolt };
+  });
+  check('at the end the three run into one another: whoever is in a river is on the main line again, without a jolt', joins.every((r) => r.ok && r.jolt < 0.35), `a step of ${Math.max(...joins.map((r) => r.jolt)).toFixed(2)} m at the most`);
+  // what each river carries
+  const sparks = course.sparks, inAir = sparks.filter((q) => q.air), onLine = (ln) => sparks.filter((q) => q.line === ln.id).length, boosts = course.things.filter((t) => t.kind === 'boost');
+  check('sparks hang along the Balcony and the Spark Run, and in the air on the way to the harder mouths; the arrows are in the Rapids, whose water runs harder', sparks.length >= 16 && onLine(side('L2')) >= 3 && onLine(L3) >= 10 && onLine(R3) === 0 && inAir.length === 4 && boosts.length === 4 && boosts.every((t) => t.line === R3.id) && R3.rush > 1.2 && L3.rush === 1,
+    `${sparks.length} sparks (${inAir.length} of them in the air), ${RIDE.spark.worth} s off the time each; ${boosts.length} sets of arrows, ${RIDE.boost} m/s each, in water that runs ${R3.rush} times as hard`);
+  {
+    const st = riderIn(R3, boosts[2].s - 12, 16), speeds = [];
+    const seen = run(st, 3, (q, i) => { hold(0)(q, i); speeds.push(q.v); }, (q, ev) => ev.some((e) => e.type === 'boost')), was = speeds[speeds.length - 2] || 0;
+    check('riding over the arrows throws one forward', seen.some((e) => e.type === 'boost') && st.v > was + RIDE.boost - 0.5 && st.boosts === 1, `${(was * 3.6).toFixed(0)} → ${(st.v * 3.6).toFixed(0)} km/h`);
+  }
+}
+
+// ------------------------------------------------------------------------------------------------ the ways down, and a person's hands
+const WAYS = [
+  ['by the pools and the river in the middle', {}, []],
+  ['lying back, through both shortcuts', { bold: true, cuts: true }, ['The Needle', 'The Plughole']],
+  ['by the pipes of sparks', { way: 'sparks' }, ['The Balcony', 'The Spark Run']],
+  ['by the Rapids', { way: 'rush' }, ['The Rapids']],
+  ['lying back, through both shortcuts, by the pipes of sparks', { bold: true, cuts: true, way: 'sparks' }, ['The Balcony', 'The Spark Run', 'The Needle', 'The Plughole']],
+];
+const tookNames = (r) => r.took.map((id) => lineOf(course, id).name);
+const downs = WAYS.map(([name, how, pipes]) => ({ name, how, pipes, r: botRun(course, how) }));
+const fastest = Math.min(...downs.map((d) => d.r.time));
+{
+  const same = (r, pipes) => pipes.every((n) => tookNames(r).includes(n)) && tookNames(r).every((n) => pipes.includes(n));
+  check('there are five ways down for a bot, and it gets down by each without ever being put back: every new pipe is ridden', downs.every((d) => d.r.over && d.r.falls === 0 && same(d.r, d.pipes)), downs.map((d) => `${d.name}: ${fmt(d.r.time)}`).join(' · '));
+  const [pools, , sparks, rush, all] = downs.map((d) => d.r);
+  check('the sparks are worth catching: a quarter of a second off the time for each', sparks.sparks >= 15 && sparks.time === Math.round((sparks.clock - sparks.sparks * RIDE.spark.worth) * 1000) && sparks.time < pools.time - 3000, `${sparks.sparks} caught of ${course.sparks.length}: ${fmt(sparks.time)} on a clock of ${fmt(Math.round(sparks.clock * 1000))}`);
+  check('the Rapids are worth riding: faster water, and the arrows', rush.boosts === 4 && rush.top > pools.top + 5 && rush.time < pools.time - 2000, `${fmt(rush.time)}, up to ${(rush.top * 3.6).toFixed(0)} km/h`);
+  check('the fastest way is not the easy one: the pools and the river in the middle are the slowest way down, the pipes one has to steer a fall into the fastest', downs.every((d) => d.r === pools || d.r.time < pools.time - 2000) && all.time === fastest && all.time < downs[1].r.time - 2000, `the easy way ${fmt(pools.time)}; the fastest ${fmt(fastest)}`);
+  // a person's hands: what the bot decides is done a quarter of a second later — and an eighth sooner or later than that
+  const LAGS = [0.13, 0.25, 0.38], human = WAYS.slice(0, 4).map(([name, how, pipes]) => ({ name, pipes, runs: LAGS.map((lag) => botRun(course, { ...how, lag })) }));
+  const made = (r, pipes) => r.over && r.falls === 0 && pipes.every((n) => tookNames(r).includes(n));
+  check('a rider with a person\'s hands — whatever it decides is done a quarter of a second later — gets down by each family of ways without being put back', human.every((h) => made(h.runs[1], h.pipes)),
+    human.map((h) => `${h.name}: ${fmt(h.runs[1].time)}, ${h.runs[1].bumps} thing${h.runs[1].bumps === 1 ? '' : 's'} run into`).join(' · '));
+  check('…and it never needs a moment narrower than a quarter of a second: an eighth of a second sooner, or later, it gets down the same ways', human.every((h) => h.runs.every((r) => made(r, h.pipes))),
+    human.map((h) => `${h.name}: ${h.runs.map((r) => (made(r, h.pipes) ? fmt(r.time) : `put back ${r.falls} times`)).join(' / ')}`).join(' · '));
+  check('…its hands being late costs it time, and a knock now and then, not the run', human.every((h) => h.runs.every((r) => r.bumps + r.caught <= 6)) && human[0].runs[1].time < pools.time + 8000, `${Math.max(...human.flatMap((h) => h.runs.map((r) => r.bumps + r.caught)))} things run into at the most`);
+  // a clumsy one: half a second late and more, and after the harder pipes all the same
+  const clumsy = [{ way: 'sparks', lag: 0.5 }, { way: 'rush', lag: 0.6 }, { lag: 0.7 }].map((how) => botRun(course, how));
+  check('a clumsy one — half a second late and more, and after the harder pipes all the same — still reaches the sea', clumsy.every((r) => r.over && r.time < 4 * 60000), clumsy.map((r) => `${fmt(r.time)}: put back ${r.falls} time${r.falls === 1 ? '' : 's'}, ${r.bumps + r.caught} things run into`).join(' · '));
+}
+
 // ------------------------------------------------------------------------------------------------ out of the trough
 {
   // what the game marks is where one comes down
@@ -326,8 +484,8 @@ const only = (t, fn) => { const things = course.things; course.things = [].conca
   check('a ride takes the same time at 30, 60 and 144 frames a second', Math.abs(t30 - t60) < 400 && Math.abs(t144 - t60) < 400, `${fmt(t30)} · ${fmt(t60)} · ${fmt(t144)}`);
 
   const careful = botRun(course, 'careful'), bold = botRun(course, 'bold'), plain = botRun(course, { bold: true, cuts: false });
-  check('a careful rider gets down without going over the edge, without touching anything', careful.over && careful.falls === 0 && careful.caught === 0 && careful.bumps === 0, `${fmt(careful.time)}, ${careful.jumps} jumps`);
-  check('a bold rider takes both shortcuts and is clearly faster', bold.over && bold.falls === 0 && bold.took.length === course.forks.length && bold.time < careful.time - 5000, `${fmt(bold.time)}, top speed ${(bold.top * 3.6).toFixed(0)} km/h`);
+  check('a careful rider gets down without going over the edge, without touching anything — over the three falls, into the pools', careful.over && careful.falls === 0 && careful.caught === 0 && careful.bumps === 0 && careful.hops === course.falls.length && careful.took.length === 0, `${fmt(careful.time)}, ${careful.jumps} jumps`);
+  check('a bold rider takes both shortcuts and is clearly faster', bold.over && bold.falls === 0 && bold.took.length === course.forks.length && bold.took.every((id) => id < course.forks.length) && bold.time < careful.time - 5000, `${fmt(bold.time)}, top speed ${(bold.top * 3.6).toFixed(0)} km/h`);
   check('the shortcuts are worth taking', bold.time < plain.time - 2000, `${fmt(plain.time)} without them`);
 
   // ---- the water carries, the walls slow: the same stretch of the first helix, in the water and up a wall
@@ -422,8 +580,9 @@ const only = (t, fn) => { const things = course.things; course.things = [].conca
   }
   // what the leaderboard should believe: nothing much under the best the bot can do
   console.log(`      the times to beat: careful ${fmt(careful.time)} · bold ${fmt(bold.time)} · touching nothing ${fmt(idle.time)}`);
-  // (the bold bot never leaves the trough: who jumps into the pipe and drops a turn of the Whirlpool is a good ten seconds quicker)
-  console.log(`      suggested rule for the board of scores: slide: { order: 'asc', min: ${Math.floor((bold.time * 0.55) / 1000) * 1000}, max: 3600_000 }`);
+  // (the fastest bot lies back, takes both shortcuts and every spark — and never leaves the trough but over the
+  // falls: who jumps into the pipe beside the long pool and drops a turn of the Whirlpool is a good ten seconds quicker)
+  console.log(`      suggested rule for the board of scores: slide: { order: 'asc', min: ${Math.floor((fastest * 0.54) / 1000) * 1000}, max: 3600_000 }`);
 }
 
 const failed = results.filter((r) => !r).length;

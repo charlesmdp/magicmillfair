@@ -17,9 +17,15 @@
 // count runs out (RIDE.out), or has come down on the ground or in the sea, is put back at the last arch, with
 // the clock running.
 //
+// And the slide itself falls: in the Cascade the trough ends in the air, three times, and goes on lower, as a
+// pool — deep water, in which one comes down softly from however high. Beside the pools hang the mouths of
+// other pipes, higher: who steers the fall comes down in one of them, and rides what it carries — sparks, each
+// a quarter of a second off one's time, or water that runs harder, with arrows that throw one forward. Where
+// two pipes run so close that only a low rim parts them, one goes over it from the one into the other, at will.
+//
 // Time advances in steps of 1/120 s whatever the frame rate: the same run takes the same time on every device.
 // What moves in the trough moves by the clock of the ride itself.
-import { SLIDE, WALL, lineAt, lineOf, frameAt, rimAt, gapAt, across, sliderAt, spinnerAt, propAt } from './track.js';
+import { SLIDE, WALL, lineAt, lineOf, frameAt, rimAt, gapAt, across, sliderAt, spinnerAt, propAt, refAt, overRim } from './track.js';
 
 export const RIDE = {
   step: 1 / 120,
@@ -51,6 +57,11 @@ export const RIDE = {
   bounce: { speed: 11, time: 0.55, fade: 3.2 }, // off a buffer: thrown back at that speed (m/s), for so long, slowing so fast (1/s)
   again: 1.2, // s before the same thing can be run into again
   out: 1.6, // s one may be out of a trough: the time to come down into one — any — or one is put back
+  deep: 12, // m: fallen further than that below where one left the trough, one is lost — no turn of the slide below is that near
+  fall: { wing: 8, splash: 0.4 }, // off a lip, off the end of a pipe — a fall the course is made of: steering in the air (m/s² across); of one's speed across, what deep water leaves
+  hop: 0.85, // of one's speed across, what is left over a low rim
+  boost: 6.5, // m/s: what the arrows of light on the water of a pipe give
+  spark: { reach: 0.95, worth: 0.25 }, // caught within so many metres of one's hips; s off one's time for each
   rest: 0.7, // s one is left where one came down, on the ground or in the sea, before being put back
   wing: 4, // m/s² across, steering in the air out of the trough
   airbrake: 5, // m/s² taken off, sitting up in the air
@@ -84,6 +95,7 @@ export function startRide(course, { under = null } = {}) {
     fly: null,
     falls: 0, // times put back at an arch
     hops: 0, skipped: 0, // times out of a trough and down into one again; the metres of the course so skipped
+    lanes: 0, boosts: 0, sparks: 0, got: new Set(), // times over a low rim; arrows ridden over; sparks caught, and which
     bumps: 0, caught: 0, jumps: 0, over: false, ended: false, time: 0, took: [],
     cool: new Map(), // (what has just been run into: not again before…)
     fellAt: -1, again: 0, // (the arch one was last put back at, and how many times running)
@@ -123,7 +135,7 @@ function bump(st, keep, toss) {
   if (toss) { st.vh = toss; st.h = Math.max(st.h, 0.02); }
 }
 
-const _p = {}, _x = {};
+const _p = {}, _x = {}, _o = {}, _hips = {};
 function sub(st, dt, input, events) {
   const course = st.course, R = SLIDE.radius;
   if (!st.over) st.clock += dt;
@@ -212,8 +224,17 @@ function sub(st, dt, input, events) {
   if (!hole) {
     const side = st.u < 0 ? -1 : 1, limit = rimAt(line, st.s, side);
     if (Math.abs(st.u) > limit) {
-      // over the rim: out of the trough. (The ridge between two troughs, where a shortcut leaves or joins, only guides.)
+      // over the rim: out of the trough…
       if (limit > p.F + WALL - 0.05) { leave(st, 'side', events); return; }
+      // …or over a low rim, into the pipe that runs beside. (The ridge between two troughs, where a shortcut leaves or joins, only guides.)
+      const o = overRim(course, line, st.s, side, _o);
+      if (o) {
+        Object.assign(st, { line: o.line.id, s: o.s, u: o.u, w: st.w * RIDE.hop, floor: 0 });
+        st.lanes++;
+        if (o.line.id >= 0 && st.took[st.took.length - 1] !== o.line.id) st.took.push(o.line.id);
+        events?.push({ type: 'lane', line: o.line.id, quiet: o.d < 1.6 }); // (where the pipes run into one another, nothing is said)
+        return;
+      }
       st.u = side * limit;
       if (st.w * side > 0) st.w *= -0.25;
     }
@@ -275,6 +296,11 @@ function sub(st, dt, input, events) {
         st.u = t.u + sg * reach;
         if (st.w * sg < 0) st.w = 0;
       }
+    } else if (t.kind === 'boost') {
+      // arrows of light on the water: who rides over them is thrown forward
+      if (cold || st.h > 0.3 || st.s < t.s - t.len / 2 || before > t.s + t.len / 2 || Math.abs(st.u - t.u) >= t.half + RIDE.body) continue;
+      st.v = Math.min(RIDE.top, st.v + RIDE.boost); st.boosts++; st.cool.set(t.index, st.clock + 2);
+      events?.push({ type: 'boost', index: t.index });
     } else if (t.kind === 'bumper') {
       // a buffer: round, too tall to jump. Run into from the front, it throws one back up the pool, and aside;
       // on its flank one slides round it
@@ -329,8 +355,16 @@ function sub(st, dt, input, events) {
     }
   }
 
-  // ---- the lip of a gap, forks, arches, the end
+  // ---- the sparks that hang over the water
+  const here = st.line < 0 ? st.s : refAt(line, st.s);
+  if (here > course.sparks.from && here < course.sparks.to) { const q = ridePose(st, _hips); sparkle(st, q.x + q.ux * RIDE.seat, q.y + q.uy * RIDE.seat, q.z + q.uz * RIDE.seat, events); }
+  // ---- the arches: passed in whatever pipe
+  while (st.settle <= 0 && st.mark + 1 < course.marks.length && here >= course.marks[st.mark + 1].s) { st.mark++; events?.push({ type: 'mark', mark: st.mark }); }
+
+  // ---- the lip of a gap, of a fall, forks, the end
   if (st.line < 0) {
+    // (a fall: the trough ends, and one goes on in the air — down into the pool below, or wherever one steers)
+    for (const f of course.falls) if (before < f.from && st.s >= f.from) { leave(st, 'fall', events, f); return; }
     for (const g of course.gaps) {
       // (the ramp at the lip: it throws one up — a little more for who jumps on it, never over the moon)
       if (before < g.from && st.s >= g.from && st.h < 0.5) { st.vh = Math.min(Math.max(st.vh, 0) + RIDE.kick, RIDE.kick + 1.5); st.h = Math.max(st.h, 0.02); events?.push({ type: 'kick' }); }
@@ -342,27 +376,37 @@ function sub(st, dt, input, events) {
         return;
       }
     }
-    while (st.settle <= 0 && st.mark + 1 < course.marks.length && st.s >= course.marks[st.mark + 1].s) { st.mark++; events?.push({ type: 'mark', mark: st.mark }); }
     if (st.s >= course.finish) {
-      // the end of the trough: the clock stops, and one goes on into the sea
-      st.over = true; st.time = Math.round(st.clock * 1000);
+      // the end of the trough: the clock stops, and one goes on into the sea — each spark is a quarter of a second off
+      st.over = true; st.time = Math.round(Math.max(0, st.clock - st.sparks * RIDE.spark.worth) * 1000);
       events?.push({ type: 'finish', time: st.time });
       leave(st, 'end', events);
     }
   } else if (st.s >= line.length) {
-    // the end of a pipe: off it, into the air; the end of a shortcut: back on the main line
-    if (line.pipe) { leave(st, 'off', events); return; }
-    st.s = line.to + (st.s - line.length); st.line = -1;
-    while (st.settle <= 0 && st.mark + 1 < course.marks.length && st.s >= course.marks[st.mark + 1].s) st.mark++;
+    // the end of a pipe: off it, into the air; the end of a shortcut, of a river: back on the main line
+    if (line.end === 'off') { leave(st, 'off', events, line); return; }
+    st.s = line.to + (st.s - line.length); st.line = -1; st.u += line.shift || 0;
     events?.push({ type: 'join', fork: line.id });
   }
 }
 
+/** The sparks within reach of a rider whose hips are at (x, y, z): caught, once each. */
+function sparkle(st, x, y, z, events) {
+  const list = st.course.sparks, reach = RIDE.spark.reach * RIDE.spark.reach;
+  for (let k = 0; k < list.length; k++) {
+    const q = list[k], dx = q.x - x, dy = q.y - y, dz = q.z - z;
+    if (dx * dx + dy * dy + dz * dz >= reach || st.got.has(k)) continue;
+    st.got.add(k); st.sparks++;
+    events?.push({ type: 'spark', index: k });
+  }
+}
+
 /**
- * Out of the trough: over its rim ('side'), short of the far lip of a gap ('gap'), off the end of a pipe ('off')
- * or of the slide ('end'). From here on one flies (see flight), the way one was going.
+ * Out of the trough: over its rim ('side'), short of the far lip of a gap ('gap'), off the lip of a fall
+ * ('fall': `what` is the fall), off the end of a pipe ('off': `what` is the pipe) or of the slide ('end').
+ * From here on one flies (see flight), the way one was going.
  */
-function leave(st, kind, events) {
+function leave(st, kind, events, what = null) {
   const q = ridePose(st, {}), side = st.u < 0 ? -1 : 1, v = st.v * (kind === 'gap' ? 0.5 : 1); // (what catches on the far lip of a gap takes half the speed)
   // down the line, across it (o: up the wall, away from the middle), out of the surface
   const wall = kind === 'end' ? 0 : st.w * side, up = kind === 'end' ? 0 : st.vh;
@@ -378,11 +422,14 @@ function leave(st, kind, events) {
     x: q.x + q.ux * lift, y: q.y + q.uy * lift, z: q.z + q.uz * lift, vx, vy, vz, t: 0, hit: 0, side, kind, wet: false, down: false,
     yaw: q.yaw, pitch: q.pitch, roll: q.roll, dx: vx / sp, dz: vz / sp, // (the way it goes over the ground: kept once it lies still)
     from: rideProgress(st), speed: st.v,
+    // (how long it may last; `sure`: a fall the course is made of — off a lip, off the end of one of its pipes:
+    // one steers it harder, and where one comes down the arches passed are one's own at once; `at`: which)
+    y0: q.y, out: (kind === 'fall' || kind === 'off') && what?.out ? what.out : RIDE.out, sure: (kind === 'fall' || kind === 'off') && !!what?.out, at: what ? what.key || what.id : '',
     // (not straight back into the trough one has just left: over its rim one is out, and short of a lip one has run into it)
     bar: { line: st.line, s: st.s, until: kind === 'gap' ? 0.7 : 0.15 },
   };
   Object.assign(st, { fly, h: 0, vh: 0, w: 0, spin: 0, turn: 0, wantJump: 0, kb: 0 });
-  events?.push({ type: 'out', kind, side });
+  events?.push({ type: 'out', kind, side, sure: fly.sure, at: fly.at });
 }
 
 // ---------------------------------------------------------------------------------------------- out of the trough
@@ -460,12 +507,14 @@ function flight(st, dt, input, events) {
     if (f.kind !== 'end' && input && sp > 0.5) {
       // in the air one still steers (across the way one goes: to the right is (-dz, dx)), and brakes, sitting up
       const dx = f.vx / sp, dz = f.vz / sp, steer = clamp(input.steer || 0, -1, 1);
-      f.vx += (-dz * steer * RIDE.wing - (input.brake && sp > 2 ? dx * RIDE.airbrake : 0)) * dt;
-      f.vz += (dx * steer * RIDE.wing - (input.brake && sp > 2 ? dz * RIDE.airbrake : 0)) * dt;
+      const wing = f.sure ? RIDE.fall.wing : RIDE.wing;
+      f.vx += (-dz * steer * wing - (input.brake && sp > 2 ? dx * RIDE.airbrake : 0)) * dt;
+      f.vz += (dx * steer * wing - (input.brake && sp > 2 ? dz * RIDE.airbrake : 0)) * dt;
     }
     f.vy -= RIDE.g * dt;
     f.x += f.vx * dt; f.y += f.vy * dt; f.z += f.vz * dt;
     if (sp > 1) { f.dx = f.vx / sp; f.dz = f.vz / sp; }
+    if (f.kind !== 'end' && f.from > course.sparks.from - 40 && f.from < course.sparks.to) sparkle(st, f.x, f.y, f.z, events);
     if (f.kind !== 'end' && alight(st, events)) return;
     const u = st.under ? st.under(f.x, f.z, _u) : SEA, floor = u.y + (u.wet ? 0.1 : 0.3);
     if (f.y <= floor) {
@@ -479,7 +528,7 @@ function flight(st, dt, input, events) {
     return;
   }
   const still = f.wet || f.down;
-  if (still ? f.t >= f.hit + RIDE.rest : f.t >= RIDE.out) putBack(st, events, !still);
+  if (still ? f.t >= f.hit + RIDE.rest : f.t >= f.out || (!f.sure && f.y0 - f.y > RIDE.deep)) putBack(st, events, !still);
 }
 
 /** Has the flight come down into a trough? Then the ride goes on from there (true). */
@@ -497,19 +546,22 @@ function alight(st, events) {
     fly: null, line: line.id, s: hit.s, u: Math.abs(hit.u) > limit ? sg * limit : hit.u, w: clamp(cross, -7, 7), v: clamp(along, RIDE.carry, RIDE.top),
     h: 0, vh: 0, floor: p.F, spin: 0, turn: 0, kb: 0,
   });
-  // (down from high up, one is flattened: most of the speed is gone; and so it is against the way the water runs)
-  const flat = -f.vy > RIDE.hard;
+  // (down from high up, one is flattened: most of the speed is gone — unless the water is deep there: the pool
+  // under a fall, the mouth of a pipe; and so it is against the way the water runs)
+  const soft = !!p.soft, flat = -f.vy > RIDE.hard && !soft;
   if (flat) { st.v = Math.max(RIDE.carry, st.v * RIDE.flat); st.stun = 0.6; }
+  // (…and deep water takes most of what one comes down with sideways: who has steered a fall into a mouth is not thrown over its far rim)
+  if (soft) st.w *= RIDE.fall.splash;
   if (along < 0) st.stun = 0.5;
   st.next.clear();
   // (the arches flown over are one's own only once one has stayed in the trough a moment: who bounces out of
   // it again, or is thrown off it, goes back to the arch they had)
-  st.settle = RIDE.settle;
+  st.settle = f.sure ? 0 : RIDE.settle;
   const gain = Math.max(0, rideProgress(st) - f.from - f.speed * f.t);
   if (line.id >= 0 && st.took[st.took.length - 1] !== line.id) st.took.push(line.id);
   st.hops++;
   st.skipped += gain;
-  events?.push({ type: 'land', hard: into, hop: true, line: line.id, gain, from: f.kind, flat });
+  events?.push({ type: 'land', hard: into, hop: true, line: line.id, gain, from: f.kind, flat, soft, sure: f.sure });
   return true;
 }
 
@@ -525,7 +577,7 @@ export function rideFall(st, out = _fall) {
   const course = st.course, dt = 1 / 90;
   let x = f.x, y = f.y, z = f.z, vy = f.vy;
   out.ok = false; out.air = false; out.nx = 0; out.ny = 1; out.nz = 0; out.line = -2;
-  for (let t = f.t; t < RIDE.out; t += dt) {
+  for (let t = f.t; t < f.out && (f.sure || f.y0 - y <= RIDE.deep); t += dt) {
     vy -= RIDE.g * dt; x += f.vx * dt; y += vy * dt; z += f.vz * dt;
     const hit = troughAt(course, x, y, z, t < f.bar.until ? f.bar : null);
     if (hit) {
@@ -540,7 +592,7 @@ export function rideFall(st, out = _fall) {
     const u = st.under ? st.under(x, z, _u) : SEA;
     if (y <= u.y + 0.2) { out.x = x; out.y = u.y; out.z = z; out.nx = 0; out.ny = 1; out.nz = 0; out.t = t - f.t; return out; }
   }
-  out.x = x; out.y = y; out.z = z; out.t = RIDE.out - f.t; out.air = true;
+  out.x = x; out.y = y; out.z = z; out.t = f.out - f.t; out.air = true;
   return out;
 }
 
@@ -568,7 +620,7 @@ export function ridePose(st, out = {}) {
     }
     out.fx = f.dx; out.fy = 0; out.fz = f.dz; out.ux = 0; out.uy = 1; out.uz = 0; out.ox = 0; out.oy = 0; out.oz = 0;
     out.k = 0; out.slope = 0; out.bank = 0; out.wide = 0; out.flying = true; out.tumble = still ? 0 : f.t; out.wet = f.wet; out.down = f.down;
-    out.left = f.kind === 'end' || still ? 0 : Math.max(0, RIDE.out - f.t);
+    out.left = f.kind === 'end' || still ? 0 : Math.max(0, f.out - f.t); out.sure = !!f.sure;
     return out;
   }
   const course = st.course, line = lineOf(course, st.line), p = lineAt(line, st.s, _q), f = frameAt(p, _f), X = across(p.F, st.u, _y);
@@ -582,19 +634,17 @@ export function ridePose(st, out = {}) {
   out.ux = f.up[0] * cs - f.side[0] * sn; out.uy = f.up[1] * cs - f.side[1] * sn; out.uz = f.up[2] * cs - f.side[2] * sn;
   const sg = st.u < 0 ? -1 : 1;
   out.ox = (f.side[0] * cs + f.up[0] * sn) * sg; out.oy = (f.side[1] * cs + f.up[1] * sn) * sg; out.oz = (f.side[2] * cs + f.up[2] * sn) * sg;
-  out.k = p.k; out.slope = p.slope; out.bank = p.bank; out.wide = p.F; out.flying = false; out.tumble = 0; out.wet = false; out.down = false; out.left = 0;
+  out.k = p.k; out.slope = p.slope; out.bank = p.bank; out.wide = p.F; out.flying = false; out.tumble = 0; out.wet = false; out.down = false; out.left = 0; out.sure = false;
   return out;
 }
 
 /**
  * How far down the course a rider is, in metres of the main line (a shortcut counts as the stretch it replaces,
- * a pipe as the one it runs beside; out of the trough, as where they left it).
+ * a pipe as what it runs beside; out of the trough, as where they left it).
  */
 export function rideProgress(st) {
   if (st.fly) return st.fly.from;
-  if (st.line < 0) return st.s;
-  const f = lineOf(st.course, st.line);
-  return f.from + (st.s / f.length) * (f.to - f.from);
+  return st.line < 0 ? st.s : refAt(lineOf(st.course, st.line), st.s);
 }
 
 // ---------------------------------------------------------------------------------------------- a rider that steers by itself
@@ -638,23 +688,79 @@ function propCost(t, st, c, v) {
   return 25;
 }
 
+// The ways through the Cascade and the Three Rivers, for a rider that steers by itself: at each fall (and off
+// the end of the Balcony), the pipe to come down in; beside the rivers, the one to be in.
+const WAYS = { sparks: { B: 'L2', C: 'L3', L2: 'L3', river: 'L3' }, rush: { C: 'R3', river: 'R3' } };
+const sideOf = (course, key) => course.sides.find((ln) => ln.key === key) || null;
+
+/** How far to the right of the middle of `line` the place (x, z) is, where the line passes nearest to it (m). */
+function offLine(line, x, z) {
+  let best = null, least = Infinity;
+  for (const p of line.points) { const d = (p.x - x) * (p.x - x) + (p.z - z) * (p.z - z); if (d < least) { least = d; best = p; } }
+  return (x - best.x) * -Math.cos(best.yaw) + (z - best.z) * Math.sin(best.yaw);
+}
+
+const _d = { aim: 0, tuck: false, brake: false, jump: false, air: 0, flying: false, line: -1, at: 0 }, _bf = {}, _bo = {};
 /**
  * A rider that steers by itself — the proof that the course can be ridden, and the times to beat. `how`:
  *   careful  keeps to the water, goes round the whirlpools and the buffers, between the blades of the
- *            propellers, jumps what can be jumped, never takes a shortcut
+ *            propellers, jumps what can be jumped, never takes a shortcut; over a fall, straight on into the pool
  *   bold     the same lying back, through every shortcut
- *   { bold, cuts }  the two choices apart (lying back or not; the shortcuts or not)
+ *   { bold, cuts, way, lag }  the choices apart: lying back or not; the shortcuts or not; `way`: 'sparks' (at the
+ *            falls, into the pipes that carry sparks, and on down the Spark Run) or 'rush' (into the Rapids) —
+ *            else the pools and the river in the middle; `lag`: a person's hands — what it decides (where
+ *            across to be, a jump, lying back, sitting up, how to steer a fall) is done so many seconds later,
+ *            and it allows a quarter of a second for it
  * It looks a second or so ahead, weighs where across the trough it would be best to be when it gets to what
- * lies there, and steers for that. It never leaves the trough of its own will. Returns the input for stepRide.
+ * lies there, and steers for that. It never leaves the trough of its own will — except over a low rim, into the
+ * river it is after. Returns the input for stepRide.
  */
 export function botInput(st, how = 'careful', out = { steer: 0, tuck: false, brake: false, jump: false }) {
   out.steer = 0; out.tuck = false; out.brake = false; out.jump = false;
-  if (st.fly || st.spin > 0 || st.kb > 0) return out;
-  const course = st.course, cfg = typeof how === 'string' ? { bold: how !== 'careful', cuts: how === 'bold' } : how;
+  if (st.spin > 0 || st.kb > 0) return out;
+  const cfg = typeof how === 'string' ? (how === 'careful' ? CAREFUL : BOLD) : how && how !== true ? how : CAREFUL, lag = cfg.lag || 0;
+  let d = lag ? { aim: 0, tuck: false, brake: false, jump: false, air: 0, flying: false, line: -1, at: 0 } : _d;
+  d.flying = !!st.fly; d.line = st.line; d.jump = false; d.air = 0;
+  if (st.fly) soar(st, cfg, d); else decide(st, cfg, d);
+  if (lag) {
+    // a person's hands: what is decided now is done `lag` seconds later
+    const b = st.bot || (st.bot = { q: [], now: null });
+    d.at = st.clock + lag; b.q.push(d);
+    let jump = false;
+    while (b.q.length && b.q[0].at <= st.clock + 1e-9) { b.now = b.q.shift(); jump = jump || b.now.jump; }
+    if (!(d = b.now)) return out;
+    out.jump = jump;
+  } else out.jump = d.jump;
+  if (st.fly) { out.steer = d.flying ? d.air : 0; return out; }
+  // steer: what holds the rider at what it makes for against the bend, plus what closes the gap (what was
+  // decided in the air, or in another pipe, says nothing of where to be in this one: the middle, meanwhile)
+  const course = st.course, line = lineOf(course, st.line), p = lineAt(line, st.s, _q), gp = RIDE.g * Math.sqrt(Math.max(0, 1 - p.ty * p.ty));
+  const stale = d.flying || d.line !== st.line, goal = stale ? 0 : d.aim, X = across(p.F, goal, _y), A = X.tilt + p.bank, hold = (gp * Math.sin(A) - st.v * st.v * p.k * Math.cos(A)) / RIDE.steer;
+  out.steer = clamp((st.h > 0.05 ? 0 : hold) + (goal - st.u) * 2.35 - st.w * 0.52, -1, 1);
+  out.tuck = !stale && d.tuck && !d.brake; out.brake = !stale && d.brake;
+  return out;
+}
+const CAREFUL = { bold: false, cuts: false }, BOLD = { bold: true, cuts: true };
+
+/** In the air: steering the fall so that one comes down in the pipe one is after (`d.air`). */
+function soar(st, cfg, d) {
+  const f = st.fly, key = (WAYS[cfg.way] || {})[f.at], want = key && f.sure ? sideOf(st.course, key) : null;
+  if (!want) return;
+  // (as a person does: by the ring of light that shows where one is going to come down)
+  const fall = rideFall(st, _bf);
+  if (!fall) return;
+  d.air = clamp(-offLine(want, fall.x, fall.z) * 0.8, -1, 1);
+}
+
+/** In a trough: where across to be (`d.aim`), lying back or sitting up, and whether to jump now. */
+function decide(st, cfg, D) {
+  const course = st.course, lag = Math.min(cfg.lag || 0, 0.25), late = st.v * lag; // (how far one goes before the hands have moved)
   const line = lineOf(course, st.line), p = lineAt(line, st.s, _q);
   const gp = RIDE.g * Math.sqrt(Math.max(0, 1 - p.ty * p.ty)), apex = (st.v * RIDE.jump) / gp; // how far one travels before the top of a jump
   const horizon = Math.max(12, st.v * 1.25), body = RIDE.body;
-  let tuck = cfg.bold, brake = false;
+  // (the turning of a propeller is read for where one will be when the hands have moved)
+  const eye = lag ? { s: st.s + late, u: st.u, h: st.h, clock: st.clock + lag } : st;
+  let tuck = !!cfg.bold, brake = false, jump = false;
 
   // ---- what is ahead: what is jumped, and what one must be clear of (where across, how wide, how far)
   const clear = [], props = []; // clear: { d, u, half, soft (how far its pull is felt) }
@@ -663,9 +769,10 @@ export function botInput(st, how = 'careful', out = { steer: 0, tuck: false, bra
     const d = t.s - st.s;
     if (d < (t.kind === 'prop' ? -(t.len + 1) : -2.5)) continue;
     if (d > horizon + (t.kind === 'prop' ? t.len : 0)) break;
+    if (t.kind === 'boost') continue; // (arrows of light: ridden over)
     if (t.kind === 'bar' || t.kind === 'slider' || t.kind === 'spinner') {
       const span = t.kind === 'bar' ? t.half : t.kind === 'slider' ? t.amp + t.half : t.len;
-      if (d > 0.2 && d <= apex + 0.3 && st.h <= 0 && Math.abs(st.u - t.u) < span + body + 0.35) out.jump = true;
+      if (d > 0.2 && d <= apex + 0.3 + late && st.h <= 0 && Math.abs(st.u - t.u) < span + body + 0.35) jump = true;
     } else if (t.kind === 'block' && t.pad) { if (d > -t.len && d < Math.max(5, st.v * 0.5)) pads = Math.min(pads, Math.abs(t.u) - t.half - body - 0.2); }
     else if (t.kind === 'block') { if (d > -t.len) clear.push({ d: Math.max(0, d - t.len / 2), u: t.u, half: t.half + body + 0.16, soft: 0 }); }
     else if (t.kind === 'bumper') { if (d > -t.r) clear.push({ d: Math.max(0, d - t.r), u: t.u, half: t.r + body + 0.3, soft: 0 }); }
@@ -673,7 +780,7 @@ export function botInput(st, how = 'careful', out = { steer: 0, tuck: false, bra
     else if (!((st.cool.get(t.index) || 0) > st.clock)) {
       clear.push({ d: Math.max(0, d - t.core), u: t.u, half: t.core + 0.5, soft: t.reach });
       // (a whirlpool there was no getting round in time: over it)
-      if (d > 0.2 && d <= apex + 0.3 && st.h <= 0 && Math.abs(st.u - t.u) < t.core + 0.45) out.jump = true;
+      if (d > 0.2 && d <= apex + 0.3 + late && st.h <= 0 && Math.abs(st.u - t.u) < t.core + 0.45) jump = true;
     }
   }
 
@@ -709,15 +816,15 @@ export function botInput(st, how = 'careful', out = { steer: 0, tuck: false, bra
     }
     // (a propeller: getting by its blades there — as one goes, or else a little slower; and, all else being
     // equal, on the side where the blades go one's way)
-    let now = 0, late = 4;
+    let now = 0, later = 4;
     for (const t of props) {
       const side = (c - t.u) * t.period > 0 ? 1.2 : 0;
-      now += propCost(t, st, c, st.v) || side;
-      if (now >= 300 && slower < st.v - 0.5) late += propCost(t, st, c, slower) || side;
-      else late += 300;
+      now += propCost(t, eye, c, st.v) || side;
+      if (now >= 300 && slower < st.v - 0.5) later += propCost(t, eye, c, slower) || side;
+      else later += 300;
     }
     if (cost + now < least) { least = cost + now; best = c; slowly = false; }
-    if (props.length && cost + late < least) { least = cost + late; best = c; slowly = true; }
+    if (props.length && cost + later < least) { least = cost + later; best = c; slowly = true; }
   }
   st.aim = best;
   // (not yet where it must be, and little time left: the careful rider sits up and brakes)
@@ -730,15 +837,16 @@ export function botInput(st, how = 'careful', out = { steer: 0, tuck: false, bra
     // a propeller ahead: no lying back (what comes is timed). A blade in the way of where one is going: over it
     // when the time comes, if that does it; else sitting up, to come to it a little later
     tuck = false;
-    const price = propCost(t, st, best, st.v);
-    if (price === 25 && _sw.jump < 0.03 && st.h <= 0 && !slowly) out.jump = true;
+    const price = propCost(t, eye, best, st.v);
+    if (price === 25 && _sw.jump < 0.03 && st.h <= 0 && !slowly) jump = true;
     else if ((slowly || price >= 300) && st.v > 5.5) brake = true;
   }
   if (st.line < 0) {
-    // a gap: fast enough, the ramp does it; else (and always, for the careful) a jump right at the lip
+    // a gap: fast enough, the ramp does it; else (and always, for the careful) a jump right at the lip — but
+    // who cannot tell the lip to a quarter of a second leaves it to the ramp whenever that will do
     for (const g of course.gaps) {
       const d = g.from - st.s, need = ((g.to - g.from) * gp) / (2 * RIDE.kick) + 1.5;
-      if (d > 0 && d <= st.v * 0.05 + 0.3 && st.h <= 0 && (!cfg.bold || st.v < need)) out.jump = true;
+      if (d > 0 && d <= st.v * 0.05 + 0.3 + late && st.h <= 0 && (!(cfg.bold || lag) || st.v < need)) jump = true;
     }
     if (fork && cfg.cuts) {
       // (too fast, a bend throws one away from the inside, where a shortcut leaves: slow down until it can be reached)
@@ -746,15 +854,25 @@ export function botInput(st, how = 'careful', out = { steer: 0, tuck: false, bra
       if (needed > 0.8 || (st.u * fork.side < 0.25 && fork.from - st.s < st.v * 0.9)) { brake = true; tuck = false; }
     } else if (fork) tuck = false;
   }
-  // steer: what holds the rider at `best` against the bend, plus what closes the gap (inside the padding of the
-  // walls while it is passed, wherever one is making for after it)
-  const goal = clamp(best, -pads, pads), X = across(p.F, goal, _y), A = X.tilt + p.bank, hold = (gp * Math.sin(A) - st.v * st.v * p.k * Math.cos(A)) / RIDE.steer;
-  out.steer = clamp((st.h > 0.05 ? 0 : hold) + (goal - st.u) * 2.35 - st.w * 0.52, -1, 1);
-  out.tuck = tuck && !brake; out.brake = brake;
-  return out;
+  let aim = clamp(best, -pads, pads);
+
+  // ---- the pipe one is after (see WAYS)
+  const way = WAYS[cfg.way];
+  if (way) {
+    // a fall ahead, and beside its pool the mouth of that pipe: up the wall on its side, well before the lip —
+    // the rest is steered in the air
+    if (st.line < 0) for (const f of course.falls) { const d = f.from - st.s, to = way[f.id] && sideOf(course, way[f.id]); if (to && d > 0 && d < st.v * 1.3 + late) { aim = to.side * 1.4; tuck = false; } }
+    // a river beside, over a low rim: over it
+    const river = sideOf(course, way.river);
+    if (river && st.line !== river.id) { const sg = st.line < 0 ? river.side : 0, o = sg && overRim(course, line, st.s, sg, _bo); if (o && o.line === river && o.d > 2) aim = sg * (rimAt(line, st.s, sg) + 0.7); }
+  }
+  D.aim = aim; D.tuck = tuck && !brake; D.brake = brake; D.jump = jump;
 }
 
-/** Rides the whole course with the bot: { time (ms), falls, hops, bumps, caught, jumps, took (the shortcuts), top (m/s), over }. */
+/**
+ * Rides the whole course with the bot: { time (ms), clock (s), falls, hops, lanes, bumps, caught, jumps, sparks,
+ * boosts, took (the lines other than the main one, in the order they were ridden), top (m/s), over }.
+ */
 export function botRun(course, how = 'careful', limit = 900) {
   const st = startRide(course), input = { steer: 0, tuck: false, brake: false, jump: false };
   let top = 0;
@@ -764,5 +882,5 @@ export function botRun(course, how = 'careful', limit = 900) {
     sub(st, RIDE.step, input, null);
     if (st.v > top) top = st.v;
   }
-  return { time: st.time, falls: st.falls, hops: st.hops, bumps: st.bumps, caught: st.caught, jumps: st.jumps, took: st.took, top, over: st.over };
+  return { time: st.time, clock: st.clock, falls: st.falls, hops: st.hops, lanes: st.lanes, bumps: st.bumps, caught: st.caught, jumps: st.jumps, sparks: st.sparks, boosts: st.boosts, took: st.took, top, over: st.over };
 }
