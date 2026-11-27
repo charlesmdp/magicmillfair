@@ -14,7 +14,7 @@ import { ANIM } from '../../../../player/Character.js';
 import { canvasBoard } from '../Boards.js';
 import { formatTime } from '../course.js';
 import { V, clamp, lerp, worldClock, gateArch, stakeSign } from '../gates.js';
-import { WALLS, LENGTH, PLAN, course, placeAt, floorAt, hallAt, stretchOf, bladeAt, spikesAt, startRun, stepRun, botInput, trodAt } from './rules.js';
+import { WALLS, LENGTH, PLAN, course, placeAt, floorAt, hallAt, stretchOf, bladeAt, spikesAt, startRun, stepRun, botInput, trodAt, onLedge } from './rules.js';
 
 const S = WALLS, H = S.half, C = S.at, TAU = Math.PI * 2;
 const OUT = H + 0.4; // the outer edge of the way: its kerb
@@ -141,6 +141,7 @@ export class Walls {
         const T = TOPS[k], lo = UNDER[k] - 0.3, s1 = Math.min(p.s1, LENGTH + 2.2), keep = k >= 5, back = keep ? 9.5 : 3.75, s0 = k ? p.s0 : -5;
         wallFace(stone, s0, s1, -H, lo, T, 1, SAND, { seed: k });
         if (!k) { cross(stone, s0, -H - back, -H, lo, T, -1, SAND, 0.6, 1); top(pave, s0, p.s0, -H - back, -H, T, mul(SAND, 0.92)); }
+        if (k >= 4) top(pave, p.s0 - 0.5, s1 + 0.5, -H, OUT + 0.3, UNDER[k] - 0.02, mul(DUSK, 0.62)); // (under an inner lap, the terrace of the lap outside: the bottom of its gaps)
         // (windows high in it, dark, where there is room over the heads and over the bands; vines down from its top)
         for (let row = 0; row < (keep ? 2 : 1); row++) for (let s = p.s0 + 2.4; s < s1 - 1.4; s += 4.2) {
           const yTop = T - 1.0 - row * 3.5, yBot = yTop - 1.9;
@@ -409,7 +410,7 @@ export class Walls {
         if (mode === 'wall') {
           // (along the wall: the feet on the stone, the body leaning out from it)
           const d = wind ? Math.sign(st.u) || -1 : st.side;
-          roll = d * 0.62; anim = ANIM.run; x += -pose.dz * d * 0.12; z += pose.dx * d * 0.12; y += 0.1;
+          roll = -d * 0.62; anim = ANIM.run; x += -pose.dz * d * 0.2; z += pose.dx * d * 0.2; y += 0.1;
         } else if (mode === 'climb') {
           // (up the stone: two or three steps on it, leaning back — then over its edge)
           const up = st.y < st.top - S.climb.hands + 1e-6 && !wind;
@@ -423,7 +424,8 @@ export class Walls {
         else {
           const v = Math.abs(st.vs);
           anim = st.over || st.wait > 0 ? ANIM.idle : v > 3.6 ? ANIM.run : v > 0.3 || Math.abs(st.vu) > 1 ? ANIM.walk : ANIM.idle;
-          yaw -= clamp(st.vu / S.side, -1, 1) * 0.3;
+          // (on a ledge one shuffles along, the back to the stone; else one turns a little the way one steers)
+          if (onLedge(st)) { yaw -= 1.25; anim = v > 0.3 ? ANIM.walk : ANIM.idle; x += pose.dz * 0.12; z -= pose.dx * 0.12; } else yaw -= clamp(st.vu / S.side, -1, 1) * 0.3;
         }
         K.lean += (roll - K.lean) * Math.min(1, dt * 14);
         pl.pos.set(x, y, z); pl.yaw = yaw; pl.pitch = pitch; pl.roll = K.lean;

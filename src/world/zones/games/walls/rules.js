@@ -198,6 +198,9 @@ export function floorAt(s, u, st) {
 }
 const wallFor = (st, d, slack = 0) => { for (const t of near(st.s)) if (t.kind === 'wall' && t.side === d && st.s >= t.s0 - S.wall.lead - slack && st.s <= t.s1 + slack && st.y >= t.y0 - 0.75 && st.y <= t.y1 + 0.4) return t; return null; };
 
+/** Is the runner on a ledge, the back to the stone? */
+export const onLedge = (st) => st.mode === 'ground' && (floorAt(st.s, st.u, st), _f.t)?.form === 'ledge';
+
 /** A runner at the start, standing. `t0`: the shared clock then (s). The clock of the run waits for the first step. */
 export function startRun(t0 = 0) {
   const c = course();
