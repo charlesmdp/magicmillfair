@@ -1439,12 +1439,13 @@ async function boot() {
       } };
     });
     hud.setMushroom(seen.size, relics.list.length);
-    // (how many there are, and what for: said by the small count at the top left when it is pressed — and once to
-    // whoever arrives, a few seconds after the gate, for as long as some are still to be found: see `relicsHello`)
+    // (how many there are, and that they are worth finding: said by the small count at the top left when it is
+    // pressed — and once to whoever arrives, a few seconds after the gate, for as long as some are still to be
+    // found: see `relicsHello`. What the bonus is, is not said: the owner wants it kept for who earns it)
     const relicsWord = () => {
       const all = relics.list.length, n = seen.size;
       return n >= all ? `You have found the ${all} relics of the world before: the mushroom cloud is yours, in the emotes (T).`
-        : `☢ ${all} relics of the world before are hidden all over the oasis — things that do not belong here: by the paths, on the pier and under it, on the islands, in the caves. Walk up to one and look at it. ${n ? `You have found ${n} of ${all}` : 'Find them all'}: the mushroom cloud is for whoever finds every one.`;
+        : `☢ ${all} relics of the world before are hidden all over the oasis — things that do not belong here: by the paths, on the pier and under it, on the islands, in the caves. Walk up to one and look at it. ${n ? `You have found ${n} of ${all}` : 'Find them all'}: whoever finds every one earns a bonus that sets them truly apart from everybody else.`;
     };
     hud.on('relics', () => hud.note(relicsWord(), 11000));
     app.relicsHello = () => { if (seen.size < relics.list.length && state.mode === 'walk' && !fair.session && !player.driver) hud.note(relicsWord(), 11000); };
