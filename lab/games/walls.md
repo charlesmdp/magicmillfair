@@ -117,12 +117,19 @@ played by its bot to the top (49 s there), its score told and kept.
   been watched in motion. The robot uses the stock clips (run, jump, walk): it does not put its hands on the bar
   nor on an edge.
 - **The blades never force a wait**, and the spikes are simply jumped: what keeps time is read, not waited for.
-  Only the blade over the ledge can shut the way, and the bot was never seen to stop for it.
+  Only the blade over the ledge can shut the way, and the bot does not stop for it: it jumps its crescent.
 - **The ruin has no walls for who is not playing**: it stands in water one may swim in, and a swimmer goes
   through its rock. One cannot walk in it: one is put on it by the game, and taken off.
 - **The slabs fall for who treads on them only**, and the others' robots are shown where the network places
   them: whether their lean along a wall or their swing under a bar shows for the others has not been looked at
   (two browsers were never run together).
+- **The gate's place is the least bad, not a good one.** It was on the sand at (64, 84) until the quay of the
+  robots was built 6 m from it and across the line to the ruin. Where it stands now is dark rock at the foot of a
+  wooded bank, the quay 9 m to the north, the mine mouth 15.6 m to the south-east: the only stretch of the south
+  beach 15 m from every other arch from which the ruin shows (further north the tower of the spiral stands
+  before it). The ground slopes 2 m across the arch; the board of scores stands up the bank to its right, under
+  the trees; and in the one picture taken there with the game's own camera behind the player, that camera sat
+  right behind the robot's head, squeezed by the bank. Nobody has walked to it from the sand.
 - The action "Leave the ruin" is shown by the game under the middle of the picture, as in every game of this
   kind: it sits just under the robot.
 - The save at 25 m lies where one takes off for the first band: who jumps before its line is saved only on the
