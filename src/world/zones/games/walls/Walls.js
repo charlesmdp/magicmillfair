@@ -386,7 +386,7 @@ export class Walls {
    */
   open(player, io) {
     const st = startRun(this.clock() / 1000), events = [], input = { run: 0, side: 0, jump: false }, pose = {}, { saves } = course();
-    const K = { acc: 0, camY: null, camU: 0, hall: 0, after: 0, spin: 0, lean: 0 };
+    const K = { acc: 0, camY: null, camU: 0, hall: 0, after: 0, lean: 0, hint: -1 };
     const _c = V(0, 0, 0), _l = V(0, 0, 0);
     const session = {
       walls: this, over: false, ended: false, score: 0, time: 0, line: '', riding: false, anim: ANIM.idle, state: st, auto: false,
@@ -403,6 +403,8 @@ export class Walls {
         }
         for (const e of events) this._tell(e, st, io);
         events.length = 0;
+        // (who hangs from a bar and does not know how to leave it is told, once a hang)
+        if (st.mode === 'pole' && st.pt > 1.3 && K.hint !== st.pole && !session.auto) { K.hint = st.pole; io.note('Hanging from the bar — the jump button lets go, and throws you on.', 2600); } else if (st.mode !== 'pole') K.hint = -1;
         // ---- where the runner is, and how it holds itself
         placeAt(st.s, st.u, pose);
         const wind = st.mode === 'rewind', mode = wind ? st.rm : st.mode, down = st.down > 0;
