@@ -166,8 +166,8 @@ export class Sneak {
     });
     this.cores = CORES.map((c) => {
       const mb = new MeshBuilder();
-      mb.tint(0.5, 3, 2.4, 1).place(0, 0.75, 0).lathe([[0.001, 0.34], [0.24, 0], [0.001, -0.34]], 6).pop();
-      mb.tint(0.2, 1.3, 1.1, 1).cylinder(0, 0.02, 0, 0.5, 0.5, 0.03, 16);
+      mb.tint(0.5, 3, 2.4, 1).place(0, 0.95, 0).lathe([[0.001, 0.5], [0.36, 0], [0.001, -0.5]], 6).pop();
+      mb.tint(0.15, 1.1, 0.9, 1).cylinder(0, 0.02, 0, 0.8, 0.8, 0.03, 20);
       const m = new THREE.Mesh(mb.build(), glowMat()); m.name = 'sneak-core'; m.position.set(c.x, 0, c.z); yard.add(m);
       return m;
     });
