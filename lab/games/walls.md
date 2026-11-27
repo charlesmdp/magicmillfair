@@ -82,7 +82,7 @@ from within 110 m only. The rock is grey, boulders on its shore; under the gaps 
 are; nobody is solid. The blades and the spikes are the same for everybody at every moment. The slabs that give
 way do so for who treads on them only: somebody else's slabs are whole.
 
-**What the checks say** (`node tools/walls-test.mjs`, 33 of 33; its last line is the line of
+**What the checks say** (`node tools/walls-test.mjs`, 34 of 34; its last line is the line of
 `server/scores.js`): the place (water under all of it, the gate dry and inside the bounds); the plan (each lap at
 least 8.1 m over the one outside it, the tallest band 6.6 m; the corners carry nothing but steps); the line from
 the camera to the runner, followed all along the way and across it, passes clear of every turret and of the
@@ -95,8 +95,10 @@ reserve. **The runner that plays by itself** tries, on a copy of itself and with
 two seconds ahead — a lane, the button now or later, twice, three times — and never presses sooner than a
 quarter of a second after deciding to: it reaches the top without a fall in **48.8 s** (17 presses), whenever it
 starts. **A clumsy one** — a third of its presses never come, most of the others come 0.1 to 0.4 s late — falls
-one to five times, is wound back each time, and reaches the top in 53 to 65 s. Who stands still stays at the start; who only
-runs falls at the second hole. `heatOf(state)` is how far the run has come (it never goes back down after a
+one to five times, is wound back each time, and reaches the top in 53 to 65 s. **One who knows nothing of it** — the stick straight up all the
+way, a press at each edge, on a wall as it ends, on a bar after a moment, steering only to get onto the ledge,
+blind to what is red — reaches the top too, in 49 to 55 s with two to eight falls: what is red costs rewinds, not
+the run. Who stands still stays at the start; who only runs falls at the second hole. `heatOf(state)` is how far the run has come (it never goes back down after a
 fall). The board: `walls: { order: 'asc', min: 38000, max: 1800000 }` — 38.3 s is the whole way at the speed a
 bar throws one at. In the running game (`node tools/play-test.mjs walls`, 13 of 13) it is offered at its gate,
 played by its bot to the top (49 s there), its score told and kept.

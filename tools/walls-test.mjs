@@ -182,6 +182,32 @@ const press = (u, ...at) => { const left = at.slice(); return (st, input) => { i
   const clumsy = [[3, 0.9, 7], [11, 0.9, 21], [5, 0.9, 99]].map(([t0, c, seed]) => botRun(t0, 900, c, seed));
   check('a clumsy one — its presses come late, or not at all, now and then — falls, is wound back, and reaches the top all the same, later', clumsy.every((r) => r.over) && clumsy.reduce((a, r) => a + r.rewinds, 0) >= 3 && clumsy.reduce((a, r) => a + r.time, 0) > runs.reduce((a, r) => a + r.time, 0),
     clumsy.map((r) => `${(r.time / 1000).toFixed(1)} s: ${r.outs} falls, ${r.rewinds} wound back, ${r.homes} back to a save`).join(' · '));
+  // ---- and one who knows nothing: the stick straight up all the way, a press at each edge (a little late, as it comes),
+  // a press on a wall as it ends, a press on a bar after a moment; steering only to get onto the ledge; blind to what is red
+  const naive = (seed) => {
+    let r = seed * 7919, pressAt = -1, armed = true;
+    const rnd = () => (r = (r * 16807) % 2147483647) / 2147483647, st = startRun(seed * 3.1), input = { run: 1, side: 0, jump: false }, events = [];
+    for (let t = 0; t < 600 && !st.over; t += S.step) {
+      input.run = 1; input.jump = false;
+      input.side = things.some((q) => q.form === 'ledge' && q.s0 < st.s + 4 && q.s1 > st.s - 0.5) ? -1 : 0;
+      if (st.mode === 'ground') {
+        const G = floorAt(st.s + 0.7, st.u, st);
+        if (armed && (G === -Infinity || G < st.y - 0.6) && pressAt < 0) { pressAt = st.n + Math.floor(rnd() * 14); armed = false; }
+        if (G > -Infinity && Math.abs(G - st.y) < 0.4) armed = true;
+      } else if (st.mode === 'wall') {
+        const band = things.find((q) => q.kind === 'wall' && q.side === st.side && st.s >= q.s0 - 1 && st.s <= q.s1 + 0.1);
+        if (pressAt < 0 && band && (band.s1 - st.s < 1.6 || st.wt > 0.85) && floorAt(Math.min(st.s + 2.5, LENGTH), st.u, st) === -Infinity) pressAt = st.n + Math.floor(rnd() * 8);
+      } else if (st.mode === 'pole' && pressAt < 0 && st.pt > 0.3) pressAt = st.n + Math.floor(rnd() * 10);
+      if (pressAt >= 0 && st.n >= pressAt) { input.jump = true; pressAt = -1; }
+      stepRun(st, S.step, input, events);
+      for (const e of events) if (e.type === 'back' || e.type === 'home') { armed = true; pressAt = -1; }
+      events.length = 0;
+    }
+    return st;
+  };
+  const simple = [1, 2, 3, 4].map(naive);
+  check('one who knows nothing of it — the stick straight up all the way, a press at each edge, on a wall as it ends, on a bar; blind to the blades and the spikes — reaches the top all the same: what is red costs rewinds, not the run', simple.every((st) => st.over) && simple.some((st) => st.used > 0),
+    simple.map((st) => `${(st.time / 1000).toFixed(1)} s: ${st.outs} falls, ${st.used} wound back, ${st.homes} back to a save`).join(' · '));
   const idle = startRun(0); for (let t = 0; t < 60; t += 0.1) stepRun(idle, 0.1, { run: 0, side: 0, jump: false });
   const only = go(startRun(0), LENGTH, null, 60);
   check('nothing is won by doing nothing: who stands stays at the start, the clock waiting; who only runs falls at the second hole', idle.s === saves[0].s && idle.clock === 0 && !idle.going && only.out === 'fall' && only.st.s < 24, `only running: a fall at ${only.st.s.toFixed(1)} m`);
