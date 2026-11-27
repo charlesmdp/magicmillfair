@@ -382,32 +382,31 @@ export const TUNES = {
   },
 
   /**
-   * The Sanctuary (a place, not a game: src/extras/sanctuary.js plays it for who walks in): a slow gospel in D flat,
-   * in twelve-eight — the deep pedal of an organ and its chords from the door on; then a bass voice that hums the
-   * tune, sliding from note to note; a piano rocking in threes; a heartbeat of a drum; and, under the dome, the
-   * choir that takes the tune up an octave above the hum, a held third over it, a bell at the head of each phrase.
-   * The fourth chord turns minor before it comes home, and the last two bars are an amen. Its heat is how far
-   * inside one stands; so is how loud it is.
+   * The Sanctuary (a place, not a game: src/extras/sanctuary.js plays it for who walks in): a chant, as monks sing
+   * one in a great empty nave — men's voices alone, one line, no beat to count, in the first mode on G. The tenors
+   * have it from the door on; the basses take it an octave under them as one walks in; under the dome a second
+   * choir joins a shade out of tune with the first (many throats, not one), a few voices follow a fifth above as
+   * the old organum did, and a note is held under it all. Each phrase rises to its reciting note, turns round it and
+   * comes down to rest; the last one is an amen. Nothing here is borrowed: the tune was written for this hall.
+   * Its heat is how far inside one stands; so is how loud it is; the room behind it is the hall's.
    */
   sanctuary: {
-    bpm: 168, beats: 12, room: 0.34,
-    chords: 'Db Db7 Gb Gbm Db Bbm Ebm Ab7 Db Db7 Gb Gbm Db Ab7 Gb Db',
-    theme: 'f4:6 eb4:3 db4:3 | f4:6 ab4:3 b4:3 | bb4:9 ab4:3 | a4:6 gb4:6 | f4:9 eb4:3 | db4:6 f4:6 | gb4:6 eb4:3 gb4:3 | f4:3 eb4:9 | '
-      + 'ab4:6 f4:3 ab4:3 | b4:6 ab4:6 | bb4:6 db5:6 | db5:3 a4:9 | ab4:6 f4:6 | gb4:6 eb4:6 | gb4:3 f4:3 eb4:3 db4:3 | db4:12',
+    bpm: 66, beats: 8, room: 0.5,
+    chords: 'Gm Gm Gm Gm Gm Gm Gm Gm Gm Gm Gm Gm Gm Gm Gm Gm',
+    theme: 'g3:2 a3 c4 d4:2 d4 e4 | d4 c4 d4:2 c4 bb3 a3:2 | a3 c4 d4 f4 e4:2 d4 c4 | d4:2 c4 a3 bb3 a3 g3:2 | '
+      + 'd4:2 d4 e4 f4:2 e4 d4 | e4 d4 c4 d4 d4:4 | f4 g4 f4 e4 d4:2 c4 d4 | c4 bb3 a3 g3 a3 g3:3 | '
+      + 'g3:2 f3 g3 a3:2 g3 f3 | g3 a3 bb3 a3 g3:4 | a3 c4 d4:2 e4 d4 c4 d4 | f4:2 e4 d4 e4 d4 c4:2 | '
+      + 'd4 e4 d4 c4 bb3 a3 c4:2 | bb3 a3 g3:2 f3 g3 a3:2 | g3 a3 bb3 a3 g3 f3 g3:2 | a3 g3 f3 g3 g3:4',
     parts: [
-      { pattern: '1:12', root: 24, wave: 'flute', vel: 0.11, gate: 0.97, attack: 0.5, release: 0.12 },
-      { pattern: '1:12', root: 36, wave: 'bourdon', vel: 0.1, gate: 0.97, attack: 0.4, release: 0.12 },
-      { pattern: 'c:12', root: 0, wave: 'chord', vel: 0.05, gate: 0.96, attack: 0.6, release: 0.1, cents: -6 },
-      { pattern: 'c:12', root: 12, wave: 'chord', vel: 0.028, from: 0.08, gate: 0.96, attack: 0.7, release: 0.1, cents: 7 },
-      { line: 'theme', shift: -12, wave: 'reed', standing: true, lp: 620, glide: 0.07, vel: 0.2, from: 0.15, every: 8, gate: 0.94, attack: 0.09, release: 0.16 },
-      { pattern: '1 5 8 10 8 5 1 5 8 10 8 5', root: 48, wave: 'piano', vel: 0.045, from: 0.3, gate: 1, attack: 0.006, sustain: 0.35, decay: 0.3, release: 0.08 },
-      { kit: 'drum', pattern: 'x:6 o:6', vel: 0.4, from: 0.4 },
-      { line: 'theme', wave: 'principal', standing: true, lp: 1500, glide: 0.06, vel: 0.07, from: 0.55, every: 8, gate: 0.94, attack: 0.12, release: 0.2 },
-      { pattern: '3:12', root: 60, wave: 'principal', standing: true, lp: 1300, glide: 0.15, vel: 0.04, from: 0.7, gate: 0.96, attack: 0.3, release: 0.25 },
-      { pattern: '8:12', root: 60, wave: 'chime', vel: 0.035, mod: [8, 0], from: 0.7, gate: 0.3, attack: 0.004, release: 0.5 },
+      { line: 'theme', wave: 'reed', standing: true, lp: 900, glide: 0.06, vel: 0.2, every: 2, gate: 0.97, attack: 0.14, release: 0.3 },
+      { line: 'theme', shift: -12, wave: 'reed', standing: true, lp: 520, glide: 0.07, vel: 0.22, from: 0.15, every: 2, gate: 0.97, attack: 0.16, release: 0.32, cents: -7 },
+      { line: 'theme', wave: 'principal', standing: true, lp: 1100, glide: 0.08, vel: 0.1, from: 0.4, every: 2, gate: 0.97, attack: 0.18, release: 0.3, cents: 11 },
+      { pattern: '1:8', root: 36, wave: 'bourdon', vel: 0.05, from: 0.55, gate: 0.99, attack: 0.9, release: 0.3 },
+      { line: 'theme', shift: -12, wave: 'principal', standing: true, lp: 700, glide: 0.09, vel: 0.09, from: 0.7, every: 2, gate: 0.97, attack: 0.2, release: 0.32, cents: 9 },
+      { line: 'theme', shift: 7, wave: 'flute', standing: true, lp: 1300, glide: 0.08, vel: 0.045, from: 0.85, every: 4, gate: 0.97, attack: 0.2, release: 0.3, cents: -5 },
     ],
     heat: (st) => sat(st?.inside ?? 0),
-    level: (st) => sat(0.2 + 0.65 * sat((st?.inside ?? 0) * 1.6)),
+    level: (st) => sat(0.2 + 0.5 * sat((st?.inside ?? 0) * 1.6)),
   },
 };
 
@@ -520,6 +519,7 @@ export function tunePlayer(app) {
         g.gain.value = 0;
         let out = bus;
         if (p.lp) { const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = p.lp; f.Q.value = 0.8; f.connect(bus); nodes.push(f); out = f; }
+        if (p.cents && o.detune) o.detune.value = p.cents; // (a shade out of tune with the others: many players, not one)
         o.connect(g); g.connect(out); o.start();
         nodes.push(o, g);
         lines[i] = { o, g };
