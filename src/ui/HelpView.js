@@ -2,7 +2,8 @@
 // service that brings what is written in it to the fair. The form is a page of Orka's, framed: it is fetched only
 // when the card is first opened — nothing of Orka's is loaded before —, and the game sends it nothing (no name, no
 // address, no identifier): what reaches Orka is what the visitor types in it. It says how tall it is (a message
-// `orka_form_resize`), and the frame follows. The address of the fair is under it, for whoever would rather write.
+// `orka_form_resize`), and the frame follows. Under it: who offers the form (Orka Chat, with a link to its site —
+// opened only if one presses it), and the address of the fair, for whoever would rather write.
 // (Privacy, app/legal.js, says so: keep the two together.)
 import { LEGAL } from '../app/legal.js';
 
@@ -17,18 +18,34 @@ export class HelpView {
     this.handlers = {};
     this.frame = null;
     this.el = el('div', 'help');
+    // (the form is Orka's own page, framed: its inside cannot be dressed from here — what is around it can: a
+    // heading that says what to expect, the form on a sheet of paper with room to breathe, and under it who
+    // offers it. "Dis que c'est offert gracieusement par Orka Chat, le meilleur chat pour les gens qui ont un
+    // business en ligne", asked the owner.)
     this.el.innerHTML = `
       <div class="help-sheet" role="dialog" aria-modal="true" aria-labelledby="help-title">
         <button type="button" class="help-x" aria-label="Close">×</button>
-        <div class="help-head"><div class="help-badge" aria-hidden="true">?</div><div><h2 id="help-title">Help &amp; support</h2><p class="help-lead">A question, something that went wrong, an idea for the fair? Write to us here.</p></div></div>
-        <div class="help-body"><div class="help-form"><p class="help-wait">Opening the form…</p></div></div>
+        <div class="help-head"><div class="help-badge" aria-hidden="true">?</div><div><h2 id="help-title">Help &amp; support</h2><p class="help-lead">A question, something that went wrong, an idea for the fair? Write to us: a person reads every message.</p></div></div>
+        <ul class="help-facts" aria-label="What to expect">
+          <li><i aria-hidden="true">✉</i>We answer by e-mail</li>
+          <li><i aria-hidden="true">✓</i>Free, no account needed</li>
+          <li><i aria-hidden="true">♥</i>No newsletter, ever</li>
+        </ul>
+        <div class="help-body">
+          <div class="help-form"><p class="help-wait">Opening the form…</p></div>
+          <a class="help-orka" href="https://orka.chat/" target="_blank" rel="noopener">
+            <span class="help-orka-mark" aria-hidden="true">💬</span>
+            <span class="help-orka-words"><b>Graciously offered by Orka Chat</b><small>The best chat for people who run a business online.</small></span>
+            <span class="help-orka-go" aria-hidden="true">orka.chat ↗</span>
+          </a>
+        </div>
         <p class="help-foot"></p>
       </div>`;
     root.append(this.el);
     this.box = this.el.querySelector('.help-form');
     const foot = this.el.querySelector('.help-foot');
-    if (LEGAL.contact) { foot.append('Or write to '); const a = el('a', '', LEGAL.contact); a.href = `mailto:${LEGAL.contact}`; foot.append(a, '. '); }
-    foot.append('The form is Orka’s: what you write in it goes to Orka, which brings it to us (see Privacy).');
+    if (LEGAL.contact) { foot.append('Rather write an e-mail? '); const a = el('a', '', LEGAL.contact); a.href = `mailto:${LEGAL.contact}`; foot.append(a, '. '); }
+    foot.append('What you write in the form goes to Orka, which brings it to us — nothing else is sent (see Privacy).');
     this.el.querySelector('.help-x').onclick = () => this.close();
     this.el.addEventListener('pointerdown', (e) => { if (e.target === this.el) this.close(); });
     this.el.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape') this.close(); });

@@ -1,8 +1,10 @@
-// Barnaby the barker as an extra: a robot in a top hat who stands on the gravel before the carport of the mill,
+// Barnaby the butler as an extra: a robot in a dinner suit and a top hat who stands on the gravel before the carport of the
+// mill,
 // by the pool — on the way of whoever arrives — and sends them to the games: "they are free to try". Asked for
 // by the owner on 27 November 2026 ("mets un mec là qui te dit d'aller tester les jeux et qu'ils peuvent
 // essayer"). Its switch: `guide` (RELEASE in src/app/config.js), ON as it is delivered — the owner asked for him
-// to be there; off, nothing of him is loaded.
+// to be there; off, nothing of him is loaded. (He was a barker in crimson at first: "enlève barker, mets plutôt
+// butler et mets lui un smoking" — so he is a butler, speaks as one, and wears the tuxedo of the paint jobs.)
 //
 // He waves and calls when somebody comes near, turns to face them, and, asked (E: "Talk to Barnaby"), says
 // which games are open today and where — he reads it from the game itself (app.extras: what is switched on, and
@@ -11,9 +13,10 @@
 import { EXTRAS } from './index.js';
 import { ANIM, EMOTE_LIST } from '../player/Character.js';
 import { HATS } from '../player/Cosmetics.js';
+import { PAINTS } from '../../server/items.js';
 
 export const GUIDE = {
-  name: 'Barnaby', title: 'Barker',
+  name: 'Barnaby', title: 'Butler',
   x: -110.6, z: -24.4, // the east edge of the gravel, the carport's corner post to his left, the pool behind him
   faces: [-121.5, -44], // …looking up the lane, at who comes down from the gate
   reach: 3.4, // m: near enough to be asked
@@ -55,21 +58,21 @@ export function linesFor(open, n = 0) {
   const fair = 'On the pier: six booths, the quad race and the flying theatre. South of the lane: Mostly Up, the climb.';
   if (!open.length) {
     return n % 2 === 0
-      ? ['Step right up! Every game of the fair is free to try: walk up to one and press E.', `${fair} Follow the lane east — you cannot miss the big wheel.`]
-      : ['The stars on the map (M) are the games. Each keeps a board of the best scores: put your name on one!', 'New games are being built all over the oasis. Come back and ask me: I shall know before anybody.'];
+      ? ['Welcome to the oasis. Every game of the fair is free to try: one walks up to it and presses E.', `${fair} Follow the lane east — one cannot miss the big wheel.`]
+      : ['If I may: the stars on the map (M) are the games. Each keeps a board of the best scores — do put your name on one.', 'New games are being built all over the oasis. Do come back and ask: I shall know before anybody.'];
   }
-  if (n % 2 === 1) return ['Every game is free to try, as often as you like: walk under its arch and press E — E again to leave.', `The stars on the map (M) show where they are. ${fair}`, 'Each game keeps a board of the best scores by its gate. Go and put your name on one!'];
-  const lines = [`Step right up! ${open.length === 1 ? 'A new game is' : `${open.length} new games are`} open today, and ${open.length === 1 ? 'it is' : 'every one is'} free to try.`];
+  if (n % 2 === 1) return ['Every game is free to try, as often as one likes: walk under its arch and press E — E again to leave.', `The stars on the map (M) show where they are. ${fair}`, 'Each game keeps a board of the best scores by its gate. Do put your name on one.'];
+  const lines = [`Welcome. If I may: ${open.length === 1 ? 'a new game is' : `${open.length} new games are`} open today, and ${open.length === 1 ? 'it is' : 'every one is'} free to try.`];
   // (three places a line at the most: a line of chat is read at a glance or not at all)
   for (let i = 0; i < places.length; i += 3) lines.push(`${places.slice(i, i + 3).join(' · ')}.`.replace(/^./, (c) => c.toUpperCase()));
-  lines.push('Walk under the arch of a game and press E. The stars on the map (M) show the way. Off you go — and tell me how it went!');
+  lines.push('Walk under the arch of a game and press E. The stars on the map (M) show the way. Do tell me how it went.');
   return lines;
 }
 
 const CALLS = [
-  'Step right up! New games all over the oasis — free to try!',
-  'Psst — over here! I know where every game is.',
-  'You there! Fancy a game? They are all free to try.',
+  'Good day. Might I suggest a game? They are all free to try.',
+  'Pardon me — the games are this way. Do ask: I know where each one is.',
+  'Welcome to the oasis. The games are open, and free to try.',
 ];
 
 /** Puts Barnaby where he stands (in the running game) and lets him speak. Returns { at, open(), lines(n) }. */
@@ -79,8 +82,10 @@ export function attach(app) {
   const G = GUIDE, y = world.data.heightAt(G.x, G.z);
   const guy = me.factory.create(3);
   const hat = Math.max(0, HATS.findIndex((h) => h.id === 'tophat'));
-  guy.setColor(19); // crimson, as the awnings of the fair
+  guy.setColor(16); // black — and over it the dinner suit, once the paint jobs have one (`tuxedo` in server/items.js)
   guy.setLook({ hat });
+  const suit = PAINTS.indexOf('tuxedo');
+  if (suit > 0) guy.setPaint(suit);
   guy.setAnim(ANIM.idle);
   const home = Math.atan2(G.faces[0] - G.x, G.faces[1] - G.z);
   guy.root.position.set(G.x, y, G.z);
@@ -90,14 +95,14 @@ export function attach(app) {
   world.collision?.addCircle?.(G.x, G.z, 0.45); // (one walks round him, not through)
   world.scatter?.keepClear?.(G.x, G.z, 1.5);
 
-  const tag = hud.tag('npc-guide', G.name, 1, G.title);
+  const tag = hud.tag('npc-guide', G.name, 15, G.title);
   tag.style.display = 'none';
   const WAVE = Math.max(0, EMOTE_LIST.findIndex((e) => e.id === 'wave')), CHEER = EMOTE_LIST.findIndex((e) => e.id === 'go');
   let asked = 0, clock = 0, called = -1e9, shown = false, yaw = home, timers = [];
   const hush = () => { for (const t of timers) clearTimeout(t); timers = []; };
   const speak = (lines) => {
     hush();
-    lines.forEach((text, i) => timers.push(setTimeout(() => { hud.addChat(G.name, 1, text, false, 'private'); hud.say(tag, text); }, i * 3400)));
+    lines.forEach((text, i) => timers.push(setTimeout(() => { hud.addChat(G.name, 15, text, false, 'private'); hud.say(tag, text); }, i * 3400)));
   };
   const free = () => !player.driver && !app.fair?.session && !player.dead;
   world.actionSources.push((p) => {

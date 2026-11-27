@@ -27,7 +27,7 @@ export const EXTRAS = {
   mine: { name: 'Little Mine Train — a mine cart through the mountains: lean, brake, jump the gaps', load: () => import('./mine.js') },
   coaster: { name: 'Hold the Rails! — a roller coaster one drives oneself through every mountain: stray from the rails and one falls', load: () => import('./coaster.js') },
   sanctuary: { name: 'The Sanctuary — a great hall of stone: a church, a mosque and a synagogue under one roof', load: () => import('./sanctuary.js') },
-  guide: { name: 'Barnaby the barker — a robot by the carport of the mill who sends whoever arrives to the games', load: () => import('./guide.js') },
+  guide: { name: 'Barnaby the butler — a robot by the carport of the mill who sends whoever arrives to the games', load: () => import('./guide.js') },
   caves: { name: 'The caves are safe places: nearby chat only', load: () => import('./caves.js') },
   stats: { name: 'The game in figures: counters, the page /opendata', load: () => import('./stats.js') },
 };

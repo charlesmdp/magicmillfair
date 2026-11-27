@@ -69,7 +69,7 @@
     mine: ["Little Mine Train", "A mine cart through the mountains: lean, brake, jump the gaps."],
     coaster: ["Hold the Rails!", "A roller coaster one drives oneself through every mountain: stray from the rails and one falls."],
     sanctuary: ['The Sanctuary', 'A great hall of pale stone under a dome, at the north of the west meadow: a mosque, a church and a synagogue round its middle, and a chant for who walks in.'],
-    guide: ['Barnaby the barker', 'A robot in a top hat by the carport of the mill: he calls whoever arrives and says which games are open, and that they are free to try.'],
+    guide: ['Barnaby the butler', 'A robot in a dinner suit and a top hat by the carport of the mill: he greets whoever arrives and says which games are open, and that they are free to try.'],
     caves: ['The caves are safe places', 'In a cave, only those nearby hear what is said.'],
     stats: ['The game in figures', 'The counters, and the page /opendata.'],
     stars: ['Stars on the map', 'On: the big attractions wear a red star and their name on the map (M). Off: the map names its places only.'],
@@ -328,7 +328,9 @@
       }
       const title = el('b', '', `${placeName(id)}${s.title ? ` — "${s.title}"` : ''}`);
       if (s.state !== 'live') title.append(el('span', 'tag', 'paid, nothing shown yet'));
-      const row = item(title, [s.subtitle, s.url, paid(s), `since ${when(s.at)}`].filter(Boolean).join(' · '), button('Edit', 'ghost small', () => editSponsor(id, s)), ...down(id, s));
+      // (how many times its site was opened from the game: counted for a place that has a site)
+      const clicks = s.url ? `${(s.clicks || 0).toLocaleString('en-US')} click${s.clicks === 1 ? '' : 's'} on its site` : '';
+      const row = item(title, [s.subtitle, s.url, clicks, paid(s), `since ${when(s.at)}`].filter(Boolean).join(' · '), button('Edit', 'ghost small', () => editSponsor(id, s)), ...down(id, s));
       if (s.logo) { const img = el('img'); img.alt = ''; img.loading = 'lazy'; img.src = s.logo; row.prepend(img); }
       (plaque ? done : live).append(row);
     }

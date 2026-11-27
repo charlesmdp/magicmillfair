@@ -252,4 +252,14 @@ export function drawSponsor(ctx, w, h, sponsor, { what = 'this game', price = ''
   ctx.fillStyle = night ? '#fdf8ea' : '#1c2a22';
   ctx.fillText(shrink(ctx, sponsor.title || '', tw, Math.round(body * (sponsor.subtitle ? 0.3 : 0.38)), 700, SERIF), cx, top + body * (sponsor.subtitle ? 0.4 : 0.5));
   if (sponsor.subtitle) { ctx.fillStyle = night ? '#c9d2cb' : '#5b6b5f'; ctx.fillText(shrink(ctx, sponsor.subtitle, tw, Math.round(body * 0.15), 500, SANS), cx, top + body * 0.72); }
+  // (how many times visitors opened this sponsor's site from the game — counted by the server, for a place that
+  // has a site: a small plate in the corner, for the sponsor to see what its panel brings, and for who would
+  // take the next one)
+  if (Number.isInteger(sponsor.clicks)) {
+    const n = sponsor.clicks, words = `↗ ${n.toLocaleString('en-US')} click${n === 1 ? '' : 's'}`, fh = Math.max(13, Math.round(body * 0.105));
+    ctx.font = `700 ${fh}px ${SANS}`;
+    const pw = ctx.measureText(words).width + fh * 1.3, ph = fh * 1.7, px = w - pw - Math.max(10, h * 0.045), py = h - ph - Math.max(10, h * 0.05);
+    ctx.fillStyle = night ? 'rgba(253, 248, 234, 0.16)' : 'rgba(28, 42, 34, 0.9)'; rounded(ctx, px, py, pw, ph, ph / 2); ctx.fill();
+    ctx.fillStyle = night ? '#fdf8ea' : '#ffe9a6'; ctx.textAlign = 'center'; ctx.fillText(words, px + pw / 2, py + ph / 2 + 1);
+  }
 }

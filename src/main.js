@@ -153,8 +153,22 @@ async function boot() {
   const player = new PlayerController(me, world.collision, data, input);
   const rig = new CameraRig(camera, input, world.collision, data);
   const free = new FreeCamera(camera, input, floorAt);
+  // (those who arrive do not all stand on one spot — "quand les gens arrivent, tout le monde s'empile au même
+  // endroit", said the owner —: each is put somewhere on the lane within a few metres of the gate, on free and
+  // level ground, looking the same way. For a picture, the spot itself.)
+  const spawnPlace = () => {
+    if (SHOT) return [SPAWN.x, SPAWN.z];
+    const y0 = data.heightAt(SPAWN.x, SPAWN.z), p = { x: 0, z: 0 };
+    for (let k = 0; k < 24; k++) {
+      const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()), x = SPAWN.x + Math.cos(a) * r * 3.4, z = SPAWN.z + Math.sin(a) * r * 6, y = data.heightAt(x, z);
+      p.x = x; p.z = z; world.collision.resolve(p, 0.7, y);
+      if (Math.hypot(p.x - x, p.z - z) < 0.05 && world.collision.walkable(x, z) && Math.abs(y - y0) < 0.8) return [x, z];
+    }
+    return [SPAWN.x, SPAWN.z];
+  };
   const spawn = () => {
-    player.teleport(SPAWN.x, SPAWN.z, SPAWN.yaw + Math.PI);
+    const [x, z] = spawnPlace();
+    player.teleport(x, z, SPAWN.yaw + Math.PI);
     rig.snap(player.pos, SPAWN.yaw);
   };
   spawn();
@@ -1050,12 +1064,13 @@ async function boot() {
       // (what awaits approval is painted where it would go for the administrator, who has to see it to say yes
       // or no — and for the holder of a plaque, who sees theirs as it will be)
       const d = (who.admin && !place.village && pending[id]?.draft) || (place.plaque && view?.mine && view.draft) || null;
-      const key = d ? `?${d.title}|${d.subtitle}|${d.logo}|${d.keep ? 1 : 0}` : live ? `${view.title}|${view.subtitle}|${view.logo}|${view.bg || ''}` : view && place.plaque ? `taken${view.mine ? '!' : ''}` : '';
+      const key = d ? `?${d.title}|${d.subtitle}|${d.logo}|${d.keep ? 1 : 0}` : live ? `${view.title}|${view.subtitle}|${view.logo}|${view.bg || ''}|${view.url ? view.clicks || 0 : ''}` : view && place.plaque ? `taken${view.mine ? '!' : ''}` : '';
       if ((shown.get(id) || '') === key) continue;
       shown.set(id, key);
       if (d) place.set({ title: d.title, subtitle: d.subtitle, url: d.url, bg: view?.bg || '', pending: true, logo: d.logo ? await loadImage(who.admin ? d.logo : ownDraft(d.logo), who.admin ? who.key : '') : d.keep && live ? await loadImage(view.logo) : null });
       else if (place.plaque) place.set(live ? { title: view.title, subtitle: view.subtitle, logo: view.logo } : view ? { taken: true, mine: !!view.mine } : null); // (its picture is fetched when the plate is painted)
-      else place.set(live ? { title: view.title, subtitle: view.subtitle, url: view.url, bg: view.bg || '', logo: await loadImage(view.logo) } : null);
+      // (`clicks`: how many times its site was opened from the game — written on the panel, for a place that has a site)
+      else place.set(live ? { title: view.title, subtitle: view.subtitle, url: view.url, bg: view.bg || '', logo: await loadImage(view.logo), ...(view.url && { clicks: view.clicks || 0 }) } : null);
     }
     for (const r of rotors) r.show(); // (a bid may change without anything painted changing: who has the panel, the board of the five)
     hud.setVillages(sky.villages, data.meta.size, villageLabel);
@@ -1143,7 +1158,7 @@ async function boot() {
   };
   let pending = {}; // the administrator: every place as the server keeps it (drafts included)
   /** Opens the site of the sponsor of the place `id` — from its place, the Trading Post or the wall of thanks: counted for the sponsor. */
-  const visitSponsor = (id, url) => { if (!url) return; shop.click(id); window.open(url, '_blank', 'noopener,noreferrer'); };
+  const visitSponsor = (id, url) => { if (!url) return; shop.click(id)?.then(() => applySponsors()); window.open(url, '_blank', 'noopener,noreferrer'); }; // (…and the count on its panel follows)
   // What a sponsor shows is asked for BEFORE the payment — a name, a line, a site, a logo —, kept in this
   // browser while they are at the payment page, and sent the moment the place is theirs (see arrived()).
   const SPONSOR_DRAFT = 'mmf.sponsor';

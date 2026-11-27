@@ -100,8 +100,8 @@ export class Shop {
   /** The site of the sponsor of a place is being opened: the server counts it (nobody waits for the answer). */
   click(slot) {
     const s = this.slots[slot];
-    if (!s || !s.url) return;
-    ask('api/click', { method: 'POST', body: { slot } }).then((res) => { if (res.ok && Number.isInteger(res.body?.clicks)) s.clicks = res.body.clicks; }).catch(() => {});
+    if (!s || !s.url) return null;
+    return ask('api/click', { method: 'POST', body: { slot } }).then((res) => { if (res.ok && Number.isInteger(res.body?.clicks)) s.clicks = res.body.clicks; }).catch(() => {});
   }
 
   /**
