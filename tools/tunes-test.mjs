@@ -17,6 +17,13 @@ const RULES = { spiral, waves, hive, lava, flip, cars, golf };
 const MOST = 8; // notes at once, at the most (of the 24 the game's music shares), counted as the game counts them
 check('a tune for each of the seven games', IDS.every((id) => TUNES[id]), Object.keys(TUNES).join(' '));
 
+// ---------- every tune there is reads — those of the games that are still being built among them
+for (const id of Object.keys(TUNES)) {
+  let sc = null, why = '';
+  try { sc = score(TUNES[id]); } catch (e) { why = e.message; }
+  if (!IDS.includes(id)) check(`${id}: its score reads, sixteen bars, every note in a sensible range`, sc && sc.bars === 16 && sc.events.every((e) => e.hz > 10 && e.hz < 8000 && e.len > 0 && (e.midi === null || (e.midi >= 24 && e.midi <= 100))), why || `${sc?.events.length} notes, ${TUNES[id].bpm} bpm`);
+}
+
 // ---------- the scores
 for (const id of IDS) {
   const tune = TUNES[id];

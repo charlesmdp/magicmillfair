@@ -217,6 +217,170 @@ export const TUNES = {
     heat: (st, secs, R) => or(st?.hole / ((R?.HOLES?.length ?? NaN) - 1), secs, 400), // the holes played
   },
 
+  // ------------------------------------------------------------------------------------------------------------
+  // The six games of lab/NEWGAMES.md. Their heat is what their rules say of a run — `heatOf(state)` → 0 … 1, exported
+  // by the rules of the game — and the time played where the rules say nothing.
+
+  /**
+   * War Through the Ages: a march in A minor that grows up with the armies. The stone age has drums and a bone
+   * flute; then the low strings march and the brass take the tune; then a choir and a snare; then the ticking and
+   * an arpeggio; and for the atom everything, the brass in octaves under cymbals.
+   */
+  ages: {
+    bpm: 108, beats: 4, accel: 0.08, room: 0.18,
+    chords: 'Am Am F G Am Am F E C G Am F Dm E Am Am',
+    theme: 'a4:1.5 a4:.5 c5 e5 | e5:1.5 d5:.5 c5:2 | a4:1.5 c5:.5 f5 e5 | d5:3 b4 | '
+      + 'a4:1.5 a4:.5 c5 e5 | a5:2 g5 e5 | f5:1.5 e5:.5 d5 c5 | b4:3 e4 | '
+      + 'g5:1.5 e5:.5 c5 e5 | d5:1.5 b4:.5 g4:2 | a4 c5 e5 a5 | a5:1.5 g5:.5 f5:2 | '
+      + 'f5:1.5 e5:.5 d5 f5 | e5:1.5 d5:.5 b4 g#4 | a4:3 e5 | a4:4',
+    parts: [
+      { kit: 'drum', pattern: 'x:.5 r:.5 r:.5 o:.5 r:.5 r:.5 x:.5 o:.5' },
+      { pattern: '1:4', root: 36, wave: 'strings', vel: 0.06, gate: 0.94, attack: 0.09, release: 0.03, cents: -5 },
+      { line: 'theme', wave: 'flute', vel: 0.085, to: 0.24, every: 8, gate: 0.85, attack: 0.03, release: 0.06, cents: 5 },
+      { pattern: '1:.5 1:.5 8:.5 1:.5 1:.5 8:.5 1:.5 8:.5', root: 36, wave: 'pulse', standing: true, lp: 1700, vel: 0.12, from: 0.2, gate: 0.5, attack: 0.004, release: 0.045 },
+      { line: 'theme', wave: 'brass', vel: 0.12, from: 0.24, every: 8, gate: 0.92, attack: 0.025, sustain: 0.8, decay: 0.3, release: 0.03, cents: -6 },
+      { pattern: 'c:4', root: 12, wave: 'chord', vel: 0.055, from: 0.45, gate: 0.9, attack: 0.14, release: 0.035 },
+      { kit: 'snare', pattern: 'r x:.5 o:.5 r x:.25 o:.25 o:.25 o:.25', vel: 0.8, from: 0.45 },
+      { kit: 'hat', pattern: 'o:.5 x:.5 o:.5 x:.5 o:.5 x:.5 o:.5 x:.5', from: 0.7 },
+      { pattern: '1:.5 5:.5 8:.5 10:.5 12:.5 10:.5 8:.5 5:.5', root: 60, wave: 'strings', standing: true, lp: 3200, vel: 0.045, from: 0.7, gate: 0.6, attack: 0.004, release: 0.03 },
+      { kit: 'cymbal', pattern: 'x:4', mod: [8, 0], from: 0.7 },
+      { line: 'theme', shift: -12, wave: 'brass', standing: true, lp: 3000, vel: 0.075, from: 0.95, every: 8, gate: 0.92, attack: 0.03, release: 0.05 },
+    ],
+    heat: (st, secs, R) => or(R?.heatOf?.(st), secs, 240),
+  },
+
+  /**
+   * Wild River: a reel in G major, as bright as the water is white — the bass goes boom and the chords answer,
+   * a fiddle has the tune, a banjo rolls under it from the first rapids on, and a flute doubles the fiddle high
+   * above when the river runs fastest.
+   */
+  raft: {
+    bpm: 138, beats: 4, accel: 0.08, room: 0.12,
+    chords: 'G G C G G Em Am D7 G G C G Em C D7 G',
+    theme: 'd5:.5 e5:.5 g5 b5 a5:.5 g5:.5 | e5 g5 d5:2 | e5:.5 g5:.5 c6 e6 d6:.5 c6:.5 | b5:1.5 a5:.5 g5:2 | '
+      + 'd5:.5 e5:.5 g5 b5 d6 | b5:.5 a5:.5 g5 e5:2 | c6:.5 b5:.5 a5 e5 a5 | f#5:2 a5 d6 | '
+      + 'd6:.5 b5:.5 g5 b5 a5:.5 g5:.5 | e5 g5 d5:2 | e5:.5 g5:.5 c6 e6 g6:.5 e6:.5 | d6:1.5 b5:.5 g5:2 | '
+      + 'b5:.5 g5:.5 e5 g5 b5 | c6:.5 e6:.5 g6 e6 c6 | d6:.5 c6:.5 a5 f#5 d5 | g5:4',
+    parts: [
+      { pattern: '1 r 5 r', root: 36, wave: 'bourdon', vel: 0.12, gate: 0.7, attack: 0.006, sustain: 0.6, decay: 0.15, release: 0.03 },
+      { pattern: 'r c:.5 r:.5 r c:.5 r:.5', root: 12, wave: 'chord', vel: 0.05, gate: 0.5, attack: 0.005, release: 0.04 },
+      { line: 'theme', shift: -12, wave: 'strings', vel: 0.1, from: 0.08, every: 4, gate: 0.85, attack: 0.012, sustain: 0.85, decay: 0.2, release: 0.035, cents: 4 },
+      { kit: 'kick', pattern: 'x r x r', vel: 0.8, from: 0.12 },
+      { kit: 'snare', pattern: 'o:.5 x:.5 o:.5 x:.5 o:.5 x:.5 o:.5 x:.5', vel: 0.55, from: 0.25 },
+      { pattern: '8:.25 5:.25 10:.25 8:.25 12:.25 10:.25 8:.25 5:.25 8:.25 5:.25 10:.25 8:.25 12:.25 10:.25 8:.25 5:.25', root: 60, wave: 'pianoHigh', standing: true, lp: 5000, vel: 0.05, from: 0.4, gate: 0.5, attack: 0.002, release: 0.03 },
+      { kit: 'hat', pattern: 'r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5', from: 0.55 },
+      { line: 'theme', wave: 'flute', standing: true, glide: 0.012, vel: 0.05, from: 0.75, every: 4, gate: 0.85, attack: 0.02, release: 0.05 },
+      { kit: 'cymbal', pattern: 'x:4', mod: [8, 0], vel: 0.7, from: 0.75 },
+    ],
+    heat: (st, secs, R) => or(R?.heatOf?.(st), secs, 90),
+  },
+
+  /**
+   * Run the Walls: a tune for a ruin in the sun, in D with its flat second and its raised third — a drone, a hand
+   * drum that says dum, tek-tek, dum, tek, a lute plucking the chord, and a flute that turns its notes before
+   * it lands on them; strings under it as one gets on.
+   */
+  walls: {
+    bpm: 120, beats: 4, accel: 0.06, room: 0.2,
+    chords: 'D D Eb D Gm Gm Eb D D D Cm D Gm Eb D D',
+    theme: 'd5:1.5 eb5:.5 f#5 g5 | a5:2 g5:.5 f#5:.5 eb5 | g5:1.5 f#5:.5 eb5 bb4 | d5:4 | '
+      + 'd5:.5 g5:.5 bb5 a5 g5 | bb5:1.5 a5:.5 g5:2 | g5:.5 f#5:.5 eb5 g5 bb5 | a5:1.5 f#5:.5 d5:2 | '
+      + 'a5:1.5 bb5:.5 c6 d6 | d6:2 c6:.5 bb5:.5 a5 | g5:1.5 eb5:.5 c5 eb5 | f#5:3 a5 | '
+      + 'bb5:.5 a5:.5 g5 d5 g5 | g5:.5 f#5:.5 eb5 bb4 eb5 | d5:1.5 eb5:.5 f#5 a5 | d5:4',
+    parts: [
+      { pattern: '1:4', root: 36, wave: 'strings', vel: 0.065, gate: 0.96, attack: 0.12, release: 0.04, cents: -5 },
+      { kit: 'kick', pattern: 'x:.5 r:1.5 x:.5 r:1.5', vel: 0.85 },
+      { kit: 'snare', pattern: 'r:.5 o:.5 r:.5 o:.5 r:1 o:.5 r:.5', vel: 0.55 },
+      { pattern: '1:.5 5:.5 8:.5 5:.5 1:.5 5:.5 8:.5 5:.5', root: 48, wave: 'pianoHigh', standing: true, lp: 3600, vel: 0.07, from: 0.08, gate: 0.4, attack: 0.002, release: 0.05 },
+      { line: 'theme', wave: 'flute', standing: true, glide: 0.022, vel: 0.11, from: 0.15, every: 4, gate: 0.9, attack: 0.02, release: 0.06 },
+      { kit: 'hat', pattern: 'r:.5 o:.5 x:.5 o:.5 r:.5 o:.5 x:.5 o:.5', vel: 0.8, from: 0.4 },
+      { pattern: 'c:4', root: 12, wave: 'chord', vel: 0.04, from: 0.5, gate: 0.9, attack: 0.2, release: 0.04 },
+      { line: 'theme', shift: -12, wave: 'strings', vel: 0.06, from: 0.7, every: 4, gate: 0.9, attack: 0.03, sustain: 0.85, decay: 0.3, release: 0.04, cents: -6 },
+      { kit: 'cymbal', pattern: 'x:4', mod: [8, 0], vel: 0.6, from: 0.7 },
+    ],
+    heat: (st, secs, R) => or(R?.heatOf?.(st), secs, 100),
+  },
+
+  /**
+   * Robots Can See You: on tiptoe, in C minor, swung — a bass that takes two steps and waits, fingers snapping on
+   * two and four, a vibraphone that drops a chord now and then, and a piano that says three notes and holds its
+   * breath. Seen, or nearly: the strings shiver and the brushes hurry.
+   */
+  sneak: {
+    bpm: 92, beats: 4, swing: 0.66, room: 0.14,
+    chords: 'Cm Cm Fm Cm Ab G7 Cm Cm Fm Fm Cm Cm Ab G7 Cm G7',
+    theme: 'c5:.5 r:.5 eb5:.5 r:.5 g5 r | r:2 f#5:.5 g5:.5 r | c5:.5 r:.5 f5:.5 r:.5 ab5 r | g5:.5 f5:.5 eb5 c5 r | '
+      + 'ab4:.5 r:.5 c5:.5 r:.5 eb5 r | d5:.5 r:.5 f5:.5 r:.5 b4 r | c5:3 r | r:2 g4:.5 b4:.5 d5 | '
+      + 'f5:.5 r:.5 ab5:.5 r:.5 c6 r | r:2 b5:.5 c6:.5 r | eb5:.5 r:.5 g5:.5 r:.5 c6 r | bb5:.5 g5:.5 eb5 c5 r | '
+      + 'c5:.5 eb5:.5 ab5 r:2 | b4:.5 d5:.5 g5 r:2 | c5:.5 r:.5 eb5:.5 r:.5 g5:.5 r:.5 c6 | r:2 g5 b4',
+    parts: [
+      { pattern: '1 r 5 r:.5 7:.5', root: 36, wave: 'bourdon', vel: 0.13, gate: 0.55, attack: 0.008, sustain: 0.5, decay: 0.2, release: 0.04 },
+      { kit: 'hat', pattern: 'r x r x', vel: 0.9 },
+      { line: 'theme', wave: 'piano', vel: 0.1, from: 0.06, every: 4, gate: 0.7, attack: 0.004, sustain: 0.4, decay: 0.2, release: 0.05 },
+      { pattern: 'r:1.5 c:.5 r:2', root: 12, wave: 'chord', vel: 0.04, from: 0.2, gate: 0.6, attack: 0.006, release: 0.2 },
+      { kit: 'snare', pattern: 'o:.5 r:.5 o:.5 o:.5 o:.5 r:.5 o:.5 o:.5', vel: 0.35, from: 0.35 },
+      { line: 'theme', shift: 12, wave: 'chime', vel: 0.035, from: 0.5, every: 4, gate: 0.5, attack: 0.004, release: 0.12 },
+      { pattern: '5:.25 r:.25 5:.25 r:.25 5:.25 r:.25 5:.25 r:.25 5:.25 r:.25 5:.25 r:.25 5:.25 r:.25 5:.25 r:.25', root: 60, wave: 'strings', standing: true, lp: 2600, vel: 0.035, from: 0.7, gate: 0.9, attack: 0.01, release: 0.03 },
+      { kit: 'kick', pattern: 'x r:1.5 o:.5 r', vel: 0.6, from: 0.7 },
+    ],
+    heat: (st, secs, R) => or(R?.heatOf?.(st), secs, 120),
+  },
+
+  /**
+   * Little Mine Train: the train is the drum — a snare that chuffs in fours, faster as it runs away —, the bass
+   * goes boom and the chords chick, a mouth organ has the tune, a banjo joins, and a whistle of two notes blows at
+   * the head of every other phrase.
+   */
+  mine: {
+    bpm: 126, beats: 4, accel: 0.2, room: 0.12,
+    chords: 'G G C G D7 D7 G G C C G Em Am D7 G G',
+    theme: 'b4:1.5 d5:.5 g5:2 | g5:1.5 e5:.5 d5:2 | e5:1.5 g5:.5 c6:2 | b5:3 d5 | '
+      + 'f#5:1.5 a5:.5 d6:2 | c6:1.5 a5:.5 f#5:2 | g5:1.5 b5:.5 d6 b5 | g5:4 | '
+      + 'e5 g5 c6 e6 | e6:1.5 c6:.5 g5:2 | d5 g5 b5 d6 | b5:1.5 g5:.5 e5:2 | '
+      + 'c5:1.5 e5:.5 a5:2 | a5:1.5 f#5:.5 d5:2 | b4:1.5 d5:.5 g5 b5 | g5:4',
+    parts: [
+      { kit: 'snare', pattern: 'x:.25 o:.25 o:.25 o:.25 x:.25 o:.25 o:.25 o:.25 x:.25 o:.25 o:.25 o:.25 x:.25 o:.25 o:.25 o:.25', vel: 0.5 },
+      { pattern: '1 r 5 r', root: 36, wave: 'bourdon', vel: 0.12, gate: 0.7, attack: 0.006, sustain: 0.6, decay: 0.15, release: 0.03 },
+      { pattern: 'r c:.5 r:.5 r c:.5 r:.5', root: 12, wave: 'chord', vel: 0.05, from: 0.06, gate: 0.5, attack: 0.005, release: 0.04 },
+      { line: 'theme', wave: 'reed', vel: 0.1, from: 0.12, every: 4, gate: 0.88, attack: 0.02, sustain: 0.8, decay: 0.2, release: 0.04, cents: -7 },
+      { kit: 'kick', pattern: 'x r x r', vel: 0.9, from: 0.25 },
+      { pattern: '8:.25 5:.25 10:.25 8:.25 12:.25 10:.25 8:.25 5:.25 8:.25 5:.25 10:.25 8:.25 12:.25 10:.25 8:.25 5:.25', root: 60, wave: 'pianoHigh', standing: true, lp: 5000, vel: 0.045, from: 0.45, gate: 0.5, attack: 0.002, release: 0.03 },
+      { pattern: '12:1.5 r:2.5', root: 60, wave: 'flute', vel: 0.05, mod: [8, 7], from: 0.3, gate: 0.9, attack: 0.03, release: 0.1, cents: 6 },
+      { pattern: '10:1.5 r:2.5', root: 60, wave: 'flute', vel: 0.05, mod: [8, 7], from: 0.3, gate: 0.9, attack: 0.03, release: 0.1, cents: -6 },
+      { line: 'theme', shift: 12, wave: 'piccolo', standing: true, lp: 6000, vel: 0.03, from: 0.75, every: 4, gate: 0.85, attack: 0.01, release: 0.04 },
+      { kit: 'cymbal', pattern: 'x:4', mod: [8, 0], vel: 0.6, from: 0.75 },
+    ],
+    heat: (st, secs, R) => or(R?.heatOf?.(st), secs, 90),
+  },
+
+  /**
+   * Hold the Rails!: flat out in F sharp minor — a drum on every beat, a bass that never lets go, the brass
+   * calling three notes at a time over it, a saw-toothed arpeggio that climbs and falls like the track, the snare
+   * and the cymbals when the speed is at its height.
+   */
+  coaster: {
+    bpm: 164, beats: 4, accel: 0.1, room: 0.16,
+    chords: 'F#m F#m D E F#m F#m D C#7 A E Bm D Bm C#7 F#m C#7',
+    theme: 'f#5:1.5 a5:1.5 c#6 | b5:1.5 a5:1.5 f#5 | d5:1.5 f#5:1.5 a5 | g#5:2 e5 b5 | '
+      + 'f#5:1.5 a5:1.5 c#6 | e6:1.5 c#6:1.5 a5 | d6:1.5 a5:1.5 f#5 | f5:2 g#5 c#6 | '
+      + 'e5:1.5 a5:1.5 c#6 | b5:1.5 g#5:1.5 e5 | d5:1.5 f#5:1.5 b5 | a5:2 f#5 d5 | '
+      + 'b5:1.5 d6:1.5 f#6 | f5:1.5 g#5:1.5 c#6 | f#5:3 c#5 | f5:1.5 g#5:1.5 b5',
+    parts: [
+      { pattern: '1:.5 1:.5 8:.5 1:.5 1:.5 8:.5 1:.5 8:.5', root: 36, wave: 'pulse', standing: true, lp: 1900, vel: 0.14, gate: 0.55, attack: 0.004, release: 0.04 },
+      { kit: 'kick', pattern: 'x x x x' },
+      { pattern: '1:4', root: 36, wave: 'strings', vel: 0.055, gate: 0.94, attack: 0.09, release: 0.03, cents: -5 },
+      { line: 'theme', shift: -12, wave: 'brass', vel: 0.12, from: 0.1, every: 4, gate: 0.9, attack: 0.02, sustain: 0.8, decay: 0.3, release: 0.03, cents: -6 },
+      { kit: 'hat', pattern: 'r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5', from: 0.2 },
+      { pattern: '1:.25 5:.25 8:.25 10:.25 12:.25 10:.25 8:.25 5:.25 1:.25 5:.25 8:.25 10:.25 12:.25 10:.25 8:.25 5:.25', root: 60, wave: 'sawtooth', standing: true, lp: 2400, vel: 0.03, from: 0.35, gate: 0.6, attack: 0.003, release: 0.025 },
+      { kit: 'snare', pattern: 'r x r x', from: 0.45 },
+      { pattern: 'c:4', root: 12, wave: 'chord', vel: 0.045, from: 0.55, gate: 0.9, attack: 0.12, release: 0.035 },
+      { line: 'theme', wave: 'brass', standing: true, lp: 4200, vel: 0.06, from: 0.72, every: 4, gate: 0.9, attack: 0.025, release: 0.05 },
+      { kit: 'cymbal', pattern: 'x:4', mod: [8, 0], from: 0.72 },
+      { kit: 'snare', pattern: 'r:3 o:.5 x:.5', mod: [4, 3], vel: 0.9, from: 0.72 },
+    ],
+    heat: (st, secs, R) => or(R?.heatOf?.(st), secs, 120),
+  },
+
   /**
    * The Sanctuary (a place, not a game: src/extras/sanctuary.js plays it for who walks in): a slow gospel in D flat,
    * in twelve-eight — the deep pedal of an organ and its chords from the door on; then a bass voice that hums the
