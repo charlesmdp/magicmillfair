@@ -102,8 +102,13 @@ waterfall (-268, 116) and its torrent up to the High Clearing (-357, 193); the s
 inside `BOUNDS` (`src/world/layout/layout.js`). **Built since**: War Through the Ages — a stage of 36 × 8 m in the
 west meadow at (-259, -19), its gate at (-240, -13), just south of the cars' table; Wild River — a headland of
 its own in the sea against the northern cliffs (x 258…524, z -511…-351), its gate on the north beach at
-(51.5, -116.5), 21 m from the slide's. The mountains beyond — north of z -250, south of z 250, west of
-x -290, up to ±500 — are ground nobody walks: a ride may go there. The sea is free: several games stand in it.
+(51.5, -116.5), 21 m from the slide's; Robots Can See You — a quay in the south of the bay (x 74…138,
+z 60…90), its gate on the south beach at (60, 80); the Sanctuary — at (-189, -124), a dome and two towers up to
+y 50 or so. **Being built as this is written** (not in this branch yet): Run the Walls — a ruin on a rock in the
+sea off the south beach, at (258, 100); Little Mine Train — a station at (-263, -60) and a line of 1,100 m in
+and over the north-west mountains (x -438…-212, z -263…-27, y 31…105). The mountains beyond — north of
+z -250, south of z 250, west of x -290, up to ±500 — are ground nobody walks: a ride may go there. The sea is
+free: several games stand in it.
 
 ## The games, one by one
 
