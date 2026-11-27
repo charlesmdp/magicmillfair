@@ -37,7 +37,9 @@ painted for, and the paint never changes its meaning:
 - **a gold bar across a gap is swung round**: jumped into (it is caught from 0.75 m), one hangs from it for as
   long as one likes, and the button lets go: thrown 5.6 m at 7.8 m/s.
 - **red hurts**: four blades — pendulums hung from beams out of the wall, swinging 2.1 to 2.5 m each way in 2.6
-  to 2.8 s — and two fields of spikes that come up through a plate 42 % of 2.4 s, their points showing and trembling a
+  to 2.8 s, each a red crescent on a rod, low over the floor (0.25 to 1.05 m) and open above, so that what is
+  behind it stays in sight: one goes round it, waits for it, or jumps it at the right stride — and two fields
+  of spikes that come up through a plate 42 % of 2.4 s, their points showing and trembling a
   moment before. All of it keeps time on the clock everybody shares.
 - **pale cracked slabs give way** 0.6 s after one sets foot on them (twelve of them: one keeps running); **a
   ledge** 0.85 m wide along the wall is shuffled along at 3.4 m/s, the back to the stone — nobody steps off its
@@ -80,7 +82,7 @@ from within 110 m only. The rock is grey, boulders on its shore; under the gaps 
 are; nobody is solid. The blades and the spikes are the same for everybody at every moment. The slabs that give
 way do so for who treads on them only: somebody else's slabs are whole.
 
-**What the checks say** (`node tools/walls-test.mjs`, 32 of 32; its last line is the line of
+**What the checks say** (`node tools/walls-test.mjs`, 33 of 33; its last line is the line of
 `server/scores.js`): the place (water under all of it, the gate dry and inside the bounds); the plan (each lap at
 least 8.1 m over the one outside it, the tallest band 6.6 m; the corners carry nothing but steps); the line from
 the camera to the runner, followed all along the way and across it, passes clear of every turret and of the

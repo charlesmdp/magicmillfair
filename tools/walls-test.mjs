@@ -169,6 +169,10 @@ const press = (u, ...at) => { const left = at.slice(); return (st, input) => { i
   for (let k = 0; k < 40 && !hit; k++) { const r = go(runner(bl.s - 4, 0, k * 0.07), bl.s + 2, null, 3); if (r.out === 'blade') hit = r; }
   let after = null;
   if (hit) { const q = hit.st, ev = []; for (let t = 0; t < 4 && !after; t += S.step) { stepRun(q, S.step, { run: 0, side: 0, jump: false }, ev); after = ev.find((e) => e.type === 'back') || null; } }
+  // (its crescent is low: a jump at the right stride clears it — never needed, there is always a way round or a moment to wait for)
+  let over = null;
+  for (let k = 0; k < 80 && over === null; k++) { const t0 = k * 0.05; if (go(runner(bl.s - 4, 0, t0), bl.s + 2, null, 3).out === 'blade' && !go(runner(bl.s - 4, 0, t0), bl.s + 2, press(0, bl.s - 2.45), 3).out) over = t0; }
+  check('a blade is a crescent on a rod, low over the floor: where it cuts one who runs on, one who jumps at the right stride goes over it', over !== null && S.blade[1] < 1.2, `the crescent from ${S.blade[0]} to ${S.blade[1]} m over the floor; a jump lifts the feet 1.47 m`);
   check('a blade winds time back as a fall does: to a footing out of its reach', !!hit && !!after && after.s < bl.s - 1, after ? `hit at ${hit.seen.find((e) => e.type === 'out').s.toFixed(1)} m, back at ${after.s.toFixed(1)} m` : 'never hit');
 }
 {

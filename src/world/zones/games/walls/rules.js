@@ -50,6 +50,7 @@ export const WALLS = {
   climb: { v: 6.2, reach: 3.5, hands: 1.05, pull: 0.3, in: 0.55 }, // up a wall: m/s, the highest edge caught from below, how far under an edge the hands catch it, s to pull up, m beyond the face one stands then
   pole: { up: 2.35, catch: 0.75, lo: 2.15, hi: 0.15, hang: 1.35, least: 0.16, v: 7.8, vy: 6.6 }, // a bar: m over the floor before it; how near, how far under it it is caught; where one hangs; s before one can let go; how one is thrown
   crumble: 0.6, shuffle: 3.4, // s a slab that gives way holds; m/s along a ledge
+  blade: [0.25, 1.05], // m over the floor: the foot and the tips of the crescent of a blade (what is over it is its rod: one may jump the crescent)
   fall: 3.6, down: 0.6, ready: 0.2, // m under the last footing a fall is a fall; s on the ground with no rewind left; s before the legs answer again
   rewinds: 3, trail: 4, wind: 2, // in reserve; a place kept every so many steps; how fast time runs back
   tall: 1.3, along: 0.28, across: 0.22, // a runner
@@ -102,7 +103,7 @@ export function placeAt(s, u = 0, out = {}) {
 //   face    { s, y0, y1 }: where the floor steps up — climbed (it is what the floors say; kept for who draws it)
 //   wall    { side (-1 the wall on the left, 1 one that stands on the right), y0, y1 }: a band one runs along
 //   pole    { s, y }: a bar across the way
-//   blade   { s, period, phase, mid, amp, y }: a blade that swings across the way
+//   blade   { s, period, phase, mid, amp, y }: a blade that swings across the way: a crescent on a rod, low
 //   spikes  { u0, u1, period, phase, share, y }: spikes that come up through the floor `share` of the time
 let made = null;
 export function course() {
@@ -415,7 +416,7 @@ function sure(st) {
 /** What hurts the runner at `now` ('' when nothing). */
 function touch(st, now) {
   for (const t of near(st.s)) {
-    if (t.kind === 'blade') { if (Math.abs(st.s - t.s) < 0.3 + S.along && Math.abs(st.u - bladeAt(t, now)) < 0.45 + S.across && st.y < t.y + 1.9 && st.y + S.tall > t.y + 0.15) return 'blade'; }
+    if (t.kind === 'blade') { if (Math.abs(st.s - t.s) < 0.3 + S.along && Math.abs(st.u - bladeAt(t, now)) < 0.45 + S.across && st.y < t.y + S.blade[1] && st.y + S.tall > t.y + S.blade[0]) return 'blade'; }
     else if (t.kind === 'spikes') { if (st.s > t.s0 - 0.05 && st.s < t.s1 + 0.05 && st.u > t.u0 - 0.1 && st.u < t.u1 + 0.1 && st.y < t.y + 0.55 * spikesAt(t, now) - 0.12 && st.y > t.y - 0.5) return 'spikes'; }
   }
   return '';

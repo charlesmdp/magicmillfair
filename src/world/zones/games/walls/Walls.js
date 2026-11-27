@@ -289,10 +289,17 @@ export class Walls {
     const L = 4.4;
     this.blades = of('blade').map((t) => {
       const parts = new Parts(), b = parts.get('matte');
-      b.tint(...DARK, 1).box(-0.05, -L + 0.5, -0.05, 0.05, 0, 0.05);
-      b.tint(...RED, 1).rod(V(0, -L, -0.05), V(0, -L, 0.05), 0.78, 18);
-      b.tint(...WHITE, 1).rod(V(0, -L, -0.06), V(0, -L, 0.06), 0.3, 12);
-      for (let m = 0; m < 10; m++) { const a = (m / 10) * TAU; b.tint(...WHITE, 1).place(Math.cos(a) * 0.78, -L + Math.sin(a) * 0.78, 0, 0, 0, a).box(-0.05, -0.1, -0.03, 0.2, 0.1, 0.03).pop(); }
+      // (a crescent on a rod — red, its edge white —, open above: what is behind it stays in sight)
+      const cy = -L + 0.12, Ro = 0.9, Ri = 0.6, at2 = (r, a, z) => V(Math.cos(a) * r, cy + Math.sin(a) * r, z);
+      b.tint(...DARK, 1).box(-0.05, cy - Ri, -0.05, 0.05, 0, 0.05);
+      for (let m = 0; m < 12; m++) {
+        const a0 = Math.PI * (1 + (0.5 + m) / 13 - 0.5 / 13), a1 = Math.PI * (1 + (1.5 + m) / 13 - 0.5 / 13), thin = (a) => Ri + (Ro - Ri) * (1 - Math.min(1, Math.abs(a - 1.5 * Math.PI) / (0.5 * Math.PI)) ** 3 * 0.85);
+        for (const z of [-0.035, 0.035]) {
+          const q = [at2(thin(a0), a0, z), at2(Ro - 0.07, a0, z), at2(Ro - 0.07, a1, z), at2(thin(a1), a1, z)], e = [at2(Ro - 0.07, a0, z), at2(Ro, a0, 0), at2(Ro, a1, 0), at2(Ro - 0.07, a1, z)];
+          if (z > 0) { b.tint(...RED, 1).quad(q[0], q[1], q[2], q[3]); b.tint(...WHITE, 1).quad(e[0], e[1], e[2], e[3]); } else { b.tint(...RED, 1).quad(q[3], q[2], q[1], q[0]); b.tint(...WHITE, 1).quad(e[3], e[2], e[1], e[0]); }
+        }
+      }
+      b.tint(...GOLD, 1).rod(V(0, cy - Ri - 0.02, -0.07), V(0, cy - Ri - 0.02, 0.07), 0.12, 8);
       const m = parts.toMeshes(mats, { name: 'walls-blade', layers: [] }), at = placeAt(t.s, t.mid, {}), y = S.base + t.y + L + 1.05;
       m.position.set(at.x, y, at.z); m.rotation.order = 'YXZ'; m.rotation.y = at.yaw; m.traverse((o) => { o.matrixAutoUpdate = true; });
       this.group.add(m);
