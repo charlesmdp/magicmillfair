@@ -43,7 +43,7 @@ export const WALLS = {
   g: 24, jump: 8.4, leap: 6, push: 10, // m/s²; m/s up; the least a jump with the stick up goes forward; m/s² the stick adds in the air
   coyote: 0.25, buffer: 0.18, // s after an edge (or a wall) during which a jump is still a jump; s a press asked too early is kept
   edge: 0.2, lip: 0.36, // m a foot may be over an edge; the step one walks up
-  wall: { t: 1.15, v: 7.4, g: 5.2, up: [1.6, 3.4], touch: 0.5, least: 2.5, kick: [5.4, 7.6], lock: 0.3, lead: 0.7 }, // a run along a wall: s it lasts, m/s, how it sags, the speed up it begins with, how near the wall one must be, the least speed, the kick (across, up), s the kick carries, m before the band one may take it
+  wall: { t: 1.15, v: 7.4, g: 5.2, up: [1.6, 3.4], touch: 0.5, least: 2.5, kick: [5.4, 7.6], lock: 0.8, lead: 0.7 }, // a run along a wall: s it lasts, m/s, how it sags, the speed up it begins with, how near the wall one must be, the least speed, the kick (across, up), s the kick carries one across whatever the stick says, m before the band one may take it
   climb: { v: 6.2, reach: 3.5, hands: 1.05, pull: 0.3, in: 0.55 }, // up a wall: m/s, the highest edge caught from below, how far under an edge the hands catch it, s to pull up, m beyond the face one stands then
   pole: { up: 2.35, catch: 0.75, lo: 2.15, hi: 0.15, hang: 1.35, least: 0.16, v: 7.8, vy: 6.6 }, // a bar: m over the floor before it; how near, how far under it it is caught; where one hangs; s before one can let go; how one is thrown
   crumble: 0.6, shuffle: 3.4, // s a slab that gives way holds; m/s along a ledge
@@ -340,7 +340,7 @@ function sub(st, dt, input, events) {
         const foot = floorAt(s0, st.u, st) >= st.gy - 0.5;
         if (st.vs > -0.5 && (G - st.y <= S.climb.hands + 0.25 || (foot && G - st.y <= S.climb.reach))) climbUp(st, G, s0, events); else { st.s = s0; st.vs = 0; }
       } else if (G > -Infinity && st.y <= G && st.vy <= 0) land(st, G, events);
-      else if (st.y < st.gy - S.fall) return out(st, 'fall', events);
+      if (st.mode === 'air' && st.y < st.gy - S.fall) return out(st, 'fall', events);
     }
   } else if (st.mode === 'wall') {
     const d = st.side, W = S.wall;
@@ -444,13 +444,16 @@ function lasts(st, plan, n) {
     if (q.outs > outs) return k;
   }
   // (hanging from a bar, or run into something: it lasts, and gets nowhere)
-  if (plan.go === 0 && (q.mode === 'pole' || q.s < from + 3)) return Math.min(n, SURE - 2);
+  if (plan.go !== NEVER && (q.mode === 'pole' || q.s < from + 3)) return Math.min(n, SURE - 2);
   return n;
 }
 function search(st, B, go, cur, k0, deep) {
   const now = st.n, first = now + (B.late ?? LATE);
   let best = cur, score = k0;
-  const tryPlan = (plan) => { plan.go = go; const k = lasts(st, plan, FAR); if (k > score || (k === score && best && plan.keys.length < best.keys.length)) { score = k; best = plan; } return k; };
+  const still = go === 0 && st.mode === 'ground' && st.vs < 1;
+  const tryOne = (plan) => { const k = lasts(st, plan, FAR); if (k > score || (k === score && best && plan.keys.length < best.keys.length)) { score = k; best = plan; } return k; };
+  // (from a standstill, two ways to go: at once, or with the first press — a leap from where one stands)
+  const tryPlan = (plan) => { plan.go = go; const k = tryOne(plan); if (still && score < FAR && plan.keys.length) tryOne({ ...plan, go: plan.keys[0] }); return k; };
   const lanes = LANES.slice().sort((a, b) => Math.abs(a - st.u) - Math.abs(b - st.u));
   const kept = (B.keys || []).filter((k) => k >= now);
   for (const u of lanes) tryPlan({ u, keys: kept.slice() });
@@ -462,7 +465,7 @@ function search(st, B, go, cur, k0, deep) {
   if (score < SURE && deep >= 3) for (let d = 0; d <= 60 && score < FAR; d += 6) for (let g = 18; g <= 110 && score < FAR; g += 10) for (let g2 = 18; g2 <= 110 && score < FAR; g2 += 10) for (const u of lanes.slice(0, 2)) tryPlan({ u, keys: [first + d, first + d + g, first + d + g + g2] });
   return { plan: best, score };
 }
-const take = (B, plan) => { B.u = plan.u; B.keys = plan.keys.slice(); B.go = plan.go; };
+const take = (B, plan) => { if (!plan) return; B.u = plan.u; B.keys = plan.keys.slice(); B.go = plan.go; };
 
 function think(st, B) {
   const now = st.n, cur = { u: B.u, keys: B.keys.filter((k) => k >= now), go: B.go };
