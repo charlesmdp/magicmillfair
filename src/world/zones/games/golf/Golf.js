@@ -14,14 +14,17 @@ import { LAYER } from '../../../../render/Shadows.js';
 import { ANIM } from '../../../../player/Character.js';
 import { canvasBoard } from '../Boards.js';
 import { V, clamp, lerp, gateArch, stakeSign, worldClock } from '../gates.js';
-import { GOLF, HOLES, GROUNDS, STAIRS, toWorld, toLocal, levelOf, feltAt, moverAt, gaugeOf, sightLine, startRound, stepRound, botInput, lineOf, formatScore } from './rules.js';
+import { GOLF, HOLES, GROUNDS, STAIRS, toWorld, toLocal, levelOf, feltAt, moverAt, gaugeOf, sightLine, startRound, stepRound, teeOff, botInput, lineOf, formatScore } from './rules.js';
 
 const R = GOLF.ball, TAU = Math.PI * 2, STEP = GOLF.step;
-const FELT = [0.1, 0.66, 0.15], FELT2 = [0.09, 0.58, 0.16], TEE = [0.05, 0.4, 0.1], STONE = [1.1, 1.0, 0.9], CREAM = [1.65, 1.5, 1.2];
+const FELT = [0.13, 0.8, 0.19], FELT2 = [0.11, 0.7, 0.2], TEE = [0.05, 0.4, 0.1], STONE = [1.1, 1.0, 0.9], CREAM = [1.65, 1.5, 1.2];
 /** The colour of each hole: its kerb and skirt are striped in it and cream, its flag and the disc of its number are painted in it. */
 const TONES = [[1.55, 0.15, 0.12], [0.3, 0.6, 1.55], [1.6, 1.15, 0.2], [0.2, 0.95, 0.4], [0.85, 0.35, 1.45], [1.6, 0.6, 0.12], [0.2, 0.45, 1.3], [0.6, 1.5, 0.2], [1.35, 0.2, 0.75]];
 const DOTS = 44, KERB = 0.2, MOVERS = 96;
 const mul = (c, k) => c.map((v) => v * k);
+/** The camera of who putts: how far behind the ball, how high over it, how far ahead of it it looks — from the lowest (nothing in the way) to the highest (lifted over what stands between it and the ball). */
+const VIEWS = [[3.7, 1.75, 2.9], [3.4, 2.5, 2.4], [2.9, 3.3, 1.8], [2.3, 4.1, 1.1], [1.5, 4.9, 0.5]];
+const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 const hash2 = (a, b) => { const s = Math.sin(a * 127.1 + b * 311.7 + 74.7) * 43758.5453; return s - Math.floor(s); };
 const orient = (poly) => { let s = 0; for (let i = 0; i < poly.length; i++) { const a = poly[i], b = poly[(i + 1) % poly.length]; s += a[0] * b[1] - b[0] * a[1]; } return s > 0 ? 1 : -1; };
@@ -77,6 +80,25 @@ function wall(b, a, c, d, e, nx, nz) {
   if (n.x * nx + n.z * nz >= 0) b.quad(a, c, d, e); else b.quad(a, e, d, c);
 }
 
+/** The felt: its own material, a fine grid painted on it — a line every half metre, a stronger one every metre — so that what rises and what falls is read from how the lines bend. */
+function feltMaterial() {
+  const N = 256, canvas = document.createElement('canvas');
+  canvas.width = canvas.height = N;
+  const ctx = canvas.getContext('2d'), img = ctx.createImageData(N, N);
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    // (a metre of felt: its nap, and the lines)
+    const di = Math.min(i, N - i), dj = Math.min(j, N - j), hi = Math.abs(i - N / 2), hj = Math.abs(j - N / 2), edge = Math.min(di, dj), half = Math.min(hi, hj);
+    let v = 0.8 + 0.06 * (hash2(i, j) - 0.5) + 0.03 * Math.sin(i * 0.9) * Math.sin(j * 1.3);
+    if (edge < 2.2) v = Math.max(v, 1.0 - 0.07 * edge); else if (half < 1.3) v = Math.max(v, 0.92 - 0.05 * half);
+    const o = (j * N + i) * 4, c = Math.round(255 * Math.min(1, v));
+    img.data[o] = c; img.data[o + 1] = c; img.data[o + 2] = c; img.data[o + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.anisotropy = 8;
+  return surfaceMaterial({ name: 'golf-felt', map: tex, rough: 0.95, spec: 0.04 });
+}
+
 export class Golf {
   constructor(world) {
     this.world = world;
@@ -92,19 +114,28 @@ export class Golf {
   build() {
     const world = this.world, mats = world.materials, parts = new Parts(), g = GOLF, acidY = this.data.meta?.acid?.y ?? 27.94;
     const ground = (x, z) => this.data.heightAt(x, z);
-    const B = { paint: parts.get('paint'), wood: parts.get('woodDark'), wp: parts.get('woodPaint'), deck: parts.get('woodDeck'), matte: parts.get('matte'), stone: parts.get('stone'), granite: parts.get('granite'), glow: parts.get('glow') };
+    const B = { felt: parts.get('felt'), paint: parts.get('paint'), wood: parts.get('woodDark'), wp: parts.get('woodPaint'), deck: parts.get('woodDeck'), matte: parts.get('matte'), stone: parts.get('stone'), granite: parts.get('granite'), glow: parts.get('glow') };
     const all = Object.values(B);
     this._plates = [];
+    // what stands high enough to come between the camera and the ball: boxes (x0, y0, z0, x1, y1, z1) in the frame of each hole, and those of the grounds in the world's
+    this._solid = HOLES.map((H) => ({ at: H.at, cos: H.cos, sin: H.sin, lv: 0, r: 0, boxes: [] }));
+    this._solid.push({ at: [0, 0], cos: 1, sin: 0, lv: 0, r: 1e9, boxes: [] });
     for (const H of HOLES) {
-      const lv = (this.level[H.n] = levelOf(H, ground)), tone = TONES[H.n];
+      const lv = (this.level[H.n] = levelOf(H, ground)), tone = TONES[H.n], solid = this._solid[H.n];
+      solid.lv = lv; solid.r = Math.hypot(this._bounds(H).w, this._bounds(H).l) / 2 + 3; solid.mid = toWorld(H, this._bounds(H).cx, this._bounds(H).cz);
+      for (const [x0, z0, x1, z1, high] of H.blocks) if (high > 0.3) solid.boxes.push([Math.min(x0, x1), -1, Math.min(z0, z1), Math.max(x0, x1), feltAt(H, (x0 + x1) / 2, (z0 + z1) / 2) + high, Math.max(z0, z1)]);
+      for (const [ax, az, bx, bz, high] of H.walls) if (high > 0.3) solid.boxes.push([Math.min(ax, bx) - 0.06, -1, Math.min(az, bz) - 0.06, Math.max(ax, bx) + 0.06, Math.max(feltAt(H, ax, az), feltAt(H, bx, bz)) + high, Math.max(az, bz) + 0.06]);
+      for (const m of H.movers) if (m.kind !== 'slide') { const r = m.kind === 'wheel' ? m.hw + 0.1 : m.r + 0.3, d = m.kind === 'wheel' ? m.r + 0.1 : 0.45; solid.boxes.push([-r, -1, m.z - d, r, m.up + m.r + 0.2, m.z + d]); }
       for (const b of all) b.place(H.at[0], lv, H.at[1], H.yaw);
       const wy = (bed, x, z) => bed.y + (bed.h ? bed.h(x, z) : 0);
       const below = (x, z) => { const w = toWorld(H, x, z); return ground(w[0], w[1]) - lv; }; // (the meadow there, from the felt of the tee)
       // ---- the felt, its striped kerbs, and the painted skirt under them down to the meadow
       for (const bed of H.beds) {
         const look = bed.look || 'felt', top = (x, z) => wy(bed, x, z) + 0.002;
-        const maxEdge = bed.h ? 0.35 : 0.8, ftone = look === 'deck' ? [1.1, 0.8, 0.5] : bed.isle ? FELT2 : FELT;
-        felt(look === 'deck' ? B.deck : B.paint, bed, ftone, top, maxEdge, (x, z) => (look === 'deck' ? 0.92 + 0.1 * hash2(Math.round(x * 5), Math.round(z * 2.2)) : 0.93 + 0.1 * hash2(Math.round(x * 4), Math.round(z * 4))));
+        const maxEdge = bed.h ? 0.3 : 0.8, ftone = look === 'deck' ? [1.1, 0.8, 0.5] : bed.isle ? FELT2 : FELT;
+        // (the relief is painted into the felt: darker in the hollows and on what turns from the light, lighter on the crests and on what faces it)
+        const relief = (x, z) => { if (!bed.h) return 1; const e = 0.08, h = bed.h(x, z), gx = (bed.h(x + e, z) - bed.h(x - e, z)) / (2 * e), gz = (bed.h(x, z + e) - bed.h(x, z - e)) / (2 * e); return 1 + clamp(h * 0.55, -0.3, 0.3) + clamp((gx * 0.6 + gz * 0.8) * 0.9, -0.3, 0.3); };
+        felt(look === 'deck' ? B.deck : B.felt, bed, ftone, top, maxEdge, (x, z) => (look === 'deck' ? 0.92 + 0.1 * hash2(Math.round(x * 5), Math.round(z * 2.2)) : (0.95 + 0.07 * hash2(Math.round(x * 4), Math.round(z * 4))) * relief(x, z)));
         const sign = orient(bed.poly), floating = !H.acid && bed.air.length === bed.n;
         let stripe = 0;
         for (let k = 0; k < bed.n; k++) {
@@ -181,7 +212,7 @@ export class Golf {
     this.gate = { x: gt.x, y: gy, z: gt.z, yaw: gt.yaw };
     this.boardSpot = { x: g.stand.x, z: g.stand.z, yaw: g.stand.yaw, y: this.data.heightAt(g.stand.x, g.stand.z) };
     gateArch(this.group, B.paint, gt.x, gy, gt.z, gt.yaw, g.name.toUpperCase(), 'NINE HOLES OF CRAZY GOLF ROUND THE ACID POND', { tone: [0.2, 1.1, 0.35], ink: '#0e2a16' });
-    this.group.add(parts.toMeshes(mats, { name: 'golf-course', layers: [LAYER.STATIC_CASTER] }));
+    this.group.add(parts.toMeshes({ ...mats, felt: feltMaterial() }, { name: 'golf-course', layers: [LAYER.STATIC_CASTER] }));
     this.group.add(this._signs());
     this._pool();
     this.group.updateMatrixWorld(true);
@@ -191,11 +222,12 @@ export class Golf {
 
   /** What makes each hole the place of the valley it takes after: the mill, the temple, the dog, the big wheel… (in the hole's frame, from the felt of its tee). */
   _decor(H, B, lv, wy, below, tone) {
-    const bed = H.beds[0], gold = [1.75, 1.05, 0.12];
+    const bed = H.beds[0], gold = [1.75, 1.05, 0.12], solid = (...box) => this._solid[H.n].boxes.push(box);
     if (H.n === 2) {
       // the stairs: a white nosing at the top of each step; the temple behind the cup; the waterfall down the rock at the left
       for (const z of STAIRS) { const y = wy(bed, 0, z - 0.42) + 0.004; flat(B.paint.tint(1.7, 1.65, 1.5, 1), [V(-1.3, y, z - 0.36), V(-1.3, y, z - 0.44), V(1.3, y, z - 0.44), V(1.3, y, z - 0.36)], 1); }
       const ty = wy(bed, 0, -12.5), z0 = -13.0;
+      solid(-1.5, -1, z0 - 1.2, 1.5, ty + 2.1, z0 + 0.2); solid(-2.9, -1, -12.3, -1.9, ty + 1.4, -11.2);
       B.stone.tint(1.25, 1.2, 1.1, 1).box(-1.4, below(0, z0) - 0.2, z0 - 1.1, 1.4, ty + 0.1, z0 + 0.15);
       for (const x of [-1.15, -0.4, 0.4, 1.15]) B.paint.tint(1.7, 1.65, 1.5, 1).cylinder(x, ty + 0.1, z0 - 0.45, 0.11, 0.09, 1.25, 10);
       B.paint.tint(1.7, 1.65, 1.5, 1).box(-1.35, ty + 1.35, z0 - 0.75, 1.35, ty + 1.5, z0 - 0.1);
@@ -209,6 +241,7 @@ export class Golf {
     } else if (H.n === 3) {
       // the mill: its two walls of stone either side of the door, a lintel and a red roof; the axle of its wheel on two posts
       const [L, R2] = H.blocks, m = H.movers[0];
+      solid(-1.6, -1, L[1] - 0.2, 1.6, 2.1, L[3] + 0.2);
       for (const [x0, z0, x1, z1, high] of [L, R2]) B.stone.tint(...STONE, 1).box(x0, wy(bed, x0, z0), z0, x1, high, z1);
       B.stone.tint(...STONE, 1).box(-0.35, 0.55, L[1], 0.35, L[4], L[3]);
       B.wp.tint(0.95, 0.65, 0.4, 1).box(-0.38, 0.5, L[3] - 0.02, 0.38, 0.58, L[3] + 0.04);
@@ -221,6 +254,7 @@ export class Golf {
     } else if (H.n === 5) {
       // the golden dog, standing over the lane: its paws on the two blocks, the ball goes between its legs; its bowl beyond
       const [L, R2] = H.blocks, zc = (L[1] + L[3]) / 2, y0 = wy(bed, 0, zc);
+      solid(-1.9, y0 + 1.0, zc - 0.4, 1.5, y0 + 2.15, zc + 0.4);
       for (const [x0, z0, x1, z1] of [L, R2]) B.paint.tint(...mul(gold, 0.8), 1).box(x0, y0, z0, x1, y0 + 0.25, z1);
       for (const x of [-0.85, 0.85]) for (const dz of [-0.2, 0.2]) B.paint.tint(...gold, 1).box(x - 0.1, y0 + 0.2, zc + dz - 0.09, x + 0.1, y0 + 1.15, zc + dz + 0.09);
       B.paint.tint(...gold, 1).box(-1.05, y0 + 1.05, zc - 0.33, 1.05, y0 + 1.55, zc + 0.33);
@@ -245,6 +279,7 @@ export class Golf {
     } else if (H.n === 8) {
       // the island's boulder, come to rest on a rock behind the boards
       const by = H.beds[1].y;
+      solid(-0.6, -2, -13.2, 1.0, by + 1.1, -11.6);
       B.granite.tint(0.8, 0.78, 0.72, 1).place(0.2, by - 0.5, -12.4).lathe([[0.75, 0], [0.7, 0.3], [0.45, 0.5], [0.001, 0.55]], 9).pop();
       B.granite.tint(1.05, 1.0, 0.95, 1).place(0.2, by + 0.05, -12.4).lathe([[0.001, 0], [0.4, 0.1], [0.55, 0.5], [0.4, 0.92], [0.001, 1.03]], 10).pop();
     }
@@ -279,8 +314,10 @@ export class Golf {
     });
     // the poles, and the bunting with its bulbs from one to the next
     const top = P.poles.map(([x, z]) => V(x, ground(x, z) + 3.05, z));
+    const world = this._solid[HOLES.length].boxes;
     for (const [i, [x, z]] of P.poles.entries()) {
       const y = ground(x, z);
+      world.push([x - 0.15, y - 1, z - 0.15, x + 0.15, y + 3.4, z + 0.15]);
       for (let h = 0; h < 3.1; h += 0.45) B.wp.tint(...(Math.round(h / 0.45) % 2 ? CREAM : [1.5, 0.2, 0.18]), 1).cylinder(x, y - 0.3 + h, z, 0.06, 0.06, Math.min(0.45, 3.2 - h), 7);
       B.paint.tint(1.7, 1.25, 0.3, 1).place(x, y + 3.1, z).lathe([[0.001, 0.22], [0.08, 0.17], [0.1, 0.08], [0.06, 0], [0.001, -0.01]], 7).pop();
     }
@@ -312,6 +349,7 @@ export class Golf {
     }
     // the ticket kiosk beside the gate: a striped booth, its window and counter to those who come, a pointed roof with bulbs
     const [kx, kz, kh] = P.kiosk, ky = ground(kx, kz), K = B.wp.place(kx, ky, kz, kh);
+    world.push([kx - 1.1, ky - 1, kz - 1.1, kx + 1.1, ky + 3.1, kz + 1.1]);
     for (let i = 0; i < 6; i++) K.tint(...(i % 2 ? CREAM : [1.5, 0.2, 0.18]), 1).box(-0.7 + i * (1.4 / 6), -0.2, -0.6, -0.7 + (i + 1) * (1.4 / 6), 2.1, 0.6, { faces: 'xXzZ' });
     K.tint(0.12, 0.1, 0.18, 1).box(-0.5, 0.95, -0.62, 0.5, 1.55, -0.58);
     K.tint(1.6, 1.2, 0.35, 1).box(-0.6, 0.9, -0.8, 0.6, 0.96, -0.6);
@@ -492,8 +530,10 @@ export class Golf {
   /** A round is asked for: the player is put at the first tee. `io`: { play, note, splash }. Returns the session — the driver of the player (see src/extras/plug.js). */
   open(player, io) {
     const st = startRound((worldClock() / 1000) % GOLF.cycle), events = [], input = { x: 0, y: 0, jump: false };
-    const S = { acc: 0, after: 0, spot: [0, 0], goal: [0, 0], hole: -1, walk: 0, alpha: 0, swing: -1, from: 0, ended: false, told: false };
-    const look = V(0, 0, 0), _t = V(0, 0, 0), _c = V(0, 0, 0), _d = V(0, 0, 0), _w = [0, 0, 0, 0];
+    const S = { acc: 0, after: 0, spot: [0, 0], goal: [0, 0], hole: -1, walk: 0, alpha: 0, swing: -1, from: 0, ended: false, told: false, peek: false, steered: false };
+    // the camera: which hole it is on, since when, its heading (an aim of the hole), the ball as it follows it, how far it is lifted, how much of the view from above is shown
+    const C = { hole: -1, t: 0, yaw: 0, aim: 0, x: 0, y: 0, z: 0, ground: 0, lift: 0, view: 1, plan: true };
+    const _t = V(0, 0, 0), _c = V(0, 0, 0), _d = V(0, 0, 0), _w = [0, 0, 0, 0], _l = [0, 0];
     const self = this;
     const session = {
       golf: this, over: false, ended: false, score: 0, line: '', riding: false, anim: ANIM.idle, state: st, auto: false,
@@ -508,16 +548,19 @@ export class Golf {
             stepRound(st, dt, input, events);
           }
         }
+        // (the stick pushed forward: the whole hole from above, for as long as it is held; who aims or putts has done planning)
+        S.peek = !session.auto && control && inp.move.y > 0.5;
+        if (!session.auto && control && (Math.abs(inp.move.x) > 0.25 || inp.jump)) S.steered = true;
         for (const e of events) self._tell(e, st, io, S);
         events.length = 0;
         const H = HOLES[st.hole], b = st.ball;
         // the robot stands behind the ball, a little to the left of the line, and walks round it as the aim turns
         const dx = Math.sin(st.aim), dz = -Math.cos(st.aim), rx = -dz, rz = dx;
-        let lat = 0.32, px, pz;
-        for (const l of [0.32, 0.16, 0]) { lat = l; px = b.x - dx * 0.5 - rx * l; pz = b.z - dz * 0.5 - rz * l; if (feltAt(H, px, pz) > -Infinity) break; }
+        let lat = 0.46, px, pz;
+        for (const l of [0.46, 0.3, 0.16, 0]) { lat = l; px = b.x - dx * 0.5 - rx * l; pz = b.z - dz * 0.5 - rz * l; if (feltAt(H, px, pz) > -Infinity) break; }
         // (it stays where it is while the ball runs, and goes to the new ball when that has stopped)
         if (st.phase === 'aim' || st.phase === 'tee' || S.hole < 0) { S.goal[0] = px; S.goal[1] = pz; }
-        if (S.hole !== st.hole) { S.hole = st.hole; S.spot[0] = S.goal[0] = px; S.spot[1] = S.goal[1] = pz; this.cam = null; }
+        if (S.hole !== st.hole) { S.hole = st.hole; S.spot[0] = S.goal[0] = px; S.spot[1] = S.goal[1] = pz; S.steered = false; }
         const gx = S.goal[0] - S.spot[0], gz = S.goal[1] - S.spot[1], k = Math.min(1, dt * 8);
         S.spot[0] += gx * k; S.spot[1] += gz * k;
         const speed = dt > 0 ? Math.hypot(gx * k, gz * k) / dt : 0;
@@ -533,27 +576,63 @@ export class Golf {
         }
         session.line = lineOf(st);
       },
-      /** The camera: above the hole and behind its tee, the whole of it in view, a little towards the ball when that runs far. */
+      /**
+       * The camera: as one stands to putt — a few metres behind the ball and a little over it, looking along the aim, so that
+       * what rises and what falls away is seen from the side it is played from. It turns with the aim (as one with the stick: the
+       * line of dots always goes straight up the screen), follows the ball as it runs, and is lifted over what would
+       * stand between it and the ball. When a hole begins, and for as long as the stick is pushed forward, it shows the whole
+       * hole from above.
+       */
       camera: (cam, dt) => {
-        const H = HOLES[Math.min(st.hole, HOLES.length - 1)], b = st.ball, bb = self._bounds(H);
-        const hc = H.yaw - (H.view || 0), fx = -Math.sin(hc), fz = -Math.cos(hc), span = Math.hypot(bb.w, bb.l);
-        self._at(H, bb.cx, bb.cz, _t); const cy = _t.y;
-        self._at(H, b.x, b.z, _c);
-        const f = Math.min(0.5, 0.15 + 0.1 * Math.max(0, Math.hypot(b.x - bb.cx, b.z - bb.cz) - span * 0.3));
-        _t.lerp(_c, f); _t.y = Math.max(cy, _t.y) - 0.1;
-        const zoom = cam.aspect < 1 ? 1 + 0.5 * (1 - cam.aspect) : 1, back = (3.6 + span * 0.5) * zoom, high = (5.4 + span * 0.8) * zoom; // (a narrow screen stands further back)
-        _d.set(_t.x - fx * back, _t.y + high, _t.z - fz * back);
-        if (!this.cam) { this.cam = _d.clone(); look.copy(_t); } else { const k = Math.min(1, dt * 3.2); this.cam.lerp(_d, k); look.lerp(_t, Math.min(1, dt * 4)); }
-        cam.position.copy(this.cam); cam.up.set(0, 1, 0); cam.lookAt(look);
-        return 52;
+        const H = HOLES[Math.min(st.hole, HOLES.length - 1)], b = st.ball, lv = self.level[H.n], bb = self._bounds(H);
+        const fresh = C.hole !== H.n;
+        if (fresh) { C.hole = H.n; C.t = 0; C.yaw = C.aim = st.aim; C.x = b.x; C.z = b.z; C.y = C.ground = b.y; C.lift = 0; C.view = 1; C.plan = true; }
+        C.t += dt;
+        // its heading: one with the aim while the stick turns it; when the aim jumps (the ball has stopped somewhere else), it comes round gently
+        const da = st.aim - C.aim; C.aim = st.aim;
+        if (st.phase === 'aim' && Math.abs(da) < 0.12) C.yaw += da;
+        C.yaw += wrap(st.aim - C.yaw) * Math.min(1, dt * 3);
+        // the ball as it is followed (not down into a gap or the acid)
+        if (st.phase !== 'lost') {
+          const k = Math.min(1, dt * 6);
+          C.x += (b.x - C.x) * k; C.z += (b.z - C.z) * k;
+          if (!b.air) C.ground = b.y;
+          C.y += (Math.max(b.y, C.ground - 0.6) - C.y) * Math.min(1, dt * 4);
+        }
+        const zoom = cam.aspect < 1 ? 1 + 0.45 * (1 - cam.aspect) : 1, dx = Math.sin(C.yaw), dz = -Math.cos(C.yaw);
+        // lifted over what stands in the way: the lowest of its places from which the ball is seen
+        let pick = VIEWS.length - 1;
+        for (let i = 0; i < VIEWS.length; i++) { const v = VIEWS[i]; if (self._clear(H, C.x - dx * v[0] * zoom, C.y + v[1] * zoom, C.z - dz * v[0] * zoom, C.x, C.y + 0.3, C.z)) { pick = i; break; } }
+        C.lift = fresh ? pick : C.lift + (pick - C.lift) * Math.min(1, dt * (pick > C.lift ? 6 : 1.8));
+        const i0 = Math.min(VIEWS.length - 2, Math.floor(C.lift)), f = C.lift - i0, v0 = VIEWS[i0], v1 = VIEWS[i0 + 1];
+        const back = lerp(v0[0], v1[0], f) * zoom, up = lerp(v0[1], v1[1], f) * zoom, ahead = lerp(v0[2], v1[2], f);
+        toWorld(H, C.x - dx * back, C.z - dz * back, _l); _d.set(_l[0], lv + C.y + up, _l[1]);
+        _d.y = Math.max(_d.y, self.data.heightAt(_d.x, _d.z) + 0.7);
+        toWorld(H, C.x + dx * ahead, C.z + dz * ahead, _l); _t.set(_l[0], lv + C.y + 0.1, _l[1]);
+        // the whole hole from above: when it begins (until one aims, three seconds at most), and while the stick is pushed forward
+        if (C.plan && (C.t > 3 || S.steered || (session.auto && C.t > 1.6))) C.plan = false;
+        const want = C.plan || S.peek || session.look ? 1 : 0;
+        C.view = fresh ? 1 : C.view + (want - C.view) * Math.min(1, dt * (want ? 5 : 2.6));
+        if (C.view > 0.002) {
+          const hc = H.yaw - (H.view || 0), fx = -Math.sin(hc), fz = -Math.cos(hc), span = Math.hypot(bb.w, bb.l), s = C.view * C.view * (3 - 2 * C.view);
+          self._at(H, bb.cx, bb.cz, _c); _c.y = lv + (bb.y0 + bb.y1) / 2;
+          const wide = cam.aspect < 1 ? 1 + 0.5 * (1 - cam.aspect) : 1, far = (2.2 + span * 0.42) * wide, high = (5.2 + span * 0.86) * wide;
+          _o.set(_c.x - fx * far, _c.y + high, _c.z - fz * far);
+          _d.lerp(_o, s); _t.lerp(_c, s);
+        }
+        cam.position.copy(_d); cam.up.set(0, 1, 0); cam.lookAt(_t);
+        self._gauge(cam);
+        return 54;
       },
       /** What belongs to the round is put where it is: the ball, its ring, the dots, the gauge, the putter. */
       show: (dt, time, cam) => self._show(st, S, dt, time, cam, _w),
+      /** (for the pictures of the holes, and for who tries one: the ball on the tee of hole `n`, 0 … 8) */
+      goto: (n) => { teeOff(st, clamp(n | 0, 0, HOLES.length - 1)); C.hole = -1; },
+      look: false, // (the whole hole from above, held)
       drop: (pl) => { pl.driver = null; pl.riding = false; pl.pitch = 0; pl.roll = 0; pl.teleport(this.gate.x, this.gate.z, this.gate.yaw); session.close(); },
       close: () => { if (this.session === session) { this.session = null; this.ball.visible = this.ring.visible = this.putter.visible = this.gauge.mesh.visible = false; this.dots.count = 0; } },
     };
     this.session = session;
-    this.cam = null;
     session.step(0, player, false);
     io.note(this._intro(HOLES[0]), 4200);
     return session;
@@ -565,8 +644,38 @@ export class Golf {
   _bounds(H) {
     if (H.box) return H.box;
     let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
-    for (const bed of H.beds) { x0 = Math.min(x0, bed.x0); x1 = Math.max(x1, bed.x1); z0 = Math.min(z0, bed.z0); z1 = Math.max(z1, bed.z1); }
-    return (H.box = { cx: (x0 + x1) / 2, cz: (z0 + z1) / 2, w: x1 - x0, l: z1 - z0 });
+    let y0 = 0, y1 = 0;
+    for (const bed of H.beds) {
+      x0 = Math.min(x0, bed.x0); x1 = Math.max(x1, bed.x1); z0 = Math.min(z0, bed.z0); z1 = Math.max(z1, bed.z1);
+      for (const p of bed.poly) { const y = bed.y + (bed.h ? bed.h(p[0], p[1]) : 0); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    }
+    return (H.box = { cx: (x0 + x1) / 2, cz: (z0 + z1) / 2, w: x1 - x0, l: z1 - z0, y0, y1 });
+  }
+
+  /** Is the camera, at (x, y, z) of the frame of hole `H`, clear of what stands — and the ball at (bx, by, bz) seen from there? */
+  _clear(H, x, y, z, bx, by, bz) {
+    const len = Math.hypot(x - bx, y - by, z - bz), n = Math.max(2, Math.ceil(len / 0.25)), lv = this.level[H.n], w = _w2, l = _l2;
+    for (const F of this._solid) {
+      if (!F.boxes.length) continue;
+      if (F.mid) { toWorld(H, bx, bz, w); if (Math.hypot(w[0] - F.mid[0], w[1] - F.mid[1]) > F.r + 5) continue; }
+      for (let k = 2; k <= n; k++) {
+        const t = k / n, px = bx + (x - bx) * t, py = lv + by + (y - by) * t - F.lv, pz = bz + (z - bz) * t, pad = k === n ? 0.35 : 0.12;
+        toWorld(H, px, pz, w);
+        if (F !== this._solid[H.n]) toLocal(F, w[0], w[1], l); else { l[0] = px; l[1] = pz; }
+        for (const q of F.boxes) if (l[0] > q[0] - pad && l[0] < q[3] + pad && l[1] > q[2] - pad && l[1] < q[5] + pad && py > q[1] - pad && py < q[4] + pad) return false;
+      }
+    }
+    return true;
+  }
+
+  /** The gauge: a board held before the camera, low on the screen, under the ball. */
+  _gauge(cam) {
+    const g = this.gauge.mesh;
+    if (!g.visible) return;
+    const d = 2, hh = Math.tan((cam.fov * Math.PI) / 360) * d, wide = Math.min(0.82, hh * cam.aspect * 1.25);
+    g.quaternion.copy(cam.quaternion);
+    g.scale.setScalar(wide / 1.7);
+    g.position.copy(cam.position).addScaledVector(_f.set(0, 0, -1).applyQuaternion(cam.quaternion), d).addScaledVector(_u.set(0, 1, 0).applyQuaternion(cam.quaternion), -hh * 0.76);
   }
 
   _show(st, S, dt, time, cam, w) {
@@ -609,8 +718,7 @@ export class Golf {
     if (gauge.visible) {
       const q = Math.round(gaugeOf(st.gauge) * 64) / 64;
       if (q !== this._shown.p) { this._shown.p = q; this.gauge.redraw(); }
-      gauge.position.set(wp[0], by + 1.05, wp[1]);
-      gauge.quaternion.copy(cam.quaternion);
+      this._gauge(cam);
     }
     // the putter: back as the gauge rises, forward at the hit
     const pl = this.putter, aw = H.yaw - st.aim, dx = Math.sin(st.aim), dz = -Math.cos(st.aim), rx = -dz, rz = dx;
@@ -649,4 +757,5 @@ export class Golf {
   }
 }
 
+const _o = new THREE.Vector3(), _f = new THREE.Vector3(), _u = new THREE.Vector3(), _w2 = [0, 0], _l2 = [0, 0];
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _r = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _c = new THREE.Color(), _e = new THREE.Euler(), _x = new THREE.Vector3(1, 0, 0), _z = new THREE.Vector3(0, 0, 1), _mv = {};
