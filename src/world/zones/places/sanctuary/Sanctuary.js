@@ -211,7 +211,7 @@ export class Sanctuary {
     const across = [...span(-P.W, -D.half - EPS, 4), ...span(-D.half + EPS, D.half - EPS, 10), ...span(D.half + EPS, P.W, 4)];
     surf(inn, across, span(0, P.spring + P.W, 16), (u, y) => V(u, clamp(y, doorAt(u), vaultAt(u)), P.chord), { want: V(0, 0, -1), key: 40 });
     /** A round window: petals of glass round a heart, in a ring of stone. */
-    const rose = (b, c, x, y, r, want, k = 1, stone = lit) => {
+    const rose = (b, c, x, y, r, want, k = 1) => {
       const P3 = (u, v) => c.clone().addScaledVector(x, u).addScaledVector(y, v), n = 12;
       for (let i = 0; i < n; i++) {
         const t0 = (i / n) * TAU, t1 = ((i + 1) / n) * TAU, tm = (t0 + t1) / 2, g = GLASS[i % 2 ? 0 : 1], h = GLASS[i % 2 ? 2 : 3], e = 0.04;
@@ -219,12 +219,11 @@ export class Sanctuary {
         face(b, P3(0.76 * r * Math.cos(t0 + e), 0.76 * r * Math.sin(t0 + e)), P3(0.93 * r * Math.cos(tm), 0.93 * r * Math.sin(tm)), P3(0.93 * r * Math.cos(tm), 0.93 * r * Math.sin(tm)), P3(0.76 * r * Math.cos(t1 - e), 0.76 * r * Math.sin(t1 - e)), want, [h[0] * k, h[1] * k, h[2] * k], plain);
         face(b, P3(0, 0), P3(0.26 * r * Math.cos(t0), 0.26 * r * Math.sin(t0)), P3(0.26 * r * Math.cos(t1), 0.26 * r * Math.sin(t1)), P3(0, 0), want, [GLASS[4][0] * k, GLASS[4][1] * k, GLASS[4][2] * k], plain);
       }
-      return stone;
     };
     rose(inn, V(0, 9.6, P.chord - 0.06), V(-1, 0, 0), V(0, 1, 0), 2.1, V(0, 0, -1), 1.0);
 
     // ---- what each chapel holds, and the bench round the middle
-    const solid = furnish({ inn, thin, lancet, rose, GLASS, V, A, face, slab, turn, surf, lit, plain, span, hash, STONE, CREAM, ROSE, SLATE, GOLD });
+    const solid = furnish({ inn, thin, rose, GLASS, V, A, face, slab, turn, surf, plain, span, STONE, CREAM, ROSE, GOLD });
 
     // ================================================================ outside
     const courses = (top) => [DEEP, 0.55, 0.55 + EPS, ...span(1.3, top, Math.round((top - 1.3) / 0.76))], foot = (j) => (j < 2 ? 0.3 : 0);
@@ -291,8 +290,6 @@ export class Sanctuary {
     // (the turn of the doorway itself, through the wall)
     { const h = D.half, pts = [[-h, 0], ...Array.from({ length: 13 }, (_, i) => { const t = Math.PI - (i / 12) * Math.PI; return [h * Math.cos(t), D.spring + h * Math.sin(t)]; }), [h, 0]];
       for (let i = 0; i + 1 < pts.length; i++) face(out, V(pts[i][0], pts[i][1], FRONT - 1.05), V(pts[i + 1][0], pts[i + 1][1], FRONT - 1.05), V(pts[i + 1][0], pts[i + 1][1], P.chord), V(pts[i][0], pts[i][1], P.chord), (m) => V(-m.x, D.spring * 0.7 - m.y, 0), OUT, plain);
-      const zz = FRONT - 0.7; // (back of the last step, down to the doorway)
-      for (let i = 0; i + 1 < pts.length; i++) { const s0 = h / (h + 0.0001 + 0.0); face(out, V(pts[i][0] * 1.0, pts[i][1], zz - 0.35), V(pts[i + 1][0], pts[i + 1][1], zz - 0.35), V(pts[i + 1][0] * s0, pts[i + 1][1], zz - 0.35 - EPS), V(pts[i][0] * s0, pts[i][1], zz - 0.35 - EPS), V(0, 0, 1), OUT, plain); }
       slab(out, V, -h - 0.5, DEEP, P.chord - 0.2, h + 0.5, 0, FRONT, TRIM, { faces: 'Y', paint: plain }); // (its sill)
     }
     // (the doors: two tall leaves of dark wood, open)

@@ -16,7 +16,7 @@ const TAU = Math.PI * 2;
  * stops one: boxes [x, z, half width, half length, yaw] in the frame of the hall.
  */
 export function furnish(k) {
-  const { inn, thin, V, A, face, slab, turn, surf, span, plain, lit, rose, GLASS, STONE, CREAM, ROSE, GOLD } = k;
+  const { inn, thin, V, A, face, slab, turn, surf, span, plain, rose, GLASS, STONE, CREAM, ROSE, GOLD } = k;
   const solid = [], C = P.chord, W = P.W;
   const WOOD = [0.4, 0.25, 0.14], WOOD2 = [0.58, 0.4, 0.24], WHITE = [1.1, 1.07, 1.0], FLAME = [1.6, 1.1, 0.4], TEAL = [0.1, 0.5, 0.52], NAVY = [0.1, 0.16, 0.5], RED = [0.55, 0.09, 0.1];
   const stop = (a, u, v, hw, hl) => solid.push([...armPoint(a, u, v), hw, hl, a]);
@@ -180,6 +180,5 @@ export function furnish(k) {
       for (const s of [-1, 1]) { const x0 = s < 0 ? -4.95 : 4.2, x1 = s < 0 ? -4.2 : 4.95; slab(inn, F, x0, 0.38, 11.8, x1, 0.46, 18.6, WOOD2, { faces: 'YxXzZ' }); slab(inn, F, s < 0 ? -5.05 : 4.95, 0.1, 11.8, s < 0 ? -4.95 : 5.05, 1.05, 18.6, WOOD); for (const v of [11.8, 15.15, 18.53]) slab(inn, F, x0, 0, v, x1, 0.38, v + 0.07, WOOD); stop(a, (x0 + x1) / 2, 15.2, 0.45, 3.4); }
     }
   }
-  void lit;
   return solid;
 }
