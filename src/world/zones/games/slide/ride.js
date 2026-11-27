@@ -58,7 +58,7 @@ export const RIDE = {
   again: 1.2, // s before the same thing can be run into again
   out: 1.6, // s one may be out of a trough: the time to come down into one — any — or one is put back
   deep: 12, // m: fallen further than that below where one left the trough, one is lost — no turn of the slide below is that near
-  fall: { wing: 8 }, // off a lip, off the end of a pipe — a fall the course is made of: steering in the air (m/s² across)
+  fall: { wing: 8, splash: 0.4 }, // off a lip, off the end of a pipe — a fall the course is made of: steering in the air (m/s² across); of one's speed across, what deep water leaves
   hop: 0.85, // of one's speed across, what is left over a low rim
   boost: 6.5, // m/s: what the arrows of light on the water of a pipe give
   spark: { reach: 0.95, worth: 0.25 }, // caught within so many metres of one's hips; s off one's time for each
@@ -550,6 +550,8 @@ function alight(st, events) {
   // under a fall, the mouth of a pipe; and so it is against the way the water runs)
   const soft = !!p.soft, flat = -f.vy > RIDE.hard && !soft;
   if (flat) { st.v = Math.max(RIDE.carry, st.v * RIDE.flat); st.stun = 0.6; }
+  // (…and deep water takes most of what one comes down with sideways: who has steered a fall into a mouth is not thrown over its far rim)
+  if (soft) st.w *= RIDE.fall.splash;
   if (along < 0) st.stun = 0.5;
   st.next.clear();
   // (the arches flown over are one's own only once one has stayed in the trough a moment: who bounces out of
