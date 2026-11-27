@@ -293,7 +293,15 @@ rule (one touch and it is the foot again, the bell in one attempt) is still ther
 `SPIRAL.back = 'foot'`. The inside of the track is the shorter way round: who hugs the tower gains on who runs
 along the rail.
 
-The bot reaches the bell at its first attempt in 161 to 163 s (138 keys, three waits); the tightest moment it
+**Asked by its owner on 27 November 2026, after playing it**: "at two places the ramp above gets in the way of
+the view" — it was the net of dark cloth hung three metres under the planks over nothing (the tightrope, the
+last straw), right between the eye and who ran the turn below: each length of a net is now a piece of its own,
+not drawn while one runs under it (`this.nets` in `Spiral.js`). And "the last thing that moves before the gate of
+the Pistons: let it start just before the jump" — the second cable of the Low Bridge ends at the edge of the
+hole, the planks between the hole and the gate carry one hurdle and nothing else, and a board comes down onto
+the top of its cable seven tenths of a second before it leaves (it harms nobody yet: it is seen coming).
+
+The bot reaches the bell at its first attempt in 161 to 164 s (138 keys, three waits); the tightest moment it
 has to act in is 0.29 s wide, half of them 0.41 s or more; the longest wait for something that moves is 2 s.
 The fastest finish there can be is 144.9 s. For the game's boards:
 `spiral: { order: 'asc', min: 144000, max: 900000 }`.
