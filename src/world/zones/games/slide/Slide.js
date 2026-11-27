@@ -30,13 +30,13 @@ const lerp = (a, b, t) => a + (b - a) * t;
 const CREAM = [1.3, 1.17, 0.9], RED = [0.95, 0.1, 0.12], GOLD = [1.5, 1.05, 0.2], TEAL = [0.12, 0.7, 0.78], BLUE = [0.16, 0.36, 1.0];
 const PURPLE = [0.5, 0.2, 0.85], NAVY = [0.07, 0.07, 0.2], YELLOW = [1.6, 1.3, 0.12], WHITE = [1.7, 1.7, 1.66], STEEL = [0.5, 0.53, 0.58];
 const PINK = [1.25, 0.16, 0.62], DEEP = [0.05, 0.2, 0.42];
-const VIOLET = [0.4, 0.13, 0.95], LILAC = [0.66, 0.4, 1.2], ORANGE = [1.7, 0.42, 0.05], AMBER = [1.75, 0.8, 0.1], SPARK = [1.9, 1.35, 0.15];
+const VIOLET = [0.4, 0.13, 0.95], LILAC = [0.66, 0.4, 1.2], ORANGE = [1.75, 0.46, 0.05], RUST = [1.2, 0.2, 0.03], SPARK = [1.9, 1.35, 0.15];
 // two colours for each stretch of the course, in bands (its `tone`); a shortcut wears the colours of a warning
 const BANDS = [[RED, CREAM], [GOLD, CREAM], [TEAL, CREAM], [RED, GOLD], [BLUE, WHITE], [PURPLE, TEAL], [RED, CREAM], [BLUE, WHITE], [TEAL, WHITE]];
 const WARN = [NAVY, YELLOW];
 // …and a pipe one chooses is all of one colour, the colour of what it carries, so that it is told from afar:
 // violet where sparks hang, orange where the water rushes
-const PAINT = { warn: WARN, spark: [VIOLET, LILAC], rush: [ORANGE, AMBER] };
+const PAINT = { warn: WARN, spark: [VIOLET, LILAC], rush: [ORANGE, RUST] };
 const INK = { spark: '#3c1796', rush: '#a8480a' }; // …and so are the signs that name it
 const BAND = 6; // metres of one colour
 const SHELL = 0.13; // thickness of the trough
@@ -198,21 +198,24 @@ export class Slide {
 
   build() {
     const world = this.world, mats = world.materials, tier = world.engine.tier, cast = [LAYER.STATIC_CASTER], course = this.course;
-    // the trough, a stretch at a time, each twice: as it is seen from near, and far more plainly (a fifteenth of
-    // the triangles) for when it is far — which it is from most of the valley, whether or not a hill hides it
+    // the trough, a stretch at a time, each three times: as it is seen from near — the stretch one rides, the pipes
+    // beside —, with two fifths of the triangles for what is further off, and far more plainly (a sixth of them)
+    // for when it is far — which it is from most of the valley, whether or not a hill hides it
     const lines = course.lines;
     this._stretches = [];
     lines.forEach((line, li) => {
-      const pts = line.points, CHUNK = 150;
+      const pts = line.points, CHUNK = 60;
       for (let from = 0; from < pts.length - 1; from += CHUNK) {
-        const to = Math.min(pts.length - 1, from + CHUNK), near = new Parts(), far = new Parts();
+        const to = Math.min(pts.length - 1, from + CHUNK), near = new Parts(), mid = new Parts(), far = new Parts();
         this._trough(near.get('paint'), line, from, to);
+        if (near.get('paint').empty) continue;
+        this._trough(mid.get('paint'), line, from, to, 3, 2);
         this._trough(far.get('paint'), line, from, to, 2, 4);
-        const a = near.toMeshes(mats, { name: `slide-trough${li}-${from}`, layers: cast }), b = far.toMeshes(mats, { name: `slide-far${li}-${from}`, layers: [] });
+        const a = near.toMeshes(mats, { name: `slide-trough${li}-${from}`, layers: cast }), m = mid.toMeshes(mats, { name: `slide-mid${li}-${from}`, layers: [] }), b = far.toMeshes(mats, { name: `slide-far${li}-${from}`, layers: [] });
         const sphere = a.children[0].geometry.boundingSphere;
-        b.visible = false;
-        this._stretches.push({ near: a, far: b, x: sphere.center.x, y: sphere.center.y, z: sphere.center.z, r: sphere.radius });
-        this.group.add(a, b);
+        m.visible = b.visible = false;
+        this._stretches.push({ near: a, mid: m, far: b, tier: 0, x: sphere.center.x, y: sphere.center.y, z: sphere.center.z, r: sphere.radius });
+        this.group.add(a, m, b);
       }
     });
     this._water(lines);
@@ -224,8 +227,8 @@ export class Slide {
     this._sparks(mats);
     this.group.updateMatrixWorld(true);
     const far = tier.phone ? 0.6 : 1;
-    this._near = 150 * far; // within that distance a stretch of the trough is drawn in full
-    this._cull = distanceCuller(this.group, [[/^slide-(trough|far)/, Infinity], [/^slide-water/, 170 * far], [/^slide-(things|whirls)/, 170 * far], [/^slide-mover/, 140 * far], [/^slide-(sign|board)/, 150 * far], [/^slide-arches/, 260 * far], [/^slide-legs/, 1200], [/./, 900]]);
+    this._close = 30 * far; this._near = 110 * far; // within the first distance a stretch of the trough is drawn in full; beyond the second, at its plainest
+    this._cull = distanceCuller(this.group, [[/^slide-(trough|mid|far)/, Infinity], [/^slide-water/, 140 * far], [/^slide-(things|whirls)/, 150 * far], [/^slide-mover/, 130 * far], [/^slide-(sign|board)/, 150 * far], [/^slide-arches/, 260 * far], [/^slide-legs/, 1200], [/./, 900]]);
     world.scene.add(this.group);
     return this;
   }
@@ -233,8 +236,8 @@ export class Slide {
   /**
    * The trough of a line between two samples: its inside — two walls, and between them, where it is opened out,
    * the floor of a pool under the water —, its outside and its two lips; nothing where the line crosses a gap.
-   * `arcs`: how many faces up each wall; `stride`: one sample in so many (the plain version seen from far has
-   * few of both).
+   * `arcs`: how many faces up each wall; `stride`: one sample in so many — but always the one where the trough
+   * ends or begins again, at a gap, at a fall (the plainer versions have fewer of both).
    */
   _trough(b, line, i0, i1, arcs = 4, stride = 1) {
     const pts = line.points, tones = this.course.stretches.map((q) => q.tone);
@@ -243,9 +246,10 @@ export class Slide {
     // (where water stands from the first metre — the pool under a fall, the mouth of a pipe — a wall closes the head of the trough)
     const headed = (i) => (line.key ? i === 0 : i > 0 && !!pts[i - 1].tag.fall);
     let prev = null;
-    for (let i = i0; i <= i1; i = i < i1 ? Math.min(i1, i + stride) : i + 1) {
+    for (let i = i0; i <= i1; i++) {
       const p = pts[i];
       if (p.tag.gap) { prev = null; continue; }
+      if (stride > 1 && (i - i0) % stride && i !== i1 && !pts[i - 1]?.tag.gap && !pts[i + 1]?.tag.gap) continue;
       const f = frameAt(p, _f), lo = -(p.lim[0] + 0.13), hi = p.lim[1] + 0.13, F = p.F, D = Math.max(0, p.D - FILM);
       const tone = palette(p)[Math.floor(p.s / BAND) % 2], inside = [tone[0] * 1.08 + 0.05, tone[1] * 1.08 + 0.05, tone[2] * 1.08 + 0.05, 1];
       const wet = Math.min(1, D / 0.5), floor = [lerp(inside[0], DEEP[0], wet), lerp(inside[1], DEEP[1], wet), lerp(inside[2], DEEP[2], wet), 1];
@@ -316,6 +320,7 @@ export class Slide {
         for (let i = from; i <= to; i++) {
           const p = pts[i];
           if (p.tag.gap) { prev = -1; continue; }
+          if ((i - from) % 2 && i !== to && !pts[i - 1]?.tag.gap && !pts[i + 1]?.tag.gap) continue; // (a row every two metres — and where the water ends or begins again)
           const f = frameAt(p, _f), lo = -Math.min(p.F + REACH, p.lim[0] + 0.04), hi = Math.min(p.F + REACH, p.lim[1] + 0.04), d = clamp(p.D / 0.6, 0, 1);
           for (let j = 0; j <= N; j++) {
             const u = lerp(lo, hi, j / N);
@@ -331,8 +336,8 @@ export class Slide {
     });
     // ---- the falls: the stream pours from each lip — and from the end of a pipe that ends in the air — down to
     // the water below, as water thrown forward falls
-    const pour = (line, s, drop, name) => {
-      const p = lineAt(line, s, {}), f = frameAt(p, { side: [0, 0, 0], up: [0, 0, 0] }), M = 4, STEPS = 12, v = 9, T = Math.sqrt((2 * (drop + 0.5)) / 9.81);
+    const pour = (line, s, drop, name, v) => {
+      const p = lineAt(line, s, {}), f = frameAt(p, { side: [0, 0, 0], up: [0, 0, 0] }), M = 4, STEPS = 12, T = Math.sqrt((2 * (drop + 0.5)) / 9.81);
       const pos = [], nrm = [], uv = [], edge = [], deep = [], idx = [], hl = Math.hypot(p.tx, p.tz) || 1, fx = p.tx / hl, fz = p.tz / hl;
       for (let k = 0; k <= STEPS; k++) {
         const t = (T * k) / STEPS, ahead = v * t, down = 4.905 * t * t, len = Math.hypot(v, 9.81 * t), half = REACH * (1 + (0.3 * k) / STEPS);
@@ -346,8 +351,8 @@ export class Slide {
       }
       sheet(name, pos, nrm, uv, edge, deep, idx);
     };
-    this.course.falls.forEach((fl, k) => pour(this.course.main, fl.from, fl.drop, `slide-water-fall${k}`));
-    this.course.sides.forEach((ln, k) => { if (ln.end === 'off') { const e = ln.points[ln.points.length - 1], low = lineAt(this.course.main, e.ref + 12, {}); pour(ln, ln.length, e.y - low.y, `slide-water-off${k}`); } });
+    this.course.falls.forEach((fl, k) => { pour(this.course.main, fl.from, fl.drop, `slide-water-fall${k}`, 9); pour(this.course.main, fl.from, fl.drop, `slide-water-fall${k}b`, 11.5); });
+    this.course.sides.forEach((ln, k) => { if (ln.end === 'off') { const e = ln.points[ln.points.length - 1], low = lineAt(this.course.main, e.ref + 12, {}); pour(ln, ln.length, e.y - low.y, `slide-water-off${k}`, 9); pour(ln, ln.length, e.y - low.y, `slide-water-off${k}b`, 11.5); } });
   }
 
   /** What holds it all up: a mast in the middle of each helix, with an arm to every turn; legs under the rest. */
@@ -397,7 +402,17 @@ export class Slide {
       for (let s = h.from + stepLen * 0.5; s < h.to; s += stepLen) {
         const p = P[Math.round(s)], u = under(p), dx = u.x - h.x, dz = u.z - h.z, d = Math.hypot(dx, dz) || 1;
         const a0 = V(h.x + (dx / d) * 0.5, u.y - 0.9 - d * 0.07, h.z + (dz / d) * 0.5), a1 = V(u.x - (dx / d) * 0.2, u.y - 0.12, u.z - (dz / d) * 0.2);
-        if (clearOf(a0, a1, p.s, R + 0.5)) b.tint(...STEEL, 1).rod(a0, a1, 0.17, 6, { caps: false });
+        if (!clearOf(a0, a1, p.s, R + 0.5)) continue;
+        b.tint(...STEEL, 1).rod(a0, a1, 0.17, 6, { caps: false });
+        // (the pipes that run beside a bend of the oval hang from the same arm: the one outside it from a rod that
+        // goes on from under the trough, the one inside it from a post that stands on the arm)
+        for (const ln of course.sides) {
+          if (p.s < ln.from || p.s > ln.to) continue;
+          const q = lineAt(ln, sideAt(ln, p.s), {}), top = under(q), dq = Math.hypot(top.x - h.x, top.z - h.z);
+          if (Math.abs(q.y - p.y) > 4.5) continue;
+          if (dq > d) b.tint(...STEEL, 1).rod(a1, V(top.x, top.y - 0.05, top.z), 0.12, 6);
+          else { const t = clamp((dq - 0.5) / Math.max(1, d - 0.7), 0, 1); b.tint(...STEEL, 1).rod(V(lerp(a0.x, a1.x, t), lerp(a0.y, a1.y, t), lerp(a0.z, a1.z, t)), V(top.x, top.y - 0.05, top.z), 0.11, 6); }
+        }
       }
     }
     // legs: one every so often under what no mast holds, where the ground is not too far below — and never
@@ -409,25 +424,28 @@ export class Slide {
       since += 1;
       if (inHelix(p.s) || since < 15 || p.tag.gap) continue;
       // (none right under the lip of a fall: that is where the camera of who has just come down is)
-      if (course.falls.some((q) => p.s > q.from - 9 && p.s <= q.from + 0.5)) continue;
+      if (course.falls.some((q) => p.s > q.from - 5 && p.s <= q.from + 0.5)) continue;
       const u = under(p), g = ground(p.x, p.z);
       if (u.y - g < 0.9) continue;
       if (!clearOf(V(p.x, g - 0.6, p.z), V(u.x, u.y - 0.25, u.z), p.s, R + 1.7)) continue;
       since = 0;
       const tall = u.y - g, r = clamp(0.2 + tall * 0.006, 0.22, 0.6);
-      lb.tint(...CREAM, 1).rod(V(p.x, g - 0.6, p.z), V(u.x, u.y - 0.25, u.z), r, 8, { caps: false, r1: r * 0.7 });
+      lb.tint(...CREAM, 1).rod(V(p.x, g - 0.6, p.z), V(u.x, u.y - 0.25, u.z), r, 6, { caps: false, r1: r * 0.7 });
       // a yoke under the trough, and a red band every twenty metres of a tall leg
       const f = frameAt(p, _f);
-      // (…as wide as what it carries: the rivers that run against the trough stand on the same legs)
+      // (…as wide as what it carries: the pipes that run beside the trough stand on the same legs — the yoke goes
+      // out under them, and a post goes up from it to one that hangs higher. All of it is underneath: never in the
+      // way of who rides)
       let yl = R * 0.8 + p.F, yr = yl;
       for (const ln of course.sides) {
         if (p.s < ln.from || p.s > ln.to) continue;
         const at = sideAt(ln, p.s), d = asideAt(ln, at), q = lineAt(ln, at, {});
-        if (Math.abs(q.y - p.y) > 1.2) continue;
+        if (q.y - p.y > 4.5 || q.y - p.y < -1.2) continue;
         if (d < 0) yl = Math.max(yl, -d + R * 0.8 + q.F); else yr = Math.max(yr, d + R * 0.8 + q.F);
+        if (q.y - p.y > 0.5) { const top = under(q); lb.tint(...STEEL, 1).rod(V(u.x + f.side[0] * d, u.y - 0.2 + f.side[1] * d, u.z + f.side[2] * d), V(top.x, top.y - 0.05, top.z), 0.11, 6); }
       }
       lb.tint(...STEEL, 1).rod(V(u.x - f.side[0] * yl, u.y - 0.2 - f.side[1] * yl, u.z - f.side[2] * yl), V(u.x + f.side[0] * yr, u.y - 0.2 + f.side[1] * yr, u.z + f.side[2] * yr), 0.13, 6);
-      for (let y = g + 20; y < u.y - 4; y += 20) lb.tint(...RED, 1).cylinder(p.x + (u.x - p.x) * ((y - g) / tall), y, p.z + (u.z - p.z) * ((y - g) / tall), r * 1.25, r * 1.25, 1.2, 8);
+      for (let y = g + 20; y < u.y - 4; y += 20) lb.tint(...RED, 1).cylinder(p.x + (u.x - p.x) * ((y - g) / tall), y, p.z + (u.z - p.z) * ((y - g) / tall), r * 1.25, r * 1.25, 1.2, 6);
     }
     // a pipe hangs from the slide it runs beside: a strut every ten metres or so, from the outside of the one's
     // rim to the outside of the other's nearer wall, and a band round the pipe there
@@ -440,22 +458,6 @@ export class Slide {
         lb.tint(...STEEL, 1).rod(a, c, 0.13, 6);
         const band = [];
         for (let k = 0; k <= 8; k++) band.push(onTrough(q, fq, lerp(-(WALL + 0.1), WALL + 0.1, k / 8), -(SHELL + 0.05)).clone());
-        for (let k = 0; k < 8; k++) lb.tint(...STEEL, 1).rod(band[k], band[k + 1], 0.07, 5, { caps: false });
-      }
-    }
-    // so do the pipes of the Cascade, while they hang beside a pool: a strut every nine metres, and a band round the pipe
-    for (const ln of course.sides) {
-      const fq = { side: [0, 0, 0], up: [0, 0, 0] }, fm = { side: [0, 0, 0], up: [0, 0, 0] };
-      for (let i = 4; i < ln.points.length - 1; i += 9) {
-        const q = ln.points[i], near = P[clamp(Math.round(q.ref), 0, P.length - 1)];
-        if (Math.abs(q.d) < NEAR + 0.6 || near.tag.gap) continue; // (where it runs against the main line it stands on its legs)
-        const m = lineAt(course.main, q.ref, {});
-        if (Math.abs(q.y - m.y) > 4.5) continue;
-        frameAt(q, fq); frameAt(m, fm);
-        const a = onTrough(m, fm, ln.side * (m.F + WALL - 0.12), -(SHELL + 0.07)).clone(), c = onTrough(q, fq, -ln.side * (q.F + 1.15), -(SHELL + 0.07)).clone();
-        lb.tint(...STEEL, 1).rod(a, c, 0.13, 6);
-        const band = [];
-        for (let k = 0; k <= 8; k++) band.push(onTrough(q, fq, lerp(-(q.F + WALL + 0.1), q.F + WALL + 0.1, k / 8), -(SHELL + 0.05)).clone());
         for (let k = 0; k < 8; k++) lb.tint(...STEEL, 1).rod(band[k], band[k + 1], 0.07, 5, { caps: false });
       }
     }
@@ -538,19 +540,25 @@ export class Slide {
       ab.tint(...STEEL, 1).rod(V(p.x + f.side[0] * foot + f.up[0] * lift, p.y + f.side[1] * foot + f.up[1] * lift, p.z + f.side[2] * foot + f.up[2] * lift), V(x, y - 0.5, z), 0.09, 6);
     }
 
-    // ---- the falls: the name of each over its lip, high; and beside the lip, on the side of each pipe that hangs
-    // under it, the name of that pipe in its colour, with what it carries
+    // ---- the falls: a gantry beyond each lip, high over where one comes down — the name of the fall over the pool,
+    // and over the mouth of each pipe that hangs beside it the name of that pipe, in its colour, with what it
+    // carries. Its feet stand on the outer rims of what lies under its ends: nothing of it is in the way of a fall.
     const over = (q, fq, side, up) => V(q.x + fq.side[0] * side + fq.up[0] * up, q.y + fq.side[1] * side + fq.up[1] * up, q.z + fq.side[2] * side + fq.up[2] * up);
     for (const fl of course.falls) {
-      const q = lineAt(course.main, fl.from - 1.5), fq = frameAt(q, { side: [0, 0, 0], up: [0, 0, 0] }), rim = R * Math.sin(SLIDE.rim) + 0.15, lift = R * (1 - Math.cos(SLIDE.rim));
-      const c = over(q, fq, 0, 6.3);
+      const q = lineAt(course.main, fl.to + 11), fq = frameAt(q, { side: [0, 0, 0], up: [0, 0, 0] }), H = lineAt(course.main, fl.from).y + 6.6 - q.y, mine = course.sides.filter((v) => v.under === fl.id);
+      const c = over(q, fq, 0, H - 0.8);
       hang(sign(fl.name.toUpperCase(), 'STEER IN THE AIR · THE RING OF LIGHT IS WHERE YOU LAND', 5.0, 1.2, '#12122e'), c.x, c.y, c.z, q.yaw);
-      for (const sg of [-1, 1]) ab.tint(...STEEL, 1).rod(over(q, fq, sg * rim, lift), over(q, fq, sg * 2.3, 5.75), 0.08, 6);
-      for (const ln of course.sides.filter((v) => v.under === fl.id)) {
-        const at = over(q, fq, ln.side * 4.7, 3.0);
-        hang(sign(ln.side < 0 ? `◀ ${ln.name.toUpperCase()}` : `${ln.name.toUpperCase()} ▶`, ln.paint === 'spark' ? 'SPARKS · EACH TAKES ¼ S OFF YOUR TIME' : 'FAST WATER · ARROWS THAT THROW YOU ON', 4.2, 1.15, INK[ln.paint]), at.x, at.y, at.z, q.yaw);
-        ab.tint(...STEEL, 1).rod(over(q, fq, ln.side * rim, lift), over(q, fq, ln.side * 4.7, 2.45), 0.08, 6);
+      const ends = [];
+      for (const sg of [-1, 1]) {
+        const ln = mine.find((v) => v.side === sg), m = ln ? lineAt(ln, sideAt(ln, q.s), {}) : q, fm = ln ? frameAt(m, { side: [0, 0, 0], up: [0, 0, 0] }) : fq;
+        const foot = onTrough(m, fm, sg * (m.F + WALL - 0.05), -SHELL).clone(), top = V(foot.x, q.y + H, foot.z);
+        ab.tint(...STEEL, 1).rod(foot, top, 0.1, 6);
+        ends.push(top);
+        if (!ln) continue;
+        const at = over(q, fq, asideAt(ln, sideAt(ln, q.s)), H - 0.8);
+        hang(sign(sg < 0 ? `◀ ${ln.name.toUpperCase()}` : `${ln.name.toUpperCase()} ▶`, ln.paint === 'spark' ? 'SPARKS · EACH TAKES ¼ S OFF YOUR TIME' : 'FAST WATER · ARROWS THAT THROW YOU ON', 4.2, 1.15, INK[ln.paint]), at.x, at.y, at.z, q.yaw);
       }
+      ab.tint(...STEEL, 1).rod(ends[0], ends[1], 0.1, 6);
     }
     // ---- the rivers: where the low rims begin, what they are for
     {
@@ -1120,9 +1128,9 @@ export class Slide {
       b.tint(tone[0], tone[1], tone[2], 1);
       for (let k = 0; k < 28; k++) {
         const a0 = (k / 28) * Math.PI * 2, a1 = ((k + 1) / 28) * Math.PI * 2;
-        b.quad(V(Math.sin(a0) * 0.85, 0, Math.cos(a0) * 0.85), V(Math.sin(a0) * 1.5, 0, Math.cos(a0) * 1.5), V(Math.sin(a1) * 1.5, 0, Math.cos(a1) * 1.5), V(Math.sin(a1) * 0.85, 0, Math.cos(a1) * 0.85), { normal: V(0, 1, 0) });
+        b.quad(V(Math.sin(a0) * 0.85, 0, Math.cos(a0) * 0.85), V(Math.sin(a0) * 1.6, 0, Math.cos(a0) * 1.6), V(Math.sin(a1) * 1.6, 0, Math.cos(a1) * 1.6), V(Math.sin(a1) * 0.85, 0, Math.cos(a1) * 0.85), { normal: V(0, 1, 0) });
       }
-      b.cylinder(0, 0, 0, 0.1, 0.04, 4.2, 6);
+      b.cylinder(0, 0, 0, 0.2, 0.07, 5.2, 6); // (the shaft stands over the head of who falls towards the ring)
       const mesh = new THREE.Mesh(b.build(), this.world.materials.glow);
       mesh.name = name;
       mesh.matrixAutoUpdate = false;
@@ -1157,8 +1165,8 @@ export class Slide {
     }
     const c = camera.position;
     for (const t of this._stretches) {
-      const near = Math.hypot(c.x - t.x, c.y - t.y, c.z - t.z) - t.r < this._near;
-      if (t.near.visible !== near) { t.near.visible = near; t.far.visible = !near; }
+      const d = Math.hypot(c.x - t.x, c.y - t.y, c.z - t.z) - t.r, tier = d < this._close ? 0 : d < this._near ? 1 : 2;
+      if (t.tier !== tier) { t.tier = tier; t.near.visible = tier === 0; t.mid.visible = tier === 1; t.far.visible = tier === 2; }
     }
     this._cull(c);
     // the sparks turn where they hang; those one has caught in this ride are gone
