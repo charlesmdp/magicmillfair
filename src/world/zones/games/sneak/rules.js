@@ -23,7 +23,7 @@ export const rnd = (a, b = 0) => { let h = (Math.imul(a | 0, 0x9E3779B1) ^ Math.
 
 export const SNEAK = {
   name: 'Robots Can See You',
-  at: { x: 104, z: 80 }, // the middle of the yard, on its quay in the south of the bay
+  at: { x: 106, z: 75 }, // the middle of the yard, on its quay in the south of the bay
   yaw: -Math.PI / 2, // the way the yard is turned: one goes through it eastwards, out to sea
   deck: 1.5, // m over the sea: the floor of the yard
   gate: { x: 60, z: 80 }, // where one asks to play: on the sand, at the foot of the quay
@@ -33,12 +33,12 @@ export const SNEAK = {
   run: 5.2, walk: 2.7, crouch: 1.9, // m/s
   full: 0.85, // of the stick: pushed so far while standing, one runs
   accel: 38, // m/s²
-  noise: 6, // m: how far a run is heard
+  noise: 5, // m: how far a run is heard
   grab: 0.95, // m: a core is picked up from so near
   see: { range: 8, half: 0.5, near: 1.3, fill: 0.5, far: 1.15, drain: 0.8, touch: 0.75 }, // a robot's cone: m, rad; s to fill the meter (in plain sight, at the far end), s to empty it
   cam: { range: 10.5, half: 0.3 },
   light: { r: 2.7, fill: 0.45 },
-  alert: { hold: 1.5, turn: 5.5, back: 3.5 }, // a robot that hears: looks so long towards the noise, turns so fast (rad/s)
+  alert: { wait: 0.4, hold: 1.6, turn: 4.5, back: 3.5 }, // a robot that hears: starts after so long, looks so long towards the noise, turns so fast (rad/s)
   penalty: 10, // s added each time one is caught
   freeze: 1.3, // s one stands caught before being put back
   react: 0.25, // s: the player that plays by itself moves so long after it has seen its moment
@@ -82,7 +82,7 @@ L(10.3, -2.6, 12.6, -1.9, 'crate');
 T(9.4, -7.7, 9.7, -6.3, 'fence'); T(12.3, -7.7, 12.6, -6.3, 'fence');
 T(0.4, -14.5, 2.8, -9.6); L(-8, -9.6, 0.4, -8.9, 'bags');
 T(-9.5, -15.5, -7.1, -10.5);
-L(6.4, -10.6, 7.6, -9.8, 'crate'); L(5.2, -15.4, 6.4, -14.2, 'crate');
+L(6.2, -9.5, 7.4, -8.7, 'crate'); L(5.2, -15.4, 6.4, -14.2, 'crate');
 T(3, -18.7, 9, -16.9); G(-3.6, -18.4, 0.4, -16.4);
 // ---- room E (-19 … -32): a guard that listens, a beam, a patrol along the last alley; core 3 at its far end
 T(-12.6, -20.7, -12.3, -19.3, 'fence'); T(-9.7, -20.7, -9.4, -19.3, 'fence');
@@ -104,11 +104,11 @@ export const TOWER = { x: 14.2, z: -12.5 }; // where the searchlight stands
 
 const heading = (a, b) => Math.atan2(b[0] - a[0], b[1] - a[1]);
 /** A round: the robot walks from point to point (and back, or round and round), turning at each. → its timeline. */
-function patrol(pts, { speed = 2.2, turn = 2.6, loop = false, phase = 0, pause = 0.25 } = {}) {
+function patrol(pts, { speed = 2.2, turn = 2.6, loop = false, phase = 0, pause = 0.25, via = null } = {}) {
   const order = loop ? [...pts, pts[0]] : [...pts, ...pts.slice(0, -1).reverse()], segs = [];
   const first = heading(order[0], order[1]);
   let yaw = first;
-  const spin = (p, to) => { const d = wrap(to - yaw); if (Math.abs(d) > 1e-6) segs.push({ x0: p[0], z0: p[1], x1: p[0], z1: p[1], y0: yaw, y1: yaw + d, dur: pause + Math.abs(d) / turn, hold: pause }); yaw = to; };
+  const spin = (p, to) => { let d = wrap(to - yaw); if (via !== null && Math.abs(Math.abs(d) - Math.PI) < 1e-6) d = Math.PI * (Math.sign(wrap(via - yaw)) || 1); /* (turning right round: through `via`) */ if (Math.abs(d) > 1e-6) segs.push({ x0: p[0], z0: p[1], x1: p[0], z1: p[1], y0: yaw, y1: yaw + d, dur: pause + Math.abs(d) / turn, hold: pause }); yaw = to; };
   for (let i = 0; i + 1 < order.length; i++) {
     const a = order[i], b = order[i + 1], h = heading(a, b);
     spin(a, h);
@@ -134,12 +134,12 @@ export const VIEWERS = [
   { kind: 'robot', room: 1, ...ROUND, phase: ROUND.period / 2 },
   { kind: 'robot', room: 3, ...post(-4, -12.5, 0, 9), spins: true },
   { kind: 'robot', room: 4, ...post(-1, -21.1, Math.PI / 2), still: true },
-  { kind: 'robot', room: 4, ...patrol([[-13, -29.8], [13, -29.8]], { speed: 2.2 }) },
+  { kind: 'robot', room: 4, ...patrol([[-13, -29.8], [13, -29.8]], { speed: 2.2, via: Math.PI }) },
   { kind: 'cam', room: 2, x: -6, z: -5.3, base: 0, amp: 0.9, period: 9, phase: 0 },
   { kind: 'cam', room: 2, x: 14.6, z: 1.2, base: -2.6, amp: 0.45, period: 7, phase: 0.3, range: 8.5 },
   { kind: 'light', room: 3, x0: 7, z0: -8.6, x1: 7, z1: -16.5, period: 9, phase: 0 },
-  { kind: 'beam', room: 2, x0: 4.5, z0: -1.5, x1: 4.5, z1: 1.5, on: 1.5, off: 1.7, phase: 0 },
-  { kind: 'beam', room: 4, x0: -6.5, z0: -25.3, x1: -3.5, z1: -25.3, on: 1.3, off: 1.6, phase: 0.8 },
+  { kind: 'beam', room: 2, x0: 4.5, z0: -1.5, x1: 4.5, z1: 1.5, on: 1.5, off: 2.1, phase: 0 },
+  { kind: 'beam', room: 4, x0: -6.5, z0: -25.3, x1: -3.5, z1: -25.3, on: 1.4, off: 2.3, phase: 0.8 },
 ];
 VIEWERS.forEach((v, i) => { v.i = i; if (v.kind === 'robot') { v.range = S.see.range; v.half = S.see.half; } if (v.kind === 'cam') { v.range ??= S.cam.range; v.half = S.cam.half; } if (v.kind === 'light') v.r = S.light.r; });
 export const ROBOTS = VIEWERS.filter((v) => v.kind === 'robot').length; // (the robots come first: their index is that of what they look at)
@@ -229,7 +229,7 @@ export function startRun(now = 0) {
     now, clock: 0, started: false, acc: 0, press: false,
     x: SAVES[0].x, z: SAVES[0].z, vx: 0, vz: 0, face: Math.PI, crouch: false, noise: 0, speed: 0,
     meter: 0, tense: 0, watched: -1, sees: new Uint8Array(VIEWERS.length), by: -1,
-    look: new Float32Array(ROBOTS), alert: new Float32Array(ROBOTS), ax: new Float32Array(ROBOTS), az: new Float32Array(ROBOTS), fresh: true,
+    look: new Float32Array(ROBOTS), alert: new Float32Array(ROBOTS), wait: new Float32Array(ROBOTS), ax: new Float32Array(ROBOTS), az: new Float32Array(ROBOTS), fresh: true,
     caught: 0, backs: 0, freeze: 0, save: 0, cores: 0, over: false, out: false, time: 0, bot: null,
   };
 }
@@ -244,7 +244,7 @@ export const heatOf = (st) => clamp(0.1 + 0.22 * progressOf(st) + 0.68 * Math.ma
 
 const _p = {};
 /** Where robot `i` looks now: its round, unless a noise turned its head. */
-export function lookOf(st, i, t = st.now) { return st.alert[i] > 0 || st.look[i] !== st.look[i] ? st.look[i] : poseAt(VIEWERS[i], t, _p).yaw; }
+export const lookOf = (st, i) => st.look[i];
 
 function collide(st) {
   const r = S.body;
@@ -271,7 +271,7 @@ function tick(st, input, events) {
     if (st.freeze <= 0) {
       const s = SAVES[st.save];
       st.x = s.x; st.z = s.z; st.vx = 0; st.vz = 0; st.crouch = false; st.meter = 0; st.noise = 0; st.speed = 0; st.backs++; st.by = -1; st.watched = -1;
-      st.sees.fill(0); st.alert.fill(0);
+      st.sees.fill(0); st.alert.fill(0); st.wait.fill(0);
       events?.push({ type: 'back', save: st.save });
     }
   } else {
@@ -297,17 +297,19 @@ function tick(st, input, events) {
     const v = VIEWERS[i], p = poseAt(v, now, _p);
     if (st.fresh) st.look[i] = p.yaw;
     if (st.noise > 0 && Math.hypot(st.x - p.x, st.z - p.z) < st.noise) {
-      if (st.alert[i] <= 0) events?.push({ type: 'heard', by: i });
+      if (st.alert[i] <= 0) { events?.push({ type: 'heard', by: i }); st.wait[i] = S.alert.wait; }
       st.alert[i] = S.alert.hold; st.ax[i] = st.x; st.az[i] = st.z;
     }
-    if (st.alert[i] > 0) {
+    if (st.alert[i] > 0 && st.wait[i] <= 0) {
       st.alert[i] -= STEP;
       const d = wrap(Math.atan2(st.ax[i] - p.x, st.az[i] - p.z) - st.look[i]), w = S.alert.turn * STEP;
       st.look[i] = wrap(st.look[i] + clamp(d, -w, w));
       if (st.alert[i] <= 0) st.alert[i] = -1; // (it turns back)
-    } else if (st.alert[i] < 0) {
+    } else if (st.alert[i] !== 0) {
+      // (it has heard, and has not turned yet — or it turns back to its round)
+      if (st.wait[i] > 0) st.wait[i] -= STEP;
       const d = wrap(p.yaw - st.look[i]), w = S.alert.back * STEP;
-      if (Math.abs(d) <= w) { st.look[i] = p.yaw; st.alert[i] = 0; } else st.look[i] = wrap(st.look[i] + Math.sign(d) * w);
+      if (Math.abs(d) <= w) { st.look[i] = p.yaw; if (st.alert[i] < 0) st.alert[i] = 0; } else st.look[i] = wrap(st.look[i] + Math.sign(d) * w);
     } else st.look[i] = p.yaw;
   }
   st.fresh = false;
@@ -389,7 +391,7 @@ const _q = {};
 export function danger(st, t, x, z, crouched, noisy) {
   for (let i = 0; i < VIEWERS.length; i++) {
     const v = VIEWERS[i];
-    if (v.kind === 'beam') { if (_beam(v, x, z) < S.body + 0.5 && (poseAt(v, t, _q).on || poseAt(v, t - 0.3, _q).on || poseAt(v, t + 0.3, _q).on)) return true; continue; }
+    if (v.kind === 'beam') { if (_beam(v, x, z) < S.body + 0.3 && (poseAt(v, t, _q).on || poseAt(v, t - 0.3, _q).on || poseAt(v, t + 0.3, _q).on)) return true; continue; }
     const p = poseAt(v, t, _q);
     if (v.kind === 'robot' && noisy && Math.hypot(x - p.x, z - p.z) < S.noise + 0.7) return true;
     if (seeRate(v, p, x, z, crouched, st.cores, 0.12, 0.6) > 0) return true;
@@ -407,20 +409,32 @@ export function safe(st, k, crouching, delay) {
   }
   return true;
 }
+/** Are the first metres of the way from node `k` (ten of them) out of every cone and pool of light at this very moment (who only looks in front of itself, and does not think ahead)? */
+function openNow(st, k, ahead = 10) {
+  let x = ROUTE[k].x, z = ROUTE[k].z, gone = 0;
+  for (let j = k + 1; j < ROUTE.length && gone < ahead; j++) {
+    const n = ROUTE[j], len = Math.hypot(n.x - x, n.z - z), steps = Math.max(1, Math.ceil(len / 0.4));
+    for (let s = 1; s <= steps; s++) for (let i = 0; i < VIEWERS.length; i++) { const v = VIEWERS[i]; if (seeRate(v, poseAt(v, st.now, _q), x + ((n.x - x) * s) / steps, z + ((n.z - z) * s) / steps, false, st.cores) > 0) return false; }
+    x = n.x; z = n.z; gone += len;
+    if (n.h && !n.low) break;
+  }
+  return true;
+}
 /**
  * The player that plays by itself, with a person's limits: it goes from hiding place to hiding place; at each it
  * watches the rounds, and leaves a quarter of a second after it has seen a moment that stays good for a quarter of
- * a second more — at a run if nothing would hear it, crouched if not. `clumsy`: one that runs everywhere and never
- * waits for anything (it stands a moment, as `seed` says, each time it is put back).
+ * a second more — at a run if nothing would hear it, crouched if not. `clumsy`: one that runs everywhere, never
+ * crouches and never thinks ahead: it leaves as soon as nothing looks at its way at that very moment (and stands a
+ * moment, as `seed` says, each time it is put back).
  */
-export function botInput(st, input, { clumsy = false, seed = 1 } = {}) {
-  const B = (st.bot ||= { at: 0, go: -1, crouch: false, backs: 0, next: 0, since: st.now, hold: 0 });
+export function botInput(st, input, { clumsy = false, seed = 1, ahead = 10 } = {}) {
+  const B = (st.bot ||= { at: 0, go: -1, crouch: false, backs: 0, next: 0, since: st.now, hold: 0, n: 0 });
   input.x = 0; input.y = 0; input.jump = false;
   if (st.over || st.freeze > 0) return input;
-  if (B.backs !== st.backs) { B.backs = st.backs; B.at = SAVES[st.save].node; B.go = -1; B.since = st.now; B.hold = clumsy ? 0.3 + 3 * rnd(seed, st.backs) : 0; B.next = 0; }
+  if (B.backs !== st.backs) { B.backs = st.backs; B.at = SAVES[st.save].node; B.go = -1; B.since = st.now; B.hold = clumsy ? 0.3 + 3 * rnd(seed, ++B.n) : 0; B.next = 0; }
   if (B.at >= ROUTE.length - 1) return input;
   if (B.go < 0) {
-    if (clumsy) { if (st.now - B.since >= B.hold) { B.go = st.now; B.crouch = false; } }
+    if (clumsy) { if (st.now - B.since >= B.hold) { if (openNow(st, B.at, ahead)) { B.go = st.now; B.crouch = false; } else { B.since = st.now; B.hold = 0.2 + 2.5 * rnd(seed, ++B.n); } } }
     else if (st.now >= B.next) {
       B.next = st.now + 0.1;
       const run = safe(st, B.at, false, S.react) && safe(st, B.at, false, 2 * S.react);
@@ -434,7 +448,7 @@ export function botInput(st, input, { clumsy = false, seed = 1 } = {}) {
   const dx = n.x - st.x, dz = n.z - st.z, d = Math.hypot(dx, dz);
   if (d < 0.1) {
     B.at++;
-    if (ROUTE[B.at].h && B.at < ROUTE.length - 1) { B.go = -1; B.since = st.now; B.hold = clumsy ? 0.15 : 0; B.next = 0; }
+    if (ROUTE[B.at].h && !(clumsy && ROUTE[B.at].low) && B.at < ROUTE.length - 1) { B.go = -1; B.since = st.now; B.hold = clumsy ? 0.2 + 2.5 * rnd(seed, ++B.n) : 0; B.next = 0; }
     return input;
   }
   // (the last steps to a place are taken gently, not to run past it)
