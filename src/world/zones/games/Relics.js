@@ -1,4 +1,4 @@
-// Twenty-five things left over from before. The oasis is all that is left of the planet, and here and there
+// Thirty things left over from before. The oasis is all that is left of the planet, and here and there
 // something says so: a road sign that sends the evacuation into the sea, a vending machine under the ivy, a
 // scarecrow in a hazmat suit, a bus stop where the next bus is always four minutes away… — and, where nobody
 // goes, a fallout shelter whose periscope turns to look at who found it. Twenty stand by the paths and in the
@@ -45,6 +45,12 @@ export const RELIC_WORDS = {
   bottle: { r: 0.35, label: 'the bottle', text: 'A message in a bottle, washed up where nobody comes. It says: "If you find this, send help." On the back, in another hand: "We are the help. Sorry."' },
   postcards: { r: 0.45, label: 'the postcard rack', text: 'A rack of postcards, bleached white by forty summers. Every one of them says WISH YOU WERE HERE. It has stopped being a wish: there is nowhere else left to be.' },
   tins: { r: 0.9, label: 'the stack of tins', text: 'Tins, stacked higher than you by somebody who meant to outlast everything. Hundreds of them. All peaches. There is no tin opener — there never was one: that is the sad part.' },
+  // (…and five more, hidden: under the pier, two on it, on the secret cove, on an island of the great pond)
+  jukebox: { r: 0.75, label: 'the jukebox', text: 'A jukebox, half in the sand under the pier: the sea carried it here, and left it. Forty-five records are still in it. It would play you one for a coin — nobody has the coin, and nobody remembers the tunes.' },
+  photobooth: { r: 0.9, label: 'the photo booth', text: 'A photo booth. Four pictures, three minutes. The last strip is still in the slot: four faces, laughing at a joke nobody is left to explain. Nobody takes it. It is not theirs.' },
+  fortune: { r: 0.7, label: 'the fortune teller', text: 'A fortune-telling machine, at the very end of the pier. Its last card is still in the slot: "A LONG JOURNEY AWAITS YOU — AND FAIR WEATHER." It was right about the weather.' },
+  television: { r: 0.9, label: 'the television', text: 'A television, carried all the way to the most beautiful beach in the world and set down facing the sea. The deck chair has its back to it. Whoever sat here worked it out in the end.' },
+  light: { r: 0.4, label: 'the traffic light', text: 'A traffic light, alone on an island in a pond. It turned red one afternoon and has not changed its mind since. Nobody has crossed. Rules are rules.' },
   bunker: { r: 1.7, label: 'the mound', text: 'A fallout shelter, sealed from the inside — and so well hidden that you may be the first to find it. The periscope turns to look at you. Somebody is still down there, waiting for it all to be over. Nobody has had the heart to tell them.' },
 };
 
@@ -430,6 +436,92 @@ export function buildRelics(zone) {
       }
       metal.tint(0.72, 0.74, 0.77, 1).rod(V(1.02, 0.095, 0.3), V(1.2, 0.095, 0.36), 0.095, 10).rod(V(-1.0, 0.095, 0.45), V(-0.83, 0.095, 0.55), 0.095, 10);
       metal.tint(0.98, 0.74, 0.3, 1).rod(V(1.058, 0.095, 0.312), V(1.162, 0.095, 0.348), 0.099, 10).rod(V(-0.966, 0.095, 0.47), V(-0.864, 0.095, 0.53), 0.099, 10);
+    } else if (wish.id === 'jukebox') {
+      // a jukebox the sea left under the pier: sunk in the sand and leaning, its round top, its arch of coloured
+      // tubes, the chrome of its grille, the window where a record still lies
+      stone.tint(1.0, 0.93, 0.74, 1).lathe([[0, 0.16], [0.5, 0.1], [0.95, -0.08]], 12);
+      metal.place(0.04, -0.26, 0, 0, -0.14, 0.2);
+      metal.tint(0.36, 0.1, 0.09, 1).box(-0.42, 0, -0.3, 0.42, 1.18, 0.3).rod(V(0, 1.18, -0.3), V(0, 1.18, 0.3), 0.42, 14);
+      for (const sx of [-1, 1]) metal.tint(1.5, 0.95, 0.2, 1).box(sx * 0.355 - 0.045, 0.1, 0.3, sx * 0.355 + 0.045, 1.18, 0.345);
+      for (let i = 0; i < 8; i++) {
+        const a0 = (Math.PI * i) / 8, a1 = (Math.PI * (i + 1)) / 8, tone = [[1.5, 0.95, 0.2], [1.5, 0.35, 0.15], [0.3, 1.2, 0.5], [1.5, 0.6, 0.15]][i % 4];
+        metal.tint(...tone, 1).rod(V(-Math.cos(a0) * 0.355, 1.18 + Math.sin(a0) * 0.355, 0.322), V(-Math.cos(a1) * 0.355, 1.18 + Math.sin(a1) * 0.355, 0.322), 0.045, 6);
+      }
+      metal.tint(0.74, 0.76, 0.8, 1).box(-0.3, 0.12, 0.3, 0.3, 0.6, 0.325);
+      for (let i = 0; i < 7; i++) metal.tint(0.26, 0.26, 0.29, 1).box(-0.252 + i * 0.08, 0.14, 0.325, -0.228 + i * 0.08, 0.58, 0.333);
+      metal.tint(0.07, 0.09, 0.13, 1).box(-0.3, 0.74, 0.3, 0.3, 1.22, 0.318);
+      metal.tint(0.04, 0.04, 0.05, 1).rod(V(0, 0.98, 0.318), V(0, 0.98, 0.33), 0.2, 16);
+      metal.tint(0.8, 0.14, 0.1, 1).rod(V(0, 0.98, 0.33), V(0, 0.98, 0.336), 0.065, 12);
+      for (let i = 0; i < 6; i++) metal.tint(0.95, 0.92, 0.82, 1).box(-0.29 + i * 0.075, 0.635, 0.3, -0.235 + i * 0.075, 0.69, 0.336);
+      metal.tint(0.85, 0.68, 0.2, 1).box(0.2, 0.63, 0.3, 0.3, 0.7, 0.34);
+      metal.pop();
+    } else if (wish.id === 'photobooth') {
+      // a photo booth: its box, the curtain half drawn over the stool, the dark eye of the machine, the lit band
+      // on top — and the last strip of four pictures, still in the slot
+      const W = 0.66, D = 0.42, H = 2.05;
+      metal.tint(0.14, 0.34, 0.48, 1).box(-W, 0, -D, W, 0.08, D).box(-W, 0.08, -D, W, H, -D + 0.05).box(-W, 0.08, -D, -W + 0.05, H, D).box(W - 0.05, 0.08, -D, W, H, D).box(-W, H - 0.32, -D, W, H, D);
+      metal.tint(0.2, 0.44, 0.6, 1).box(0.04, 0.08, D - 0.05, W, H - 0.32, D);
+      metal.tint(0.05, 0.06, 0.08, 1).box(0.2, 1.22, D, 0.5, 1.54, D + 0.012);
+      metal.tint(0.8, 0.82, 0.86, 1).box(0.22, 0.74, D, 0.48, 0.82, D + 0.03);
+      metal.tint(0.96, 0.95, 0.9, 1).box(0.29, 0.4, D + 0.012, 0.41, 0.78, D + 0.02);
+      for (let i = 0; i < 4; i++) metal.tint(0.34 + (i % 2) * 0.1, 0.3 + (i % 2) * 0.08, 0.27, 1).box(0.305, 0.42 + i * 0.085, D + 0.02, 0.395, 0.49 + i * 0.085, D + 0.024);
+      for (let i = 0; i < 6; i++) { const x0 = -W + 0.05 + i * 0.108; metal.tint(...(i % 2 ? [0.62, 0.08, 0.09] : [0.84, 0.13, 0.12]), 1).box(x0, 0.7, D - 0.05 + (i % 2) * 0.02, x0 + 0.108, H - 0.32, D - 0.02 + (i % 2) * 0.02); }
+      metal.tint(0.74, 0.76, 0.8, 1).cylinder(-0.3, 0.08, 0.05, 0.03, 0.03, 0.42, 6);
+      metal.tint(0.1, 0.1, 0.11, 1).cylinder(-0.3, 0.5, 0.05, 0.17, 0.17, 0.06, 10);
+      metal.tint(1.5, 1.2, 0.5, 1).box(-W + 0.06, H - 0.27, D, W - 0.06, H - 0.05, D + 0.015);
+      for (let i = 0; i < 4; i++) metal.tint(0.14, 0.14, 0.18, 1).box(-0.5 + i * 0.27, H - 0.235, D + 0.015, -0.31 + i * 0.27, H - 0.085, D + 0.02);
+      metal.tint(0.75, 0.12, 0.1, 1).box(-W - 0.02, H, -D - 0.02, W + 0.02, H + 0.05, D + 0.02);
+    } else if (wish.id === 'fortune') {
+      // a fortune-telling machine: a cabinet with its slot and the card left in it, a case of glass on gold
+      // pillars under a small dome — and in the case a robot in a turban, its ball of glass before it
+      metal.tint(0.4, 0.1, 0.12, 1).box(-0.42, 0, -0.36, 0.42, 0.95, 0.36).box(-0.46, 1.95, -0.4, 0.46, 2.05, 0.4);
+      metal.tint(0.85, 0.68, 0.2, 1).box(-0.44, 0.9, -0.38, 0.44, 0.97, 0.38).box(-0.44, 0, -0.38, 0.44, 0.07, 0.38).rod(V(0.27, 0.58, 0.36), V(0.27, 0.58, 0.39), 0.03, 8);
+      metal.tint(0.08, 0.08, 0.09, 1).box(-0.12, 0.56, 0.36, 0.12, 0.61, 0.372);
+      metal.tint(0.97, 0.95, 0.86, 1).box(-0.08, 0.47, 0.372, 0.08, 0.59, 0.38);
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) metal.tint(0.85, 0.68, 0.2, 1).box(sx * 0.4 - 0.03, 0.97, sz * 0.34 - 0.03, sx * 0.4 + 0.03, 1.95, sz * 0.34 + 0.03);
+      metal.tint(0.3, 0.45, 0.5, 1).box(-0.38, 0.97, -0.345, 0.38, 1.95, -0.335);
+      metal.tint(0.85, 0.68, 0.2, 1).lathe([[0, 2.05], [0.34, 2.05], [0.3, 2.16], [0.14, 2.28], [0.04, 2.42], [0, 2.46]], 10);
+      metal.tint(0.3, 0.16, 0.5, 1).lathe([[0, 0.97], [0.3, 0.97], [0.27, 1.2], [0.16, 1.34], [0, 1.36]], 10);
+      metal.tint(0.8, 0.82, 0.86, 1).lathe([[0, 1.34], [0.1, 1.36], [0.13, 1.47], [0.1, 1.58], [0, 1.6]], 10);
+      metal.tint(0.2, 1.5, 1.2, 1).rod(V(-0.048, 1.5, 0.112), V(-0.048, 1.5, 0.126), 0.024, 8).rod(V(0.048, 1.5, 0.112), V(0.048, 1.5, 0.126), 0.024, 8);
+      metal.tint(0.85, 0.2, 0.3, 1).lathe([[0, 1.56], [0.15, 1.56], [0.17, 1.66], [0.1, 1.76], [0, 1.78]], 10);
+      metal.tint(1.5, 1.15, 0.3, 1).rod(V(0, 1.66, 0.16), V(0, 1.66, 0.178), 0.032, 8);
+      metal.tint(0.85, 0.68, 0.2, 1).cylinder(0, 0.97, 0.2, 0.07, 0.05, 0.06, 8);
+      metal.place(0, 0, 0.2);
+      metal.tint(0.8, 1.3, 1.5, 1).lathe([[0, 1.03], [0.07, 1.05], [0.1, 1.13], [0.07, 1.21], [0, 1.23]], 10);
+      metal.pop();
+    } else if (wish.id === 'television') {
+      // a television on four thin legs, set down on the sand facing the sea, its two aerials — and a deck chair a
+      // few steps before it, its back to the set
+      stone.tint(1.0, 0.93, 0.74, 1).lathe([[0, 0.05], [0.45, 0.04], [0.8, -0.06]], 10);
+      for (const sx of [-0.27, 0.27]) for (const sz of [-0.15, 0.15]) metal.tint(0.2, 0.14, 0.1, 1).cylinder(sx, -0.05, sz, 0.026, 0.02, 0.3, 6);
+      metal.tint(0.42, 0.26, 0.14, 1).box(-0.37, 0.24, -0.22, 0.37, 0.78, 0.22);
+      metal.tint(0.08, 0.1, 0.11, 1).box(-0.31, 0.31, 0.22, 0.14, 0.71, 0.235);
+      metal.tint(0.2, 0.27, 0.28, 1).box(-0.27, 0.35, 0.235, 0.1, 0.67, 0.24);
+      metal.tint(0.75, 0.7, 0.6, 1).box(0.18, 0.31, 0.22, 0.33, 0.71, 0.23);
+      metal.tint(0.1, 0.1, 0.11, 1).rod(V(0.255, 0.62, 0.23), V(0.255, 0.62, 0.262), 0.036, 8).rod(V(0.255, 0.5, 0.23), V(0.255, 0.5, 0.262), 0.036, 8);
+      metal.tint(0.74, 0.76, 0.8, 1).cylinder(0, 0.78, 0, 0.05, 0.04, 0.03, 8).rod(V(0, 0.8, 0), V(-0.3, 1.3, 0), 0.009, 5).rod(V(0, 0.8, 0), V(0.28, 1.36, 0), 0.009, 5);
+      for (const sx of [-0.31, 0.31]) wood.tint(0.95, 0.82, 0.6, 1).rod(V(sx, 0, 2.05), V(sx, 1.0, 1.1), 0.022, 5).rod(V(sx, 0, 1.25), V(sx, 0.52, 2.02), 0.022, 5);
+      wood.tint(0.95, 0.82, 0.6, 1).rod(V(-0.31, 1.0, 1.1), V(0.31, 1.0, 1.1), 0.022, 5).rod(V(-0.31, 0.3, 1.94), V(0.31, 0.3, 1.94), 0.022, 5);
+      for (let i = 0; i < 5; i++) {
+        const x0 = -0.28 + i * 0.112, tone = i % 2 ? [0.97, 0.95, 0.9] : [0.2, 0.55, 0.85];
+        // (the cloth, in two flat pieces: the back, then the seat)
+        metal.tint(...tone, 1).quad(V(x0, 0.98, 1.1), V(x0 + 0.112, 0.98, 1.1), V(x0 + 0.112, 0.42, 1.52), V(x0, 0.42, 1.52)).quad(V(x0, 0.42, 1.52), V(x0 + 0.112, 0.42, 1.52), V(x0 + 0.112, 0.31, 1.93), V(x0, 0.31, 1.93));
+        metal.tint(...tone, 1).quad(V(x0, 0.42, 1.52), V(x0 + 0.112, 0.42, 1.52), V(x0 + 0.112, 0.98, 1.1), V(x0, 0.98, 1.1)).quad(V(x0, 0.31, 1.93), V(x0 + 0.112, 0.31, 1.93), V(x0 + 0.112, 0.42, 1.52), V(x0, 0.42, 1.52));
+      }
+    } else if (wish.id === 'light') {
+      // a traffic light on its pole, leaning a little: the red is on, as it has been since; the box with the
+      // button one pressed to cross
+      metal.place(0, 0, 0, 0, 0, 0.05);
+      metal.tint(0.2, 0.22, 0.2, 1).cylinder(0, -0.3, 0, 0.11, 0.09, 0.5, 8).cylinder(0, 0.2, 0, 0.055, 0.05, 2.5, 8);
+      metal.tint(0.95, 0.75, 0.1, 1).box(-0.07, 1.05, 0.05, 0.07, 1.25, 0.13);
+      metal.tint(0.75, 0.12, 0.1, 1).rod(V(0, 1.15, 0.13), V(0, 1.15, 0.15), 0.025, 8);
+      metal.tint(0.09, 0.11, 0.1, 1).box(-0.17, 2.5, -0.12, 0.17, 3.42, 0.12);
+      for (const [ly, tone] of [[3.25, [2.6, 0.22, 0.16]], [2.96, [0.3, 0.2, 0.05]], [2.67, [0.06, 0.22, 0.1]]]) {
+        metal.tint(...tone, 1).rod(V(0, ly, 0.12), V(0, ly, 0.135), 0.105, 12);
+        metal.tint(0.09, 0.11, 0.1, 1).box(-0.13, ly + 0.095, 0.12, 0.13, ly + 0.12, 0.27);
+      }
+      metal.pop();
     } else if (wish.id === 'bunker') {
       // a mound the grass has taken back; in it a round steel hatch, ajar; a pipe to breathe by; and the tube of a
       // periscope (its head is a part of its own: it turns to look at who comes — see below)

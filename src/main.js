@@ -1422,7 +1422,7 @@ async function boot() {
       });
   };
   {
-    // twenty-five things left over from the world before (zones/games/Relics.js): looked at, each has a word to say —
+    // thirty things left over from the world before (zones/games/Relics.js): looked at, each has a word to say —
     // and which ones were looked at is remembered, to say when all of them were
     const relics = world.games.relics, seen = new Set((store.get('mmf.relics') || '').split(',').filter((id) => relics.list.some((q) => q.id === id)));
     world.actionSources.unshift((p) => { // (before the flowers at its foot)
@@ -1431,7 +1431,7 @@ async function boot() {
       return { label: `Look at ${q.label}`, run: () => {
         const first = !seen.has(q.id), all = relics.list.length;
         seen.add(q.id);
-        if (first) { store.set('mmf.relics', [...seen].join(',')); hud.setMushroom(seen.size, all); }
+        if (first) { store.set('mmf.relics', [...seen].join(',')); hud.setMushroom(seen.size, all); hud.relicFound(seen.size, all); }
         hud.note(`${q.text}${!first ? '' : seen.size >= all ? ` — That was the last of the ${all} relics of the world before. Now you know — and the mushroom cloud is yours: in the emotes (T).` : ` — Relic ${seen.size} of ${all}.`}`, 12000);
         audio.play('tick');
         // (the last one found: the cloud goes up at once — and from now on whenever they like)
@@ -1439,6 +1439,15 @@ async function boot() {
       } };
     });
     hud.setMushroom(seen.size, relics.list.length);
+    // (how many there are, and what for: said by the small count at the top left when it is pressed — and once to
+    // whoever arrives, a few seconds after the gate, for as long as some are still to be found: see `relicsHello`)
+    const relicsWord = () => {
+      const all = relics.list.length, n = seen.size;
+      return n >= all ? `You have found the ${all} relics of the world before: the mushroom cloud is yours, in the emotes (T).`
+        : `☢ ${all} relics of the world before are hidden all over the oasis — things that do not belong here: by the paths, on the pier and under it, on the islands, in the caves. Walk up to one and look at it. ${n ? `You have found ${n} of ${all}` : 'Find them all'}: the mushroom cloud is for whoever finds every one.`;
+    };
+    hud.on('relics', () => hud.note(relicsWord(), 11000));
+    app.relicsHello = () => { if (seen.size < relics.list.length && state.mode === 'walk' && !fair.session && !player.driver) hud.note(relicsWord(), 11000); };
     // the mushroom cloud of those who found them all, made of light like the animals, in their ring over their head —
     // the flash, the stem that rises drum by drum, the cap whose rim rolls, the embers (player/RankAnimals.js) —, and
     // a small boom; everybody near sees it (its tile is the last of the animals of light, in the emotes)
@@ -1846,7 +1855,7 @@ async function boot() {
     kit.paint = Math.max(0, PAINTS.indexOf(p.paint)); kit.trail = Math.max(0, TRAILS.indexOf(p.trail));
     if (p.size) { size = SIZES.indexOf(sizeOf(p.size)); store.set('mmf.size', SIZES[size]); }
   };
-  const showAccount = () => hud.setAccount({ name: account.name, available: account.available, mail: account.mail, email: account.email });
+  const showAccount = () => hud.setAccount({ name: account.name, available: account.available, mail: account.mail, email: account.email, google: account.google, viaGoogle: account.viaGoogle, passwordless: account.passwordless });
   /** Signed in (or out): what is owned, the days in a row and the look are asked again. */
   const accountChanged = async () => {
     showAccount();
@@ -1867,6 +1876,8 @@ async function boot() {
   // the account, on its card (ui/AccountView.js): signing in, making one, a new password with the recovery code
   const accountAction = async (what) => {
     if (what === 'logout') { await account.logout(); await accountChanged(); hud.note('Signed out: this browser is a guest again.', 5000); return; }
+    // (with Google: the game leaves for Google's page — with the name the robot wears, should this make a new account)
+    if (what === 'google') { hud.note('One moment: off to Google…', 4000); account.toGoogle(!/^Visitor \d+$/.test(name) ? name : ''); return; }
     if (what === 'email') {
       // the address of the account: only ever used to mail a code when the password is forgotten
       const got = await hud.form('The e-mail of your account', 'It is only used to send you a code if you forget the password. Leave it empty to take it away. Your password is asked for, so that nobody changes it behind your back.',
@@ -1880,10 +1891,35 @@ async function boot() {
     hud.closeAll();
     input.exitLock();
     input.keys.clear(); // (nothing stays pressed behind the card)
-    accountView.open({ mode: what === 'create' ? 'create' : what === 'reset' ? 'reset' : 'login', name: what === 'create' && !/^Visitor \d+$/.test(name) ? name : '', mail: account.mail });
+    accountView.open({ mode: what === 'create' ? 'create' : what === 'reset' ? 'reset' : 'login', name: what === 'create' && !/^Visitor \d+$/.test(name) ? name : '', mail: account.mail, google: account.google });
   };
+  // Signing in with Google (server/google.js): the game leaves for Google's page and comes back with a claim in its
+  // address (?google=…), which this browser hands to the server. The first time, the account is made under the
+  // name typed on the card — or the one the robot wears; when that will not do, the card asks for one.
+  let googleClaim = '';
+  const backFromGoogle = async (word, asked = '') => {
+    if (word === 'no') { hud.note('Signing in with Google was called off: nothing has changed.', 6000); return {}; }
+    if (word === 'expired' || word === 'failed' || word === 'off') { hud.note('Signing in with Google did not work. Try again in a moment.', 7000); return {}; }
+    googleClaim = word;
+    const done = await account.claim(word, asked || (!/^Visitor \d+$/.test(name) ? name : ''), profileNow());
+    if (done.needName) {
+      hud.closeAll(); input.exitLock(); input.keys.clear();
+      accountView.open({ mode: 'name', name: '', mail: account.mail, say: asked ? done.error : 'Google knows you now. One thing is left: the name of your account in the oasis.', warn: !!asked });
+      return { error: done.error };
+    }
+    if (done.error) { hud.note(done.error, 7000); return { error: done.error }; }
+    googleClaim = '';
+    if (!done.created) applyProfile(account.profile);
+    await accountChanged();
+    audio.play('victory');
+    hud.note(done.created ? `Your account “${account.name}” is made, and this browser is signed in with Google.` : `Welcome back, ${account.name}!`, 7000);
+    return {};
+  };
+
   accountView
+    .on('google', (typed) => account.toGoogle(typed || (!/^Visitor \d+$/.test(name) ? name : '')))
     .on('submit', async (mode, d) => {
+      if (mode === 'name') return backFromGoogle(googleClaim, d.name);
       if (mode === 'create') {
         const made = await account.create(d.name, d.password, profileNow(), d.email);
         if (made.error) return { error: made.error };
@@ -2116,7 +2152,16 @@ async function boot() {
     input.keys.clear();
     return payView.open(shop.pk, secret, { title: 'Payment', test: shop.mode === 'test', paid: async () => { if (session) await shop.confirm(session); arrived(item); } });
   };
-  account.load().then(() => { showAccount(); if (account.name) world.games.setMe(account.name); }); // (on the boards, "me" is the account when there is one)
+  account.load().then(async () => {
+    // (back from Google? the claim in the address is spent at once, and taken out of the address)
+    const word = params.get('google');
+    if (word) {
+      try { const u = new URL(location.href); u.searchParams.delete('google'); history.replaceState(null, '', u.pathname + u.search + u.hash); } catch { /* the address stays as it is */ }
+      await backFromGoogle(word);
+    }
+    showAccount();
+    if (account.name) world.games.setMe(account.name); // (on the boards, "me" is the account when there is one)
+  });
   hud.setSettings(settings);
   hud.setVolume(volume);
   showEmotes();
@@ -2572,6 +2617,8 @@ async function boot() {
   startPresence();
   canvas.focus();
   setTimeout(() => hud.note(touch ? 'Drag on the left to walk, on the right to look around' : 'Drag the mouse to look around · double-click to capture it', 5200), returning ? 6200 : 2600);
+  // (…then what there is to look for: the relics of the world before — said to whoever still has some to find)
+  setTimeout(() => app.relicsHello?.(), (returning ? 6200 : 2600) + 7000);
 }
 
 boot().catch((err) => {

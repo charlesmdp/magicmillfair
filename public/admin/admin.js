@@ -78,12 +78,26 @@
     userRooms: ['Rooms made by players', 'Off: nothing of them — no card in the shop, no path that answers. On: an account can buy a room of its own ($59 a month): reached by its link only, fifty visitors, a password if its owner wants one, its own boards of scores.'],
     freeRooms: ['Rooms by address', 'Off: only the common rooms exist (you still get in anywhere). On: any name written in the address (?room=a-name) is a room of its own, free.'],
   };
+  // (the switches that are games: one button puts them all off — as the game is delivered)
+  const GAME_SWITCHES = ['slide', 'pond', 'boats', 'hill', 'crack', 'hollow', 'waves', 'lava', 'hive', 'flip', 'spiral', 'cars', 'golf', 'ages', 'raft', 'walls', 'sneak', 'mine', 'coaster'];
   async function showReleases() {
     const res = await api('/api/release');
     if (!res.ok) return;
     const { release, refresh, build } = res.body, box = $('switches');
     $('fact-build').textContent = build || 'unknown';
     box.textContent = '';
+    {
+      const lit = GAME_SWITCHES.filter((k) => release[k] === true), row = el('div', 'switch'), text = el('div');
+      text.append(el('b', '', lit.length ? `${lit.length} game${lit.length === 1 ? ' is' : 's are'} switched on` : 'Every game is switched off'),
+        el('small', '', lit.length ? `${lit.map((k) => (SWITCH[k] || [k])[0]).join(', ')}. As the game is delivered, every one of them is off: you switch on those you want, below.` : 'As the game is delivered: you switch on those you want, below.'));
+      row.append(text);
+      if (lit.length) {
+        const all = el('button', 'warn', 'Switch every game off'); all.type = 'button';
+        all.onclick = async () => { if (said(await api('/api/release', { method: 'POST', body: { set: Object.fromEntries(lit.map((k) => [k, false])) } }), `${lit.length} game${lit.length === 1 ? '' : 's'} switched off. Every room has been told.`)) showReleases(); };
+        row.append(all);
+      }
+      box.append(row);
+    }
     for (const [name, value] of Object.entries(release)) {
       const [title, hint] = SWITCH[name] || [name, ''];
       const row = el('div', 'switch'), text = el('div');

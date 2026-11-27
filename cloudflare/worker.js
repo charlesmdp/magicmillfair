@@ -27,6 +27,7 @@ import { Room as Relay, MAX_FRAME, NEAR, RANGE, BLAST_EVERY, cleanRoom, originAl
 import { Limiter, LIMITS, BODY_MAX, allowed, parseBody, mayPost, bodyMax } from '../server/api.js';
 import { stripeConfig } from '../server/stripe.js';
 import { restMailer } from '../server/mail.js';
+import { googleConfig } from '../server/google.js';
 import { route, addBan } from '../server/routes.js';
 import { knock, roomRules, settle, wardrobeOf, newCrowd, noteCrowd } from '../server/door.js';
 import { mayBeNamed } from '../server/accounts.js';
@@ -220,11 +221,13 @@ export class Room extends DurableObject {
       settleLater: () => this.settleSoon(),
       tell: (name, message) => this.tellRoom(name, JSON.stringify(message)),
       store, stripe,
+      // signing in with Google, where the two secrets of it were given (server/google.js)
+      google: googleConfig(env),
       // e-mails leave through Cloudflare's Email Service: with its binding (EMAIL) where the Worker has one,
       // through its REST API with three secrets otherwise (see server/mail.js)
       mail,
       later: (work) => this.ctx.waitUntil(work), // (a message that leaves while its request is answered: mail.js)
-      flags: { npc: !!env.ANTHROPIC_API_KEY, admin: !!env.ADMIN_KEY, shop: stripe.mode || 'off', mail: !!mail },
+      flags: { npc: !!env.ANTHROPIC_API_KEY, admin: !!env.ADMIN_KEY, shop: stripe.mode || 'off', mail: !!mail, google: !!googleConfig(env) },
       // the secret that signs the notes of the runs: given, or drawn once and kept here
       secret: async () => {
         if (!this.signing) {
@@ -269,6 +272,7 @@ export class Room extends DurableObject {
     const out = await route({
       method: request.method, path: url.pathname, query: url.searchParams, body, client, admin: sameSecret(bearer, (env.ADMIN_KEY || '').trim()), bearer, // (a space or a new line pasted with the secret does not count)
       geo: unpackGeo(request.headers.get(GEO)), raw, signature: request.headers.get('Stripe-Signature') || '', site: url.origin,
+      cookie: request.headers.get('Cookie') || '', // (read by one route only: the way back from Google — server/google.js)
     }, ctx);
     if (out.bytes) return new Response(out.bytes, { status: out.status, headers: out.headers });
     return Response.json(out.body, { status: out.status, headers: { 'Cache-Control': 'no-store', ...out.headers } });

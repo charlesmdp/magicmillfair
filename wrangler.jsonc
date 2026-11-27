@@ -39,6 +39,9 @@
     //   SCORE_SECRET       optional: signs the notes of the game runs (drawn and kept by the Worker otherwise)
     //   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET   open the shop (sk_test_… to try, sk_live_… to sell): see the README, "The shop"
     //   STRIPE_PUBLISHABLE_KEY   optional (pk_test_… / pk_live_…): the payment form is then shown inside the game
+    //   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET   optional: visitors can then sign in with Google (an "OAuth client" of
+    //                      the kind "Web application" whose redirect URI is https://<the site>/api/google/callback):
+    //                      see the README, "Signing in with Google"
     //   CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_EMAIL_TOKEN   optional: with MAIL_FROM above, the game can then send an
     //                      e-mail (a code to set a new password, a welcome, a thank you — to accounts that gave an
     //                      address): see the README, "E-mails"
