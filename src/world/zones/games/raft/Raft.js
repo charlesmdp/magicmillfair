@@ -207,11 +207,11 @@ export class Raft {
   /** The ground of the headland: its height on a lattice, then pieces of it — each twice: in full, and with a quarter of the points for when it is far. */
   _ground() {
     const L = this.land, nx = Math.floor((L.x1 - L.x0) / CELL) + 1, nz = Math.floor((L.z1 - L.z0) / CELL) + 1, n = nx * nz;
-    const H = new Float32Array(n), kind = new Uint8Array(n), E = new Float32Array(n), top = new Float32Array(n), sea = new Float32Array(n), lvl = new Float32Array(n), o = {};
+    const H = new Float32Array(n), kind = new Uint8Array(n), isle = new Uint8Array(n), E = new Float32Array(n), top = new Float32Array(n), sea = new Float32Array(n), lvl = new Float32Array(n), o = {};
     for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
       const k = j * nx + i; L.at(L.x0 + i * CELL, L.z0 + j * CELL, o);
       H[k] = o.h; kind[k] = o.kind; E[k] = o.e; top[k] = o.top; sea[k] = o.sea; lvl[k] = o.level;
-      if (o.e <= 0.5 && o.h > o.level + 0.2) { kind[k] = 1; E[k] = (o.h - o.level) * 2.2; } // (the island of the fork is land: grass on its back, gravel round it)
+      if (o.e <= 0.5 && o.h > o.level + 0.2) { kind[k] = 1; E[k] = (o.h - o.level) * 2.2; isle[k] = 1; } // (the island of the fork is land: grass on its back, gravel round it)
     }
     const at = (i, j) => H[clamp(j, 0, nz - 1) * nx + clamp(i, 0, nx - 1)];
     const col = [0, 0, 0, 1], N = V(0, 1, 0), P = V(0, 0, 0);
@@ -275,13 +275,13 @@ export class Raft {
       const s = a.geometry.boundingSphere;
       this._pieces.push({ near: a, far: b, x: s.center.x, y: s.center.y, z: s.center.z, r: s.radius });
     }
-    this._lattice = { H, kind, E, top, sea, lvl, nx, nz };
+    this._lattice = { H, kind, isle, E, top, sea, lvl, nx, nz };
   }
 
   /** A point of the lattice of the ground nearest to a place: { h, kind, e, top, sea, flat (how level it lies, 0 … 1) }. */
   _groundAt(x, z, out = {}) {
     const L = this.land, G = this._lattice, i = clamp(Math.round((x - L.x0) / CELL), 1, G.nx - 2), j = clamp(Math.round((z - L.z0) / CELL), 1, G.nz - 2), k = j * G.nx + i;
-    out.h = G.H[k]; out.kind = G.kind[k]; out.e = G.E[k]; out.top = G.top[k]; out.sea = G.sea[k]; out.level = G.lvl[k];
+    out.h = G.H[k]; out.kind = G.kind[k]; out.isle = G.isle[k]; out.e = G.E[k]; out.top = G.top[k]; out.sea = G.sea[k]; out.level = G.lvl[k];
     out.flat = 1 / Math.hypot((G.H[k - 1] - G.H[k + 1]) / (2 * CELL), 1, (G.H[k - G.nx] - G.H[k + G.nx]) / (2 * CELL));
     return out;
   }
@@ -414,7 +414,9 @@ export class Raft {
       const x = L.x0 + R() * (L.x1 - L.x0), z = L.z0 + R() * (L.z1 - L.z0), g = this._groundAt(x, z, o), w = noise(x / 19 + 3, z / 19 + 8);
       if (g.h < 1.4 || g.kind === 0 || g.kind === 4 || g.flat < 0.72) continue;
       const here = { x, y: g.h - 0.15, z, k: 0.75 + 0.6 * R(), yaw: R() * TAU };
-      if (g.kind === 3 && g.sea > 3.5) { if (R() < 0.2 + 0.5 * w && kinds.pine.length < 130) kinds.pine.push(here); else if (R() < 0.3 && kinds.bush.length < 200) kinds.bush.push(here); }
+      // (on the island of the fork, bushes only: the river runs on both sides of it, and nothing tall may come between who looks and the raft)
+      if (g.isle) { if (R() < 0.5 && kinds.bush.length < 200) kinds.bush.push(here); }
+      else if (g.kind === 3 && g.sea > 3.5) { if (R() < 0.2 + 0.5 * w && kinds.pine.length < 130) kinds.pine.push(here); else if (R() < 0.3 && kinds.bush.length < 200) kinds.bush.push(here); }
       else if (g.kind === 1 && g.e > 2.6) { if (R() < 0.55 && kinds.round.length < 70) kinds.round.push(here); else if (R() < 0.5 && kinds.bush.length < 200) kinds.bush.push(here); }
       else if (g.kind === 1 && g.e > 1.1 && R() < 0.3 && kinds.bush.length < 200) kinds.bush.push(here);
       else if (g.kind === 2 && g.flat > 0.86 && R() < 0.6) { if (R() < 0.3 && kinds.round.length < 70) kinds.round.push(here); else if (kinds.bush.length < 200) kinds.bush.push(here); }
