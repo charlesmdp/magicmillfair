@@ -14,8 +14,8 @@ one before and 8 m and more over it. So the wall is always on the left and the s
 rides on the open side, behind the runner and a little above (6.2 m back, 3.5 m out, 3.3 m up): nothing is ever
 between it and the runner. Where a wall stands on the right as well — the two halls — it comes in over the middle
 of the way before the runner is between the two, and goes out again after. One asks to play on the shore
-at the south-east end of the south beach, at (79, 98) — past the quay of *Robots Can See You*, whose gate is at
-(60, 80): 26 m from that arch, 16 m from the mine mouth, 8 m south of the quay's corner. From there the line to
+at the south-east end of the south beach, at (79, 99) — past the quay of *Robots Can See You*, whose gate is at
+(60, 80): 27 m from that arch, 15.6 m from the mine mouth, 9 m south of the quay. From there the line to
 the ruin passes clear of the quay, and the tower of the spiral stands to its left (10° off: it hides the north
 wing of the ruin, not its keep). The ground there is dark rock at the foot of a wooded bank, not sand. One is
 put at the foot of the ruin, and let go at the gate again.
