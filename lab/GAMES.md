@@ -63,11 +63,12 @@ Asked for on 26 November 2026; each behind a switch that is off. What is built h
 | `ages` | **War Through the Ages** — two bases on one road, fifteen kinds of robot, five ages, turrets, a great blow each; a stage in the west meadow | `lab/games/ages.md` | `node tools/ages-test.mjs` (42) |
 | `raft` | **Wild River** — a raft down 648 m of river on a headland of its own, north of the golden dog: pools, rapids, rocks, a fork, falls | `lab/games/raft.md` | `node tools/raft-test.mjs` (39) |
 | `sneak` | **Robots Can See You** — a yard of containers on a quay in the south of the bay, five rooms, robots, cameras, a searchlight and beams whose sight is drawn on the ground; three cores, then the door | `lab/games/sneak.md` | `node tools/sneak-test.mjs` (30) |
+| `walls` | **Run the Walls** — a citadel of pale stone on a rock in the south bay: 300 m along its walls, wall to wall, up to its tower; a fall winds time back | `lab/games/walls.md` | `node tools/walls-test.mjs` (34) |
+| `mine` | **Little Mine Train** — ore carts hauled up inside the west mountain and let go: a trestle 125 m up, a spiral, tunnels, a fork, a drop, a lake under the rock; 1,035 m | `lab/games/mine.md` | `node tools/mine-test.mjs` (36) |
 | `sanctuary` | **The Sanctuary** (a place) — a hall of pale stone under a dome at the north of the west meadow: a mosque, a church and a synagogue round its middle, and a chant | `lab/games/sanctuary.md` | `node tools/sanctuary-test.mjs` (15) |
 
-`node tools/play-test.mjs ages raft sneak` plays them in the running game. Their music is in
-`src/extras/tunes.js` (`TUNES.ages`, `TUNES.raft`, `TUNES.sneak`: the rules of each say how far a run has come,
-`heatOf`). To come: `walls`, `mine`, `coaster`.
+`node tools/play-test.mjs ages raft sneak walls mine` plays them in the running game. Their music is in
+`src/extras/tunes.js` (`TUNES.<id>`: the rules of each say how far a run has come, `heatOf`). To come: `coaster`.
 
 ## Several at once: one game, seen the same by all
 
