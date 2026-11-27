@@ -17,7 +17,7 @@ export function attach(app) {
     leave: 'Leave the war',
     left: 'You left the war.',
     keys: (touch) => (touch
-      ? 'Tap a button: a brawler, a shooter, a heavy one · then a turret on your base, the great blow, the next age · A button takes its price in gold and lifts its veil as it comes back · Sturdy robots go in front by themselves: shooters behind them bring the other base down · Or: stick left / right to choose a button, the arrow button to press it'
-      : '1 2 3: send a brawler, a shooter, a heavy one · 4: a turret on your base · 5: the great blow, on every robot of the other side · 6: the next age, once the bar is full · Or ← → to choose a button and Space to press it; a click does too · Sturdy robots go in front by themselves: shooters behind them bring the other base down · E: leave · H: these keys again'),
+      ? 'Tap a button: a brawler, a shooter, a heavy one · then a turret on your base, the great blow, the next age · A button takes its price in gold, and lifts its veil as it comes back · Sturdy robots go in front by themselves: the shooters behind them bring the other base down · Or: stick left / right to choose a button, the arrow button to press it'
+      : '1 2 3: send a brawler, a shooter, a heavy one · 4: a turret on your base · 5: the great blow · 6: the next age, once the bar is full · Or ← → and Space, or a click · Sturdy robots go in front by themselves: the shooters behind them bring the other base down · E: leave · H: these keys again'),
   });
 }
