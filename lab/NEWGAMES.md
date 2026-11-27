@@ -99,7 +99,10 @@ the wheat fields (-62, -124), Lookout Hill (-2, -90), the quad track; in the nor
 (212, -296), the golden dog, the sea fall (168, -208), the Smugglers' Den (150, -217) and the slide, which comes
 down from the cliffs there to the sea; in the west the Stairway (-312, 60), the Lost Temple (-380, 36), the
 waterfall (-268, 116) and its torrent up to the High Clearing (-357, 193); the secret cove (178, 196). One walks
-inside `BOUNDS` (`src/world/layout/layout.js`); the mountains beyond — north of z -250, south of z 250, west of
+inside `BOUNDS` (`src/world/layout/layout.js`). **Built since**: War Through the Ages — a stage of 36 × 8 m in the
+west meadow at (-259, -19), its gate at (-240, -13), just south of the cars' table; Wild River — a headland of
+its own in the sea against the northern cliffs (x 258…524, z -511…-351), its gate on the north beach at
+(51.5, -116.5), 21 m from the slide's. The mountains beyond — north of z -250, south of z 250, west of
 x -290, up to ±500 — are ground nobody walks: a ride may go there. The sea is free: several games stand in it.
 
 ## The games, one by one

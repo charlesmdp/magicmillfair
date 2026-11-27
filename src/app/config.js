@@ -26,7 +26,7 @@ export const RELEASE = {
   cars: false, // Karting Simulator: radio-controlled cars raced on a table, seen from above (an extra)
   golf: false, // Balthazar Golf: nine holes of crazy golf round the acid pond (an extra)
   ages: false, // War Through the Ages: two armies on one road, from the stone age to the atom: units, turrets, and an age to reach before the other does (an extra)
-  raft: false, // Wild River: a raft down a mountain river to the sea: rapids, rocks, falls (an extra)
+  raft: false, // Wild River: a raft down a river in its own canyon, on a headland north of the golden dog, to the sea (an extra)
   walls: false, // Run the Walls: a ruin one crosses by running along its walls, from wall to wall, and winding time back after a fall (an extra)
   sneak: false, // Robots Can See You: alleys patrolled by robots that see: one slips through unseen (an extra)
   mine: false, // Little Mine Train: a mine cart through the mountains: lean, brake, jump the gaps (an extra)

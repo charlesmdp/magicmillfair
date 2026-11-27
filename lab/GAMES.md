@@ -54,6 +54,19 @@ tune of one game loads nothing of another); `node tools/tunes-test.mjs` (175) ch
 `tools/game-shots.mjs` takes pictures of a game in the running game: `node tools/game-shots.mjs waves
 far=30,26,-78,-115,-28 gate=gate a=play:8` (its top says how).
 
+## Six more, and a place (lab/NEWGAMES.md)
+
+Asked for on 26 November 2026; each behind a switch that is off. What is built has its own notes:
+
+| Switch | What it is | Its notes | Its checks |
+|---|---|---|---|
+| `ages` | **War Through the Ages** — two bases on one road, fifteen kinds of robot, five ages, turrets, a great blow each; a stage in the west meadow | `lab/games/ages.md` | `node tools/ages-test.mjs` (42) |
+| `raft` | **Wild River** — a raft down 648 m of river on a headland of its own, north of the golden dog: pools, rapids, rocks, a fork, falls | `lab/games/raft.md` | `node tools/raft-test.mjs` (39) |
+
+`node tools/play-test.mjs ages raft` plays them in the running game. Their music is in `src/extras/tunes.js`
+(`TUNES.ages`, `TUNES.raft`: the rules of each say how far a run has come, `heatOf`). To come: `walls`, `sneak`,
+`mine`, `coaster`, and the place `sanctuary`.
+
 ## Several at once: one game, seen the same by all
 
 Asked for by the owner after playing with a friend ("on voit le nom du robot qui bouge sans cesse", "chacun joue

@@ -63,7 +63,7 @@
     cars: ['Karting Simulator', 'Radio-controlled cars raced on a table by the acid pond, seen from above: three laps against three others.'],
     golf: ['Balthazar Golf', 'Nine holes of crazy golf round the acid pond, each the valley in miniature.'],
     ages: ["War Through the Ages", "A toy battlefield in the west meadow, south of the cars' table: two armies on one road, from the stone age to the atom — robots that fight by themselves, turrets, a great blow an age, and an age to reach before the other does. The fastest victory."],
-    raft: ["Wild River", "A raft down a mountain river to the sea: rapids, rocks, falls."],
+    raft: ["Wild River", "A raft down 650 m of river in its own canyon, north of the golden dog: pools, rapids, rocks, falls — a start every ten seconds."],
     walls: ["Run the Walls", "A ruin one crosses by running along its walls, from wall to wall, and winding time back after a fall."],
     sneak: ["Robots Can See You", "Alleys patrolled by robots that see: one slips through unseen."],
     mine: ["Little Mine Train", "A mine cart through the mountains: lean, brake, jump the gaps."],

@@ -685,7 +685,7 @@ export class Raft {
     else if (e.type === 'brace') io.play('jump', { volume: 0.35 });
     else if (e.type === 'rock') { io.play(e.braced ? 'land' : 'hit', { volume: e.braced ? 0.5 : 0.9 }); S.shake = e.braced ? 0.4 : 1; io.note(e.braced ? 'Braced!' : 'Knocked! Brace before a rock you cannot miss.', 1800); io.splash?.(pose.x, pose.level, pose.z, 3); }
     else if (e.type === 'bank') { io.play('land', { volume: 0.4 }); S.shake = Math.max(S.shake, 0.3); }
-    else if (e.type === 'lip') io.play('whoosh', { volume: Math.min(1, 0.35 + e.h * 0.07) });
+    else if (e.type === 'lip') io.play('dive', { volume: Math.min(1, 0.35 + e.h * 0.07) }); // (over the lip of a fall: the game's own sound of a dive)
     else if (e.type === 'land') {
       io.play('splash', { volume: clamp(0.35 + e.h * 0.07, 0.3, 1) }); io.splash?.(pose.x, pose.level, pose.z, 3 + e.h * 0.8); S.shake = Math.max(S.shake, e.clean ? 0.25 + e.h * 0.05 : 0.9);
       if (e.h >= RAFT.fall.least) { if (e.clean) io.note(e.h > 5 ? 'Down the great fall!' : 'Braced — clean!', 1600); else if (!e.side || e.braced) { io.play('hit', { volume: 0.7 }); io.note(e.braced ? 'Sideways! Take the falls straight.' : 'Knocked! Press BRACE just before a fall.', 2200); } }
