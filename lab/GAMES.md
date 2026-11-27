@@ -65,6 +65,7 @@ Asked for on 26 November 2026; each behind a switch that is off. What is built h
 | `sneak` | **Robots Can See You** — a yard of containers on a quay in the south of the bay, five rooms, robots, cameras, a searchlight and beams whose sight is drawn on the ground; three cores, then the door | `lab/games/sneak.md` | `node tools/sneak-test.mjs` (30) |
 | `walls` | **Run the Walls** — a citadel of pale stone on a rock in the south bay: 300 m along its walls, wall to wall, up to its tower; a fall winds time back | `lab/games/walls.md` | `node tools/walls-test.mjs` (34) |
 | `mine` | **Little Mine Train** — ore carts hauled up inside the west mountain and let go: a trestle 125 m up, a spiral, tunnels, a fork, a drop, a lake under the rock; 1,035 m | `lab/games/mine.md` | `node tools/mine-test.mjs` (36) |
+| `guide` (on) | **Barnaby the barker** (a character) — a robot in a top hat on the gravel before the carport of the mill: he calls who arrives, and, asked, says which games are open today and where, and that they are free to try (he reads it from the running game) | the top of `src/extras/guide.js` | seen in pictures; the walk and smoke tests pass with him there |
 | `sanctuary` | **The Sanctuary** (a place) — a hall of pale stone under a dome at the north of the west meadow: a mosque, a church and a synagogue round its middle, and a chant | `lab/games/sanctuary.md` | `node tools/sanctuary-test.mjs` (15) |
 
 `node tools/play-test.mjs ages raft sneak walls mine` plays them in the running game. Their music is in
