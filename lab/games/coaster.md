@@ -71,7 +71,7 @@ The Leap needs the burst: from the flag before it, it may be pressed anywhere in
 What it adds to the world (only when it is on): one group, `coaster` — the line in pieces of 180 m, each built
 twice (within 170 m: rails, sleepers, the red boards, stringers, every bent with its girts and crosses; beyond:
 two rails and the legs, drawn out to 3 km so that the coaster is seen on the mountains from anywhere in the
-valley), the pylons and boards in one mesh, the station — and ten cars kept apart (one's own, eight for the
+valley), the pylons, the boards and the bulbs up the lifts in one mesh, the station — and ten cars kept apart (one's own, eight for the
 others, the one that waits). Counted in the running game: 41 to 54 thousand triangles of it are handed to the
 renderer while one rides (55 to 78 meshes), 36 thousand in 44 meshes while one walks in the valley — before the
 renderer leaves out what is not in view —, 110 thousand in all. Each frame while nobody rides: thirteen
@@ -97,12 +97,14 @@ rate on a real device was not measured (the pictures were taken with a software 
 game's own server (`node lab/tools/duo-games.mjs coaster --late=10`) each said "with Bob", "with Alice", and
 each saw the other's robot on the lift, sixty metres off, their clocks a fifth of a second apart; the other's
 car is too small in those pictures to be told, so it was looked at by putting a rider on the rails by hand (a
-blue car, twenty metres ahead on the Flank). **Two people have not ridden together.** The line is long for a first try: 2 min 27 s clean, three lifts in it (34 s of
-chain in all): its owner should say first whether the lifts are a rest or a wait. What is weakest: the last
+blue car, twenty metres ahead on the Flank). **Two people have not ridden together.** The line is long for a
+first try: 2 min 27 s clean, three lifts in it (34 s of chain in all): its owner should say first whether the
+lifts are a rest or a wait. What is weakest: the last
 kilometre runs through the forest of the southern slopes, where trees still stand close on both sides and the
 view ahead is shorter than on the bare rock of the north and the west; the sparks are small; the fork's rails
 overlap the line's for a few metres where they part and meet (no points are drawn); the terminus is plain (an
-arch, buffers, a few planks) and its last metres lie across the edge of a meadow one walks on, at knee height;
+arch, buffers, a few planks) and its last metres lie along the edge of a meadow one walks on, at the height of
+one's shoulders;
 the bents stand on the rock without footings and some legs come down steep faces; there is no sound of the
 chain or of the wheels (only the game's own effects: a click, a squeal at the edge, the burst); no robot tends
 the station; the line is not drawn on the map. The pictures were all taken at the lowest quality.
