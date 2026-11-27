@@ -62,10 +62,11 @@ Asked for on 26 November 2026; each behind a switch that is off. What is built h
 |---|---|---|---|
 | `ages` | **War Through the Ages** — two bases on one road, fifteen kinds of robot, five ages, turrets, a great blow each; a stage in the west meadow | `lab/games/ages.md` | `node tools/ages-test.mjs` (42) |
 | `raft` | **Wild River** — a raft down 648 m of river on a headland of its own, north of the golden dog: pools, rapids, rocks, a fork, falls | `lab/games/raft.md` | `node tools/raft-test.mjs` (39) |
+| `sanctuary` | **The Sanctuary** (a place) — a hall of pale stone under a dome at the north of the west meadow: a mosque, a church and a synagogue round its middle, and a chant | `lab/games/sanctuary.md` | `node tools/sanctuary-test.mjs` (15) |
 
 `node tools/play-test.mjs ages raft` plays them in the running game. Their music is in `src/extras/tunes.js`
 (`TUNES.ages`, `TUNES.raft`: the rules of each say how far a run has come, `heatOf`). To come: `walls`, `sneak`,
-`mine`, `coaster`, and the place `sanctuary`.
+`mine`, `coaster`.
 
 ## Several at once: one game, seen the same by all
 

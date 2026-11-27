@@ -68,7 +68,7 @@
     sneak: ["Robots Can See You", "Alleys patrolled by robots that see: one slips through unseen."],
     mine: ["Little Mine Train", "A mine cart through the mountains: lean, brake, jump the gaps."],
     coaster: ["Hold the Rails!", "A roller coaster one drives oneself through every mountain: stray from the rails and one falls."],
-    sanctuary: ['The Sanctuary', 'A great hall of stone in the mountain: a church, a mosque and a synagogue under one roof, and its deep music.'],
+    sanctuary: ['The Sanctuary', 'A great hall of pale stone under a dome, at the north of the west meadow: a mosque, a church and a synagogue round its middle, and a chant for who walks in.'],
     caves: ['The caves are safe places', 'In a cave, only those nearby hear what is said.'],
     stats: ['The game in figures', 'The counters, and the page /opendata.'],
     stars: ['Stars on the map', 'On: the big attractions wear a red star and their name on the map (M). Off: the map names its places only.'],
