@@ -15,7 +15,14 @@
 //                                                                                       Google stands for — or, the first time, a
 //                                                                                       new one under `name`; { needName } when a
 //                                                                                       name has to be chosen first: the claim waits)
+//   GET  /api/account?free=<name>                            → { free, ok }   (is that name free, and may it be worn? asked as it is typed)
+//   GET  /api/account?pw=<token>                             → { name }       (whose password the link of a message lets one choose)
 //   and, where the host can send e-mail (mail.js) — elsewhere no address is ever kept:
+//        join    { name, email, profile? }                   → { account, created }   (a name and an address, no password yet: the
+//                                                                            account is made, this browser signed in, and a link
+//                                                                            is mailed to choose a password — inviteMail)
+//        setpw   { token, password }                         → { account }   (the link of that message: the password is chosen)
+//        invite  {}                                          → { ok }        (signed in to such an account: the link is mailed again)
 //        create  { …, email? }                               the account carries an address (and is welcomed there: mail.js)
 //        email   { email, password }                         → { account }   (signed in: the address is given, changed, or — '' — taken away)
 //        mailcode { name }                                   → { ok }        (a code is mailed to the address of that account, if it has
@@ -33,17 +40,19 @@
 // no password at all: no `hash`, no `code`) }; `goog:<that number>` → { acct } (the account it stands for);
 // `dev:<device>` → { acct } (the account a browser is attached to). A browser without an account keeps the
 // same `pass` and `first` in its own record, `own:<device>` (see shop.js).
-import { randomId, sameSecret } from './token.js';
+import { randomId, sameSecret, sign, verify } from './token.js';
 import { cleanName } from './protocol.js';
 import { nameOk } from './decency.js';
 import { COLORS, sizeOf } from './items.js';
-import { cleanEmail, maskEmail, codeMail, mailLater, welcomeMail } from './mail.js';
+import { cleanEmail, maskEmail, codeMail, mailLater, welcomeMail, inviteMail } from './mail.js';
 import { readClaim, dropClaim } from './google.js';
 
 const enc = new TextEncoder();
 const ROUNDS = 100_000, DEVICES = 12, FAILS = 10, LOCK = 15 * 60_000;
 /** A code that was mailed lasts `MAIL_CODE`; an account is sent one every `MAIL_GAP` at the most, `MAIL_DAY` a day. */
 const MAIL_CODE = 30 * 60_000, MAIL_GAP = 2 * 60_000, MAIL_DAY = 5;
+/** The link of the message that lets a new account choose its password lasts a week. */
+const INVITE = 7 * 86_400_000;
 const DEVICE = /^[A-Za-z0-9_-]{16,64}$/;
 const b64 = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const out = (status, body, headers = {}) => ({ status, body, headers });
@@ -64,10 +73,43 @@ export function accountName(text) {
   return /^[\p{L}\p{N}][\p{L}\p{N} _-]{1,14}[\p{L}\p{N}]$/u.test(s) && nameOk(s) ? s : '';
 }
 const keyOf = (name) => `acct:${name.toLowerCase()}`;
+// `mail:<address>` → { acct }: the account an address belongs to (one account for an address: whoever gives a name
+// and an address at the fair is told when that address has an account already — and signing in with Google finds
+// the account of its address). The accounts made before this list existed are put on it the first time it is read.
+const mailKey = (email) => `mail:${email}`;
+async function accountByEmail(store, email) {
+  if (!email) return null;
+  if (store.list && !(await store.get('mailidx'))) {
+    for (const [, a] of await store.list('acct:')) if (a?.email && a.name && !(await store.get(mailKey(a.email)))) await store.put(mailKey(a.email), { acct: a.name.toLowerCase() });
+    await store.put('mailidx', { at: Date.now() });
+  }
+  const link = await store.get(mailKey(email)), acct = link?.acct ? await store.get(`acct:${link.acct}`) : null;
+  return acct && acct.email === email ? acct : null;
+}
+/** The address of an account is listed (unless another account holds it already: the first keeps it). */
+async function listEmail(store, email, name) {
+  if (!email) return;
+  const held = await accountByEmail(store, email);
+  if (!held) await store.put(mailKey(email), { acct: name.toLowerCase() });
+}
 /** Is that the name of an account (whatever its capitals)? */
 export const isAccountName = async (store, name) => !!accountName(name) && !!(await store.get(keyOf(accountName(name))));
 /** The names the fair gives to who has not chosen one ("Visitor 42"): never the name of an account. */
 const GUEST_NAME = /^visitor \d+$/i;
+/**
+ * A name for a new account, drawn from an address: what stands before its @ (and before a +), made a name, made
+ * free with a number if somebody has it — '' when nothing can be made of it. Only ever a suggestion, put in the
+ * field for whoever signs in with Google the first time: they may change it.
+ */
+async function nameFrom(store, email) {
+  const base = String(email || '').split('@')[0].split('+')[0].normalize('NFKC').replace(/[^\p{L}\p{N}_-]+/gu, '_').replace(/^[_-]+|[_-]+$/g, '').slice(0, 16).replace(/[_-]+$/, '');
+  if (base.length < 2) return '';
+  for (const n of [base, ...Array.from({ length: 30 }, (_, i) => `${base.slice(0, 14)}${i + 2}`)]) {
+    const ok = accountName(n.length < 3 ? `${n}${n.length < 2 ? '00' : '0'}` : n);
+    if (ok && !GUEST_NAME.test(ok) && !(await store.get(keyOf(ok)))) return ok;
+  }
+  return '';
+}
 const goodPassword = (p) => typeof p === 'string' && p.length >= 8 && p.length <= 100;
 /** The look of a robot, as an account keeps it (anything else is dropped). */
 function cleanProfile(p) {
@@ -171,13 +213,43 @@ async function attach(store, acct, device, now) {
   if (pass && pass.sub && pass === mine.pass) await store.put(`sub:${pass.sub}`, { device, account: acct.name.toLowerCase(), at: now });
   return next;
 }
-const shown = (acct) => ({ name: acct.name, profile: acct.profile || null, devices: (acct.devices || []).length, ...(acct.email && { email: maskEmail(acct.email) }), ...(acct.google && { google: true }), ...(!acct.hash && { passwordless: true }) });
+const shown = (acct) => ({ name: acct.name, profile: acct.profile || null, devices: (acct.devices || []).length, ...(acct.email && { email: maskEmail(acct.email) }), ...(acct.google && { google: true }), ...(!acct.hash && { passwordless: true }), ...(!acct.hash && acct.invite && { invited: true }) });
+
+/** The link that lets a new account choose its password, read: { acct, t } while it lasts and was not used — or null. */
+async function readInvite(ctx, store, token, now) {
+  const t = typeof token === 'string' && token.length < 800 && ctx.secret ? await verify(await ctx.secret(), token) : null;
+  if (!t || t.p !== 1 || typeof t.a !== 'string' || typeof t.n !== 'string' || !(t.exp > now)) return null;
+  const acct = await store.get(`acct:${t.a}`);
+  return acct && acct.invite && acct.invite.n === t.n && acct.invite.until > now ? { acct, t } : null;
+}
+/** A link to choose its password is made for an account (kept on it: good once, for a week) and mailed. Returns the account as it is kept. */
+async function sendInvite(req, ctx, store, acct, now) {
+  const n = randomId(12), sent = (acct.mailed || []).filter((t) => now - t < 24 * 3600_000);
+  const next = { ...acct, invite: { n, until: now + INVITE }, mailed: [...sent, now] };
+  await store.put(keyOf(acct.name), next);
+  const token = await sign(await ctx.secret(), { p: 1, a: acct.name.toLowerCase(), n, exp: now + INVITE });
+  mailLater(ctx, { to: acct.email, ...inviteMail(req.site || '', acct.name, `${req.site || ''}/?pw=${encodeURIComponent(token)}`, Math.round(INVITE / 86_400_000)) });
+  return next;
+}
 
 /** Answers /api/account; returns nothing for any other path. `limited(name)`: has this address asked too often? */
 export async function accountRoute(req, ctx, limited) {
   if (req.path !== '/api/account') return null;
   const { method, query, body } = req, store = ctx.store, now = ctx.now();
   if (method === 'GET' || method === 'HEAD') {
+    if (query.has('free')) {
+      // is that name free? Asked as it is typed, on the card of the account: "that will do" was said of names
+      // somebody had, and the refusal only came with the button (the owner tried his own name, and was told yes)
+      if (limited('names')) return out(429, { error: 'Not so fast.' }, { 'Retry-After': '10' });
+      const n = accountName(query.get('free') || '');
+      return out(200, { ok: !!n && !GUEST_NAME.test(n), free: !!n && !GUEST_NAME.test(n) && !(await store.get(keyOf(n))) });
+    }
+    if (query.has('pw')) {
+      // the link of the message that lets a new account choose its password: whose it is, while it lasts
+      if (limited('names')) return out(429, { error: 'Not so fast.' }, { 'Retry-After': '10' });
+      const t = await readInvite(ctx, store, query.get('pw'), now);
+      return t ? out(200, { name: t.acct.name }) : out(404, { error: 'That link has expired, or was used already.' });
+    }
     const acct = await accountOf(store, query.get('device') || '');
     return out(200, { account: acct ? shown(acct) : null });
   }
@@ -199,7 +271,7 @@ export async function accountRoute(req, ctx, limited) {
     await store.put(keyOf(acct.name), next);
     return out(200, { account: shown(next) });
   }
-  if (action !== 'create' && action !== 'login' && action !== 'reset' && action !== 'email' && action !== 'mailcode' && action !== 'google') return out(400, { error: 'Unknown action.' });
+  if (!['create', 'login', 'reset', 'email', 'mailcode', 'google', 'join', 'setpw', 'invite'].includes(action)) return out(400, { error: 'Unknown action.' });
   if (limited('account')) return out(429, { error: 'Too many tries: wait a minute.' }, { 'Retry-After': '60' });
   if (action === 'google') {
     // back from Google (google.js): this browser claims what Google said — the game's page does, in the browser
@@ -214,10 +286,15 @@ export async function accountRoute(req, ctx, limited) {
       const mine = await accountOf(store, device);
       if (mine) acct = { ...mine, google: said.sub, ...(ctx.mail && !mine.email && said.email && cleanEmail(said.email) && { email: cleanEmail(said.email) }) };
       else {
-        // (the name: the one typed on the card, else the one the robot wears — never guessed from Google)
+        // (an account has this very address already — made with a password, before Google was asked: it is
+        // theirs, and it is said; nothing is joined without its password, or the code its address can be sent)
+        const gmail = said.email ? cleanEmail(said.email) : '', same = gmail ? await accountByEmail(store, gmail) : null;
+        if (same) return out(409, { same: same.name, error: `This Google address is the e-mail of the account “${same.name}”. Sign in to it — with its password, or “Forgot the password” for a code by e-mail — then choose “Sign in with Google too” in the settings.` });
+        // (the name: the one typed on the card, else the one the robot wears; when neither will do, one is asked
+        // for — and what stands before the @ of the Google address is put in the field, to keep or to change)
         const asked = [body.name, said.want].find((n) => typeof n === 'string' && n.trim()), wanted = accountName(asked);
-        if (!wanted || GUEST_NAME.test(wanted)) return out(409, { needName: true, error: asked && !nameOk(String(asked)) ? 'That name cannot be worn here: pick another.' : 'Choose a name for your account: 3 to 16 letters or digits.' });
-        if (await store.get(keyOf(wanted))) return out(409, { needName: true, error: `The name “${wanted}” is taken. Choose another.` });
+        if (!wanted || GUEST_NAME.test(wanted)) return out(409, { needName: true, suggest: await nameFrom(store, gmail), error: asked && !nameOk(String(asked)) ? 'That name cannot be worn here: pick another.' : 'Choose a name for your account: 3 to 16 letters or digits.' });
+        if (await store.get(keyOf(wanted))) return out(409, { needName: true, suggest: await nameFrom(store, gmail), error: `The name “${wanted}” is taken — if it is yours, sign in to it with its password. Otherwise choose another.` });
         const email = ctx.mail && said.email ? cleanEmail(said.email) : '';
         acct = { name: wanted, salt: randomId(16), created: now, devices: [], items: [], visit: null, profile: cleanProfile(body.profile), fails: 0, lock: 0, google: said.sub, ...(email && { email }) };
         created = true;
@@ -226,8 +303,48 @@ export async function accountRoute(req, ctx, limited) {
     }
     await dropClaim(store, body.claim, now);
     const made = await attach(store, acct, device, now);
+    await listEmail(store, made.email, made.name);
     if (created && made.email) mailLater(ctx, { to: made.email, ...welcomeMail(req.site || '', made.name) });
     return out(200, { account: shown(made), created });
+  }
+  if (action === 'join') {
+    // A name and an address, no password yet — "How should we call you?", and whoever is about to pay: the account
+    // is made at once (the name is theirs, this browser is signed in, what it had goes with it) and a link is
+    // mailed to choose a password. Until then the account is opened by that link, or by the code "Forgot the
+    // password" sends to the same address: nobody else has either.
+    if (!ctx.mail || !ctx.secret) return out(501, { error: 'This server sends no e-mail: make an account with a password instead.' });
+    if (await accountOf(store, device)) return out(400, { error: 'This browser is signed in already.' });
+    const name = accountName(body.name), email = body.email ? cleanEmail(body.email) : '';
+    if (!name) return out(400, { field: 'name', error: typeof body.name === 'string' && !nameOk(body.name) ? 'That name cannot be worn here: pick another.' : 'A name is 3 to 16 letters or digits.' });
+    if (GUEST_NAME.test(name)) return out(400, { field: 'name', error: 'That name is kept for visitors without an account. Pick another.' });
+    if (!email) return out(400, { field: 'email', error: 'That does not look like an e-mail address.' });
+    if (await store.get(keyOf(name))) return out(409, { field: 'name', error: 'That name is taken — if it is yours, sign in.' });
+    const same = await accountByEmail(store, email);
+    if (same) return out(409, { field: 'email', same: same.name, error: `An account already uses this address: “${same.name}”. Sign in to it — “Forgot the password” sends a code there.` });
+    const acct = { name, salt: randomId(16), created: now, devices: [], items: [], visit: null, profile: cleanProfile(body.profile), fails: 0, lock: 0, email };
+    await attach(store, acct, device, now);
+    await store.put(mailKey(email), { acct: name.toLowerCase() });
+    const made = await sendInvite(req, ctx, store, await store.get(keyOf(name)), now);
+    return out(200, { account: shown(made), created: true });
+  }
+  if (action === 'setpw') {
+    // the link of that message: the password is chosen (once), and the browser it is opened in is signed in
+    const got = await readInvite(ctx, store, body.token, now);
+    if (!got) return out(403, { error: 'That link has expired, or was used already. In the game: Settings, Your account, “Forgot the password” sends a code to your e-mail.' });
+    if (!goodPassword(body.password)) return out(400, { error: 'The password needs at least 8 characters.' });
+    const { invite: _spent, ...rest } = got.acct;
+    const made = await attach(store, { ...rest, hash: await hashOf(body.password, got.acct.salt), fails: 0, lock: 0 }, device, now);
+    return out(200, { account: shown(made) });
+  }
+  if (action === 'invite') {
+    // signed in to an account that has no password yet: the link is mailed again (a few a day at the most)
+    const acct = await accountOf(store, device);
+    if (!acct) return out(403, { error: 'Sign in first.' });
+    if (acct.hash || !acct.email || !ctx.mail || !ctx.secret) return out(400, { error: acct.hash ? 'This account has a password already.' : 'This account has no e-mail.' });
+    const sent = (acct.mailed || []).filter((t) => now - t < 24 * 3600_000);
+    if (sent.length >= MAIL_DAY || (sent.length && now - sent[sent.length - 1] < MAIL_GAP)) return out(429, { error: 'A link was sent a moment ago: look in your mail — and in its spam folder.' });
+    await sendInvite(req, ctx, store, acct, now);
+    return out(200, { ok: true, account: shown(acct) });
   }
   if (action === 'email') {
     // the address of an account: given, changed or taken away from a browser that is signed in — with the password
@@ -246,6 +363,9 @@ export async function accountRoute(req, ctx, limited) {
     const { email: _was, mail: _code, ...rest } = acct; // (a code mailed to the old address dies with it)
     const next = { ...rest, ...(email && { email }), fails: 0, lock: 0 };
     await store.put(keyOf(acct.name), next);
+    // (the list of the addresses follows: the old one is free again, the new one is this account's unless another holds it)
+    if (_was && _was !== email && (await store.get(mailKey(_was)))?.acct === acct.name.toLowerCase()) await store.delete(mailKey(_was));
+    await listEmail(store, email, acct.name);
     return out(200, { account: shown(next) });
   }
   if (action === 'mailcode') {
@@ -274,6 +394,7 @@ export async function accountRoute(req, ctx, limited) {
     const salt = randomId(16), code = recoveryCode();
     const acct = { name, salt, hash: await hashOf(body.password, salt), code: await hashOf(cleanCode(code), salt), created: now, devices: [], items: [], visit: null, profile: cleanProfile(body.profile), fails: 0, lock: 0, ...(email && { email }) };
     const made = await attach(store, acct, device, now);
+    await listEmail(store, email, name);
     // (a welcome, to whoever gave an address: it leaves while they are answered — nobody waits for it)
     if (email) mailLater(ctx, { to: email, ...welcomeMail(req.site || '', name) });
     return out(200, { account: shown(made), recovery: code });
@@ -294,7 +415,7 @@ export async function accountRoute(req, ctx, limited) {
   let acct = found;
   if (action === 'reset') {
     if (!goodPassword(body.password)) return out(400, { error: 'The password needs at least 8 characters.' });
-    acct = { ...found, hash: await hashOf(body.password, found.salt), mail: null }; // (the code that was mailed is spent)
+    acct = { ...found, hash: await hashOf(body.password, found.salt), mail: null, invite: null }; // (the code that was mailed is spent — and the link to choose a first password with it)
   }
   return out(200, { account: shown(await attach(store, acct, device, now)) });
 }

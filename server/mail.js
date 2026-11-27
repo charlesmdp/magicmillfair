@@ -347,3 +347,35 @@ ${para(esc(next))}`,
   });
   return { subject, text, html };
 }
+
+/**
+ * The message to whoever has just given a name and an address ("How should we call you?", or at the moment of
+ * paying): the account is made already — this carries the link to choose its password. `link`: the address that
+ * opens the game on the card where the password is typed (good for `days` days, once); `site`: the game.
+ */
+export function inviteMail(site, name, link, days = 7) {
+  const where = siteOf(site), go = /^https?:\/\/[^\s<>"]+$/.test(link || '') ? link : '';
+  const keeps = ['Your name: nobody else can play, chat or score under it', 'Everything you buy, on every browser you sign in from', 'Your scores of the week, the month and all time', 'Your days in a row, and your robot as you dressed it'];
+  const text = [
+    `Welcome to Atomic Oasis, ${name}!`, '',
+    `Your account is made, and the browser you played in is signed in. One thing is left: choose a password, so that you can come back from any other browser.`, '',
+    ...(go ? [`Choose your password: ${go}`, '', `The link is good for ${days} days, and for one use.`, ''] : []),
+    'What your account keeps for you:', ...keeps.map((k) => `- ${k}`), '',
+    'No password yet and the link has run out? In the game: Settings, Your account, "Forgot the password" — a code comes to this address.', '',
+    'See you at the fair,', 'Atomic Oasis — made by a guy on a couch, not by a multinational.',
+    ...(where ? ['', where] : []), '',
+    `You get this message because an account named "${name}" was made at Atomic Oasis with this address. ${RARELY}`,
+    'Not you? Somebody typed your address by mistake: ignore this message — without the link nobody can choose a password, and nothing else will follow.',
+  ].join('\n');
+  const html = dressed({
+    title: 'Choose your password', preview: 'Your account is made. One thing is left: choose a password.', site: '', button: '',
+    body: `<h1 style="margin:0 0 14px;font:700 26px/1.2 Georgia,'Times New Roman',serif;color:${INK}">Welcome, ${esc(name)}!</h1>
+${para('Your account is made, and the browser you played in is signed in. One thing is left: <b>choose a password</b>, so that you can come back from any other browser.')}
+${go ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" style="padding:6px 0 18px"><a href="${esc(go)}" style="display:inline-block;padding:14px 28px;border-radius:10px;background:${SUN};border-bottom:4px solid #c9a31c;font:700 16px/1 Arial,Helvetica,sans-serif;color:${INK};text-decoration:none">Choose my password</a></td></tr></table>
+${para(`<span style="color:#6b6480;font-size:14px">The link is good for ${days} days, and for one use.</span>`)}` : ''}
+${ticket('What your account keeps for you', bullets(keeps))}
+${para('See you at the fair,<br><i>Atomic Oasis — made by a guy on a couch, not by a multinational.</i>')}`,
+    why: `You get this message because an account named “${esc(name)}” was made at Atomic Oasis with this address. ${esc(RARELY)}<br>Not you? Somebody typed your address by mistake: ignore this message — without the link nobody can choose a password, and nothing else will follow.`,
+  });
+  return { subject: `${name}, choose your password for Atomic Oasis`, text, html };
+}

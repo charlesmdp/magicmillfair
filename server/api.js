@@ -33,6 +33,7 @@ export const LIMITS = {
   sponsor: [[12, 60_000], [40, 3600_000]], // what a sponsor wants shown (a picture each time)
   click: [[30, 60_000], [300, 3600_000]], // a sponsor's site opened from the game: counted for the sponsor
   account: [[10, 60_000], [40, 3600_000]], // a name and a password tried (creating, signing in, a new password)
+  names: [[60, 60_000], [900, 3600_000]], // is that name free? (asked as it is typed, on the card of the account)
   enter: [[20, 60_000], [240, 3600_000]], // the door of a room a player made: a ticket asked for (a password tried)
   myroom: [[20, 60_000], [120, 3600_000]], // …and its owner changing something about it
   npc: [[10, 60_000], [120, 3600_000]],
