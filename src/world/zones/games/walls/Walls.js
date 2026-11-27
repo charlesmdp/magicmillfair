@@ -22,6 +22,7 @@ const DEEP = -S.base - 1; // under the rock
 // the top of the wall on the left of each side, and what is under the way there: the rock, or the terrace of the lap outside
 const TOPS = [7, 11, 14.9, 14.9, 17, 27.5, 27.5, 27.5, 27.5], UNDER = [DEEP, DEEP, DEEP, DEEP, 7, 11, 14.9, 14.9, 17];
 const SAND = [1.22, 1.04, 0.76], PALE = [1.42, 1.27, 0.98], DUSK = [0.86, 0.7, 0.5], BLUE = [0.1, 0.4, 1.35], SKY = [0.55, 0.85, 1.5], GREEN = [0.1, 0.8, 0.36], LIME = [0.6, 1.4, 0.5], RED = [1.25, 0.08, 0.08], GOLD = [1.7, 1.2, 0.18], WHITE = [1.6, 1.55, 1.45], DARK = [0.16, 0.13, 0.11];
+const LEAF = [[0.2, 0.5, 0.13], [0.34, 0.72, 0.2], [0.14, 0.38, 0.12]], CLOTH = [[1.25, 0.16, 0.12], [1.55, 1.42, 1.12], [0.12, 0.42, 1.2], [1.6, 1.15, 0.2], [0.14, 0.75, 0.36]];
 const WHY = { fall: 'A fall!', blade: 'Caught by a blade!', spikes: 'Onto the spikes!' };
 const _p = {}, _q = {};
 /** A point of the way: metre `s`, `u` across (to the right), `y` over the foot of the ruin. */
@@ -57,7 +58,8 @@ export class Walls {
 
   build() {
     const world = this.world, mats = world.materials, core = new Parts(), { things, saves } = course();
-    const stone = core.get('paving'), pave = stone, paint = core.get('matte'), rock = core.get('rock'), glow = core.get('glow');
+    const stone = core.get('paving'), pave = stone, paint = core.get('matte'), rock = core.get('rock'), glow = core.get('glow'), cloth = core.get('doubleSided');
+    const bands = things.filter((t) => t.kind === 'wall');
     const of = (kind, form) => things.filter((t) => t.kind === kind && (form === undefined || t.form === form));
     const num = (v, s) => (typeof v === 'function' ? v(s) : v);
     /**
@@ -88,6 +90,41 @@ export class Walls {
       for (let i = 0; i + 1 < cs.length; i++) { const sa = cs[i], sb = cs[i + 1]; b.tint(...tone, 1).quad(P(sa, u0, num(y, sa)), P(sa, u1, num(y, sa)), P(sb, u1, num(y, sb)), P(sb, u0, num(y, sb)), { u0: u0, v0: sa, ...o }); }
     };
 
+    /** An arch on a face along the way: dark inside, a pale roll round it — `u` the face, seen from the right (1) or the left (-1). */
+    const arch = (c, r, yBot, yTop, u, face, dark = 0.4) => {
+      const yc = yTop - r, e = face * 0.025, pts = [P(c - face * r, u + e, yBot), P(c + face * r, u + e, yBot)];
+      for (let m = 0; m <= 8; m++) { const a = (m / 8) * Math.PI; pts.push(P(c + face * r * Math.cos(a), u + e, yc + r * Math.sin(a))); }
+      for (let m = 1; m + 1 < pts.length; m++) stone.quad(pts[0], pts[m], pts[m + 1], pts[m + 1], { colors: [mul(DUSK, dark * 1.5), mul(DUSK, dark * (pts[m].y > pts[0].y + 0.1 ? 0.8 : 1.5)), mul(DUSK, dark * 0.8), mul(DUSK, dark * 0.8)] });
+      for (let m = 0; m < 8; m++) { const a0 = (m / 8) * Math.PI, a1 = ((m + 1) / 8) * Math.PI; stone.tint(...PALE, 1).rod(P(c + r * Math.cos(a0), u + face * 0.09, yc + r * Math.sin(a0)), P(c + r * Math.cos(a1), u + face * 0.09, yc + r * Math.sin(a1)), 0.11, 5); }
+      for (const d of [-1, 1]) stone.tint(...PALE, 1).rod(P(c + d * r, u + face * 0.09, yBot), P(c + d * r, u + face * 0.09, yc), 0.11, 5);
+    };
+    /** A vine down a face along the way, from `y` down `len` at the most: a few tongues of leaves. */
+    const vine = (s, u, y, len, face) => {
+      for (let m = 0; m < 9; m++) {
+        const c = s + (m - 4) * 0.2 + (hash(s + m) - 0.5) * 0.16, w = 0.07 + 0.09 * hash(s * 3 + m), l = len * (0.3 + 0.7 * hash(s * 7 + m)), uu = u + face * (0.04 + 0.008 * m);
+        const a = P(c - face * w * 0.2, uu, y - l), b = P(c + face * w * 0.2, uu, y - l), cc = P(c + face * w, uu, y + 0.12), d = P(c - face * w, uu, y + 0.12);
+        paint.quad(a, b, cc, d, { colors: [mul(LEAF[m % 3], 0.8), mul(LEAF[m % 3], 0.8), mul(LEAF[(m + 1) % 3], 1.15), mul(LEAF[(m + 1) % 3], 1.15)] });
+        // (leaves, left and right in turn down the stem)
+        for (let q = 0, yy = y - 0.15; yy > y - l + 0.1; yy -= 0.34, q++) { const d2 = (q % 2 ? 1 : -1) * face, tone = mul(LEAF[(m + q) % 3], 0.9 + 0.3 * hash(q + m)); paint.tint(...tone).tri(...(d2 * face > 0 ? [P(c, uu, yy - 0.1), P(c + d2 * 0.24, uu, yy - 0.14), P(c, uu, yy + 0.1)] : [P(c, uu, yy + 0.1), P(c + d2 * 0.24, uu, yy - 0.14), P(c, uu, yy - 0.1)])); }
+      }
+    };
+    /** Bunting from mast to mast along the top of a wall: the little flags of the fair. */
+    const bunting = (s0, s1, y, u) => {
+      const n = Math.max(1, Math.round((s1 - s0) / 9.5)), span = (s1 - s0) / n;
+      for (let k = 0; k <= n; k++) { const p = P(s0 + k * span, u, y); paint.tint(...WHITE, 1).cylinder(p.x, p.y, p.z, 0.05, 0.035, 2.7, 5); paint.tint(...GOLD, 1).cube(p.x, p.y + 2.75, p.z, 0.14, 0.14, 0.14); }
+      for (let k = 0; k < n; k++) {
+        let prev = P(s0 + k * span, u, y + 2.6);
+        for (let m = 0; m < 14; m++) {
+          const f = (m + 0.5) / 14, s = s0 + (k + f) * span, yy = y + 2.6 - 1.25 * 4 * f * (1 - f), p = P(s, u, yy);
+          paint.tint(...DARK, 1).beam(prev, p, 0.025, 0.025); prev = p;
+          cloth.tint(...CLOTH[(m + k) % 5], 1).tri(P(s - 0.19, u, yy), P(s + 0.19, u, yy), P(s, u, yy - 0.46));
+        }
+        paint.tint(...DARK, 1).beam(prev, P(s0 + (k + 1) * span, u, y + 2.6), 0.025, 0.025);
+      }
+    };
+    /** How high the way is at metre `s` (over a gap: the floor before it). */
+    const pathY = (s) => { let y = 0; for (const t of things) if (t.kind === 'floor' && t.s0 <= s) y = t.s1 >= s ? lerp(t.y0, t.y1, clamp((s - t.s0) / (t.s1 - t.s0), 0, 1)) : t.y1; return y; };
+
     // ---- the rock it stands on: out of the sea, flat enough on top
     {
       const N = 40, A = 30, B = 36, ring = (k, y, j) => Array.from({ length: N }, (_, i) => { const a = (i / N) * TAU, r = k * (1 + 0.07 * Math.sin(i * 2.3 + j) + 0.05 * Math.sin(i * 5.1 + 1.7)) / Math.pow(Math.abs(Math.cos(a) / A) ** 4 + Math.abs(Math.sin(a) / B) ** 4, 0.25); return V(C.x + Math.cos(a) * r, y + 0.5 * Math.sin(i * 3.1 + j), C.z + Math.sin(a) * r); });
@@ -101,8 +138,21 @@ export class Walls {
     PLAN.forEach((p, i) => {
       const k = i >> 1;
       if (p.kind === 'line') {
-        const T = TOPS[k], lo = UNDER[k] - 0.3, s1 = Math.min(p.s1, LENGTH + 2.2), keep = k >= 5, back = keep ? 9.5 : 3.75;
-        wallFace(stone, p.s0, s1, -H, lo, T, 1, SAND, { seed: k });
+        const T = TOPS[k], lo = UNDER[k] - 0.3, s1 = Math.min(p.s1, LENGTH + 2.2), keep = k >= 5, back = keep ? 9.5 : 3.75, s0 = k ? p.s0 : -5;
+        wallFace(stone, s0, s1, -H, lo, T, 1, SAND, { seed: k });
+        if (!k) { cross(stone, s0, -H - back, -H, lo, T, -1, SAND, 0.6, 1); top(pave, s0, p.s0, -H - back, -H, T, mul(SAND, 0.92)); }
+        // (windows high in it, dark, where there is room over the heads and over the bands; vines down from its top)
+        for (let row = 0; row < (keep ? 2 : 1); row++) for (let s = p.s0 + 2.4; s < s1 - 1.4; s += 4.2) {
+          const yTop = T - 1.0 - row * 3.5, yBot = yTop - 1.9;
+          if (yBot < Math.max(pathY(s - 1.5), pathY(s + 1.5)) + 4.4 || bands.some((t) => t.side < 0 && s > t.s0 - 1.2 && s < t.s1 + 1.2 && t.y1 > yBot - 0.6)) continue;
+          arch(s, 0.5, yBot, yTop, -H, 1, 0.3);
+          stone.tint(...PALE, 1); wallFace(stone, s - 0.75, s + 0.75, -H + 0.16, yBot - 0.2, yBot, 1, PALE, { plain: true }); top(stone, s - 0.75, s + 0.75, -H, -H + 0.16, yBot, PALE);
+        }
+        for (let s = p.s0 + 1.5 + 3 * hash(k * 7.7); s < s1 - 1.5; s += 4.5 + 5 * hash(s * 1.3 + k)) {
+          const room = Math.min(...[-1, 0, 1].map((d) => T - Math.max(pathY(s + d) + 2.7, ...bands.filter((t) => t.side < 0 && s > t.s0 - 1.5 && s < t.s1 + 1.5).map((t) => t.y1 + 0.5))));
+          if (room > 1) vine(s, -H, T - 0.5, Math.min(room, 1.6 + 3.2 * hash(s * 2.1)), 1);
+        }
+        if (k < 5) bunting(p.s0 + 0.8, s1 - 0.8, T + 0.2, -H - 0.3);
         // (a string course under its top, proud of the wall; the terrace behind; a parapet with gaps where it has fallen)
         wallFace(stone, p.s0, s1, -H + 0.14, T - 0.5, T - 0.15, 1, PALE, { plain: true });
         top(stone, p.s0, s1, -H, -H + 0.14, T - 0.15, PALE);
@@ -157,10 +207,20 @@ export class Walls {
       // (its kerb on the open side: a pale edge one reads the way by)
       top(stone, t.s0, s1, H + 0.08, OUT, t.y0 + 0.16, PALE); wallFace(stone, t.s0, s1, H + 0.08, t.y0, t.y0 + 0.16, -1, PALE, { plain: true });
       wallFace(stone, t.s0, s1, OUT, lo, t.y0 + 0.16, 1, SAND, { seed: t.id });
+      wallFace(stone, t.s0, s1, OUT + 0.13, t.y0 - 0.34, t.y0 - 0.04, 1, PALE, { plain: true }); top(stone, t.s0, s1, OUT, OUT + 0.13, t.y0 - 0.04, PALE);
+      if (s1 - t.s0 >= 2.6) {
+        // (pilasters down to what it stands on, an arch between each two)
+        const n = Math.max(1, Math.round((s1 - t.s0) / 3.4)), bay = (s1 - t.s0) / n, low = lo((t.s0 + s1) / 2), yTop = t.y0 - 0.85, yBot = Math.max(low + 0.2, yTop - 4.4), w = 0.3;
+        for (let k = 0; k <= n; k++) { const s = clamp(t.s0 + k * bay, t.s0 + w, s1 - w); wallFace(stone, s - w, s + w, OUT + 0.2, low, t.y0 - 0.34, 1, PALE, { seed: k }); cross(stone, s - w, OUT, OUT + 0.2, low, t.y0 - 0.34, -1, SAND, 0.6, 1); cross(stone, s + w, OUT, OUT + 0.2, low, t.y0 - 0.34, 1, DUSK, 0.6, 1); }
+        if (yTop - yBot > 1.7) for (let k = 0; k < n; k++) arch(t.s0 + (k + 0.5) * bay, Math.min(bay / 2 - 0.55, (yTop - yBot) * 0.6), yBot, yTop, OUT, 1);
+        for (let k = 0; k < n; k++) if (hash(t.id * 3.1 + k) > 0.55) vine(t.s0 + (k + 0.5) * bay + (hash(t.id + k) - 0.5), OUT + 0.14, t.y0 + 0.1, 1 + 2.4 * hash(t.id * 1.7 + k), 1);
+      }
       const pa = before(t), pb = after(t);
       if (!pa || pa.y1 < t.y0 - 0.01 || pa.form === 'crumble' || pa.form === 'ledge') cross(stone, t.s0, -H, OUT, pa && pa.form !== 'crumble' && pa.form !== 'ledge' ? pa.y1 : lo(t.s0), t.y0, -1, SAND, 0.5, 1);
       if (!pb || pb.form === 'crumble' || pb.form === 'ledge') cross(stone, s1, -H, OUT, lo(s1), t.y0, 1, DUSK, 0.5, 1);
     }
+    // (behind the start the way is broken off: a stump of it, so that one does not begin on the brink)
+    top(pave, -5, 0, -H, OUT, 0, SAND); top(stone, -5, 0, H + 0.08, OUT, 0.16, PALE); wallFace(stone, -5, 0, OUT, DEEP - 0.3, 0.16, 1, SAND, { seed: 91 }); cross(stone, -5, -H, OUT, DEEP - 0.3, 0, -1, SAND, 0.5, 1);
     // ---- a face of green stone: what one runs up — a panel proud of it, arrows up
     for (const t of of('face')) {
       const s = t.s - 0.03;
@@ -194,10 +254,18 @@ export class Walls {
     saves.forEach((v, n) => {
       for (let j = 0; j < 8; j++) { const u0 = -H + ((H + OUT) * j) / 8, u1 = -H + ((H + OUT) * (j + 1)) / 8; top(paint, v.s - 0.16, v.s + 0.16, u0, u1, v.y + 0.012, j % 2 ? GOLD : WHITE); }
       // (a banner of gold cloth down the wall, and a sign that stands out from it over the way: the open side stays clear)
-      wallFace(paint, v.s - 0.45, v.s + 0.45, -H + 0.04, v.y + 1.2, v.y + 3.9, 1, GOLD, { plain: true });
-      wallFace(paint, v.s - 0.45, v.s + 0.45, -H + 0.05, v.y + 3.55, v.y + 3.9, 1, WHITE, { plain: true });
+      wallFace(paint, v.s - 0.45, v.s + 0.45, -H + 0.04, v.y + 1.2, v.y + 3.45, 1, GOLD, { plain: true });
       paint.tint(...GOLD, 1).tri(P(v.s - 0.45, -H + 0.04, v.y + 1.2), P(v.s, -H + 0.04, v.y + 0.75), P(v.s + 0.45, -H + 0.04, v.y + 1.2));
-      if (n) { const p = P(v.s + 0.6, -H + 1.25, v.y + 3.92); paint.tint(...DARK, 1).beam(P(v.s + 0.6, -H, v.y + 4.05), P(v.s + 0.6, -H + 2.4, v.y + 4.05), 0.07, 0.07); stakeSign(this.group, paint, p.x, p.y, p.z, placeAt(v.s, 0, _q).yaw + Math.PI, `SAVE ${n + 1} · ${v.name.toUpperCase()}`, { w: 2.1, h: 0.46, up: -0.17, back: '#0f3d2a' }); }
+      if (hallAt(v.s) < 0.01 && hallAt(v.s + 12) < 0.01 && TOPS[pieceOf(v.s).k] - v.y > 4.9 && !bands.some((t) => t.s0 > v.s - 3 && t.s0 < v.s + 10)) {
+        const a = v.s - 1.8, b = v.s + 1.8, tones = [CLOTH[n % 2 ? 2 : 0], CLOTH[1]], yw = v.y + 4.25, yo = v.y + 3.62, uo = 0.75;
+        for (let j = 0; j < 8; j++) {
+          const sa = a + ((b - a) * j) / 8, sb = a + ((b - a) * (j + 1)) / 8;
+          cloth.tint(...tones[j % 2], 1).quad(P(sa, -H + 0.04, yw), P(sa, uo, yo), P(sb, uo, yo), P(sb, -H + 0.04, yw));
+          cloth.tint(...tones[j % 2], 1).tri(P(sa, uo, yo), P((sa + sb) / 2, uo + 0.05, yo - 0.3), P(sb, uo, yo));
+        }
+        for (const s of [a, b]) paint.tint(...DARK, 1).beam(P(s, uo, yo), P(s, -H, yw + 0.55), 0.03, 0.03);
+      }
+      { const p = P(v.s, -H + 0.07, v.y + 3.68 + 0.39), q = placeAt(v.s, 0, _q); stakeSign(this.group, paint, p.x, p.y, p.z, Math.atan2(-q.dz, q.dx), `${n + 1} · ${v.name.toUpperCase()}`, { w: 2.3, h: 0.46, up: -0.39, back: '#0f3d2a' }); }
     });
     // ---- the top of the tower: a brazier of gold
     {
@@ -349,7 +417,7 @@ export class Walls {
         } else if (mode === 'pole') {
           // (hanging from the bar, swinging under it)
           const a = Math.sin(st.pt * 6.5) * 0.75;
-          pitch = a; anim = ANIM.jump; x += pose.dx * Math.sin(a) * 0.9; z += pose.dz * Math.sin(a) * 0.9; y += (1 - Math.cos(a)) * 0.6;
+          pitch = a; anim = ANIM.jump; x += pose.dx * Math.sin(a) * 0.9; z += pose.dz * Math.sin(a) * 0.9; y += (1 - Math.cos(a)) * 0.6 - 0.4;
         } else if (mode === 'air') { anim = ANIM.jump; yaw -= clamp(st.vu / S.side, -1, 1) * 0.35; }
         else if (down) { anim = st.why === 'fall' ? ANIM.jump : ANIM.dead; }
         else {
@@ -393,7 +461,7 @@ export class Walls {
         placeAt(st.s + D.ahead, K.camU * 0.6 - 0.3 * (1 - K.hall), pose);
         _l.set(pose.x, S.base + K.camY + 1.1 + Math.max(0, st.y - K.camY) * 0.45, pose.z);
         cam.position.copy(_c); cam.up.set(0, 1, 0); cam.lookAt(_l);
-        return 62;
+        return lerp(62, 72, K.hall); // (between two walls it looks wider)
       },
       /** The run is over (the top), or left: the player is put back at the gate. */
       drop: (pl) => { pl.driver = null; pl.riding = false; pl.pitch = 0; pl.roll = 0; pl.teleport(this.gate.x, this.gate.z, this.gate.yaw); session.close(); },

@@ -412,7 +412,7 @@ function touch(st, now) {
 function out(st, why, events) {
   st.outs++; st.why = why;
   events?.push({ type: 'out', why, s: st.s });
-  if (st.trail && st.rew > 0 && st.trail.length > 1) {
+  if (st.trail && st.rew > 0 && st.trail.length > 0) {
     st.rew--; st.used++; st.rm = st.mode; st.mode = 'rewind'; st.ri = st.trail.length - 1; st.rf = 0;
     // (three seconds of it at the most, at twice the speed: a longer way back is run faster)
     st.rs = Math.max(S.wind, (st.trail.length * S.trail / 120) / 1.5);
