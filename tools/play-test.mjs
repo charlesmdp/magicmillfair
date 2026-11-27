@@ -25,6 +25,7 @@ const SPECS = {
   spiral: { offer: /Spiral of Death/, score: (ms) => ms > 20000 && ms < 900000 },
   cars: { offer: /Karting Simulator/, score: (ms) => ms > 5000 && ms < 900000 },
   golf: { offer: /Balthazar Golf/, score: (n) => n > 0, star: false }, // (the golf has no star on the map)
+  ages: { offer: /War Through the Ages/, score: (ms) => ms > 80000 && ms < 900000 }, // (a whole war by its bot: two or three minutes)
 };
 const asked = process.argv.slice(2).filter((a) => SPECS[a]), ids = asked.length ? asked : Object.keys(SPECS);
 

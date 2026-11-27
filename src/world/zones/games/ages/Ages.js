@@ -22,9 +22,11 @@ const A = AGES, H = A.half, L = W.road, STEP = A.step, TAU = Math.PI * 2;
 const LANE = [0.92, 0.34, 0.62];
 const ROAD = { z0: -0.42, z1: 1.6 };
 /** The camera: so far in front of the middle of the stage, so high over it; what must be in the picture: so wide (half), from so low to so high. */
-const CAM = { v: 31, y: 12.5, wide: 19.4, low: -1.0, lowV: 4.8, high: 8.6, highV: -2 };
-const RED = [1.75, 0.2, 0.14], CREAM = [1.9, 1.7, 1.25], GILT = [2.0, 1.45, 0.3], GRASS = [[0.36, 1.0, 0.26], [0.42, 1.14, 0.3]], SAND = [1.5, 1.22, 0.74];
-const FLAGS = [[2.4, 0.15, 0.1], [2.4, 2.0, 0.1], [0.1, 0.5, 2.6], [0.2, 1.8, 0.3], [2.4, 0.3, 1.6], [2.5, 0.9, 0.05]];
+const CAM = { v: 31, y: 12.5, wide: 18.5, low: -1.0, lowV: 4.8, high: 8.8, highV: -2 };
+const RED = [1.05, 0.1, 0.07], CREAM = [1.1, 0.98, 0.72], GILT = [1.2, 0.85, 0.16], GRASS = [[0.17, 0.56, 0.11], [0.21, 0.66, 0.14]], SAND = [0.86, 0.66, 0.36];
+const FLAGS = [[1.4, 0.09, 0.06], [1.4, 1.15, 0.06], [0.06, 0.3, 1.5], [0.12, 1.05, 0.18], [1.4, 0.18, 0.95], [1.45, 0.5, 0.03]];
+/** How much larger than the rules have them the robots are drawn (a brawler and a shooter; a heavy one), and the turrets. */
+const BIG = [1.42, 1.42, 1.22], TURRET = 1.5;
 const GATE_A = [-L / 2, L / 2]; // where the gate of each side stands along the stage
 const rnd = Math.random;
 
@@ -111,25 +113,25 @@ export class Ages {
     // ---- its top: mown grass behind and before, a road of sand between, the two ruts of all the wheels that came
     for (let a = -H.a, n = 0; a < H.a - 0.01; a += 1.5, n++) { const g = GRASS[n % 2], e = Math.min(H.a, a + 1.5); P(matte, g).box(a, -0.05, -H.v, e, 0, ROAD.z0).box(a, -0.05, ROAD.z1, e, 0, H.v); }
     P(matte, SAND).box(-H.a, -0.05, ROAD.z0, H.a, 0.012, ROAD.z1);
-    for (const z of [0.3, 0.9]) P(matte, [1.3, 1.02, 0.6]).box(-H.a, 0.012, z - 0.05, H.a, 0.018, z + 0.05);
-    for (let a = -H.a + 0.3, n = 0; a < H.a; a += 0.85, n++) { const r = 0.07 + 0.03 * ((n * 7) % 3); for (const z of [ROAD.z0 - 0.02, ROAD.z1 + 0.02]) P(paint, [0.95, 0.9, 0.82]).box(a - r, 0, z - r, a + r, r * 1.2, z + r); }
+    for (const z of [0.3, 0.9]) P(matte, [0.72, 0.54, 0.28]).box(-H.a, 0.012, z - 0.05, H.a, 0.018, z + 0.05);
+    for (let a = -H.a + 0.3, n = 0; a < H.a; a += 0.85, n++) { const r = 0.07 + 0.03 * ((n * 7) % 3); for (const z of [ROAD.z0 - 0.02, ROAD.z1 + 0.02]) P(paint, [0.6, 0.57, 0.52]).box(a - r, 0, z - r, a + r, r * 1.2, z + r); }
     for (let z = ROAD.z0 + 0.1; z < ROAD.z1; z += 0.34) P(paint, CREAM).box(-0.04, 0.012, z, 0.04, 0.02, z + 0.18); // (the middle of the road)
     // ---- what grows behind the road: toy trees, rocks, bushes — low, and behind whoever fights
     const tree = (x, z, h, c) => { P(wood, [0.5, 0.3, 0.16]).cylinder(x, 0, z, 0.09, 0.07, h * 0.4, 6); paint.tint(c[0], c[1], c[2], 1).place(x, h * 0.3, z).lathe([[0.001, h * 0.72], [h * 0.14, h * 0.5], [h * 0.3, h * 0.24], [h * 0.36, 0.02], [0.001, 0]], 7).pop(); };
-    for (const [x, z, h, n] of [[-10.2, -2.9, 1.9, 0], [-8.6, -2.2, 1.4, 1], [-5.4, -3.1, 2.2, 0], [-1.8, -2.5, 1.6, 1], [2.6, -3.0, 2.0, 0], [4.1, -2.1, 1.3, 1], [7.3, -2.8, 2.1, 0], [10.4, -2.4, 1.5, 1]]) tree(x, z, h, n ? [0.3, 0.95, 0.4] : [0.22, 0.74, 0.3]);
-    for (const [x, z, r] of [[-7.2, -1.5, 0.3], [-3.3, -1.3, 0.22], [0.6, -1.7, 0.36], [5.6, -1.4, 0.26], [8.9, -1.6, 0.32]]) paint.tint(0.82, 0.78, 0.72, 1).place(x, 0, z).lathe([[0.001, -0.05], [r, 0], [r * 0.9, r * 0.5], [r * 0.45, r * 0.85], [0.001, r * 0.9]], 6).pop();
-    for (const [x, z, n] of [[-9.4, 2.6, 0], [-6.1, 3.2, 1], [-2.2, 2.4, 2], [1.4, 3.3, 3], [4.8, 2.5, 4], [8.2, 3.1, 5], [11.0, 2.7, 0]]) { P(paint, [0.3, 0.86, 0.3]).box(x - 0.02, 0, z - 0.02, x + 0.02, 0.2, z + 0.02); paint.tint(...FLAGS[n], 1).place(x, 0.24, z).lathe([[0.001, -0.07], [0.08, 0], [0.001, 0.07]], 6).pop(); }
+    for (const [x, z, h, n] of [[-10.2, -2.9, 1.9, 0], [-8.6, -2.2, 1.4, 1], [-5.4, -3.1, 2.2, 0], [-1.8, -2.5, 1.6, 1], [2.6, -3.0, 2.0, 0], [4.1, -2.1, 1.3, 1], [7.3, -2.8, 2.1, 0], [10.4, -2.4, 1.5, 1]]) tree(x, z, h, n ? [0.14, 0.5, 0.2] : [0.1, 0.38, 0.15]);
+    for (const [x, z, r] of [[-7.2, -1.5, 0.3], [-3.3, -1.3, 0.22], [0.6, -1.7, 0.36], [5.6, -1.4, 0.26], [8.9, -1.6, 0.32]]) paint.tint(0.5, 0.48, 0.44, 1).place(x, 0, z).lathe([[0.001, -0.05], [r, 0], [r * 0.9, r * 0.5], [r * 0.45, r * 0.85], [0.001, r * 0.9]], 6).pop();
+    for (const [x, z, n] of [[-10.6, 3.5, 0], [-6.4, 3.7, 1], [-2.1, 3.4, 2], [2.2, 3.7, 3], [6.5, 3.5, 4], [10.8, 3.6, 5], [-14.5, 3.4, 2], [14.8, 3.6, 1]]) { P(paint, [0.12, 0.42, 0.12]).box(x - 0.02, 0, z - 0.02, x + 0.02, 0.2, z + 0.02); paint.tint(...FLAGS[n], 1).place(x, 0.24, z).lathe([[0.001, -0.07], [0.08, 0], [0.001, 0.07]], 6).pop(); }
     // ---- the backdrop: a sky that pales towards the hills, two rows of painted hills, a sun, clouds
     const zb = -H.v;
     P(wood, [0.42, 0.28, 0.17]).box(-H.a, 0, zb - 0.14, H.a, 3.4, zb);
-    const sky0 = [1.5, 1.75, 1.95, 1], sky1 = [0.42, 0.9, 2.0, 1];
+    const sky0 = [0.95, 1.1, 1.2, 1], sky1 = [0.2, 0.48, 1.15, 1];
     paint.quad(V(-H.a, 0, zb + 0.005), V(H.a, 0, zb + 0.005), V(H.a, 3.4, zb + 0.005), V(-H.a, 3.4, zb + 0.005), { colors: [sky0, sky0, sky1, sky1] });
     const hump = (x, w, h, z, c0, c1) => { const pts = [V(x - w, 0, z), V(x + w, 0, z)]; for (let n = 1; n < 12; n++) { const t = (n / 12) * Math.PI; pts.push(V(x + Math.cos(t) * w, Math.sin(t) * h, z)); } const c = pts.map((p) => { const k = clamp(p.y / h, 0, 1); return [c0[0] + (c1[0] - c0[0]) * k, c0[1] + (c1[1] - c0[1]) * k, c0[2] + (c1[2] - c0[2]) * k, 1]; }); for (let n = 1; n + 1 < pts.length; n++) { const i0 = paint.vert(pts[0], _zn, 0, 0, c[0]), i1 = paint.vert(pts[n], _zn, 0, 0, c[n]), i2 = paint.vert(pts[n + 1], _zn, 0, 0, c[n + 1]); paint.idx.push(i0, i1, i2); } };
     const disc = (x, y, rx, ry, z, c) => { const pts = []; for (let n = 0; n < 14; n++) { const t = (n / 14) * TAU; pts.push(V(x + Math.cos(t) * rx, y + Math.sin(t) * ry, z)); } paint.tint(c[0], c[1], c[2], 1).poly(pts); };
-    disc(-12.4, 2.5, 0.55, 0.55, zb + 0.02, [2.6, 2.2, 0.9]);
-    for (const [x, y, s] of [[-7.5, 2.75, 1], [-1.4, 2.3, 0.8], [5.2, 2.85, 1.1], [11.6, 2.4, 0.9], [-15.4, 2.2, 0.7]]) { disc(x, y, 0.9 * s, 0.26 * s, zb + 0.03, [2.3, 2.3, 2.3]); disc(x + 0.5 * s, y + 0.16 * s, 0.55 * s, 0.24 * s, zb + 0.035, [2.4, 2.4, 2.4]); disc(x - 0.5 * s, y + 0.1 * s, 0.45 * s, 0.2 * s, zb + 0.035, [2.4, 2.4, 2.4]); }
-    for (const [x, w, h] of [[-15.5, 4.4, 1.9], [-8.4, 5.2, 2.3], [-0.8, 4.6, 1.7], [6.6, 5.4, 2.4], [14.4, 4.8, 2.0]]) hump(x, w, h, zb + 0.06, [0.34, 0.86, 0.74], [0.6, 1.2, 1.5]);
-    for (const [x, w, h] of [[-17.2, 3.2, 1.0], [-11.6, 3.8, 1.25], [-4.6, 3.6, 0.95], [2.8, 4.2, 1.3], [10.2, 3.6, 1.05], [16.6, 3.2, 1.2]]) hump(x, w, h, zb + 0.12, [0.26, 0.82, 0.26], [0.5, 1.25, 0.42]);
+    disc(-12.4, 2.5, 0.55, 0.55, zb + 0.02, [1.6, 1.3, 0.4]);
+    for (const [x, y, s] of [[-7.5, 2.75, 1], [-1.4, 2.3, 0.8], [5.2, 2.85, 1.1], [11.6, 2.4, 0.9], [-15.4, 2.2, 0.7]]) { disc(x, y, 0.9 * s, 0.26 * s, zb + 0.03, [1.3, 1.3, 1.3]); disc(x + 0.5 * s, y + 0.16 * s, 0.55 * s, 0.24 * s, zb + 0.035, [1.4, 1.4, 1.4]); disc(x - 0.5 * s, y + 0.1 * s, 0.45 * s, 0.2 * s, zb + 0.035, [1.4, 1.4, 1.4]); }
+    for (const [x, w, h] of [[-15.5, 4.4, 1.9], [-8.4, 5.2, 2.3], [-0.8, 4.6, 1.7], [6.6, 5.4, 2.4], [14.4, 4.8, 2.0]]) hump(x, w, h, zb + 0.06, [0.18, 0.5, 0.45], [0.34, 0.7, 0.95]);
+    for (const [x, w, h] of [[-17.2, 3.2, 1.0], [-11.6, 3.8, 1.25], [-4.6, 3.6, 0.95], [2.8, 4.2, 1.3], [10.2, 3.6, 1.05], [16.6, 3.2, 1.2]]) hump(x, w, h, zb + 0.12, [0.13, 0.44, 0.12], [0.26, 0.7, 0.2]);
     P(paint, GILT).box(-H.a, 3.4, zb - 0.16, H.a, 3.52, zb + 0.04);
     // ---- five striped posts behind it, bunting from one to the next, a string of bulbs under the bunting
     const posts = [-H.a + 0.1, -9, 0, 9, H.a - 0.1], pz = zb - 0.3, ph = 6.0;
@@ -139,7 +141,7 @@ export class Ages {
       const x0 = posts[n], x1 = posts[n + 1], sag = (t) => 4 * t * (1 - t), cnt = Math.round((x1 - x0) / 0.5);
       for (let i = 0; i < cnt; i++) {
         const t0 = i / cnt, t1 = (i + 1) / cnt, tm = (t0 + t1) / 2, y0 = ph - 0.25 - sag(t0) * 0.9, y1 = ph - 0.25 - sag(t1) * 0.9, ym = (y0 + y1) / 2, xa = x0 + (x1 - x0) * t0, xb = x0 + (x1 - x0) * t1, xm = (xa + xb) / 2;
-        P(paint, [0.9, 0.9, 0.85]).beam(V(xa, y0, pz + 0.14), V(xb, y1, pz + 0.14), 0.02, 0.02);
+        P(paint, [0.6, 0.6, 0.56]).beam(V(xa, y0, pz + 0.14), V(xb, y1, pz + 0.14), 0.02, 0.02);
         paint.tint(...FLAGS[fl++ % FLAGS.length], 1).tri(V(xa + 0.04, y0 - 0.01, pz + 0.15), V(xm, ym - 0.42, pz + 0.15), V(xb - 0.04, y1 - 0.01, pz + 0.15));
         if (i % 2 === 0) { const yb = ph - 1.1 - sag(tm) * 1.0; P(glow, i % 4 ? [2.6, 2.1, 1.0] : [2.8, 1.4, 0.6]).place(xm, yb, pz + 0.16).lathe([[0.001, -0.09], [0.07, -0.05], [0.09, 0.02], [0.05, 0.08], [0.001, 0.1]], 6).pop(); P(paint, [0.2, 0.2, 0.2]).box(xm - 0.008, yb + 0.1, pz + 0.152, xm + 0.008, yb + 0.26, pz + 0.168); }
       }
@@ -168,7 +170,7 @@ export class Ages {
     // ---- while nobody plays: one's own robots of the five ages on the road, age by age, and a board that names the ages
     {
       const b = new MeshBuilder(); this.paradeAt = [];
-      ERAS.forEach((e, era) => { const x = -8.6 + era * 4.3; this.paradeAt.push(x); [[1, -1.25], [0, -0.1], [2, 1.35]].forEach(([k, dx]) => { b.place(x + dx, 0.012, LANE[k]); drawUnit(b, era, k, 0, 1); b.pop(); }); });
+      ERAS.forEach((e, era) => { const x = -8.6 + era * 4.3; this.paradeAt.push(x); [[1, -1.3], [0, -0.1], [2, 1.4]].forEach(([k, dx]) => { b.push(new THREE.Matrix4().makeScale(BIG[k], BIG[k], BIG[k]).setPosition(x + dx, 0.012, LANE[k])); drawUnit(b, era, k, 0, 1); b.pop(); }); });
       this.parade = new THREE.Mesh(b.build(), this.toys); this.parade.name = 'ages-parade'; this.parade.layers.enable(LAYER.STATIC_CASTER);
       const strip = canvasBoard(2048, 72, (ctx, w, h) => {
         ctx.clearRect(0, 0, w, h); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '700 40px Georgia, serif';
@@ -204,7 +206,7 @@ export class Ages {
   /** One more turret to draw this frame: of side `side` and of age `era`, in place `j`, so much pulled back by its last shot. */
   _turret(side, era, j, k) {
     const m = this.turrets[era][side], dir = side ? -1 : 1;
-    put(m, GATE_A[side] - dir * (W.mount[j] + (1 - k) * 0.12), BASE.roof, BASE.turret.z, null, 1.05, 1.05 * (0.9 + 0.1 * k), 1.05);
+    put(m, GATE_A[side] - dir * (W.mount[j] + (1 - k) * 0.14), BASE.roof, BASE.turret.z, null, TURRET, TURRET * (0.88 + 0.12 * k), TURRET);
   }
 
   setBest(ms) { this.best = ms || 0; }
@@ -279,7 +281,8 @@ export class Ages {
     const S = { count: 2.6, acc: 0, after: 0, cam: null, chosen: -1, held: 0, repeat: 0, said: -1, smoke: 0 };
     this.bits.clear(); this.vis = new Map(); this.dying = []; this.fx = []; this.recoil = [[9, 9, 9], [9, 9, 9]]; this.shake = [0, 0]; this.blast = null; this.raid = null; this.fallen = -1; this.sunk = 0;
     this.parade.visible = false;
-    const panel = (this.panel = makePanel({ touch: !!this.world.engine?.input?.isTouch || !!io.touch, press: (b) => queue.push(b), pictures: (era) => this._pictures(era) }));
+    const touch = !!document.getElementById('ui')?.classList.contains('touch'); // (a telephone: the game says so on its own page)
+    const panel = (this.panel = makePanel({ touch, press: (b) => queue.push(b), pictures: (era) => this._pictures(era) }));
     const session = {
       ages: this, over: false, ended: false, score: 0, line: '', riding: false, anim: ANIM.idle, state: st, auto: false, seed, instance: seed,
       step: (dt, pl, control) => {
@@ -293,7 +296,7 @@ export class Ages {
         }
         if (S.count > 0) {
           S.count -= Math.min(dt, 0.25); queue.length = 0;
-          if (S.count <= 0) { io.play('start'); panel.say('To war!', 'age', 1400); panel.tip(inp?.isTouch ? 'Shooters bring a base down — send sturdy robots before them' : 'Shooters bring a base down — send sturdy robots before them · keys 1 … 6', 9000); }
+          if (S.count <= 0) { io.play('start'); panel.say('To war!', 'age', 1400); panel.tip(touch ? 'Shooters bring a base down — send sturdy robots before them' : 'Shooters bring a base down — send sturdy robots before them · keys 1 … 6', 9000); }
         } else if (!st.over) {
           for (const b of queue) { if (press(st, 0, b)) { panel.done(b); io.play(b === 4 ? 'rocket' : b === 5 ? 'checkpoint' : b === 3 ? 'press' : 'click', { volume: b < 3 ? 0.5 : 0.8 }); } else { panel.nope(b); io.play('tick', { volume: 0.35, rate: 0.7 }); } }
           queue.length = 0;
@@ -305,7 +308,7 @@ export class Ages {
         session.anim = ANIM.idle;
         if (st.over) {
           S.after += dt;
-          if (!session.over) { session.over = true; session.score = st.won ? st.time : 0; }
+          if (!session.over) { session.over = true; session.score = st.won ? st.time : 0; panel.end(); }
           if (S.after > 6) session.ended = true;
         }
         const era = ERAS[st.sides[0].age].name;
@@ -325,8 +328,11 @@ export class Ages {
         const pitch = (near + far) / 2 + ((y0 + y1) / 2 - 0.5) * -fov, at = spot(0, CAM.v), to = spot(0, CAM.v - Math.cos(pitch) * 10);
         cam.position.set(at.x, this.top + CAM.y, at.z); cam.up.set(0, 1, 0);
         cam.lookAt(to.x, this.top + CAM.y - Math.sin(pitch) * 10, to.z);
+        // (an eye of one's own, the same: what the page shows over the stage — the bars of the bases, the gold of a fall — is placed through it, whatever the game does with its camera meanwhile)
+        const eye = (this.eye ||= new THREE.PerspectiveCamera());
+        eye.position.copy(cam.position); eye.quaternion.copy(cam.quaternion); eye.fov = (fov * 180) / Math.PI; eye.aspect = cam.aspect; eye.updateProjectionMatrix(); eye.updateMatrixWorld(true);
         this.view = view;
-        return (fov * 180) / Math.PI;
+        return eye.fov;
       },
       /** The war is over (or left): the player is put back on the grass, before the arch. */
       drop: (pl) => { pl.driver = null; pl.riding = false; pl.pitch = 0; pl.roll = 0; pl.teleport(this.gate.x, this.gate.z, this.gate.yaw); session.close(); },
@@ -411,9 +417,9 @@ export class Ages {
 
   /** Where a place of the stage is on the page (px), through the camera of the war: null before the camera is known. */
   _page(x, y, z) {
-    const cam = this.S?.cam, view = this.view;
-    if (!cam || !view) return null;
-    this.stage.localToWorld(_p.set(x, y, z)).project(cam);
+    const eye = this.eye, view = this.view;
+    if (!eye || !view || !this.S?.cam) return null;
+    this.stage.localToWorld(_p.set(x, y, z)).project(eye);
     return { x: (_p.x * 0.5 + 0.5) * view.w, y: (-_p.y * 0.5 + 0.5) * view.h };
   }
 
@@ -448,7 +454,7 @@ export class Ages {
         const df = u.def, k = df.k, x1 = along(i ? L - u.p : u.p);
         let v = seen.get(u.id); if (!v) { v = { x: x1 }; seen.set(u.id, v); }
         v.x += (x1 - v.x) * Math.min(1, d * 13);
-        const age = now - u.born, grow = clamp(age / 0.22, 0.2, 1), walks = u.moving && df.speed > 0, legs = k !== 2 || df.era === 0 || df.era === 4, ph = now * df.speed * 3.4 + u.id * 1.7;
+        const age = now - u.born, grow = clamp(age / 0.22, 0.2, 1) * BIG[k], walks = u.moving && df.speed > 0, legs = k !== 2 || df.era === 0 || df.era === 4, ph = now * df.speed * 3.4 + u.id * 1.7;
         // (it waddles as it walks; it lunges when it hits, leans back when it shoots; it starts when it is hit)
         const hit = u.hit < 0.26 ? Math.sin((u.hit / 0.26) * Math.PI) : 0, ouch = u.ouch < 0.12 ? 1 : 0;
         const lean = df.range ? hit * -0.13 : hit * 0.34, reach = df.range ? hit * -0.09 : hit * 0.24;
@@ -456,14 +462,14 @@ export class Ages {
         _q.setFromEuler(_e.set(roll, 0, -dir * lean - dir * ouch * -0.08));
         put(this.units[df.era * 6 + k * 2 + i], v.x + dir * (reach - ouch * 0.05), 0.012 + bob, LANE[k], _q, grow, grow, grow, ouch ? [2.4, 2.4, 2.4] : null);
         put(this.shades, v.x, 0.02, LANE[k], null, df.len * 0.95, 1, 0.7 + (k === 2 ? 0.5 : 0));
-        if (u.hp < df.hp) { const f = clamp(u.hp / df.hp, 0, 1), y = this.tall[df.era][k] + 0.2, w = k === 2 ? 1.3 : 0.8; put(this.bars, v.x, y, LANE[k], null, w + 0.06, 0.15, 1, [0.03, 0.03, 0.04]); put(this.bars, v.x - (w / 2) * (1 - f), y, LANE[k] + 0.01, null, w * f, 0.09, 1, i ? [3, 0.5, 0.3] : [0.4, 1.4, 3]); }
+        if (u.hp < df.hp) { const f = clamp(u.hp / df.hp, 0, 1), y = this.tall[df.era][k] * BIG[k] + 0.22, w = k === 2 ? 1.3 : 0.8; put(this.bars, v.x, y, LANE[k], null, w + 0.06, 0.15, 1, [0.03, 0.03, 0.04]); put(this.bars, v.x - (w / 2) * (1 - f), y, LANE[k] + 0.01, null, w * f, 0.09, 1, i ? [3, 0.5, 0.3] : [0.4, 1.4, 3]); }
         void col;
       }
     }
     for (let n = this.dying.length - 1; n >= 0; n--) { // (who fell tips over backwards and is gone)
       const q = this.dying[n], dir = q.side ? -1 : 1; q.t += d;
       if (q.t > 0.55) { this.dying.splice(n, 1); continue; }
-      const f = q.t / 0.55, sc = 1 - 0.5 * f * f;
+      const f = q.t / 0.55, sc = (1 - 0.5 * f * f) * BIG[q.k];
       _q.setFromEuler(_e.set(0, 0, dir * f * 1.5));
       put(this.units[q.era * 6 + q.k * 2 + q.side], q.x - dir * f * 0.4, 0.012 + 0.25 * Math.sin(f * Math.PI), LANE[q.k], _q, sc, sc, sc, [1 - 0.6 * f, 1 - 0.6 * f, 1 - 0.6 * f]);
     }
@@ -505,8 +511,7 @@ export class Ages {
     for (const m of [this.shades, this.bars, this.balls, this.streaks]) flush(m);
     for (const pair of this.turrets) for (const m of pair) flush(m);
     // ---- over each base, how much of it stands
-    if (this.panel) for (let i = 0; i < 2; i++) { const p = this._page(GATE_A[i] + (i ? 1 : -1) * 3.2, 8.0, -1.5); if (p) this.panel.place(i, p.x, p.y); }
-    if (st.sides[0].age !== S.said) { S.said = st.sides[0].age; if (S.said === 0) this.panel?.place(0, -999, -999); }
+    if (this.panel) for (let i = 0; i < 2; i++) { const p = this._page(GATE_A[i] + (i ? -1 : 1) * 2.5, 4.3, 0); if (p) this.panel.place(i, p.x, p.y); }
     void GENERAL;
   }
 }

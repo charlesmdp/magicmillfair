@@ -11,14 +11,14 @@ import * as THREE from 'three';
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const mul = (c, k) => [c[0] * k, c[1] * k, c[2] * k];
 /** The colour of each side — one's own blue, the other's red —, and the light of their eyes. */
-export const TEAM = [[0.12, 0.5, 2.3], [2.4, 0.15, 0.09]];
-export const EYES = [[0.8, 2.2, 3.0], [3.0, 1.9, 0.5]];
+export const TEAM = [[0.03, 0.17, 0.95], [1.05, 0.04, 0.03]];
+export const EYES = [[0.5, 1.7, 2.3], [2.4, 1.5, 0.35]];
 
-const BLACK = [0.06, 0.06, 0.07], INK = [0.14, 0.13, 0.15], WHITE = [1.9, 1.88, 1.8], CREAM = [1.7, 1.5, 1.1];
-const RUST = [1.0, 0.5, 0.22], FUR = [0.62, 0.38, 0.18], BONE = [1.8, 1.7, 1.35], WOOD = [0.8, 0.5, 0.26], DARKWOOD = [0.4, 0.25, 0.13], STONE = [0.8, 0.76, 0.7];
-const STEEL = [1.1, 1.16, 1.28], IRON = [0.42, 0.45, 0.52], BRASS = [1.9, 1.3, 0.32], LEATHER = [0.55, 0.32, 0.16], GREEN = [0.36, 0.72, 0.28];
-const KHAKI = [0.95, 0.84, 0.46], OLIVE = [0.44, 0.52, 0.24], COPPER = [1.6, 0.66, 0.3], BRICK = [1.25, 0.42, 0.26];
-const PEARL = [1.9, 1.92, 1.95], HAZARD = [2.5, 1.9, 0.08], GLOW = [0.5, 3.2, 1.0], CYAN = [0.6, 2.4, 3.0], CONCRETE = [1.25, 1.24, 1.18];
+const BLACK = [0.04, 0.04, 0.05], INK = [0.09, 0.085, 0.1], WHITE = [1.0, 0.98, 0.94], CREAM = [0.85, 0.72, 0.5];
+const RUST = [0.5, 0.21, 0.08], FUR = [0.3, 0.17, 0.07], BONE = [0.95, 0.88, 0.68], WOOD = [0.48, 0.3, 0.15], DARKWOOD = [0.24, 0.15, 0.08], STONE = [0.48, 0.46, 0.42];
+const STEEL = [0.62, 0.66, 0.74], IRON = [0.24, 0.26, 0.3], BRASS = [1.1, 0.75, 0.18], LEATHER = [0.32, 0.19, 0.09], GREEN = [0.2, 0.42, 0.16];
+const KHAKI = [0.58, 0.5, 0.27], OLIVE = [0.26, 0.3, 0.14], COPPER = [0.9, 0.38, 0.17], BRICK = [0.72, 0.24, 0.15];
+const PEARL = [0.88, 0.9, 0.94], HAZARD = [1.3, 0.92, 0.04], GLOW = [0.25, 2.0, 0.5], CYAN = [0.22, 1.1, 1.5], CONCRETE = [0.6, 0.6, 0.57];
 
 /** The tools one draws with, into builder `b`: everything mirrored along x by `dir`. */
 function kit(b, dir) {
@@ -36,22 +36,23 @@ function kit(b, dir) {
 }
 
 /**
- * The little robot every soldier is: two feet, a barrel of a body, a round head with a visor all round it and an
- * eye on each side, two arms held forward, and on its back a pole with the flag of its side. o: { body, head (its
- * colours), side (0 | 1), legs, arms, flag (false: without) }.
+ * The little robot every soldier is: two feet, a barrel of a body in the colour of its side, a round head with a
+ * visor all round it and an eye on each side, two arms held forward, and on its back a pole with the flag of its
+ * side. o: { body (the colour of its age: its limbs, its head, its chest), head, side (0 | 1), legs, arms, flag
+ * (false: without) }.
  */
 function bot(K, o) {
-  const { box, cyl, rod, lathe, ball } = K, body = o.body, dark = mul(body, 0.5), team = TEAM[o.side], eye = EYES[o.side];
+  const { box, cyl, rod, lathe, ball } = K, body = o.body, dark = mul(body, 0.55), team = TEAM[o.side], eye = EYES[o.side];
   if (o.legs !== false) for (const z of [-0.13, 0.13]) { box(-0.1, 0, z - 0.075, 0.16, 0.075, z + 0.075, dark); cyl(0.01, 0.07, z, 0.055, 0.05, 0.22, dark, 6); }
-  lathe(0, 0.27, 0, [[0.001, 0], [0.19, 0.02], [0.245, 0.14], [0.245, 0.34], [0.2, 0.5], [0.001, 0.53]], body);
-  box(0.14, 0.4, -0.15, 0.265, 0.7, 0.15, team);
-  for (const z of [-0.27, 0.27]) ball(0, 0.74, z, 0.105, team, 6);
-  lathe(0.02, 0.8, 0, [[0.001, 0], [0.13, 0.01], [0.165, 0.1], [0.165, 0.2], [0.11, 0.29], [0.001, 0.31]], o.head || mul(body, 1.18));
+  lathe(0, 0.27, 0, [[0.001, 0], [0.19, 0.02], [0.245, 0.14], [0.245, 0.34], [0.2, 0.5], [0.001, 0.53]], team);
+  box(0.14, 0.42, -0.13, 0.265, 0.68, 0.13, body);
+  for (const z of [-0.27, 0.27]) ball(0, 0.74, z, 0.105, body, 6);
+  lathe(0.02, 0.8, 0, [[0.001, 0], [0.13, 0.01], [0.165, 0.1], [0.165, 0.2], [0.11, 0.29], [0.001, 0.31]], o.head || mul(body, 1.2));
   box(0, 0.9, -0.172, 0.19, 1.0, 0.172, BLACK);
   for (const z of [-0.178, 0.178]) box(0.06, 0.92, z - 0.005, 0.15, 0.98, z + 0.005, eye);
   box(0.186, 0.92, -0.1, 0.196, 0.98, 0.1, eye);
   if (o.arms !== false) { rod(0, 0.7, 0.27, 0.27, 0.56, 0.3, 0.045, dark); rod(0, 0.7, -0.27, 0.24, 0.52, -0.27, 0.045, dark); ball(0.28, 0.555, 0.3, 0.06, body, 6); }
-  if (o.flag !== false) { rod(-0.2, 0.55, 0, -0.26, 1.64, 0, 0.014, BLACK, 4); box(-0.52, 1.34, -0.012, -0.262, 1.62, 0.012, team); }
+  if (o.flag !== false) { rod(-0.2, 0.55, 0, -0.26, 1.64, 0, 0.014, BLACK, 4); box(-0.56, 1.3, -0.012, -0.262, 1.62, 0.012, team); }
 }
 const skirt = (K, c, low = 0.26) => K.lathe(0, low, 0, [[0.31, 0], [0.29, 0.09], [0.25, 0.2]], c, 9);
 
@@ -92,7 +93,7 @@ const UNITS = [
       K.rod(-0.2, 0.45, -0.12, -0.32, 0.95, -0.12, 0.06, LEATHER, 6);
     }),
     (K, side) => { // the knight: a toy horse on four wheels, a lance with its pennant
-      const horse = [1.6, 1.52, 1.38];
+      const horse = [0.95, 0.9, 0.8];
       K.box(-0.55, 0.52, -0.2, 0.5, 0.98, 0.2, horse);
       for (const z of [-1, 1]) { K.box(-0.52, 0.4, z * 0.2, 0.46, 0.9, z * 0.235, TEAM[side]); K.box(-0.52, 0.4, z * 0.236, 0.46, 0.47, z * 0.245, BRASS); }
       K.rod(0.4, 0.9, 0, 0.74, 1.34, 0, 0.14, horse, 6, 0.11); K.box(0.6, 1.22, -0.1, 1.0, 1.45, 0.1, horse); K.box(0.9, 1.22, -0.105, 1.0, 1.33, 0.105, mul(horse, 0.7));
@@ -108,14 +109,14 @@ const UNITS = [
   ],
   [ // ---- the powder age: coats in the colour of one's side, three-cornered hats, a cannon
     (K, side) => K.at(0, 0, 1.12, () => { // the buccaneer: a kerchief, a cutlass, a belt with a great buckle
-      bot(K, { body: CREAM, side });
-      K.lathe(0.02, 1.02, 0, [[0.17, 0], [0.16, 0.07], [0.09, 0.12], [0.001, 0.13]], TEAM[side]); K.ball(-0.16, 1.04, 0.06, 0.05, TEAM[side], 5);
+      bot(K, { body: mul(CREAM, 0.9), side });
+      K.lathe(0.02, 1.02, 0, [[0.17, 0], [0.16, 0.07], [0.09, 0.12], [0.001, 0.13]], [1.2, 0.2, 0.12]); K.ball(-0.16, 1.04, 0.06, 0.05, [1.2, 0.2, 0.12], 5);
       K.lathe(0, 0.36, 0, [[0.255, 0], [0.255, 0.08]], INK, 9); K.box(0.22, 0.36, -0.06, 0.27, 0.44, 0.06, BRASS);
       K.box(0.262, 0.6, 0.285, 0.31, 1.0, 0.315, mul(STEEL, 1.5)); K.box(0.3, 0.98, 0.285, 0.36, 1.2, 0.315, mul(STEEL, 1.5)); K.box(0.35, 1.18, 0.285, 0.43, 1.3, 0.315, mul(STEEL, 1.5)); K.box(0.2, 0.58, 0.26, 0.37, 0.64, 0.34, BRASS);
     }),
     (K, side) => K.at(0, 0, 1.08, () => { // the musketeer: a long coat, a white belt, a tricorn, a musket with its bayonet
-      bot(K, { body: mul(TEAM[side], 0.75), head: CREAM, side });
-      K.lathe(0, 0.24, 0, [[0.3, 0], [0.25, 0.2]], mul(TEAM[side], 0.6), 9); K.lathe(0, 0.5, 0, [[0.252, 0], [0.252, 0.06]], WHITE, 9);
+      bot(K, { body: CREAM, side });
+      K.lathe(0, 0.24, 0, [[0.3, 0], [0.25, 0.2]], mul(TEAM[side], 0.7), 9); K.lathe(0, 0.5, 0, [[0.252, 0], [0.252, 0.06]], WHITE, 9);
       for (const y of [0.44, 0.6, 0.7]) K.box(0.262, y, -0.02, 0.275, y + 0.04, 0.02, BRASS);
       K.lathe(0.02, 1.07, 0, [[0.33, 0], [0.33, 0.035], [0.17, 0.05], [0.15, 0.15], [0.001, 0.17]], INK, 3); K.lathe(0.02, 1.075, 0, [[0.335, 0.03], [0.335, 0.045]], BRASS, 3);
       K.rod(-0.2, 0.6, 0.3, 0.72, 0.72, 0.3, 0.03, IRON, 5); K.box(-0.3, 0.5, 0.26, 0.05, 0.63, 0.34, WOOD); K.rod(0.72, 0.72, 0.3, 0.98, 0.75, 0.3, 0.012, mul(STEEL, 1.5), 4, 0.003);
@@ -125,7 +126,7 @@ const UNITS = [
       K.box(-0.75, 0.3, -0.36, 0.55, 0.52, 0.36, DARKWOOD); K.rod(-0.3, 0.42, 0, -0.95, 0.06, 0, 0.07, DARKWOOD, 5);
       K.rod(-0.42, 0.66, 0, 0.92, 0.84, 0, 0.19, INK, 10, 0.14); K.rod(0.84, 0.83, 0, 0.95, 0.845, 0, 0.18, INK, 10); K.ball(-0.46, 0.655, 0, 0.19, INK, 8);
       for (const x of [-0.1, 0.4]) K.rod(x, 0.7 + x * 0.12, 0, x + 0.06, 0.708 + x * 0.12, 0, 0.2, BRASS, 10);
-      K.at(-0.72, 0, 0.9, () => { bot(K, { body: mul(TEAM[side], 0.75), head: CREAM, side }); K.lathe(0.02, 1.07, 0, [[0.33, 0], [0.33, 0.035], [0.17, 0.05], [0.15, 0.15], [0.001, 0.17]], INK, 3); K.rod(0.28, 0.5, 0.3, 0.2, 1.3, 0.3, 0.02, WOOD, 4); K.ball(0.2, 1.32, 0.3, 0.06, [2.6, 1.2, 0.2], 5); });
+      K.at(-0.72, 0, 0.9, () => { bot(K, { body: CREAM, side }); K.lathe(0.02, 1.07, 0, [[0.33, 0], [0.33, 0.035], [0.17, 0.05], [0.15, 0.15], [0.001, 0.17]], INK, 3); K.rod(0.28, 0.5, 0.3, 0.2, 1.3, 0.3, 0.02, WOOD, 4); K.ball(0.2, 1.32, 0.3, 0.06, [2.4, 1.0, 0.15], 5); });
     },
   ],
   [ // ---- the steam age: khaki and brass, a boiler on every back, a tank
@@ -247,22 +248,26 @@ export function drawBase(parts, era, side, gate, out) {
   const banners = (y0 = 1.0, y1 = 2.6) => { for (const d of [2.3, 4.6]) { paint.box(d - 0.3, y0, F, d + 0.3, y1, F + 0.04, team); paint.box(d - 0.3, y1 - 0.1, F, d + 0.3, y1, F + 0.06, BRASS); paint.box(d - 0.1, y0 + 0.5, F + 0.04, d + 0.1, y0 + 0.9, F + 0.05, WHITE); } };
   if (era === 0) {
     // ---- the stone age: a mound of rock, a stockade of stakes, two tusks for a porch
-    blocks([0.86, 0.72, 0.56], 0.75);
-    for (const [d, y, v, r] of [[1.5, 0, 2.4, 0.7], [3.4, 0, 2.7, 0.55], [5.4, 0, 2.3, 0.8], [5.6, 0, -1.5, 0.9], [1.5, 2.6, 1.9, 0.45], [4.9, 2.7, 0.3, 0.5]]) paint.lathe(d, y, v, [[0.001, -0.2], [r, 0], [r * 0.85, r * 0.6], [r * 0.4, r], [0.001, r * 1.05]], [0.74, 0.62, 0.5], 7);
+    blocks([0.5, 0.4, 0.3], 0.72);
+    for (const [d, y, v, r] of [[1.5, 0, 2.4, 0.7], [3.4, 0, 2.7, 0.55], [5.4, 0, 2.3, 0.8], [5.6, 0, -1.5, 0.9], [1.5, 2.6, 1.9, 0.45], [4.9, 2.7, 0.3, 0.5]]) paint.lathe(d, y, v, [[0.001, -0.2], [r, 0], [r * 0.85, r * 0.6], [r * 0.4, r], [0.001, r * 1.05]], [0.42, 0.35, 0.28], 7);
     for (let d = a + 0.12; d < z; d += 0.36) { wood.rod(d, B.roof, F - 0.1, d, B.roof + 0.62 + 0.14 * Math.sin(d * 7), F - 0.1, 0.09, WOOD, 5, 0.01); wood.rod(d, B.deck, K + 0.1, d, B.deck + 0.72 + 0.14 * Math.cos(d * 5), K + 0.1, 0.09, WOOD, 5, 0.01); }
     for (let v = K + 0.3; v < M; v += 0.36) wood.rod(z - 0.1, B.deck, v, z - 0.1, B.deck + 0.7 + 0.12 * Math.sin(v * 6), v, 0.09, WOOD, 5, 0.01);
     for (const v of [-0.3, 1.5]) { paint.rod(0.12, 0, v, 0.5, 1.5, v + (v < 0 ? 0.12 : -0.12), 0.17, BONE, 6, 0.12); paint.rod(0.5, 1.5, v + (v < 0 ? 0.12 : -0.12), 0.75, 2.5, 0.6, 0.12, BONE, 6, 0.02); }
-    paint.box(0.5, 2.25, -0.3, a, 2.35, 1.5, [1.25, 0.85, 0.5]); paint.box(0.5, 2.05, -0.3, 0.56, 2.25, 1.5, [1.05, 0.7, 0.4]);
+    paint.box(0.5, 2.25, -0.3, a, 2.35, 1.5, [0.75, 0.5, 0.28]); paint.box(0.5, 2.05, -0.3, 0.56, 2.25, 1.5, [0.62, 0.4, 0.22]);
     paint.rod(2.0, 0, F + 0.5, 2.0, 2.3, F + 0.5, 0.13, WOOD, 6); paint.lathe(2.0, 2.3, F + 0.5, [[0.001, 0], [0.16, 0.02], [0.2, 0.14], [0.18, 0.26], [0.001, 0.34]], RUST, 7); paint.box(2.0 - 0.05, 2.42, F + 0.5 - 0.21, 2.0 + 0.22, 2.5, F + 0.5 + 0.21, BLACK);
-    paint.box(3.4, 0.7, F, 4.4, 1.6, F + 0.03, [1.5, 0.75, 0.3]); paint.box(3.6, 0.9, F + 0.03, 4.2, 1.4, F + 0.05, [0.86, 0.72, 0.56]);
+    // (the layers of the rock, and what was painted on it: a sun of ochre, a herd of three)
+    for (const [y, h, k] of [[0.9, 0.22, 0.86], [1.7, 0.16, 1.12], [2.35, 0.2, 0.9]]) { paint.box(a, y, F, z, y + h, F + 0.03, mul([0.5, 0.4, 0.3], k)); paint.box(a - 0.03, y, M, a, y + h, F, mul([0.5, 0.4, 0.3], k * 0.9)); }
+    for (const [y, h, k] of [[3.2, 0.2, 0.86], [3.6, 0.14, 1.1]]) paint.box(a, y, M, z, y + h, M + 0.03, mul([0.5, 0.4, 0.3], k));
+    paint.rod(3.9, 1.3, F + 0.02, 3.9, 1.3, F + 0.05, 0.3, [0.95, 0.42, 0.14], 10); paint.rod(3.9, 1.3, F + 0.05, 3.9, 1.3, F + 0.06, 0.17, [0.5, 0.4, 0.3], 10);
+    for (const [d, y] of [[2.6, 1.25], [3.0, 1.4], [4.9, 1.2]]) { paint.box(d - 0.16, y, F + 0.03, d + 0.16, y + 0.14, F + 0.05, [0.3, 0.12, 0.06]); paint.box(d - 0.14, y - 0.12, F + 0.03, d - 0.1, y, F + 0.05, [0.3, 0.12, 0.06]); paint.box(d + 0.1, y - 0.12, F + 0.03, d + 0.14, y, F + 0.05, [0.3, 0.12, 0.06]); paint.box(d + 0.14, y + 0.1, F + 0.03, d + 0.24, y + 0.2, F + 0.05, [0.3, 0.12, 0.06]); }
     flag(WOOD);
   } else if (era === 1) {
     // ---- the iron age: a keep of grey stone, its teeth, a round tower, banners
-    blocks([1.05, 1.04, 1.0], 0.8); parapet([1.12, 1.1, 1.06], 0.5, 0.7, 0.3);
+    blocks([0.62, 0.62, 0.6], 0.78); parapet([0.7, 0.7, 0.68], 0.5, 0.7, 0.3);
     for (let d = a + 0.4; d < z; d += 1.1) paint.box(d, 1.7, F, d + 0.12, 2.3, F + 0.02, BLACK);
-    paint.cyl(z - 0.3, 0, K + 0.4, 1.0, 1.0, B.deck + 1.0, [1.0, 0.98, 0.94], 10); paint.lathe(z - 0.3, B.deck + 1.0, K + 0.4, [[1.25, 0], [0.7, 0.9], [0.001, 1.9]], [0.5, 0.62, 1.0], 10);
-    for (const v of [-0.3, 1.5]) paint.box(0.05, 0, v - 0.14, 0.4, 2.2, v + 0.14, [1.0, 0.98, 0.94]);
-    paint.box(0, 2.2, -0.5, a, 2.6, 1.7, [1.05, 1.04, 1.0]); for (let v = -0.5; v < 1.6; v += 0.6) paint.box(0, 2.6, v, 0.25, 2.95, v + 0.32, [1.12, 1.1, 1.06]);
+    paint.cyl(z - 0.3, 0, K + 0.4, 1.0, 1.0, B.deck + 1.0, [0.58, 0.58, 0.56], 10); paint.lathe(z - 0.3, B.deck + 1.0, K + 0.4, [[1.25, 0], [0.7, 0.9], [0.001, 1.9]], [0.22, 0.3, 0.55], 10);
+    for (const v of [-0.3, 1.5]) paint.box(0.05, 0, v - 0.14, 0.4, 2.2, v + 0.14, [0.58, 0.58, 0.56]);
+    paint.box(0, 2.2, -0.5, a, 2.6, 1.7, [0.62, 0.62, 0.6]); for (let v = -0.5; v < 1.6; v += 0.6) paint.box(0, 2.6, v, 0.25, 2.95, v + 0.32, [0.7, 0.7, 0.68]);
     banners(); flag(WOOD);
   } else if (era === 2) {
     // ---- the powder age: a fort of brick, white corner stones, guns at its ports, barrels
@@ -271,16 +276,16 @@ export function drawBase(parts, era, side, gate, out) {
     for (const d of [2.4, 3.6, 4.8]) { paint.box(d - 0.28, 1.5, F, d + 0.28, 2.0, F + 0.03, BLACK); paint.rod(d, 1.74, F - 0.1, d, 1.74, F + 0.5, 0.11, INK, 8); paint.box(d - 0.34, 1.42, F, d + 0.34, 1.5, F + 0.08, CREAM); }
     for (const [d, v] of [[1.75, F + 0.45], [2.25, F + 0.5], [2.0, F + 0.95]]) { wood.cyl(d, 0, v, 0.24, 0.24, 0.6, WOOD, 8); wood.cyl(d, 0.25, v, 0.255, 0.255, 0.1, IRON, 8); }
     for (const v of [-0.3, 1.5]) wood.box(0.06, 0, v - 0.1, 0.26, 2.3, v + 0.1, DARKWOOD);
-    paint.box(-0.1, 2.3, -0.5, a, 2.45, 1.7, [0.9, 0.3, 0.2]); paint.box(-0.2, 2.45, -0.6, a, 2.55, 1.8, [1.1, 0.4, 0.26]);
-    paint.box(z - 1.5, B.deck, K + 0.2, z - 0.2, B.deck + 1.3, K + 1.5, CREAM); paint.lathe(z - 0.85, B.deck + 1.3, K + 0.85, [[1.05, 0], [0.5, 0.5], [0.001, 0.9]], [0.9, 0.3, 0.2], 4);
+    paint.box(-0.1, 2.3, -0.5, a, 2.45, 1.7, [0.5, 0.16, 0.1]); paint.box(-0.2, 2.45, -0.6, a, 2.55, 1.8, [0.62, 0.2, 0.13]);
+    paint.box(z - 1.5, B.deck, K + 0.2, z - 0.2, B.deck + 1.3, K + 1.5, CREAM); paint.lathe(z - 0.85, B.deck + 1.3, K + 0.85, [[1.05, 0], [0.5, 0.5], [0.001, 0.9]], [0.5, 0.16, 0.1], 4);
     banners(0.4, 1.3); flag(WOOD);
   } else if (era === 3) {
     // ---- the steam age: plates of iron and rivets, pipes of copper, a great cog, a chimney of brick
-    blocks([0.5, 0.54, 0.6], 0.7); parapet(IRON, 0.5, 2.2, 0.06, 0.06);
+    blocks([0.3, 0.33, 0.38], 0.7); parapet(IRON, 0.5, 2.2, 0.06, 0.06);
     for (let d = a; d < z; d += 1.1) { paint.box(d - 0.03, 0.5, F, d + 0.03, B.roof, F + 0.03, IRON); for (let y = 0.8; y < B.roof; y += 0.55) paint.box(d + 0.1, y, F, d + 0.16, y + 0.06, F + 0.03, BRASS); }
     paint.rod(a + 0.2, 2.5, F + 0.14, z - 0.2, 2.5, F + 0.14, 0.09, COPPER, 8); paint.rod(z - 0.2, 0.3, F + 0.14, z - 0.2, 2.5, F + 0.14, 0.09, COPPER, 8);
     paint.rod(3.4, 1.4, F, 3.4, 1.4, F + 0.14, 0.62, BRASS, 12); paint.rod(3.4, 1.4, F + 0.14, 3.4, 1.4, F + 0.2, 0.2, IRON, 8); for (let n = 0; n < 10; n++) { const t = n * Math.PI / 5; paint.box(3.4 + Math.cos(t) * 0.66 - 0.09, 1.4 + Math.sin(t) * 0.66 - 0.09, F, 3.4 + Math.cos(t) * 0.66 + 0.09, 1.4 + Math.sin(t) * 0.66 + 0.09, F + 0.12, BRASS); }
-    for (const d of [1.9, 5.0]) { paint.rod(d, 1.6, F, d, 1.6, F + 0.05, 0.3, BRASS, 10); glow.rod(d, 1.6, F + 0.05, d, 1.6, F + 0.07, 0.22, [2.6, 1.9, 0.6], 10); }
+    for (const d of [1.9, 5.0]) { paint.rod(d, 1.6, F, d, 1.6, F + 0.05, 0.3, BRASS, 10); glow.rod(d, 1.6, F + 0.05, d, 1.6, F + 0.07, 0.22, [1.6, 1.15, 0.35], 10); }
     paint.cyl(z - 0.7, 0, K + 0.7, 0.62, 0.42, 6.6, BRICK, 10); paint.cyl(z - 0.7, 6.6, K + 0.7, 0.5, 0.5, 0.3, INK, 10); paint.cyl(z - 0.7, 3.2, K + 0.7, 0.57, 0.56, 0.24, CREAM, 10);
     paint.lathe(2.3, B.deck, K + 0.9, [[0.001, 0], [0.6, 0.05], [0.6, 1.0], [0.3, 1.3], [0.001, 1.34]], COPPER, 10); paint.cyl(2.3, B.deck + 0.5, K + 0.9, 0.62, 0.62, 0.1, BRASS, 10);
     for (const v of [-0.3, 1.5]) { paint.box(0.06, 0, v - 0.09, 0.24, 2.3, v + 0.09, IRON); for (let y = 0.1; y < 2.2; y += 0.5) paint.box(0.04, y, v - 0.1, 0.26, y + 0.25, v + 0.1, y % 1 < 0.5 ? HAZARD : BLACK); }
@@ -290,10 +295,10 @@ export function drawBase(parts, era, side, gate, out) {
     // ---- the atom age: pale concrete, yellow and black, a dome, a cooling tower, windows that glow green
     blocks(CONCRETE, 0.86); parapet(PEARL, 0.4, 2.2, 0.08, 0.05);
     for (let d = a, n = 0; d < z - 0.01; d += 0.55, n++) paint.box(d, 0.5, F, Math.min(z, d + 0.55), 0.78, F + 0.025, n % 2 ? BLACK : HAZARD);
-    for (const d of [2.0, 3.1, 4.2, 5.3]) { paint.box(d - 0.32, 1.3, F, d + 0.32, 2.3, F + 0.03, IRON); glow.box(d - 0.25, 1.38, F + 0.03, d + 0.25, 2.22, F + 0.045, [0.6, 2.8, 1.0]); }
+    for (const d of [2.0, 3.1, 4.2, 5.3]) { paint.box(d - 0.32, 1.3, F, d + 0.32, 2.3, F + 0.03, IRON); glow.box(d - 0.25, 1.38, F + 0.03, d + 0.25, 2.22, F + 0.045, [0.3, 1.5, 0.5]); }
     paint.lathe(2.9, B.deck, K + 1.5, [[1.45, 0], [1.4, 0.5], [1.1, 1.1], [0.6, 1.5], [0.001, 1.65]], PEARL, 14); paint.lathe(2.9, B.deck + 0.35, K + 1.5, [[1.46, 0], [1.44, 0.14]], HAZARD, 14);
-    paint.lathe(z - 0.95, 0, K + 0.95, [[0.95, 0], [0.72, 2.6], [0.62, 4.2], [0.7, 5.6], [0.82, 6.4]], [1.5, 1.5, 1.46], 12); paint.lathe(z - 0.95, 6.36, K + 0.95, [[0.83, 0], [0.84, 0.08]], [2.2, 0.3, 0.2], 12);
-    for (const v of [-0.3, 1.5]) { paint.box(0.06, 0, v - 0.08, 0.2, 2.3, v + 0.08, PEARL); glow.box(0.04, 0.3, v - 0.03, 0.22, 2.0, v + 0.03, [0.6, 2.8, 1.0]); }
+    paint.lathe(z - 0.95, 0, K + 0.95, [[0.95, 0], [0.72, 2.6], [0.62, 4.2], [0.7, 5.6], [0.82, 6.4]], [0.9, 0.9, 0.87], 12); paint.lathe(z - 0.95, 6.36, K + 0.95, [[0.83, 0], [0.84, 0.08]], [1.3, 0.15, 0.1], 12);
+    for (const v of [-0.3, 1.5]) { paint.box(0.06, 0, v - 0.08, 0.2, 2.3, v + 0.08, PEARL); glow.box(0.04, 0.3, v - 0.03, 0.22, 2.0, v + 0.03, [0.3, 1.5, 0.5]); }
     paint.box(-0.1, 2.3, -0.5, a, 2.42, 1.7, PEARL); paint.box(-0.1, 2.42, -0.5, a, 2.47, 1.7, HAZARD);
     banners(0.9, 1.25); flag(IRON);
   }

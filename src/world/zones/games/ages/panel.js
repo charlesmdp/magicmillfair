@@ -41,7 +41,7 @@ const CSS = `
 .ages-b.age .f{top:auto;bottom:0;background:linear-gradient(0deg,rgba(122,208,255,.5),rgba(122,208,255,.18));border-bottom:0;border-top:2px solid #b9f3ff}
 @keyframes ages-no{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
 @keyframes ages-pulse{50%{box-shadow:0 0 0 4px rgba(242,193,78,.55),0 0 22px rgba(242,193,78,.8)}}
-.ages-hp{position:absolute;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center;gap:3px;width:clamp(96px,15vw,190px);text-shadow:0 1px 3px rgba(0,0,0,.9)}
+.ages-hp{position:absolute;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center;gap:3px;width:clamp(92px,13vw,170px);text-shadow:0 1px 3px rgba(0,0,0,.9)}
 .ages-hp b{font:800 12px/1 system-ui,sans-serif;letter-spacing:.08em;white-space:nowrap}
 .ages-hp i{display:block;width:100%;height:12px;border-radius:6px;background:rgba(0,0,0,.62);box-shadow:0 0 0 2px rgba(246,231,200,.75);overflow:hidden}
 .ages-hp u{display:block;height:100%;width:100%;border-radius:6px;transition:width .2s}
@@ -63,6 +63,8 @@ const CSS = `
 @media (max-aspect-ratio:1/1){.ages-bar{bottom:calc(178px + env(safe-area-inset-bottom,0px));--w:calc((100vw - 16px)/6 - 5px)}.ages-row{gap:5px}.ages-xp em:first-child{display:none}}
 `;
 const KIND = ['unit', 'unit', 'unit', 'turret', 'blow', 'age'];
+/** The great blow of each age, in a word or two (its button is narrow). */
+const BLOW = ['Stones', 'Arrows', 'Broadside', 'Air Raid', 'The Atom'];
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
 
 // ---- the pictures that are not robots: the great blow of each age, and the sign of each age
@@ -159,7 +161,7 @@ export function makePanel(o) {
       if (s.age !== age) { age = s.age; xpFrom.textContent = era.name; xpTo.textContent = last ? 'the last age' : `${ERAS[s.age + 1].name}${o.touch ? '' : ' · 6'}`; }
       for (let b = 0; b < 6; b++) {
         const B = buttons[b], q = offer(st, 0, b), pic = `${b}:${s.age}`;
-        if (B.pic !== pic) { B.pic = pic; draw(B, b, s.age); B.name.textContent = b === 5 ? (last ? 'the last age' : q.name) : q.name; }
+        if (B.pic !== pic) { B.pic = pic; draw(B, b, s.age); B.name.textContent = b === 5 ? (last ? 'the last age' : q.name) : b === 4 ? BLOW[s.age] : q.name; }
         const shown = b < 4 ? (q.why === 'full' ? 'full' : String(q.cost)) : b === 4 ? (q.ok ? 'ready' : `${Math.ceil(s.blow)} s`) : last ? '—' : q.ok ? 'go!' : `${Math.floor(q.fill * 100)} %`;
         if (B.shown !== shown) { B.shown = shown; if (b < 4 && q.why !== 'full') { B.price.replaceChildren(el('i', 'ages-coin'), document.createTextNode(shown)); } else B.price.textContent = shown; }
         const cls = `${q.ok ? ' ok' : ''}${q.why === 'gold' ? ' poor' : ''}${b === chosen ? ' sel' : ''}`;
@@ -197,6 +199,8 @@ export function makePanel(o) {
     /** A button that was pressed for nothing shakes; one that did something dips. */
     nope(b) { const e = buttons[b].btn; e.classList.remove('no'); void e.offsetWidth; e.classList.add('no'); },
     done(b) { const e = buttons[b].btn; e.classList.add('hit'); setTimeout(() => e.classList.remove('hit'), 110); },
+    /** The war is over: the buttons go (what the game says of the score is said where they were). */
+    end() { bar.style.display = 'none'; },
     /** The whole screen goes white for a moment (the atom). */
     flash() { flash.style.transition = 'none'; flash.style.opacity = '0.92'; void flash.offsetWidth; flash.style.transition = ''; flash.style.opacity = '0'; },
     /** Takes everything away. */
