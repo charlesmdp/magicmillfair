@@ -7,12 +7,14 @@
 // button; the rest is what the stone is painted for:
 //   a band of BLUE stone along a wall   run along this: jump at it at a run and one runs on along it, in a
 //                                       shallow arc, for a little over a second — over what no jump crosses.
+//                                       Beside it a jump is drawn to the wall: one need not aim at the stone.
 //                                       The button kicks off it, to the wall across when there is one
 //   a face of GREEN stone across the way  climb this: run straight at it and one runs two or three steps up
 //                                       it, catches its edge and pulls up — no button. An edge one falls just
 //                                       short of is caught the same way
 //   a GOLD bar across a gap             swing round this: jump into it, and the button lets go — thrown far
-//   RED                                 this hurts: blades that swing across, spikes that come up in time
+//   RED                                 this hurts: blades that swing across — crescents on rods, gone round,
+//                                       waited for, or jumped —, spikes that come up in time
 //   pale cracked slabs                  give way a moment after one sets foot on them: one keeps running
 //   a ledge along the wall              shuffled along, the back to the stone: nobody steps off its side
 // And time winds back: a fall, a blade, a spike — and one's robot goes back along its own path to the last
@@ -32,25 +34,29 @@ const frac = (v) => v - Math.floor(v);
 export const WALLS = {
   name: 'Run the Walls',
   at: { x: 258, z: 100 }, // the middle of the ruin, in the sea off the south beach
-  gate: { x: 56, z: 88 }, // where one asks to run: on the south beach, the ruin in sight
-  base: 3.2, // m over the sea: the foot of the way
+  gate: { x: 79, z: 99 }, // where one asks to run: on the shore at the south-east end of the south beach, past the quay of the robots, the ruin in sight across the water
+  base: 6, // m over the sea: the foot of the way
   half: 1.7, reach: 1.45, // the way: half its width; how far from its middle one goes (the wall, a kerb)
   // its plan: a snail's shell of straight sides, each turned left into the next by a quarter circle
   plan: { a: 42, b: 30, inset: 7.5, r: 5, sides: 9 },
+  // the top of the wall on the left of each side (m over the foot of the ruin): the terrace the next lap in stands on;
+  // the turret at a corner rises `turret` over the higher of its two walls
+  tops: [7, 11, 14.9, 14.9, 17, 27.5, 27.5, 27.5, 27.5], turret: 2.6,
   step: 1 / 120,
   speed: 7, back: 3.2, start: 0.22, stop: 0.18, // m/s forward, backward; s from standing to that speed, and back
   side: 4.6, accel: 40, // across: m/s, m/s²
   g: 24, jump: 8.4, leap: 6, push: 10, // m/s²; m/s up; the least a jump with the stick up goes forward; m/s² the stick adds in the air
   coyote: 0.25, buffer: 0.18, // s after an edge (or a wall) during which a jump is still a jump; s a press asked too early is kept
   edge: 0.2, lip: 0.36, // m a foot may be over an edge; the step one walks up
-  wall: { t: 1.15, v: 7.4, g: 5.2, up: [1.6, 3.4], touch: 0.5, least: 2.5, kick: [5.4, 7.6], lock: 0.3, lead: 0.7 }, // a run along a wall: s it lasts, m/s, how it sags, the speed up it begins with, how near the wall one must be, the least speed, the kick (across, up), s the kick carries, m before the band one may take it
+  wall: { t: 1.15, v: 7.4, g: 5.2, up: [1.6, 3.4], touch: 0.5, least: 2.5, kick: [5.4, 7.6], lock: 0.8, lead: 0.7 }, // a run along a wall: s it lasts, m/s, how it sags, the speed up it begins with, how near the wall one must be, the least speed, the kick (across, up), s the kick carries one across whatever the stick says, m before the band one may take it
   climb: { v: 6.2, reach: 3.5, hands: 1.05, pull: 0.3, in: 0.55 }, // up a wall: m/s, the highest edge caught from below, how far under an edge the hands catch it, s to pull up, m beyond the face one stands then
   pole: { up: 2.35, catch: 0.75, lo: 2.15, hi: 0.15, hang: 1.35, least: 0.16, v: 7.8, vy: 6.6 }, // a bar: m over the floor before it; how near, how far under it it is caught; where one hangs; s before one can let go; how one is thrown
   crumble: 0.6, shuffle: 3.4, // s a slab that gives way holds; m/s along a ledge
+  blade: [0.25, 1.05], // m over the floor: the foot and the tips of the crescent of a blade (what is over it is its rod: one may jump the crescent)
   fall: 3.6, down: 0.6, ready: 0.2, // m under the last footing a fall is a fall; s on the ground with no rewind left; s before the legs answer again
   rewinds: 3, trail: 4, wind: 2, // in reserve; a place kept every so many steps; how fast time runs back
   tall: 1.3, along: 0.28, across: 0.22, // a runner
-  cam: { back: 7.6, out: 4.3, up: 5.2, ahead: 2.6, hall: { out: 0.35, up: 6.9 } }, // the camera: behind, on the open side, above — between two walls it comes in over the middle of the way
+  cam: { back: 6.2, out: 3.5, up: 3.3, ahead: 1.8, hall: { out: 0.3, up: 5.4 } }, // the camera: behind, on the open side, above — between two walls it comes in over the middle of the way
   names: ['First Steps', 'Along the Wall', 'Up the Wall', 'Wall to Wall', 'The Bars', 'Blades and Spikes', 'Giving Way', 'The Ledge', 'Run and Climb', 'The Roofless Hall', 'Thin Ice', 'The Tower'],
 };
 const S = WALLS, H = S.half, R = S.reach;
@@ -99,7 +105,7 @@ export function placeAt(s, u = 0, out = {}) {
 //   face    { s, y0, y1 }: where the floor steps up — climbed (it is what the floors say; kept for who draws it)
 //   wall    { side (-1 the wall on the left, 1 one that stands on the right), y0, y1 }: a band one runs along
 //   pole    { s, y }: a bar across the way
-//   blade   { s, period, phase, mid, amp, y }: a blade that swings across the way
+//   blade   { s, period, phase, mid, amp, y }: a blade that swings across the way: a crescent on a rod, low
 //   spikes  { u0, u1, period, phase, share, y }: spikes that come up through the floor `share` of the time
 let made = null;
 export function course() {
@@ -129,7 +135,7 @@ export function course() {
   // ---- 3 · Up the Wall: faces of green stone, the last one beyond a hole
   save(60.7); to(64); up(2.6); floor(5); up(3); floor(4); gap(2.6); up(1.3); corner(1);
   // ---- 4 · Wall to Wall: a wall stands on the right as well — kick from one to the other
-  save(); to(91.5); band(-1, 90.3, 99.5, 5.8); band(1, 101, 109, 5.8); gap(16); floor(4);
+  save(); to(91.5); band(-1, 90.3, 99.5, 4.6); band(1, 101, 109, 4.6); gap(16); floor(4);
   // ---- 5 · The Bars: a gold bar over each gap
   save(108.6); pole(114.6); gap(7.5); floor(2.8); pole(124.9); gap(7.2); corner(2);
   // ---- 6 · Blades and Spikes: what keeps time
@@ -197,6 +203,9 @@ export function floorAt(s, u, st) {
   return top;
 }
 const wallFor = (st, d, slack = 0) => { for (const t of near(st.s)) if (t.kind === 'wall' && t.side === d && st.s >= t.s0 - S.wall.lead - slack && st.s <= t.s1 + slack && st.y >= t.y0 - 0.75 && st.y <= t.y1 + 0.4) return t; return null; };
+
+/** Is the runner on a ledge, the back to the stone? */
+export const onLedge = (st) => st.mode === 'ground' && (floorAt(st.s, st.u, st), _f.t)?.form === 'ledge';
 
 /** A runner at the start, standing. `t0`: the shared clock then (s). The clock of the run waits for the first step. */
 export function startRun(t0 = 0) {
@@ -309,7 +318,13 @@ function sub(st, dt, input, events) {
   } else if (st.mode === 'air') {
     const want = run * S.speed;
     if (want > st.vs) st.vs = Math.min(want, st.vs + S.push * dt); else if (run < -0.2 && want < st.vs) st.vs = Math.max(want * 0.5, st.vs - S.push * dt);
-    if (st.kick > 0) st.kick -= dt; else st.vu += clamp(side * S.side - st.vu, -S.accel * dt, S.accel * dt);
+    if (st.kick > 0) st.kick -= dt;
+    else {
+      // (beside a band, a jump is drawn to the wall unless the stick says otherwise: one need not aim at the stone)
+      let pull = 0;
+      if (st.sprung && st.vs >= S.wall.least) for (const d of [-1, 1]) if (!pull && st.lastWall !== d && side * d > -0.3 && wallFor(st, d)) pull = d;
+      st.vu += clamp((pull || side) * S.side - st.vu, -S.accel * dt, S.accel * dt);
+    }
     if (st.coy > 0) st.coy -= dt;
     if (st.wcoy > 0) st.wcoy -= dt;
     if (st.want > 0 && st.coy > 0) { st.y = Math.max(st.y, st.gy - 0.05); jumpOff(st, run, events); }
@@ -340,7 +355,7 @@ function sub(st, dt, input, events) {
         const foot = floorAt(s0, st.u, st) >= st.gy - 0.5;
         if (st.vs > -0.5 && (G - st.y <= S.climb.hands + 0.25 || (foot && G - st.y <= S.climb.reach))) climbUp(st, G, s0, events); else { st.s = s0; st.vs = 0; }
       } else if (G > -Infinity && st.y <= G && st.vy <= 0) land(st, G, events);
-      else if (st.y < st.gy - S.fall) return out(st, 'fall', events);
+      if (st.mode === 'air' && st.y < st.gy - S.fall) return out(st, 'fall', events);
     }
   } else if (st.mode === 'wall') {
     const d = st.side, W = S.wall;
@@ -403,7 +418,7 @@ function sure(st) {
 /** What hurts the runner at `now` ('' when nothing). */
 function touch(st, now) {
   for (const t of near(st.s)) {
-    if (t.kind === 'blade') { if (Math.abs(st.s - t.s) < 0.3 + S.along && Math.abs(st.u - bladeAt(t, now)) < 0.45 + S.across && st.y < t.y + 1.9 && st.y + S.tall > t.y + 0.15) return 'blade'; }
+    if (t.kind === 'blade') { if (Math.abs(st.s - t.s) < 0.3 + S.along && Math.abs(st.u - bladeAt(t, now)) < 0.45 + S.across && st.y < t.y + S.blade[1] && st.y + S.tall > t.y + S.blade[0]) return 'blade'; }
     else if (t.kind === 'spikes') { if (st.s > t.s0 - 0.05 && st.s < t.s1 + 0.05 && st.u > t.u0 - 0.1 && st.u < t.u1 + 0.1 && st.y < t.y + 0.55 * spikesAt(t, now) - 0.12 && st.y > t.y - 0.5) return 'spikes'; }
   }
   return '';
@@ -412,7 +427,7 @@ function touch(st, now) {
 function out(st, why, events) {
   st.outs++; st.why = why;
   events?.push({ type: 'out', why, s: st.s });
-  if (st.trail && st.rew > 0 && st.trail.length > 1) {
+  if (st.trail && st.rew > 0 && st.trail.length > 0) {
     st.rew--; st.used++; st.rm = st.mode; st.mode = 'rewind'; st.ri = st.trail.length - 1; st.rf = 0;
     // (three seconds of it at the most, at twice the speed: a longer way back is run faster)
     st.rs = Math.max(S.wind, (st.trail.length * S.trail / 120) / 1.5);
@@ -444,13 +459,16 @@ function lasts(st, plan, n) {
     if (q.outs > outs) return k;
   }
   // (hanging from a bar, or run into something: it lasts, and gets nowhere)
-  if (plan.go === 0 && (q.mode === 'pole' || q.s < from + 3)) return Math.min(n, SURE - 2);
+  if (plan.go !== NEVER && (q.mode === 'pole' || q.s < from + 3)) return Math.min(n, SURE - 2);
   return n;
 }
 function search(st, B, go, cur, k0, deep) {
   const now = st.n, first = now + (B.late ?? LATE);
   let best = cur, score = k0;
-  const tryPlan = (plan) => { plan.go = go; const k = lasts(st, plan, FAR); if (k > score || (k === score && best && plan.keys.length < best.keys.length)) { score = k; best = plan; } return k; };
+  const still = go === 0 && st.mode === 'ground' && st.vs < 1;
+  const tryOne = (plan) => { const k = lasts(st, plan, FAR); if (k > score || (k === score && best && plan.keys.length < best.keys.length)) { score = k; best = plan; } return k; };
+  // (from a standstill, two ways to go: at once, or with the first press — a leap from where one stands)
+  const tryPlan = (plan) => { plan.go = go; const k = tryOne(plan); if (still && score < FAR && plan.keys.length) tryOne({ ...plan, go: plan.keys[0] }); return k; };
   const lanes = LANES.slice().sort((a, b) => Math.abs(a - st.u) - Math.abs(b - st.u));
   const kept = (B.keys || []).filter((k) => k >= now);
   for (const u of lanes) tryPlan({ u, keys: kept.slice() });
@@ -462,7 +480,7 @@ function search(st, B, go, cur, k0, deep) {
   if (score < SURE && deep >= 3) for (let d = 0; d <= 60 && score < FAR; d += 6) for (let g = 18; g <= 110 && score < FAR; g += 10) for (let g2 = 18; g2 <= 110 && score < FAR; g2 += 10) for (const u of lanes.slice(0, 2)) tryPlan({ u, keys: [first + d, first + d + g, first + d + g + g2] });
   return { plan: best, score };
 }
-const take = (B, plan) => { B.u = plan.u; B.keys = plan.keys.slice(); B.go = plan.go; };
+const take = (B, plan) => { if (!plan) return; B.u = plan.u; B.keys = plan.keys.slice(); B.go = plan.go; };
 
 function think(st, B) {
   const now = st.n, cur = { u: B.u, keys: B.keys.filter((k) => k >= now), go: B.go };

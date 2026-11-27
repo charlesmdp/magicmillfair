@@ -1602,7 +1602,7 @@ async function boot() {
     golf: { title: 'FEWEST STROKES', sub: 'nine holes round the acid pond · the fewest strokes, then the fastest', at: [4.4, -0.5, 0], format: golfScore, star: false }, // (no star on the map for the golf)
     ages: { title: 'FASTEST VICTORIES', sub: 'two armies, five ages · the other base down the soonest', at: [4.4, -0.5, 0] },
     raft: { title: 'BEST TIMES', sub: 'down the river to the sea · fastest', at: [4.4, -0.5, 0] },
-    walls: { title: 'BEST TIMES', sub: 'through the ruin, along its walls · fastest', at: [4.4, -0.5, 0] },
+    walls: { title: 'BEST TIMES', sub: 'along the walls of the ruin, to the top of its tower · fastest', at: [4.4, -0.5, 0] },
     sneak: { title: 'BEST TIMES', sub: 'through the alleys, unseen · fastest', at: [4.4, -0.5, 0] },
     mine: { title: 'BEST TIMES', sub: 'the whole line of the mine · fastest', at: [4.4, -0.5, 0] },
     coaster: { title: 'BEST TIMES', sub: 'round every mountain, on the rails · fastest', at: [4.4, -0.5, 0] },
