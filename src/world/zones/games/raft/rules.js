@@ -27,14 +27,14 @@ export const RAFT = {
   // where one asks to play, on the sand at the north end of the beach, and which way the gate looks (at the sea)
   gate: { x: 51.5, z: -116.5, yaw: 1.2 },
   // the spring: the middle of the Cauldron, at the foot of the northern sea cliffs, and the way the river leaves it
-  top: { x: 291, z: -490, y: 53.85, yaw: Math.PI / 2 },
+  top: { x: 291, z: -484, y: 53.85, yaw: Math.PI / 2 },
   r: 1.25, // m: a raft, for what it runs into (it is 3.7 m long and 2 m wide)
   g: 9.81,
   carry: 1.0, // 1/s: how fast the stream takes a raft along with it
   grip: 1.3, // 1/s: …and stills what it does across the stream
   paddle: 2.7, // m/s²: paddling on, the way the raft points
   back: 2.3, // m/s²: holding water
-  draw: 1.7, // m/s²: straight across, at full stick (the paddles pull the raft sideways)
+  draw: 2.1, // m/s²: straight across, at full stick (the paddles pull the raft sideways)
   steer: 0.8, // radians: how far off the stream the crew points the raft at full stick
   turn: { pull: 7.5, damp: 4.3, most: 3.3 }, // the raft comes round to where it is pointed: stiffness, damping, the most it can turn (rad/s²)
   swing: 0.45, // how much of a bend throws the raft towards its outer bank
@@ -91,28 +91,30 @@ const WATER = {
  */
 const COURSE = [
   { name: 'The Cauldron', kind: 'pool', line: [line(26)], drop: 0.15, hw: 8 },
-  { name: 'First Riffles', kind: 'riffle', line: [bend(15, 70), bend(-15, 70), line(3)], drop: 2.0,
+  { name: 'First Riffles', kind: 'riffle', line: [bend(-9, 70), bend(18, 70), bend(-9, 70)], drop: 2.0,
     rocks: [[13, -3.7, 1.0], [27, 3.5, 1.1]], waves: [[6, 34, -1.6, 1.6, 0.28]] },
-  { name: 'The Rock Garden', kind: 'rapid', line: [line(22), bend(-13, 90), bend(13, 90), line(11)], drop: 4.6, hw: 6,
-    rocks: [[7, -1.6, 1.3], [16, 3.0, 1.2], [25, -3.9, 1.1], [29, 0.8, 1.35], [38, 4.1, 1.2], [42, -2.4, 1.5], [52, 1.9, 1.3], [57, -4.2, 1.1], [64, -0.5, 1.35], [69, 3.7, 1.0]] },
+  { name: 'The Rock Garden', kind: 'rapid', line: [line(14), bend(-8, 90), bend(16, 90), bend(-8, 90), line(10)], drop: 4.6, hw: 6,
+    // (boulders now on the left, now on the right: the way weaves between them — never faster across than a raft can go)
+    rocks: [[12, -2.7, 1.3], [19, 5.2, 0.8], [26, 2.7, 1.3], [33, -5.2, 0.8], [40, -2.7, 1.4], [47, 5.2, 0.8], [54, 2.7, 1.3], [67, -2.5, 1.2]] },
   { name: 'Otter Pool', kind: 'pool', line: [line(26)], drop: 0.2, flag: 12 },
   { name: 'The Step', kind: 'fall', line: [line(10)], drop: 2.7, ledges: [[5, 2.4]] },
-  { name: 'The Big Bend', kind: 'rapid', line: [bend(-180, 20)], drop: 3.6, hw: 5.8,
+  { name: 'The Big Bend', kind: 'rapid', line: [bend(-180, 19)], drop: 3.6, hw: 5.8,
     rocks: [[41, -4.5, 1.2]], waves: [[8, 52, -4.6, -1.2, 0.6]], shoals: [[14, 50, 2.6, 5.8]] },
   { name: 'Heron Pool', kind: 'pool', line: [line(24)], drop: 0.2, flag: 12 },
-  { name: 'The Narrows', kind: 'narrows', line: [line(6), bend(13, 80), bend(-26, 80), bend(13, 80), line(12.5)], drop: 5.9,
+  { name: 'The Narrows', kind: 'narrows', line: [line(6), bend(13, 60), bend(-26, 60), bend(13, 60), line(12.5)], drop: 5.9,
     rocks: [[19, -2.75, 1.05], [37, 2.7, 1.05], [56, -2.6, 1.1]], waves: [[4, 68, -1.1, 1.1, 0.5]] },
-  { name: 'The Chute', kind: 'fall', line: [line(12)], drop: 3.3, ledges: [[4, 3.0]], holes: [[5.6, 10.4, -0.8, 5.2]] },
+  { name: 'The Chute', kind: 'fall', line: [line(12)], drop: 3.3, ledges: [[4, 3.0]], holes: [[5.6, 10.4, 0.4, 5.2]] },
   { name: 'Boulder Alley', kind: 'rapid', line: [line(42)], drop: 3.3,
-    rocks: [[7, 2.7, 1.6], [16, -3.0, 1.5], [25, 1.3, 1.7], [33, -2.2, 1.5], [39, 3.6, 1.2]], waves: [[26, 40, -5, -3.2, 0.4]] },
+    rocks: [[8, 2.9, 1.6], [23, -2.9, 1.7], [38, 2.8, 1.5]], waves: [[26, 34, 0.6, 4.6, 0.4]] },
   { name: 'Kingfisher Pool', kind: 'pool', line: [line(22)], drop: 0.2, flag: 11 },
-  { name: 'The Hairpin', kind: 'rapid', line: [bend(180, 20)], drop: 4.2, hw: 5.8,
+  { name: 'The Hairpin', kind: 'rapid', line: [bend(180, 19)], drop: 4.2, hw: 5.8,
     rocks: [[51, -0.6, 1.4]], waves: [[6, 26, 1.2, 4.8, 0.55], [33, 36.5, -0.6, 5.8, 1.25]], shoals: [[12, 44, -5.8, -3.0]] },
-  { name: 'The Fork', kind: 'fork', line: [line(15), bend(10, 90), bend(-10, 90), line(13)], drop: 4.0,
-    island: [13, 47, 0.7, 3.1], rocks: [[21, -6.9, 1.25], [31, -3.7, 1.2], [40, -7.4, 1.15]], waves: [[14, 46, -7.6, -3.6, 0.45]] },
-  { name: 'Last Chance', kind: 'pool', line: [line(24)], drop: 0.2, flag: 12 },
+  { name: 'The Fork', kind: 'fork', line: [line(8), bend(-18, 60), bend(18, 60), line(13.6)], drop: 4.0, hw: 11.4,
+    // (to the left of the island: the quick water, and two rocks to weave between; to its right: the long, quiet way)
+    island: [13, 47, 0.7, 3.1], rocks: [[19, -9.4, 1.2], [40, -3.0, 1.3]], waves: [[12, 46, -9.0, -4.4, 0.45]] },
+  { name: 'Last Chance', kind: 'pool', line: [bend(-12, 115)], drop: 0.2, flag: 12 },
   { name: 'The Staircase', kind: 'rapid', line: [line(52)], drop: 8.7,
-    ledges: [[10, 1.7], [24, 1.7], [38, 1.7]], rocks: [[17, 3.3, 1.2], [31, -3.6, 1.2], [46, 2.6, 1.2]], holes: [[25.4, 29.4, -5.4, -0.4]] },
+    ledges: [[10, 1.7], [24, 1.7], [38, 1.7]], rocks: [[15, 3.3, 1.2], [32, -3.6, 1.2], [48, 3.2, 1.2]], holes: [[25.4, 29.4, -5.4, -0.4]] },
   { name: 'The Great Fall', kind: 'fall', line: [line(14)], drop: 10.1, ledges: [[4.5, 9.6]] },
   { name: 'The Lagoon', kind: 'lagoon', line: [line(27)], drop: 0.12 },
 ];
@@ -184,6 +186,8 @@ export function raftCourse() {
   });
   rocks.sort((a, b) => a.s - b.s); ledges.sort((a, b) => a.s - b.s);
   rocks.forEach((r, index) => { r.index = index; });
+  // (a last one in the lagoon, under the great fall: whoever cannot get down it is put there in the end — see RAFT.mercy)
+  flags.push({ s: stretches[stretches.length - 1].from + 4, name: COURSE[COURSE.length - 1].name, last: true });
   // ---- how high the water stands: each stretch comes down by its drop — its falls at once, the rest evenly
   const y = new Float64Array(n + 1);
   {
@@ -217,6 +221,34 @@ export function raftCourse() {
       else p.c *= 1 - 0.35 * (1 - smooth(l.s + l.run, l.s + l.run + 5, p.s));
     }
   }
+  // ---- which side of each rock a raft can pass on (-1 left, 1 right, 0 either): the water pushes that way
+  for (const r of rocks) {
+    const at = P[Math.min(n, Math.round(r.s))], need = 2 * RAFT.r + 0.5;
+    const room = (side) => {
+      let edge = side * at.hw;
+      for (const o of rocks) if (o !== r && Math.abs(o.s - r.s) < o.r + r.r + 2 * RAFT.r && (o.u - r.u) * side > 0) edge = side > 0 ? Math.min(edge, o.u - o.r) : Math.max(edge, o.u + o.r);
+      for (const it of islands) if (r.s > it.from - 1 && r.s < it.to + 1 && (it.u - r.u) * side > 0) edge = side > 0 ? Math.min(edge, it.u - it.half) : Math.max(edge, it.u + it.half);
+      return (edge - r.u) * side - r.r;
+    };
+    const left = room(-1) >= need, right = room(1) >= need;
+    r.open = left && !right ? -1 : right && !left ? 1 : 0;
+    // (and the bank it leaves no room along, if any: that bank is taken to come out to it — see below)
+    r.bank = at.hw - Math.abs(r.u) - r.r >= need ? 0 : r.u < 0 ? -1 : 1;
+  }
+  // ---- how far across a raft may be, at every metre: [lo, hi] (m from the middle). Between the banks — and where
+  // a rock leaves no room for a raft between it and a bank, the bank is taken to come out to it, in a slope a
+  // raft slides along: nothing is ever wedged in such a corner
+  for (const q of P) q.lim = [-(q.hw - RAFT.r * 0.8), q.hw - RAFT.r * 0.8];
+  for (const r of rocks) {
+    if (!r.bank) continue;
+    const shut = r.bank, gate = r.u - shut * (r.r + RAFT.r + 0.05); // (the side that is shut; how far across a raft's middle is, abreast of the rock)
+    for (const q of P) {
+      const d = Math.abs(q.s - r.s);
+      if (d > 14) continue;
+      const edge = gate + shut * Math.max(0, d - r.r * 0.5) * 0.85;
+      if (shut > 0) q.lim[1] = Math.min(q.lim[1], edge); else q.lim[0] = Math.max(q.lim[0], edge);
+    }
+  }
   const last = P[n];
   built = {
     points: P, step, length: total, finish: stretches[stretches.length - 1].from + FINISH, drop: y[0] - y[n], stretches,
@@ -228,8 +260,8 @@ export function raftCourse() {
 
 const _a = {};
 /**
- * The river `s` metres from its spring: { x, z, yaw, tx, tz, k, y, slope, hw, c, deep, bank, i (the sample before),
- * s }. `out` is filled and returned.
+ * The river `s` metres from its spring: { x, z, yaw, tx, tz, k, y, slope, hw, c, deep, bank, lo, hi (how far
+ * across a raft may be, to the left and to the right), i (the sample before), s }. `out` is filled and returned.
  */
 export function riverAt(course, s, out = {}) {
   const P = course.points, f = clamp(s / course.step, 0, P.length - 1), i = Math.min(P.length - 2, Math.floor(f)), t = f - i, a = P[i], b = P[i + 1];
@@ -237,6 +269,7 @@ export function riverAt(course, s, out = {}) {
   out.yaw = a.yaw + wrap(b.yaw - a.yaw) * t;
   out.k = lerp(a.k, b.k, t); out.y = lerp(a.y, b.y, t); out.slope = lerp(a.slope, b.slope, t); out.hw = lerp(a.hw, b.hw, t);
   out.c = lerp(a.c, b.c, t); out.deep = lerp(a.deep, b.deep, t); out.bank = a.bank; out.i = i; out.s = clamp(s, 0, course.length);
+  out.lo = lerp(a.lim[0], b.lim[0], t); out.hi = lerp(a.lim[1], b.lim[1], t);
   return out;
 }
 /** A place of the river in the world: `u` metres to the right of its middle; out.x, out.y (the water), out.z. */
@@ -280,6 +313,28 @@ export function currentAt(course, p, u) {
   for (const w of course.waves) if (p.s > w.from - 3 && p.s < w.to + 3 && u > w.u0 - 0.8 && u < w.u1 + 0.8) c *= 1 + 0.16 * Math.min(smooth(w.from - 3, w.from + 2, p.s), 1 - smooth(w.to - 2, w.to + 3, p.s));
   for (const it of course.islands) if (p.s > it.from && p.s < it.to && u > it.u) c *= 0.8; // (the right-hand channel: the long, quiet way)
   return c;
+}
+
+/**
+ * How the water parts round the rocks at a place: how fast it runs across there (m/s, to the right when positive).
+ * It piles up before a rock and slips by on both sides: a raft that drifts onto one is pushed off it, to the side
+ * it is already on — nothing stays pinned.
+ */
+export function partAt(course, s, u, from = 0) {
+  let cu = 0;
+  const rocks = course.rocks;
+  for (let n = from; n < rocks.length && rocks[n].s < s + 7; n++) {
+    const r = rocks[n], ds = r.s - s, du = u - r.u, reach = r.r + 2.2;
+    if (ds < -r.r || ds > 2.4 * r.r + 2.5 || Math.abs(du) > reach) continue;
+    const side = r.open || (Math.abs(du) > 0.12 ? Math.sign(du) : r.u > 0 ? -1 : 1); // (to the side a raft can pass on; dead on a rock open on both: towards the middle of the river)
+    cu += side * 2.6 * (1 - Math.abs(du) / reach) * (1 - smooth(0, 2.4 * r.r + 2.5, ds));
+  }
+  for (const it of course.islands) {
+    const ds = it.from - s, du = u - it.u, reach = it.half + 3;
+    if (ds < -6 || ds > 9 || Math.abs(du) > reach) continue;
+    cu += (Math.abs(du) > 0.12 ? Math.sign(du) : -1) * 2.6 * (1 - Math.abs(du) / reach) * (1 - smooth(0, 9, ds));
+  }
+  return cu;
 }
 
 /** How high the water stands over the level of the river at a place, in a train of waves (m; for what is seen, and how a raft bobs). */
@@ -384,15 +439,16 @@ function sub(st, dt, input, events) {
   // ---- a brace: the crew gets down and holds on (nobody paddles meanwhile)
   if (st.want > 0 && st.braced <= 0 && st.rest <= 0 && !stunned && !st.held) { st.braced = K.brace.hold; st.want = 0; st.braces++; st.used = false; st.bracedAt = st.clock; events?.push({ type: 'brace' }); }
   const braced = st.braced > 0;
-  /** A brace has just saved a knock: how long before it was needed it had come. */
-  const saved = () => { st.saves++; st.used = true; st.margins.push(st.clock - st.bracedAt); };
+  /** A brace has just saved a knock: how long before it was needed it had come (`early`, when that was a while ago: at the lip of a fall). */
+  const saved = (early = -1) => { st.saves++; st.used = true; st.margins.push(early >= 0 ? early : st.clock - st.bracedAt); };
 
   // ---- over a fall: the raft drops, and comes down as it left
   if (st.air) {
     const A = st.air;
     A.vy -= K.g * dt; A.y += A.vy * dt;
     if (braced) A.braced = true;
-    st.s = Math.min(course.length - 0.5, st.s + (st.vs * dt) / Math.max(0.6, 1 + p.k * st.u)); st.u = clamp(st.u + st.vu * dt * 0.5, -p.hw + K.r, p.hw - K.r); st.a += st.w * dt;
+    st.s = Math.min(course.length - 0.5, st.s + (st.vs * dt) / Math.max(0.6, 1 + p.k * st.u)); st.u = clamp(st.u + st.vu * dt * 0.5, p.lo, p.hi);
+    st.w *= Math.max(0, 1 - 3 * dt); st.a += st.w * dt;
     const q = riverAt(course, st.s, _p);
     if (A.y <= q.y) {
       const h = A.h, side = Math.abs(Math.sin(st.a)) > K.side, hard = h >= K.fall.least;
@@ -400,10 +456,10 @@ function sub(st, dt, input, events) {
       if (hard && ((side && !A.braced) || (h >= K.fall.great && !A.braced))) { events?.push({ type: 'land', h, clean: false, side, braced: A.braced }); capsize(st, side ? 'side' : 'great', events); return; }
       if (hard && (side || !A.braced)) {
         knock(st, Math.min(K.fall.stun[2], K.fall.stun[0] + K.fall.stun[1] * h), K.fall.keep, (st.a < 0 ? -1 : 1) * 0.8);
-        if (A.braced) saved();
+        if (A.braced) saved(A.early);
         events?.push({ type: 'land', h, clean: false, side, braced: A.braced });
       } else {
-        if (hard) saved();
+        if (hard) saved(A.early);
         st.vs = Math.max(st.vs, q.c + 0.6);
         events?.push({ type: 'land', h, clean: true, side: false, braced: A.braced });
       }
@@ -426,8 +482,9 @@ function sub(st, dt, input, events) {
   }
 
   // ---- the stream, the paddles, the bend
+  while (st.nextRock < course.rocks.length && course.rocks[st.nextRock].s < st.s - 6) st.nextRock++;
   const cur = currentAt(course, p, st.u), thrust = braced ? 0 : y > 0 ? K.paddle * y : K.back * y, ca = Math.cos(st.a), sa = Math.sin(st.a);
-  let as = K.carry * (cur - st.vs) + thrust * ca, au = -K.grip * st.vu + thrust * sa + K.draw * x * (braced ? 0.3 : 1) + K.swing * p.k * st.vs * st.vs;
+  let as = K.carry * (cur - st.vs) + thrust * ca, au = K.grip * (partAt(course, st.s, st.u, st.nextRock) - st.vu) + thrust * sa + K.draw * x * (braced ? 0.3 : 1) + K.swing * p.k * st.vs * st.vs;
   // (a gravel bar holds what runs onto it)
   let shoal = false;
   for (const g of course.shoals) if (st.s > g.from && st.s < g.to && st.u > g.u0 && st.u < g.u1) shoal = true;
@@ -448,9 +505,9 @@ function sub(st, dt, input, events) {
 
   // ---- the banks
   {
-    const lim = p.hw - K.r * 0.8, side = st.u < 0 ? -1 : 1;
-    if (Math.abs(st.u) > lim) {
-      st.u = side * lim;
+    const q = riverAt(course, st.s, _a), side = st.u < q.lo ? -1 : st.u > q.hi ? 1 : 0;
+    if (side) {
+      st.u = side < 0 ? q.lo : q.hi;
       const into = st.vu * side;
       if (into > 0) {
         if (into > K.bank.hard) { st.vs *= K.bank.keep; st.w += side * -0.9 * Math.sign(ca || 1); events?.push({ type: 'bank', hard: into }); }
@@ -522,7 +579,8 @@ function sub(st, dt, input, events) {
     if (before <= l.s && st.s > l.s) {
       st.nextLedge++;
       st.vs = Math.max(st.vs, 2.2); // (nothing stops on the lip)
-      st.air = { y: riverAt(course, l.s, _a).y, vy: 0, h: l.h, braced };
+      st.air = { y: riverAt(course, l.s, _a).y, vy: 0, h: l.h, braced, early: braced ? st.clock - st.bracedAt : -1 };
+      if (braced && l.h >= K.fall.least) st.used = true;
       events?.push({ type: 'lip', h: l.h, braced });
     }
   }
@@ -548,30 +606,42 @@ export function raftPose(st, out = {}, time = 0) {
   return out;
 }
 
+/**
+ * How far a run has come, 0 … 1 (its music follows it): 0 in the Cauldron, 1 at the lip of the great fall — and a
+ * little more while the raft is in white water (a rapid, the narrows, a fall) than in a pool.
+ */
+export function heatOf(st) {
+  const course = st.course, last = course.ledges[course.ledges.length - 1], far = clamp((st.s - course.flags[0].s) / (last.s - course.flags[0].s), 0, 1);
+  const p = riverAt(course, st.s, _a), white = st.wait > 0 ? 0 : smooth(2.5, 6, p.c);
+  return clamp(far * 0.88 + 0.12 * white * (0.4 + 0.6 * far), 0, 1);
+}
+
 // ---------------------------------------------------------------------------------------------- a raft that goes by itself
 
 /** May a raft be `u` metres across at metre `s`: on the water, clear of the rocks and of the island by `room` metres? */
 function clearAt(course, p, s, u, room) {
-  if (Math.abs(u) > p.hw - RAFT.r * 0.8 - room * 0.5) return false;
+  if (u < p.lo + room * 0.5 || u > p.hi - room * 0.5) return false;
   for (const r of course.rocks) { if (r.s < s - 5) continue; if (r.s > s + 5) break; if (Math.hypot(s - r.s, u - r.u) < r.r + RAFT.r + room) return false; }
   for (const it of course.islands) { const mid = (it.from + it.to) / 2, la = (it.to - it.from) / 2 + RAFT.r + room, lb = it.half + RAFT.r + room; if (((s - mid) / la) ** 2 + ((u - it.u) / lb) ** 2 < 1) return false; }
   return true;
 }
 
+const DU = 0.25, UMAX = 12.5, NU = Math.round((2 * UMAX) / DU) + 1, uOf = (j) => -UMAX + j * DU;
 /**
- * The line to take: for every metre of the river, how far across to be (m). The quickest way that keeps clear
- * of the rocks, of the holes and of the gravel, and never asks a raft to cross the river faster than it can:
- * found once, from the sea back up. `how`: 'keen' cuts closer.
+ * The way down, from anywhere: for every metre of the river and every place across it, what getting to the sea
+ * from there costs (s, more or less) and which way to lean next. The quickest water that keeps clear of the
+ * rocks, of the holes and of the gravel, never crossing the river faster than a raft can, and straight over the
+ * falls: found once, from the sea back up. `how`: 'keen' cuts closer. Returns { cost, next, line (from the
+ * spring: how far across to be at every metre) }.
  */
 export function raftLine(course, how = 'steady') {
   const key = `_line_${how}`;
   if (course[key]) return course[key];
-  const DU = 0.25, U = 11, nu = Math.round((2 * U) / DU) + 1, n = Math.floor(course.length), room = how === 'keen' ? 0.3 : 0.55, soft = how === 'keen' ? 0.5 : 1.0;
-  const cost = new Float32Array((n + 1) * nu), next = new Int16Array((n + 1) * nu), p = {};
-  const at = (j) => -U + j * DU;
+  const n = Math.floor(course.length), room = how === 'keen' ? 0.45 : 0.55, soft = how === 'keen' ? 0.7 : 1.0;
+  const cost = new Float32Array((n + 1) * NU), next = new Int16Array((n + 1) * NU), p = {};
   const price = (s, j) => {
     riverAt(course, s, p);
-    const u = at(j);
+    const u = uOf(j);
     if (!clearAt(course, p, s, u, room)) return Infinity;
     let c = 1 / (currentAt(course, p, u) + 2.2);
     if (!clearAt(course, p, s, u, room + soft)) c += 0.25;
@@ -579,28 +649,34 @@ export function raftLine(course, how = 'steady') {
     for (const g of course.shoals) if (s > g.from - 1 && s < g.to + 1 && u > g.u0 - 1.2 && u < g.u1 + 1.2) c += 2;
     return c;
   };
-  for (let j = 0; j < nu; j++) cost[n * nu + j] = 0;
+  // (over a fall, and over a great wave, a raft goes straight: no leaning there)
+  const straight = (s) => course.ledges.some((l) => l.h >= RAFT.fall.least && s > l.s - 7 && s < l.s + 5) || course.waves.some((w) => w.h >= 1 && s > w.from - 6 && s < w.to + 3);
+  for (let j = 0; j < NU; j++) cost[n * NU + j] = 0;
+  const every = how === 'keen' ? 1 : 2; // (a lean every so many metres: an eighth of a metre across for each metre down, for the steady)
   for (let i = n - 1; i >= 0; i--) {
-    for (let j = 0; j < nu; j++) {
+    const lean = i % every ? Infinity : straight(i) ? 0.6 : 0.02;
+    for (let j = 0; j < NU; j++) {
       const here = price(i, j);
       let best = Infinity, to = j;
-      if (here < Infinity) for (let d = -1; d <= 1; d++) { const jj = j + d; if (jj < 0 || jj >= nu) continue; const c = cost[(i + 1) * nu + jj] + 0.02 * d * d; if (c < best) { best = c; to = jj; } }
-      cost[i * nu + j] = here + best; next[i * nu + j] = to;
+      if (here < Infinity) for (let d = -1; d <= 1; d++) { const jj = j + d; if (jj < 0 || jj >= NU || (d && lean === Infinity)) continue; const c = cost[(i + 1) * NU + jj] + (d ? lean : 0); if (c < best) { best = c; to = jj; } }
+      cost[i * NU + j] = here + best; next[i * NU + j] = to;
     }
   }
-  const lineOf = new Float32Array(n + 1);
-  let j = Math.round(U / DU);
-  { let best = Infinity; for (let q = 0; q < nu; q++) if (Math.abs(at(q)) < 4 && cost[q] < best) { best = cost[q]; j = q; } }
-  for (let i = 0; i <= n; i++) { lineOf[i] = at(j); if (i < n) j = next[i * nu + j]; }
-  // (rounded off a little: a raft does not turn on the spot — never into what it keeps clear of)
-  const out = new Float32Array(n + 1);
-  for (let i = 0; i <= n; i++) {
-    let sum = 0, w = 0;
-    for (let d = -3; d <= 3; d++) { const q = clamp(i + d, 0, n); sum += lineOf[q]; w++; }
-    const u = sum / w;
-    out[i] = clearAt(course, riverAt(course, i, p), i, u, room) ? u : lineOf[i];
+  const line = new Float32Array(n + 1);
+  let j = Math.round(UMAX / DU);
+  { const i0 = Math.floor(course.flags[0].s); let best = Infinity; for (let q = 0; q < NU; q++) if (Math.abs(uOf(q)) < 4 && cost[i0 * NU + q] < best) { best = cost[i0 * NU + q]; j = q; } for (let i = 0; i < i0; i++) line[i] = uOf(j); for (let i = i0; i <= n; i++) { line[i] = uOf(j); if (i < n) j = next[i * NU + j]; } }
+  return (course[key] = { cost, next, line, n });
+}
+
+/** From (s, u), following the way down for `ahead` metres: how far across that leads (m). */
+function lineFrom(way, s, u, ahead) {
+  let i = clamp(Math.floor(s), 0, way.n), j = clamp(Math.round((u + UMAX) / DU), 0, NU - 1);
+  if (!(way.cost[i * NU + j] < Infinity)) {
+    // (where no raft should be — against a rock, on a bank —: towards the nearest place where one may)
+    for (let d = 1; d < NU; d++) { if (j - d >= 0 && way.cost[i * NU + j - d] < Infinity) { j -= d; break; } if (j + d < NU && way.cost[i * NU + j + d] < Infinity) { j += d; break; } }
   }
-  return (course[key] = out);
+  for (let m = 0; m < ahead && i < way.n; m++, i++) j = way.next[i * NU + j];
+  return uOf(j);
 }
 
 const DELAY = { steady: 0.25, keen: 0, clumsy: 0.55 };
@@ -609,41 +685,52 @@ const DELAY = { steady: 0.25, keen: 0, clumsy: 0.55 };
  *   steady  a careful crew with a person's limits: it sees what comes a quarter of a second late
  *   keen    the same without the delay, cutting closer: about the best that can be done
  *   clumsy  half a second late, weaving, and it braces for one fall in two only
- * It follows the line (raftLine), paddles on, and braces before a fall and before what it cannot go round.
- * Returns the input for stepRun.
+ * It follows the way down from wherever it is (raftLine), paddles on, goes straight over the falls, and braces
+ * before a fall and before what it cannot go round. Returns the input for stepRun.
  */
 export function botInput(st, how = 'steady', out = { x: 0, y: 0, brace: false }) {
-  const course = st.course, K = RAFT, lineTo = raftLine(course, how === 'keen' ? 'keen' : 'steady'), n = lineTo.length - 1;
+  const course = st.course, K = RAFT, way = raftLine(course, how === 'keen' ? 'keen' : 'steady');
   // what it would do, seeing the river as it is now…
   const now = { x: 0, y: 1, brace: false };
   if (st.wait <= 0 && st.swim <= 0) {
-    const p = riverAt(course, st.s, _p), v = Math.max(1.5, st.vs), ahead = st.s + Math.max(3, v * 0.75);
-    const f = clamp(ahead, 0, n), i = Math.min(n - 1, Math.floor(f)), goal = lerp(lineTo[i], lineTo[i + 1], f - i);
-    const here = lerp(lineTo[Math.min(n - 1, Math.floor(clamp(st.s, 0, n)))], lineTo[Math.min(n, Math.floor(clamp(st.s, 0, n)) + 1)], clamp(st.s, 0, n) % 1);
-    // (across to the line, against the bend, not faster than can be stopped)
-    const gain = how === 'clumsy' ? 0.55 : 1;
-    let x = (0.62 * (goal - st.u) + 0.5 * (here - st.u) - 0.42 * st.vu) * gain - (K.swing * p.k * st.vs * st.vs) / 3.4;
-    if (how === 'clumsy') x += 0.55 * Math.sin(st.clock * 2.7 + 1.3);
-    now.x = clamp(x, -1, 1);
-    // (off the stream after a knock: it straightens before it paddles on)
-    now.y = Math.abs(Math.sin(st.a)) > 0.9 ? 0.3 : 1;
-    // a fall ahead: braced just before its lip
+    const p = riverAt(course, st.s, _p), v = Math.max(1.5, st.vs);
+    const goal = lineFrom(way, st.s, st.u, Math.round(Math.max(4, v * 1.1))), soon = lineFrom(way, st.s, st.u, 2);
+    // (across to the way down, against the bend, not faster than can be stopped)
+    const gain = how === 'clumsy' ? 0.6 : 1;
+    let x = (0.55 * (goal - st.u) + 0.25 * (soon - st.u) - 0.38 * st.vu) * gain - (K.swing * p.k * st.vs * st.vs) / 4;
+    if (how === 'clumsy') x += 0.5 * Math.sin(st.clock * 2.7 + 1.3);
+    // a fall ahead: straight over it, and braced just before its lip
     const l = course.ledges[st.nextLedge];
+    let level = false;
     if (l && !st.air && l.h >= K.fall.least) {
       const t = (l.s - st.s) / v;
+      if (t > 0 && t < 1.3) level = true;
       if (t > 0 && t < (how === 'keen' ? 0.3 : 0.5) && (how !== 'clumsy' || st.nextLedge % 2 === 0)) now.brace = true;
     }
+    // a great wave ahead: head on — braced if not
+    for (const w of course.waves) {
+      if (w.h < 1 || st.done.has(w)) continue;
+      const t = ((w.from + w.to) / 2 - st.s) / v;
+      if (t > 0 && t < 1.3 && st.u > w.u0 - 1 && st.u < w.u1 + 1) level = true;
+      if (how !== 'clumsy' && t > 0 && t < 0.5 && st.u > w.u0 && st.u < w.u1 && Math.abs(Math.sin(st.a)) > K.side * 0.8) now.brace = true;
+    }
+    if (level && how !== 'clumsy') x = clamp(x, -0.3, 0.3);
+    now.x = clamp(x, -1, 1);
+    // (off the stream after a knock: it straightens before it paddles on; and when what comes asks it to cross
+    // the river faster than a raft can, it stops paddling — or holds water — to have the time)
+    const far = lineFrom(way, st.s, st.u, 11), across = (Math.abs(far - st.u) * v) / 11;
+    now.y = Math.abs(Math.sin(st.a)) > 0.9 ? 0.3 : across > 1.9 ? -1 : across > 1.4 ? 0 : 1;
+    // (a boil it is going into: hard through it)
+    for (const h of course.holes) if (!st.done.has(h) && h.from - st.s < 9 && st.s < h.to && st.u > h.u0 - 0.5 && st.u < h.u1 + 0.5) now.y = 1;
     // a rock it is going to run into all the same: braced
     if (how !== 'clumsy') {
       for (let q = st.nextRock; q < course.rocks.length && course.rocks[q].s < st.s + 8; q++) {
-        const r = course.rocks[q], ds = r.s - st.s, du = r.u - st.u, vr = st.vs, close = ds * vr + du * st.vu;
+        const r = course.rocks[q], ds = r.s - st.s, du = r.u - st.u, close = ds * st.vs + du * st.vu;
         if (close <= 0) continue;
-        const sp = Math.hypot(vr, st.vu) || 1, t = close / (sp * sp), miss = Math.hypot(ds - vr * t, du - st.vu * t);
-        if (miss < r.r + K.r - 0.05 && t < 0.5) now.brace = true;
+        const sp = Math.hypot(st.vs, st.vu) || 1, t = close / (sp * sp), miss = Math.hypot(ds - st.vs * t, du - st.vu * t);
+        if (miss < r.r + K.r - 0.25 && t < 0.5) now.brace = true;
       }
     }
-    // a great wave it is not going to take head on: braced
-    for (const w of course.waves) { if (w.h < 1 || st.done.has(w)) continue; const t = ((w.from + w.to) / 2 - st.s) / v; if (how !== 'clumsy' && t > 0 && t < 0.5 && st.u > w.u0 && st.u < w.u1 && Math.abs(Math.sin(st.a)) > K.side * 0.8) now.brace = true; }
     if (st.held) { now.y = 1; now.x = 0; }
   }
   // …done a moment later: a person's time to see and to act
