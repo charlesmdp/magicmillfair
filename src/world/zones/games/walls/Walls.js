@@ -128,10 +128,15 @@ export class Walls {
     // ---- the rock it stands on: out of the sea, flat enough on top
     {
       const N = 40, A = 30, B = 36, ring = (k, y, j) => Array.from({ length: N }, (_, i) => { const a = (i / N) * TAU, r = k * (1 + 0.07 * Math.sin(i * 2.3 + j) + 0.05 * Math.sin(i * 5.1 + 1.7)) / Math.pow(Math.abs(Math.cos(a) / A) ** 4 + Math.abs(Math.sin(a) / B) ** 4, 0.25); return V(C.x + Math.cos(a) * r, y + 0.5 * Math.sin(i * 3.1 + j), C.z + Math.sin(a) * r); });
-      const rings = [ring(0.86, 1.6, 0), ring(0.98, 0.5, 1), ring(1.08, -2.5, 2), ring(1.3, -9.5, 3)], tones = [[1.25, 1.12, 0.92], [1.0, 0.9, 0.76], [0.8, 0.74, 0.66], [0.6, 0.58, 0.56]];
+      const rings = [ring(0.86, 1.6, 0), ring(0.98, 0.5, 1), ring(1.08, -2.5, 2), ring(1.3, -9.5, 3)], tones = [[1.02, 0.95, 0.84], [0.92, 0.85, 0.74], [0.74, 0.7, 0.64], [0.56, 0.55, 0.53]];
       for (let j = 0; j + 1 < rings.length; j++) for (let i = 0; i < N; i++) { const i1 = (i + 1) % N; rock.quad(rings[j + 1][i1], rings[j + 1][i], rings[j][i], rings[j][i1], { colors: [mul(tones[j + 1], 1), mul(tones[j + 1], 1), mul(tones[j], 1), mul(tones[j], 1)] }); }
       const mid = V(C.x, 1.9, C.z);
       for (let i = 0; i < N; i++) rock.tint(...tones[0], 1).tri(mid, rings[0][(i + 1) % N], rings[0][i]);
+      // (boulders on its shore, where the sea has thrown them)
+      for (let i = 0; i < 16; i++) {
+        const q = rings[1][Math.floor(hash(i * 3.3) * N)], k = 0.9 + 0.12 * hash(i * 1.9), r = 0.8 + 1.7 * hash(i * 7.1), g = 0.8 + 0.4 * hash(i * 5.3);
+        rock.tint(1.0 * g, 0.94 * g, 0.84 * g, 1).place(C.x + (q.x - C.x) * k, q.y - 0.3, C.z + (q.z - C.z) * k, hash(i) * 6).lathe([[0.001, 0], [r, r * 0.08], [r * 1.12, r * 0.45], [r * 0.8, r * 0.85], [0.001, r]], 7).pop();
+      }
     }
 
     // ---- the wall on the left of every side, its terrace, its parapet; a round turret at every corner
