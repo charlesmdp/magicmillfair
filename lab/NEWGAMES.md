@@ -288,7 +288,9 @@ that shimmers. No blood, nothing military: tin, brass, a cork with a red end.
 - **What it reaches into** (no file of the game is changed): `Character._keep` / `_ik` (the right hand is put on
   the grip after the robot has been animated), `world.sparks._spawn`, `audio.effects` (its four sounds are made
   there), `RemoteAvatars.update` (wrapped: the others' arms are bent after they have been animated).
-- **Its checks**: `node tools/weapons-test.mjs [--shots=<folder>]` — the game as built, its own server, two
+- **What it weighs**: `src/extras/weapons.js` (21 KB, 9.7 KB once packed), downloaded only when the switch is
+  on; each toy is a few boxes and cylinders, its sounds are made by code.
+- **Its checks**: `node tools/weapons-test.mjs [--shots=<folder>]` (31 checks) — the game as built, its own server, two
   browsers in one room (then a third, phone-sized, with a finger): off, on, the mill, Barnaby, a fall and the
   shimmer, typing, seated, too far, a forged shot, a fall from nine metres up, a cave, The Sanctuary, a game,
   the duel, ten shots claimed in a second.
