@@ -17,6 +17,7 @@
 //   GET | POST /api/account                   an account to keep what was bought and earned (accounts.js)
 //
 //   the shop and the sponsors: /api/shop, /api/checkout, /api/stripe/webhook, /api/sponsor(s), /api/logo (see shop.js)
+//   POST /api/sponsor/peek { url }            what a sponsor's own site says of itself: a name, a line, an icon (peek.js)
 //
 // req: { method, path, query (URLSearchParams), body (object | null), client (address), admin (boolean: the
 //        owner's key came with the request), bearer (the key that came, for those the owner has named),
@@ -37,6 +38,7 @@ import { replayable, replay, agrees } from './replay.js';
 import { randomId, sign, verify } from './token.js';
 import { cleanName } from './protocol.js';
 import { shopRoute, notifyRoute } from './shop.js';
+import { peekRoute } from './peek.js';
 import { adminOf, listAdmins, removeAdmin } from './admins.js';
 import { cleanGeo, noteVisit, visitorsReport } from './visitors.js';
 import { accountRoute, visitRecord, accountOf, isAccountName } from './accounts.js';
@@ -314,7 +316,8 @@ export async function route(req, ctx) {
   const stats = await statsRoute(req, ctx);
   if (stats) return stats;
 
-  // the shop, the sponsors (shop.js)
+  // the shop, the sponsors (shop.js) — and what a sponsor's own site says of itself, to fill their form in (peek.js)
+  if (path === '/api/sponsor/peek') return peekRoute(req, ctx);
   const shop = await shopRoute(req, ctx);
   if (shop) return shop;
 

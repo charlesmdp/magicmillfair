@@ -619,6 +619,29 @@ the panel** behind the sponsor's name and logo (a logo made for a dark ground, a
 colour: the words are written light on a dark panel, dark on a light one). Over the board of a game, a
 panel that has a sponsor wears a ribbon along its top: *OUR AWESOME SPONSOR*.
 
+**A sponsor's form fills itself from the sponsor's site.** The address of the site is the first step of the
+form — optional, set apart at its top, with a button: *Fill it in from my site*. The fair reads the one page at
+that address and fills the form in with what the page says of itself: **a name** (the one the site gives
+itself, `og:site_name`; else its title without its tail: "Acme Bikes | Handmade since 1980" is "Acme Bikes"),
+**a line** (its description, cut to the forty letters of the form where a sentence ends, or a clause, or at a
+word) and **its icon as the logo** (the largest of its apple-touch-icons and PNG or SVG icons; else the
+picture it shows when it is shared; else `/favicon.ico`). Each field says in a word where what it holds was
+found ("from its title", "its touch icon") until it is touched; every one stays the sponsor's to change, and
+**nothing is saved until the form is saved as before**. It is the server that goes to the site
+(`POST /api/sponsor/peek { url }`, `server/peek.js`) — an address typed by a stranger, so: https only, on its
+usual port, a name of the public web (no IP address however it is written, no `localhost`, no name without a
+dot, no `.local` / `.internal` / `.test`, nobody's name or password in it); a site that sends elsewhere is
+followed three times at the most, each address checked like the first; six seconds for the page and six for
+the icon; 400 KB of the page are read and no more, 600 KB for an icon; no cookie and no word of who asks goes
+with the request; and of the page only those three things ever come back — its words cleaned as a sponsor's
+own are, its icon as the bytes of a picture (told by how they begin, not by what the site says). **The
+browser** turns those bytes into what the game accepts (`iconFile` in `src/net/Shop.js`): drawn on a canvas —
+a `.ico`, an SVG, where the browser reads them —, fitted within 512 pixels, kept as a PNG or a WebP under
+90 KB, and put in the field of the logo as if it had been chosen by hand; where it cannot, the words are
+filled all the same and the form says "No usable icon found: upload yours." One address may ask six times a
+minute and thirty an hour, everybody together 1,500 times a day (`LIMITS.peek`, `LIMITS.peekDay`). What it
+costs: one request to the server for each press of the button, and nothing kept.
+
 **The Trading Post** is where sponsors do business: on the north side of the plaza at the foot of the
 pier — on everybody's way to the games, and a long way from where one arrives. A red and white kiosk, its
 name painted on a plank, a red carpet between brass posts, and over it a board that lists every game of
@@ -1617,6 +1640,7 @@ notebook, with the rest. No new Durable Object class: such a room is a room like
 | `npm run test:update` | a delivery from end to end, in the real game: two builds, a visitor in the world, the owner at the back office (`/admin`: the switches, the boards of what is new taken away and put back, a word to every room, a line refused, somebody kept out, the figures, two games of the lab thrown on — fetched and built as the game runs, each played by its own bot, its time on its board; each with its stand, its panel for a sponsor, its star on the map and its planks at the forks —, the sky villages stage by stage), every page asked to refresh but never in the middle of a sentence, then the server replaced by the next version — the page says so, refreshes, comes back at the same spot, and puts no card of what is new in the way (the boards by the poppy field say it); and a plain build leaves nothing of the game on the page (16 checks) |
 | `node tools/extras-test.mjs`, `node tools/slide-test.mjs`, `node tools/pond-test.mjs`, `node tools/boats-test.mjs`, `node tools/hill-test.mjs`, `node tools/crack-test.mjs`, `node tools/hollow-test.mjs`, `node tools/games-test.mjs` | the lab's own checks of its extras and of each of its games — the last one plays them in the running game, in a browser (see `lab/INTEGRATION.md`) |
 | `node tools/wall-test.mjs` | the wall of the companions, without a browser (`layout/plaquewall.js`): its galleries in the cliff, its stair walked with the real collision, its 324 plates and the plaques the server sells for them — while its switch is on; off, nothing of it is there |
+| `node tools/peek-test.mjs` | the form of a sponsor that fills itself from the sponsor's site (`server/peek.js`), without a browser and without the web — stand-in sites are handed to the server in place of `fetch`: the three things found on a typical page, on a page that only has a title, icons named by relative addresses, a site that sends elsewhere (three times, not four, never somewhere the server will not go), every address that is refused before anything is fetched, a page too big, a site too slow, markup in what a page says, what goes with a request and what comes back, how often one may ask (29 checks) |
 | `node tools/offers-test.mjs` | the six cards of the Game Pass and the six of an account, without a browser: when each is due (those of an account between those of the Game Pass), that who comes back after a while gets the last one that is due and not the others, that each says something of its own and fits its card (the cards in the running game: `npm run test:shop`) (9 checks) |
 | `node tools/waves-test.mjs`, `node tools/lava-test.mjs`, `node tools/hive-test.mjs`, `node tools/flip-test.mjs`, `node tools/spiral-test.mjs`, `node tools/cars-test.mjs`, `node tools/golf-test.mjs`, `node tools/tunes-test.mjs`, `node tools/play-test.mjs` | the checks of the seven games with a gate — the rules of each (its bot plays it; the line of its board is held against `server/scores.js`), their music, and the seven played in the running game, in a browser, each switched on the way the game does it (see `lab/GAMES.md`) |
 | `npm run test:load` | a crowd at the door, with the real rules: 600 connections arrive in twenty seconds and walk (everybody gets in, rooms of about fifty, the lists say what is true, a state reaches the neighbours in time), 230 more follow one link (that room holds 200, never one more; the relay refuses whoever comes without asking; the owner still gets in), then most leave (the rooms that have emptied are offered a livelier one, nobody is moved or cut off) — 11 checks; `-- --cloudflare` plays it against the real Worker in the local Workers runtime, `-- --visitors=400` changes the crowd |

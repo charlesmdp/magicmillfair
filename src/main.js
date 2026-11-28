@@ -24,7 +24,7 @@ import { deviceId } from './net/device.js';
 import { Previewer } from './ui/Preview.js';
 import { Sparks } from './world/effects/Sparks.js';
 import { Account } from './net/Account.js';
-import { Shop, price, logoData, loadImage, ownDraft } from './net/Shop.js';
+import { Shop, price, logoData, iconFile, loadImage, ownDraft } from './net/Shop.js';
 import { PlayerController, JET, JET_LITE } from './player/PlayerController.js';
 import { CameraRig } from './player/CameraRig.js';
 import { Interact } from './player/Interact.js';
@@ -1141,7 +1141,7 @@ async function boot() {
       isPlaque ? (byHand ? 'What you save is engraved at once, for everyone to read.' : 'Their name, a few words — and their picture, if you have one you like. It is engraved once the fair has looked at it.') : byHand ? 'What you save is shown to everyone at once. The colour behind it is yours to choose.' : 'It is shown at once, to everyone. Keep it short — it is painted on a sign — and fit for a fair: what is not is taken down.', [
         { key: 'title', label: isPlaque ? 'Their name (22 letters at most)' : isVillage ? 'Its name (22 letters at most)' : 'Your name (28 letters at most)', value: was.title || '', max: isVillage || isPlaque ? 22 : 28 },
         { key: 'subtitle', label: isPlaque ? 'A few words (40 letters at most)' : isVillage ? 'A line under it (34 letters at most)' : 'A line under it (40 letters at most)', value: was.subtitle || '', max: isVillage ? 34 : 40 },
-        ...(isPlaque ? [] : [{ key: 'url', label: 'Your website (https://…)', value: was.url || '', max: 200, hint: 'https://' }]),
+        ...(isPlaque ? [] : [{ key: 'url', label: 'Your website (https://…) — optional', value: was.url || '', max: 200, hint: 'https://', fill: fromSite({ name: isVillage ? 22 : 28, line: isVillage ? 34 : 40, logo: !isVillage }) }]),
         ...(isVillage ? [] : [{ key: 'logo', label: isPlaque ? 'Their picture (PNG, JPEG or WebP) — leave empty to keep the one you sent' : 'Your logo (PNG, JPEG or WebP) — leave empty to keep the one you sent', type: 'file' }]),
         ...(byHand && !isVillage && !isPlaque ? [{ key: 'bg', label: 'The colour of the panel behind it', type: 'color', value: view.bg || '#fbf7ec' }] : []),
         // (a sponsor who paid some other way: what they paid ranks them on the wall of thanks)
@@ -1159,13 +1159,39 @@ async function boot() {
   let pending = {}; // the administrator: every place as the server keeps it (drafts included)
   /** Opens the site of the sponsor of the place `id` — from its place, the Trading Post or the wall of thanks: counted for the sponsor. */
   const visitSponsor = (id, url) => { if (!url) return; shop.click(id)?.then(() => applySponsors()); window.open(url, '_blank', 'noopener,noreferrer'); }; // (…and the count on its panel follows)
+  // A sponsor's form fills itself from the sponsor's own site: the address of the site is its first step — optional
+  // — with a button. The fair reads what the site says of itself (the server goes there: server/peek.js) — its name,
+  // its line, its icon — and the form is filled with it: every field still theirs to change, each saying in a word
+  // where what it holds was found, and nothing saved until they save the form as before. The icon comes as the bytes
+  // of whatever picture the site has (a .ico, an SVG…); this browser redraws it into one the game accepts (iconFile),
+  // and it is put in the field of the logo as if it had been chosen by hand.
+  const FOUND_IN = { 'og:site_name': 'from its name', 'og:title': 'from its title', title: 'from its title', address: 'from its address', description: 'from its description', 'og:description': 'from its description', 'apple-touch-icon': 'its touch icon', icon: 'its icon', 'og:image': 'the picture it shares', 'favicon.ico': 'its favicon' };
+  /** What was typed for the address of a site, as an address: "acme.com" is https://acme.com ('' when it is none). */
+  const siteAddress = (typed) => { const t = String(typed || '').trim().replace(/^http:\/\//i, 'https://'); return !t || /\s/.test(t) ? '' : /^https:\/\//i.test(t) ? t : /^[^/:@]+\.[^/:@]+/.test(t) && !/^[a-z][a-z0-9+.-]*:/i.test(t) ? `https://${t}` : ''; };
+  const fromSite = ({ name = 28, line = 40, logo = true, enter = false } = {}) => ({
+    label: 'Fill it in from my site', busy: 'Reading your site…', enter,
+    hint: `One press, and the fair reads your name, a line${logo ? ' and your icon' : ''} from your site. Everything stays yours to change.`,
+    run: async (typed) => {
+      const url = siteAddress(typed);
+      if (!url) return { error: 'Type the address of your site first — https://… — then press the button.' };
+      const got = await shop.peek(url, { name, line });
+      if (got.error) return got;
+      const file = logo && got.icon ? await iconFile(got.icon) : null, has = [got.name && 'a name', got.line && 'a line', file && 'an icon'].filter(Boolean);
+      const host = siteWords(got.url || url) || 'your site';
+      return {
+        value: got.url || url, values: { title: got.name, subtitle: got.line }, files: { logo: file },
+        from: { title: FOUND_IN[got.from?.name] || 'from your site', subtitle: FOUND_IN[got.from?.line] || 'from your site', logo: FOUND_IN[got.from?.icon] || 'from your site' },
+        say: `${has.length ? `Read on ${host}: ${has.length > 2 ? `${has[0]}, ${has[1]} and ${has[2]}` : has.join(' and ')}.` : `Nothing to read on ${host}.`}${logo && !file ? ' No usable icon found: upload yours.' : ''}${has.length ? ' Change whatever you like — nothing is saved yet.' : ' Fill it in by hand.'}`,
+      };
+    },
+  });
   // What a sponsor shows is asked for BEFORE the payment — a name, a line, a site, a logo —, kept in this
   // browser while they are at the payment page, and sent the moment the place is theirs (see arrived()).
   const SPONSOR_DRAFT = 'mmf.sponsor';
   const sponsorFields = (village = false) => [
     { key: 'title', label: village ? 'Its name (22 letters at most)' : 'Your name — a company, a site, yourself (28 letters at most)', value: '', max: village ? 22 : 28 },
     { key: 'subtitle', label: village ? 'A line under it (34 letters at most)' : 'A line under it (40 letters at most)', value: '', max: village ? 34 : 40 },
-    { key: 'url', label: 'Your website (https://…): visitors open it from your place', value: '', max: 200, hint: 'https://' },
+    { key: 'url', label: 'Your website (https://…) — optional: visitors open it from your place', value: '', max: 200, hint: 'https://', fill: fromSite({ name: village ? 22 : 28, line: village ? 34 : 40, logo: !village, enter: true }) },
     ...(village ? [] : [{ key: 'logo', label: 'Your logo (PNG, JPEG or WebP) — it can also be added later', type: 'file' }]),
   ];
   /** Keeps what the form of a sponsor brought back, for after the payment. False when something is wrong (and said). */

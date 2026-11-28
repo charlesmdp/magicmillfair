@@ -137,6 +137,17 @@ export class Shop {
     return res.ok ? null : res.body?.error || 'It could not be saved.';
   }
 
+  /**
+   * What the site at `url` says of itself, for a sponsor's form to be filled in with (server/peek.js): resolves to
+   * { url, name, line, icon: { type, data (base64) } | null, from: { name, line, icon } } — or to { error }.
+   * `room`: { name, line } — how many letters the form has for each. Nothing is saved by it.
+   */
+  async peek(url, room = {}) {
+    const res = await ask('api/sponsor/peek', { method: 'POST', body: { url, ...room } });
+    if (res.ok && res.body) return res.body;
+    return { error: res.status === 429 ? 'The fair has read a good many sites just now: give it a minute, then press again.' : res.body?.error || (res.status === 0 ? 'The fair cannot be reached just now. Fill it in by hand.' : 'That site could not be read. Fill it in by hand.') };
+  }
+
   /** The administrator fills a place by hand (shown at once). Resolves to null, or to what is wrong. */
   async set(slot, { title, subtitle, url, logo, bg, paid }, key) {
     const res = await ask('api/sponsors', { method: 'POST', key, body: { slot, set: { title, subtitle, url, ...(logo && { logo }), ...(bg !== undefined && { bg }), ...(paid !== undefined && { paid }) } } });
@@ -174,6 +185,60 @@ export async function logoData(file, side = 256, photo = false) {
       if (data && data.length * 0.75 < 88_000) return data;
     }
   } catch { /* not a picture after all */ }
+  return null;
+}
+
+/**
+ * An SVG given the size it is to be drawn at (`side` along its longer side): many say only what they hold (a viewBox)
+ * and not how large they are — a browser then draws them small, or not at all. → its text again, or null (not an SVG).
+ */
+function sizedSvg(text, side) {
+  const doc = new DOMParser().parseFromString(text, 'image/svg+xml'), svg = doc.documentElement;
+  if (!svg || svg.localName !== 'svg' || doc.querySelector('parsererror')) return null;
+  const px = (v) => (/^\s*[\d.]+\s*(px)?\s*$/.test(v || '') ? parseFloat(v) : 0);
+  const box = (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+  let w = px(svg.getAttribute('width')), h = px(svg.getAttribute('height'));
+  if (!(w > 0 && h > 0)) { w = box.length === 4 && box[2] > 0 ? box[2] : 1; h = box.length === 4 && box[3] > 0 ? box[3] : 1; }
+  else if (box.length !== 4) svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  const k = side / Math.max(w, h);
+  svg.setAttribute('width', String(Math.max(1, Math.round(w * k))));
+  svg.setAttribute('height', String(Math.max(1, Math.round(h * k))));
+  return new XMLSerializer().serializeToString(doc);
+}
+
+/**
+ * The icon of a sponsor's site, as the server relayed its bytes ({ type, data: base64 } — a PNG, a .ico, an SVG…:
+ * server/peek.js), made into what the game accepts: drawn on a canvas by this browser — where it can read that kind
+ * of picture —, fitted within `side` pixels, and kept as a PNG, or as a WebP when the PNG weighs too much, smaller
+ * and smaller until it is under 90 KB. Only its pixels are kept. → a File, as if the sponsor had chosen it by hand
+ * — or null: this browser cannot read it, or it shows nothing (the sponsor uploads theirs).
+ */
+export async function iconFile(icon, side = 512, most = 88_000) {
+  if (!icon || typeof icon.data !== 'string' || !/^image\/[a-z0-9.+-]+$/.test(icon.type || '') || icon.data.length > 900_000) return null;
+  let url = '';
+  try {
+    let bytes = Uint8Array.from(atob(icon.data), (c) => c.charCodeAt(0));
+    const svg = icon.type === 'image/svg+xml';
+    if (svg) { const sized = sizedSvg(new TextDecoder().decode(bytes), side); if (!sized) return null; bytes = new TextEncoder().encode(sized); }
+    url = URL.createObjectURL(new Blob([bytes], { type: icon.type }));
+    const img = await new Promise((yes, no) => { const i = new Image(); i.onload = () => yes(i); i.onerror = () => no(new Error('not a picture this browser reads')); i.src = url; });
+    const w0 = img.naturalWidth, h0 = img.naturalHeight;
+    if (!(w0 > 0 && h0 > 0)) return null;
+    for (const s of [side, 384, 256, 192, 128, 96]) {
+      if (s < side && s >= Math.max(w0, h0)) continue; // (it is smaller than that already: drawn again it would weigh the same)
+      const k = Math.min(1, s / Math.max(w0, h0)), w = Math.max(1, Math.round(w0 * k)), h = Math.max(1, Math.round(h0 * k));
+      const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d');
+      canvas.width = w; canvas.height = h;
+      ctx.drawImage(img, 0, 0, w, h);
+      // (a picture that shows nothing — every pixel see-through — is no logo)
+      if (s === side) { const px = ctx.getImageData(0, 0, w, h).data; let seen = false; for (let i = 3; i < px.length; i += 4) if (px[i] > 8) { seen = true; break; } if (!seen) return null; }
+      for (const [kind, quality] of [['image/png'], ['image/webp', 0.92], ['image/webp', 0.8], ['image/webp', 0.6]]) {
+        const blob = await new Promise((done) => canvas.toBlob(done, kind, quality));
+        // (a browser that cannot write a WebP hands back a PNG: not what was asked for, and already tried)
+        if (blob && blob.type === kind && blob.size > 0 && blob.size <= most) return new File([blob], `icon-of-your-site.${kind === 'image/png' ? 'png' : 'webp'}`, { type: kind });
+      }
+    }
+  } catch { /* this browser cannot read that kind of picture, or will not let its pixels be taken */ } finally { if (url) URL.revokeObjectURL(url); }
   return null;
 }
 
