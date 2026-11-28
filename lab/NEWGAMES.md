@@ -234,7 +234,7 @@ the diver is a driver of the player (as in the games), and three methods of the 
 looks through it), `ripples.trail` (no rings over who swims deep). The others see a diver at their true depth:
 the game's own message of where one is carries it.
 
-Its checks: `node tools/dive-test.mjs` (38: the rock alone — the only way in is under four metres of water, a
+Its checks: `node tools/dive-test.mjs` (39: the rock alone — the only way in is under four metres of water, a
 body goes through, the walker is shut out and in —, then a bot in the running game that swims out, dives, finds
 the arch, comes up in the chamber, walks the strand, and swims back out and up; the shark keeps its water) and
 `node tools/dive-duo.mjs` (7: two visitors — a diver is drawn for the other at their true depth, two divers see

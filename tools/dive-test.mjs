@@ -220,7 +220,20 @@ try {
   s = await B('walk', [pool], { run: false, reach: 0.7 });
   o = await B('offered');
   check('back in the pool it swims, and is offered to dive again', s.swimming && o.label === 'Dive', { at: s.at.map(r1) });
-  await B('press');
+  // (a telephone: the prompt is a button one taps, and the arrow — "jump" — kicks one up)
+  await frames(3);
+  await page.click('.prompt[data-prompt="0"]');
+  s = await B('state');
+  const kick = await page.evaluate(() => {
+    const a = window.__mmf, { player, input, rig } = a, dt = 1 / 60, was = input.isTouch;
+    for (let f = 0; f < 45; f++) player.update(dt, rig.yaw, true);
+    const y0 = player.pos.y;
+    input.isTouch = true; input.jump = true; player.update(dt, rig.yaw, true); input.jump = false;
+    for (let f = 0; f < 18; f++) player.update(dt, rig.yaw, true);
+    input.isTouch = was;
+    return { y0, y1: player.pos.y, diving: !!a.dive.diving() };
+  });
+  check('on a telephone: a tap on the prompt starts the dive, and the arrow kicks the diver up', s.diving && kick.diving && kick.y1 > kick.y0 + 0.2, { sankTo: r2(kick.y0), kickedUpTo: r2(kick.y1) });
   s = await B('swim', [...way].reverse());
   check('it dives, and swims back down the chimney, along the passage and out through the arch', s.diving && s.body > 0.35 && s.room > 0.2 && Math.hypot(s.at[0] - way[0][0], s.at[1] - way[0][1], s.at[2] - way[0][2]) < 1.2, { at: s.at.map(r1), nearestTheRock: { body: r2(s.body), eye: r2(s.room) } });
   s = await B('up');
