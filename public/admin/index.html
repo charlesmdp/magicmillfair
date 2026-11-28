@@ -145,11 +145,24 @@
       <div id="tax-box" hidden>
         <h3>VAT and invoices</h3>
         <p class="hint">With the VAT on, Stripe works out the VAT due on each sale — where the buyer is — out of the price, which includes it (a bid stays what is paid); a business can give its VAT number; and each payment gets an invoice, which Stripe e-mails to the buyer. <b>First, in Stripe</b>: <i>Settings → Tax</i> (the address of the company and its VAT registrations), <i>Settings → Business → Public details</i> (what the invoices show), and <i>Settings → Customer emails</i>: "Successful payments" (so that invoices are sent). If Stripe Tax is not set up at all, Stripe refuses the VAT: the shop sells without it, and this says so here. The rest is not checked from here — look at a first invoice to see that it carries the VAT. A payment given back (outbid, taken down) gets its credit note.</p>
-        <form id="tax-form" class="row wrap">
+        <form id="tax-form" class="taxform">
           <label class="tick"><input type="checkbox" id="tax-on"> VAT on each sale (Stripe Tax)</label>
-          <label>Tax code <input id="tax-code" type="text" maxlength="13" spellcheck="false" autocomplete="off" placeholder="the one set in Stripe" pattern="txcd_[0-9]{8}" title="txcd_ and eight digits — or leave it empty"></label>
-          <button type="submit" class="small">Save</button>
+          <fieldset class="picks">
+            <legend>Tax code — the kind of thing sold, in Stripe's words</legend>
+            <label class="pick"><input type="radio" name="tax-pick" value="" checked><span><b>The one set in Stripe</b> <i>if you are not sure, leave this one</i><small>Stripe uses the “preset product tax code” of your account (in Stripe: <i>Settings → Tax</i>). Unless you changed it there, that is the general code just below.</small></span></label>
+            <label class="pick"><input type="radio" name="tax-pick" value="txcd_10000000"><span><b>Anything digital</b> <code>txcd_10000000</code><small>Whatever is delivered over the internet with nobody doing it by hand. The catch-all: enough in the European Union, where every digital sale to a person bears the VAT of their country; Stripe advises a more exact code for who sells much in the United States. Stripe calls it “General - Electronically Supplied Services”.</small></span></label>
+            <label class="pick"><input type="radio" name="tax-pick" value="txcd_10201000"><span><b>A video game — bought once, kept for good</b> <code>txcd_10201000</code><small>A game, or something in a game, that stays the buyer's: the hats, the jetpacks, the paints, a plaque. Choose it if things bought for good are most of your sales. Stripe calls it “Video Games - downloaded - non subscription - with permanent rights”.</small></span></label>
+            <label class="pick"><input type="radio" name="tax-pick" value="txcd_10201004"><span><b>A video game — by subscription</b> <code>txcd_10201004</code><small>A game played online for as long as one pays: the Game Pass, a room by the month. Choose it if what is paid by the month is most of your sales. Stripe calls it “Video Games - streamed - subscription - with conditional rights”.</small></span></label>
+            <label class="pick"><input type="radio" name="tax-pick" value="txcd_10701000"><span><b>Advertising on a site</b> <code>txcd_10701000</code><small>An advertisement shown online: what a sponsor buys — a panel, a gondola, a village. Only if sponsors are nearly all of your sales: it is the wrong code for a hat. Stripe calls it “Website Advertising”.</small></span></label>
+            <label class="pick"><input type="radio" name="tax-pick" value="other"><span><b>Another code</b> <input id="tax-code" type="text" maxlength="13" spellcheck="false" autocomplete="off" placeholder="txcd_10000000" pattern="txcd_[0-9]{8}" title="txcd_ and eight digits" aria-label="Another tax code"><small>Any other code of Stripe's list (docs.stripe.com/tax/tax-codes) — the one your accountant gives you.</small></span></label>
+          </fieldset>
+          <div class="row"><button type="submit" class="small">Save</button></div>
         </form>
+        <ul class="hint taxhelp">
+          <li><b>What a tax code is.</b> It tells Stripe what kind of thing is sold, so that Stripe applies the VAT — or the sales tax — that kind of thing bears where the buyer lives. It changes no price: the tax is taken out of what is paid.</li>
+          <li><b>Stripe Tax first.</b> A code does nothing until Stripe Tax is switched on in Stripe itself: <i>Settings → Tax</i> — the address of the company, the countries where it is registered for VAT, and that “preset product tax code”.</li>
+          <li><b>One code for everything.</b> Today the code chosen here goes with all the fair sells: hats, the pass, rooms and sponsors' places alike. In truth a sponsor's place is advertising, not a piece of a game: in the European Union that seldom changes the VAT, in the United States it can. Giving the sponsors a code of their own would take a second choice here and a few lines on the server — ask for it if your accountant says so. Which code is right, and where the company must register, is for an accountant to confirm: this page is no tax adviser.</li>
+        </ul>
         <p class="hint" id="tax-said"></p>
       </div>
       <dialog id="invoices" aria-labelledby="invoices-title">
@@ -169,6 +182,43 @@
       <div id="engraved" class="list"></div>
       <h3>Refunds</h3>
       <div id="refunds" class="list"></div>
+    </section>
+
+    <!-- The sales, and their refunds: the owner's alone. Its script is sales.js (it names its own tab). -->
+    <section class="card" data-tab="sales" data-owner>
+      <h2>Sales</h2>
+      <p class="hint">Everything that was bought, the newest first: one line a purchase — what is paid by the month is one line, with its latest payment. <b>Refund…</b> gives a payment back through Stripe, all of it or a part of it; before anything moves, it tells you how much can go back and what becomes of what was bought. The money given back some other way is written on its line too: a bid that was outbid, a place taken down, a refund made in Stripe itself.</p>
+      <p class="hint" id="sales-mode" hidden></p>
+      <div id="sales-total" class="tiles"></div>
+      <div class="row wrap">
+        <input type="search" id="sales-find" placeholder="Find a name, an e-mail, a thing…" aria-label="Find among the sales" />
+        <button type="button" class="ghost" id="sales-fetch">Fetch what Stripe remembers</button>
+      </div>
+      <p class="hint">This list is kept from the day this page arrived. For what was sold before, <i>Fetch what Stripe remembers</i> reads Stripe's own list and adds what is missing here. It only fills the list — it gives nothing and takes nothing back — and can be pressed again whenever you like: nothing is doubled. <span id="sales-fetch-said"></span></p>
+      <div id="sales" class="list"></div>
+      <div class="row"><button type="button" class="ghost" id="sales-more" hidden>Older</button></div>
+      <dialog id="sale-refund" aria-labelledby="sale-refund-title">
+        <form id="sale-refund-form" class="stack">
+          <h3 id="sale-refund-title">Refund</h3>
+          <p class="hint" id="sale-refund-who"></p>
+          <p class="sums" id="sale-refund-sums"></p>
+          <p class="hint" id="sale-refund-month" hidden></p>
+          <fieldset id="sale-refund-how">
+            <legend>How much goes back</legend>
+            <label class="tick"><input type="radio" name="sale-refund-how" id="sale-refund-all" checked> <span id="sale-refund-all-label">All of it</span></label>
+            <label class="tick"><input type="radio" name="sale-refund-how" id="sale-refund-part"> A part of it: <input type="text" id="sale-refund-amount" inputmode="decimal" autocomplete="off" placeholder="5.00" aria-label="The sum to give back"> <span id="sale-refund-most"></span></label>
+          </fieldset>
+          <label class="field">Why (optional — kept with the refund here, and written on it in Stripe) <input type="text" id="sale-refund-reason" maxlength="200" autocomplete="off" placeholder="Bought twice by mistake"></label>
+          <div class="plan">
+            <b>What happens to what was bought</b>
+            <p id="sale-refund-what"></p>
+            <label class="tick" id="sale-refund-keep-row" hidden><input type="checkbox" id="sale-refund-keep"> …and let them keep it</label>
+          </div>
+          <p class="hint">The money goes back to the card that paid, through Stripe: it shows on their statement within a few days. They are told in the game at their next visit, and by e-mail where an address is known. A refund cannot be undone.</p>
+          <p class="error" id="sale-refund-error" hidden></p>
+          <div class="row"><button type="submit" class="warn" id="sale-refund-go" disabled>Give it back</button><button type="button" class="ghost" id="sale-refund-cancel">Cancel</button></div>
+        </form>
+      </dialog>
     </section>
 
     <section class="card" data-tab="bans">
@@ -210,5 +260,6 @@
 </main>
 <div class="toast" id="toast" role="status"></div>
 <script src="/admin/admin.js" defer></script>
+<script src="/admin/sales.js" defer></script>
 </body>
 </html>

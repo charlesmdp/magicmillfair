@@ -1,0 +1,50 @@
+/* The tab "Sales" of the back office (loaded by sales.js): a line a purchase, and the dialog that gives one back. */
+#sales-find { flex: 1 1 260px; min-width: 0; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--line); background: #110d30; color: var(--ink); }
+#sales-total .tile.back b { color: #ffb38a; }
+#sales-fetch-said { color: var(--ink); }
+#sales-fetch-said.bad { color: var(--red); }
+
+/* a sale: when · what and who · how much and where it stands · what can be done */
+.sale { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto auto; align-items: center; gap: 6px 14px; padding: 10px 12px; border-radius: 12px; background: rgba(0, 0, 0, 0.22); border: 1px solid var(--line); min-width: 0; }
+.sale.refunded { opacity: 0.78; }
+.sale .when b { display: block; font: 700 13px/1.25 system-ui, sans-serif; }
+.sale .when small { color: var(--dim); font-size: 12px; }
+.sale .grow { min-width: 0; }
+.sale .grow > b { display: block; font-weight: 700; font-size: 15.5px; overflow-wrap: anywhere; }
+.sale .grow small { display: block; color: var(--dim); font-size: 12.5px; overflow-wrap: anywhere; }
+.sale .grow small.who { color: var(--ink); opacity: 0.86; }
+.sale .grow small.back { color: #ffb38a; }
+.sale .sum { text-align: right; }
+.sale .sum > b { display: block; font: 800 17px/1.2 system-ui, sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sale .tags { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; margin-top: 3px; }
+.sale .tag { margin-left: 0; white-space: nowrap; }
+.sale .tag.ok { background: rgba(125, 255, 90, 0.16); color: var(--green); }
+.sale .tag.part { background: rgba(255, 150, 70, 0.2); color: #ffb38a; }
+.sale .tag.gone { background: rgba(255, 255, 255, 0.12); color: var(--ink); }
+.sale .tag.end { background: rgba(255, 255, 255, 0.08); color: var(--dim); }
+.sale .acts { display: flex; flex-direction: column; align-items: stretch; gap: 5px; min-width: 132px; }
+.sale .acts a.ghost { text-align: center; }
+
+/* the dialog of a refund */
+#sale-refund { width: min(560px, calc(100% - 24px)); }
+#sale-refund .sums { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+#sale-refund .hint { margin: 0; }
+#sale-refund fieldset { margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; display: grid; gap: 8px; min-width: 0; }
+#sale-refund fieldset:disabled { opacity: 0.55; }
+#sale-refund legend { padding: 0 6px; color: var(--gold); font: 700 11.5px/1.2 system-ui, sans-serif; letter-spacing: 0.1em; text-transform: uppercase; }
+#sale-refund .tick { flex-wrap: wrap; font-size: 14px; color: var(--ink); }
+#sale-refund .tick[hidden] { display: none; }
+#sale-refund-amount { flex: 0 0 96px; width: 96px; padding: 6px 9px; }
+#sale-refund-most { color: var(--dim); font-size: 12.5px; }
+#sale-refund .field { display: grid; gap: 4px; font-size: 12.5px; color: var(--dim); }
+#sale-refund .plan { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--gold); background: rgba(242, 193, 78, 0.08); display: grid; gap: 7px; }
+#sale-refund .plan b { color: var(--gold); font: 700 11.5px/1.2 system-ui, sans-serif; letter-spacing: 0.1em; text-transform: uppercase; }
+#sale-refund .plan p { margin: 0; font-size: 14.5px; }
+#sale-refund .error { margin: 0; }
+
+@media (max-width: 760px) {
+  .sale { grid-template-columns: minmax(0, 1fr) auto; }
+  .sale .when { grid-column: 1 / -1; display: flex; gap: 8px; align-items: baseline; }
+  .sale .when b { display: inline; }
+  .sale .acts { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; min-width: 0; }
+}

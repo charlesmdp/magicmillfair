@@ -421,10 +421,17 @@
   $('notify-email').addEventListener('input', notifyTest);
 
   // (the VAT on each sale, the owner's switch — and why Stripe refused it, the last time it did)
+  // (the tax code: one of the few that fit what the fair sells — index.html says what each means —, or another, typed)
+  const taxPicks = () => [...document.querySelectorAll('input[name="tax-pick"]')];
+  const taxOther = () => taxPicks().find((r) => r.value === 'other');
+  const setTaxCode = (code) => { const known = taxPicks().find((r) => r.value === code); (known || taxOther()).checked = true; $('tax-code').value = known ? '' : code; };
+  const taxCode = () => { const on = taxPicks().find((r) => r.checked); return !on ? '' : on.value === 'other' ? $('tax-code').value.trim() : on.value; };
+  for (const r of taxPicks()) r.addEventListener('change', () => { if (r.value === 'other') $('tax-code').focus(); else $('tax-code').value = ''; });
+  $('tax-code').addEventListener('input', () => { taxOther().checked = true; });
   function showTax(t) {
     $('tax-box').hidden = false;
     if (document.activeElement !== $('tax-on')) $('tax-on').checked = !!t.on;
-    if (document.activeElement !== $('tax-code')) $('tax-code').value = t.code || '';
+    if (document.activeElement !== $('tax-code') && !taxPicks().includes(document.activeElement)) setTaxCode(t.code || ''); // (not while one is being chosen)
     const said = $('tax-said');
     said.classList.toggle('bad', !!t.refused);
     said.textContent = !t.stripe ? 'The shop is not open: there is no Stripe key on this server.'
@@ -433,7 +440,7 @@
   }
   $('tax-form').onsubmit = async (e) => {
     e.preventDefault();
-    const on = $('tax-on').checked, code = $('tax-code').value.trim();
+    const on = $('tax-on').checked, code = taxCode();
     if (on && !confirm('Switch the VAT on? Do it once Stripe Tax is set up in Stripe (Settings → Tax).')) return;
     const res = await api('/api/tax', { method: 'POST', body: { on, code } });
     if (said(res, on ? 'The VAT is on.' : 'The VAT is off.')) showTax(res.body);
