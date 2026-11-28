@@ -1034,6 +1034,9 @@ server/replay.js           the referee: a game played again from its seed and wh
 server/urooms.js           the rooms that players make for themselves (switched off as delivered): bought, entered with a ticket, asleep when unpaid
 server/rooms.js            …and its reasoning: the common rooms, when one opens, starts, goes quiet
 server/stats.js            the game in figures: sums only (the lab's)
+server/people.js           the owner's list of everybody who has an account, and what is known of who has none
+server/mail.js  mails.js   the e-mails: the words of each (a table the owner can change), and the one door they leave by — its
+                           switches, the owner's words, the list of what left (the tab "E-mails" of the back office)
 public/admin/              the back office: a page of plain files that asks everything of the API
 public/opendata/           the page of the figures (the lab's)
 lab/                       the lab: its pages, its notes (BRIEF.md, INTEGRATION.md), its own server
@@ -1404,6 +1407,44 @@ list, add, let back in); **Figures** (the page everybody can read, and what was 
 releases. The page is fenced in by its headers: no script but its own, nothing from another site, never
 framed, never listed, never kept.
 
+**People and e-mails: the owner's two tabs.** Two more sections of the back office are the owner's alone — an
+administrator the owner has named is refused by the server, and is not shown their tabs (`public/admin/people.js`,
+`mails.js`: files of their own, which `admin.js` only names). **People** is everybody who has an account, the
+newest first (`server/people.js`, `GET /api/people`): the name, how they sign in (a password, Google, both — or
+*no password yet*: an account made with a name and an address, whose link to choose a password was mailed), the
+address in full, when it was made and last came, its days in a row, what it owns and the Game Pass, how many
+browsers; how many of each sort at the top, which are also the filters (*with an e-mail*, *a name and a password
+only*, *Google*); a box to find a name or an address; fifty to a page; *Copy the addresses shown* and *Download
+as a table (CSV)* — both of what the filter and the box show, every page of it. Nothing there changes an account
+(nothing in the game deletes one either: an account is taken away by hand, in the store). The accounts are read
+a few hundred at a time (`store.list(prefix, { after, limit })` on both hosts) and only a line of each is held —
+for half a minute, so that turning a page reads nothing again. Under the list, **those who only typed a name**:
+the fair keeps no list of them — a guest is the random name their browser gave itself — and the page says what
+it does keep, as the privacy text does, and shows the one thing that carries a name: among the last 300 visits
+(`server/visitors.js`), those made from a browser signed in to no account. **E-mails** is every kind of message
+the fair sends (`server/mails.js`, `GET | POST /api/mails`), a card each: what it is, when it leaves and to whom,
+its subject; *Read it, change its words* opens the message as it leaves — in a frame that can do nothing, and its
+twin in plain text — beside its sentences: the subject, the title, each paragraph, the button, the signature are
+lines of a table (`MAILS` in `server/mail.js`) that the owner's own words can stand in for. What is typed is text
+and never markup (escaped in the HTML); `{name}`, `{place}`, `{price}`… are listed under each sentence and put in
+when the message is made; words between `[square brackets]` that hold one are left out when it is not known; a
+sentence that cannot be used (a placeholder that does not exist, the line of the code without its code) is refused
+when saved and, should one be kept all the same, never breaks a message: the original is sent in its place. The
+message on the page follows what is typed before anything is saved; *Back to the original* is per sentence; a
+message that has several cases (a sponsor outbid, too late, taken down…) shows each. A switch stops a kind from
+leaving — except **the code to set a new password and the link to choose a first one, which are always sent**
+(the server refuses, and the card says why). *Send me this one* sends the case shown, with made-up values, to the
+owner's own address (the one given at the top of the tab — or, failing that, the one new sponsors are told to),
+its subject marked `[Test]`. **Every message leaves by one door** (`mailDoor` in `server/mails.js`, put in front
+of the host's mailer by `route()`): whoever sends — `mailLater` or `ctx.mail` itself — the door looks at the
+switch of that kind, writes the message again with the owner's words, hands it to the mailer and notes it on
+**the list of what left**, the last 200: when, which kind, to whom, handed to the mailer — or not sent (switched
+off), or the reason the mailer gave. That list keeps no address: an account is kept by its name, and the page
+shows the address it has now; a buyer without an account, whose address is asked of Stripe for one message and
+kept nowhere, is kept as just that. `node tools/people-test.mjs` checks all of it — and that with nothing typed
+every message still says, byte for byte, what it said before its words could be changed (10,668 cases held
+against `tools/lib/mail-before.mjs`, the messages as they were written).
+
 **The lab.** Novelties are built on another branch, as *extras* (`src/extras/`: a module with
 `attach(app)`), with their own checks (a test for each: see below) and a page of their own (`lab/`: see
 `lab/INTEGRATION.md`). The game switches them on through the switches above: **the caves are safe places**
@@ -1616,6 +1657,7 @@ notebook, with the rest. No new Durable Object class: such a room is a room like
 | `npm run test:cf` | the same protocol and API checks against the Cloudflare version (in its local runtime), plus its own: files and headers, rooms going to sleep, ghost connections (213 in all) |
 | `npm run test:update` | a delivery from end to end, in the real game: two builds, a visitor in the world, the owner at the back office (`/admin`: the switches, the boards of what is new taken away and put back, a word to every room, a line refused, somebody kept out, the figures, two games of the lab thrown on — fetched and built as the game runs, each played by its own bot, its time on its board; each with its stand, its panel for a sponsor, its star on the map and its planks at the forks —, the sky villages stage by stage), every page asked to refresh but never in the middle of a sentence, then the server replaced by the next version — the page says so, refreshes, comes back at the same spot, and puts no card of what is new in the way (the boards by the poppy field say it); and a plain build leaves nothing of the game on the page (16 checks) |
 | `node tools/extras-test.mjs`, `node tools/slide-test.mjs`, `node tools/pond-test.mjs`, `node tools/boats-test.mjs`, `node tools/hill-test.mjs`, `node tools/crack-test.mjs`, `node tools/hollow-test.mjs`, `node tools/games-test.mjs` | the lab's own checks of its extras and of each of its games — the last one plays them in the running game, in a browser (see `lab/INTEGRATION.md`) |
+| `node tools/people-test.mjs` | the owner's two tabs of the back office, without a browser: every e-mail built in 10,668 ways still says byte for byte what it said before its words could be changed; a sentence typed changes that sentence and nothing else; what is typed is never markup; a broken placeholder breaks no message; the door every message leaves by (a kind switched off, the two that are always sent, the list of what left: two hundred lines, no address but the owner's); the accounts read a few hundred at a time; and, on the Node server, the list, its filters, its pages, the table for a spreadsheet — for the owner and nobody else (36 checks) |
 | `node tools/wall-test.mjs` | the wall of the companions, without a browser (`layout/plaquewall.js`): its galleries in the cliff, its stair walked with the real collision, its 324 plates and the plaques the server sells for them — while its switch is on; off, nothing of it is there |
 | `node tools/offers-test.mjs` | the six cards of the Game Pass and the six of an account, without a browser: when each is due (those of an account between those of the Game Pass), that who comes back after a while gets the last one that is due and not the others, that each says something of its own and fits its card (the cards in the running game: `npm run test:shop`) (9 checks) |
 | `node tools/waves-test.mjs`, `node tools/lava-test.mjs`, `node tools/hive-test.mjs`, `node tools/flip-test.mjs`, `node tools/spiral-test.mjs`, `node tools/cars-test.mjs`, `node tools/golf-test.mjs`, `node tools/tunes-test.mjs`, `node tools/play-test.mjs` | the checks of the seven games with a gate — the rules of each (its bot plays it; the line of its board is held against `server/scores.js`), their music, and the seven played in the running game, in a browser, each switched on the way the game does it (see `lab/GAMES.md`) |
