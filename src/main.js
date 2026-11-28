@@ -1089,13 +1089,18 @@ async function boot() {
     const ownedNow = `${[...(shop.owned || [])].sort().join()}|${shop.hasPass ? 1 : 0}`;
     if (ownedWas !== null && ownedNow !== ownedWas) presence?.own();
     ownedWas = ownedNow;
+    // An administrator has everything — but is only known to be one a moment after the page opens, when the
+    // server has answered about the key this browser keeps. Until then nothing is taken off the robot: the hat,
+    // the paint and the colour of the pass were taken off and the bare robot kept, at every new version ("quand
+    // je fais des mises à jour ça m'enlève mes skins en tant qu'admin, je redeviens la couleur par défaut").
+    const unsure = !who.admin && !!store.get('mmf.admin');
     // (nothing is worn that is not theirs — or lent: the Game Pass lends every hat)
-    if (look.hat && !owns(HATS[look.hat].id)) look.hat = 0;
+    if (!unsure && look.hat && !owns(HATS[look.hat].id)) look.hat = 0;
     // (a colour of the pass, a size: back to everybody's when the pass is gone)
-    if (color >= FREE_COLORS && !shop.hasPass) { color -= FREE_COLORS; me.setColor(color); store.set('mmf.color', String(color)); presence?.setIdentity(name, color); }
-    hud.setRobot({ color, size: shop.hasPass ? size : 0, pass: shop.hasPass });
-    if (kit.paint && !shop.owns(`paint:${PAINTS[kit.paint]}`)) kit.paint = 0;
-    if (kit.trail && !shop.owns(`trail:${TRAILS[kit.trail]}`)) kit.trail = 0;
+    if (!unsure && color >= FREE_COLORS && !shop.hasPass) { color -= FREE_COLORS; me.setColor(color); store.set('mmf.color', String(color)); presence?.setIdentity(name, color); }
+    hud.setRobot({ color, size: shop.hasPass || unsure ? size : 0, pass: shop.hasPass || unsure });
+    if (!unsure && kit.paint && !shop.owns(`paint:${PAINTS[kit.paint]}`)) kit.paint = 0;
+    if (!unsure && kit.trail && !shop.owns(`trail:${TRAILS[kit.trail]}`)) kit.trail = 0;
     wear();
     fitJet();
     // (the free day of the light jetpack: said once, the first time it is found)
