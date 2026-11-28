@@ -189,8 +189,9 @@ export class Room extends DurableObject {
       const ok = allowed(limiter, 'npc', client) && limiter.allow('npc:day', ...LIMITS.npcDay);
       return Response.json({ ok });
     }
-    // (`list`: every record whose key begins with `prefix`, as [[key, value]…] — the back office lists the accounts with it)
-    const store = { get: (key) => this.ctx.storage.get(key), put: (key, value) => this.ctx.storage.put(key, value), delete: (key) => this.ctx.storage.delete(key), list: async (prefix = '') => [...(await this.ctx.storage.list({ prefix }))] };
+    // (`list`: every record whose key begins with `prefix`, as [[key, value]…] — the back office lists the accounts with
+    // it, a few at a time with { after, limit }: the `limit` first ones, by key, after the key `after`)
+    const store = { get: (key) => this.ctx.storage.get(key), put: (key, value) => this.ctx.storage.put(key, value), delete: (key) => this.ctx.storage.delete(key), list: async (prefix = '', { after = '', limit = 0 } = {}) => [...(await this.ctx.storage.list({ prefix, ...(after && { startAfter: after }), ...(limit > 0 && { limit }) }))] };
     const env = this.env, storage = this.ctx.storage, stripe = (this.stripe ||= stripeConfig(env));
     const mail = env.EMAIL && env.MAIL_FROM ? (m) => env.EMAIL.send({ from: String(env.MAIL_FROM), to: m.to, subject: m.subject, text: m.text, html: m.html }) : restMailer(env);
     if (request.headers.has(BUILD)) this.build = request.headers.get(BUILD) || '';

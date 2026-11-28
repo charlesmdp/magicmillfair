@@ -8,6 +8,8 @@
 <title>Atomic Oasis — the back office</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 <link rel="stylesheet" href="/admin/admin.css" />
+<link rel="stylesheet" href="/admin/people.css" />
+<link rel="stylesheet" href="/admin/mails.css" />
 </head>
 <body>
 <!-- The back office of the fair: what is released, the rooms, the boards of scores, the sponsors and the plaques,
@@ -187,6 +189,39 @@
       <div id="bans" class="list"></div>
     </section>
 
+    <section class="card" data-tab="people" data-owner>
+      <h2>People</h2>
+      <p class="hint">Everybody who has an account at the fair, the newest first. Their e-mail addresses are personal: this page is yours alone — no other administrator is shown it — and nothing on it changes an account.</p>
+      <div class="pfilters" id="people-filters" role="tablist" aria-label="Which accounts"></div>
+      <div class="row wrap">
+        <input type="search" id="people-find" placeholder="Find a name or an address…" aria-label="Find a name or an address" />
+        <button type="button" class="ghost small" id="people-copy">Copy the addresses shown</button>
+        <button type="button" class="ghost small" id="people-csv">Download as a table (CSV)</button>
+        <button type="button" class="ghost small" id="people-fresh">Read again</button>
+      </div>
+      <p class="hint" id="people-note"></p>
+      <div id="people" class="pwrap"></div>
+      <div class="row wrap" id="people-pages"></div>
+      <h3>Those who only typed a name</h3>
+      <div id="guests-said"></div>
+      <div id="guests" class="list"></div>
+    </section>
+
+    <section class="card" data-tab="mails" data-owner>
+      <h2>E-mails</h2>
+      <p class="hint">Every kind of message the fair sends by itself — there is no newsletter. Each can be read as it leaves, and its words changed: what you type is sent as text, in the place of the original sentence, and the page shows the message as you type. All but two can be switched off.</p>
+      <p class="hint bad" id="mails-none" hidden>This server sends no e-mail yet: the three secrets of the e-mails are to be set where it runs (the README says how, under "E-mails"). The messages can still be read here, and their words changed.</p>
+      <form id="mails-me-form" class="row">
+        <label>Send my tests to <input id="mails-me" type="email" maxlength="120" placeholder="you@example.com" autocomplete="email"></label>
+        <button type="submit" class="small">Save</button>
+      </form>
+      <p class="hint">“Send me this one”, on a message below, sends it to that address with made-up values — a visitor called Robin — so that you see it in a real mailbox. Its subject begins with [Test].</p>
+      <div id="mails" class="mails"></div>
+      <h3>What left lately</h3>
+      <p class="hint" id="mails-log-said"></p>
+      <div id="mails-log" class="list"></div>
+    </section>
+
     <section class="card" data-tab="figures">
       <h2>Figures</h2>
       <p class="hint">The page everybody can read: <a href="/opendata/" target="_blank" rel="noopener">The game in figures</a>. The counting starts the day it is switched on: set here what was before.</p>
@@ -209,6 +244,8 @@
   <p class="foot">Atomic Oasis · the back office · <a href="/">back to the fair</a></p>
 </main>
 <div class="toast" id="toast" role="status"></div>
+<script src="/admin/people.js" defer></script>
+<script src="/admin/mails.js" defer></script>
 <script src="/admin/admin.js" defer></script>
 </body>
 </html>

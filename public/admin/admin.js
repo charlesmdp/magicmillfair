@@ -622,6 +622,9 @@
     SHOW[tab]?.();
     try { history.replaceState(null, '', `#${tab}`); } catch { /* a page of a file */ }
   }
+  // (the tabs that live in files of their own — people.js, mails.js: loaded before this one — say what they are called
+  // and how they are shown; each is lent what this page has: the API with the key, and its small tools)
+  for (const t of window.officeTabs || []) { NAMES[t.id] = t.name; SHOW[t.id] = () => t.show({ api, key: () => key, el, button, item, empty, toast, said, when }); }
   async function enter(tried) {
     key = tried.trim();
     const res = key ? await api('/api/admin') : { ok: false, status: 403 };

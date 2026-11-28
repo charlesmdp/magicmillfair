@@ -159,8 +159,14 @@ const store = {
     return this.data;
   },
   async get(key) { return (await this.load())[key]; },
-  /** Every record whose key begins with `prefix`: [[key, value]…] (the back office lists the accounts with it). */
-  async list(prefix = '') { return Object.entries(await this.load()).filter(([k]) => k.startsWith(prefix)); },
+  /**
+   * Every record whose key begins with `prefix`: [[key, value]…] (the back office lists the accounts with it) —
+   * a few at a time with { after, limit }: the `limit` first ones, by key, after the key `after`.
+   */
+  async list(prefix = '', { after = '', limit = 0 } = {}) {
+    const found = Object.entries(await this.load()).filter(([k]) => k.startsWith(prefix) && (!after || k > after));
+    return limit > 0 ? found.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).slice(0, limit) : found;
+  },
   async put(key, value) { (await this.load())[key] = value; return this.save(); },
   async delete(key) { delete (await this.load())[key]; return this.save(); },
   save() {
