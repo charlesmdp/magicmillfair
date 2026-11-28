@@ -1,13 +1,16 @@
 // Checks of the Sanctuary (src/extras/sanctuary.js), in the running game (a headless browser): with its switch off
-// nothing of it is in the world; switched on, the hall is in the scene; the player, put before its doors and
-// walked by the game's own controller, reaches the middle under the dome and each of the three chapels, and is
-// stopped by a wall; `inside()` is 0 far outside, about 0.1 at the doors and 1 under the dome.
+// nothing of it is in the world and the cliff is whole; switched on, the hall is in the scene, under the rock of
+// the cliff but for its court, and the ground is cut there alone; the player, walked by the game's own
+// controller from the meadow, goes through the court and up the stair to the doors, reaches the middle under the
+// dome — on its floor, not on the slope above — and each of the three chapels, and is stopped by a wall and by
+// the rock of the court; `inside()` is 0 far outside, about 0.1 at the doors and 1 under the dome.
 // usage: node tools/sanctuary-test.mjs
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stubOutside } from './lib/outside.mjs';
-import { PLAN, CHAPELS, DOOR, toWorld, armPoint, inside, floorAt } from '../src/world/zones/places/sanctuary/plan.js';
+import { PLAN, CHAPELS, DOOR, toWorld, armPoint, inside, floorAt, FACE, STAIR_END } from '../src/world/zones/places/sanctuary/plan.js';
+import { height } from '../lab/tools/heights.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const results = [];
@@ -18,6 +21,15 @@ const arm = (a, u, v) => toWorld(...armPoint(a, u, v));
 check('inside() is 0 far outside, about 0.1 at the doors, 1 under the dome', inside(DOOR.x + 60, PLAN.floor, DOOR.z + 60) === 0 && inside(PLAN.at.x, PLAN.floor, PLAN.at.z) === 1 && Math.abs(inside(DOOR.x, DOOR.y, DOOR.z) - 0.1) < 0.05, { far: inside(DOOR.x + 60, PLAN.floor, DOOR.z + 60), door: +inside(DOOR.x, DOOR.y, DOOR.z).toFixed(3), dome: inside(PLAN.at.x, PLAN.floor, PLAN.at.z) });
 check('in each chapel one is well inside (the music does not leave): 0.5 or more', CHAPELS.every(({ angle }) => { const [x, z] = arm(angle, 0, PLAN.chord + 1); return inside(x, PLAN.floor, z) >= 0.5; }), CHAPELS.map(({ id, angle }) => { const [x, z] = arm(angle, 0, PLAN.chord + 1); return `${id} ${inside(x, PLAN.floor, z).toFixed(2)}`; }).join(', '));
 check('the floor carries under the dome, in the doorway and on the stair, and nowhere outside', floorAt(PLAN.at.x, PLAN.at.z) === PLAN.floor && floorAt(DOOR.x, DOOR.z) === PLAN.floor && floorAt(DOOR.x + 60, DOOR.z + 60) === null);
+{
+  // (the rock over it, read from the map of the ground: over the crown of every vault and over the dome, but in
+  // the court, where it is cut away)
+  const over = [], crown = PLAN.spring + PLAN.W;
+  for (const a of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) for (let v = 4; v <= (a === 0 ? FACE - 0.5 : PLAN.chord + PLAN.W); v += 1.5) for (const u of [-PLAN.W, 0, PLAN.W]) { const [x, z] = arm(a, u, v), top = Math.hypot(...armPoint(a, u, v)) < PLAN.R ? PLAN.cornice + PLAN.drum + Math.sqrt(Math.max(0, PLAN.R ** 2 - Math.hypot(...armPoint(a, u, v)) ** 2)) : crown; over.push(height(x, z) - PLAN.floor - top); }
+  check('it is dug into the cliff: two metres of rock and more over every vault and over the dome, all of it under the ground but its court', Math.min(...over) >= 2, { leastRock: +Math.min(...over).toFixed(1), points: over.length });
+  const [mx, mz] = toWorld(0, PLAN.court.mouth + 2);
+  check('its court opens on the meadow at the foot of the cliff: the ground there is no higher than the floor of the court', height(mx, mz) <= PLAN.floor - PLAN.steps.n * 0.2 + 0.5, { ground: +height(mx, mz).toFixed(1), court: +(PLAN.floor - PLAN.steps.n * 0.2).toFixed(1) });
+}
 
 const { chromium } = createRequire(import.meta.url)('playwright');
 const { createServer } = await import('vite');
@@ -39,12 +51,18 @@ try {
   const frames = (n) => page.evaluate((n) => new Promise((res) => { const app = window.__mmf, t = app.frames + n; const tick = () => (app.frames >= t ? res() : requestAnimationFrame(tick)); tick(); }), n);
 
   check('with its switch off — as the game is delivered — nothing of it is in the world', await page.evaluate(() => !window.__mmf.world.scene.getObjectByName('sanctuary') && !window.__mmf.sanctuary));
+  const ground = () => page.evaluate(() => { const w = window.__mmf.world, T = w.terrain; return { holes: T.material.defines.HOLES || 0, caves: w.places.holes.length, depth: T.mesh.userData.depthMaterial === T.depthMaterial, areas: w.collision.areas.length }; });
+  const whole = await ground();
+  check('…and the cliff is whole: the ground has the holes of the caves alone, and its shadow none', whole.holes === whole.caves && whole.depth, whole);
   const before = await page.evaluate(() => ({ zones: window.__mmf.world.zones.length, boxes: window.__mmf.world.collision.boxes.length }));
   await page.evaluate(() => import('/src/extras/index.js').then(({ loadExtras }) => loadExtras(window.__mmf, { sanctuary: true })).then(() => window.__mmf.extrasBuilt()));
   await frames(6);
   const built = await page.evaluate(() => { const a = window.__mmf, g = a.world.scene.getObjectByName('sanctuary'); let tris = 0, meshes = 0; g?.traverse((o) => { if (o.isMesh) { meshes++; tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; } }); return { group: !!g, tris, meshes, zones: a.world.zones.length, boxes: a.world.collision.boxes.length, door: a.sanctuary?.door, name: a.sanctuary?.name }; });
   check('switched on, the hall is in the scene: one group, few meshes, 60,000 triangles at the most', built.group && built.meshes <= 8 && built.tris > 5000 && built.tris <= 60000, { meshes: built.meshes, triangles: built.tris, boxes: built.boxes - before.boxes });
   check('it says where its doors are', built.door && Math.abs(built.door.x - DOOR.x) < 0.01 && Math.abs(built.door.y - PLAN.floor) < 0.01);
+  const cut = await ground(), gone = await page.evaluate(() => window.__mmf.sanctuary.uprooted);
+  check('switched on, the ground is cut where its court is (three boxes more), and so is its shadow; one place more to walk in, under the rock', cut.holes === whole.holes + 3 && !cut.depth && cut.areas === whole.areas + 1, cut);
+  check('what grew on the ground cut away is gone', gone >= 1, { trees: gone });
 
   // ---- the player, walked by the game's own controller (as tools/walk-test.mjs does: the stick held towards a point)
   const walk = (from, points) => page.evaluate(([from, points]) => {
@@ -55,9 +73,11 @@ try {
     return { x: player.pos.x, y: player.pos.y, z: player.pos.z, inside: a.sanctuary.inside(player.pos.x, player.pos.y, player.pos.z) };
   }, [from, points]);
   const near = (p, [x, z], r = 1) => Math.hypot(p.x - x, p.z - z) < r;
-  const foot = toWorld(0, PLAN.chord + PLAN.T + 2.2 + PLAN.steps.n * PLAN.steps.run + 3), mid = [PLAN.at.x, PLAN.at.z];
-  let p = await walk([foot[0], foot[1], DOOR.yaw], [[DOOR.x, DOOR.z]]);
-  check('from the meadow one walks up the stair to the doors', near(p, [DOOR.x, DOOR.z]) && Math.abs(p.y - PLAN.floor) < 0.15, { at: [p.x, p.y, p.z].map((v) => +v.toFixed(1)), inside: +p.inside.toFixed(2) });
+  const meadow = toWorld(0, PLAN.court.mouth + 7), foot = toWorld(0, STAIR_END + 3), mid = [PLAN.at.x, PLAN.at.z];
+  let p = await walk([meadow[0], meadow[1], DOOR.yaw], [foot]);
+  check('from the meadow one walks into the court cut in the cliff, on its floor', near(p, foot) && Math.abs(p.y - (PLAN.floor - PLAN.steps.n * 0.2)) < 0.15, { at: [p.x, p.y, p.z].map((v) => +v.toFixed(1)) });
+  p = await walk(null, [[DOOR.x, DOOR.z]]);
+  check('…and up the stair to the doors', near(p, [DOOR.x, DOOR.z]) && Math.abs(p.y - PLAN.floor) < 0.15, { at: [p.x, p.y, p.z].map((v) => +v.toFixed(1)), inside: +p.inside.toFixed(2) });
   p = await walk([DOOR.x, DOOR.z, DOOR.yaw], [mid]);
   check('put before the doors and walked in, the player reaches the middle under the dome — on its floor, and wholly inside', near(p, mid) && Math.abs(p.y - PLAN.floor) < 0.1 && p.inside === 1, { at: [p.x, p.y, p.z].map((v) => +v.toFixed(1)), inside: p.inside });
   for (const { id, angle } of CHAPELS) {
@@ -71,6 +91,11 @@ try {
   p = await walk([from[0], from[1], 0], [beyond]);
   const r = Math.hypot(p.x - PLAN.at.x, p.z - PLAN.at.z);
   check('a wall stops one: walking at the round wall between two arms, one stays in the hall', r < PLAN.R && r > PLAN.R - 1.5, { fromTheMiddle: +r.toFixed(2), wall: PLAN.R });
+  // (in the court, across it, at its rock)
+  const side = toWorld(PLAN.court.half + 6, STAIR_END + 2);
+  p = await walk([...toWorld(9, STAIR_END + 2), 0], [side]);
+  const lx = (p.x - PLAN.at.x) * Math.cos(PLAN.yaw) - (p.z - PLAN.at.z) * Math.sin(PLAN.yaw);
+  check('the rock of the court lets nobody into the cliff', lx < PLAN.court.half && Math.abs(p.y - (PLAN.floor - PLAN.steps.n * 0.2)) < 0.15, { across: +lx.toFixed(2), wall: PLAN.court.half, y: +p.y.toFixed(2) });
   // (on the landing, beside the doorway, straight at the front wall)
   const beside = toWorld(4.4, PLAN.chord + PLAN.T + 1.2);
   p = await walk([beside[0], beside[1], DOOR.yaw], [toWorld(4.4, PLAN.chord - 5)]);
