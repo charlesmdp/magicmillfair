@@ -1200,7 +1200,8 @@ the password* offers *Send me a code by e-mail* (a code good for half an hour, o
 two minutes and five a day per account at the most; the answer is the same whether or not the account
 exists or has an address), and the settings let who is signed in add, change or take away the address
 (with the password). The address is kept with the account, shown to its owner with most of it hidden
-(`j•••@e•••.org`) and to nobody else; where no e-mail can be sent, none is ever asked for or kept. To
+(`j•••@e•••.org`) and to nobody else in the game — the owner of the fair, and nobody else, reads it whole in the
+back office (*People*); where no e-mail can be sent, none is ever asked for or kept. To
 switch it on at Cloudflare (their Email Service — on the Workers Paid plan — sends to any address):
 
 1. In the Cloudflare dashboard: *Compute → Email Service → Email Sending → Onboard Domain*, choose the
