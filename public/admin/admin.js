@@ -78,6 +78,7 @@
     sky: ['The sky villages', 'Hidden: nothing of them. Soon: their gate is there, closed. Open: everything.'],
     userRooms: ['Rooms made by players', 'Off: nothing of them — no card in the shop, no path that answers. On: an account can buy a room of its own ($59 a month): reached by its link only, fifty visitors, a password if its owner wants one, its own boards of scores.'],
     freeRooms: ['Rooms by address', 'Off: only the common rooms exist (you still get in anywhere). On: any name written in the address (?room=a-name) is a room of its own, free.'],
+    dive: ['Diving, and a secret cave under the sea', 'On: where the water is deep a swimmer can go under and swim freely — the sea is seen from below, with its weed and its fish — and somewhere under the bay a cave is to be found. Off: nothing of it is loaded or drawn.'],
   };
   // (the switches that are games: one button puts them all off — as the game is delivered)
   const GAME_SWITCHES = ['slide', 'pond', 'boats', 'hill', 'crack', 'hollow', 'waves', 'lava', 'hive', 'flip', 'spiral', 'cars', 'golf', 'ages', 'raft', 'walls', 'sneak', 'mine', 'coaster'];
