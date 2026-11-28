@@ -54,7 +54,7 @@ uniform vec4 uRock; // the rock: x, z, how far its shade goes
 uniform vec3 uAt;
 in vec3 vWorld;
 void main() {
-  if (vWorld.y < uAt.y - 0.5) { gl_FragColor = vec4(outputColor(uFogColor), 1.0); return; } // (far under: where the bed of the map ends, the deep)
+  if (vWorld.y < uAt.y - 0.5) { gl_FragColor = vec4(outputColor(applyFog(uFogColor, vWorld, cameraPosition)), 1.0); return; } // (far under: where the bed of the map ends, the deep)
   vec3 dir = normalize(vWorld - cameraPosition);
   // the ripples, seen from under: they bend what comes through, and draw a net of light
   vec2 uv = vWorld.xz * 0.085;
