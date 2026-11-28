@@ -3,7 +3,7 @@
 // avatar is a single draw call (per pass) however many visitors there are.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { surfaceMaterial, skinnedDepthMaterial } from '../render/SurfaceMaterial.js';
+import { surfaceMaterial, skinnedDepthMaterial, paintSet } from '../render/SurfaceMaterial.js';
 import { LAYER } from '../render/Shadows.js';
 import { assetUrl } from '../core/Assets.js';
 import { HATS, makeHat, makeBouquet, makeJetpack, makeQuad, makeDisguise, QUAD, wings as makeWings } from './Cosmetics.js';
@@ -312,13 +312,17 @@ export class Character {
 
   /**
    * A paint job over the colour of the avatar: 0 none, 1 gold plating, 2 chrome, 3 atomic glow (it pulses),
-   * 4 candy (it drifts through the rainbow), 5 meltdown, 6 plasma, 7 hazard stripes, 8 mirror ball, 9 galaxy — the
-   * numbers of PAINTS in server/items.js.
+   * 4 candy (it drifts through the rainbow), 5 meltdown, 6 plasma, 7 hazard stripes, 8 mirror ball, 9 galaxy,
+   * 10 tuxedo (the head keeps the colour of the robot), 11 camouflage, 12 tiger, 13 rust bucket, 14 deep frost,
+   * 15 holographic, 16 circuit board, 17 marble and gold, 18 last sunset — the numbers of PAINTS in
+   * server/items.js.
    */
   setPaint(paint = 0) {
     if (paint === (this.paint || 0)) return;
     this.paint = paint;
-    // (the paint itself is drawn by the material: see PAINT in SurfaceMaterial.js)
+    // (the paint itself is drawn by the material: see PAINT in SurfaceMaterial.js — those from the tenth on by a
+    // program of their own, which the material takes when it is given one of them)
+    paintSet(this.mainMaterial, paint);
     const u = this.mainMaterial.uniforms;
     u.uPaint.value.x = paint;
     u.uParams.value.x = paint === 1 ? 0.22 : paint === 2 ? 0.08 : 0.45; u.uParams.value.y = paint === 1 || paint === 2 ? 1.0 : 0.5;
