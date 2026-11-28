@@ -403,20 +403,20 @@ export const TUNES = {
     hall: { seconds: 5.5, wet: 0.7, dry: (st) => 0.22 + 0.68 * sat((st?.inside ?? 0) * 1.3) },
     chords: 'Gm Gm Gm Gm Gm Gm Gm Gm Gm Gm Gm Gm Gm Gm Gm Gm',
     // (the tenors: the chant; they rest while they are answered)
-    theme: 'r:2 g3:2 a3 bb3 c4:2 | d4:4 c4 bb3 a3:2 | r:8 | r:8 | r:2 d4:2 e4 f4 g4:2 | f4:2 e4 d4 d4:4 | c4:2 d4:2 bb3:2 a3:2 | g3:6 r:2 | '
-      + 'r:8 | r:8 | r:2 a3:2 c4:2 d4:2 | f4:3 e4 d4:2 c4:2 | d4:6 r:2 | r:2 bb3:2 c4 bb3 a3:2 | g3:2 a3:2 bb3:2 a3:2 | g3:6 r:2',
+    theme: 'r:2 g3:2 a3 bb3 c4:2 | d4:4 c4 bb3 a3:2 | r:8 | r:8 | r:2 d4:2 e4 f4 g4:2 | f4:2 e4 d4 d4:4 | c4:2 d4:2 bb3:2 a3:2 | g3:5 r:3 | '
+      + 'r:8 | r:8 | r:2 a3:2 c4:2 d4:2 | f4:3 e4 d4:2 c4:2 | d4:5 r:3 | r:2 bb3:2 c4 bb3 a3:2 | g3:2 a3:2 bb3:2 a3:2 | g3:5 r:3',
     parts: [
       { line: 'theme', wave: 'reed', standing: true, choir: 3, spread: 9, vibrato: 10, vowels: 'aoeaouaeo', breath: 0.05, lp: 420, glide: 0.07, vel: 0.42, every: 2, gate: 0.97, attack: 0.18, release: 0.45 },
       // (the baritones: the answer, then the cadences with the tenors)
-      { line: 'r:8 | r:8 | r:2 d3:2 f3 e3 d3:2 | c3:2 bb2:2 a2:2 g2:2 | r:8 | r:8 | f3:2 f3:2 d3:2 d3:2 | d3:6 r:2 | '
-          + 'r:8 | r:8 | r:8 | a3:3 g3 f3:2 e3:2 | f3:6 r:2 | r:2 g3:2 a3 g3 f3:2 | d3:2 c3:2 d3:2 f3:2 | d3:6 r:2',
-        wave: 'reed', standing: true, choir: 3, spread: 8, vibrato: 9, vowels: 'oaeoua', breath: 0.045, lp: 380, glide: 0.08, vel: 0.38, from: 0.3, every: 2, gate: 0.97, attack: 0.2, release: 0.45, cents: -4 },
+      { line: 'r:8 | r:8 | r:2 d3:2 f3 e3 d3:2 | c3:2 bb2:2 a2:2 g2:2 | r:8 | r:8 | f3:2 f3:2 d3:2 d3:2 | d3:5 r:3 | '
+          + 'r:8 | r:8 | r:8 | a3:3 g3 f3:2 e3:2 | f3:5 r:3 | r:2 g3:2 a3 g3 f3:2 | d3:2 c3:2 d3:2 f3:2 | d3:5 r:3',
+        wave: 'reed', standing: true, choir: 3, spread: 8, vibrato: 9, vowels: 'oaeoua', breath: 0.045, lp: 380, glide: 0.08, vel: 0.32, from: 0.3, every: 2, gate: 0.97, attack: 0.2, release: 0.45, cents: -4 },
       // (the basses: the ison under the tenors, and their own low phrase after the bell)
-      { line: 'r:8 | r:8 | r:8 | r:8 | g2:8 | g2:8 | f2:4 d2:4 | g2:6 r:2 | r:2 d2:2 f2 g2 a2:2 | bb2:2 a2 g2 f2:2 g2:2 | g2:8 | d2:8 | d2:6 r:2 | r:8 | g2:2 f2:2 d2:2 d2:2 | g2:6 r:2',
-        wave: 'reed', standing: true, choir: 3, spread: 7, vibrato: 7, vowels: 'ouoaou', breath: 0.04, lp: 300, glide: 0.1, vel: 0.46, from: 0.45, every: 2, gate: 0.98, attack: 0.25, release: 0.5, cents: 3 },
+      { line: 'r:8 | r:8 | r:8 | r:8 | g2:8 | g2:8 | f2:4 d2:4 | g2:5 r:3 | r:2 d2:2 f2 g2 a2:2 | bb2:2 a2 g2 f2:2 g2:2 | g2:8 | d2:8 | d2:5 r:3 | r:8 | g2:2 f2:2 d2:2 d2:2 | g2:5 r:3',
+        wave: 'reed', standing: true, choir: 3, spread: 7, vibrato: 7, vowels: 'ouoaou', breath: 0.04, lp: 300, glide: 0.1, vel: 0.38, from: 0.45, every: 2, gate: 0.98, attack: 0.25, release: 0.5, cents: 3 },
       // (the note one feels: the tonic two octaves down, where the basses hold theirs)
-      { line: 'r:8 | r:8 | r:8 | r:8 | g1:8 | g1:8 | g1:8 | g1:6 r:2 | r:8 | r:8 | g1:8 | d2:8 | d2:6 r:2 | r:8 | g1:8 | g1:6 r:2',
-        wave: 'bourdon', standing: true, lp: 170, glide: 0.3, vel: 0.2, from: 0.55, every: 2, gate: 0.98, attack: 1.2, release: 1.5 },
+      { line: 'r:8 | r:8 | r:8 | r:8 | g1:8 | g1:8 | g1:8 | g1:5 r:3 | r:8 | r:8 | g1:8 | d2:8 | d2:5 r:3 | r:8 | g1:8 | g1:5 r:3',
+        wave: 'bourdon', standing: true, lp: 170, glide: 0.3, vel: 0.17, from: 0.55, every: 2, gate: 0.98, attack: 1.2, release: 0.8 },
       // (a low bell, far off, once a turn: as the first cadence dies)
       { line: 'r:64 g2:8 r:56', wave: 'chime', vel: 0.12, from: 0.35, gate: 0.99, attack: 0.004, sustain: 0, decay: 2.2, release: 2 },
     ],

@@ -1,7 +1,8 @@
-// The Sanctuary as an extra: a great hall of stone at the foot of the cliff of the west meadow — a mosque, a
-// church and a synagogue under one dome — plugged into the running game from outside (its switch: RELEASE in
-// src/app/config.js, off as it is delivered; with it off nothing of it is loaded, built or shown). No game
-// there: one walks in and looks; its music — a slow, deep gospel (TUNES.sanctuary) — plays for who is inside.
+// The Sanctuary as an extra: a great hall of stone dug into the cliff of the west meadow — a mosque, a church and
+// a synagogue under one dome, its front in a court cut into the rock — plugged into the running game from outside
+// (its switch: RELEASE in src/app/config.js, off as it is delivered; with it off nothing of it is loaded, built or
+// shown, and the cliff is whole). No game there: one walks in and looks; its music — a chant of three choirs
+// under the rock, in a hall of its own (TUNES.sanctuary) — plays for who is inside, louder as one walks in.
 // See lab/NEWGAMES.md and src/world/zones/places/sanctuary/.
 import { Sanctuary } from '../world/zones/places/sanctuary/Sanctuary.js';
 import { tunePlayer } from './tunes.js';
