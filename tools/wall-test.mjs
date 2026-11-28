@@ -16,6 +16,7 @@ import { NORTH } from '../src/world/layout/layout.js';
 import { PLAQUE_COUNT, PLAQUE_WALL, PLAQUE_WALL_COUNT } from '../src/world/layout/sponsors.js';
 import { RELEASE } from '../src/app/config.js';
 import { describe as describeItem } from '../server/catalog.js';
+import { sponsorMail } from '../server/mail.js';
 import {
   WALL, DECKS, FLIGHTS, LANDINGS, PIECES, SIGN, point, place, out, eIn, eOut, baseAt, heightOn, heightNear, wallSegments, crowds, outline, arcLength,
   COLUMNS, FIRST, WALL_COUNT, plateOf, idsOf, plateAt, columnAt,
@@ -30,9 +31,10 @@ const ground = (x, z) => { const u = x + half - 0.5, v = z + half - 0.5, x0 = Ma
 
 const E = NORTH.ledge, S = NORTH.statue, RAD = 0.38, STEP = 0.62, CLIMB = 1.35, REACH = 0.6;
 // (where things stand on the ledge, as PlacesZone._north puts them: the plinth's drum, PR = 7.05; where one says hello to
-// the dog, and from how far; the sign of the companions, 38° round the drum from the tablet, 4.7 m out)
+// the dog, and from how far; the board of the companions, NORTH.companions: so many degrees round the drum from the
+// tablet, so far out, so wide, facing the top of the stair)
 const PR = 7.05, fwd = [Math.sin(S.yaw), Math.cos(S.yaw)], HELLO = { x: S.x + fwd[0] * (PR + 2.2), z: S.z + fwd[1] * (PR + 2.2), reach: 4.2 };
-const COMPANIONS = (() => { const a = (38 * Math.PI) / 180, lx = Math.sin(a) * (PR + 4.7), lz = Math.cos(a) * (PR + 4.7), c = Math.cos(S.yaw), s = Math.sin(S.yaw); return { x: S.x + lx * c + lz * s, z: S.z - lx * s + lz * c }; })();
+const COMPANIONS = (() => { const B = NORTH.companions, a = (B.a * Math.PI) / 180, lx = Math.sin(a) * (PR + B.out), lz = Math.cos(a) * (PR + B.out), c = Math.cos(S.yaw), s = Math.sin(S.yaw), x = S.x + lx * c + lz * s, z = S.z - lx * s + lz * c, [tx, tz] = NORTH.stairs[0].points.at(-1); return { x, z, hw: B.w / 2 + 0.2, hl: 0.12, yaw: Math.atan2(tx - x, tz - z) }; })();
 const rampAt = (p, a) => (p.y0 === p.y1 ? p.y0 : p.y0 + (p.y1 - p.y0) * ((a - p.a0) / (p.a1 - p.a0)));
 /** The lowest of f(a, e) - ground over a piece (every quarter of a degree, every 4 cm out). */
 const lowest = (p, f) => { let min = Infinity, at = null; for (let a = p.a0; a <= p.a1 + 1e-9; a += 0.25) for (let e = p.lo; e <= p.hi + 1e-9; e += out(0.04)) { const [x, z] = point(a, e), c = f(a, e) - ground(x, z); if (c < min) { min = c; at = [+a.toFixed(2), +e.toFixed(4)]; } } return { min: +min.toFixed(2), at }; };
@@ -121,7 +123,7 @@ const lowest = (p, f) => { let min = Infinity, at = null; for (let a = p.a0; a <
   col.addArea(new Polygon(ellipse(0.955), { name: 'golden' }));
   col.addCircle(S.x, S.z, 7.47); // (the plinth)
   col.addBox(S.x + fwd[0] * (PR + 0.1), S.z + fwd[1] * (PR + 0.1), 2.75, 0.55, S.yaw); // (its tablet)
-  col.addCircle(COMPANIONS.x, COMPANIONS.z, 0.3); // (the sign of the companions)
+  col.addBox(COMPANIONS.x, COMPANIONS.z, COMPANIONS.hw, COMPANIONS.hl, COMPANIONS.yaw); // (the board of the companions)
   let on = true;
   for (const p of PIECES) col.addPlatform({ clearance: p.kind === 'flight' && p.g === 0 ? 4 : 1.0, heightAt: (x, z) => (on ? heightOn(p, x, z) : null) });
   const posts = wallSegments().map(([x, z, hw, hl, yaw, y0, y1]) => ({ h: col.addBox(x, z, hw, hl, yaw, y0, y1), y0 }));
@@ -286,6 +288,24 @@ const lowest = (p, f) => { let min = Infinity, at = null; for (let a = p.a0; a <
     w?.plaque && w.wall === true && w.amount === drum.amount && w.monthly === false && /wall of the companions/.test(w.name) && last?.wall === true && drum?.plaque && !drum.wall
     && ['plaque:397', 'plaque:0', 'plaque:073', 'plaque:1000', 'plaque:x', 'plaque:'].every((i) => describeItem(i) === null),
     { 73: w, 72: drum?.name });
+}
+
+{
+  // ---- the board of the companions, by the plates round the plinth: where it stands — and what a plaque is said to be
+  // for wherever the server says it (the board itself, the offer and the form are the game's: Plaques.js, main.js)
+  const B = COMPANIONS, top = NORTH.stairs[0].points.at(-1), ux = Math.cos(B.yaw), uz = -Math.sin(B.yaw);
+  const ends = [-1, 1].map((k) => [B.x + ux * k * B.hw, B.z + uz * k * B.hw]);
+  const within = ends.map(([x, z]) => +Math.hypot((x - E.x) / E.rx, (z - E.z) / E.rz).toFixed(3)); // (1: the rim of the ledge; one walks within 0.955 of it)
+  const drum = Math.min(...ends.map(([x, z]) => Math.hypot(x - S.x, z - S.z))) - 7.47, far = Math.hypot(B.x - top[0], B.z - top[1]);
+  const benches = [14, 42].map((d) => { const a = (d * Math.PI) / 180, bx = E.x + Math.cos(a) * E.rx * 0.8, bz = E.z + Math.sin(a) * E.rz * 0.8; return Math.min(...ends.map(([x, z]) => Math.hypot(x - bx, z - bz))); });
+  // (it faces whoever arrives: the top of the stair is straight in front of it)
+  const facing = ((top[0] - B.x) * Math.sin(B.yaw) + (top[1] - B.z) * Math.cos(B.yaw)) / far;
+  check('the board of the companions stands on the ledge — both its ends on the ground one walks on —, four to six metres from the top of the stair and facing it: read as one arrives; it leaves two metres to walk round the plinth, and the benches alone',
+    within.every((r) => r < 0.955) && far > 4 && far < 6 && facing > 0.999 && drum > 1.8 && benches.every((d) => d > 2) && NORTH.companions.w >= 2.2,
+    { within, far: +far.toFixed(2), drum: +drum.toFixed(2), benches: benches.map((d) => +d.toFixed(2)) });
+  const mail = sponsorMail('https://fair.example', 'Eve', { plaque: true, cents: 2000 }), panel = sponsorMail('https://fair.example', 'Eve', { place: 'gondola 3 of the big wheel', cents: 2900, monthly: true });
+  check('the e-mail of thanks for a plaque says whom it is for — a companion here with them, or missed: not a memorial only —; that of a sponsor says nothing of the kind',
+    /for your companion — here with you, or missed/.test(mail.text) && /here with you, or missed/.test(mail.html) && !/companion/.test(panel.text), { plaque: mail.text.split('\n')[2] });
 }
 
 done();

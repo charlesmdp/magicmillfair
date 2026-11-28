@@ -806,7 +806,11 @@ it — their companion's name, a few words, a picture if they like (cut square a
 browser; the same rules as a logo on the server) — and never a link. Until the administrator has approved
 it the plate reads "being engraved…" to everybody else, while its holder sees it as it will be, marked
 *awaiting approval*. Its holder can change it later (the change is approved again). The pictures of the
-plates are fetched only when the plates are painted, by whoever climbs up there.
+plates are fetched only when the plates are painted, by whoever climbs up there. **A plaque is for a
+companion who is here as much as for one who is missed**, and nothing reads as a memorial only: the offer at
+a bare plate, the form ("For your companion — here with you, or missed", and two examples of a few words:
+"Still steals socks", or "2009–2024, he loved the sea"), the card of the Trading Post and the e-mail of thanks
+say so, as the board by the plates does.
 
 **The wall of the companions.** When the plinth is full — or before —, the owner throws the switch
 `plaqueWall` (off as delivered): 324 more plates, `plaque:73` … `plaque:396` (`PLAQUE_WALL` in
@@ -904,7 +908,13 @@ mountain, under the rock, out at sea.
   hello: it answers.
   (It is seen from the open sea, from the island and from the end of the pier.)
   Round the drum of the plinth run **the plaques of the companions**: seventy-two brass plates in two rows,
-  one for each pet somebody wanted remembered up here — a name, a few words, a picture (see *The shop*).
+  one for each pet somebody loves — the one asleep on their sofa tonight as much as the one they miss —: a
+  name, a few words, a picture (see *The shop*). It is no graveyard, and **a painted board** says so to
+  whoever comes up, before they read a plate: on two posts under a little roof of planks, facing the top of
+  the stair, letters of fifteen centimetres — *The good companions. Asleep on your sofa tonight, or missed
+  every day: a plate here is for both. An ode to life. They cannot read. Tell them anyway.* — and, smaller,
+  the way to have a plate (`COMPANIONS` and `drawCompanions` in `zones/places/Plaques.js`; where it stands:
+  `NORTH.companions` in `layout/layout.js`).
   A plate that is nobody's yet is bare bronze; step up to one to take it. With a bouquet in hand, it can be
   laid under a plate that carries a name. (All the plates are one mesh painted from one picture, which is
   only made when somebody comes up to the ledge and is thrown away when they have gone.)

@@ -1138,9 +1138,9 @@ async function boot() {
     const place = places.get(id), view = shop.slots[id] || {}, was = view.draft || view, isVillage = !!place.village, isPlaque = !!place.plaque;
     const byHand = who.admin && !view.mine; // (the administrator fills a place in for a sponsor: shown at once)
     const got = await hud.form(isPlaque ? (byHand ? 'This plaque' : 'Their plaque') : isVillage ? 'Your village' : byHand ? 'This panel' : 'Your panel',
-      isPlaque ? (byHand ? 'What you save is engraved at once, for everyone to read.' : 'Their name, a few words — and their picture, if you have one you like. It is engraved once the fair has looked at it.') : byHand ? 'What you save is shown to everyone at once. The colour behind it is yours to choose.' : 'It is shown at once, to everyone. Keep it short — it is painted on a sign — and fit for a fair: what is not is taken down.', [
+      isPlaque ? (byHand ? 'What you save is engraved at once, for everyone to read.' : 'For your companion — here with you, or missed: their name, a few words — and their picture, if you have one you like. It is engraved once the fair has looked at it.') : byHand ? 'What you save is shown to everyone at once. The colour behind it is yours to choose.' : 'It is shown at once, to everyone. Keep it short — it is painted on a sign — and fit for a fair: what is not is taken down.', [
         { key: 'title', label: isPlaque ? 'Their name (22 letters at most)' : isVillage ? 'Its name (22 letters at most)' : 'Your name (28 letters at most)', value: was.title || '', max: isVillage || isPlaque ? 22 : 28 },
-        { key: 'subtitle', label: isPlaque ? 'A few words (40 letters at most)' : isVillage ? 'A line under it (34 letters at most)' : 'A line under it (40 letters at most)', value: was.subtitle || '', max: isVillage ? 34 : 40 },
+        { key: 'subtitle', label: isPlaque ? 'A few words (40 letters at most) — "Still steals socks", or "2009–2024, he loved the sea"' : isVillage ? 'A line under it (34 letters at most)' : 'A line under it (40 letters at most)', value: was.subtitle || '', max: isVillage ? 34 : 40 },
         ...(isPlaque ? [] : [{ key: 'url', label: 'Your website (https://…) — optional', value: was.url || '', max: 200, hint: 'https://', fill: fromSite({ name: isVillage ? 22 : 28, line: isVillage ? 34 : 40, logo: !isVillage }) }]),
         ...(isVillage ? [] : [{ key: 'logo', label: isPlaque ? 'Their picture (PNG, JPEG or WebP) — leave empty to keep the one you sent' : 'Your logo (PNG, JPEG or WebP) — leave empty to keep the one you sent', type: 'file' }]),
         ...(byHand && !isVillage && !isPlaque ? [{ key: 'bg', label: 'The colour of the panel behind it', type: 'color', value: view.bg || '#fbf7ec' }] : []),
@@ -1263,10 +1263,11 @@ async function boot() {
       return out;
     }
     if (place.plaque) {
-      // a plaque for a companion: paid once; its holder has it engraved (and may change it); the administrator may fill one in
+      // a plaque for a companion — one who is here as much as one who is missed: nothing it says reads as a memorial only —:
+      // paid once; its holder has it engraved (and may change it); the administrator may fill one in
       if (view?.mine) out.push({ label: view.draft ? 'Change what you sent for your plaque' : view.state === 'live' ? 'Change your plaque' : 'Have your plaque engraved', run: () => fillPlace(id) });
       else if (who.admin && shop.open) out.push({ label: `Fill the ${row} plaque in (administrator)`, run: () => fillPlace(id) });
-      else if (!view && shop.open) out.push({ label: `The ${row} plate, for your companion · ${price(cents)}`, run: () => offer(id, 'A plaque for a companion', `${price(cents)}, once, and this plate is theirs for as long as the fair stands: their name, a few words and their picture if you like, ${place.wall ? 'on the wall of the companions, round the best dog ever' : 'at the feet of the best dog ever'}. You write it right after paying; it is engraved as soon as the fair has looked at it.`, cents, false) });
+      else if (!view && shop.open) out.push({ label: `The ${row} plate, for your companion · ${price(cents)}`, run: () => offer(id, 'A plaque for a companion', `For your companion — here with you, or missed: the plates are an ode to life. ${price(cents)}, once, and this plate is theirs for as long as the fair stands: their name, a few words and their picture if you like, ${place.wall ? 'on the wall of the companions, round the best dog ever' : 'at the feet of the best dog ever'}. You write it right after paying; it is engraved as soon as the fair has looked at it.`, cents, false) });
       return out;
     }
     if (view?.mine || (who.admin && shop.open)) out.push({ label: view?.mine ? (view.draft ? 'Change what you sent' : 'Set up your panel') : 'Fill this place in (administrator)', run: () => fillPlace(id) });
@@ -1587,7 +1588,7 @@ async function boot() {
     if (plaques?.count) {
       // (with the wall of the companions when it is on: its plates go on from the plinth's)
       const more = plateWall?.on ? plateWall.count : 0, taken = Array.from({ length: plaques.count + more }, (_, k) => `plaque:${k + 1}`).filter((id) => shop.slots[id]).length;
-      extras.push({ title: 'A plaque for a companion', text: `${plaques.count} brass plates round the golden dog${more ? ` and ${more} more on the wall of the companions round it` : ''}, ${taken} of them taken${shop.open ? ` · ${price(shop.prices.plaque)}, once` : ''}. They are chosen on the spot: swim north along the cliffs to the Golden Cove, then climb.`, act: null });
+      extras.push({ title: 'A plaque for a companion', text: `For your companion — here with you, or missed. ${plaques.count} brass plates round the golden dog${more ? ` and ${more} more on the wall of the companions round it` : ''}, ${taken} of them taken${shop.open ? ` · ${price(shop.prices.plaque)}, once` : ''}. They are chosen on the spot: swim north along the cliffs to the Golden Cove, then climb.`, act: null });
     }
     sponsorsView.open({ cards, wheel: { cards: cars, of: gondolas.length }, beach: { cards: huts, of: hutList.length }, extras, note: shop.open ? '' : 'The shop is not open yet: sponsoring starts soon. Meanwhile, here is every game and who sponsors it.' });
     audio.play('pick');
