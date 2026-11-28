@@ -43,6 +43,7 @@ export async function attach(app) {
   const games = world.games;
   /** Is (x, z) in the water of the shark — or so near that it could come? */
   const sharky = (x, z) => !!games.seaEdges?.length && games.seaEdgeDistance(x, z) < SHARK.far;
+  if (app.free) app.free.groundAt = (x, z) => data.heightAt(x, z); // (the free camera of the owner goes under the water too)
   let found = false;
   try { found = localStorage.getItem(FOUND) === '1'; } catch { /* no storage */ }
 
@@ -164,6 +165,19 @@ export async function attach(app) {
     }
     return ok;
   };
+  // …and which way: the way asked, or — the rock too near behind — the same way from higher up. → how far; the way is left in `way3`
+  const way3 = { x: 0, y: 0, z: 0 };
+  const back = (f, dx, dy, dz, want) => {
+    let best = clear(f, dx, dy, dz, want);
+    way3.x = dx; way3.y = dy; way3.z = dz;
+    if (best >= Math.min(want, 1.3)) return best;
+    const h = Math.hypot(dx, dz) || 1e-6, e = Math.atan2(dy, h);
+    for (const lift of [0.5, 1, 1.5]) {
+      const a = Math.min(1.45, e + lift), x = (dx / h) * Math.cos(a), y = Math.sin(a), z = (dz / h) * Math.cos(a), room = clear(f, x, y, z, want);
+      if (room > best + 0.3) { best = room; way3.x = x; way3.y = y; way3.z = z; if (room >= 1.8) break; }
+    }
+    return Math.max(best, 0.5);
+  };
   const view = { mix: 0, dist: 5 }, f = new THREE.Vector3(), follow = rig.update.bind(rig);
   rig.update = (dt, target, walker) => {
     follow(dt, target, walker);
@@ -175,14 +189,14 @@ export async function attach(app) {
     if (k > 0) {
       // the view of a diver: round the body wherever the look goes, under the water as over it
       const cp = Math.cos(rig.pitch), dx = Math.sin(rig.yaw) * cp, dy = -Math.sin(rig.pitch), dz = Math.cos(rig.yaw) * cp;
-      const room = clear(f, dx, dy, dz, Math.min(rig.distance, 6.5));
+      const room = back(f, dx, dy, dz, Math.min(rig.distance, 6.5));
       view.dist += (room - view.dist) * (room < view.dist ? 1 : 1 - Math.exp(-dt * 4));
-      cam.position.lerp(_p.set(f.x + dx * view.dist, f.y + dy * view.dist, f.z + dz * view.dist), k);
+      cam.position.lerp(_p.set(f.x + way3.x * view.dist, f.y + way3.y * view.dist, f.z + way3.z * view.dist), k);
     }
     if (near) {
       // no eye looks through the rock: one that would be in it, or behind it, is brought back before its face
       const dx = cam.position.x - f.x, dy = cam.position.y - f.y, dz = cam.position.z - f.z, d = Math.hypot(dx, dy, dz) || 1;
-      if (d > 0.6) { const room = clear(f, dx / d, dy / d, dz / d, d); if (room < d - 0.01) cam.position.set(f.x + (dx / d) * room, f.y + (dy / d) * room, f.z + (dz / d) * room); }
+      if (d > 0.6) { const room = back(f, dx / d, dy / d, dz / d, d); if (room < d - 0.01) cam.position.set(f.x + way3.x * room, f.y + way3.y * room, f.z + way3.z * room); }
     }
     // the picture is never cut by the swell: an eye in it goes just over, or just under
     const level = waterAt(cam.position.x, cam.position.z);

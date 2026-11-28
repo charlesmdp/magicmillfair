@@ -14,7 +14,7 @@ export const DEEP = {
   at: { x: 202, z: 58 }, // the middle of the rock: in the south-east of the bay, on a bed seven and a half metres down
   yaw: 0.3, // the way its mouth looks, radians from east (+x) towards south (+z): out to sea, away from the beaches and the pier
   r: 15, // nothing of it is further from its middle than that (m) …
-  low: -8.8, high: 7.6, // … nor lower, nor higher
+  low: -8.8, high: 9.2, // … nor lower, nor higher
   mouth: { u: 11.4, y: -6.2, w: 0.2 }, // the middle of the arch
   pool: { u: -0.9, w: -2.0 }, // where the chimney comes up into the pool
   rest: { u: -1.6, w: 4.3 }, // the middle of the strand
@@ -49,17 +49,17 @@ function noise(x, y, z) {
 }
 
 // the stack: a dome, the talus at its foot, a shoulder, a tooth
-const DOME = [-0.4, -3.2, 0, 10.0, 10.0, 9.6], TALUS = [0, -8.6, 0, 13.0, 3.4, 12.6], SHOULDER = [-5.2, -2.5, 5.0, 5.6, 7.4, 5.2], TOOTH = [6.2, -2.0, -5.6, 3.9, 8.4, 3.9];
+const DOME = [-0.4, -3.2, 0, 10.2, 11.5, 9.8], TALUS = [0, -8.6, 0, 13.0, 3.4, 12.6], SHOULDER = [-5.6, -2.5, 5.4, 5.2, 6.4, 4.8], TOOTH = [7.0, -2.0, -6.2, 3.4, 9.6, 3.4];
 /** The stack without its hollow, smooth: negative inside. */
-export const hull = (u, y, w) => smin(smin(smin(ell(u, y, w, DOME), ell(u, y, w, TALUS), 2.2), ell(u, y, w, SHOULDER), 1.6), ell(u, y, w, TOOTH), 1.4);
+export const hull = (u, y, w) => smin(smin(smin(ell(u, y, w, DOME), ell(u, y, w, TALUS), 2.2), ell(u, y, w, SHOULDER), 1.0), ell(u, y, w, TOOTH), 0.8);
 // the chamber, and its floor: the bottom of the pool, a bank, then the strand (dry from w = 2.2 or so)
-const CHAMBER = [-1.0, 0.8, 0.3, 6.2, 3.9, 6.0];
+const CHAMBER = [-1.0, 1.2, 0.3, 6.2, 4.6, 6.0];
 /** The floor of the chamber at (u, w): the bed of its pool, the bank, the sand of the strand (m over the sea). */
 export const strand = (u, w) => -2.7 + 2.55 * sm(-1.5, 1.6, w) + 0.7 * sm(1.2, 4.4, w);
 /** Is (u, w) under the vault of the chamber (a little short of its walls)? */
 export const inChamber = (u, w, shrink = 0) => ((u - CHAMBER[0]) / (CHAMBER[3] - shrink)) ** 2 + ((w - CHAMBER[2]) / (CHAMBER[5] - shrink)) ** 2 < 1;
 // the way in: from the arch, under the rock, and up the chimney into the pool — [u, y, w, radius]
-export const WAY = [[13.5, -6.3, 0.6, 2.0], [8.5, -6.2, -0.4, 1.75], [4.0, -6.1, -1.6, 1.6], [0.2, -6.0, -2.3, 1.65], [-0.9, -3.6, -2.2, 1.6], [-0.9, -1.6, -2.0, 1.7]];
+export const WAY = [[13.5, -6.3, 0.6, 2.3], [8.5, -6.2, -0.4, 2.05], [4.0, -6.1, -1.6, 1.9], [0.2, -6.0, -2.3, 1.95], [-0.9, -3.6, -2.2, 1.85], [-0.9, -1.6, -2.0, 1.9]];
 function way(u, y, w) {
   let best = Infinity;
   for (let k = 0; k + 1 < WAY.length; k++) {
@@ -77,9 +77,9 @@ export const hollow = (u, y, w) => smin(Math.max(ell(u, y, w, CHAMBER), (strand(
 /** The rock: negative where it is solid, positive in the water, the air, and its own hollow — about metres to its face. */
 export function solid(u, y, w) {
   let o = hull(u, y, w);
-  if (o > 2.6) return o - 0.9; // (far outside: its roughness is less than that)
+  if (o > 3) return o - 1.2; // (far outside: its roughness is less than that)
   const n1 = noise(u * 0.31 + 7.3, y * 0.36, w * 0.31 - 2.1) - 0.5, n2 = noise(u * 0.9, y * 0.9 + 3.7, w * 0.9) - 0.5;
-  o += n1 * 1.1 + n2 * 0.4;
+  o += n1 * 1.5 + (0.5 - Math.abs(n2) * 2) * 0.7; // (swells, and cracks where the fine grain turns)
   return Math.max(o, -(hollow(u, y, w) + n1 * 0.3 + n2 * 0.3));
 }
 /** Which way out of the rock at a point (the slope of solid()): written to `out` ({ u, y, w }), of length one. */
@@ -184,7 +184,7 @@ function build() {
   const stand = (u, w) => (inChamber(u, w, 0.3) ? Math.max(strand(u, w), -1.05) : -1.05);
   for (let k = 0; k < m; k++) for (let i = 0; i < m; i++) {
     const u = -R + i, w = -R + k, h = stand(u, w);
-    shut[k * m + i] = solid(u, h + 0.45, w) < 0.2 || solid(u, h + 1.2, w) < 0.2 || solid(u, h + 1.9, w) < 0.2 ? 1 : 0;
+    shut[k * m + i] = solid(u, h + 0.45, w) < 0.2 || solid(u, h + 1.2, w) < 0.2 || solid(u, h + 1.9, w) < 0.2 || solid(u, h + 2.5, w) < 0.2 ? 1 : 0; // (and room over the head for an eye)
   }
   for (let k = 0; k < m; k++) for (let i = 0; i < m; i++) {
     if (!shut[k * m + i]) continue;
