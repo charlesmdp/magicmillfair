@@ -35,7 +35,7 @@ const EXPOSE = 0.4;
  * The glass at the end of each arm: the rock is behind it, so the builders set a lamp behind each window — the
  * same lamp for the three chapels (and for the rose over the doors).
  */
-const LAMPS = ARMS.map((a) => { const [x, z] = armPoint(a, 0, a === 0 ? P.chord - 0.6 : P.chord + P.W - 1.2); return { x, y: a === 0 ? 10 : 6.2, z, k: a === 0 ? 0.45 : 0.85, reach: 7 }; });
+const LAMPS = ARMS.map((a) => { const [x, z] = armPoint(a, 0, a === 0 ? P.chord - 0.6 : P.chord + P.W - 1.2); return { x, y: a === 0 ? 10 : 6.2, z, k: a === 0 ? 0.35 : 0.62, reach: 6.5 }; });
 /** The two lamps that hang from the vault of each arm. */
 const HANG = ARMS.flatMap((a) => [13.4, 17.6].map((v) => { const [x, z] = armPoint(a, 0, v); return { x, y: 6.3, z }; }));
 /** The light that falls on a point of the inside whose face looks the way `n` says: [r, g, b]. */
@@ -50,7 +50,7 @@ export function lightAt(p, n) {
   // (the coloured glass at the end of each arm, lit from behind: gold)
   for (const L of LAMPS) { w = from(L.x, L.y, L.z, L.k, L.reach, 0.3); r += w; g += 0.76 * w; b += 0.42 * w; }
   // (the lamps hanging in the arms: warm, near)
-  for (const L of HANG) { w = from(L.x, L.y, L.z, 0.42, 3.4, 0.4); r += w; g += 0.7 * w; b += 0.36 * w; }
+  for (const L of HANG) { w = from(L.x, L.y, L.z, 0.5, 3.4, 0.4); r += w; g += 0.7 * w; b += 0.36 * w; }
   // (the day through the doors, down the arm of the doors)
   if (p.z > 5 && Math.abs(p.x) < P.W + 0.5) { w = from(0, 3.2, P.chord + 2, 0.55, 5.5, 0.3); r += 0.86 * w; g += 0.9 * w; b += w; }
   return [r, g, b];

@@ -65,7 +65,7 @@ export function carve({ rock, stone, face, plain, ground, TRIM, OUT }) {
   const sheet = (ni, nj, pt, want) => {
     const G = Array.from({ length: nj + 1 }, (_, j) => Array.from({ length: ni + 1 }, (_, i) => {
       const [p, back = 0.5] = pt(i, j), t = (0.8 + 0.3 * noise1(p.x * 0.23 + p.z * 0.29, p.y * 0.35)) * (1.08 - 0.32 * back) * (0.82 + 0.18 * Math.min(1, Math.max(0, (p.y - COURT) / 2.5)));
-      return { p, c: [0.9 * t, 0.86 * t, 0.8 * t, 1] };
+      return { p, c: [1.14 * t, 1.1 * t, 1.03 * t, 1] }; // (as light as the rock of the cliff round it)
     }));
     const n = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3();
     for (let j = 0; j < nj; j++) for (let i = 0; i < ni; i++) {
@@ -80,13 +80,13 @@ export function carve({ rock, stone, face, plain, ground, TRIM, OUT }) {
   /** How far a face of the cut is set back at (a along it, y up): rough blocks in beds, as the rock of the cliff. */
   const bed = (a, y) => 0.55 * noise1(a * 0.32, y * 0.75) + 0.3 * noise1(a * 0.95 + 5.3, y * 1.6) + 0.15 * noise1(a * 2.4 - 7.1, y * 2.3);
   /** The edge of the cut, over the ground: it turns over it and goes into it (`k` 1 then 2: how far from the edge). */
-  const lip = (k) => (k === 1 ? [1.1, 0.4] : [2.5, -1.1]);
+  const lip = (k) => (k === 1 ? [0.55, 0.25] : [1.4, -1.0]);
   const lowest = COURT - 1.4, rough = bed;
   // ---- the two sides of the court: from the back of the towers out to the meadow, up to the ground and over it
   for (const s of [-1, 1]) {
     const zs = span(C.back - 0.4, C.mouth + 0.9, 32), NJ = 18;
     sheet(zs.length - 1, NJ + 2, (i, j) => {
-      const z = zs[i], top = Math.max(COURT + 0.3, ground(s * C.half, z) + 0.8);
+      const z = zs[i], top = Math.max(COURT + 0.3, ground(s * C.half, z) + 0.6);
       if (j > NJ) { const [o, dy] = lip(j - NJ); return [V(s * (C.half + o), ground(s * (C.half + o), z) + dy, z + (hash(i, j) - 0.5) * 0.5), 0.3]; }
       const y = lowest + ((top - lowest) * j) / NJ, r = j === 0 ? 0.3 : rough(z * s, y);
       return [V(s * (C.half - 0.1 - 1.05 * r), y, z + (j > 0 && i > 0 && i < zs.length - 1 ? (hash(i, j) - 0.5) * 0.3 : 0)), r];
@@ -160,12 +160,12 @@ export function clearGround(world) {
     for (let z = Math.floor(z0); z <= z1; z++) for (let x = Math.floor(x0); x <= x1; x++) { const [lx, lz] = toLocal(x + 0.5, z + 0.5); if (inCourt(lx, lz, 1)) d.aux[d.index(x + 0.5, z + 0.5) * 4] = 0; }
     d.auxTex.needsUpdate = true;
   }
-  // (the boulders that lay at the foot of the cliff, where the court is cut)
+  // (the boulders that lay at the foot of the cliff, where the court is cut and before its mouth)
   const m = new THREE.Matrix4(), q = new THREE.Vector3(), none = new THREE.Matrix4().makeScale(0, 0, 0);
   world.rocks?.group.traverse((o) => {
     if (!o.isInstancedMesh) return;
     let hit = false;
-    for (let i = 0; i < o.count; i++) { o.getMatrixAt(i, m); q.setFromMatrixPosition(m); if (gone(q.x, q.z)) { o.setMatrixAt(i, none); hit = true; } }
+    for (let i = 0; i < o.count; i++) { o.getMatrixAt(i, m); q.setFromMatrixPosition(m); const [lx, lz] = toLocal(q.x, q.z); if (inCourt(lx, lz, 1) || (Math.abs(lx) < C.half && lz > C.mouth && lz < C.mouth + 6)) { o.setMatrixAt(i, none); hit = true; } }
     if (hit) { o.instanceMatrix.needsUpdate = true; o.computeBoundingSphere?.(); }
   });
   const col = world.collision, h = (q) => world.data.heightAt(q[0], q[1]);
