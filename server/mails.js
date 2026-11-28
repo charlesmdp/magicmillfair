@@ -233,7 +233,8 @@ function shown(kind, set, site) {
       const original = originalOf(f);
       return { id, label: f.label, original, ...(plainQuotes(original) !== f.text && { twin: f.text }), ...(f.line && { line: true }), ...(f.must && { must: true }), ...(f.only && { only: f.only }), ...(f.note && { note: f.note }), ...(f.own && { own: f.own }), ...(f.needs && { needs: f.needs }), ...(typeof words[id] === 'string' && { typed: words[id] }) };
     }),
-    forms: about.forms.map((form) => { const used = new Set(), made = buildMail(kind, form.args(site), words, used); return { id: form.id, name: form.name, subject: made.subject, fields: Object.keys(table.fields).filter((id) => used.has(id)) }; }),
+    // (the sentences of a case, in the order of the table — its subject first)
+    forms: about.forms.map((form) => { const used = new Set(), made = buildMail(kind, form.args(site), words, used), ids = Object.keys(table.fields).filter((id) => used.has(id)); return { id: form.id, name: form.name, subject: made.subject, fields: [...ids.filter((id) => /subject$/i.test(id)), ...ids.filter((id) => !/subject$/i.test(id))] }; }),
   };
 }
 

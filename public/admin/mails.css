@@ -51,6 +51,13 @@
 @media (max-width: 900px) {
   .mail-cols { grid-template-columns: minmax(0, 1fr); }
   .mail-preview { position: static; max-height: none; order: -1; }
-  .mail-head { flex-wrap: wrap; }
+  /* (why a message is always sent: under what it is, not beside it) */
+  .mail-head:has(.mail-lock) { flex-wrap: wrap; }
   .mail-lock { flex: 1 1 100%; text-align: left; }
+}
+@media (max-width: 640px) {
+  /* (a phone: the message takes all the width there is) */
+  .mail { padding: 10px 9px 6px; }
+  .mail-preview { padding: 6px 0 0; border: 0; background: transparent; }
+  .mail-field { padding: 8px 8px 7px; }
 }
