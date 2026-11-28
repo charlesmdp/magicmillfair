@@ -18,6 +18,7 @@
 //                                             what left lately (mails.js, which is also the door every e-mail leaves by)
 //   GET | POST | DELETE /api/bans             the administrator's list of who is kept out (see below)
 //   GET | POST /api/account                   an account to keep what was bought and earned (accounts.js)
+//   GET | POST /api/sales                     the owner alone: everything that was bought, and a payment given back (sales.js)
 //
 //   the shop and the sponsors: /api/shop, /api/checkout, /api/stripe/webhook, /api/sponsor(s), /api/logo (see shop.js)
 //
@@ -54,6 +55,7 @@ import { banned, addBan, bansRoute, anyQuiet, keptOut } from './bans.js';
 import { statsRoute } from './stats.js';
 import { BOARDS as GAME_NAMES, PRICES } from './catalog.js';
 import { uroomsRoute, memberOf, userRoom, userRoomsOn, isUserRoom } from './urooms.js';
+import { salesRoute } from './sales.js';
 
 const out = (status, body, headers = {}) => ({ status, body, headers });
 
@@ -154,6 +156,9 @@ export async function route(req, ctx) {
   // where the owner is told of new sponsors (shop.js)
   const told = await notifyRoute(req, ctx);
   if (told) return told;
+  // …and the list of the sales, with their refunds: the owner's alone (sales.js)
+  const sales = await salesRoute(req, ctx);
+  if (sales) return sales;
 
   if (path === '/api/visit') {
     if (method !== 'POST') return out(405, { error: 'Method not allowed.' }, { Allow: 'POST' });

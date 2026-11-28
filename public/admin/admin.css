@@ -84,6 +84,22 @@ dialog .stack { display: grid; gap: 10px; }
 #sponsor-edit label { display: grid; gap: 4px; font-size: 12.5px; color: var(--dim); }
 #sponsor-edit label[hidden] { display: none; }
 dialog h3 { margin: 0; }
+/* the VAT: its switch, then the tax code — a few choices, each with what it means under its name */
+.taxform { display: grid; gap: 10px; margin: 8px 0; }
+.picks { margin: 0; padding: 10px 12px 12px; border: 1px solid var(--line); border-radius: 12px; display: grid; gap: 6px; min-width: 0; }
+.picks legend { padding: 0 6px; color: var(--gold); font: 700 11.5px/1.2 system-ui, sans-serif; letter-spacing: 0.1em; text-transform: uppercase; }
+.pick { display: flex; align-items: flex-start; gap: 9px; padding: 7px 9px; border-radius: 10px; border: 1px solid transparent; cursor: pointer; }
+.pick:hover { background: rgba(255, 255, 255, 0.04); }
+.pick:has(input[type="radio"]:checked) { border-color: var(--gold); background: rgba(242, 193, 78, 0.08); }
+.pick input[type="radio"] { flex: none; margin: 4px 0 0; accent-color: var(--gold); }
+.pick span { min-width: 0; }
+.pick b { font-weight: 700; }
+.pick i { color: var(--dim); font-size: 12.5px; }
+.pick small { display: block; margin-top: 2px; color: var(--dim); font-size: 12.5px; }
+.pick small i { font-size: inherit; }
+.pick input[type="text"] { flex: none; width: 150px; padding: 4px 8px; }
+.taxhelp { margin: 0 0 12px; padding-left: 18px; display: grid; gap: 5px; }
+.taxhelp b { color: var(--ink); }
 .chatlog > .empty { margin: 0; }
 /* the boards of scores, all at once: a card each */
 .boards { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 10px; align-items: start; }

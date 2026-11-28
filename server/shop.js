@@ -63,6 +63,10 @@ import { userRoomsOn, roomOfAccount, openRoom, sleepRoom } from './urooms.js';
 import { cleanEmail, mailLater, passMail, sponsorMail, ownerSaleMail, sponsorNoticeMail, ownerRefundMail } from './mail.js';
 import { maskWords } from './decency.js';
 import { LEGAL } from '../src/app/legal.js';
+// (the list of the sales, and the refunds the owner makes from it: sales.js — told here of each sale and of each
+// payment the shop gives back by itself; it says what it does with the very words of the shop, below)
+import { noteSold, noteLost, noteBack, heard } from './sales.js';
+export { leaveNote, tellSponsor, tellOwnerRefund, release, placeOf };
 
 const out = (status, body, headers = {}) => ({ status, body, headers });
 /**
@@ -271,6 +275,7 @@ async function refundLater(ctx, cfg, pay, site = '') {
   if (!entry) return null;
   try { const done = await refundPayment(cfg, pay, entry.why, ctx.fetch || fetch); entry.ok = true; entry.at = ctx.now(); delete entry.kept; delete entry.error; if (done.uncredited) entry.uncredited = done.uncredited; } catch (err) { entry.error = String(err.message || err).slice(0, 160); console.error('[shop] refund', entry.error); }
   await ctx.store.put('refunds', list);
+  await noteBack(ctx, { pay, cents: entry.amount || 0, by: 'owner', why: entry.why, ok: !!entry.ok, error: entry.error || '' }); // (the list of the sales)
   const place = placeIn(entry.why);
   if (entry.ok) {
     await noteRefund(ctx.store, { cents: entry.amount }, ctx.now()).catch(() => {});
@@ -290,6 +295,7 @@ async function refund(ctx, cfg, pay, amount, why, { place = '', reason = '', by 
   // (uncredited: given back, but its invoice still wants its credit note — Stripe refused to make it)
   try { const done = await refundPayment(cfg, pay, why, ctx.fetch || fetch); if (done.uncredited) entry.uncredited = done.uncredited; } catch (err) { entry.ok = false; entry.error = String(err.message || err).slice(0, 160); console.error('[shop] refund', entry.error); }
   await ctx.store.put('refunds', [...((await ctx.store.get('refunds')) || []), entry].slice(-100));
+  await noteBack(ctx, { pay, cents: amount, by: reason === 'down' ? 'fair' : 'auction', why, ok: entry.ok, error: entry.error || '' }); // (the list of the sales)
   if (entry.ok) await noteRefund(ctx.store, { cents: amount }, ctx.now()).catch(() => {}); // (the figures: what the shop earned)
   await tellOwnerRefund(ctx, { cents: amount, place: place || placeIn(why), reason, ok: entry.ok, error: entry.error || '', uncredited: entry.uncredited || '' });
   return entry.ok;
@@ -330,8 +336,10 @@ async function completed(ctx, cfg, o, site) {
   const named = describe(o.metadata?.item), sold = named && o.metadata?.life ? forLife(named) : named, fresh = sold ? await firstTime(ctx, o.id) : false; // (fresh: it is said for the first time)
   if (!sold) return false;
   if (fresh) await noteSale(ctx.store, { cents: Number.isInteger(o.amount_total) ? o.amount_total : 0, pass: sold.kind === 'pass' }, now).catch(() => {});
+  const sale = await noteSold(ctx, cfg, o); // (the list of the sales: written before anything is given — a bid come too late is given back at once)
   const got = sold.auction ? await takeBid(ctx, cfg, o.metadata.item, o.metadata?.device, o.amount_total, o.payment_intent, site)
     : await grant(ctx, o.metadata?.item, o.metadata?.device, o.subscription, o.customer, o.metadata?.account, sold.life ? (Number.isInteger(o.amount_total) && o.amount_total > 0 ? o.amount_total : sold.amount) : 0);
+  if (fresh && !got && !sold.auction) await noteLost(ctx, sale); // (paid, and not given: the owner gives it back from that list)
   if (got && fresh && sold.kind === 'pass') await thankForPass(ctx, o, site);
   if (got && fresh && sold.kind === 'slot') await thankSponsor(ctx, o, site, sold).catch(() => {});
   // (the owner is told too — and of a place paid for that could not be given, somebody having it already, which is for
@@ -668,6 +676,7 @@ export async function shopRoute(req, ctx) {
     const event = cfg.webhook ? await verifyWebhook(cfg.webhook, req.raw, req.signature, now) : null;
     if (!event) return out(400, { error: 'Not from Stripe.' });
     const o = event.data?.object || {};
+    await heard(ctx, cfg, event); // (the list of the sales: a month more, an end, a refund made in Stripe itself, a dispute)
     if (event.type === 'checkout.session.completed' && (o.payment_status === 'paid' || o.payment_status === 'no_payment_required')) {
       await completed(ctx, cfg, o, req.site);
     } else if (event.type === 'invoice.paid' && o.billing_reason === 'subscription_cycle') {
@@ -839,6 +848,7 @@ export async function shopRoute(req, ctx) {
         if (!cfg.key) unstopped = 'Stripe is not set up on this server';
         else try { const done = await endSubscription(cfg, gone.sub, back, ctx.fetch || fetch); stopped = true; refunded = refunded || done.refunded; uncredited = done.uncredited || ''; } catch (err) { unstopped = String(err.message || err).slice(0, 160); console.error('[shop] subscription', unstopped); }
       }
+      if (gone.sub && stopped && refunded) await noteBack(ctx, { sub: gone.sub, cents: describe(id)?.amount || 0, by: 'fair', why: `removed from ${id}` }); // (the list of the sales: the month given back)
       const what = describe(id)?.plaque ? 'plaque' : 'panel';
       await leaveNote(ctx, gone.by, gone.pay && refunded ? `The fair took your ${what} down: your payment has been refunded in full.`
         : stopped ? `The fair took your ${what} down: ${refunded ? 'the month you paid has been refunded, and ' : ''}nothing more will be charged for it.` : `The fair took your ${what} down.`);
