@@ -304,13 +304,15 @@ async function look(ctx, cfg, e) {
   if (is(e.sub, 'sub')) {
     const all = await monthsOf(ctx, cfg, e.sub), v = all.latest;
     if (v) Object.assign(seen, { months: all.months, total: all.total, invoice: idOf(v.id), paid: v.amount_paid, at: ms(v.status_transitions?.paid_at) || ms(v.created) || seen.at, pay: idOf(v.payment_intent), back: cents(v.post_payment_credit_notes_amount), email: typeof v.customer_email === 'string' ? v.customer_email : '' });
-    const sub = await ask(ctx, cfg, `/v1/subscriptions/${enc(e.sub)}`);
-    seen.active = !['canceled', 'incomplete_expired'].includes(sub.status);
-    if (!seen.active) seen.ended = ms(sub.ended_at) || ms(sub.canceled_at) || ctx.now();
+    // (…and whether it still runs: one Stripe no longer knows has ended)
+    let sub = null;
+    try { sub = await ask(ctx, cfg, `/v1/subscriptions/${enc(e.sub)}`); } catch (err) { if (err.status !== 404) throw err; }
+    seen.active = !!sub && !['canceled', 'incomplete_expired'].includes(sub.status);
+    if (!seen.active) seen.ended = ms(sub?.ended_at) || ms(sub?.canceled_at) || e.ended || ctx.now();
   }
   if (is(seen.pay, 'pi')) {
     const ch = chargeOf(await ask(ctx, cfg, `/v1/payment_intents/${enc(seen.pay)}?expand[]=latest_charge`));
-    if (ch) Object.assign(seen, { paid: cents(ch.amount_captured ?? ch.amount) || seen.paid, back: cents(ch.amount_refunded), disputed: !!ch.disputed && !ch.refunded, email: ch.billing_details?.email || ch.receipt_email || seen.email });
+    if (ch) Object.assign(seen, { paid: cents(ch.amount_captured ?? ch.amount) || seen.paid, back: cents(ch.amount_refunded), disputed: !!ch.disputed && !ch.refunded && !['won', 'warning_closed'].includes(e.dispute?.status), email: ch.billing_details?.email || ch.receipt_email || seen.email });
   }
   return seen;
 }
@@ -332,9 +334,12 @@ async function agree(ctx, e, seen) {
 
 // ------------------------------------------------------------------------------- what a full refund takes back
 
-/** The other payments of the same thing by the same buyer that still hold it (paid twice: one given back leaves it theirs). */
-async function paidAgain(ctx, e) {
-  const others = (await everySale(ctx)).filter((s) => s.id !== e.id && s.item === e.item && !s.taken && !s.lost && (s.paid || 0) > (s.backNow || 0));
+/**
+ * The other payments of the same thing by the same buyer that still hold it (paid twice: one given back leaves it
+ * theirs). `later`: only those made after this one (a place let go, then taken again: the later payment holds it).
+ */
+async function paidAgain(ctx, e, later = false) {
+  const others = (await everySale(ctx)).filter((s) => s.id !== e.id && s.item === e.item && !s.taken && !s.lost && !s.sub && (s.paid || 0) > (s.backNow || 0) && (!later || s.at > e.at));
   for (const s of others) if (s.device === e.device || (await sameOwner(ctx.store, s.device, e.device)) || (!!s.account && String(s.account).toLowerCase() === String(e.account || '').toLowerCase())) return s;
   return null;
 }
@@ -397,7 +402,8 @@ async function placeHeld(ctx, e) {
   if (!s || s.by === 'admin') return null;
   if (e.sub) return s.sub === e.sub ? s : null;
   if (what?.auction) return e.pay && s.pay === e.pay ? s : null;
-  return !s.sub && (s.by === e.device || (await sameOwner(ctx.store, s.by, e.device))) ? s : null;
+  // (bought once — for good, a plaque —: theirs while no later payment of theirs holds it instead)
+  return !s.sub && (s.by === e.device || (await sameOwner(ctx.store, s.by, e.device))) && !(await paidAgain(ctx, e, true)) ? s : null;
 }
 
 /**
@@ -493,7 +499,7 @@ async function refundSale(req, ctx, cfg) {
     const now = ctx.now(), runs = !!e.sub && seen.active;
     const line = { at: now, cents: amount, by: 'owner', ...(reason && { why: reason }), token, ...(done.id && { re: done.id }), ...(keep && { kept: true }) };
     // (read again: Stripe's own word of this refund — its webhook — may have come meanwhile)
-    let next = given((await read(ctx, id)) || e, seen.back + amount, line);
+    let next = given((await read(ctx, id)) || e, Math.max(seen.back, e.backNow || 0) + amount, line);
     if (!next.log.some((l) => l.token === token)) next = { ...next, log: logged(next, line) }; // (counted already, and no line of Stripe's to put the name on)
     await write(ctx, next);
     let took = { took: false, stopped: false, unstopped: '' };

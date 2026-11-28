@@ -87,7 +87,7 @@ export function standIn({ key = 'sk_test_standin' } = {}) {
   // ---- money given back
   function giveBack(p, amount, how) {
     if (p.old) return no(400, 'This payment is too old to be refunded.', 'charge_expired_for_refund');
-    if (p.disputed) return no(400, `Charge ch_${p.id.slice(3)} has been charged back; cannot issue a refund.`, 'charge_disputed');
+    if (p.disputed && p.disputed !== 'won') return no(400, `Charge ch_${p.id.slice(3)} has been charged back; cannot issue a refund.`, 'charge_disputed'); // ('won': its charge still says it was disputed)
     const left = p.amount - p.refunded, sum = amount ?? left;
     if (left <= 0) return no(400, `Charge ch_${p.id.slice(3)} has already been refunded.`, 'charge_already_refunded');
     if (!Number.isInteger(sum) || sum < 1) return no(400, 'Invalid positive integer', 'parameter_invalid_integer');

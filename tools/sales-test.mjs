@@ -285,6 +285,19 @@ async function testFull() {
   await f.call('DELETE', '/api/sponsors', { query: 'slot=gondola:9' }); // (taken down by the fair, the money kept)
   const yours = await f.buy({ item: 'gondola:9', device: cy, amount: 2900, monthly: true });
   const gone = await f.look(mine.id), paidBack = await f.refund(mine.id);
+  // …and a place bought once, taken down, then bought again by the same buyer: the later payment holds it
+  const first = await f.buy({ item: 'plaque:30', device: gus, amount: 2000 });
+  await f.call('DELETE', '/api/sponsors', { query: 'slot=plaque:30' });
+  const second = await f.buy({ item: 'plaque:30', device: gus, amount: 2000 });
+  const older = await f.look(first.id), olderBack = await f.refund(first.id), stillTheirs = !!f.mem.get('slots')['plaque:30'], newer = await f.refund(second.id);
+  check('refund: a plaque taken down and bought again by the same buyer stays theirs when the first payment is given back — the second one frees it',
+    older.look.held === false && olderBack.status === 200 && olderBack.body.took === false && stillTheirs && newer.body.took === true && !f.mem.get('slots')['plaque:30'], [older.look, olderBack.body, newer.body]);
+  // …and what is paid by the month whose subscription Stripe no longer knows: it has ended, and its last month can still go back
+  const gone2 = await f.buy({ item: 'hut:9', device: gus, amount: 1450, monthly: true });
+  const lastMonth = s.invoices.get(gone2.invoice);
+  s.subs.delete(gone2.subscription);
+  const ghost = await f.look(gone2.id), ghostBack = await f.refund(gone2.id);
+  check('refund: a subscription Stripe no longer knows has ended — its latest month is still given back, and nothing is asked to stop', ghost.look.asked === true && ghost.look.active === false && ghost.look.left === 1450 && ghostBack.status === 200 && ghostBack.body.stopped === false && !ghostBack.body.unstopped && s.payments.get(lastMonth.payment_intent).refunded === 1450 && (await f.line(gone2.id)).ended > 0, [ghost.look, ghostBack.body]);
   check('refund: a place taken down since, and sold again, stays with its new holder when the old payment is given back', gone.look.held === false && /no longer theirs/.test(gone.look.take) && paidBack.status === 200 && paidBack.body.took === false && f.mem.get('slots')['gondola:9'].sub === yours.subscription, [gone.look, paidBack.body]);
 }
 
@@ -439,11 +452,13 @@ async function testHeard() {
   await f.hook(s.event('charge.dispute.created', d2('needs_response')));
   await f.hook(s.event('charge.dispute.closed', d2('won')));
   const won = await f.line(c.id);
-  check('heard: a dispute won leaves the payment paid, and it can be given back again', won.state === 'paid' && won.back === 0 && won.can === true && won.dispute.status === 'won', won);
+  s.payments.get(c.payment_intent).disputed = 'won'; // (its charge goes on saying it was disputed)
+  const after = await f.look(c.id), back = await f.refund(c.id, { amount: 400 });
+  check('heard: a dispute won leaves the payment paid, and it can be given back again', won.state === 'paid' && won.back === 0 && won.can === true && won.dispute.status === 'won' && after.look.disputed === false && back.status === 200 && (await f.line(c.id)).back === 400, [won, after.look, back.body]);
   const stray = await f.hook(s.event('charge.refunded', { id: 'ch_of_nothing', payment_intent: 'pi_of_nothing_here', amount_refunded: 500 }));
   check('heard: what Stripe says of a payment the list does not have is let go', stray.status === 200 && (await f.sales()).totals.count === 3);
   const forged = await f.call('POST', '/api/stripe/webhook', { body: s.event('charge.refunded', { ...s.charge(c.payment_intent), amount_refunded: 1900 }), as: 'visitor' });
-  check('heard: …and what does not carry Stripe\'s signature changes nothing', forged.status === 400 && (await f.line(c.id)).back === 0, forged.body);
+  check('heard: …and what does not carry Stripe\'s signature changes nothing', forged.status === 400 && (await f.line(c.id)).back === 400, forged.body);
 }
 
 // ---------------------------------------------------------- test payments and real ones; Stripe's newer invoices
