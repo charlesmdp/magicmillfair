@@ -110,6 +110,16 @@ async function testLedger() {
   const again = await f.refund(bid.id);
   check('sales: …and it cannot be given back a second time', again.status === 409 && /Nothing is left/.test(again.body.error) && f.stripe.refunds.length === 1, again.body);
 
+  // taken down by the fair with the money back — the month of a place paid by the month; a bid kept, then given back after all
+  const hut = await f.buy({ item: 'hut:7', device: bob, amount: 1450, monthly: true, email: 'bob@example.org' }), kept = await f.buy({ item: 'board:cups', device: ada, amount: 900, bid: 900, email: 'ada@example.org' });
+  const down = await f.call('DELETE', '/api/sponsors', { query: 'slot=hut:7&refund=1' });
+  await f.hook(f.stripe.event('customer.subscription.deleted', { id: hut.subscription }));
+  const hutLine = await f.line(hut.id);
+  check('sales: a place paid by the month that the fair takes down with the money back: its line says the month went back, by whom, and that the subscription ended', down.status === 200 && down.body.refunded === true && hutLine.state === 'refunded' && hutLine.back === 1450 && hutLine.log.at(-1).by === 'fair' && hutLine.ended > 0 && hutLine.can === false, [down.body, hutLine]);
+  await f.call('DELETE', '/api/sponsors', { query: 'slot=board:cups' });
+  const waits = await f.line(kept.id), later = await f.call('POST', '/api/sponsors', { body: { refund: kept.payment_intent } }), settledLater = await f.line(kept.id);
+  check('sales: a bid taken down with the money kept stays paid on its line — and says refunded once the owner gives it back from the list of refunds', waits.state === 'paid' && waits.back === 0 && later.status === 200 && later.body.refunded === true && settledLater.state === 'refunded' && settledLater.back === 900 && settledLater.log.at(-1).by === 'owner', [waits, later.body, settledLater]);
+
   // paid, and not given: somebody had the place already
   const late = await f.buy({ item: 'gondola:4', device: bob, amount: 2900, monthly: true, email: 'bob@example.org' });
   const lost = await f.line(late.id), seen = await f.look(late.id);

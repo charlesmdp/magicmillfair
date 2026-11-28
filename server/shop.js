@@ -846,8 +846,9 @@ export async function shopRoute(req, ctx) {
       if (gone.sub) {
         // (unstopped: why Stripe would not stop what is paid by the month — the owner must, in Stripe itself)
         if (!cfg.key) unstopped = 'Stripe is not set up on this server';
-        else try { const done = await endSubscription(cfg, gone.sub, back, ctx.fetch || fetch); stopped = true; refunded = refunded || done.refunded; uncredited = done.uncredited || ''; if (done.refunded) await noteBack(ctx, { sub: gone.sub, cents: describe(id)?.amount || 0, by: 'fair', why: `removed from ${id}` }); } catch (err) { unstopped = String(err.message || err).slice(0, 160); console.error('[shop] subscription', unstopped); }
+        else try { const done = await endSubscription(cfg, gone.sub, back, ctx.fetch || fetch); stopped = true; refunded = refunded || done.refunded; uncredited = done.uncredited || ''; } catch (err) { unstopped = String(err.message || err).slice(0, 160); console.error('[shop] subscription', unstopped); }
       }
+      if (gone.sub && stopped && refunded) await noteBack(ctx, { sub: gone.sub, cents: describe(id)?.amount || 0, by: 'fair', why: `removed from ${id}` }); // (the list of the sales: the month given back)
       const what = describe(id)?.plaque ? 'plaque' : 'panel';
       await leaveNote(ctx, gone.by, gone.pay && refunded ? `The fair took your ${what} down: your payment has been refunded in full.`
         : stopped ? `The fair took your ${what} down: ${refunded ? 'the month you paid has been refunded, and ' : ''}nothing more will be charged for it.` : `The fair took your ${what} down.`);
