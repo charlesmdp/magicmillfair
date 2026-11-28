@@ -30,11 +30,14 @@
   .pfilters button { flex: 1 1 40%; min-width: 0; }
   .ptable, .ptable tbody { display: block; }
   .ptable thead { display: none; }
-  .ptable tr { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 12px; margin-bottom: 8px; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.22); }
+  .ptable tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 7px 12px; margin-bottom: 8px; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.22); }
   .ptable td { padding: 0; border: 0; min-width: 0; }
   .ptable td::before { content: attr(data-label); display: block; margin-bottom: 1px; color: var(--dim); font: 700 10.5px/1.3 system-ui, sans-serif; letter-spacing: 0.07em; text-transform: uppercase; }
-  .ptable td.name { grid-column: 1 / -1; font-size: 16px; white-space: normal; overflow-wrap: anywhere; }
-  .ptable td.name::before { display: none; }
+  /* (a card: the name and, beside it, how they sign in; the address; then the rest two by two) */
+  .ptable td.name { font-size: 16px; white-space: normal; overflow-wrap: anywhere; }
+  .ptable td.name::before, .ptable td:nth-child(2)::before { display: none; }
+  .ptable td:nth-child(2) { text-align: right; }
+  .ptable .how { white-space: normal; }
   .ptable td.addr { grid-column: 1 / -1; }
   .ptable td.num { text-align: left; }
 }
