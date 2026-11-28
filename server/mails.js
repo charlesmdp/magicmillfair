@@ -257,7 +257,9 @@ export async function mailsRoute(req, ctx) {
   const notify = cleanEmail((await store.get('notify'))?.email || ''), mine = set.me || notify;
   if (method === 'GET' || method === 'HEAD') return out(200, { mail: !!ctx.mail, me: mine, notify, kinds: Object.keys(ABOUT).map((kind) => shown(kind, set, site)), log: await readLog(ctx), keeps: MAIL_LOG });
   if (method !== 'POST') return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD, POST' });
-  const b = body && typeof body === 'object' ? body : {};
+  // (what could not be read: too long — a whole message typed to the brim, several times over —, or not what this page sends)
+  if (!body || typeof body !== 'object') return out(400, { error: 'That could not be read: if it is a great many sentences at once, save a few at a time.' });
+  const b = body;
   const save = (next) => store.put(SET, { off: next.off, words: next.words, ...(next.me && { me: next.me }), at: ctx.now() });
 
   if (typeof b.me === 'string') {

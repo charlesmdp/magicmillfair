@@ -85,11 +85,11 @@
       `The last ${g.keeps} visits, whoever made them: when, the name the robot wore, the country and the town — to know whether anybody comes.`,
       'A score of the day, under the name chosen: on the boards of “High scores”, for that day only.',
       'What was said in the chat, with the name over the robot: under “Chat”, for fourteen days.',
-      'Under the random name of the browser, and nothing else: its days in a row, and what it bought.',
+      'Under the random name of the browser, and nothing else: its days in a row, what it bought — and, so that the figures count nobody twice, the day it was last counted and as what (a kind of device, a country, a colour).',
     ]) kept.append(T.el('li', '', line));
     said.textContent = '';
     said.append(
-      T.el('p', 'hint', 'The fair keeps no list of the names that were only typed. Without an account, a visitor is the random name their browser gave itself: the name over their robot stays in that browser, and the fair keeps no address of theirs (a guest who pays gives one to Stripe; the fair writes to it, and does not keep it). What it remembers all the same, as the privacy page says:'),
+      T.el('p', 'hint', 'The fair keeps no list of the names that were only typed: its privacy page says that one can play without giving a name, an address or anything else. Without an account, a visitor is the random name their browser gave itself — the name over their robot stays in that browser, and the fair keeps no address of theirs (a guest who pays gives one to Stripe; the fair writes to it, and does not keep it). What it remembers all the same:'),
       kept,
       T.el('p', 'hint', `${g.people ? `The figures have counted ${many(g.people, 'browser')} since they were switched on, for ${many(d.total, 'account')}. ` : ''}${g.kept ? `Of the ${many(g.kept, 'visit')} remembered right now, ${guests === g.kept ? (guests === 1 ? 'it was' : 'all were') : `${guests} ${guests === 1 ? 'was' : 'were'}`} made from a browser signed in to no account${guests ? ' — the newest first' : ''}${g.signed && guests ? `; the ${g.signed === 1 ? 'other was' : `${g.signed} others were`} made by somebody on the list above` : ''}:` : ''}`),
     );
