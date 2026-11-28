@@ -205,34 +205,47 @@ async function paidInvoice(cfg, { pay = '', invoice = '' }, fetcher) {
  * on; `invoice`: a month of a subscription) is given back by a credit note on it — the refund and the credit note
  * that cancels the invoice in the books, at once —; if Stripe refuses the credit note, the money is given back all
  * the same, the plain way, and the answer says the credit note is still to be made (`uncredited`: why).
+ *
+ * From the list of the sales (sales.js): `amount` (cents), a part of it instead of the whole; `reason`, the owner's
+ * own words, kept at Stripe with it; `token`, one per intention — the same asked twice is given back once, another
+ * one is another refund (a part, then another part). What Stripe refuses is thrown with its `code`. A part is never
+ * sent a second way when nobody knows what became of the first (Stripe did not answer): `code` 'unknown'.
  */
-export async function refundPayment(cfg, pay, why = '', fetcher = fetch, { invoice = '' } = {}) {
-  let uncredited = '';
+export async function refundPayment(cfg, pay, why = '', fetcher = fetch, { invoice = '', amount = 0, reason = '', token = '' } = {}) {
+  const part = Number.isInteger(amount) && amount > 0 ? amount : 0, tail = token ? `-${token}` : '';
+  const said = (form) => { if (why) form.set('metadata[why]', why); if (reason) form.set('metadata[reason]', reason); return form; };
+  const refusal = (res, body) => Object.assign(new Error(`Stripe: ${body?.error?.message || res.status}`), { code: String(body?.error?.code || ''), status: res.status });
+  let uncredited = '', refused = null, asking = false;
   try {
     const inv = await paidInvoice(cfg, { pay, invoice }, fetcher);
     if (inv) {
-      const note = new URLSearchParams({ invoice: inv.id, refund_amount: String(inv.total) });
-      if (inv.line) { note.set('lines[0][type]', 'invoice_line_item'); note.set('lines[0][invoice_line_item]', inv.line); note.set('lines[0][quantity]', String(inv.qty)); } else note.set('amount', String(inv.total));
-      if (why) note.set('metadata[why]', why);
+      const note = said(new URLSearchParams({ invoice: inv.id, refund_amount: String(part || inv.total) }));
+      if (part) note.set('amount', String(part));
+      else if (inv.line) { note.set('lines[0][type]', 'invoice_line_item'); note.set('lines[0][invoice_line_item]', inv.line); note.set('lines[0][quantity]', String(inv.qty)); } else note.set('amount', String(inv.total));
+      asking = true;
       const res = await fetcher(`${cfg.api}/v1/credit_notes`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${cfg.key}`, 'Content-Type': 'application/x-www-form-urlencoded', 'Idempotency-Key': `credit-${pay || inv.id}` },
+        headers: { Authorization: `Bearer ${cfg.key}`, 'Content-Type': 'application/x-www-form-urlencoded', 'Idempotency-Key': `credit-${pay || inv.id}${tail}` },
         body: note.toString(),
       });
       const body = await res.json().catch(() => null);
       if (res.ok && body && !body.error) return { id: String(body.id || ''), credited: true };
+      if (res.status < 500 && body?.error) asking = false; // (Stripe answered: it said no)
+      refused = refusal(res, body);
       uncredited = String(body?.error?.message || res.status).slice(0, 160);
     }
   } catch (err) { uncredited = String(err.message || err).slice(0, 160); }
-  const form = new URLSearchParams({ payment_intent: pay, reason: 'requested_by_customer' });
-  if (why) form.set('metadata[why]', why);
+  if (part && asking) throw Object.assign(new Error('Stripe did not answer: nobody knows whether this was given back.'), { code: 'unknown' });
+  if (!pay) throw refused || new Error(`Stripe: ${uncredited || 'this payment cannot be found'}`); // (a month of a subscription whose payment is not known: only its invoice could give it back)
+  const form = said(new URLSearchParams({ payment_intent: pay, reason: 'requested_by_customer' }));
+  if (part) form.set('amount', String(part));
   const res = await fetcher(`${cfg.api}/v1/refunds`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${cfg.key}`, 'Content-Type': 'application/x-www-form-urlencoded', 'Idempotency-Key': `refund-${pay}` },
+    headers: { Authorization: `Bearer ${cfg.key}`, 'Content-Type': 'application/x-www-form-urlencoded', 'Idempotency-Key': `refund-${pay}${tail}` },
     body: form.toString(),
   });
   const body = await res.json().catch(() => null);
-  if (!res.ok || !body || body.error) throw new Error(`Stripe: ${body?.error?.message || res.status}`);
+  if (!res.ok || !body || body.error) throw refusal(res, body);
   return { id: String(body.id || ''), ...(uncredited && { uncredited }) };
 }
 

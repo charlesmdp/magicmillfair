@@ -37,6 +37,7 @@ import { replayable, replay, agrees } from './replay.js';
 import { randomId, sign, verify } from './token.js';
 import { cleanName } from './protocol.js';
 import { shopRoute, notifyRoute } from './shop.js';
+import { salesRoute } from './sales.js';
 import { adminOf, listAdmins, removeAdmin } from './admins.js';
 import { cleanGeo, noteVisit, visitorsReport } from './visitors.js';
 import { accountRoute, visitRecord, accountOf, isAccountName } from './accounts.js';
@@ -313,6 +314,10 @@ export async function route(req, ctx) {
   // the game in figures (stats.js)
   const stats = await statsRoute(req, ctx);
   if (stats) return stats;
+
+  // the list of the sales and their refunds, for the owner (sales.js)
+  const sales = await salesRoute(req, ctx);
+  if (sales) return sales;
 
   // the shop, the sponsors (shop.js)
   const shop = await shopRoute(req, ctx);
