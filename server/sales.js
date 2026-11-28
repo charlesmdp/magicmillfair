@@ -349,10 +349,15 @@ async function holders(ctx, e) {
 }
 
 /**
- * Is what was bought still theirs — and what would taking it back do? → { held, twice, take (the sentence the
- * owner reads), keep (what "they keep it" means) }. Nothing is changed.
+ * Is what was bought still theirs — and what would giving its payment back do? → { held, twice, take (what a full
+ * refund does: the sentence the owner reads), keep (what "they keep it" means; '': there is nothing to keep), part
+ * (what a part given back does: nothing else) }. Nothing is changed.
  */
 async function standing(ctx, e, seen) {
+  const s = await standingOf(ctx, e, seen), runs = !!e.sub && (seen ? seen.active : !e.ended);
+  return { ...s, part: s.held || s.twice ? `Nothing else changes: they keep ${thingOf(e)}${runs ? ', and its subscription goes on' : ''}.` : `Nothing else changes${runs ? ': its subscription goes on' : ''}.` };
+}
+async function standingOf(ctx, e, seen) {
   const what = describe(e.item), thing = thingOf(e), month = !!e.sub, runs = month && (seen ? seen.active : !e.ended);
   const stop = runs ? ' Its subscription is cancelled: nothing more is charged.' : '';
   const kept = month && runs ? `They keep ${thing}: the subscription goes on, and is charged again next month.` : `They keep ${thing}.`;

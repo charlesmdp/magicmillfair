@@ -41,7 +41,7 @@
   /** $9.99, $1,204.50, 12.50 EUR — from cents. */
   const money = (cents, currency = 'usd') => { const n = (Math.abs(cents) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), cur = String(currency || 'usd').toLowerCase(); return `${cents < 0 ? '−' : ''}${cur === 'usd' ? `$${n}` : `${n} ${cur.toUpperCase()}`}`; };
   const whoOf = (w) => [w.name || `A browser without an account (${w.short || '?'}…)`, w.email].filter(Boolean).join(' · ');
-  const BY = { owner: 'by you', auction: 'by the auction — outbid, or a bid that came too late', fair: 'when it was taken down', stripe: 'in Stripe itself', dispute: 'to the buyer\'s bank, after a dispute' };
+  const BY = { owner: 'by you', auction: 'by the auction', fair: 'by the fair, when the place was taken down', stripe: 'in Stripe itself', dispute: 'to the buyer\'s bank: a dispute was lost' };
 
   // ---------------------------------------------------------------------------------------------------- the list
   let lines = [], before = '', more = false, found = '', asked = 0, mode = null;
@@ -53,7 +53,8 @@
     for (const l of s.log) {
       if (l.failed) { out.push(`A refund of ${money(l.cents, s.currency)} failed on ${day(l.at)} (${l.failed}): it can be given back from here.`); continue; }
       if (!l.cents) continue;
-      out.push(`${money(l.cents, s.currency)} given back ${BY[l.by] || ''} on ${day(l.at)}${l.why && l.by === 'owner' ? ` — “${l.why}”` : ''}${l.took ? ' · taken back' : l.kept ? ' · they kept it' : ''}`.replace(/\s+/g, ' '));
+      const why = l.by === 'owner' ? l.why && ` — “${l.why}”` : l.by === 'auction' ? (/^too late/.test(l.why || '') ? ': the bid came too late' : ': outbid') : '';
+      out.push(`${money(l.cents, s.currency)} given back on ${day(l.at)} ${BY[l.by] || ''}${why || ''}${l.took ? ' · taken back' : l.kept ? ' · they kept it' : ''}`.replace(/\s+/g, ' '));
     }
     return out;
   }
@@ -167,7 +168,7 @@
     $('sale-refund-keep-row').hidden = !canKeep;
     if (!canKeep) $('sale-refund-keep').checked = false;
     const what = $('sale-refund-what');
-    what.textContent = full ? ($('sale-refund-keep').checked ? look.keep : look.take) : `Nothing else changes: a part given back leaves ${sale.what} theirs${sale.monthly ? ', and its subscription goes on' : ''}.`;
+    what.textContent = full ? ($('sale-refund-keep').checked ? look.keep : look.take) : look.part;
     let bad = '';
     if (!all && amountBox.value.trim() && typedSum === null) bad = 'A sum like 5 or 5.50.';
     else if (!all && typedSum !== null && typedSum < 1) bad = 'More than nothing.';
@@ -213,6 +214,8 @@
   for (const id of ['sale-refund-all', 'sale-refund-part', 'sale-refund-keep']) $(id).addEventListener('change', showPlan);
   amountBox.addEventListener('input', () => { $('sale-refund-part').checked = true; showPlan(); });
   amountBox.addEventListener('focus', () => { $('sale-refund-part').checked = true; showPlan(); });
+  // (Enter in a field gives nothing back: only the button does)
+  for (const id of ['sale-refund-amount', 'sale-refund-reason']) $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
   $('sale-refund-cancel').onclick = () => dialog.close();
   dialog.addEventListener('close', () => { giving = null; });
 

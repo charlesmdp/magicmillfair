@@ -167,23 +167,29 @@ try {
   // the tax code
   await page.click('#tabs button[data-tab="sponsors"]');
   await page.waitForSelector('#tax-box:not([hidden])', { timeout: 15000 });
-  await page.locator('#tax-box').scrollIntoViewIfNeeded();
-  await page.locator('#tax-box').screenshot({ path: path.join(OUT, '13-tax-code.png') }); console.log('13-tax-code.png');
+  await page.evaluate(() => document.getElementById('toast').classList.remove('on'));
+  const box = async (p, name) => { await p.waitForTimeout(300); const r = await p.evaluate(() => { const b = document.getElementById('tax-box').getBoundingClientRect(); return { x: Math.max(0, b.x + scrollX - 12), y: b.y + scrollY - 12, width: b.width + 24, height: b.height + 24 }; }); await p.screenshot({ path: path.join(OUT, `${name}.png`), fullPage: true, clip: r }); console.log(`${name}.png`); };
+  await box(page, '13-tax-code');
   await page.check('input[name="tax-pick"][value="txcd_10201000"]');
   await page.click('#tax-form button[type="submit"]');
   await page.waitForSelector('.toast.on', { timeout: 15000 });
   said.tax = (await api('GET', '/api/tax')).body;
-  await page.locator('#tax-box').screenshot({ path: path.join(OUT, '14-tax-code-chosen.png') }); console.log('14-tax-code-chosen.png');
+  await page.evaluate(() => document.getElementById('toast').classList.remove('on'));
+  await box(page, '14-tax-code-chosen');
   await page.fill('#tax-code', 'txcd_10103000');
   await page.click('#tax-form button[type="submit"]');
   await page.waitForFunction(() => /off|on/i.test(document.getElementById('tax-said').textContent), null, { timeout: 15000 });
   await page.waitForTimeout(400);
   said.taxOther = (await api('GET', '/api/tax')).body;
-  await page.locator('#tax-box').screenshot({ path: path.join(OUT, '15-tax-code-another.png') }); console.log('15-tax-code-another.png');
+  await page.evaluate(() => document.getElementById('toast').classList.remove('on'));
+  await box(page, '15-tax-code-another');
 
   // a telephone
   const phone = await open(390, 800, true);
-  await shot(phone, '16-phone-sales');
+  await shot(phone, '16-phone-sales', false);
+  await phone.evaluate(() => document.getElementById('sales').scrollIntoView());
+  await phone.evaluate(() => scrollBy(0, -70));
+  await shot(phone, '16b-phone-sales-lines', false);
   await phone.click('.sale:has(.grow > b:text-is("Pirate hat")) button:text("Refund…")');
   await phone.waitForFunction(() => !document.getElementById('sale-refund-how').disabled, null, { timeout: 15000 });
   await phone.fill('#sale-refund-amount', '3');
@@ -191,7 +197,7 @@ try {
   await phone.click('#sale-refund-cancel');
   await phone.click('#tabs button[data-tab="sponsors"]');
   await phone.waitForSelector('#tax-box:not([hidden])', { timeout: 15000 });
-  await phone.locator('#tax-box').screenshot({ path: path.join(OUT, '18-phone-tax-code.png') }); console.log('18-phone-tax-code.png');
+  await box(phone, '18-phone-tax-code');
 
   // what a named administrator sees: no tab Sales
   const named = (await api('POST', '/api/sales', null, 'nobody')).status;
