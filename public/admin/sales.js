@@ -120,17 +120,17 @@
     drawTotals(b.totals, b.hidden || 0);
     draw();
     $('sales-fetch').disabled = !b.stripe || filling;
-    if (!filling && b.fill?.done) $('sales-fetch-said').textContent = `Last read to its end on ${day(b.fill.done)}.`;
+    if (!filling && !fetched && b.fill?.done) $('sales-fetch-said').textContent = `Last read to its end on ${day(b.fill.done)}.`; // (what a reading made from this page said stays said)
   }
   let findTimer = 0;
   $('sales-find').addEventListener('input', () => { clearTimeout(findTimer); findTimer = setTimeout(() => { found = $('sales-find').value.trim(); load(); }, 350); });
   $('sales-more').onclick = () => load(true);
 
   // ---------------------------------------------------------------------------------- what Stripe remembers
-  let filling = false;
+  let filling = false, fetched = false;
   $('sales-fetch').onclick = async () => {
     if (filling) return;
-    filling = true;
+    filling = fetched = true;
     const b = $('sales-fetch'), said = $('sales-fetch-said');
     b.disabled = true;
     said.classList.remove('bad');
@@ -250,8 +250,11 @@
   const name = () => { const b = tabs?.querySelector('button[data-tab="sales"]'); if (b && b.textContent !== 'Sales') b.textContent = 'Sales'; };
   if (tabs) new MutationObserver(name).observe(tabs, { childList: true });
   name();
+  // (shown: its section is not hidden, nor the office round it, and a key was given — looked at each time admin.js
+  // opens a tab: it marks the tab's button, even when this section was never hidden, the page opened on #sales)
   let shown = false;
-  const look = () => { const now = !section.hidden && !!key(); if (now && !shown) { found = $('sales-find').value.trim(); load(); } shown = now; };
-  new MutationObserver(look).observe(section, { attributes: true, attributeFilter: ['hidden'] });
+  const office = $('office');
+  const look = () => { name(); const now = !section.hidden && !office?.hidden && !!key(); if (now && !shown) { found = $('sales-find').value.trim(); load(); } shown = now; };
+  new MutationObserver(look).observe(office || section, { subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] });
   look();
 })();
