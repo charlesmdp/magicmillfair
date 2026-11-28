@@ -357,6 +357,7 @@ async function standing(ctx, e, seen) {
   const stop = runs ? ' Its subscription is cancelled: nothing more is charged.' : '';
   const kept = month && runs ? `They keep ${thing}: the subscription goes on, and is charged again next month.` : `They keep ${thing}.`;
   if (!what) return { held: false, take: 'Nothing else changes: this is no longer sold, and nothing of it can be taken back from here.', keep: '' };
+  if (e.lost) return { held: false, take: `They paid for ${thing}, and it could not be given to them — somebody had it already: giving this back takes nothing from anybody.${stop}`, keep: '' };
   if (what.kind === 'own') {
     const again = await paidAgain(ctx, e);
     if (again) return { held: false, twice: true, take: `They paid for ${thing} twice — the other payment stays — so they keep it.`, keep: '' };
