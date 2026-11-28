@@ -254,3 +254,41 @@ the arch, comes up in the chamber, walks the strand, and swims back out and up; 
 each other, who is in the cave is not named through its rock; a picture of each screen). Pictures:
 `node tools/game-shots.mjs dive mouth=209.4,-5.5,81.3,15.5,-2` (the free camera goes under the water while the
 switch is on).
+
+### Toy weapons (`weapons`)
+
+"Des armes — quand je tire sur un robot, ça le « tue » (momentanément, comme lorsqu'on mange un champignon).
+Activable par token." (the owner, 28 November 2026). Not a game and not a place: the toys of a fair that anybody
+can draw anywhere, `src/extras/weapons.js`. A **cork gun** (slow and long: 28 m, a second and a half to push the
+next cork in, the cork flies and has to be aimed) and a **spark zapper** (quick and short: 9 m, at once, again
+half a second later). A robot that is hit falls exactly as after a strange mushroom (`player.die`: the same
+screen, "Corked by Alice"), lies there 3.6 s, stands again where it fell — on the very floor it lay on, having
+come down to the ground if it was hit in the air — and is then **out of reach for six seconds**, in a bubble
+that shimmers. No blood, nothing military: tin, brass, a cork with a red end.
+
+- **Its switch**: `weapons`, off as delivered (page /admin: "Toy weapons"). Off: nothing of it is downloaded,
+  no key, no button, nothing travels.
+- **Keys**: `C` draws the toy and puts it away, `N` changes it, a click on the world fires where the sight
+  looks (at once while the mouse is locked; otherwise a click that did not drag the view). The sight is the
+  game's own, above the middle of the screen — one's own robot stands in the middle. **On a phone**: one round
+  button by the pads (the cork gun, then the zapper, then away) and a red one under it that fires; a finger is
+  helped — the robot nearest the sight within a narrow cone (`cone`, radians) is the one.
+- **Who decides that a robot falls: the browser of the one who is hit**, from what it knows itself (`judge()`):
+  where it stands and what it is doing, where *the relay* places the one who shot (never what the message
+  says), the toy's range plus four metres, whether a building or the ground stands between, and that the toy
+  was not heard again sooner than half its reload. A shot is a small message through `Presence.sendThing`
+  (kind 9; no change to the protocol): "this toy, at that visitor, it lands there" — everybody near draws it,
+  the one it names decides, then says "I fell, by whom" (or, once a second at the most, why not).
+- **Where toys do nothing** — neither firing nor being hit (`quiet()`): in a game (`fair.session`,
+  `player.driver`, the timed climb), seated or on a ride, in the water, in a cave, in The Sanctuary, within
+  **25 m of where newcomers arrive** (`SPAWN`: x −121.8, z −60), on who is typing or in a menu, on who lies
+  there or has just stood up. Barnaby cannot be felled: he shakes his head and says a dry word to who fired.
+- **`ONLY_ARMED`** (a constant at the top of the file, `false`): set to `true`, only those who have their own
+  toy drawn can be felled — a duel between the willing.
+- **What it reaches into** (no file of the game is changed): `Character._keep` / `_ik` (the right hand is put on
+  the grip after the robot has been animated), `world.sparks._spawn`, `audio.effects` (its four sounds are made
+  there), `RemoteAvatars.update` (wrapped: the others' arms are bent after they have been animated).
+- **Its checks**: `node tools/weapons-test.mjs [--shots=<folder>]` — the game as built, its own server, two
+  browsers in one room (then a third, phone-sized, with a finger): off, on, the mill, Barnaby, a fall and the
+  shimmer, typing, seated, too far, a forged shot, a fall from nine metres up, a cave, The Sanctuary, a game,
+  the duel, ten shots claimed in a second.
