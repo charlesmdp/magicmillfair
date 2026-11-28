@@ -45,6 +45,7 @@ export const RELEASE = {
   // only the common rooms exist, for everybody but the owner. (A server started with FREE_ROOMS=1 has it on
   // where nobody decided: the tests and the development server are.)
   freeRooms: false,
+  bar: false, // The Velvet Gasket: a hidden cabaret of robots in a cave of its own under the southern slopes — one pays in flowers, one drinks "Alcooil", and what comes off on the stage is hardware (an extra; a place, not a game)
 };
 export const SKY_STAGES = ['hidden', 'soon', 'open'];
 /** Switches made clean: only those above, each of its kind; what is missing or wrong is as in `base`. */

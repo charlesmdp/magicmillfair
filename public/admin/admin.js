@@ -79,6 +79,7 @@
     sky: ['The sky villages', 'Hidden: nothing of them. Soon: their gate is there, closed. Open: everything.'],
     userRooms: ['Rooms made by players', 'Off: nothing of them — no card in the shop, no path that answers. On: an account can buy a room of its own ($59 a month): reached by its link only, fifty visitors, a password if its owner wants one, its own boards of scores.'],
     freeRooms: ['Rooms by address', 'Off: only the common rooms exist (you still get in anywhere). On: any name written in the address (?room=a-name) is a room of its own, free.'],
+    bar: ['The Velvet Gasket — the hidden cabaret', 'A cave of its own behind a slab of rock at the foot of the southern cliff, a small red lantern its only sign: a doorman who takes three flowers, a counter where a glass of “Alcooil” costs one, and a stage where a tin diva takes off her hat, her plates and her panels — cogs and springs, nothing else. On no map.'],
   };
   // (the switches that are games: one button puts them all off — as the game is delivered)
   const GAME_SWITCHES = ['slide', 'pond', 'boats', 'hill', 'crack', 'hollow', 'waves', 'lava', 'hive', 'flip', 'spiral', 'cars', 'golf', 'ages', 'raft', 'walls', 'sneak', 'mine', 'coaster'];

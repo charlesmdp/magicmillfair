@@ -31,6 +31,7 @@ export const EXTRAS = {
   plane: { name: 'A plane in the sky — it crosses every few minutes, and whoever looks at it is told what their robot thinks of it', load: () => import('./plane.js') },
   caves: { name: 'The caves are safe places: nearby chat only', load: () => import('./caves.js') },
   stats: { name: 'The game in figures: counters, the page /opendata', load: () => import('./stats.js') },
+  bar: { name: 'The Velvet Gasket — a hidden cabaret of robots in a cave of its own: the cover is flowers, the drinks are oil', load: () => import('./bar.js') },
 };
 
 /** Switches on what `on` says ({ id: true }); returns what was built, by id. One that fails leaves the others alone. */
