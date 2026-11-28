@@ -95,7 +95,7 @@ export function judge(o) {
 // its head — which is nearly a metre wide —, so that whoever plays it sees the toy from behind.
 const GRIP = [-0.56, 0.86, 0.28];
 const BIG = 1.3; // (the toys of a fair: larger than life)
-const FLY = 2.8; // (…and the cork that flies larger still: it has to be seen from thirty metres)
+const FLY = 3.2; // (…and the cork that flies larger still: it has to be seen from thirty metres)
 const MUZZLE = [[0, 0.045 * BIG, 0.47 * BIG], [0, 0.05 * BIG, 0.43 * BIG]]; // the mouth of each toy, from its grip
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const ball = (b, x, y, z, r) => b.add(new THREE.SphereGeometry(r, 10, 7), new THREE.Matrix4().makeTranslation(x, y, z));
@@ -277,7 +277,7 @@ export function attach(app) {
   // (the cork in the air: about its own middle, pointing along +z — and the white streak it leaves, a cone that trails behind it)
   const corkGeo = new MeshBuilder().tint(0.9, 0.7, 0.44).rod(V(0, 0, -0.045), V(0, 0, 0.02), 0.056, 10, { r1: 0.05 }).tint(0.92, 0.14, 0.1).rod(V(0, 0, 0.02), V(0, 0, 0.045), 0.05, 10, { r1: 0.044 }).build();
   const tailGeo = new THREE.ConeGeometry(0.045, 1, 6, 1, true).rotateX(-Math.PI / 2).translate(0, 0, -0.5);
-  const tailMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false, toneMapped: false });
+  const tailMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.62, depthWrite: false, toneMapped: false });
   const shoot = (i, from, to, shielded) => {
     const toy = TOYS[i], len = from.distanceTo(to);
     _v.subVectors(to, from).normalize();
