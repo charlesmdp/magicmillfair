@@ -12,8 +12,8 @@
 .ptable td { padding: 8px 9px; border-bottom: 1px solid rgba(47, 40, 112, 0.6); vertical-align: top; }
 .ptable tbody tr:hover { background: rgba(255, 255, 255, 0.04); }
 .ptable td.name { font-weight: 800; white-space: nowrap; }
-.ptable td.mail { overflow-wrap: anywhere; user-select: all; }
-.ptable td.mail.none { color: var(--dim); font-style: italic; user-select: none; }
+.ptable td.addr { overflow-wrap: anywhere; user-select: all; }
+.ptable td.addr.none { color: var(--dim); font-style: italic; user-select: none; }
 .ptable td.num, .ptable th:last-child { text-align: right; font-variant-numeric: tabular-nums; }
 .ptable td:nth-child(4), .ptable td:nth-child(5) { white-space: nowrap; }
 .how { display: inline-block; padding: 1px 8px; border-radius: 7px; background: rgba(255, 255, 255, 0.08); color: var(--ink); font-size: 12px; font-weight: 600; white-space: nowrap; }
@@ -21,6 +21,9 @@
 .how.email { background: rgba(242, 193, 78, 0.18); color: var(--gold); }
 .how.none { background: rgba(255, 107, 94, 0.18); color: var(--red); }
 #people-pages .hint { margin: 0; }
+/* (what is kept of who has no account: a short list, in the voice of the hints) */
+.pkept { margin: -4px 0 12px; padding-left: 20px; color: var(--dim); font-size: 13.5px; }
+.pkept li { margin: 3px 0; }
 /* (what is handed to the clipboard, or to the browser as a file: there, and out of sight) */
 .offscreen { position: fixed; left: -9999px; top: 0; width: 1px; height: 1px; opacity: 0; }
 @media (max-width: 760px) {
@@ -32,6 +35,6 @@
   .ptable td::before { content: attr(data-label); display: block; margin-bottom: 1px; color: var(--dim); font: 700 10.5px/1.3 system-ui, sans-serif; letter-spacing: 0.07em; text-transform: uppercase; }
   .ptable td.name { grid-column: 1 / -1; font-size: 16px; white-space: normal; overflow-wrap: anywhere; }
   .ptable td.name::before { display: none; }
-  .ptable td.mail { grid-column: 1 / -1; }
+  .ptable td.addr { grid-column: 1 / -1; }
   .ptable td.num { text-align: left; }
 }

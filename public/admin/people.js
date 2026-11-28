@@ -54,7 +54,7 @@
         cell(0, 'name', a.name);
         const how = T.el('span', `how ${a.how}`, HOW[a.how] || a.how); how.title = HOW_TITLE[a.how] || '';
         cell(1, '').append(how);
-        cell(2, a.email ? 'mail' : 'mail none', a.email || 'none given');
+        cell(2, a.email ? 'addr' : 'addr none', a.email || 'none given');
         cell(3, '', day(a.created)).title = `${new Date(a.created).toLocaleString('en-GB')} (your time)`;
         cell(4, '', day(a.last));
         cell(5, '', a.days ? `${a.days}${a.best > a.days ? ` (best: ${a.best})` : ''}` : a.best ? `— (best: ${a.best})` : '—').title = 'Their days in a row as they stood when they last came — a dash once the run is over.';
@@ -77,7 +77,19 @@
 
     // who never made an account: what the fair keeps of them, and no more
     const g = d.guests;
-    $('guests-said').textContent = `The fair keeps no list of the names that are only typed: without an account, a visitor is the random name their browser gave itself, and the name over their robot stays in that browser. What it does remember, as the privacy page says: the last ${g.keeps} visits — when, the name the robot wore, the country and the town; a score of the day under the name chosen (see “High scores”); what was said in the chat, for fourteen days (see “Chat”); and, under the random name of the browser and nothing else, its days in a row and what it bought. No address, ever. ${g.people ? `The figures have counted ${many(g.people, 'browser')} since they were switched on, for ${many(d.total, 'account')}. ` : ''}Below: of the ${many(g.kept, 'visit')} remembered right now, the ${g.visits.length === 1 ? 'one' : g.visits.length} made from a browser that is signed in to no account${g.signed ? ` (the ${g.signed === 1 ? 'other was' : `${g.signed} others were`} made from a browser signed in to one)` : ''}.`;
+    const said = $('guests-said'), kept = T.el('ul', 'pkept'), guests = g.visits.length;
+    for (const line of [
+      `The last ${g.keeps} visits, whoever made them: when, the name the robot wore, the country and the town — to know whether anybody comes.`,
+      'A score of the day, under the name chosen: on the boards of “High scores”, for that day only.',
+      'What was said in the chat, with the name over the robot: under “Chat”, for fourteen days.',
+      'Under the random name of the browser, and nothing else: its days in a row, and what it bought.',
+    ]) kept.append(T.el('li', '', line));
+    said.textContent = '';
+    said.append(
+      T.el('p', 'hint', 'The fair keeps no list of the names that were only typed. Without an account, a visitor is the random name their browser gave itself: the name over their robot stays in that browser, and the fair keeps no address of theirs (a guest who pays gives one to Stripe; the fair writes to it, and does not keep it). What it remembers all the same, as the privacy page says:'),
+      kept,
+      T.el('p', 'hint', `${g.people ? `The figures have counted ${many(g.people, 'browser')} since they were switched on, for ${many(d.total, 'account')}. ` : ''}${g.kept ? `Of the ${many(g.kept, 'visit')} remembered right now, ${guests === g.kept ? (guests === 1 ? 'it was' : 'all were') : `${guests} ${guests === 1 ? 'was' : 'were'}`} made from a browser signed in to no account${guests ? ' — the newest first' : ''}${g.signed && guests ? `; the ${g.signed === 1 ? 'other was' : `${g.signed} others were`} made by somebody on the list above` : ''}:` : ''}`),
+    );
     const list = $('guests');
     if (!g.visits.length) T.empty(list, g.kept ? 'Every visit remembered right now was made from a browser signed in to an account.' : 'No visit is remembered yet.');
     else {

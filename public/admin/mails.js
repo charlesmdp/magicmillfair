@@ -40,9 +40,11 @@
   function paint(frame, html) {
     const doc = frame.contentDocument;
     if (!doc || !doc.documentElement) return;
-    const made = new DOMParser().parseFromString(html, 'text/html'), styles = [];
+    // (the styles are taken aside under another name before the message is read: read as styles, each would be
+    // refused by the page and written in the console. No text of a message can hold ` style="`: its quotes are escaped.)
+    const made = new DOMParser().parseFromString(html.replace(/ style="/g, ' data-look="'), 'text/html'), styles = [];
     for (const node of made.querySelectorAll('script, style, link, iframe, object, embed, form, img, video, audio, base, meta')) node.remove(); // (a message of the fair has none of these)
-    for (const node of made.querySelectorAll('[style]')) { styles.push([node, node.getAttribute('style') || '']); node.removeAttribute('style'); }
+    for (const node of made.querySelectorAll('[data-look]')) { styles.push([node, node.getAttribute('data-look') || '']); node.removeAttribute('data-look'); }
     for (const a of made.querySelectorAll('a[href]')) { a.setAttribute('tabindex', '-1'); a.setAttribute('title', a.getAttribute('href')); }
     const body = doc.adoptNode(made.body);
     if (doc.body) doc.documentElement.replaceChild(body, doc.body); else doc.documentElement.append(body);
@@ -70,8 +72,17 @@
     return frame;
   }
 
+  /**
+   * The message stays in sight beside its sentences while they are scrolled: under the tabs of the page, however
+   * many lines they take (on a narrow screen it simply comes first, and the style sheet says so).
+   */
+  function under(preview) {
+    const wide = !window.matchMedia('(max-width: 900px)').matches, bar = Math.ceil($('tabs')?.getBoundingClientRect().height || 0);
+    preview.style.top = wide ? `${bar + 6}px` : '';
+    preview.style.maxHeight = wide ? `calc(100vh - ${bar + 18}px)` : '';
+  }
+
   // ---- one kind of message: its card
-  const kindOf = (id) => data.kinds.find((k) => k.id === id);
   const formOf = (k) => k.forms.find((f) => f.id === at(k.id).form) || k.forms[0];
   /** What the field of a sentence shows: what is typed and not kept yet, else what is kept, else the original. */
   const shownText = (k, f) => { const d = at(k.id).draft; return Object.hasOwn(d, f.id) ? (d[f.id] === null ? f.original : d[f.id]) : f.typed ?? f.original; };
@@ -189,6 +200,7 @@
     views.append(dressed, plain);
     right.append(subject, views, card.frame, card.text);
     show(s.view);
+    under(right);
     cols.append(left, right);
     box.append(cols);
     preview(k, card);
@@ -277,6 +289,7 @@
   }
   function wire() {
     wired = true;
+    window.addEventListener('resize', () => { for (const preview of document.querySelectorAll('.mail-preview')) under(preview); });
     $('mails-me-form').onsubmit = async (e) => {
       e.preventDefault();
       const me = $('mails-me').value.trim(), res = await post({ me });
