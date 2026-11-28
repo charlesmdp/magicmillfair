@@ -394,7 +394,7 @@ export class Room extends DurableObject {
     }
     this.ctx.acceptWebSocket(server);
     // (…what this visitor may be seen wearing, and whether they are kept out in silence)
-    const worn = /^(\d{1,10})\.(\d{1,9})$/.exec(request.headers.get(WEAR) || '');
+    const worn = /^(\d{1,16})\.(\d{1,9})$/.exec(request.headers.get(WEAR) || ''); // (a wardrobe is up to fifty-three bits: sixteen digits)
     const p = this.relay.add(server, undefined, { ip: request.headers.get('CF-Connecting-IP') || '', ua: request.headers.get('User-Agent') || '', ...unpackGeo(request.headers.get(GEO)), max, pass,
       dev: url.searchParams.get('dev') || '', ...(worn && { wear: { m: Number(worn[1]), left: Number(worn[2]) } }), mute: request.headers.get(MUTE) === '1', host: request.headers.get(HOST) === '1' });
     p.seen = Date.now();

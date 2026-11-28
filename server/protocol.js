@@ -12,8 +12,10 @@
 //                     (s: a name the page gave itself when it opened. A page that says hello again — its line
 //                     dropped without the relay noticing: a laptop that slept, a change of network — replaces
 //                     the connection it had before, so that nobody is ever seen twice)
-//                     (k: the "kit" of the avatar — its paint, its trail… one number from 0 to 255, see items.js;
-//                     it comes back as `k` in `join` and in the peers of `welcome`, when it is not 0)
+//                     (k: the "kit" of the avatar — its paint, its trail… one number from 0 to 1023, see items.js
+//                     (it stopped at 255 while there were fewer than sixteen paints: a browser of then takes a
+//                     larger one for no kit at all); it comes back as `k` in `join` and in the peers of
+//                     `welcome`, when it is not 0)
 //                     {t:'g',b}   a score of mine has just gone on board b (relayed as {t:'g',id,b})
 //                     {t:'n'}     the big red button: answered {t:'n',id,wait} to the whole room when it goes
 //                                 off (wait: ms before the next one), {t:'n',wait} to the sender when it is too soon
@@ -49,7 +51,8 @@
 //                     own)   {t:'promoted',id} (to who named them)   {t:'gift',by} (to who was given something:
 //                     nothing is given by this message — the shop is, and it only believes the administrator)
 //   `color` is a number from 0 to 31 (the last sixteen come with the Game Pass: the shop decides who may wear
-//   them, the relay only carries the number); `f`, the look of the avatar, is 16 bits (see packLook).
+//   them, the relay only carries the number); `f`, the look of the avatar, is 16 bits (see packLook: bit 15 is
+//   the last one free).
 //   `c` is a chat line: relayed as it comes, never stored, never sent back to its author; with `n` it only goes
 //   to those within CHAT_NEAR metres of who says it.
 //   `v` is a thing one steers: the relay looks at its shape and at nothing else (whole numbers in their bounds,
@@ -78,6 +81,7 @@
 // off on their own screen, and what they steer in a game (a boat) is shown to nobody.
 
 import { fitColor, fitKit, fitLook, mayLight, cleanWardrobe, FIREWORK } from './wardrobe.js';
+import { KIT_MAX } from './items.js';
 import { maskChat, nameOk } from './decency.js';
 
 export const MAX_FRAME = 2048; // bytes
@@ -236,13 +240,13 @@ export class Room {
     const worn = cleanWardrobe(from?.wear);
     if (worn) { p.wear = { m: worn.m, t: t + worn.left }; p.wdev = cleanDevice(from.dev); }
     if (known) {
-      p.name = cleanName(known.name); p.color = int(known.color, 31); p.kit = int(known.kit, 255); p.joined = !!known.joined;
+      p.name = cleanName(known.name); p.color = int(known.color, 31); p.kit = int(known.kit, KIT_MAX); p.joined = !!known.joined;
       p.dev = cleanDevice(known.dev); p.sid = cleanSession(known.sid); p.build = cleanBuild(known.build); p.admin = !!known.admin; p.badge = !!known.badge;
       p.rank = !known.admin ? '' : known.admin === 'admin' ? 'admin' : 'owner'; p.key = typeof known.key === 'string' ? known.key.slice(0, 12) : '';
       if (Array.isArray(known.state) && known.state.length === 6 && known.state.every(Number.isFinite)) { p.state = known.state; p.row = `[${p.id},${p.state.join(',')}`; p.ver = 1; }
       if (known.wear && Number.isInteger(known.wear.m) && Number.isFinite(known.wear.t)) { p.wear = { m: known.wear.m, t: known.wear.t }; p.wdev = cleanDevice(known.wdev); }
       // (what they asked for: as it was kept — or, from before it was, what they were shown as)
-      p.want = Array.isArray(known.want) ? [int(known.want[0], 31), int(known.want[1], 255)] : [p.color, p.kit];
+      p.want = Array.isArray(known.want) ? [int(known.want[0], 31), int(known.want[1], KIT_MAX)] : [p.color, p.kit];
       p.look = Number.isInteger(known.look) ? known.look & 0xffff : p.state ? p.state[5] : 0;
     }
     if (p.id >= this.nextId) this.nextId = p.id + 1;
@@ -563,7 +567,7 @@ export class Room {
     // (the wardrobe that came with the connection is that of the browser named in the address: a hello that
     // names another has nothing until its own has been read)
     if (p.wear && p.wdev !== p.dev) { p.wear = { m: 0, t: 0 }; p.wdev = p.dev; this._own(p, this.io.now(), true); }
-    p.want = [int(m.color, 31), int(m.k, 255)];
+    p.want = [int(m.color, 31), int(m.k, KIT_MAX)];
     const color = fitColor(p.want[0], this._wear(p)), kit = fitKit(p.want[1], this._wear(p));
     if (!p.build) p.build = cleanBuild(m.b);
     if (!p.sid) {

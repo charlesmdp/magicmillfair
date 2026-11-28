@@ -131,6 +131,21 @@ try {
   const onGround = await until(() => bob.page.evaluate(() => { const it = [...window.__mmf.avatars.items.values()][0]; return it && it.peer.anim === 10 && it.character.size === 1 && it.character.look.hat === 0 ? { anim: it.peer.anim } : null; }), 20000);
   await alice.page.evaluate(() => { window.__mmf.player.cross = false; });
   check('Bob sees Alice in the largest size with a party hat on, then her usual size, sitting on the ground', !!big && !!onGround, JSON.stringify({ big, onGround }));
+  // a paint and a hat of after the first fifteen — the fifth bit of the hat, a kit over 255 —, each way: Alice in a
+  // tuxedo under a traffic cone, Bob in marble under a halo; each sees the other dressed so, then as they were
+  {
+    const dress = (v, paint, hat, on) => v.page.evaluate(([paint, hat, on]) => { const a = window.__mmf; a.equip(`paint:${paint}`, on); a.equip(`hat:${hat}`, on); }, [paint, hat, on]);
+    const worn = (v) => v.page.evaluate(() => { const it = [...window.__mmf.avatars.items.values()][0]; return it ? { paint: it.character.paint || 0, hat: it.character.look.hat, kit: it.peer.kit || 0, set: it.character.mainMaterial.defines.PAINT, on: !!it.character.hat } : null; });
+    await dress(alice, 'tuxedo', 'cone', true); await dress(bob, 'marble', 'halo', true);
+    const bobSees = await until(async () => { const w = await worn(bob); return w && w.paint === 10 && w.hat === 18 ? w : null; }, 20000);
+    const aliceSees = await until(async () => { const w = await worn(alice); return w && w.paint === 17 && w.hat === 13 ? w : null; }, 20000);
+    await frames(bob, 3);
+    await bob.page.screenshot({ path: path.join(OUT, 'bob-sees-alice-dressed.png') });
+    await dress(alice, 'tuxedo', 'cone', false); await dress(bob, 'marble', 'halo', false);
+    const bare = await until(async () => { const a = await worn(alice), b = await worn(bob); return a && b && !a.paint && !a.hat && !b.paint && !b.hat ? true : null; }, 20000);
+    check('each sees the other in a paint and a hat of after the first fifteen — a tuxedo under a traffic cone, marble under a halo — and then without',
+      !!bobSees && bobSees.kit === packKit({ paint: 10 }) && bobSees.set === 2 && bobSees.on && !!aliceSees && aliceSees.kit === packKit({ paint: 17 }) && aliceSees.kit > 255 && aliceSees.on && !!bare, JSON.stringify({ bobSees, aliceSees, bare }));
+  }
   // a bouquet: Alice holds it out to Bob, who stands right by her — it is in his hands
   await bob.page.evaluate(() => { const a = window.__mmf, o = [...a.avatars.items.values()][0].peer; a.player.teleport(o.x + 1.2, o.z + 0.4, 0); });
   await alice.page.evaluate(() => { const a = window.__mmf; a.look.kinds = undefined; a.look.bouquet = true; });

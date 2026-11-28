@@ -8,7 +8,10 @@ import { MeshBuilder } from '../world/props/MeshBuilder.js';
 import { surfaceMaterial } from '../render/SurfaceMaterial.js';
 import { LAYER } from '../render/Shadows.js';
 
-/** Hats, in the order of their number on the network (4 bits: at most 16 entries, 'none' included; never reorder). */
+/**
+ * Hats, in the order of their number on the network (5 bits: at most 32 entries, 'none' included; never reorder,
+ * append — and add the same name to HAT_IDS in server/wardrobe.js and its card to server/items.js).
+ */
 export const HATS = [
   { id: 'none', name: 'No hat' },
   { id: 'cap', name: 'Cap', premium: true },
@@ -23,6 +26,12 @@ export const HATS = [
   { id: 'chef', name: "Chef's hat", premium: true },
   { id: 'propeller', name: 'Propeller cap', premium: true },
   { id: 'party', name: 'Party hat', premium: true },
+  { id: 'halo', name: 'Halo', premium: true },
+  { id: 'jester', name: "Jester's hat", premium: true },
+  { id: 'antlers', name: 'Antlers', premium: true },
+  { id: 'sombrero', name: 'Sombrero', premium: true },
+  { id: 'mortarboard', name: 'Graduation cap', premium: true },
+  { id: 'cone', name: 'Traffic cone', premium: true },
 ];
 /** Other things meant to be sold one day. */
 export const EXTRAS = { jetpack: { name: 'Jetpack', premium: true } };
@@ -76,6 +85,36 @@ export function wings() {
 // ---------------------------------------------------------------------------
 // Hats. Modelled for a head of radius 1 whose top is at the origin (y up, the face towards +Z): the avatar
 // scales them to its own head.
+
+/**
+ * A tube along a line of points ([x, y, z]…), its radius given at each: rings joined edge to edge, so that it
+ * bends without a seam (a tail, an antler, a cord). `tones`: a colour for each point ([r, g, b]) instead of the
+ * builder's own. Its ends are closed when they are wide enough to be seen into.
+ */
+function sweep(b, pts, rad, sides = 7, tones = null) {
+  const P = pts.map((p) => V(p[0], p[1], p[2])), rings = [];
+  let side = null;
+  for (let i = 0; i < P.length; i++) {
+    const t = new THREE.Vector3().subVectors(P[Math.min(P.length - 1, i + 1)], P[Math.max(0, i - 1)]).normalize();
+    // (a direction across the tube, carried from one ring to the next: the rings do not twist)
+    side = side ? side.clone().addScaledVector(t, -side.dot(t)).normalize() : new THREE.Vector3().crossVectors(t, Math.abs(t.y) > 0.9 ? V(1, 0, 0) : V(0, 1, 0)).normalize();
+    const other = new THREE.Vector3().crossVectors(t, side), c = tones ? [...tones[i], 1] : b.color, ring = [];
+    for (let s = 0; s <= sides; s++) {
+      const a = (s / sides) * Math.PI * 2, n = side.clone().multiplyScalar(Math.cos(a)).addScaledVector(other, Math.sin(a));
+      ring.push(b.vert(P[i].clone().addScaledVector(n, rad[i]), n, s / sides, i, c));
+    }
+    rings.push(ring);
+    if ((i === 0 || i === P.length - 1) && rad[i] > 0.04) {
+      const n = i ? t : t.clone().negate(), mid = b.vert(P[i], n, 0.5, i, c), rim = [];
+      for (let s = 0; s <= sides; s++) { const a = (s / sides) * Math.PI * 2; rim.push(b.vert(P[i].clone().addScaledVector(side, Math.cos(a) * rad[i]).addScaledVector(other, Math.sin(a) * rad[i]), n, s / sides, i, c)); }
+      for (let s = 0; s < sides; s++) i ? b.idx.push(mid, rim[s], rim[s + 1]) : b.idx.push(mid, rim[s + 1], rim[s]);
+    }
+  }
+  for (let i = 0; i + 1 < rings.length; i++) for (let s = 0; s < sides; s++) b.idx.push(rings[i][s], rings[i][s + 1], rings[i + 1][s], rings[i][s + 1], rings[i + 1][s + 1], rings[i + 1][s]);
+  return b;
+}
+/** A ball (a bell, a pompom). */
+const ball = (b, x, y, z, r, sides = 8) => b.place(x, y, z).lathe([[0.0, -r], [r * 0.71, -r * 0.71], [r, 0.0], [r * 0.71, r * 0.71], [0.0, r]], sides).pop();
 
 const hatCache = new Map();
 export function hatGeometry(id) {
@@ -193,6 +232,85 @@ export function hatGeometry(id) {
     for (let k = 0; k < N; k++) for (let j = 0; j < A; j++) { const t = (k + (j >> 1)) % 2 ? [1.25, 0.25, 0.55] : [0.15, 0.75, 0.95]; b.tint(t[0], t[1], t[2], 1).quad(at(k, j), at(k, j + 1), at(k + 1, j + 1), at(k + 1, j)); }
     b.tint(1.3, 1.3, 1.25, 1).lathe([[0.62, -0.03], [0.78, 0.0], [0.78, 0.08], [0.62, 0.12]], A);
     b.tint(1.4, 1.1, 0.15, 1).place(0, h + 0.06, 0).lathe([[0.0, -0.17], [0.15, -0.09], [0.19, 0.0], [0.15, 0.09], [0.0, 0.17]], 8).pop();
+  } else if (id === 'halo') {
+    // a ring of light, about its own centre (it is a mesh of its own, of the material that glows, and floats over
+    // the head: see makeHat)
+    const R = 0.74, r = 0.085, prof = [];
+    for (let k = 0; k <= 10; k++) { const a = -Math.PI / 2 + (k / 10) * Math.PI * 2; prof.push([R + Math.cos(a) * r, Math.sin(a) * r]); }
+    b.tint(0.62, 0.4, 0.085, 1).lathe(prof, 28);
+  } else if (id === 'jester') {
+    // a cap in quarters of two colours, a ruff of points round its rim, three tails that droop — and a bell on
+    // every point of it
+    const RED = [0.62, 0.035, 0.06], BLUE = [0.085, 0.05, 0.42], YELLOW = [0.95, 0.6, 0.05], BELL = [1.3, 0.95, 0.2];
+    const A = 16, prof = [[1.03, -0.22], [1.04, 0.0], [0.96, 0.3], [0.72, 0.52], [0.36, 0.64], [0.0, 0.67]];
+    const at = (k, j) => { const [r, y] = prof[k], a = (j / A) * Math.PI * 2 + Math.PI / 4; return V(Math.sin(a) * r, y, Math.cos(a) * r); };
+    for (let k = 0; k + 1 < prof.length; k++) for (let j = 0; j < A; j++) { const t = (j >> 2) % 2 ? RED : BLUE; b.tint(t[0], t[1], t[2], 1).quad(at(k, j), at(k, j + 1), at(k + 1, j + 1), at(k + 1, j)); }
+    for (let i = 0; i < 8; i++) {
+      const a0 = (i / 8) * Math.PI * 2, a1 = ((i + 1) / 8) * Math.PI * 2, am = (a0 + a1) / 2, t = i % 2 ? YELLOW : i % 4 ? BLUE : RED;
+      const p = (a, r, y) => V(Math.sin(a) * r, y, Math.cos(a) * r), tip = p(am, 1.22, -0.64);
+      b.tint(t[0], t[1], t[2], 1).tri(p(a1, 1.05, -0.2), p(a0, 1.05, -0.2), tip);
+      ball(b.tint(BELL[0], BELL[1], BELL[2], 1), tip.x, tip.y - 0.05, tip.z, 0.075, 6);
+    }
+    const tail = (pts, tone) => {
+      sweep(b.tint(tone[0], tone[1], tone[2], 1), pts, [0.46, 0.37, 0.27, 0.18, 0.08], 8);
+      const e = pts[pts.length - 1];
+      ball(b.tint(BELL[0], BELL[1], BELL[2], 1), e[0], e[1] - 0.12, e[2], 0.16, 8);
+    };
+    tail([[0.4, 0.4, 0.0], [0.86, 0.95, 0.0], [1.42, 1.12, 0.0], [1.86, 0.86, 0.02], [2.02, 0.42, 0.05]], RED);
+    tail([[-0.4, 0.4, 0.0], [-0.86, 0.95, 0.0], [-1.42, 1.12, 0.0], [-1.86, 0.86, 0.02], [-2.02, 0.42, 0.05]], BLUE);
+    tail([[0.0, 0.46, -0.36], [0.0, 1.08, -0.78], [0.0, 1.26, -1.34], [0.0, 1.0, -1.8], [0.0, 0.56, -1.96]], YELLOW);
+  } else if (id === 'antlers') {
+    // a band over the head, and on it two antlers of five points each: the beam, which rises and leans out, and
+    // four tines that leave it forward (the last one back) — pale at their tips
+    const BONE = [0.56, 0.41, 0.25], PALE = [1.1, 1.0, 0.82];
+    const band = [];
+    for (let k = 0; k <= 12; k++) { const a = -1.25 + (k / 12) * 2.5; band.push([Math.sin(a) * 1.07, Math.cos(a) * 1.07 - 1.03, 0.0]); }
+    sweep(b.tint(0.26, 0.15, 0.08, 1), band, band.map(() => 0.075), 6);
+    for (const s of [-1, 1]) {
+      const beam = [[0.5 * s, -0.14, 0.0], [0.72 * s, 0.38, -0.06], [1.02 * s, 0.86, -0.16], [1.22 * s, 1.38, -0.16], [1.2 * s, 1.9, -0.02], [1.02 * s, 2.32, 0.14]];
+      sweep(b, beam, [0.2, 0.18, 0.155, 0.13, 0.1, 0.025], 7, [BONE, BONE, BONE, BONE, BONE, PALE]);
+      const tine = (k, mid, tip, r) => sweep(b, [beam[k], [mid[0] * s, mid[1], mid[2]], [tip[0] * s, tip[1], tip[2]]], [r, r * 0.72, 0.018], 6, [BONE, BONE, PALE]);
+      tine(1, [0.8, 0.64, 0.3], [0.74, 1.02, 0.64], 0.13);
+      tine(2, [1.3, 1.04, 0.12], [1.54, 1.44, 0.36], 0.12);
+      tine(3, [1.54, 1.56, -0.02], [1.8, 1.98, 0.12], 0.11);
+      tine(4, [1.4, 2.1, -0.24], [1.5, 2.44, -0.42], 0.09);
+      ball(b.tint(0.26, 0.15, 0.08, 1), 0.5 * s, -0.12, 0.0, 0.2, 8); // (where it is fixed to the band)
+    }
+  } else if (id === 'sombrero') {
+    // a tall crown with its ribbons, and a brim wider than the shoulders that dips, then turns up — its edge
+    // braided in three colours, a pompom hanging from every other stitch
+    const STRAW = [0.6, 0.42, 0.14], TONES = [[0.62, 0.05, 0.04], [0.9, 0.87, 0.78], [0.05, 0.36, 0.13]];
+    const prof = [[2.0, 0.06], [1.7, -0.06], [1.3, -0.05], [0.98, 0.03], [0.9, 0.5], [0.72, 0.95], [0.5, 1.3], [0.3, 1.5], [0.12, 1.6], [0.0, 1.62]];
+    b.tint(STRAW[0], STRAW[1], STRAW[2], 1).lathe(prof, 24);
+    const A = 24, rim = (j, r, y) => { const a = (j / A) * Math.PI * 2; return V(Math.sin(a) * r, y, Math.cos(a) * r); };
+    for (let j = 0; j < A; j++) {
+      const t = TONES[j % 3];
+      b.tint(t[0], t[1], t[2], 1).quad(rim(j, 2.24, 0.36), rim(j + 1, 2.24, 0.36), rim(j + 1, 2.0, 0.06), rim(j, 2.0, 0.06));
+      if (j % 2 === 0) { const p = rim(j + 0.5, 2.29, 0.22); ball(b, p.x, p.y, p.z, 0.085, 6); }
+    }
+    // (its ribbons: bands round the crown, a little proud of it — and a zigzag over them)
+    const crown = (y) => { let k = 3; while (k + 2 < prof.length && prof[k + 1][1] < y) k++; const [r0, y0] = prof[k], [r1, y1] = prof[k + 1]; return r0 + ((r1 - r0) * (y - y0)) / (y1 - y0) + 0.014; };
+    for (const [y0, y1, k] of [[0.36, 0.5, 0], [0.5, 0.57, 1], [0.57, 0.72, 2]]) b.tint(TONES[k][0], TONES[k][1], TONES[k][2], 1).lathe([[crown(y0), y0], [crown(y1), y1]], 24);
+    b.tint(TONES[0][0], TONES[0][1], TONES[0][2], 1);
+    for (let j = 0; j < 12; j++) b.tri(rim(2 * j, crown(0.78) + 0.004, 0.78), rim(2 * j + 2, crown(0.78) + 0.004, 0.78), rim(2 * j + 1, crown(1.02) + 0.004, 1.02));
+  } else if (id === 'mortarboard') {
+    // a skullcap, the square board on it (a corner to the front), its button, and a gold tassel over the edge
+    b.tint(0.045, 0.045, 0.055, 1).lathe([[1.02, -0.3], [1.03, -0.02], [0.93, 0.2], [0.6, 0.3], [0.0, 0.33]], S);
+    b.tint(0.075, 0.075, 0.09, 1).place(0, 0.36, 0, Math.PI / 4).box(-1.2, -0.035, -1.2, 1.2, 0.035, 1.2).pop();
+    b.tint(1.2, 0.82, 0.14, 1).cylinder(0, 0.39, 0, 0.1, 0.1, 0.05, 10);
+    sweep(b, [[0.0, 0.43, 0.0], [0.5, 0.42, 0.44], [0.86, 0.41, 0.8], [0.93, 0.2, 0.86], [0.94, -0.22, 0.87]], [0.032, 0.032, 0.032, 0.032, 0.032], 5);
+    ball(b, 0.94, -0.26, 0.87, 0.075, 6);
+    b.place(0.94, -0.3, 0.87).lathe([[0.0, -0.46], [0.12, -0.44], [0.055, 0.0]], 8).pop();
+  } else if (id === 'cone') {
+    // a traffic cone: its square foot, two white bands round it, the hole at its top
+    const r = (y) => 0.98 - (0.78 / 2.02) * (y + 0.07);
+    b.tint(0.7, 0.07, 0.004, 1).box(-1.18, -0.16, -1.18, 1.18, -0.07, 1.18);
+    for (const [y0, y1, white] of [[-0.07, 0.62, 0], [0.62, 0.98, 1], [0.98, 1.28, 0], [1.28, 1.54, 1], [1.54, 1.95, 0]]) {
+      if (white) b.tint(1.0, 1.0, 0.96, 1); else b.tint(0.85, 0.085, 0.004, 1);
+      b.lathe([[r(y0), y0], [r(y1), y1]], 18);
+    }
+    b.tint(0.85, 0.085, 0.004, 1).lathe([[r(1.95), 1.95], [0.13, 1.97]], 18);
+    b.tint(0.05, 0.02, 0.01, 1).lathe([[0.13, 1.97], [0.0, 1.9]], 18);
   }
   const g = b.empty ? null : b.build();
   hatCache.set(id, g);
@@ -203,6 +321,20 @@ export function hatGeometry(id) {
 export function makeHat(id, r) {
   const g = hatGeometry(id);
   if (!g) return null;
+  if (id === 'halo') {
+    // (nothing holds it: a ring that glows, leaning a little, and the way it leans goes slowly round — found in
+    // userData.rotor, which the avatar turns, at the pace of userData.rate)
+    const m = new THREE.Group(), turn = new THREE.Group(), ring = new THREE.Mesh(g, glowMaterial());
+    m.scale.setScalar(r);
+    ring.rotation.x = 0.17;
+    ring.frustumCulled = false;
+    turn.position.y = 0.52;
+    turn.add(ring);
+    m.add(turn);
+    m.userData.rotor = turn;
+    turn.userData.rate = 0.9;
+    return m;
+  }
   const m = new THREE.Mesh(g, cosmeticMaterial());
   m.scale.setScalar(r);
   m.layers.enable(LAYER.DYNAMIC_CASTER);

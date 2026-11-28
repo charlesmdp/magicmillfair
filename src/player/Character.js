@@ -3,11 +3,11 @@
 // avatar is a single draw call (per pass) however many visitors there are.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { surfaceMaterial, skinnedDepthMaterial } from '../render/SurfaceMaterial.js';
+import { surfaceMaterial, skinnedDepthMaterial, paintSet } from '../render/SurfaceMaterial.js';
 import { LAYER } from '../render/Shadows.js';
 import { assetUrl } from '../core/Assets.js';
 import { HATS, makeHat, makeBouquet, makeJetpack, makeQuad, makeDisguise, QUAD, wings as makeWings } from './Cosmetics.js';
-import { SIZE_SCALE } from '../../server/items.js';
+import { SIZE_SCALE, hatOf, withHat } from '../../server/items.js';
 
 /**
  * Body colours offered to players (index is what travels over the network; never reorder). The first sixteen
@@ -95,13 +95,13 @@ const REST_HAND = [0.33, 0.74, 0.04]; // about where a hand hangs (gestures ease
 
 /**
  * What an avatar wears and holds travels in the 16 "flags" bits of its state:
- * bit 0 free camera · bits 1-3 hat (index in HATS, its low bits) · bit 4 jetpack burning · bit 5 bouquet ·
- * bit 6 quad · bit 7 a head twice the size · bits 8-9 and 13 size (see SIZE_SCALE in items.js) · bits 10-11 disguise (0 none,
- * 1 a bush, 2 a tree) · bit 12 the fourth bit of the hat
+ * bit 0 free camera · bits 1-3, 12 and 14 hat (its number in HATS: see hatOf and withHat in server/items.js) ·
+ * bit 4 jetpack burning · bit 5 bouquet · bit 6 quad · bit 7 a head twice the size · bits 8-9 and 13 size (see
+ * SIZE_SCALE in items.js) · bits 10-11 disguise (0 none, 1 a bush, 2 a tree) · bit 15 free
  */
-export const packLook = (o) => (o.free ? 1 : 0) | ((o.hat & 7) << 1) | (o.jet ? 16 : 0) | (o.bouquet ? 32 : 0) | (o.quad ? 64 : 0) | (o.dome ? 128 : 0)
-  | (((o.size || 0) & 3) << 8) | (((o.disguise || 0) & 3) << 10) | (((o.hat >> 3) & 1) << 12) | ((((o.size || 0) >> 2) & 1) << 13);
-const unpackLook = (f) => ({ hat: ((f >> 1) & 7) | (((f >> 12) & 1) << 3), jet: !!(f & 16), bouquet: !!(f & 32), quad: !!(f & 64), dome: !!(f & 128), size: ((f >> 8) & 3) | (((f >> 13) & 1) << 2), disguise: (f >> 10) & 3 });
+export const packLook = (o) => withHat((o.free ? 1 : 0) | (o.jet ? 16 : 0) | (o.bouquet ? 32 : 0) | (o.quad ? 64 : 0) | (o.dome ? 128 : 0)
+  | (((o.size || 0) & 3) << 8) | (((o.disguise || 0) & 3) << 10) | ((((o.size || 0) >> 2) & 1) << 13), o.hat || 0);
+const unpackLook = (f) => ({ hat: hatOf(f), jet: !!(f & 16), bouquet: !!(f & 32), quad: !!(f & 64), dome: !!(f & 128), size: ((f >> 8) & 3) | (((f >> 13) & 1) << 2), disguise: (f >> 10) & 3 });
 
 const HEIGHT = 1.72;
 // Seated, the hips sit this far behind the feet and the underside of the body this high above them.
@@ -312,13 +312,17 @@ export class Character {
 
   /**
    * A paint job over the colour of the avatar: 0 none, 1 gold plating, 2 chrome, 3 atomic glow (it pulses),
-   * 4 candy (it drifts through the rainbow), 5 meltdown, 6 plasma, 7 hazard stripes, 8 mirror ball, 9 galaxy — the
-   * numbers of PAINTS in server/items.js.
+   * 4 candy (it drifts through the rainbow), 5 meltdown, 6 plasma, 7 hazard stripes, 8 mirror ball, 9 galaxy,
+   * 10 tuxedo (the head keeps the colour of the robot), 11 camouflage, 12 tiger, 13 rust bucket, 14 deep frost,
+   * 15 holographic, 16 circuit board, 17 marble and gold, 18 last sunset — the numbers of PAINTS in
+   * server/items.js.
    */
   setPaint(paint = 0) {
     if (paint === (this.paint || 0)) return;
     this.paint = paint;
-    // (the paint itself is drawn by the material: see PAINT in SurfaceMaterial.js)
+    // (the paint itself is drawn by the material: see PAINT in SurfaceMaterial.js — those from the tenth on by a
+    // program of their own, which the material takes when it is given one of them)
+    paintSet(this.mainMaterial, paint);
     const u = this.mainMaterial.uniforms;
     u.uPaint.value.x = paint;
     u.uParams.value.x = paint === 1 ? 0.22 : paint === 2 ? 0.08 : 0.45; u.uParams.value.y = paint === 1 || paint === 2 ? 1.0 : 0.5;
@@ -507,7 +511,9 @@ export class Character {
     this.big += ((l.dome ? 1 : 0) - this.big) * Math.min(1, dt * 5);
     this.bones.Head.scale.setScalar(this.headScale * (1 + 1.35 * this.big));
     if (this.root.scale.x !== this.size) this.root.scale.setScalar(this.size);
-    if (this.hat?.userData.rotor) this.hat.userData.rotor.rotation.y += dt * (6 + Math.min(18, this.speed * 3)); // the propeller of the cap
+    // the propeller of the cap, which turns faster as one runs — or what turns at a pace of its own (a halo)
+    const rotor = this.hat?.userData.rotor;
+    if (rotor) rotor.rotation.y += dt * (rotor.userData.rate ?? 6 + Math.min(18, this.speed * 3));
     // sitting on the ground, legs crossed: the body comes down until it rests, the knees go out, the feet tuck in
     this.cross += ((this.anim === ANIM.cross ? 1 : 0) - this.cross) * Math.min(1, dt * 7);
     if (this.cross > 0.01) this._crossLegs(this.cross);
