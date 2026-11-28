@@ -208,6 +208,11 @@ try {
   await B('press');
   const said = await page.evaluate(() => window.__mmf.hud.noteEl.textContent);
   check('by the helmet the prompt says "Look at the diving helmet", and it has its word to say', o.label === 'Look at the diving helmet' && /A diving helmet, from before/.test(said), said.slice(0, 60) + '…');
+  // (the log: a seat of the game)
+  const log = await page.evaluate(() => { const a = window.__mmf, s = a.world.seats[a.world.seats.length - 1]; return [s.x, s.z]; });
+  s = await B('walk', [log], { run: false, reach: 0.9 });
+  const sat = await page.evaluate(() => { const a = window.__mmf; a.interact.update(true); const label = a.interact.target?.label || null; a.interact.press(0); const seated = !!a.player.seat; for (let f = 0; f < 40; f++) a.player.update(1 / 60, 0, false); const y = a.player.pos.y; a.player.stand(); return { label, seated, y }; });
+  check('by the log the prompt says "Sit on the log", and one sits', sat.label === 'Sit on the log' && sat.seated, sat);
   s = await B('walk', [toWorld(DEEP.rest.u - 1, DEEP.rest.w + 9)], { run: false, steps: 500 });
   check('the wall behind the strand stops it: it stays in the chamber', inChamber(...toLocal(s.at[0], s.at[2])) && s.grounded && s.room > 0.2, { at: s.at.map(r1), eyeFromTheRock: r2(s.room) });
   // 5. back out, and up

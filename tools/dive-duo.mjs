@@ -62,19 +62,20 @@ try {
   const look = (fx, fz, tx, tz) => Math.atan2(fx - tx, fz - tz); // (the camera of one who stands at f and looks at t)
   await alice.page.evaluate(([x, z]) => window.__mmf.player.teleport(x, z, 0), [ax, az]);
   await bob.page.evaluate(([x, z]) => window.__mmf.player.teleport(x, z, 0), [bx, bz]);
-  await sleep(3500);
+  for (const v of [alice, bob]) await v.page.waitForFunction(() => window.__mmf.player.pos.y > -1.12 && !window.__mmf.hud.noteEl.classList.contains('show'), null, { timeout: 120000 }); // (afloat, and the words of the gate read)
+  await sleep(2500);
   let a = await sees(alice), b = await sees(bob);
   check('at the surface each sees the other swim', !!a.other?.visible && !!b.other?.visible && a.other.anim === 4 && Math.abs(a.other.at[1] + 1.05) < 0.3, { Alice: r1(a.me), Bob: r1(b.me) });
   // Alice goes under, four and a half metres down; Bob stays at the surface and looks at her
-  await alice.page.evaluate(([x, z, yaw]) => window.__mmf.dive.put(x, -5.4, z, yaw, -0.1), [ax, az, look(ax, az, bx, bz)]);
+  await alice.page.evaluate(([x, z, yaw]) => window.__mmf.dive.put(x, -5.4, z, yaw, -0.1), [ax, az, look(ax, az, bx, bz) + 0.5]);
   await bob.page.evaluate(([x, z, yaw]) => { const m = window.__mmf; m.rig.pitch = -0.5; m.rig.snap(m.player.pos, yaw); }, [bx, bz, look(bx, bz, ax, az)]);
   await sleep(3000);
   a = await sees(alice); b = await sees(bob);
   check('Alice dives: Bob, at the surface, is told where she is — at her true depth — and her robot is drawn there, not pulled back to the surface', a.diving && Math.abs(b.other.at[1] - a.me[1]) < 0.3 && b.other.at[1] < -4 && Math.abs(b.other.drawn[1] - a.me[1]) < 0.4 && b.other.shown && b.other.anim === 4, { Alice: r1(a.me), BobIsTold: r1(b.other.at), drawnAt: r1(b.other.drawn) });
   await bob.page.screenshot({ path: path.join(OUT, 'bob-over-alice.png') });
   // Bob dives too: face to face, six metres apart
-  await bob.page.evaluate(([x, z, yaw]) => window.__mmf.dive.put(x, -5.4, z, yaw, -0.08), [bx, bz, look(bx, bz, ax, az)]);
-  await alice.page.evaluate(([x, z, yaw]) => window.__mmf.dive.put(x, -5.4, z, yaw, -0.08), [ax, az, look(ax, az, bx, bz)]);
+  await bob.page.evaluate(([x, z, yaw]) => window.__mmf.dive.put(x, -5.4, z, yaw, -0.08), [bx, bz, look(bx, bz, ax, az) + 0.5]);
+  await alice.page.evaluate(([x, z, yaw]) => window.__mmf.dive.put(x, -5.4, z, yaw, -0.08), [ax, az, look(ax, az, bx, bz) + 0.5]);
   await sleep(3500);
   a = await sees(alice); b = await sees(bob);
   check('two divers see each other under the water, each where the other is', a.diving && b.diving && a.under && b.under && a.other.shown && b.other.shown && Math.abs(a.other.drawn[1] - b.me[1]) < 0.4 && Math.abs(b.other.drawn[1] - a.me[1]) < 0.4 && Math.hypot(a.other.drawn[0] - b.me[0], a.other.drawn[2] - b.me[2]) < 0.6, { AliceSeesBobAt: r1(a.other.drawn), Bob: r1(b.me), BobSeesAliceAt: r1(b.other.drawn), Alice: r1(a.me) });
@@ -86,7 +87,7 @@ try {
   await sleep(3000);
   b = await sees(bob);
   check('Alice is in the chamber, Bob outside in the sea: her name is not written over the rock', b.other.tagOff && b.other.tag === false && !b.under, { Alice: r1(b.other.at) });
-  await bob.page.evaluate(([x, z, y, yaw]) => { const m = window.__mmf; m.player.teleport(x, z, yaw + Math.PI, y); m.rig.pitch = -0.15; m.rig.snap(m.player.pos, yaw); }, [tx, tz, strand(DEEP.rest.u + 2.5, DEEP.rest.w - 1.2) + 0.05, look(tx, tz, sx, sz)]);
+  await bob.page.evaluate(([x, z, y, yaw]) => { const m = window.__mmf; m.player.teleport(x, z, yaw + Math.PI, y); m.rig.pitch = -0.15; m.rig.snap(m.player.pos, yaw + 0.5); }, [tx, tz, strand(DEEP.rest.u + 2.5, DEEP.rest.w - 1.2) + 0.05, look(tx, tz, sx, sz)]);
   await sleep(3000);
   b = await sees(bob);
   check('Bob joins her on the strand: he sees her there, by her name', !b.other.tagOff && b.other.shown && Math.abs(b.other.drawn[1] - y) < 0.3, { BobSeesAliceAt: r1(b.other.drawn) });

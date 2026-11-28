@@ -194,3 +194,50 @@ new kind of light). No game there: one walks in, looks, sits. The symbols are dr
 another. `src/world/zones/places/Temple.js` and `Caves.js` show how a place one walks into is built (floors as
 platforms, an inside under the ground). Its music is written afterwards (the deep choir): leave the place where
 it is heard (`sanctuary.inside(x, y, z)`).
+
+### Diving, and the Diver's Rest (`dive`)
+
+Asked for on 28 November 2026: "to be able to dive under the water, and a secret cave under the water — behind
+a toggle, so that the game is no heavier without it". Not a game: a way of moving, and a place to find. Switch
+`dive` (`RELEASE`), **off as delivered**: with it off nothing of it is asked for, loaded, built or drawn, and no
+file of the game runs a line more.
+
+**Diving.** Where the water is three metres deep or more, a swimmer is offered "Dive" (the E key, or a tap on the
+prompt). Under, one swims in three dimensions: the stick goes where the camera looks — down and up with it —,
+Space and C go straight up and down, Shift is faster; on a telephone the stick and the look do it all, the arrow
+kicks one up, and the prompt "Back up to the surface" brings one up. Reaching the surface where there is air
+over it gives the ordinary swimming back. No gauge of air: a robot does not breathe. The open sea stays the
+shark's: within its reach (`SHARK.far`, 46 m from where the sea ends) one is not offered to dive, and a diver is
+held at that line.
+
+**Under the water** (only while the camera is under it): a veil of colour that thickens with the depth — the
+haze of the world itself, lent the colour of the water and given back —, the surface seen from below with its
+net of light, bubbles from every diver, weed on the bed and a shoal round the rock (one instanced mesh each),
+the sound dulled by a low-pass filter. The game's mirrored view of the world is not rendered meanwhile: a frame
+under the water costs less than one above it.
+
+**The Diver's Rest.** A stack of rock in the south-east of the bay, **its middle at (202, 58)**, on a bed seven
+metres down: 20 m across, 8 m over the sea, solid to the eye from the shore and from above. Its arch is at its
+foot, on the side away from the beaches — **at (206, 69), its crown four metres under the waterline** —; a
+passage runs fourteen metres under the rock to a chimney that comes up into the pool of a chamber: a pocket of
+air, a strand of sand **at about (197, 58)**, crystals that glow, a log to sit on, and a copper diving helmet
+from before which has its word to say (it is not one of the thirty relics). A line says one has found it, kept
+in the browser (`mmf.dive.found`); nothing is on the map. The hint, for who looks: a thread of bubbles from the
+arch — rings on the water where it breaks the surface — and a glow over the arch.
+
+The ground of the world cannot be dug while the game runs (its caves are baked), so the rock is its own:
+`src/world/zones/places/deep/plan.js` is ONE function that says where it is solid, from which everything is
+drawn — its mesh (surface nets), what stops a diver, the ring of obstacles and the two floors the game's own
+walker meets, what no camera may cross. `Deep.js` is what is seen; `src/extras/dive.js` plugs it in from outside:
+the diver is a driver of the player (as in the games), and three methods of the running game are wrapped —
+`interact.update` (the prompt for a swimmer), `rig.update` (the camera goes under; near the rock no camera
+looks through it), `ripples.trail` (no rings over who swims deep). The others see a diver at their true depth:
+the game's own message of where one is carries it.
+
+Its checks: `node tools/dive-test.mjs` (38: the rock alone — the only way in is under four metres of water, a
+body goes through, the walker is shut out and in —, then a bot in the running game that swims out, dives, finds
+the arch, comes up in the chamber, walks the strand, and swims back out and up; the shark keeps its water) and
+`node tools/dive-duo.mjs` (7: two visitors — a diver is drawn for the other at their true depth, two divers see
+each other, who is in the cave is not named through its rock; a picture of each screen). Pictures:
+`node tools/game-shots.mjs dive mouth=209.4,-5.5,81.3,15.5,-2` (the free camera goes under the water while the
+switch is on).
