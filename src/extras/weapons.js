@@ -138,7 +138,8 @@ const css = `
 .toys .toy-line:empty { display: none; }
 .toys .toy-line b { color: var(--accent); font-weight: 700; }
 .free .toys, .dead .toys { display: none; }
-.touch .toys { right: calc(158px + var(--safe-r)); bottom: calc(22px + var(--safe-b)); flex-direction: column-reverse; align-items: flex-end; gap: 10px; }
+.touch .toys { right: calc(158px + var(--safe-r)); bottom: calc(22px + var(--safe-b)); flex-direction: column-reverse; align-items: flex-end; gap: 46px; }
+/* (the gap: the game's notes — "Corked: Bob is down!" — are written at the foot of the page, just above the fire button: they are read between the two) */
 .touch .toys .toy-draw { width: 52px; height: 52px; border: 1.5px solid rgba(255, 255, 255, 0.3); background: rgba(255, 255, 255, 0.12); }
 .touch .toys .toy-draw[aria-pressed='true'] { background: rgba(242, 193, 78, 0.9); border-color: transparent; }
 .touch .toys .toy-draw kbd, .touch .toys .toy-line { display: none; }

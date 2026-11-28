@@ -217,7 +217,11 @@ try {
   }
   let before = await state(bob);
   const fires = count(await state(alice), 'fire');
-  const beside = await sightOn(alice, B, 0.065); // (the sight a little to one side of him: with a mouse, that is nobody)
+  // (the sight a little to one side of him, six metres away: 0.14 rad passes some 0.8 m from his middle — further than
+  // the cork's reach (0.55 m), so a mouse finds nobody; seen from the camera, seven metres further back, that is
+  // about 0.065 rad: inside the cork's cone (0.1 rad), so a finger on a phone is helped to him — see Cara below)
+  const BESIDE = 0.14;
+  const beside = await sightOn(alice, B, BESIDE);
   let aimed = await sightOn(alice, B);
   await shot(alice, 'a-sight-on-bob'); await lookAt(bob, ...P(6)); await shot(bob, 'b-sees-alice-armed');
   await loaded(alice); await click(alice);
@@ -391,7 +395,7 @@ try {
   let c = await state(cara);
   const drawn = await boxes();
   check('on a phone-sized page there are no keys: one round button draws the toy, and a red one appears under it to fire', pads.touch && !!pads.draw && pads.draw[2] >= 44 && !pads.fire && !pads.line && c.toy === 0 && !!drawn.fire && drawn.fire[2] >= 56 && drawn.draw[1] === pads.draw[1], { draw: pads.draw, fire: drawn.fire });
-  const helped = await sightOn(cara, B, 0.065); // (the sight a little to one side of him: a finger is helped — the nearest robot in a narrow cone)
+  const helped = await sightOn(cara, B, BESIDE); // (the sight as far to one side of him as Alice's was: a finger is helped — the nearest robot in a narrow cone)
   await sleep(SHOTS ? 3600 : 0);
   await shot(cara, 'phone-buttons');
   await loaded(cara);
