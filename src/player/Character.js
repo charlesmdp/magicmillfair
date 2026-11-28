@@ -511,7 +511,9 @@ export class Character {
     this.big += ((l.dome ? 1 : 0) - this.big) * Math.min(1, dt * 5);
     this.bones.Head.scale.setScalar(this.headScale * (1 + 1.35 * this.big));
     if (this.root.scale.x !== this.size) this.root.scale.setScalar(this.size);
-    if (this.hat?.userData.rotor) this.hat.userData.rotor.rotation.y += dt * (6 + Math.min(18, this.speed * 3)); // the propeller of the cap
+    // the propeller of the cap, which turns faster as one runs — or what turns at a pace of its own (a halo)
+    const rotor = this.hat?.userData.rotor;
+    if (rotor) rotor.rotation.y += dt * (rotor.userData.rate ?? 6 + Math.min(18, this.speed * 3));
     // sitting on the ground, legs crossed: the body comes down until it rests, the knees go out, the feet tuck in
     this.cross += ((this.anim === ANIM.cross ? 1 : 0) - this.cross) * Math.min(1, dt * 7);
     if (this.cross > 0.01) this._crossLegs(this.cross);
