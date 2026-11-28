@@ -140,6 +140,20 @@ try {
   await dialogOf(page, 'Jetpack');
   await shot(page, '9-refund-the-rest', false);
   await page.click('#sale-refund-cancel');
+  // what Stripe refuses is said in the dialog, in plain words — and a payment given back in Stripe itself meanwhile
+  stripe.balance = 100;
+  await dialogOf(page, 'Crown');
+  await page.click('#sale-refund-go');
+  await page.waitForFunction(() => !document.getElementById('sale-refund-error').hidden && !document.getElementById('sale-refund-go').disabled, null, { timeout: 15000 });
+  said.refused = await page.textContent('#sale-refund-error');
+  await shot(page, '9b-refund-refused', false);
+  stripe.balance = Infinity;
+  await page.click('#sale-refund-cancel');
+  stripe.payments.get(sold.crown.payment_intent).refunded = 999;
+  await dialogOf(page, 'Crown');
+  said.nothingLeft = await page.textContent('#sale-refund-error');
+  await shot(page, '9c-refund-nothing-left', false);
+  await page.click('#sale-refund-cancel');
   // done for good: the top hat goes back, and the list says so
   await dialogOf(page, 'Top hat');
   await page.fill('#sale-refund-reason', 'Asked for by e-mail');

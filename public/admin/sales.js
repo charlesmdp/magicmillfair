@@ -154,7 +154,7 @@
   // (one intention, one token: drawn when the dialog opens, sent with the refund — the same click said twice is
   // one refund. After a refusal — Stripe did nothing — another is drawn; when nobody knows what Stripe did, it is kept.)
   const draw16 = () => { try { return crypto.randomUUID().replace(/-/g, ''); } catch { return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}${Math.random().toString(36).slice(2, 12)}`; } };
-  let giving = null; // ({ sale, look, token, n }: the sale the dialog is open on)
+  let giving = null; // ({ sale, look, token, n, note }: the sale the dialog is open on — note: what it has to say, whatever is typed)
   const dialog = $('sale-refund'), amountBox = $('sale-refund-amount'), go = $('sale-refund-go'), errBox = $('sale-refund-error');
   /** What was typed as a sum, in cents (null: not a sum). "5", "5.5", "5,50", "$5.50". */
   const centsOf = (text) => { const m = /^\s*\$?\s*(\d{1,7})(?:[.,](\d{1,2}))?\s*\$?\s*$/.exec(String(text || '')); return m ? Number(m[1]) * 100 + Number((m[2] || '').padEnd(2, '0')) : null; };
@@ -173,7 +173,7 @@
     if (!all && amountBox.value.trim() && typedSum === null) bad = 'A sum like 5 or 5.50.';
     else if (!all && typedSum !== null && typedSum < 1) bad = 'More than nothing.';
     else if (!all && typedSum !== null && typedSum > look.left) bad = `No more than what is left of this payment: ${money(look.left, cur)}.`;
-    fail(bad);
+    fail(bad || giving.note || '');
     const ready = look.left > 0 && !look.disputed && giving.can && (all || (typedSum !== null && typedSum >= 1 && typedSum <= look.left));
     go.disabled = !ready || giving.busy;
     go.textContent = ready ? `Give back ${money(sum, cur)}` : 'Give it back';
@@ -181,7 +181,7 @@
 
   async function openRefund(sale) {
     const n = (giving?.n || 0) + 1;
-    giving = { sale, look: null, token: draw16(), n, can: false, busy: false };
+    giving = { sale, look: null, token: draw16(), n, can: false, busy: false, note: '' };
     $('sale-refund-title').textContent = `Refund — ${sale.what}`;
     $('sale-refund-who').textContent = `${whoOf(sale.who)} — bought on ${day(sale.at)} at ${hour(sale.at)}`;
     $('sale-refund-sums').textContent = 'Asking Stripe what is left of this payment…';
@@ -195,21 +195,23 @@
     const res = await api(`/api/sales?look=${encodeURIComponent(sale.id)}`);
     if (giving?.n !== n || !dialog.open) return; // (closed, or opened on another sale meanwhile)
     if (!res.ok) { $('sale-refund-sums').textContent = ''; fail(wrong(res)); return; }
-    const { look, sale: fresh } = res.body, cur = fresh.currency;
-    giving.sale = fresh; giving.look = look; giving.can = !!look.asked || fresh.can;
-    $('sale-refund-who').textContent = `${whoOf(fresh.who)} — bought on ${day(fresh.at)} at ${hour(fresh.at)}`;
+    showLook(res.body);
+  }
+  /** The dialog shows a sale as Stripe has it now ({ sale, look }: the answer of the server). `note`: what it says besides. */
+  function showLook({ look, sale }, note = '') {
+    const cur = sale.currency;
+    Object.assign(giving, { sale, look, can: !!look.asked || sale.can });
+    $('sale-refund-who').textContent = `${whoOf(sale.who)} — bought on ${day(sale.at)} at ${hour(sale.at)}`;
     $('sale-refund-sums').textContent = `Paid: ${money(look.paid, cur)}${look.back ? ` · already given back: ${money(look.back, cur)}` : ''} · can be given back: ${money(look.left, cur)}${look.asked ? ' (as Stripe has it, just now)' : ''}`;
     $('sale-refund-all-label').textContent = look.back ? `All that is left — ${money(look.left, cur)}` : `All of it — ${money(look.left, cur)}`;
     $('sale-refund-most').textContent = `(at most ${money(look.left, cur)})`;
     const month = $('sale-refund-month');
-    month.hidden = !fresh.monthly;
-    month.textContent = fresh.monthly ? `Paid by the month: this gives back its latest payment — ${money(look.paid, cur)}, paid on ${day(look.at)}. The months before it stay paid (give them back in Stripe, if ever you must).` : '';
-    $('sale-refund-how').disabled = false;
-    if (look.error) fail(look.error);
-    if (look.disputed) fail('The buyer\'s bank is disputing this payment: it cannot be given back while that runs. Answer the dispute in Stripe.');
-    else if (!look.left) fail('Nothing is left of this payment to give back.');
+    month.hidden = !sale.monthly;
+    month.textContent = sale.monthly ? `Paid by the month: this gives back its latest payment — ${money(look.paid, cur)}, paid on ${day(look.at)}. The months before it stay paid (give them back in Stripe, if ever you must).` : '';
+    $('sale-refund-how').disabled = !look.left || look.disputed;
+    giving.note = note || (look.disputed ? 'The buyer\'s bank is disputing this payment: it cannot be given back while that runs. Answer the dispute in Stripe.'
+      : !look.left ? 'Nothing is left of this payment to give back.' : look.error || '');
     showPlan();
-    if (look.error) errBox.hidden = false, errBox.textContent = look.error;
   }
   for (const id of ['sale-refund-all', 'sale-refund-part', 'sale-refund-keep']) $(id).addEventListener('change', showPlan);
   amountBox.addEventListener('input', () => { $('sale-refund-part').checked = true; showPlan(); });
@@ -225,6 +227,7 @@
     const g = giving, all = $('sale-refund-all').checked, sum = all ? g.look.left : centsOf(amountBox.value), keep = $('sale-refund-keep').checked && !$('sale-refund-keep-row').hidden;
     // (the button is dead from the first click to the answer: a second click sends nothing)
     g.busy = true; go.disabled = true; go.textContent = 'Asking Stripe…';
+    g.note = '';
     fail('');
     const res = await api('/api/sales', { method: 'POST', body: { refund: g.sale.id, ...(all ? { all: true } : { amount: sum }), reason: $('sale-refund-reason').value.trim(), keep, token: g.token } });
     if (giving !== g) { if (res.ok) load(); return; } // (the dialog was closed while Stripe was asked: the list says what became of it)
@@ -232,10 +235,10 @@
     if (!res.ok) {
       // (refused: Stripe did nothing — a new try is a new intention; no answer: nobody knows — the same one is said again)
       if (res.body?.refused || res.status === 400) g.token = draw16();
-      fail(wrong(res));
-      if (res.body?.sale) { g.sale = res.body.sale; }
+      g.note = wrong(res);
       showPlan();
-      if (res.status === 409 && !res.body?.refused && !res.body?.busy) { const again = await api(`/api/sales?look=${encodeURIComponent(g.sale.id)}`); if (giving === g && again.ok) { g.look = again.body.look; g.sale = again.body.sale; showPlan(); fail(wrong(res)); } }
+      // (not what the page believed — less is left, or nothing —: Stripe is asked again, and the dialog shows it as it is)
+      if (res.status === 409 && !res.body?.refused && !res.body?.busy) { const again = await api(`/api/sales?look=${encodeURIComponent(g.sale.id)}`); if (giving === g && again.ok) showLook(again.body, g.note); }
       load();
       return;
     }
@@ -257,7 +260,7 @@
   // opens a tab: it marks the tab's button, even when this section was never hidden, the page opened on #sales)
   let shown = false;
   const office = $('office');
-  const look = () => { name(); const now = !section.hidden && !office?.hidden && !!key(); if (now && !shown) { found = $('sales-find').value.trim(); load(); } shown = now; };
-  new MutationObserver(look).observe(office || section, { subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] });
-  look();
+  const watch = () => { name(); const now = !section.hidden && !office?.hidden && !!key(); if (now && !shown) { found = $('sales-find').value.trim(); load(); } shown = now; };
+  new MutationObserver(watch).observe(office || section, { subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] });
+  watch();
 })();
