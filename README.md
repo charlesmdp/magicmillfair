@@ -619,8 +619,9 @@ on Stripe's own list, <https://docs.stripe.com/tax/tax-codes>. One code goes wit
 deserve its own — a second choice in the form, and `taxed` picking by the kind of thing sold. Nobody here is a
 tax adviser: which code, and where to register, is for an accountant to confirm.
 
-**Sales and refunds.** The tab *Sales* of the back office — the owner's alone, as is `/api/sales` — lists
-everything that was bought, the newest first, fifty lines at a time: when, who (the account, or a browser
+**Sales and refunds.** The tab *Sales* of the back office — the owner's alone, as is `/api/sales`; a file of its
+own beside the page's, `public/admin/sales.js`, which names its own tab and reads its list when its section is
+shown — lists everything that was bought, the newest first, fifty lines at a time: when, who (the account, or a browser
 without one by the first characters of its name), what in plain words ("Top hat", "Game Pass — monthly",
 "Gondola 3 — for good", "Bid on the panel of Spiral of Death"), how much, where it stands (paid, partly
 refunded and by how much, refunded, disputed; a subscription that ended), and a link to the payment in Stripe's
@@ -1092,6 +1093,8 @@ server/api.js  scores.js  npc.js   the API of the game, shared by both hostings:
 server/shop.js  stripe.js  catalog.js   the shop and the sponsors: what is sold and for how much, the payment
                            page asked of Stripe and its signed webhook, the places that can be sponsored
                            (src/net/Shop.js is the same thing seen from the game)
+server/sales.js            the list of everything that was bought, and the refunds the owner makes from it (the
+                           tab "Sales" of the back office: public/admin/sales.js, sales.css)
 cloudflare/worker.js       Cloudflare version: Worker + one Durable Object per room, one for the leaderboards
 wrangler.jsonc             Cloudflare deployment settings (build included)
 .github/workflows/deploy.yml   asks Cloudflare to build after every push (see "Putting it online with Cloudflare")
@@ -1452,11 +1455,6 @@ list, add, let back in); **Figures** (the page everybody can read, and what was 
 **Administrators**. An administrator the owner has named opens it with their own key and sees all but the
 releases. The page is fenced in by its headers: no script but its own, nothing from another site, never
 framed, never listed, never kept.
-
-One more section is the owner's alone, **Sales**: everything that was bought, and *Refund…* on each line — see
-*Sales and refunds*, with the shop. It is a file of its own beside the page's (`public/admin/sales.js`, with its
-few rules of style in `sales.css`): it names its own tab and reads its list when its section is shown, so that
-`admin.js` knows nothing of it.
 
 **The lab.** Novelties are built on another branch, as *extras* (`src/extras/`: a module with
 `attach(app)`), with their own checks (a test for each: see below) and a page of their own (`lab/`: see
