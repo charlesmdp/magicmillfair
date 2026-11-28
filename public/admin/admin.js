@@ -70,6 +70,7 @@
     coaster: ["Hold the Rails!", "A roller coaster one drives oneself through every mountain: stray from the rails and one falls."],
     sanctuary: ['The Sanctuary', 'A great hall of pale stone under a dome, at the north of the west meadow: a mosque, a church and a synagogue round its middle, and a chant for who walks in.'],
     guide: ['Barnaby the butler', 'A robot in a dinner suit and a top hat by the carport of the mill: he greets whoever arrives and says which games are open, and that they are free to try.'],
+    plane: ['A plane in the sky', 'Every five minutes an airliner crosses high over the oasis with its white trail; whoever looks at it reads what their robot thinks of it (“A plane?… Strange. Everything was supposed to have stopped.”).'],
     caves: ['The caves are safe places', 'In a cave, only those nearby hear what is said.'],
     stats: ['The game in figures', 'The counters, and the page /opendata.'],
     stars: ['Stars on the map', 'On: the big attractions wear a red star and their name on the map (M). Off: the map names its places only.'],

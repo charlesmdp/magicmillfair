@@ -194,3 +194,16 @@ new kind of light). No game there: one walks in, looks, sits. The symbols are dr
 another. `src/world/zones/places/Temple.js` and `Caves.js` show how a place one walks into is built (floors as
 platforms, an inside under the ground). Its music is written afterwards (the deep choir): leave the place where
 it is heard (`sanctuary.inside(x, y, z)`).
+
+### A plane in the sky (`plane`)
+
+"Rajouter avion dans le ciel et quand on le regarde on a un message en mode « bizarre un avion, tout était censé
+s'être arrêté »" — only if the game weighs next to nothing more. Every five minutes an airliner crosses high over
+the oasis (520 to 700 m up, a kilometre aside at the least: never overhead), from one haze to the other in about
+fifty seconds, a white trail behind it. Whoever keeps it in the middle of their view for a moment reads what
+their robot thinks — "A plane?… Strange. Everything was supposed to have stopped." —, once a pass, a new thought
+at each of the first sightings (`THOUGHTS`, counted in the browser: `mmf.plane`), never during a game nor under
+a roof of rock. Where the plane is comes from the server's clock alone (`planeAt(ms)`): everybody sees the same
+pass at the same moment, and nothing is sent. Its switch is **on as the game is delivered** (the owner asked for
+it to be there). What it weighs: `src/extras/plane.js` (about 3 KB once packed), two meshes of 168 triangles in
+all, drawn one minute in five. `node tools/plane-test.mjs` (17).

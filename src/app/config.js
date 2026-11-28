@@ -33,6 +33,7 @@ export const RELEASE = {
   coaster: false, // Hold the Rails!: a roller coaster one drives oneself through every mountain: stray from the rails and one falls (an extra)
   sanctuary: false, // The Sanctuary: a great hall of stone in the mountain — a church, a mosque and a synagogue under one roof, and its deep music (an extra; a place, not a game)
   guide: true, // Barnaby the butler: a robot in a dinner suit and a top hat by the carport of the mill, who sends whoever arrives to the games — "free to try" (an extra; the owner asked for him to be there)
+  plane: true, // a plane in the sky: it crosses high over the oasis every five minutes, and whoever looks at it is told what their robot thinks of it (an extra; the owner asked for it to be there)
   caves: true, // the caves are safe places: only those nearby hear what is said there (an extra)
   stats: true, // the game in figures: the counters and the page /opendata (an extra)
   stars: true, // the stars of the big attractions on the map, with their names (off: the map names its places only)

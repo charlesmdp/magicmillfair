@@ -61,10 +61,12 @@ const call = async (target, { method = 'GET', body, cookie = '', from = `10.1.0.
 };
 const device = (n) => `device-${n}-`.padEnd(24, 'x');
 /** One trip to "Google" and back for the person `who` (the code says who): → what the page comes back with (?google=…). */
+// (`tamper`: a letter in the middle of the state is changed — not its last one: the last letter of a signature carries
+// two bits that mean nothing, and one time in sixteen the state so "touched" was the very same state)
 const trip = async (who, { name = '', keepCookie = true, tamper = false, refused = false } = {}) => {
   const start = await call(`/api/google/start${name ? `?name=${encodeURIComponent(name)}` : ''}`);
   const cookie = (start.set.split(';')[0] || ''), state = new URL(start.to).searchParams.get('state');
-  const back = await call(refused ? `/api/google/callback?error=access_denied&state=${encodeURIComponent(state)}` : `/api/google/callback?code=${encodeURIComponent(who)}&state=${encodeURIComponent(tamper ? state.replace(/.$/, (c) => (c === 'A' ? 'B' : 'A')) : state)}`, { cookie: keepCookie ? cookie : '' });
+  const back = await call(refused ? `/api/google/callback?error=access_denied&state=${encodeURIComponent(state)}` : `/api/google/callback?code=${encodeURIComponent(who)}&state=${encodeURIComponent(tamper ? state.replace(/^(.{10})(.)/, (m, a, c) => a + (c === 'A' ? 'B' : 'A')) : state)}`, { cookie: keepCookie ? cookie : '' });
   return { start, back, word: new URL(back.to || `${SITE}/?google=`, SITE).searchParams.get('google') || '' };
 };
 
