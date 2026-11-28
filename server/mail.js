@@ -106,13 +106,18 @@ function read(template) {
 }
 /** The placeholders a sentence uses. */
 const named = (pieces, into = new Set()) => { for (const p of pieces) { if (p.v) into.add(p.v); else if (p.opt) named(p.opt, into); } return into; };
+/**
+ * What stands for a placeholder: a value — or a function that makes it when a sentence asks for it (a word that is
+ * itself a sentence of the table: "a payment", "{amount} a month" — it is only read where it shows).
+ */
+const standsFor = (vars, name) => { const v = vars[name]; return String((typeof v === 'function' ? v() : v) ?? ''); };
 /** A sentence with its placeholders filled in. `lit`: what becomes of its own words; `val`: of what stands for a placeholder. */
 function fill(pieces, vars, lit, val) {
   let s = '';
   for (const p of pieces) {
     if (typeof p === 'string') s += lit(p);
-    else if (p.v) s += val(String(vars[p.v] ?? ''));
-    else if ([...named(p.opt)].every((n) => String(vars[n] ?? '') !== '')) s += fill(p.opt, vars, lit, val);
+    else if (p.v) s += val(standsFor(vars, p.v));
+    else if ([...named(p.opt)].every((n) => standsFor(vars, n) !== '')) s += fill(p.opt, vars, lit, val);
   }
   return s;
 }
@@ -363,7 +368,7 @@ export const MAILS = {
     build(w, site, name, { place = '', cents = 0, monthly = false, auction = false, plaque = false, wall = false, life = false } = {}) {
       const where = siteOf(site), amount = dollars(cents), id = (x) => (plaque ? `plaque${capital(x)}` : x);
       w.set({ name, place, amount });
-      w.set({ price: amount && monthly ? w.t('perMonth') : amount, spot: plaque ? w.t(wall ? 'spotWall' : 'spotFeet') : '' });
+      w.set({ price: () => (amount && monthly ? w.t('perMonth') : amount), spot: () => (plaque ? w.t(wall ? 'spotWall' : 'spotFeet') : '') });
       const keep = plaque ? '' : auction ? 'keepAuction' : monthly ? 'keepMonth' : life ? 'keepLife' : '';
       const text = blocks([w.t('hello')], [w.t(id('got'))], [w.t(id('next'))], [keep && w.t(keep)], [w.t('thanks')], [where], [w.t('why')]);
       const html = dressed({
@@ -398,7 +403,7 @@ export const MAILS = {
     build(w, site, name, { perks = [], cents = 0 } = {}) {
       const where = siteOf(site), amount = dollars(cents);
       w.set({ name, amount });
-      w.set({ price: w.t(amount ? 'perMonth' : 'byMonth') });
+      w.set({ price: () => w.t(amount ? 'perMonth' : 'byMonth') });
       const text = blocks([w.t('hello')], [w.t('on')], [w.t('thanks')], [w.t('perksTitle'), ...perks.map((k) => `- ${k}`)], [w.t('effects')], [w.t('stop')], [name ? '' : w.t('tip')], [where], [w.t('why')]);
       const html = dressed({
         title: 'Your Game Pass is on', preview: w.h('preview'), site, button: w.h('button'),
@@ -446,7 +451,7 @@ export const MAILS = {
       const where = siteOf(site), back = where ? `${where.replace(/\/$/, '')}/admin#sponsors` : '', amount = dollars(cents);
       const form = test ? 'test' : lost ? 'lost' : plaque ? 'plaque' : 'new', id = (x) => (form === 'new' ? x : `${form}${capital(x)}`);
       w.set({ place, amount, account, link: back });
-      w.set({ price: amount && monthly ? w.t('perMonth') : amount });
+      w.set({ price: () => (amount && monthly ? w.t('perMonth') : amount) });
       // (a place bought for good is already named so — "…, for good" —: the sum only says that it was paid once)
       const what = form === 'new' ? (auction ? 'whatBid' : life ? 'whatLife' : 'what') : id('what'), who = test ? '' : account ? 'who' : 'guest', next = test ? '' : id('next');
       const subject = w.t(id('subject'));
@@ -574,15 +579,15 @@ export const MAILS = {
     build(w, site, { cents = 0, place = '', reason = '', monthly = false, ok = true, error = '', asked = true, unstopped = false, uncredited = '' } = {}) {
       const where = siteOf(site), back = where ? `${where.replace(/\/$/, '')}/admin#sponsors` : '';
       w.set({ place, link: back });
-      w.set({ price: dollars(cents) || w.t('aPayment') });
+      w.set({ price: () => dollars(cents) || w.t('aPayment') });
       const reasons = { outbid: 'whyOutbid', raised: 'whyRaised', late: 'whyLate', down: monthly ? 'whyDownMonth' : 'whyDown', later: 'whyLater' };
       const form = unstopped ? 'unstopped' : ok ? 'refunded' : 'failed';
       let subject, what, whatHtml, next, nextHtml;
       if (unstopped) {
-        const more = { what: place || w.t('aPlace'), Place: capital(place || w.t('aPlace')), error: error || w.t('noReason') }, then = asked ? 'unstoppedNextAsked' : 'unstoppedNext';
+        const more = { what: () => place || w.t('aPlace'), Place: () => capital(place || w.t('aPlace')), error: () => error || w.t('noReason') }, then = asked ? 'unstoppedNextAsked' : 'unstoppedNext';
         [subject, what, whatHtml, next, nextHtml] = [w.t('unstoppedSubject', more), w.t('unstopped', more), w.h('unstopped', more), w.t(then), w.h(then)];
       } else {
-        const more = { what: place || w.t('aPayment'), why: Object.hasOwn(reasons, reason) ? w.t(reasons[reason]) : place, ...(!ok && { error: error || w.t('noReason') }) };
+        const more = { what: () => place || w.t('aPayment'), why: () => (Object.hasOwn(reasons, reason) ? w.t(reasons[reason]) : place), error: () => error || w.t('noReason') };
         const then = ok ? (reason === 'raised' ? 'raisedNext' : 'toldToo') : monthly ? 'failedMonthNext' : 'failedNext';
         [subject, what, whatHtml, next, nextHtml] = [w.t(ok ? 'subject' : 'failedSubject', more), w.t(ok ? 'done' : 'failed', more), w.h(ok ? 'done' : 'failed', more), w.t(then), w.h(then)];
         // (given back, but the invoice of that payment still wants its credit note: Stripe refused to make it)

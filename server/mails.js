@@ -68,7 +68,8 @@ function noteMail(ctx, entry) {
 /** To whom a message goes, as the list keeps it: never the address of anybody but the owner (see the top of this file). */
 async function whomOf(ctx, kind, args, to, test) {
   if (test || TO_OWNER.has(kind)) return { to: cleanEmail(to) };
-  const name = kind && typeof args?.[1] === 'string' ? args[1] : '';
+  if (!kind) return {}; // (a message that does not say what it is: nothing is known of whom it is for)
+  const name = typeof args?.[1] === 'string' ? args[1] : '';
   const acct = name ? await ctx.store.get(`acct:${name.toLowerCase()}`) : null;
   return acct ? { acct: acct.name, ...(acct.email !== to && { paid: 1 }) } : { guest: 1 };
 }
