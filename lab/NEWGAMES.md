@@ -205,5 +205,5 @@ their robot thinks — "A plane?… Strange. Everything was supposed to have sto
 at each of the first sightings (`THOUGHTS`, counted in the browser: `mmf.plane`), never during a game nor under
 a roof of rock. Where the plane is comes from the server's clock alone (`planeAt(ms)`): everybody sees the same
 pass at the same moment, and nothing is sent. Its switch is **on as the game is delivered** (the owner asked for
-it to be there). What it weighs: `src/extras/plane.js` (about 3 KB once packed), two meshes of 168 triangles in
+it to be there). What it weighs: `src/extras/plane.js` (4.4 KB, 2.2 KB once packed), two meshes of 168 triangles in
 all, drawn one minute in five. `node tools/plane-test.mjs` (17).

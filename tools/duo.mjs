@@ -246,7 +246,9 @@ try {
   const apart = () => alice.page.evaluate(() => { const a = window.__mmf, o = [...a.presence.peers.values()][0]; return Math.hypot(o.x - a.player.pos.x, o.z - a.player.pos.z); });
   // the administrator is carried next to a visitor; a click on the large map carries them to that spot
   await bob.page.evaluate(() => { const a = window.__mmf; a.player.teleport(-60, -30, 0); });
-  await until(async () => ((await apart()) > 30 ? true : null), 20000);
+  // (…once Alice has heard of it: a visitor with nobody near says where they are twice a second only, and she would
+  // be carried to where Bob stood before)
+  await until(() => alice.page.evaluate(() => { const o = [...window.__mmf.presence.peers.values()][0]; return o && Math.hypot(o.x + 60, o.z + 30) < 3 ? true : null; }), 20000);
   const far = await apart();
   await act(alice, 'Go to');
   await frames(alice, 4);
