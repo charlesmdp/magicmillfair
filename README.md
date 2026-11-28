@@ -413,13 +413,22 @@ eleventh medallion: the **mushroom cloud**, of light too, for those who found ev
   on shelves of cards dressed by rarity — each with a picture of *your* robot wearing the thing, drawn by
   the game itself. Pick a card: what it is, what it costs, and a button to buy it (or to put it on and take
   it off, once it is yours). On the shelves: two **jetpacks** (the real one, a second and a half of thrust;
-  the light one, three tenths of a second — three metres or so — once every fifteen seconds), twelve **hats** (crown, wizard hat, top hat, cowboy hat, straw hat,
-  cap, beanie, pirate hat, Viking helmet, chef's hat, a cap whose propeller turns, party hat), nine **paint jobs** drawn by the
+  the light one, three tenths of a second — three metres or so — once every fifteen seconds), eighteen **hats** (crown, wizard hat, top hat, cowboy hat, straw hat,
+  cap, beanie, pirate hat, Viking helmet, chef's hat, a cap whose propeller turns, party hat — and a halo that
+  floats over the head and glows, a jester's hat with a bell on each of its three tails, antlers of ten points,
+  a sombrero wider than the shoulders, a graduation cap with its gold tassel, a traffic cone), eighteen **paint jobs** drawn by the
   material of the robot itself (gold plating: facets and gold dust that glitters; chrome: a mirror with the
   sky, the horizon and the grass in it; an atomic glow: a dark shell with green veins that breathe; candy
   paint: lacquered stripes in five flavours, turning slowly; galaxy: a night sky with nebulas that drift and
   stars that twinkle; meltdown: black slag with the fire of the core crawling in its cracks; plasma: filaments
-  of violet and cyan; a mirror ball: little mirrors that twinkle; hazard stripes, yellow and black) and a
+  of violet and cyan; a mirror ball: little mirrors that twinkle; hazard stripes, yellow and black; a tuxedo:
+  black jacket, satin lapels, white shirt front, bow tie, carnation, cuffs and gloves — the head keeps the
+  colour of the robot; holographic: a foil in shards, every colour sliding over it as one moves; marble and
+  gold: white stone, grey veins, cracks mended with gold; a circuit board: gold traces from pad to pad, signals
+  running along them, lamps that blink; deep frost: blocks of blue ice, snow on what faces the sky; the last
+  sunset: a sky from the first stars down to the embers, the sun going into the sea on the chest; tiger;
+  woodland camouflage with a star stencilled on the chest; a rust bucket: old paint that flakes, rust, rivets
+  that weep) and a
   **box of fireworks** (V: a rocket goes up and bursts). The four **trails** (stardust, confetti, bubbles,
   fallout) are no longer sold: whoever bought one keeps it, wears it, and still finds it in their shop.
   Everybody sees what you wear and leave behind you; none of it helps at the games. The first shelf is the
@@ -480,8 +489,8 @@ fireworks: the item shop says so and lets everything be put on. With a key, the 
 | **The Game Pass**: every hat, the light jetpack, four sizes, two more rows of colours | $19 a month | the first shelf of the item shop (O) |
 | The jetpack | $30, once | the item shop |
 | The light jetpack (a small tank, one go every fifteen seconds; free for the first day) | $5, once | the item shop |
-| A hat (each of the twelve) | $9.99, once | the item shop |
-| A paint job: gold plating, galaxy, chrome, meltdown, plasma, atomic glow, mirror ball, candy paint, hazard stripes | $19, $16, $15, $14, $13, $12, $12, $9, $7, once | the item shop |
+| A hat (each of the eighteen) | $9.99, once | the item shop |
+| A paint job: gold plating, holographic, marble and gold, galaxy, chrome, tuxedo, meltdown, plasma, circuit board, atomic glow, mirror ball, deep frost, last sunset, candy paint, tiger, camouflage, hazard stripes, rust bucket | $19, $18, $17, $16, $15, $15, $14, $13, $13, $12, $12, $12, $11, $9, $9, $8, $7, $7, once | the item shop |
 | The box of fireworks (never empty) | $15, once | the item shop |
 | The sponsor's panel over the board of a game (fourteen of them) | an auction, from $1 (see below) | step up to the board ("Sponsor this game · from $1"), or the shelf *Sponsor a game* of the item shop |
 | The backdrop of the shooting gallery | $99 a month | at the counter side of Bullseye Alley |
