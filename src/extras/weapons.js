@@ -220,10 +220,12 @@ export function attach(app) {
     for (let i = 1; i < n && i / n < f; i++) { const k = i / n; if (a.y + (b.y - a.y) * k < data.heightAt(a.x + (b.x - a.x) * k, a.z + (b.z - a.z) * k) - 0.05) { f = (i - 1) / n; break; } }
     return f;
   };
-  /** The mouth of toy `i` held by a robot standing at (x, y, z) and facing `yaw`. */
-  const muzzle = (x, y, z, yaw, i, out) => {
-    const s = Math.sin(yaw), c = Math.cos(yaw), lx = GRIP[0] + MUZZLE[i][0], lz = GRIP[2] + MUZZLE[i][2];
-    return out.set(x + c * lx + s * lz, y + GRIP[1] + MUZZLE[i][1], z - s * lx + c * lz);
+  /** How large a robot is drawn (1: as most are; a secret word, the Game Pass: from under a half to over twice that) — 0: one's own. */
+  const sizeOf = (id) => (id ? app.avatars?.items?.get(id)?.character : me)?.root.scale.x || 1;
+  /** The mouth of toy `i` held by a robot of size `k` standing at (x, y, z) and facing `yaw`. */
+  const muzzle = (x, y, z, yaw, i, out, k = 1) => {
+    const s = Math.sin(yaw), c = Math.cos(yaw), lx = (GRIP[0] + MUZZLE[i][0]) * k, lz = (GRIP[2] + MUZZLE[i][2]) * k;
+    return out.set(x + c * lx + s * lz, y + (GRIP[1] + MUZZLE[i][1]) * k, z - s * lx + c * lz);
   };
   const shieldOf = (id) => (id === myId() ? S.shield : seen.get(id)?.shield || 0);
 
@@ -253,18 +255,19 @@ export function attach(app) {
     vertexShader: 'varying vec3 vN; varying vec3 vV; varying float vY; void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalMatrix * normal; vV = -mv.xyz; vY = position.y; gl_Position = projectionMatrix * mv; }',
     fragmentShader: 'uniform float uTime; varying vec3 vN; varying vec3 vV; varying float vY; void main() { float rim = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 1.6); float band = 0.5 + 0.5 * sin(vY * 15.0 - uTime * 8.0); float a = (0.2 + 0.8 * rim) * (0.6 + 0.4 * band) * (0.82 + 0.18 * sin(uTime * 27.0)); gl_FragColor = vec4(mix(vec3(0.5, 0.9, 1.0), vec3(1.0), rim * 0.7 + band * 0.2), a); }',
   });
-  const shimmer = (h, at, dt) => {
+  /** The shimmer round a robot of size `k` that stands at `at` — or none (`at` null). */
+  const shimmer = (h, at, dt, k = 1) => {
     if (!at) { if (h.bubble) h.bubble.visible = false; return; }
     if (!h.bubble) { h.bubble = new THREE.Mesh(bubbleGeo, bubbleMat); h.bubble.renderOrder = 15; h.bubble.name = 'toy-shield'; group.add(h.bubble); }
-    const s = 1 + 0.05 * Math.sin(clock * 11 + at.x);
+    const s = (1 + 0.05 * Math.sin(clock * 11 + at.x)) * k, wide = 0.8, tall = 1.12;
     h.bubble.visible = true;
-    h.bubble.position.set(at.x, at.y + 0.98, at.z);
-    h.bubble.scale.set(0.66 * s, 1.1, 0.66 * s);
-    h.glint = (h.glint || 0) + dt * 30;
+    h.bubble.position.set(at.x, at.y + 0.98 * k, at.z);
+    h.bubble.scale.set(wide * s, tall * k, wide * s);
+    h.glint = Math.min(8, (h.glint || 0) + dt * 30);
     while (h.glint >= 1) {
       h.glint -= 1;
-      const a = rnd(0, 6.283), u = rnd(-1, 1), r = 0.66 * Math.sqrt(1 - u * u);
-      spark({ x: at.x + Math.cos(a) * r, y: at.y + 0.98 + u * 1.1, z: at.z + Math.sin(a) * r, vx: 0, vy: rnd(0.2, 0.7), vz: 0, life: rnd(0.25, 0.55), r: 0.7, g: 0.95, b: 1.0, glow: 2.6, size: rnd(0.06, 0.13) });
+      const a = rnd(0, 6.283), u = rnd(-1, 1), r = wide * k * Math.sqrt(1 - u * u);
+      spark({ x: at.x + Math.cos(a) * r, y: at.y + (0.98 + u * tall) * k, z: at.z + Math.sin(a) * r, vx: 0, vy: rnd(0.2, 0.7), vz: 0, life: rnd(0.25, 0.55), r: 0.7, g: 0.95, b: 1.0, glow: 2.6, size: rnd(0.06, 0.13) });
     }
   };
 
@@ -354,30 +357,32 @@ export function attach(app) {
     const toy = TOYS[Math.max(0, S.toy)], cam = app.engine.camera, p = player.pos, helped = isTouch();
     _o.copy(cam.position);
     _d.set(0, RULES.sight, 0.5).unproject(cam).sub(_o).normalize();
-    muzzle(p.x, p.y, p.z, Math.atan2(_d.x, _d.z), Math.max(0, S.toy), _m);
+    muzzle(p.x, p.y, p.z, Math.atan2(_d.x, _d.z), Math.max(0, S.toy), _m, sizeOf(0));
     const tMe = Math.max(0, _v.set(p.x, p.y + 1, p.z).sub(_o).dot(_d)); // (how far along the sight's ray one's own robot is)
     const guide = app.extras?.guide?.at, list = [];
     if (app.presence) for (const q of app.presence.peers.values()) if (q.visible && !q.far && !q.hidden) list.push(q);
     if (guide) list.push({ butler: true, x: guide.x, y: guide.y, z: guide.z });
+    const end = V(0, 0, 0);
     let best = null, score = Infinity;
     for (const q of list) {
-      _c.set(q.x, q.y + 0.95, q.z);
+      const k = q.butler ? 1 : sizeOf(q.id);
+      _c.set(q.x, q.y + 0.95 * k, q.z);
       if (_c.distanceTo(_m) > toy.range) continue;
       const t = _v.subVectors(_c, _o).dot(_d);
       if (t < tMe + 0.4) continue; // (behind oneself: between the camera and one's own robot)
       // how far from their middle the sight passes — a robot is taller than it is wide: heights count for half
       _w.copy(_d).multiplyScalar(t).sub(_v);
       const miss = Math.hypot(_w.x, _w.y * 0.5, _w.z);
-      if (!(miss < toy.reach || (helped && Math.atan2(miss, t) < toy.cone))) continue;
+      if (!(miss < toy.reach * k || (helped && Math.atan2(miss, t) < toy.cone))) continue;
       const sc = helped ? miss / t : t; // (with a finger: the nearest to the sight; with a mouse: the first the sight is on)
-      if (sc < score && clear(_m, _c) >= 1) { best = q; score = sc; }
+      if (sc < score && clear(_m, _c) >= 1) { best = q; score = sc; end.copy(_c); }
     }
-    if (best) return { peer: best.butler ? null : best, butler: !!best.butler, end: V(best.x, best.y + 1.0, best.z) };
+    if (best) return { peer: best.butler ? null : best, butler: !!best.butler, end };
     // nobody: the shot goes where the sight looks, as far as the toy carries — or to the ground, or a wall, before that
     const om = _v.subVectors(_o, _m), b = om.dot(_d), far = -b + Math.sqrt(Math.max(0, b * b - (om.lengthSq() - toy.range * toy.range)));
     let t = Math.max(tMe, far);
     for (let s = tMe + 1; s < far; s += 1) { if (_o.y + _d.y * s < Math.max(data.heightAt(_o.x + _d.x * s, _o.z + _d.z * s), data.waterAt(_o.x + _d.x * s, _o.z + _d.z * s))) { t = s; break; } }
-    const end = V(_o.x + _d.x * t, _o.y + _d.y * t, _o.z + _d.z * t), f = clear(_m, end);
+    const f = clear(_m, end.set(_o.x + _d.x * t, _o.y + _d.y * t, _o.z + _d.z * t));
     if (f < 1) end.sub(_m).multiplyScalar(Math.max(0.02, f)).add(_m);
     return { peer: null, butler: false, end };
   };
@@ -398,7 +403,7 @@ export function attach(app) {
     const toy = TOYS[S.toy], a = aim(), p = player.pos;
     S.ready = clock + toy.reload; S.fired = clock; S.kick = 1;
     if (Math.hypot(a.end.x - p.x, a.end.z - p.z) > 0.6) player.yaw = Math.atan2(a.end.x - p.x, a.end.z - p.z); // (the robot turns to where it fires)
-    const from = muzzle(p.x, p.y, p.z, player.yaw, S.toy, V(0, 0, 0));
+    const from = muzzle(p.x, p.y, p.z, player.yaw, S.toy, V(0, 0, 0), sizeOf(0));
     shoot(S.toy, from, a.end, !!a.peer && shieldOf(a.peer.id) > 0);
     app.presence?.sendThing?.(KIND, OP.fire, [S.toy, a.peer ? a.peer.id : 0, a.end.x, a.end.y, a.end.z]);
     note('fire', { toy: S.toy, at: a.peer ? a.peer.id : 0 });
@@ -478,17 +483,17 @@ export function attach(app) {
     if (since < toy.reload * RULES.haste) { if (d[1] === myId()) note('shot', { by: e.id, toy: i, why: 'haste' }); return; } // (faster than the toy reloads: a browser that lies — not drawn, not believed)
     st.kick = 1; st.toy = i; st.at = clock;
     // (drawn from where their robot stands, and no further than their toy carries — whatever the message says)
-    const end = V(d[2], d[3], d[4]), from = muzzle(peer.x, peer.y, peer.z, Math.atan2(end.x - peer.x, end.z - peer.z), i, V(0, 0, 0)), len = from.distanceTo(end), most = toy.range + RULES.slack;
+    const end = V(d[2], d[3], d[4]), from = muzzle(peer.x, peer.y, peer.z, Math.atan2(end.x - peer.x, end.z - peer.z), i, V(0, 0, 0), sizeOf(e.id)), len = from.distanceTo(end), most = toy.range + RULES.slack;
     if (len > most) end.sub(from).multiplyScalar(most / len).add(from);
     if (peer.visible && !peer.hidden) shoot(i, from, end, d[1] > 0 && shieldOf(d[1]) > 0);
     if (!myId() || d[1] !== myId()) return;
     // …at me. Do I fall? Decided here, from what this browser knows itself.
     const dist = Math.hypot(peer.x - p.x, peer.y - p.y, peer.z - p.z);
-    const why = judge({ toy: i, quiet: pending ? 'down' : quiet(), onlyArmed: api.onlyArmed, armed: S.toy >= 0, seen: !!peer.visible && !peer.far, safe: safeAt(peer), dist, since, wall: clear(from, _c.set(p.x, p.y + 1, p.z)) < 1 });
+    const why = judge({ toy: i, quiet: pending ? 'down' : quiet(), onlyArmed: api.onlyArmed, armed: S.toy >= 0, seen: !!peer.visible && !peer.far, safe: safeAt(peer), dist, since, wall: clear(from, _c.set(p.x, p.y + 0.95 * sizeOf(0), p.z)) < 1 });
     note('shot', { by: e.id, toy: i, why, dist: Math.round(dist * 10) / 10 });
     if (why) {
       // (said back to who fired, once in a while: why nothing came of it)
-      if (WHY.indexOf(why) > 0 && clock - (nopes.get(e.id) || -99) > 1) { nopes.set(e.id, clock); send(OP.nope, [e.id, WHY.indexOf(why)]); }
+      if (SAID[why] && clock - (nopes.get(e.id) || -99) > 1) { nopes.set(e.id, clock); send(OP.nope, [e.id, WHY.indexOf(why)]); }
       return;
     }
     pending = { by: e.id, name: peer.name, toy: i, at: clock + (toy.speed ? Math.max(0, dist / toy.speed - 0.12) : 0) };
@@ -531,7 +536,7 @@ export function attach(app) {
       st.kick = Math.max(0, st.kick - dt * 4);
       const c = it.character, q = it.peer, there = c.root.visible && !q.hidden;
       carry(st, c, there && st.toy >= 0 && upright(q.anim) && !c.look?.disguise ? st.toy : -1, st.kick, clock - st.fired >= (TOYS[st.toy]?.reload || 0));
-      shimmer(st, there && st.shield > 0 && q.anim !== ANIM.dead ? q : null, dt);
+      shimmer(st, there && st.shield > 0 && q.anim !== ANIM.dead ? q : null, dt, c.root.scale.x);
     }
   };
 
@@ -557,7 +562,7 @@ export function attach(app) {
       if (S.toy >= 0 && (player.driver || app.fair?.session || player.seat || player.riding || player.swimming)) { S.toy = -1; refresh(); }
       S.kick = Math.max(0, S.kick - dt * 4);
       carry(S, me, holding() && me.root.visible ? S.toy : -1, S.kick, clock >= S.ready);
-      shimmer(S, S.shield > 0 && !dead ? p : null, dt);
+      shimmer(S, S.shield > 0 && !dead ? p : null, dt, sizeOf(0));
       bubbleMat.uniforms.uTime.value = clock;
       // the sight: while a toy is drawn and may fire here; dimmed until the toy is ready again
       const on = S.toy >= 0 && holding() && !quiet();
@@ -571,9 +576,5 @@ export function attach(app) {
   });
   refresh();
 
-  return Object.assign(api, {
-    draw, away, next, cycle, fire, aim, quiet, judge, buttons: { draw: drawBtn, fire: fireBtn },
-    /** (for the checks) a shot heard as if the relay had handed it on: what `id` claims to have fired. */
-    hear: (id, op, d) => onThing({ kind: KIND, id, peer: app.presence?.peers.get(id), run: OP[op], d }),
-  });
+  return Object.assign(api, { draw, away, next, cycle, fire, aim, quiet, judge, buttons: { draw: drawBtn, fire: fireBtn } });
 }
