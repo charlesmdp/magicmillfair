@@ -51,7 +51,11 @@
   //   "send_email": [{ "name": "EMAIL" }],
   // is used instead of the token when it is there — add it only once the domain is onboarded to Cloudflare's
   // Email Service: a binding the account cannot honour makes a deployment fail.)
-  "observability": { "enabled": true },
+  // What Cloudflare keeps of what the Worker says: its own lines (the errors it writes) — but NOT one line for
+  // every request and for every message a room receives. Each message of the relay is an "invocation", and at
+  // the full rate that journal alone was nine tenths of what two thousand visitors would have cost (stored and
+  // billed by the gigabyte from 1 December 2026). The errors are still kept.
+  "observability": { "enabled": true, "logs": { "invocation_logs": false } },
   // No usage statistics sent to Cloudflare by the tool itself.
   "send_metrics": false
 }
