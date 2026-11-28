@@ -160,7 +160,7 @@
         </form>
         <ul class="hint taxhelp">
           <li><b>What a tax code is.</b> It tells Stripe what kind of thing is sold, so that Stripe applies the VAT — or the sales tax — that kind of thing bears where the buyer lives. It changes no price: the tax is taken out of what is paid.</li>
-          <li><b>Stripe Tax first.</b> A code does nothing until Stripe Tax is switched on in Stripe itself: <i>Settings → Tax</i> — the address of the company, the countries where it is registered for VAT, and that “preset product tax code”.</li>
+          <li><b>Stripe Tax first.</b> The code only counts while “VAT on each sale” is ticked above — and that only works once Stripe Tax is switched on in Stripe itself: <i>Settings → Tax</i> (the address of the company, the countries where it is registered for VAT, and that “preset product tax code”).</li>
           <li><b>One code for everything.</b> Today the code chosen here goes with all the fair sells: hats, the pass, rooms and sponsors' places alike. In truth a sponsor's place is advertising, not a piece of a game: in the European Union that seldom changes the VAT, in the United States it can. Giving the sponsors a code of their own would take a second choice here and a few lines on the server — ask for it if your accountant says so. Which code is right, and where the company must register, is for an accountant to confirm: this page is no tax adviser.</li>
         </ul>
         <p class="hint" id="tax-said"></p>
@@ -259,7 +259,7 @@
   <p class="foot">Atomic Oasis · the back office · <a href="/">back to the fair</a></p>
 </main>
 <div class="toast" id="toast" role="status"></div>
+<script src="/admin/sales.js" defer></script><!-- (the tab Sales: it stands by itself, whatever the order of these two) -->
 <script src="/admin/admin.js" defer></script>
-<script src="/admin/sales.js" defer></script>
 </body>
 </html>

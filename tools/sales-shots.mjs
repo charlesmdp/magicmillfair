@@ -168,7 +168,7 @@ try {
   await page.click('#tabs button[data-tab="sponsors"]');
   await page.waitForSelector('#tax-box:not([hidden])', { timeout: 15000 });
   await page.evaluate(() => document.getElementById('toast').classList.remove('on'));
-  const box = async (p, name) => { await p.waitForTimeout(300); const r = await p.evaluate(() => { const b = document.getElementById('tax-box').getBoundingClientRect(); return { x: Math.max(0, b.x + scrollX - 12), y: b.y + scrollY - 12, width: b.width + 24, height: b.height + 24 }; }); await p.screenshot({ path: path.join(OUT, `${name}.png`), fullPage: true, clip: r }); console.log(`${name}.png`); };
+  const box = async (p, name) => { await p.evaluate(() => scrollTo(0, 0)); await p.waitForTimeout(300); const r = await p.evaluate(() => { const b = document.getElementById('tax-box').getBoundingClientRect(); return { x: Math.max(0, b.x + scrollX - 12), y: b.y + scrollY - 12, width: b.width + 24, height: b.height + 24 }; }); await p.screenshot({ path: path.join(OUT, `${name}.png`), fullPage: true, clip: r }); console.log(`${name}.png`); };
   await box(page, '13-tax-code');
   await page.check('input[name="tax-pick"][value="txcd_10201000"]');
   await page.click('#tax-form button[type="submit"]');
