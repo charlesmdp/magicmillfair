@@ -280,15 +280,19 @@ export function hatGeometry(id) {
     // a tall crown with its ribbons, and a brim wider than the shoulders that dips, then turns up — its edge
     // braided in three colours, a pompom hanging from every other stitch
     const STRAW = [0.6, 0.42, 0.14], TONES = [[0.62, 0.05, 0.04], [0.9, 0.87, 0.78], [0.05, 0.36, 0.13]];
-    b.tint(STRAW[0], STRAW[1], STRAW[2], 1).lathe([[2.0, 0.1], [1.7, -0.07], [1.3, -0.06], [0.98, 0.03], [0.95, 0.42], [0.8, 0.86], [0.56, 1.22], [0.3, 1.42], [0.0, 1.48]], 24);
+    const prof = [[2.0, 0.06], [1.7, -0.06], [1.3, -0.05], [0.98, 0.03], [0.9, 0.5], [0.72, 0.95], [0.5, 1.3], [0.3, 1.5], [0.12, 1.6], [0.0, 1.62]];
+    b.tint(STRAW[0], STRAW[1], STRAW[2], 1).lathe(prof, 24);
     const A = 24, rim = (j, r, y) => { const a = (j / A) * Math.PI * 2; return V(Math.sin(a) * r, y, Math.cos(a) * r); };
     for (let j = 0; j < A; j++) {
       const t = TONES[j % 3];
-      b.tint(t[0], t[1], t[2], 1).quad(rim(j, 2.26, 0.52), rim(j + 1, 2.26, 0.52), rim(j + 1, 2.0, 0.1), rim(j, 2.0, 0.1));
-      if (j % 2 === 0) { const p = rim(j + 0.5, 2.3, 0.36); ball(b, p.x, p.y, p.z, 0.085, 6); }
+      b.tint(t[0], t[1], t[2], 1).quad(rim(j, 2.24, 0.36), rim(j + 1, 2.24, 0.36), rim(j + 1, 2.0, 0.06), rim(j, 2.0, 0.06));
+      if (j % 2 === 0) { const p = rim(j + 0.5, 2.29, 0.22); ball(b, p.x, p.y, p.z, 0.085, 6); }
     }
-    const crown = (y) => 1.0 - 0.07 * (y / 0.42) + 0.012;
-    for (const [y0, y1, k] of [[0.06, 0.2, 0], [0.2, 0.27, 1], [0.27, 0.41, 2]]) b.tint(TONES[k][0], TONES[k][1], TONES[k][2], 1).lathe([[crown(y0), y0], [crown(y1), y1]], 24);
+    // (its ribbons: bands round the crown, a little proud of it — and a zigzag over them)
+    const crown = (y) => { let k = 3; while (k + 2 < prof.length && prof[k + 1][1] < y) k++; const [r0, y0] = prof[k], [r1, y1] = prof[k + 1]; return r0 + ((r1 - r0) * (y - y0)) / (y1 - y0) + 0.014; };
+    for (const [y0, y1, k] of [[0.36, 0.5, 0], [0.5, 0.57, 1], [0.57, 0.72, 2]]) b.tint(TONES[k][0], TONES[k][1], TONES[k][2], 1).lathe([[crown(y0), y0], [crown(y1), y1]], 24);
+    b.tint(TONES[0][0], TONES[0][1], TONES[0][2], 1);
+    for (let j = 0; j < 12; j++) b.tri(rim(2 * j, crown(0.78) + 0.004, 0.78), rim(2 * j + 2, crown(0.78) + 0.004, 0.78), rim(2 * j + 1, crown(1.02) + 0.004, 1.02));
   } else if (id === 'mortarboard') {
     // a skullcap, the square board on it (a corner to the front), its button, and a gold tassel over the edge
     b.tint(0.045, 0.045, 0.055, 1).lathe([[1.02, -0.3], [1.03, -0.02], [0.93, 0.2], [0.6, 0.3], [0.0, 0.33]], S);
@@ -300,12 +304,12 @@ export function hatGeometry(id) {
   } else if (id === 'cone') {
     // a traffic cone: its square foot, two white bands round it, the hole at its top
     const r = (y) => 0.98 - (0.78 / 2.02) * (y + 0.07);
-    b.tint(0.8, 0.13, 0.008, 1).box(-1.18, -0.16, -1.18, 1.18, -0.07, 1.18);
+    b.tint(0.7, 0.07, 0.004, 1).box(-1.18, -0.16, -1.18, 1.18, -0.07, 1.18);
     for (const [y0, y1, white] of [[-0.07, 0.62, 0], [0.62, 0.98, 1], [0.98, 1.28, 0], [1.28, 1.54, 1], [1.54, 1.95, 0]]) {
-      if (white) b.tint(1.0, 1.0, 0.96, 1); else b.tint(0.95, 0.16, 0.008, 1);
+      if (white) b.tint(1.0, 1.0, 0.96, 1); else b.tint(0.85, 0.085, 0.004, 1);
       b.lathe([[r(y0), y0], [r(y1), y1]], 18);
     }
-    b.tint(0.95, 0.16, 0.008, 1).lathe([[r(1.95), 1.95], [0.13, 1.97]], 18);
+    b.tint(0.85, 0.085, 0.004, 1).lathe([[r(1.95), 1.95], [0.13, 1.97]], 18);
     b.tint(0.05, 0.02, 0.01, 1).lathe([[0.13, 1.97], [0.0, 1.9]], 18);
   }
   const g = b.empty ? null : b.build();
