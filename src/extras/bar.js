@@ -155,6 +155,16 @@ export function attach(app) {
     heard.heat = !show.on ? 0.3 : show.n >= 5 ? 1 : 0.7;
     if (!playing && k > 0.01) { tune.play('bar', { state: heard }); playing = true; }
     if (playing) { tune.tick(); if (k <= 0 && heard.inside < 0.01) { tune.stop(); playing = false; } }
+    // ---- the camera that follows the visitor stays under the low vault of the passage, out to its mouth (the
+    // game's rig keeps a camera under the roof of a cave where the cave answers for that spot, which the open part
+    // of a mouth does not: there it would rise through the vault and see the sky through the hole)
+    if (camera && inCave && !hud.root?.classList.contains('free')) {
+      const c = camera.position;
+      if (c.z > BAR.mouth.z - 1 && c.z < D.z && Math.abs(c.x - AX) < 3) {
+        const roof = place.corridor.ceilingAt(c.x, Math.max(BAR.mouth.z + 0.05, c.z)) - 0.3, f = app.rig?._focus;
+        if (c.y > roof) { c.y = roof; camera.lookAt(f ? f.x : p.x, f ? f.y + 0.1 : p.y + 1.55, f ? f.z : p.z); camera.updateMatrixWorld(); }
+      }
+    }
     // ---- a glass: the world sways a little, and one hiccups
     state.roll = 0;
     if (state.sway > 0) {

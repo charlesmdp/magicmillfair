@@ -267,7 +267,7 @@ south-east of the Old Tree: from the mill, walk south past the Great Pond to the
 to the foot of the rock face, where a slab of fallen rock stands between two boulders. The mouth is behind the slab;
 a small red lantern over it is lit only for who comes within 22 m. Not on the map (its place is `hidden` and added
 after the map is made), no sign, and Barnaby does not speak of it. The gallery runs due south (x = -65): a low
-passage, the door at z = 185.6, the room from z = 188 to 209, its floor at 33.3, ten metres under the grass.
+passage, the door at z = 185.6, the room from z = 188 to 209, its floor at 33.3, a dozen metres and more under the grass.
 
 **Inside.** A doorman, Hinge, behind his hatch: the cover is three flowers (the bouquet in hand, spent from its last
 flowers as the plaques and the golden dog spend one); without them he says where flowers grow. Then a low vaulted
@@ -279,7 +279,7 @@ Peony Piston dances with two fans of feathers and takes off her hat, a shoulder 
 back plate (her key), and on the last roll her shell opens and a smaller robot steps out, dances and bows. E (or the
 prompt, on a phone) by the stage throws a flower: she spins, the room cheers. At the counter a glass costs a flower:
 the robot raises it (a "cheer" emote, which the others see), says "hic!" now and then, and for a minute the world
-sways a little (1.5° at the most; not at all for who asked their device for less motion); three a night. Its tune
+sways a little (2° at the most, after the third; not at all for who asked their device for less motion); three a night. Its tune
 (`TUNES.bar`: a slow swung cabaret in D minor, brushes, a walking bass, a muted horn once the curtain is up) is
 heard only in the cave, faintly behind the door. With the extra `caves` on, it is a safe place as every cave is
 ("Nearby" chat).
