@@ -14,7 +14,8 @@
 //   POST /api/mails { preview: { kind, form, words } }   → { subject, text, html, used, broken }: that message as it
 //                                                        would leave with these words — nothing is kept
 //   POST /api/mails { send: { kind, form, words } }   that message, with made-up values, to the owner's own address
-//   POST /api/mails { me }                            the owner's own address, for those tests ('' forgets it)
+//   POST /api/mails { me }                            the owner's own address, for those tests ('' forgets it: they then
+//                                                        go where the owner is told of new sponsors, if anywhere)
 //
 // THE DOOR. Whoever sends a message calls ctx.mail (or mailLater, which does): mailDoor(ctx) — called by route()
 // for every request — stands there once and for all, in front of the mailer the host gave. A message that comes
@@ -30,17 +31,19 @@
 // at the moment it is looked at; for a buyer without an account, whose address is asked of Stripe for one message
 // and kept nowhere (the privacy page says so), it keeps nothing of who it was. The owner's own address is the owner's.
 //
-// Kept: `mailset` → { off: { <kind>: true }, words: { <kind>: { <sentence>: text } }, me }; `maillog` → the last
+// Kept: `mails:set` → { off: { <kind>: true }, words: { <kind>: { <sentence>: text } }, me }; `mails:log` → the last
 // MAIL_LOG messages, [{ at, kind, form?, state: 'sent' | 'off' | 'failed', error?, test?, to (the owner's own
 // address) | acct (the name of an account; paid: at the address given at the payment, not at the account's) | guest }].
-// (Neither begins with "mail:" — those are the addresses of the accounts: accounts.js.)
+// (Neither begins with "mail:" — those are the addresses of the accounts: accounts.js. And both have a colon in
+// their name: the Node server takes a list kept under a name without one for a board of scores of its first
+// version, and puts it away as such the next time it starts — server/index.js, `store.load`.)
 import { MAILS, buildMail, checkWords, cleanEmail } from './mail.js';
 import { PASS } from './items.js';
 import { PRICES } from './catalog.js';
 import { LEGAL } from '../src/app/legal.js';
 
 const out = (status, body, headers = {}) => ({ status, body, headers });
-const SET = 'mailset', LOG = 'maillog';
+const SET = 'mails:set', LOG = 'mails:log';
 /** How many messages the list of what left remembers. */
 export const MAIL_LOG = 200;
 /** The kinds that are always sent, and why (said to the owner, in the place of their switch). */
@@ -249,8 +252,9 @@ export async function mailsRoute(req, ctx) {
   if (req.path !== '/api/mails') return null;
   if (!req.owner) return out(403, { error: 'Only the owner.' });
   const { method, body } = req, store = ctx.store, site = req.site || '', set = await settingsOf(store);
-  const all = async () => ({ mail: !!ctx.mail, me: set.me, notify: cleanEmail((await store.get('notify'))?.email || ''), kinds: Object.keys(ABOUT).map((kind) => shown(kind, set, site)), log: await readLog(ctx), keeps: MAIL_LOG });
-  if (method === 'GET' || method === 'HEAD') return out(200, await all());
+  // (where the owner's tests go: the address given for them — or, while none was, the one the owner is told of new sponsors at)
+  const notify = cleanEmail((await store.get('notify'))?.email || ''), mine = set.me || notify;
+  if (method === 'GET' || method === 'HEAD') return out(200, { mail: !!ctx.mail, me: mine, notify, kinds: Object.keys(ABOUT).map((kind) => shown(kind, set, site)), log: await readLog(ctx), keeps: MAIL_LOG });
   if (method !== 'POST') return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD, POST' });
   const b = body && typeof body === 'object' ? body : {};
   const save = (next) => store.put(SET, { off: next.off, words: next.words, ...(next.me && { me: next.me }), at: ctx.now() });
@@ -259,7 +263,7 @@ export async function mailsRoute(req, ctx) {
     const me = b.me.trim() ? cleanEmail(b.me) : '';
     if (b.me.trim() && !me) return out(400, { error: 'That does not look like an e-mail address.' });
     await save({ ...set, me });
-    return out(200, { ok: true, me });
+    return out(200, { ok: true, me: me || notify });
   }
 
   const asked = b.preview || b.send;
@@ -270,10 +274,10 @@ export async function mailsRoute(req, ctx) {
     const words = laid(set.words[kind], asked.words), used = new Set(), made = buildMail(kind, formOf(kind, asked.form).args(site), words, used);
     if (b.preview) return out(200, { subject: made.subject, text: made.text, html: made.html, used: Object.keys(MAILS[kind].fields).filter((id) => used.has(id)), broken: brokenIn(kind, words) });
     if (!ctx.mail) return out(501, { error: 'This server sends no e-mail.' });
-    if (!set.me) return out(400, { error: 'Say first where your tests are to be sent (at the top of this page).' });
+    if (!mine) return out(400, { error: 'Say first where your tests are to be sent (at the top of this page).' });
     // (through the door, like every message — marked as a test: it leaves even while its kind is switched off, as it is written here)
-    try { await ctx.mail({ to: set.me, subject: `[Test] ${made.subject}`, text: made.text, html: made.html, kind, form: made.form, test: true }); } catch (err) { return out(502, { error: `It could not be sent: ${said(err)}` }); }
-    return out(200, { ok: true, sent: true, to: set.me, log: await readLog(ctx) });
+    try { await ctx.mail({ to: mine, subject: `[Test] ${made.subject}`, text: made.text, html: made.html, kind, form: made.form, test: true }); } catch (err) { return out(502, { error: `It could not be sent: ${said(err)}` }); }
+    return out(200, { ok: true, sent: true, to: mine, log: await readLog(ctx) });
   }
 
   const kind = Object.hasOwn(ABOUT, b.kind) ? b.kind : '';

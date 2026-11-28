@@ -173,18 +173,18 @@ const account = (name, more = {}) => ({ name, salt: 's', created: Date.UTC(2026,
 
   // the two that must always leave
   const lockCode = await post({ kind: 'code', off: true }), lockInvite = await post({ kind: 'invite', off: true });
-  kept.set('mailset', { ...kept.get('mailset'), off: { code: true, invite: true } }); // (…and even if the store said so)
+  kept.set('mails:set', { ...kept.get('mails:set'), off: { code: true, invite: true } }); // (…and even if the store said so)
   await ctx.mail({ to: 'ada@example.org', ...mail.codeMail(SITE, 'Ada', 'AAAA-BBBB-CCCC', 30) });
   await ctx.mail({ to: 'ada@example.org', ...mail.inviteMail(SITE, 'Ada', `${SITE}/?pw=tok.en`, 7) });
   const locked = (await call('/api/mails')).body.kinds.filter((k) => k.locked);
   check('the door: the code to set a new password and the link to choose a first one cannot be switched off — the back office says why, the server refuses, and they leave whatever the store says',
     Object.keys(LOCKED).sort().join() === 'code,invite' && lockCode.status === 409 && lockInvite.status === 409 && /cannot be switched off/.test(lockCode.body.error) && sent.length === 5 && sent[3].text.includes('AAAA-BBBB-CCCC') && sent[4].text.includes('?pw=tok.en')
     && locked.map((k) => k.id).sort().join() === 'code,invite' && locked.every((k) => k.off === false && k.locked.length > 20), [lockCode.status, lockInvite.status, sent.length]);
-  kept.set('mailset', { ...kept.get('mailset'), off: {} });
+  kept.set('mails:set', { ...kept.get('mails:set'), off: {} });
 
   // the owner's words
   const bad = await post({ kind: 'welcome', words: { subject: 'Bienvenue {name}', intro: 'Bonjour {prenom}' } });
-  const nothingKept = !kept.get('mailset')?.words?.welcome;
+  const nothingKept = !kept.get('mails:set')?.words?.welcome;
   const saved = await post({ kind: 'welcome', words: { subject: ' Bienvenue,\n{name} ', intro: 'Bonjour {name} <b>& co</b>', keep1: null } });
   await ctx.mail({ to: 'ada@example.org', ...mail.welcomeMail(SITE, 'Ada') });
   await ctx.mail({ to: 'ada@example.org', ...mail.passMail(SITE, 'Ada', { perks: ['Every hat'], cents: 1900 }) });
@@ -195,7 +195,7 @@ const account = (name, more = {}) => ({ name, salt: 's', created: Date.UTC(2026,
     bad.status === 400 && bad.body.field === 'intro' && /\{prenom\}/.test(bad.body.error) && nothingKept && saved.status === 200 && saved.body.kind.forms[0].subject === 'Bienvenue, Robin'
     && mine.subject === 'Bienvenue, Ada' && mine.text === plain.text.replace(plain.text.split('\n\n')[1], 'Bonjour Ada <b>& co</b>') && mine.html.includes('Bonjour Ada &#60;b&#62;&#38; co&#60;/b&#62;') && !mine.html.includes('<b>& co')
     && pass.text === mail.passMail(SITE, 'Ada', { perks: ['Every hat'], cents: 1900 }).text && shownMine.fields.find((f) => f.id === 'intro').typed === 'Bonjour {name} <b>& co</b>' && shownMine.fields.find((f) => f.id === 'keep1').typed === undefined
-    && back.status === 200 && !kept.get('mailset').words.welcome && sent[7].subject === plain.subject && sent[7].html === plain.html, [bad.status, bad.body, saved.status, mine?.subject, back.status, kept.get('mailset')]);
+    && back.status === 200 && !kept.get('mails:set').words.welcome && sent[7].subject === plain.subject && sent[7].html === plain.html, [bad.status, bad.body, saved.status, mine?.subject, back.status, kept.get('mails:set')]);
 
   // looked at before it is kept
   const draft = await post({ preview: { kind: 'sponsorNotice', form: 'topTie', words: { hello: 'Salut[, {name}] !', topKeep: 'Oops {nope}' } } });
@@ -203,18 +203,23 @@ const account = (name, more = {}) => ({ name, salt: 's', created: Date.UTC(2026,
   const long = await post({ preview: { kind: 'welcome', form: 'welcome', words: { intro: 'é'.repeat(1400), lost: 'è'.repeat(1400), start: 'à'.repeat(1400) } } });
   check('the back office: a message is looked at with the words being typed before anything is kept — its subject, its text, its HTML, the sentences that case is made of, and which of the words typed cannot be used',
     draft.status === 200 && draft.body.text.startsWith('Salut, Robin !\n\n') && draft.body.html.includes('Salut, Robin !') && /as much as you/.test(draft.body.text) && draft.body.used.includes('topLeadTie') && !draft.body.used.includes('topLead') && Object.keys(draft.body.broken).join() === 'topKeep'
-    && draft.body.text.includes('You keep your place among the five') && guest.body.text.startsWith('Salut !\n\n') && !kept.get('mailset').words.sponsorNotice && long.status === 200 && long.body.text.includes('é'.repeat(1400)), [draft.status, draft.body.broken, guest.body?.text?.slice(0, 20), long.status]);
+    && draft.body.text.includes('You keep your place among the five') && guest.body.text.startsWith('Salut !\n\n') && !kept.get('mails:set').words.sponsorNotice && long.status === 200 && long.body.text.includes('é'.repeat(1400)), [draft.status, draft.body.broken, guest.body?.text?.slice(0, 20), long.status]);
 
   // "send me this one"
+  // (while no address was given for the tests, they go where the owner is told of new sponsors — and nowhere when that is not said either)
+  const testsGo = (await call('/api/mails')).body.me, toNotify = await post({ send: { kind: 'welcome', form: 'welcome' } }), wentTo = sent.at(-1).to;
+  kept.delete('notify');
   const nowhere = await post({ send: { kind: 'welcome', form: 'welcome' } });
+  kept.set('notify', { email: 'owner@example.org', site: SITE });
   const notMail = await post({ me: 'not an address' }), me = await post({ me: ' Me@Example.org ' });
   await post({ kind: 'sponsor', off: true });
   const before8 = sent.length, test = await post({ send: { kind: 'sponsor', form: 'wall', words: { thanks: 'Merci <3' } } });
   const got = sent[before8], testLog = (await log())[0];
-  check('the back office: "send me this one" sends that case, with made-up values and the words as they are typed, to the owner\'s own address — once it is said where; its subject begins with [Test]; it leaves even while its kind is switched off, by the same door, and the list says it was a test',
-    nowhere.status === 400 && notMail.status === 400 && me.status === 200 && me.body.me === 'me@example.org' && test.status === 200 && test.body.to === 'me@example.org' && sent.length === before8 + 1 && got.to === 'me@example.org' && got.subject === '[Test] Their plaque is reserved — thank you'
+  check('the back office: "send me this one" sends that case, with made-up values and the words as they are typed, to the owner\'s own address — the one given for the tests, else the one new sponsors are told to, and it says so when there is neither; its subject begins with [Test]; it leaves even while its kind is switched off, by the same door, and the list says it was a test',
+    testsGo === 'owner@example.org' && toNotify.status === 200 && toNotify.body.to === 'owner@example.org' && wentTo === 'owner@example.org' && nowhere.status === 400 && /where your tests/.test(nowhere.body.error)
+    && notMail.status === 400 && me.status === 200 && me.body.me === 'me@example.org' && test.status === 200 && test.body.to === 'me@example.org' && sent.length === before8 + 1 && got.to === 'me@example.org' && got.subject === '[Test] Their plaque is reserved — thank you'
     && got.text.includes('Merci <3') && got.html.includes('Merci &#60;3') && /on the wall of the companions/.test(got.text) && Object.keys(got).sort().join() === 'html,subject,text,to' && testLog.test === true && testLog.state === 'sent' && testLog.whom.you === true && testLog.whom.email === 'me@example.org'
-    && !kept.get('mailset').words.sponsor, [nowhere.status, notMail.status, me.body, test.status, got?.subject, testLog]);
+    && !kept.get('mails:set').words.sponsor, [testsGo, toNotify.status, wentTo, nowhere.status, notMail.status, me.body, test.status, got?.subject, testLog]);
   await post({ kind: 'sponsor', off: false });
 
   // a mailer that says no
@@ -235,7 +240,7 @@ const account = (name, more = {}) => ({ name, salt: 's', created: Date.UTC(2026,
   await ctx.mail({ to: 'paid-with@example.net', ...mail.sponsorNoticeMail(SITE, 'Bob', { kind: 'outbid', place: 'the board of Mostly Up', cents: 700, refunded: true }) }); // (Bob's account has no address: the one given at the payment)
   await ctx.mail({ to: 'owner@example.org', ...mail.ownerRefundMail(SITE, { cents: 700, place: 'the board of Mostly Up', reason: 'outbid' }) });
   await ctx.mail({ to: 'ada@example.org', subject: 'By hand', text: 'x', html: '<p>x</p>' });
-  const whom = (await log()).slice(0, 4).map((l) => l.whom), written = JSON.stringify(kept.get('maillog'));
+  const whom = (await log()).slice(0, 4).map((l) => l.whom), written = JSON.stringify(kept.get('mails:log'));
   kept.set('acct:ada', account('Ada', { hash: 'h', email: 'ada@new.example' }));
   const moved = (await log()).find((l) => l.whom.account === 'Ada')?.whom.email;
   check('the list of what left keeps no address but the owner\'s own: an account is kept by its name — and shown with the address it has now —, a buyer without an account as just that (their address is asked of Stripe for one message, and kept nowhere), and nothing of a code, a link or a subject',
@@ -254,10 +259,10 @@ const account = (name, more = {}) => ({ name, salt: 's', created: Date.UTC(2026,
   const many = [], had = sent.length;
   for (let i = 0; i < MAIL_LOG + 40; i++) many.push(ctx.mail({ to: 'ada@new.example', ...mail.welcomeMail(SITE, 'Ada') }));
   await Promise.all(many);
-  const full = kept.get('maillog'), left = sent.length - had;
+  const full = kept.get('mails:log'), left = sent.length - had;
   w.clock.t += 60_000;
   await ctx.mail({ to: 'ada@new.example', ...mail.codeMail(SITE, 'Ada', 'AAAA-BBBB-CCCC', 30) });
-  const after = kept.get('maillog'), shownLog = (await call('/api/mails')).body;
+  const after = kept.get('mails:log'), shownLog = (await call('/api/mails')).body;
   check(`the list of what left is bounded: of ${MAIL_LOG + 40} messages leaving at once every one is handed to the mailer and noted (none loses its line to another), ${MAIL_LOG} are kept, and the next one pushes the oldest out`,
     MAIL_LOG === 200 && left === MAIL_LOG + 40 && full.length === MAIL_LOG && full.every((l) => l.kind === 'welcome' && l.state === 'sent') && after.length === MAIL_LOG && after.at(-1).kind === 'code' && shownLog.log.length === MAIL_LOG && shownLog.log[0].kind === 'code' && shownLog.keeps === MAIL_LOG, [left, full.length, after.length, shownLog.log.length]);
 
@@ -265,7 +270,7 @@ const account = (name, more = {}) => ({ name, salt: 's', created: Date.UTC(2026,
   const stranger = [await call('/api/mails', { owner: false }), await call('/api/mails', { owner: false, method: 'POST', body: { kind: 'welcome', off: true } }), await call('/api/people', { owner: false })];
   kept.set('admins', { abc: { hash: 'never-this', name: 'Somebody', by: 'owner', at: 1 } });
   const named = [await call('/api/mails', { owner: false, admin: true }), await call('/api/people', { owner: false, admin: true })];
-  check('the owner\'s alone: without the owner\'s key neither the e-mails nor the accounts are shown, and nothing is changed', [...stranger, ...named].every((r) => r.status === 403 && !r.body.kinds && !r.body.accounts) && !kept.get('mailset').off.welcome, [...stranger, ...named].map((r) => r.status));
+  check('the owner\'s alone: without the owner\'s key neither the e-mails nor the accounts are shown, and nothing is changed', [...stranger, ...named].every((r) => r.status === 403 && !r.body.kinds && !r.body.accounts) && !kept.get('mails:set').off.welcome, [...stranger, ...named].map((r) => r.status));
 
   const silent = world({ mailer: false });
   const none = await silent.call('/api/mails'), cannot = await silent.call('/api/mails', { method: 'POST', body: { send: { kind: 'welcome', form: 'welcome' } } }), look = await silent.call('/api/mails', { method: 'POST', body: { preview: { kind: 'welcome', form: 'welcome' } } });
@@ -325,6 +330,9 @@ seeded['visitors:recent'] = [
 ];
 seeded['stats:all'] = { since: T0, people: 512, money: 0, passes: 0, sales: 0, keys: 0, metres: 0, secs: 0, moving: 0, blasts: 0, colors: [], kind: {}, os: {}, from: {}, cc: {}, weeks: {}, months: {} };
 seeded.admins = { [hashOf(NAMED).slice(0, 12)]: { hash: hashOf(NAMED), name: 'Named', by: 'Owner', at: T0 } };
+// (what left before this server was started — and a kind that was switched off then: both must still be there)
+seeded['mails:log'] = [{ at: T0, kind: 'welcome', acct: 'Player 01', state: 'sent' }];
+seeded['mails:set'] = { off: { ownerRefund: true }, words: {} };
 fs.writeFileSync(storeFile, JSON.stringify(seeded));
 fs.mkdirSync(path.join(ROOT, 'dist'), { recursive: true });
 const port = await freePort(), HERE = `http://127.0.0.1:${port}`;
@@ -411,7 +419,9 @@ try {
   check('E-mails: for the owner alone — the eight kinds of message, each with what it is, when it leaves and to whom, its sentences and their placeholders, its cases; the two that are always sent say why; the link mailed to Nina is on the list of what left',
     refused.every((r) => r.status === 403 && !r.body?.kinds) && mails.status === 200 && mails.body.mail === true && mails.body.kinds.length === 8 && mails.body.kinds.every((k) => k.name && k.when && k.to && k.fields.length >= 7 && k.forms.length >= 1 && k.forms.every((f) => f.subject && f.fields.length >= 5) && Object.keys(k.vars).length >= 1)
     && mails.body.kinds.filter((k) => k.locked).map((k) => k.id).sort().join() === 'code,invite' && mails.body.kinds.find((k) => k.id === 'code').fields.find((f) => f.id === 'codeLine').own.code && mails.body.kinds.find((k) => k.id === 'welcome').fields.find((f) => f.id === 'lost').original.includes('“Forgot the password”')
-    && !!invite && Object.keys(invite).sort().join() === 'at,html,subject,text,to' && mails.body.log[0].kind === 'invite' && mails.body.log[0].state === 'sent' && mails.body.log[0].whom.account === 'Nina' && mails.body.log[0].whom.email === 'nina@example.org', [refused.map((r) => r.status), mails.status, mails.body?.log?.[0]]);
+    && !!invite && Object.keys(invite).sort().join() === 'at,html,subject,text,to' && mails.body.log[0].kind === 'invite' && mails.body.log[0].state === 'sent' && mails.body.log[0].whom.account === 'Nina' && mails.body.log[0].whom.email === 'nina@example.org'
+    // (…and what was kept before the server was started is still there: a message that left, a kind switched off)
+    && mails.body.log.length === 2 && mails.body.log[1].at === T0 && mails.body.log[1].whom.account === 'Player 01' && mails.body.log[1].whom.email === 'player1@example.org' && mails.body.kinds.find((k) => k.id === 'ownerRefund').off === true && mails.body.me === '', [refused.map((r) => r.status), mails.status, mails.body?.log?.[0]]);
 
   // switched off: an account made with an address gets no welcome; the link to choose a password still leaves
   const off = await ask('/api/mails', { method: 'POST', body: { kind: 'welcome', off: true } });
@@ -442,9 +452,9 @@ try {
   check('E-mails: "send me this one" — a refund Stripe refused, with made-up values, comes to the address the owner gave, its subject marked [Test]; the address is kept for the next time',
     meSaved.status === 200 && test.status === 200 && test.body.to === 'boss@example.org' && tested?.subject === '[Test] A refund failed — the board of Mostly Up' && /too old to be refunded/.test(tested.text) && (await ask('/api/mails')).body.me === 'boss@example.org' && test.body.log[0].test === true, [meSaved.status, test.status, tested?.subject]);
 
-  const kept = fs.readFileSync(storeFile, 'utf8'), logKept = JSON.stringify(JSON.parse(kept).maillog);
+  const kept = fs.readFileSync(storeFile, 'utf8'), logKept = JSON.stringify(JSON.parse(kept)['mails:log']);
   check('E-mails: what is kept — the owner\'s words, which kinds are off, the owner\'s own address; and a list of what left that holds no address of anybody else, no link and no code',
-    /"mailset"/.test(kept) && /Bienvenue à Atomic Oasis/.test(kept) && /boss@example\.org/.test(logKept) && !/nina@|pia@|quin@|rose@|\?pw=/.test(logKept) && JSON.parse(kept).maillog.length === 5, logKept.slice(0, 400));
+    /"mails:set"/.test(kept) && /Bienvenue à Atomic Oasis/.test(kept) && /boss@example\.org/.test(logKept) && !/nina@|pia@|quin@|rose@|\?pw=/.test(logKept) && JSON.parse(kept)['mails:log'].length === 6, logKept.slice(0, 400));
 } catch (err) {
   check('the checks ran to the end', false, String(err?.stack || err).slice(0, 600));
 } finally {
