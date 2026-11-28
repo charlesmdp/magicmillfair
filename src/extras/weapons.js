@@ -45,7 +45,7 @@ export const RULES = {
   safe: 25, // m round where newcomers arrive, by the mill: toys do nothing there
   shield: 6, // s out of reach after standing again
   slack: 4, // m forgiven on the range: two browsers never quite agree on where each robot is
-  haste: 0.7, // a toy heard again sooner than this share of its reload is not believed
+  haste: 0.5, // a toy heard again sooner than this share of its reload is not believed (nor drawn)
   sight: 0.3, // where the sight is on the screen, above the middle (one's own robot stands in the middle)
 };
 
@@ -142,7 +142,8 @@ const css = `
 .touch .toys .toy-draw { width: 52px; height: 52px; border: 1.5px solid rgba(255, 255, 255, 0.3); background: rgba(255, 255, 255, 0.12); }
 .touch .toys .toy-draw[aria-pressed='true'] { background: rgba(242, 193, 78, 0.9); border-color: transparent; }
 .touch .toys .toy-draw kbd, .touch .toys .toy-line { display: none; }
-.touch .toys .toy-fire.on { display: grid; width: 70px; height: 70px; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.45); background: rgba(222, 62, 44, 0.82); color: #fff; }
+.touch .toys .toy-fire { display: grid; visibility: hidden; width: 70px; height: 70px; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.45); background: rgba(222, 62, 44, 0.82); color: #fff; }
+.touch .toys .toy-fire.on { visibility: visible; }
 .touch .toys .toy-fire svg { width: 30px; height: 30px; }
 .touch .toys .toy-fire:active { background: rgba(242, 193, 78, 0.85); color: #2a1d05; }
 .touch .toys .toy-fire.wait { opacity: 0.45; }
@@ -250,7 +251,7 @@ export function attach(app) {
   const bubbleMat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, uniforms: { uTime: { value: 0 } },
     vertexShader: 'varying vec3 vN; varying vec3 vV; varying float vY; void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalMatrix * normal; vV = -mv.xyz; vY = position.y; gl_Position = projectionMatrix * mv; }',
-    fragmentShader: 'uniform float uTime; varying vec3 vN; varying vec3 vV; varying float vY; void main() { float rim = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.0); float band = 0.5 + 0.5 * sin(vY * 15.0 - uTime * 8.0); float a = (0.14 + 0.82 * rim) * (0.6 + 0.4 * band) * (0.82 + 0.18 * sin(uTime * 27.0)); gl_FragColor = vec4(mix(vec3(0.5, 0.9, 1.0), vec3(1.0), rim * 0.7 + band * 0.2), a); }',
+    fragmentShader: 'uniform float uTime; varying vec3 vN; varying vec3 vV; varying float vY; void main() { float rim = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 1.6); float band = 0.5 + 0.5 * sin(vY * 15.0 - uTime * 8.0); float a = (0.2 + 0.8 * rim) * (0.6 + 0.4 * band) * (0.82 + 0.18 * sin(uTime * 27.0)); gl_FragColor = vec4(mix(vec3(0.5, 0.9, 1.0), vec3(1.0), rim * 0.7 + band * 0.2), a); }',
   });
   const shimmer = (h, at, dt) => {
     if (!at) { if (h.bubble) h.bubble.visible = false; return; }
@@ -318,7 +319,7 @@ export function attach(app) {
       _v.subVectors(_w, _c);
       const l = _v.length();
       _q.setFromUnitVectors(FWD, _v.divideScalar(l || 1));
-      b.mesh.setMatrixAt(k - 1, _mat.compose(_c, _q, _s.set(0.05, 0.05, l)));
+      b.mesh.setMatrixAt(k - 1, _mat.compose(_c, _q, _s.set(0.07, 0.07, l)));
       _c.copy(_w);
     }
     b.mesh.instanceMatrix.needsUpdate = true;
@@ -390,9 +391,9 @@ export function attach(app) {
   let dry = 0;
   /** Fires the toy in hand where the sight looks. Returns what came of it: { peer, end, butler } or { why }. */
   const fire = () => {
-    if (S.toy < 0) return { why: 'away' };
     const why = quiet();
-    if (why) { explain(why); return { why }; }
+    if (why) { if (S.toy >= 0) explain(why); return { why }; }
+    if (!holding()) return { why: 'away' }; // (none in hand — or hidden: a bush does not shoot)
     if (clock < S.ready) return { why: 'reload' };
     const toy = TOYS[S.toy], a = aim(), p = player.pos;
     S.ready = clock + toy.reload; S.fired = clock; S.kick = 1;
@@ -449,6 +450,8 @@ export function attach(app) {
     // (by the letter printed on the key, as the game's own shortcuts; a keyboard without Latin letters: by its place)
     const key = typeof e.key === 'string' && e.key.length === 1 ? e.key.toLowerCase() : '', is = (letter, code) => (key >= 'a' && key <= 'z' ? key === letter : e.code === code);
     if (!app.input.enabled || hud.root.classList.contains('free')) return; // (not one's robot just now: the free camera has C for itself)
+    // (…and where no toy can be held — a game, a ride, the water — the keys are left to whatever else may want them, without a word)
+    if (S.toy < 0 && ['down', 'game', 'seat', 'swim'].includes(quiet())) return;
     if (is('c', 'KeyC')) { if (S.toy < 0) draw(); else away(); } else if (is('n', 'KeyN')) next();
   });
   // (a click on the world: at once while the mouse is locked; else when the button comes back up without having
@@ -471,7 +474,9 @@ export function attach(app) {
     const d = e.d, i = d[0], toy = TOYS[i], peer = e.peer, p = player.pos;
     if (!toy || !peer || ![d[2], d[3], d[4]].every(Number.isFinite)) return;
     const since = clock - st.fired;
-    st.fired = clock; st.kick = 1; st.toy = i; st.at = clock;
+    st.fired = clock;
+    if (since < toy.reload * RULES.haste) { if (d[1] === myId()) note('shot', { by: e.id, toy: i, why: 'haste' }); return; } // (faster than the toy reloads: a browser that lies — not drawn, not believed)
+    st.kick = 1; st.toy = i; st.at = clock;
     // (drawn from where their robot stands, and no further than their toy carries — whatever the message says)
     const end = V(d[2], d[3], d[4]), from = muzzle(peer.x, peer.y, peer.z, Math.atan2(end.x - peer.x, end.z - peer.z), i, V(0, 0, 0)), len = from.distanceTo(end), most = toy.range + RULES.slack;
     if (len > most) end.sub(from).multiplyScalar(most / len).add(from);
@@ -490,8 +495,9 @@ export function attach(app) {
   };
   const fall = (h) => {
     const p = player.pos, toy = TOYS[h.toy];
-    player.die(`${toy.verb} by ${h.name}`, [p.x, p.z, player.yaw]);
-    if (!player.dead) return;
+    const cause = `${toy.verb} by ${h.name}`;
+    player.die(cause, [p.x, p.z, player.yaw]);
+    if (player.dead?.cause !== cause) return;
     // (where the body lies: it comes down to the ground if it was in the air, and stands again on that very floor)
     mine = { death: player.dead, x: p.x, z: p.z, yaw: player.yaw, vy: 0 };
     send(OP.fell, [h.by, h.toy]);
