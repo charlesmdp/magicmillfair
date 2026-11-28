@@ -204,9 +204,46 @@ export class Bar {
     for (const c of this._colliders) { if (c.box) c.handle = col.addBox(c.x, c.z, c.hw, c.hl, c.yaw || 0, c.y0 ?? -1e9, c.y1 ?? 1e9); else c.handle = col.addCircle(c.x, c.z, c.r, c.y0 ?? -1e9, c.y1 ?? 1e9); }
     for (const s of this._seats) world.seats.push(s);
     this.dig();
+    this.cleared = this._clearMouth();
     world.scatter?.keepClear?.(AX, 176.4, 3.4);
     world.scatter?.keepClear?.(BAR.slab.x, BAR.slab.z, 3);
     return this;
+  }
+
+  /**
+   * The boulders of the valley (props/Rocks.js) were laid before there was a mouth here: one that stands in it
+   * goes, one that leans into the passage is pushed aside, up the slope — its instance and what stops one with
+   * it. (The game keeps its boulders eight metres from the mouths of its own caves; this one wants its rocks.)
+   * Returns what was done: [{ at: [x, z], to: [x, z] | null }].
+   */
+  _clearMouth() {
+    const { world } = this, col = world.collision, ground = (x, z) => world.data.heightAt(x, z), done = [];
+    const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(), M = BAR.mouth, half = BAR.cave.nodes[0][2];
+    for (const mesh of world.rocks?.group.children || []) {
+      if (!mesh.isInstancedMesh) continue;
+      for (let i = 0; i < mesh.count; i++) {
+        mesh.getMatrixAt(i, m); m.decompose(p, q, s);
+        const reach = Math.max(s.x, s.z) * 0.9, aside = Math.abs(p.x - AX) - reach;
+        if (s.x === 0 || p.z < M.z - 1.5 || p.z > M.z + 5 || aside > half + 0.3) continue;
+        const was = [p.x, p.z];
+        // (its collider, if it has one: the same place, size × 0.7)
+        const c = col.circles.find((k) => Math.abs(k[0] - p.x) < 0.01 && Math.abs(k[1] - p.z) < 0.01 && k[3] < -1e8);
+        if (Math.abs(p.x - AX) < half + 0.4) {
+          m.makeScale(0, 0, 0); // (in the mouth: it goes)
+          if (c) c[3] = 1e9;
+          done.push({ at: was, to: null });
+        } else {
+          const side = Math.sign(p.x - AX), x = AX + side * (half + 0.35 + reach), sink = p.y - ground(p.x, p.z);
+          p.set(x, ground(x, p.z) + Math.min(0, sink), p.z);
+          m.compose(p, q, s);
+          if (c) { c[3] = 1e9; col.addCircle(p.x, p.z, c[2]); }
+          done.push({ at: was, to: [p.x, p.z] });
+        }
+        mesh.setMatrixAt(i, m);
+        mesh.instanceMatrix.needsUpdate = true;
+      }
+    }
+    return done;
   }
 
   /**
@@ -245,7 +282,8 @@ export class Bar {
     for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) iron.rod(V(L.x + dx * 0.075, L.y - 0.11, L.z + dz * 0.075), V(L.x + dx * 0.075, L.y + 0.1, L.z + dz * 0.075), 0.008, 4);
     const g = new MeshBuilder();
     g.tint(1, 0.1, 0.06, 1).box(L.x - 0.06, L.y - 0.1, L.z - 0.06, L.x + 0.06, L.y + 0.09, L.z + 0.06);
-    this.lantern = new THREE.Mesh(g.build(), world.materials.glow);
+    // (a red of its own, unlit: the game's glowing material would whiten it to the colour of a peach in daylight)
+    this.lantern = new THREE.Mesh(g.build(), new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.07, 0.04), toneMapped: false, fog: false }));
     this.lantern.name = 'bar:lantern';
     this.lantern.visible = false;
     this.outside.add(this.lantern);

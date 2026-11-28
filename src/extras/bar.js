@@ -167,10 +167,10 @@ export function attach(app) {
       if (camera && free() && a > 0) { camera.rotateZ(state.roll); camera.rotateX(0.3 * a * Math.sin(swayT * 0.67 + 1)); camera.updateMatrixWorld(); }
     }
     // ---- the names
-    const fd = place.corridor.floorAt(AX, D.z), top = FLOOR + S.height;
+    const fd = place.corridor.floorAt(AX, D.z), top = FLOOR + S.height, seen = !!camera && camera.position.z > D.z + 0.2; // (the room's names: not through the wall of the door)
     label('doorman', inCave && free() && Math.abs(p.z - D.z) < 6, BAR.doorman.x, fd + (place.door.k > 0.5 ? 2.2 : 2.0), place.door.k > 0.5 ? BAR.doorman.z : D.z - 0.1, camera);
-    label('barman', inRoom && free() && Math.hypot(p.x - BAR.barman.x, p.z - BAR.barman.z) < 9, BAR.barman.x, FLOOR + 2.15, BAR.barman.z, camera);
-    label('star', inRoom && free() && show.curtain > 0.4, place.star.group.position.x, top + (show.n >= 5 ? 2.3 : show.n >= 1 ? 2.25 : 2.6), BAR.star.z, camera);
+    label('barman', inRoom && seen && free() && Math.hypot(p.x - BAR.barman.x, p.z - BAR.barman.z) < 9, BAR.barman.x, FLOOR + 2.15, BAR.barman.z, camera);
+    label('star', inRoom && seen && free() && show.curtain > 0.4, place.star.group.position.x, top + (show.n >= 5 ? 2.3 : show.n >= 1 ? 2.25 : 2.6), BAR.star.z, camera);
     return events;
   };
   world.zones.push({ update: (dt, time, camera) => step(dt, camera) });
