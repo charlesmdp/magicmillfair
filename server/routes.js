@@ -17,6 +17,7 @@
 //   GET | POST /api/account                   an account to keep what was bought and earned (accounts.js)
 //
 //   the shop and the sponsors: /api/shop, /api/checkout, /api/stripe/webhook, /api/sponsor(s), /api/logo (see shop.js)
+//   GET | POST /api/sales                     the owner: everything that was bought, and a payment given back (sales.js)
 //
 // req: { method, path, query (URLSearchParams), body (object | null), client (address), admin (boolean: the
 //        owner's key came with the request), bearer (the key that came, for those the owner has named),

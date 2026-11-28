@@ -558,6 +558,10 @@ is shown on a card inside the game and nobody leaves: step 5 below.)
    is counted in the takings). Copy its **signing secret** (`whsec_…`) into the secret
    `STRIPE_WEBHOOK_SECRET`. (A buyer who comes back to the game is given what they paid for even before the
    webhook says so — see *Becoming a sponsor* — but the webhook is the only thing that tells of an end.)
+   Three more are worth adding for the list of the sales (*Sales and refunds*, below): `charge.refunded` (a
+   refund made in Stripe itself is written on its line), `charge.dispute.created` and `charge.dispute.closed`
+   (a payment the buyer's bank takes back). Without them the list learns of those when a refund is opened on
+   that line, or when *Fetch what Stripe remembers* is pressed.
 3. Deploy once more, check `https://<your site>/api/status` (`"shop": "test"`), buy a hat with a test card.
    To sell for real, do the same two steps in live mode and replace the two secrets with the live ones.
 4. For the Game Pass: *Settings → Billing → Customer portal*, switch it on once (in test mode, then in
@@ -602,6 +606,51 @@ paid by the month — with the VAT in them, their page and their PDF, and *Send 
 to who paid. All of it is the owner's alone (`/api/tax`, `/api/invoices`; `server/stripe.js`: `taxed`,
 `findInvoices`, `sendInvoice`). A payment made before the VAT was on has no invoice at Stripe: one is made by
 hand, in Stripe (*Invoices → Create*).
+
+**The tax code** is chosen in the same form among the few of Stripe's that fit what the fair sells — each with a
+sentence saying what it means —, or typed: *The one set in Stripe* (none is sent: Stripe uses the "preset product
+tax code" of the account, *Settings → Tax*); `txcd_10000000` *General - Electronically Supplied Services* (the
+catch-all for what is digital; Stripe advises a more exact one for who sells in the United States);
+`txcd_10201000` *Video Games - downloaded - non subscription - with permanent rights* (a hat, a jetpack, a paint,
+a plaque: bought once and kept); `txcd_10201004` *Video Games - streamed - subscription - with conditional rights*
+(the Game Pass, a room by the month); `txcd_10701000` *Website Advertising* (what a sponsor buys). They were read
+on Stripe's own list, <https://docs.stripe.com/tax/tax-codes>. One code goes with everything that is sold
+(`taxed` in `server/stripe.js`): a sponsor's place is advertising rather than a piece of a game, and would
+deserve its own — a second choice in the form, and `taxed` picking by the kind of thing sold. Nobody here is a
+tax adviser: which code, and where to register, is for an accountant to confirm.
+
+**Sales and refunds.** The tab *Sales* of the back office — the owner's alone, as is `/api/sales` — lists
+everything that was bought, the newest first, fifty lines at a time: when, who (the account, or a browser
+without one by the first characters of its name), what in plain words ("Top hat", "Game Pass — monthly",
+"Gondola 3 — for good", "Bid on the panel of Spiral of Death"), how much, where it stands (paid, partly
+refunded and by how much, refunded, disputed; a subscription that ended), and a link to the payment in Stripe's
+dashboard. A search finds a name, an address, a thing; the total at the top counts what the search found. The
+list is a ledger the server keeps (`server/sales.js`): one record a sale (`sale:<Stripe's name of the payment
+page>` — nothing grows with the number of sales), written as Stripe says a page was paid, and completed at each
+month more, at the end of a subscription, at each refund — the owner's, the shop's own (outbid, too late, taken
+down), one made in Stripe itself, a dispute. What was sold before the list existed is brought in by *Fetch what
+Stripe remembers*: Stripe's own list of the payment pages that were paid is read twenty at a time (each request
+goes on from the last, within what a Worker may ask in one request), what is missing is added, what is known is
+completed, nothing is doubled, nothing is given or taken. A buyer's address at Stripe is never kept (the privacy
+page says so): it is asked of Stripe when a refund is opened, and when a whole address is searched for.
+**Refund…** on a line asks Stripe, there and then, what is left of the payment — of what is paid by the month,
+its latest invoice paid — and gives back all of it or a part typed in, never more than what is left, with a
+reason that is kept and written on the refund at Stripe. A *full* refund takes back what was bought: the thing
+leaves the wardrobe (unless it was paid for twice: the other payment still holds it), the Game Pass ends at
+once, a room falls asleep, a sponsor's place is freed, and what is paid by the month is cancelled — unless *…and
+let them keep it* is ticked. A *partial* refund changes nothing else. The dialog says which, in a sentence,
+before anything moves. What Stripe refuses — too old, already given back, a dispute, not enough balance — is said
+in plain words and changes nothing; when Stripe does not answer, nobody knows, and that is what is said. A
+refund cannot be made twice by a second click: the page draws one token per intention, the server gives a sale
+back one request at a time and remembers the token, and the token is Stripe's idempotency key. The buyer is
+told as for the other refunds (a note in the game, an e-mail where an address is known), and so is the owner; the
+refund is in the list of refunds of the sponsors' tab and off the figures. A payment that has an invoice (the
+VAT was on) is given back by a credit note, a part of it by a credit note of that sum; Stripe makes one refund
+per payment that way, so a second part goes back the plain way and the owner is told a credit note is still to
+be made. (`node tools/sales-test.mjs`: 81 checks against a stand-in for Stripe, `tools/lib/stripe.mjs`;
+`node tools/sales-shots.mjs` sells a dozen things to that stand-in and takes pictures of the tab, of a refund
+and of the tax code.) Nothing of it was tried against Stripe itself: the first real refund is yours to make, in
+test mode, on a hat bought with the card 4242 4242 4242 4242.
 
 **Sponsors.** A place that can be sponsored is held by one sponsor at a time, for as long as the
 subscription runs (when it ends, Stripe says so and the place is free again). Its holder goes to it in the
@@ -1404,6 +1453,11 @@ list, add, let back in); **Figures** (the page everybody can read, and what was 
 releases. The page is fenced in by its headers: no script but its own, nothing from another site, never
 framed, never listed, never kept.
 
+One more section is the owner's alone, **Sales**: everything that was bought, and *Refund…* on each line — see
+*Sales and refunds*, with the shop. It is a file of its own beside the page's (`public/admin/sales.js`, with its
+few rules of style in `sales.css`): it names its own tab and reads its list when its section is shown, so that
+`admin.js` knows nothing of it.
+
 **The lab.** Novelties are built on another branch, as *extras* (`src/extras/`: a module with
 `attach(app)`), with their own checks (a test for each: see below) and a page of their own (`lab/`: see
 `lab/INTEGRATION.md`). The game switches them on through the switches above: **the caves are safe places**
@@ -1621,6 +1675,7 @@ notebook, with the rest. No new Durable Object class: such a room is a room like
 | `node tools/waves-test.mjs`, `node tools/lava-test.mjs`, `node tools/hive-test.mjs`, `node tools/flip-test.mjs`, `node tools/spiral-test.mjs`, `node tools/cars-test.mjs`, `node tools/golf-test.mjs`, `node tools/tunes-test.mjs`, `node tools/play-test.mjs` | the checks of the seven games with a gate — the rules of each (its bot plays it; the line of its board is held against `server/scores.js`), their music, and the seven played in the running game, in a browser, each switched on the way the game does it (see `lab/GAMES.md`) |
 | `npm run test:load` | a crowd at the door, with the real rules: 600 connections arrive in twenty seconds and walk (everybody gets in, rooms of about fifty, the lists say what is true, a state reaches the neighbours in time), 230 more follow one link (that room holds 200, never one more; the relay refuses whoever comes without asking; the owner still gets in), then most leave (the rooms that have emptied are offered a livelier one, nobody is moved or cut off) — 11 checks; `-- --cloudflare` plays it against the real Worker in the local Workers runtime, `-- --visitors=400` changes the crowd |
 | `npm run sim:rooms` | a whole day at the door, simulated with the real rules: the size of every room through the day as a picture (`tools/preview/rooms-<scenario>.png`), next to what the old door did; `-- --peak=800`, `-- --rules=open:40,start:15,low:6` try other days and other numbers |
+| `node tools/sales-test.mjs` | the list of the sales and their refunds, without a browser, against a stand-in for Stripe (`tools/lib/stripe.mjs`): 81 checks — a line for each thing paid (said twice: one line), the search (an address only Stripe knows is asked of Stripe, and kept nowhere), fifty lines at a time, one record a sale; what Stripe remembers of the past, read a page at a time, pressed twice, cut in the middle; a full refund of each kind of thing and what it takes back (a hat of a browser, of an account — worn —, paid twice, kept; the Game Pass, kept or not; a room by the month and for good; a place by the month, for good, a plaque, a bid; a place sold again since); a part, another part, the rest; more than what is left; a payment that has an invoice; what Stripe refuses (too old, no balance, a dispute, out of reach, silent at the very moment) and that nothing changes then; the same click twice at once, said again later, two pages at once, Stripe's own word come first; a visitor and a named administrator refused everywhere; a refund made in Stripe, a dispute opened, lost, won; test payments left out once the shop sells for real; Stripe's newer invoices |
 | `npm run test:shop` | the shop in the real game, on the Node server with test keys and a stand-in for Stripe: a hat bought and worn, the panel of a game sponsored, filled in (with a logo) and approved by the administrator, the stand of the gondolas (one taken by the month, one bought for good — $199, once, no subscription — by a visitor who chose; the administrator offered both ways to pay), a beach hut (offered on the sand by the hut, its panel on the roof, its card in the Trading Post), a plaque for a companion (bought at a bare plate, engraved with a picture, approved), an account made and signed in to on its card, the payment form inside the game (and Stripe's page when it cannot be shown); and a newcomer: the padlocks of the welcome card and the free day of the jetpack, the Game Pass bought as a subscription, what it lends (black, the largest size, a hat that was never bought), its end and the end of the free day; the cards of the Game Pass and of an account, come by themselves at their times; the window of the Trading Post; and a room of one's own: its card and its payment, its settings from a form, its password asked for at the door, a score on its board and on the world's, a visitor put out; the five sponsors of a big attraction (41 checks) |
 | `npm run test:smoke` | drives the real site: welcome screen, walking, free camera, settings, large map (and its stars), who comes back going straight in, the two cards that make an offer, the emotes and the pictures of their animals, the story of the opening told once (`-- --mobile` for the touch layout) |
 | `npm run test:audio` | Listens to the sound engine without ears: in headless Chromium it renders a dozen listener scenarios (beach, cliffs, pier, woods, mill, waterfall, cave, sky village, the climb…) and every one-shot effect through an offline audio context, measures level, spectrum, how the loudness moves and how tonal it is, fails on silence or clipping, and times `update()` (about 0.01 ms a frame) |
