@@ -2,9 +2,11 @@
 // and the way to give a payment back, in whole or in part. The owner's alone — the server refuses anybody else
 // (server/sales.js, which also decides everything: what is left of a payment, what a refund takes back).
 //
-// This file stands by itself next to admin.js, which knows nothing of it: it names its own tab, reads the list
-// when its section is shown, and asks the API with the key the page was opened with (the one admin.js keeps for
-// this tab of the browser). Nothing a buyer wrote is ever read as HTML, and no other site is spoken to.
+// This file stands by itself next to admin.js: it names its own tab, reads the list when its section is shown, and
+// asks the API with the key the page was opened with (the one admin.js keeps for this tab of the browser). Where
+// admin.js keeps a list of the tabs that live in files of their own (window.officeTabs, read as it loads) and
+// this file is loaded before it, the tab is named and shown through that list instead: either way does.
+// Nothing a buyer wrote is ever read as HTML, and no other site is spoken to.
 (() => {
   'use strict';
   const $ = (id) => document.getElementById(id);
@@ -41,7 +43,7 @@
   /** $9.99, $1,204.50, 12.50 EUR — from cents. */
   const money = (cents, currency = 'usd') => { const n = (Math.abs(cents) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), cur = String(currency || 'usd').toLowerCase(); return `${cents < 0 ? '−' : ''}${cur === 'usd' ? `$${n}` : `${n} ${cur.toUpperCase()}`}`; };
   const whoOf = (w) => [w.name || `A browser without an account (${w.short || '?'}…)`, w.email].filter(Boolean).join(' · ');
-  const BY = { owner: 'by you', auction: 'by the auction', fair: 'by the fair, when the place was taken down', stripe: 'in Stripe itself', dispute: 'to the buyer\'s bank: a dispute was lost' };
+  const BY = { owner: 'by you', auction: 'by the auction', fair: 'by the fair, when the place was taken down', dispute: 'to the buyer\'s bank: a dispute was lost' };
 
   // ---------------------------------------------------------------------------------------------------- the list
   let lines = [], before = '', more = false, found = '', asked = 0, mode = null;
@@ -53,6 +55,8 @@
     for (const l of s.log) {
       if (l.failed) { out.push(`A refund of ${money(l.cents, s.currency)} failed on ${day(l.at)} (${l.failed}): it can be given back from here.`); continue; }
       if (!l.cents) continue;
+      // (what Stripe alone told of — a refund made in Stripe itself, or one older than this list —: when it was learnt, not when it was made)
+      if (l.by === 'stripe') { out.push(`${money(l.cents, s.currency)} given back — not from this page: Stripe says so (learnt on ${day(l.at)})`); continue; }
       const why = l.by === 'owner' ? l.why && ` — “${l.why}”` : l.by === 'auction' ? (/^too late/.test(l.why || '') ? ': the bid came too late' : ': outbid') : '';
       out.push(`${money(l.cents, s.currency)} given back on ${day(l.at)} ${BY[l.by] || ''}${why || ''}${l.took ? ' · taken back' : l.kept ? ' · they kept it' : ''}`.replace(/\s+/g, ' '));
     }
@@ -260,6 +264,7 @@
   // opens a tab: it marks the tab's button, even when this section was never hidden, the page opened on #sales)
   let shown = false;
   const office = $('office');
+  (window.officeTabs ||= []).push({ id: 'sales', name: 'Sales', show: () => watch() });
   const watch = () => { name(); const now = !section.hidden && !office?.hidden && !!key(); if (now && !shown) { found = $('sales-find').value.trim(); load(); } shown = now; };
   new MutationObserver(watch).observe(office || section, { subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] });
   watch();
