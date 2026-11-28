@@ -105,7 +105,8 @@ try {
     try { await page.waitForSelector('#sales .sale', { timeout: 15000 }); } catch (err) { await page.screenshot({ path: path.join(OUT, '0-not-opened.png'), fullPage: true }); console.error(JSON.stringify({ problems, tabs: await page.$$eval('#tabs button', (bs) => bs.map((x) => `${x.dataset.tab}:${x.textContent}`)), sales: await page.$eval('#sales', (x) => x.textContent).catch(() => null), hidden: await page.$eval('section[data-tab="sales"]', (x) => x.hidden).catch(() => null) })); throw err; }
     return page;
   };
-  const shot = async (page, name, full = true) => { await page.waitForTimeout(250); await page.screenshot({ path: path.join(OUT, `${name}.png`), fullPage: full }); console.log(`${name}.png`); };
+  // (a whole page in one picture: the place where the page says what was done — empty, it waits under the window — is left out of it)
+  const shot = async (page, name, full = true) => { await page.waitForTimeout(250); if (full) await page.evaluate(() => { const t = document.getElementById('toast'); t.hidden = !t.classList.contains('on'); }); await page.screenshot({ path: path.join(OUT, `${name}.png`), fullPage: full }); await page.evaluate(() => { document.getElementById('toast').hidden = false; }); console.log(`${name}.png`); };
   const dialogOf = async (page, what) => { await page.click(`.sale:has(.grow > b:text-is("${what}")) button:text("Refund…")`); await page.waitForFunction(() => !document.getElementById('sale-refund-how').disabled || !document.getElementById('sale-refund-error').hidden, null, { timeout: 15000 }); };
 
   const page = await open(1240, 900);
@@ -168,7 +169,7 @@ try {
   await page.click('#tabs button[data-tab="sponsors"]');
   await page.waitForSelector('#tax-box:not([hidden])', { timeout: 15000 });
   await page.evaluate(() => document.getElementById('toast').classList.remove('on'));
-  const box = async (p, name) => { await p.evaluate(() => scrollTo(0, 0)); await p.waitForTimeout(300); const r = await p.evaluate(() => { const b = document.getElementById('tax-box').getBoundingClientRect(); return { x: Math.max(0, b.x + scrollX - 12), y: b.y + scrollY - 12, width: b.width + 24, height: b.height + 24 }; }); await p.screenshot({ path: path.join(OUT, `${name}.png`), fullPage: true, clip: r }); console.log(`${name}.png`); };
+  const box = async (p, name) => { await p.evaluate(() => { scrollTo(0, 0); document.getElementById('toast').hidden = true; }); await p.waitForTimeout(300); const r = await p.evaluate(() => { const b = document.getElementById('tax-box').getBoundingClientRect(); return { x: Math.max(0, b.x + scrollX - 12), y: b.y + scrollY - 12, width: b.width + 24, height: b.height + 24 }; }); await p.screenshot({ path: path.join(OUT, `${name}.png`), fullPage: true, clip: r }); await p.evaluate(() => { document.getElementById('toast').hidden = false; }); console.log(`${name}.png`); };
   await box(page, '13-tax-code');
   await page.check('input[name="tax-pick"][value="txcd_10201000"]');
   await page.click('#tax-form button[type="submit"]');
