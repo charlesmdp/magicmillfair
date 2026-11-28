@@ -1,12 +1,15 @@
 // The plaques of the companions: brass plates fixed round the plinth of the golden dog, two rows of them, one
-// for each pet somebody wanted remembered up here — a name, a few words, a picture if they sent one (what is
-// written there is the business of the shop: a plaque is a place like the others, `plaque:<n>`, paid once).
+// for each pet somebody loves enough to want up here — the one asleep on their sofa tonight as much as the one
+// they miss: a name, a few words, a picture if they sent one (what is written there is the business of the
+// shop: a plaque is a place like the others, `plaque:<n>`, paid once). It is no graveyard, and the board that
+// stands by the plates says so before anybody reads one (COMPANIONS, drawCompanions).
 //
 // All of them are one mesh painted from one picture (an atlas: a cell per plaque). The picture is only made
 // when somebody comes up to the ledge, and thrown away when they have gone: it costs nothing to those who
 // never climb. A picture sent for a plaque is fetched when its cell is painted, and not kept.
 import * as THREE from 'three';
 import { loadImage } from '../../../net/Shop.js';
+import { paintWords, wordsWidth } from '../../props/handpaint.js';
 
 export const CELL_W = 256, CELL_H = 128;
 const COLS = 8;
@@ -33,6 +36,61 @@ const wrap = (ctx, text, max, most) => {
 };
 /** Words cut in the metal: dark, with a line of light under them. */
 const engrave = (ctx, text, x, y) => { ctx.fillStyle = 'rgba(255, 246, 205, 0.6)'; ctx.fillText(text, x + 1, y + 1.2); ctx.fillStyle = '#35220a'; ctx.fillText(text, x, y); };
+
+/**
+ * What the board by the plates says, to whoever comes up to them: a plate is for a companion one loves — here
+ * with them or missed, the same —, and the place is a celebration of them. (`how`: the way to have one.)
+ */
+export const COMPANIONS = {
+  title: 'THE GOOD COMPANIONS',
+  lines: ['Asleep on your sofa tonight,', 'or missed every day:', 'a plate here is for both.'],
+  ribbon: 'AN ODE TO LIFE',
+  aside: 'They cannot read. Tell them anyway.',
+  how: 'A plate for yours, for good: step up to one that is still bare.',
+};
+
+/**
+ * The board of the companions, painted (1024 × 752 for a board of 2.4 m by 1.76: its three lines are letters of
+ * fifteen centimetres, read from the top of the stair): a page of warm paper in a brown frame, as the story of
+ * the fair is told at its gate — its title painted by hand, a paw on either side; the three lines; a red ribbon
+ * across; and, smaller, a word of advice and the way to have a plate.
+ */
+export function drawCompanions(ctx, w, h) {
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#f8ecd2'); g.addColorStop(1, '#ecd7a8');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+  // (the paper has seen the sea air: a few stains, always the same)
+  let seed = 20261128;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  for (let k = 0; k < 22; k++) { ctx.fillStyle = `rgba(150, 105, 50, ${0.018 + rnd() * 0.03})`; ctx.beginPath(); ctx.ellipse(rnd() * w, rnd() * h, 20 + rnd() * 80, 12 + rnd() * 44, rnd() * 3, 0, 7); ctx.fill(); }
+  ctx.strokeStyle = '#6b4423'; ctx.lineWidth = 14; ctx.strokeRect(11, 11, w - 22, h - 22);
+  ctx.strokeStyle = '#d9a63a'; ctx.lineWidth = 4; ctx.strokeRect(25, 25, w - 50, h - 50);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  // its title, painted by hand, a paw on either side
+  const size = Math.min(74, (74 * (w - 250)) / Math.max(1, wordsWidth(COMPANIONS.title, 74))), tw = wordsWidth(COMPANIONS.title, size);
+  paintWords(ctx, COMPANIONS.title, w / 2, 128, size, { align: 'center', color: '#7a1f17', shade: 'rgba(255, 244, 214, 0.6)', seed: 'companions' });
+  ctx.fillStyle = '#c98a1e';
+  for (const sgn of [-1, 1]) { ctx.save(); ctx.translate(w / 2 + sgn * (tw / 2 + 58), 90); ctx.rotate(sgn * 0.22); paw(ctx, 0, 0, 27); ctx.restore(); }
+  ctx.strokeStyle = 'rgba(107, 68, 35, 0.6)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(150, 170); ctx.lineTo(w / 2 - 30, 170); ctx.moveTo(w / 2 + 30, 170); ctx.lineTo(w - 150, 170); ctx.stroke();
+  ctx.fillStyle = '#7a1f17'; paw(ctx, w / 2, 168, 12);
+  // the three lines: what the place is for
+  ctx.fillStyle = '#35220f';
+  COMPANIONS.lines.forEach((t, i) => { fitFont(ctx, t, w - 110, 68, 30, 'italic 700'); ctx.fillText(t, w / 2, 242 + i * 81); });
+  // a ribbon across, its ends cut in a swallow tail
+  const ry = 460, rh = 96, rx = 150, tail = 34;
+  ctx.fillStyle = '#5c1711';
+  for (const sgn of [-1, 1]) { const x0 = sgn < 0 ? rx - 46 : w - rx + 46, x1 = sgn < 0 ? rx + 30 : w - rx - 30; ctx.beginPath(); ctx.moveTo(x0, ry + 16); ctx.lineTo(x1, ry + 16); ctx.lineTo(x1, ry + rh + 16); ctx.lineTo(x0, ry + rh + 16); ctx.lineTo(x0 - sgn * tail, ry + rh / 2 + 16); ctx.closePath(); ctx.fill(); }
+  const rg = ctx.createLinearGradient(0, ry, 0, ry + rh);
+  rg.addColorStop(0, '#b93226'); rg.addColorStop(1, '#8a1f18');
+  ctx.fillStyle = rg; ctx.fillRect(rx, ry, w - 2 * rx, rh);
+  ctx.strokeStyle = 'rgba(255, 226, 150, 0.75)'; ctx.lineWidth = 2.5; ctx.strokeRect(rx + 9, ry + 9, w - 2 * rx - 18, rh - 18);
+  const rs = Math.min(56, (56 * (w - 2 * rx - 90)) / Math.max(1, wordsWidth(COMPANIONS.ribbon, 56)));
+  paintWords(ctx, COMPANIONS.ribbon, w / 2, ry + rh / 2 + rs / 2, rs, { align: 'center', color: '#fff0c4', shade: 'rgba(40, 8, 4, 0.55)', seed: 'ode' });
+  // smaller: a word of advice, and the way to have a plate
+  ctx.fillStyle = '#4a2f14'; fitFont(ctx, COMPANIONS.aside, w - 160, 44, 22, 'italic 600'); ctx.fillText(COMPANIONS.aside, w / 2, 612);
+  ctx.fillStyle = '#7b5a36'; fitFont(ctx, COMPANIONS.how, w - 110, 29, 16, '700'); ctx.fillText(COMPANIONS.how, w / 2, 676);
+}
 
 /**
  * One plate, painted in its cell (256 × 128). `what`: null (nobody's yet), { taken } (somebody's, not engraved

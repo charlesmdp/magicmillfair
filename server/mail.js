@@ -352,7 +352,7 @@ export const MAILS = {
       plaquePreview: { label: 'The line mail readers show after the subject', text: 'A plaque {spot} — thank you.', line: true, only: 'html', own: { spot: 'where the plaque is (the sentence “Where a plaque is”)' } },
       hello: { label: 'Title', text: 'Thank you[, {name}]!', line: true },
       got: { label: 'What they have', text: 'You now sponsor {place}[ ({price})].' },
-      plaqueGot: { label: 'What they have', text: 'A plaque {spot} is reserved, for good[ ({price})].', own: { spot: 'where the plaque is (the sentence “Where a plaque is”)' } },
+      plaqueGot: { label: 'What they have', text: 'A plaque {spot} is reserved, for good[ ({price})]: for your companion — here with you, or missed.', own: { spot: 'where the plaque is (the sentence “Where a plaque is”)' } },
       spotFeet: { label: 'Where a plaque is — at the feet of the dog', text: 'at the feet of the golden dog', line: true, note: 'It makes {spot} in the two sentences above.' },
       spotWall: { label: 'Where a plaque is — on the wall', text: 'on the wall of the companions by the golden dog', line: true, note: 'It makes {spot} in the two sentences above.' },
       perMonth: PER_MONTH,

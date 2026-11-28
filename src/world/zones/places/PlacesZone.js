@@ -16,7 +16,7 @@ import { canvasBoard } from '../games/Boards.js';
 import { seatAt } from '../../../player/PlayerController.js';
 import { ANIM } from '../../../player/Character.js';
 import { statueGeometry, goldMaterial } from './GoldenDog.js';
-import { buildPlaques } from './Plaques.js';
+import { buildPlaques, drawCompanions } from './Plaques.js';
 import { PLAQUE_COUNT } from '../../layout/sponsors.js';
 import { STAIRWAY, VILLAGE, FALLS, COVE, ISLAND, islandPath, CAMP, BEACH_LOUNGE, POND_DECK, LEVELS, CAVES, GLADE, NORTH } from '../../layout/layout.js';
 
@@ -439,8 +439,8 @@ export class PlacesZone {
       const gold = (y0g, y1g) => { const g = ctx.createLinearGradient(0, y0g, 0, y1g); g.addColorStop(0, '#fff3b0'); g.addColorStop(0.45, '#f6c64e'); g.addColorStop(0.55, '#d99a1c'); g.addColorStop(1, '#f9dd7c'); return g; };
       const paw = (cx, cy, r) => { ctx.beginPath(); ctx.ellipse(cx, cy + r * 0.35, r * 0.62, r * 0.5, 0, 0, 7); ctx.fill(); for (const [ox, oy] of [[-0.66, -0.18], [-0.24, -0.62], [0.24, -0.62], [0.66, -0.18]]) { ctx.beginPath(); ctx.ellipse(cx + ox * r, cy + oy * r, r * 0.21, r * 0.27, ox * 0.5, 0, 7); ctx.fill(); } };
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      // a memorial to every companion: two lines of polished gold, a rule, who they were — and, by its name, the
-      // dog who keeps watch for them all
+      // to every companion anybody ever loved — the ones who are here as much as the ones who are missed —: two lines
+      // of polished gold, a rule, who they are — and, by its name, the dog who keeps watch for them all
       const cut = (text, y, size, max, weight = 900, style = '') => {
         ctx.font = `${style}${weight} ${size}px ${serif}`;
         ctx.fillStyle = '#231505'; ctx.fillText(text, w / 2 + size * 0.03, y + size * 0.035, max);
@@ -457,34 +457,31 @@ export class PlacesZone {
     plaque.mesh.rotation.y = S.yaw;
     plaque.mesh.name = 'golden:plaque';
     this.group.add(plaque.mesh);
-    // round the drum of the plinth: the plaques of the companions (see Plaques.js), and a sign that says what they are
+    // round the drum of the plinth: the plaques of the companions (see Plaques.js), and the board that says what they are
     this.plaques = buildPlaques({ x: S.x, y: y0, z: S.z, yaw: S.yaw, r: PR }, PLAQUE_COUNT);
     this.group.add(this.plaques.mesh);
     {
-      // (to the right of who comes up the stair, by the parapet: clear of the ring where one walks round the
-      // plates, and of what one sees of them from the top of the stair)
-      const a = 38 * (Math.PI / 180), lx = Math.sin(a) * (PR + 4.7), lz = Math.cos(a) * (PR + 4.7), c = Math.cos(S.yaw), s = Math.sin(S.yaw);
-      const gx = S.x + lx * c + lz * s, gz = S.z - lx * s + lz * c, [tx, tz] = st.points[st.points.length - 1], yaw = Math.atan2(tx - gx, tz - gz), W = 1.7, H = 1.06;
-      const sign = canvasBoard(544, 340, (ctx, w, h) => {
-        const serif = "Georgia, 'Times New Roman', serif";
-        const bg = ctx.createLinearGradient(0, 0, 0, h); bg.addColorStop(0, '#5b3d1c'); bg.addColorStop(0.5, '#6f4c22'); bg.addColorStop(1, '#3f2a12');
-        ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
-        ctx.strokeStyle = '#2a1b0a'; ctx.lineWidth = 12; ctx.strokeRect(6, 6, w - 12, h - 12);
-        ctx.strokeStyle = '#e2b24a'; ctx.lineWidth = 4; ctx.strokeRect(18, 18, w - 36, h - 36);
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#f6d98a'; ctx.font = `900 46px ${serif}`; ctx.fillText('THE GOOD COMPANIONS', w / 2, 74, w - 70);
-        ctx.fillStyle = '#e2b24a'; ctx.fillRect(w / 2 - 150, 108, 300, 3);
-        ctx.fillStyle = '#f3e6c8'; ctx.font = `italic 600 25px ${serif}`;
-        ['Round the best dog ever,', 'the best friends of everybody else.'].forEach((t, i) => ctx.fillText(t, w / 2, 146 + i * 32, w - 60));
-        ctx.fillStyle = '#ffe9a6'; ctx.font = `700 24px ${serif}`;
-        ['A plate for yours, for good:', 'step up to one that is still bare.'].forEach((t, i) => ctx.fillText(t, w / 2, 236 + i * 31, w - 60));
-      }, W, H, { both: true });
-      sign.mesh.position.set(gx, y0 + 1.0 + H / 2, gz);
+      // The board of the companions: a painted board of the fair on two posts, under a little roof of planks — what
+      // whoever comes up reads before any plate: a plate is for a companion one loves, asleep on the sofa tonight or
+      // missed every day, and the place is an ode to life (its words and its paint: Plaques.js). It faces the top of
+      // the stair, to the right of who arrives — ahead of who climbs the last flight —, clear of the ring where one
+      // walks round the plates and of what one sees of them from the top of the stair (where: NORTH.companions).
+      const B = N.companions, a = B.a * (Math.PI / 180), lx = Math.sin(a) * (PR + B.out), lz = Math.cos(a) * (PR + B.out), c = Math.cos(S.yaw), s = Math.sin(S.yaw);
+      const gx = S.x + lx * c + lz * s, gz = S.z - lx * s + lz * c, [tx, tz] = st.points[st.points.length - 1], yaw = Math.atan2(tx - gx, tz - gz), W = B.w, H = W * (752 / 1024), up = 0.85;
+      const sign = canvasBoard(1024, 752, drawCompanions, W, H, { both: true });
+      sign.mesh.position.set(gx, y0 + up + H / 2, gz);
       sign.mesh.rotation.y = yaw;
       sign.mesh.name = 'golden:companions';
       this.group.add(sign.mesh);
-      wood.tint(0.55, 0.42, 0.3, 1).place(gx, y0, gz, yaw).box(-W / 2 - 0.05, 0.95, -0.024, W / 2 + 0.05, 1.05 + H, -0.006, { tile: 1 }).box(-0.07, -0.3, -0.1, 0.07, 1.0, -0.03, { tile: 1 }).pop();
-      this.colliders.push({ type: 'circle', x: gx, z: gz, r: 0.3 });
+      wood.place(gx, y0, gz, yaw);
+      for (const side of [-1, 1]) wood.tint(0.62, 0.46, 0.32, 1).box(side * (W / 2 + 0.1) - 0.08, -0.4, -0.08, side * (W / 2 + 0.1) + 0.08, up + H + 0.2, 0.08, { tile: 1 });
+      wood.tint(0.62, 0.46, 0.32, 1).box(-W / 2 - 0.18, up - 0.14, -0.05, W / 2 + 0.18, up - 0.04, 0.05, { tile: 1 });
+      // (the roof: two planks, sloping to the front and to the back — seen from under them too)
+      const top = up + H + 0.2, e = W / 2 + 0.34;
+      wood.tint(0.5, 0.36, 0.25, 1).quad(V(-e, top - 0.04, 0.5), V(e, top - 0.04, 0.5), V(e, top + 0.3, 0), V(-e, top + 0.3, 0)).quad(V(e, top - 0.04, -0.5), V(-e, top - 0.04, -0.5), V(-e, top + 0.3, 0), V(e, top + 0.3, 0))
+        .quad(V(e, top - 0.04, 0.5), V(-e, top - 0.04, 0.5), V(-e, top + 0.26, 0), V(e, top + 0.26, 0)).quad(V(-e, top - 0.04, -0.5), V(e, top - 0.04, -0.5), V(e, top + 0.26, 0), V(-e, top + 0.26, 0));
+      wood.pop();
+      this.colliders.push({ type: 'box', x: gx, z: gz, hw: W / 2 + 0.2, hl: 0.12, yaw });
     }
     // the dog itself (its mesh is baked: see GoldenDog.js), and its shadow across the ledge
     const dog = new THREE.Mesh(statueGeometry(this.data.statue, S.height), goldMaterial());

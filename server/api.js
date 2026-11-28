@@ -33,6 +33,8 @@ export const LIMITS = {
   checkout: [[12, 60_000], [60, 3600_000]], // a payment page asked for (a few bids in a row are not a flood)
   portal: [[6, 60_000], [30, 3600_000]], // the page where a subscription is looked after
   sponsor: [[12, 60_000], [40, 3600_000]], // what a sponsor wants shown (a picture each time)
+  peek: [[6, 60_000], [30, 3600_000]], // a sponsor's own site read to fill their form in: the server goes and fetches a page (peek.js)
+  peekDay: [1500, 24 * 3600_000], // …and everyone together: a ceiling on what strangers can send the server to fetch in a day
   click: [[30, 60_000], [300, 3600_000]], // a sponsor's site opened from the game: counted for the sponsor
   account: [[10, 60_000], [40, 3600_000]], // a name and a password tried (creating, signing in, a new password)
   names: [[60, 60_000], [900, 3600_000]], // is that name free? (asked as it is typed, on the card of the account)

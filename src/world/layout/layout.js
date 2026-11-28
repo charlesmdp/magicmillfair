@@ -257,6 +257,10 @@ export const NORTH = {
   // (the dog, and with it a cat, a snake and a bird; the tablet of the plinth is for every pet — `memorial`, two
   // lines, and `kin` under them — and names the dog, who keeps watch for them all)
   statue: { x: 225.5, z: -335, yaw: -0.3, height: 15, name: 'CROKMOU', plaque: 'BEST DOG EVER', memorial: ['TO EVERY PET', 'WE EVER LOVED'], kin: 'Dogs, cats, birds, snakes — the best of us.' },
+  // (the board of the companions, which says what the plates round the plinth are for — the pets one loves, here or
+  // missed: `a` degrees round the drum of the plinth from its tablet, by the right of who looks at it, `out` metres
+  // from the drum, `w` metres wide; it faces the top of the stair)
+  companions: { a: 46, out: 3.65, w: 2.4 },
   // the wall of the companions, in the cliff round the dog (layout/plaquewall.js): four galleries, decks at `levels`
   // (m), `depth` m deep, their back walls `margin` m short of the rock, from angle `from` to `to` round the ledge
   // (degrees, its own: 0 east, 90 south, 180 west); two rows of plates on each, at `rows` m over the deck; a wall of

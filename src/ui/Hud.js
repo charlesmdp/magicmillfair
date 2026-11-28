@@ -583,6 +583,16 @@ export class Hud {
   /**
    * A few things to fill in. `fields`: [{ key, label, value, max, hint, type: 'text' | 'file' }]. Resolves to
    * { key: text (a File, or null, for a file) }, or to null when the visitor gives up.
+   *
+   * A text field may be a first step that fills the others in — `fill: { label, hint, busy, enter, run }`: its row is
+   * shown first, set apart, with a button (`label`) and a line under it (`hint`, then what `run` says). `run(text)`
+   * resolves to { error } or to { say, value (what the field itself should read), values: { key: text }, files:
+   * { key: File }, from: { key: a word for where it was found } }: the fields named are filled — each still the
+   * visitor's to change, each saying where what it holds came from until it is touched —, a file as if it had been
+   * chosen by hand, with a look at it. Pressed again, it takes back what it had put there and nobody touched, where
+   * it finds nothing this time. Nothing leaves the form before it is saved. (`enter`: the Enter key in that field
+   * presses the button rather than saving, while what it holds has not been read yet.) The fields keep their order
+   * in the page whichever is shown first: what fills a form in by their place — the tests — is not disturbed.
    */
   form(title, lead, fields, save = 'Save') {
     const box = this.hud.querySelector('.chooser'), list = box.querySelector('.list'), close = box.querySelector('.close');
@@ -596,30 +606,81 @@ export class Hud {
     this.panel.classList.remove('on'); this.emotes.classList.remove('on'); this.toggleBigMap(false);
     this.input.exitLock();
     return new Promise((resolve) => {
-      const inputs = {};
-      const done = (v) => { this._choice = null; box.classList.remove('on'); list.classList.remove('fields'); close.textContent = 'Stay here'; box.onclick = null; resolve(v); };
+      const inputs = {}, names = {}, found = {}, given = new Set(), looks = [], steps = [];
+      const done = (v) => { this._choice = null; box.classList.remove('on'); list.classList.remove('fields'); close.textContent = 'Stay here'; box.onclick = null; for (const u of looks.splice(0)) URL.revokeObjectURL(u); resolve(v); };
       this._choice = done;
+      /** Where what a field holds came from, said beside its name ('': it says nothing any more). */
+      const tag = (key, word) => { names[key].querySelector('.from')?.remove(); if (word) { const t = el('em', 'from'); t.textContent = word; names[key].append(t); } };
+      /** A field touched by hand is the visitor's own: no longer what a first step put there. */
+      const own = (key) => { given.delete(key); tag(key, ''); };
+      const unlook = (row) => { row.querySelector('.found')?.remove(); row.classList.remove('looked'); };
+      /** A picture put in a file field as if it had been chosen — or kept beside it, where a browser will not have that —, with a look at it (null: it is taken back). */
+      const give = (key, file) => {
+        const input = inputs[key], row = input.parentNode;
+        found[key] = file;
+        unlook(row);
+        if (!file) { input.value = ''; return; }
+        try { const hold = new DataTransfer(); hold.items.add(file); input.files = hold.files; } catch { /* kept beside the field */ }
+        const pic = el('img', 'found'), src = URL.createObjectURL(file);
+        looks.push(src);
+        pic.alt = ''; pic.src = src;
+        row.classList.add('looked');
+        row.append(pic);
+      };
       for (const f of fields) {
         const row = el('label'), name = el('span'), input = el('input');
         name.textContent = f.label;
-        if (f.type === 'file') { input.type = 'file'; input.accept = 'image/png,image/jpeg,image/webp'; }
+        if (f.type === 'file') { input.type = 'file'; input.accept = 'image/png,image/jpeg,image/webp'; input.addEventListener('change', () => { found[f.key] = null; unlook(row); own(f.key); }); }
         else if (f.type === 'color') { input.type = 'color'; input.value = /^#[0-9a-f]{6}$/i.test(f.value || '') ? f.value : '#fbf7ec'; }
         else if (f.type === 'password') { input.type = 'password'; input.maxLength = 100; input.autocomplete = f.fresh ? 'new-password' : 'current-password'; }
-        else { input.type = 'text'; input.maxLength = f.max || 60; input.value = f.value || ''; input.autocomplete = 'off'; input.spellcheck = false; if (f.hint) input.placeholder = f.hint; }
+        else { input.type = 'text'; input.maxLength = f.max || 60; input.value = f.value || ''; input.autocomplete = 'off'; input.spellcheck = false; if (f.hint) input.placeholder = f.hint; input.addEventListener('input', () => own(f.key)); }
         row.append(name, input);
-        list.append(row);
-        inputs[f.key] = input;
+        inputs[f.key] = input; names[f.key] = name;
+        if (!f.fill || input.type !== 'text') { list.append(row); continue; }
+        // the first step: this field, a button, and a line that says what the button does — then what it found
+        const step = el('div', 'fill'), go = el('button', 'pull'), said = el('p', 'said');
+        go.type = 'button'; go.textContent = f.fill.label;
+        said.setAttribute('aria-live', 'polite'); said.textContent = f.fill.hint || '';
+        step.append(row, go, said);
+        list.append(step);
+        const first = { key: f.key, go, enter: !!f.fill.enter, read: null, busy: false };
+        first.press = async () => {
+          if (first.busy) return;
+          // (the button is not switched off while it works: it would let go of the keyboard, and the keys would go to the game)
+          first.busy = true; go.classList.add('busy'); go.setAttribute('aria-busy', 'true'); said.className = 'said'; said.textContent = f.fill.busy || '…';
+          let got = null;
+          try { got = await f.fill.run(input.value.trim()); } catch { got = null; }
+          if (this._choice !== done) return; // (the form was closed meanwhile)
+          first.busy = false; go.classList.remove('busy'); go.removeAttribute('aria-busy');
+          if (!got || got.error) { said.classList.add('wrong'); said.textContent = got?.error || 'That did not work. Fill it in by hand.'; return; }
+          if (typeof got.value === 'string' && got.value) input.value = got.value.slice(0, input.maxLength);
+          first.read = input.value.trim();
+          const values = got.values || {}, files = got.files || {};
+          // (what an earlier press put there, and nobody touched since, goes when this one found nothing for it)
+          for (const k of [...given]) if (!(inputs[k].type === 'file' ? files[k] : values[k])) { if (inputs[k].type === 'file') give(k, null); else inputs[k].value = ''; own(k); }
+          for (const [k, v] of Object.entries(values)) if (inputs[k] && inputs[k].type === 'text' && k !== f.key && v) { inputs[k].value = String(v).slice(0, inputs[k].maxLength); given.add(k); tag(k, got.from?.[k]); }
+          for (const [k, file] of Object.entries(files)) if (inputs[k] && inputs[k].type === 'file' && file) { give(k, file); given.add(k); tag(k, got.from?.[k]); }
+          said.textContent = got.say || '';
+        };
+        go.onclick = (e) => { e.stopPropagation(); first.press(); };
+        steps.push(first);
       }
       const ok = el('button', 'save');
       ok.type = 'button'; ok.textContent = save;
-      const send = () => done(Object.fromEntries(fields.map((f) => [f.key, f.type === 'file' ? inputs[f.key].files[0] || null : f.type === 'password' ? inputs[f.key].value : inputs[f.key].value.trim()])));
+      const send = () => done(Object.fromEntries(fields.map((f) => [f.key, f.type === 'file' ? inputs[f.key].files[0] || found[f.key] || null : f.type === 'password' ? inputs[f.key].value : inputs[f.key].value.trim()])));
       ok.onclick = (e) => { e.stopPropagation(); send(); };
-      for (const f of fields) if (f.type !== 'file') inputs[f.key].addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); send(); } else if (e.key === 'Escape') { e.preventDefault(); done(null); } e.stopPropagation(); });
+      for (const f of fields) if (f.type !== 'file') inputs[f.key].addEventListener('keydown', (e) => {
+        const first = steps.find((st) => st.key === f.key), text = inputs[f.key].value.trim();
+        if (e.key === 'Enter') { e.preventDefault(); if (first?.enter && text && text !== first.read) first.press(); else send(); } else if (e.key === 'Escape') { e.preventDefault(); done(null); }
+        e.stopPropagation();
+      });
       list.append(ok);
+      // (a first step is shown first but stands where its field does: the Tab key is made to follow what is seen)
+      if (steps.length) { let n = 1; for (const st of steps) { inputs[st.key].tabIndex = n++; st.go.tabIndex = n++; } for (const f of fields) if (!steps.some((st) => st.key === f.key)) inputs[f.key].tabIndex = n++; ok.tabIndex = n; }
       close.onclick = (e) => { e.stopPropagation(); done(null); };
       box.onclick = (e) => { if (e.target === box) done(null); };
       box.classList.add('on');
-      inputs[fields[0].key]?.focus();
+      inputs[(steps[0] || fields[0]).key]?.focus();
     });
   }
 

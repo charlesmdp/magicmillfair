@@ -164,7 +164,7 @@ export function sponsorMail(site, name, { place = '', cents = 0, monthly = false
   const spot = wall ? 'on the wall of the companions by the golden dog' : 'at the feet of the golden dog';
   const where = siteOf(site), hello = name ? `Thank you, ${name}!` : 'Thank you!';
   const sum = cents > 0 ? `$${(cents / 100).toFixed(2).replace(/\.00$/, '')}${monthly ? ' a month' : ''}` : '';
-  const got = plaque ? `A plaque ${spot} is reserved, for good${sum ? ` (${sum})` : ''}.` : `You now sponsor ${place}${sum ? ` (${sum})` : ''}.`;
+  const got = plaque ? `A plaque ${spot} is reserved, for good${sum ? ` (${sum})` : ''}: for your companion — here with you, or missed.` : `You now sponsor ${place}${sum ? ` (${sum})` : ''}.`;
   const next = plaque
     ? 'What goes on it — a name, a few words, a picture — is asked for in the game, at the plaque itself: "Have your plaque engraved". It is engraved once the fair has looked at it.'
     : 'What you gave before paying — your name, a line, your link, your logo — goes up as soon as you are back in the game. To change it, walk up to your place or open the Trading Post: "Set up your panel".';
