@@ -81,6 +81,7 @@
     freeRooms: ['Rooms by address', 'Off: only the common rooms exist (you still get in anywhere). On: any name written in the address (?room=a-name) is a room of its own, free.'],
     dive: ['Diving, and a secret cave under the sea', 'On: where the water is deep a swimmer can go under and swim freely — the sea is seen from below, with its weed and its fish — and somewhere under the bay a cave is to be found. Off: nothing of it is loaded or drawn.'],
     weapons: ['Toy weapons', 'On: anybody can draw a toy — a cork gun, a spark zapper (the C key, or a button on a phone) — and fire at the other robots: one that is hit falls as after a strange mushroom, stands again where it fell, and is out of reach for a few seconds. Nothing happens in a game, in a cave, in The Sanctuary or by the mill.'],
+    bar: ['The Velvet Gasket — the hidden cabaret', 'A cave of its own behind a slab of rock at the foot of the southern cliff, a small red lantern its only sign: a doorman who takes three flowers, a counter where a glass of “Alcooil” costs one, and a stage where a tin diva takes off her hat, her plates and her panels — cogs and springs, nothing else. On no map.'],
   };
   // (the switches that are games: one button puts them all off — as the game is delivered)
   const GAME_SWITCHES = ['slide', 'pond', 'boats', 'hill', 'crack', 'hollow', 'waves', 'lava', 'hive', 'flip', 'spiral', 'cars', 'golf', 'ages', 'raft', 'walls', 'sneak', 'mine', 'coaster'];

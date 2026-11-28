@@ -408,6 +408,37 @@ export const TUNES = {
     heat: (st) => sat(st?.inside ?? 0),
     level: (st) => sat(0.2 + 0.5 * sat((st?.inside ?? 0) * 1.6)),
   },
+
+  /**
+   * The Velvet Gasket (a place, not a game: src/extras/bar.js plays it for who is inside its cave): a slow, sly
+   * cabaret number in D minor, swung — brushes on the snare, the hat closing on two and four, a bass that walks,
+   * a piano that answers off the beat; and, once the curtain is up, a muted horn that takes its time. Nothing here
+   * is borrowed: the tune was written for this room. Its heat is the show (the band alone between two numbers,
+   * the horn during one, a cymbal on every fourth bar once the last piece is off); how loud it is, how far inside
+   * one stands — a murmur behind the door.
+   */
+  bar: {
+    bpm: 104, beats: 4, swing: 0.66, room: 0.22,
+    chords: 'Dm Dm Gm Dm Bb A7 Dm A7 Dm Dm Gm Dm Gm A7 Dm Dm',
+    theme: 'r a4:.5 d5:.5 f5:2 | e5:.5 f5:.5 d5 r:2 | r g4:.5 bb4:.5 d5:1.5 c5:.5 | a4:3 r | '
+      + 'r bb4:.5 d5:.5 f5 g5 | e5:1.5 c#5:.5 a4:2 | r:.5 d5:.5 f5:.5 d5:.5 a4:2 | g#4:.5 a4:.5 c#5 e5 r | '
+      + 'r a4:.5 d5:.5 f5 a5 | ab5:.5 g5:.5 f5 d5 r | r g4:.5 bb4:.5 d5 g5 | f5:1.5 d5:.5 a4:2 | '
+      + 'bb4 d5:.5 c5:.5 bb4 g4 | a4 c#5:.5 e5:.5 g5:1.5 f5:.5 | e5:.5 d5:2.5 r | r a4:.5 c5:.5 d5:2',
+    parts: [
+      {
+        line: 'd2 f2 a2 c3 | d3 c3 a2 f2 | g2 bb2 d3 c3 | a2 f2 d2 e2 | bb2 d3 f2 g2 | a2 c#3 e3 g2 | d2 f2 a2 d3 | a2 g2 e2 c#2 | '
+          + 'd2 f2 a2 c3 | d3 a2 f2 d2 | g2 bb2 d3 f3 | d3 c3 a2 f2 | g2 a2 bb2 b2 | c#3 a2 g2 e2 | d2 f2 a2 d3 | c3 a2 f2 e2',
+        wave: 'pianoLow', vel: 0.17, gate: 0.82, attack: 0.006, sustain: 0.45, decay: 0.22, release: 0.07,
+      },
+      { kit: 'snare', pattern: 'o o:.5 o:.5 o o:.5 o:.5', vel: 0.55 },
+      { kit: 'hat', pattern: 'r x r x', vel: 0.7 },
+      { pattern: 'r:1.5 c:.5 r:1.5 c:.5', root: 12, wave: 'chord', vel: 0.05, gate: 0.6, attack: 0.008, release: 0.09 },
+      { line: 'theme', wave: 'brass', standing: true, lp: 950, glide: 0.035, vel: 0.1, from: 0.5, every: 8, gate: 0.92, attack: 0.035, release: 0.1, cents: -5 },
+      { kit: 'cymbal', pattern: 'x:4', mod: [4, 0], vel: 0.6, from: 0.9 },
+    ],
+    heat: (st) => sat(st?.heat ?? 0.3),
+    level: (st) => sat(0.8 * (st?.inside ?? 0)),
+  },
 };
 
 // ---------------------------------------------------------------------------------------------- the score

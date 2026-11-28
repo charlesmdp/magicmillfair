@@ -33,6 +33,7 @@ export const EXTRAS = {
   stats: { name: 'The game in figures: counters, the page /opendata', load: () => import('./stats.js') },
   dive: { name: 'Diving — one goes under where the water is deep, and somewhere under the sea a cave is to be found', load: () => import('./dive.js') },
   weapons: { name: 'Toy weapons — a cork gun and a spark zapper: a robot that is hit falls for a moment, and stands again', load: () => import('./weapons.js') },
+  bar: { name: 'The Velvet Gasket — a hidden cabaret of robots in a cave of its own: the cover is flowers, the drinks are oil', load: () => import('./bar.js') },
 };
 
 /** Switches on what `on` says ({ id: true }); returns what was built, by id. One that fails leaves the others alone. */
