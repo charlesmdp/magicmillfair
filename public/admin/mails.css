@@ -61,4 +61,5 @@
   .mail-preview { padding: 6px 0 0; border: 0; background: transparent; }
   .mail-field { padding: 8px 8px 7px; }
   .mail-keep { position: static; }
+  #mails-log { max-height: none; overflow-y: visible; }
 }
