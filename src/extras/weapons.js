@@ -95,7 +95,7 @@ export function judge(o) {
 // its head — which is nearly a metre wide —, so that whoever plays it sees the toy from behind.
 const GRIP = [-0.56, 0.86, 0.28];
 const BIG = 1.3; // (the toys of a fair: larger than life)
-const FLY = 2.6; // (…and the cork that flies larger still: it has to be seen from thirty metres)
+const FLY = 2.8; // (…and the cork that flies larger still: it has to be seen from thirty metres)
 const MUZZLE = [[0, 0.045 * BIG, 0.47 * BIG], [0, 0.05 * BIG, 0.43 * BIG]]; // the mouth of each toy, from its grip
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const ball = (b, x, y, z, r) => b.add(new THREE.SphereGeometry(r, 10, 7), new THREE.Matrix4().makeTranslation(x, y, z));
@@ -108,7 +108,7 @@ function buildToys(mats) {
     p.tint(0.98, 0.76, 0.1).rod(V(0, y, 0.3), V(0, y, 0.41), 0.05, 12, { r1: 0.092 }).rod(V(0, y, 0.0), V(0, y, 0.035), 0.06, 12).rod(V(0, y, -0.12), V(0, y, -0.095), 0.06, 12); // a brass bell and two rings
     p.tint(0.6, 0.62, 0.66).rod(V(0, y, -0.22), V(0, y, -0.12), 0.018, 8); // the rod of the pump
     ball(p.tint(0.12, 0.36, 0.85), 0, y, -0.235, 0.042); // …and its blue knob
-    plug.get('paint').tint(0.83, 0.63, 0.4).rod(V(0, y, 0.385), V(0, y, 0.47), 0.056, 10, { r1: 0.047 }); // the cork
+    plug.get('paint').tint(0.86, 0.66, 0.42).rod(V(0, y, 0.385), V(0, y, 0.45), 0.056, 10, { r1: 0.05 }).tint(0.9, 0.16, 0.12).rod(V(0, y, 0.45), V(0, y, 0.475), 0.05, 10, { r1: 0.044 }); // the cork, its end dipped in red
   }
   {
     const p = zap.get('paint'), y = 0.05;
@@ -250,7 +250,7 @@ export function attach(app) {
   const bubbleMat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, uniforms: { uTime: { value: 0 } },
     vertexShader: 'varying vec3 vN; varying vec3 vV; varying float vY; void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalMatrix * normal; vV = -mv.xyz; vY = position.y; gl_Position = projectionMatrix * mv; }',
-    fragmentShader: 'uniform float uTime; varying vec3 vN; varying vec3 vV; varying float vY; void main() { float rim = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.0); float band = 0.5 + 0.5 * sin(vY * 15.0 - uTime * 8.0); float a = (0.1 + 0.8 * rim) * (0.6 + 0.4 * band) * (0.82 + 0.18 * sin(uTime * 27.0)); gl_FragColor = vec4(mix(vec3(0.5, 0.9, 1.0), vec3(1.0), rim * 0.7 + band * 0.2), a); }',
+    fragmentShader: 'uniform float uTime; varying vec3 vN; varying vec3 vV; varying float vY; void main() { float rim = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.0); float band = 0.5 + 0.5 * sin(vY * 15.0 - uTime * 8.0); float a = (0.14 + 0.82 * rim) * (0.6 + 0.4 * band) * (0.82 + 0.18 * sin(uTime * 27.0)); gl_FragColor = vec4(mix(vec3(0.5, 0.9, 1.0), vec3(1.0), rim * 0.7 + band * 0.2), a); }',
   });
   const shimmer = (h, at, dt) => {
     if (!at) { if (h.bubble) h.bubble.visible = false; return; }
@@ -270,6 +270,10 @@ export function attach(app) {
   // ---- a shot, as everybody near sees it: the cork that flies and pops, the spark that jumps
   const shots = [], bolts = [];
   const boltGeo = new MeshBuilder().tint(0.22, 0.6, 1.25).box(-0.5, -0.5, 0, 0.5, 0.5, 1).build();
+  // (the cork in the air: about its own middle, pointing along +z — and the white streak it leaves, a cone that trails behind it)
+  const corkGeo = new MeshBuilder().tint(0.9, 0.7, 0.44).rod(V(0, 0, -0.045), V(0, 0, 0.02), 0.056, 10, { r1: 0.05 }).tint(0.92, 0.14, 0.1).rod(V(0, 0, 0.02), V(0, 0, 0.045), 0.05, 10, { r1: 0.044 }).build();
+  const tailGeo = new THREE.ConeGeometry(0.045, 1, 6, 1, true).rotateX(-Math.PI / 2).translate(0, 0, -0.5);
+  const tailMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false, toneMapped: false });
   const shoot = (i, from, to, shielded) => {
     const toy = TOYS[i], len = from.distanceTo(to);
     _v.subVectors(to, from).normalize();
@@ -277,7 +281,12 @@ export function attach(app) {
     sound(i ? ZAP : POP, from.x, from.z, i ? 0.8 : 1);
     if (toy.speed) {
       let s = shots.find((q) => q.t >= q.T);
-      if (!s) { if (shots.length >= 8) return; s = { obj: models[0].getObjectByName('toy-plug').clone() }; s.obj.name = 'toy-shot'; s.obj.scale.setScalar(FLY); group.add(s.obj); shots.push(s); }
+      if (!s) {
+        if (shots.length >= 8) return;
+        s = { obj: new THREE.Group(), cork: new THREE.Mesh(corkGeo, world.materials.paint), tail: new THREE.Mesh(tailGeo, tailMat) };
+        s.obj.name = 'toy-shot'; s.cork.scale.setScalar(FLY); s.tail.renderOrder = 15;
+        s.obj.add(s.cork, s.tail); group.add(s.obj); shots.push(s);
+      }
       Object.assign(s, { a: from.clone(), b: to.clone(), t: 0, T: Math.max(0.05, len / toy.speed), shielded, len });
       fly(s, 0);
       s.obj.visible = true;
@@ -296,8 +305,8 @@ export function attach(app) {
     s.obj.position.lerpVectors(s.a, s.b, k);
     s.obj.position.y += Math.sin(k * Math.PI) * s.len * 0.012;
     s.obj.quaternion.setFromUnitVectors(FWD, _v.subVectors(s.b, s.a).normalize());
-    s.obj.rotateZ(s.t * 22);
-    s.obj.translateY(-0.045 * FLY).translateZ(-0.43 * FLY); // (the cork sits at the mouth of its model: it is put so that it flies on the line)
+    s.cork.rotation.z = s.t * 22;
+    s.tail.scale.set(FLY, FLY, Math.max(0.01, Math.min(k * s.len, 5.5))); // (as long as the way it has come, up to a few metres)
   };
   /** The spark of bolt `b`: a broken line from the mouth of the zapper to where it lands. */
   const jag = (b) => {
@@ -320,9 +329,6 @@ export function attach(app) {
       s.t += dt;
       const k = Math.min(1, s.t / s.T);
       fly(s, k);
-      // (a thread of smoke behind it, so that the eye follows)
-      _w.lerpVectors(s.a, s.b, k);
-      spark({ x: _w.x, y: _w.y + Math.sin(k * Math.PI) * s.len * 0.012, z: _w.z, vx: 0, vy: 0.15, vz: 0, life: 0.38, r: 1, g: 0.98, b: 0.93, glow: 0.85, size: rnd(0.1, 0.17) });
       if (k < 1) continue;
       s.obj.visible = false;
       // it pops where it lands: a puff, and bits of cork
