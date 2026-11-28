@@ -13,7 +13,8 @@
   const state = { filter: 'all', q: '', page: 1 };
   let T = null, wired = false, asked = 0, typing = 0;
 
-  const day = (ms) => (ms ? new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '—');
+  // (a day, by the clock of the world — the year only when it is not this one)
+  const day = (ms) => (ms ? new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC', ...(new Date(ms).getUTCFullYear() !== new Date().getUTCFullYear() && { year: 'numeric' }) }) : '—');
   const hour = (ms) => new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   const many = (n, one, more = `${one}s`) => `${n.toLocaleString('en-US')} ${n === 1 ? one : more}`;
   const country = (() => { let names = null; try { names = new Intl.DisplayNames(['en'], { type: 'region' }); } catch { /* an old browser: the two letters */ } return (cc) => { try { return (cc && names?.of(cc)) || cc || ''; } catch { return cc || ''; } }; })();
@@ -39,7 +40,7 @@
       b.onclick = () => { state.filter = id; state.page = 1; load(); };
       tabs.append(b);
     }
-    $('people-note').textContent = `${d.counts.waiting ? `${many(d.counts.waiting, 'account has', 'accounts have')} no password yet: made with a name and an address, a link to choose one was mailed. ` : ''}The addresses were given to hear about an account — the privacy page promises no newsletter. Read at ${hour(d.at)}.`;
+    $('people-note').textContent = `${d.counts.waiting ? `${many(d.counts.waiting, 'account has', 'accounts have')} no password yet: made with a name and an address, a link to choose one was mailed. ` : ''}The addresses were given to hear about an account — the privacy page promises no newsletter. This list was read at ${hour(d.at)}.`;
     $('people-copy').disabled = $('people-csv').disabled = !d.matched;
 
     const box = $('people');
@@ -54,7 +55,9 @@
         cell(0, 'name', a.name);
         const how = T.el('span', `how ${a.how}`, HOW[a.how] || a.how); how.title = HOW_TITLE[a.how] || '';
         cell(1, '').append(how);
-        cell(2, a.email ? 'addr' : 'addr none', a.email || 'none given');
+        // (an address is written whole; where a line must be cut, it is cut after its @)
+        const at = a.email.indexOf('@') + 1, addr = cell(2, a.email ? 'addr' : 'addr none', a.email ? '' : 'none given');
+        if (a.email) addr.append(a.email.slice(0, at), T.el('wbr'), a.email.slice(at));
         cell(3, '', day(a.created)).title = `${new Date(a.created).toLocaleString('en-GB')} (your time)`;
         cell(4, '', day(a.last));
         cell(5, '', a.days ? `${a.days}${a.best > a.days ? ` (best: ${a.best})` : ''}` : a.best ? `— (best: ${a.best})` : '—').title = 'Their days in a row as they stood when they last came — a dash once the run is over.';

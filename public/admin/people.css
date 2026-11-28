@@ -12,7 +12,7 @@
 .ptable td { padding: 8px 9px; border-bottom: 1px solid rgba(47, 40, 112, 0.6); vertical-align: top; }
 .ptable tbody tr:hover { background: rgba(255, 255, 255, 0.04); }
 .ptable td.name { font-weight: 800; white-space: nowrap; }
-.ptable td.addr { overflow-wrap: anywhere; user-select: all; }
+.ptable td.addr { user-select: all; }
 .ptable td.addr.none { color: var(--dim); font-style: italic; user-select: none; }
 .ptable td.num, .ptable th:last-child { text-align: right; font-variant-numeric: tabular-nums; }
 .ptable td:nth-child(4), .ptable td:nth-child(5) { white-space: nowrap; }

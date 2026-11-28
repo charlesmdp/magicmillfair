@@ -132,25 +132,26 @@
     }
     const cols = T.el('div', 'mail-cols'), left = T.el('div', 'mail-fields'), right = T.el('div', 'mail-preview');
     const legend = T.el('p', 'hint');
-    legend.append('In a sentence, a word between braces is put in when the message is made: ');
-    Object.entries(k.vars).forEach(([name, what], i) => { if (i) legend.append(', '); legend.append(T.el('code', '', `{${name}}`), ` ${what}`); });
-    legend.append('. Words between [square brackets] that hold one are left out when it is not known: “Thank you[, {name}]!”.');
-    left.append(legend);
+    legend.append('Change a sentence on the left: the message on the right follows as you type, and nothing is sent differently until you save. A word between braces is put in when the message is made — ');
+    Object.entries(k.vars).forEach(([name, what], i) => { if (i) legend.append('; '); legend.append(T.el('code', '', `{${name}}`), `: ${what}`); });
+    legend.append('. Words between [square brackets] that hold one are left out when it is not known: “Thank you[, {name}]!” is “Thank you!” for somebody without a name.');
+    box.append(legend);
     for (const id of form.fields) {
       const f = k.fields.find((x) => x.id === id), row = { box: T.el('div', 'mail-field') }, head = T.el('label', '', f.label), holders = { ...k.vars, ...(f.own || {}) };
-      row.input = T.el(f.line ? 'input' : 'textarea');
+      row.input = T.el('textarea');
       row.input.id = `mail-${k.id}-${f.id}`; head.htmlFor = row.input.id;
-      if (f.line) row.input.type = 'text'; else row.input.rows = Math.min(8, Math.max(2, Math.ceil(shownText(k, f).length / 44)));
+      row.input.rows = 1;
       row.input.maxLength = f.line ? 200 : 1500;
       row.input.spellcheck = true;
       row.input.value = shownText(k, f);
+      if (f.line) row.input.onkeydown = (e) => { if (e.key === 'Enter') e.preventDefault(); }; // (a subject, a title, a button: one line)
       row.state = T.el('span', 'tag');
       head.append(' ', row.state);
       // (what was typed changes the message at once: asked of the server a moment after the last letter)
       const typed = () => {
         const value = row.input.value;
         if (value === (f.typed ?? f.original)) delete s.draft[f.id]; else s.draft[f.id] = value;
-        say(k, f, row); mark(k, card);
+        say(k, f, row); mark(k, card); grow(row.input);
         clearTimeout(s.timer); s.timer = setTimeout(() => preview(k, card), 260);
       };
       row.input.oninput = typed;
@@ -163,7 +164,7 @@
       }
       row.back = T.el('button', 'ghost small', 'Back to the original');
       row.back.type = 'button';
-      row.back.onclick = () => { if (f.typed !== undefined) s.draft[f.id] = null; else delete s.draft[f.id]; row.input.value = f.original; say(k, f, row); mark(k, card); preview(k, card); };
+      row.back.onclick = () => { if (f.typed !== undefined) s.draft[f.id] = null; else delete s.draft[f.id]; row.input.value = f.original; say(k, f, row); mark(k, card); grow(row.input); preview(k, card); };
       chips.append(row.back);
       row.note = T.el('small', 'mail-note');
       row.box.append(head, row.input, chips, row.note);
@@ -185,7 +186,7 @@
       drawCard(res.body.kind);
     });
     card.forget = T.button('Forget what I typed', 'ghost', () => { s.draft = {}; s.wrong = {}; drawCard(k); });
-    const acts = T.el('div', 'row wrap');
+    const acts = T.el('div', 'row wrap mail-keep');
     acts.append(card.save, card.forget);
     left.append(acts);
 
@@ -203,8 +204,15 @@
     under(right);
     cols.append(left, right);
     box.append(cols);
+    card.grown = () => { for (const row of Object.values(card.rows)) grow(row.input); };
     preview(k, card);
     return box;
+  }
+  /** A box is as tall as what is typed in it. */
+  function grow(area) {
+    if (!area.isConnected) return;
+    area.style.height = 'auto';
+    area.style.height = `${area.scrollHeight + 2}px`;
   }
   /** What a card says of its state: switched off, how many sentences are the owner's, how many are typed and not kept. */
   function mark(k, card) {
@@ -242,18 +250,20 @@
     open.type = 'button';
     open.onclick = () => { s.open = !s.open; drawCard(k); };
     const send = T.button('Send me this one', 'ghost', async () => {
+      if (!data.me) { $('mails-me').focus(); return T.toast('Say first where your tests are to go: type your address at the top of this page, and save it.', true); }
       const res = await post({ send: { kind: k.id, form: formOf(k).id, words: s.draft } });
       if (!res.ok) return T.toast(res.body?.error || 'It could not be sent. Try again in a moment.', true);
       T.toast(`Sent to ${res.body.to}${pending(k) ? ', with the words as you see them here (they are not saved yet)' : ''}: look in that mailbox — and in its spam, the first time.`);
       if (res.body.log) { data.log = res.body.log; drawLog(); }
     });
-    send.disabled = !data.mail || !data.me;
-    send.title = !data.mail ? 'This server sends no e-mail.' : !data.me ? 'Say first where your tests go, at the top of this page.' : `To ${data.me}, with made-up values${k.forms.length > 1 ? ' — the case chosen below' : ''}.`;
+    send.disabled = !data.mail;
+    send.title = !data.mail ? 'This server sends no e-mail.' : !data.me ? 'Say first where your tests go, at the top of this page.' : `To ${data.me}, with made-up values${k.forms.length > 1 ? (s.open ? ' — the case chosen below' : ` — its first case: “${k.forms[0].name}” (open it to choose another)`) : ''}.`;
     acts.append(open, send);
     card.box.append(head, acts);
     if (s.open) card.box.append(editor(k, card));
     mark(k, card);
     if (was) was.replaceWith(card.box); else $('mails').append(card.box);
+    card.grown?.();
   }
 
   // ---- what left lately
@@ -282,7 +292,6 @@
     data = res.body;
     $('mails-none').hidden = data.mail;
     if (document.activeElement !== $('mails-me')) $('mails-me').value = data.me || '';
-    if (!data.me && data.notify && !$('mails-me').value) $('mails-me').placeholder = data.notify;
     $('mails').textContent = '';
     for (const k of data.kinds) drawCard(k);
     drawLog();
@@ -293,8 +302,9 @@
     $('mails-me-form').onsubmit = async (e) => {
       e.preventDefault();
       const me = $('mails-me').value.trim(), res = await post({ me });
-      if (!T.said(res, me ? `Your tests will go to ${res.body?.me || me}.` : 'No address for your tests any more.')) return;
+      if (!T.said(res, me ? `Your tests will go to ${res.body?.me || me}.` : res.body?.me ? `No address of their own any more: your tests go to ${res.body.me}, where you are told of new sponsors.` : 'No address for your tests any more.')) return;
       data.me = res.body.me;
+      $('mails-me').value = data.me || '';
       for (const k of data.kinds) drawCard(k);
     };
   }
