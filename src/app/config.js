@@ -44,6 +44,7 @@ export const RELEASE = {
   // only the common rooms exist, for everybody but the owner. (A server started with FREE_ROOMS=1 has it on
   // where nobody decided: the tests and the development server are.)
   freeRooms: false,
+  weapons: false, // toy weapons: a cork gun and a spark zapper anybody can draw (C) — a robot that is hit falls as after a strange mushroom, and stands again where it fell (an extra; not a game)
 };
 export const SKY_STAGES = ['hidden', 'soon', 'open'];
 /** Switches made clean: only those above, each of its kind; what is missing or wrong is as in `base`. */

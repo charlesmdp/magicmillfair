@@ -1607,7 +1607,7 @@ async function boot() {
   // ---------- what is released, and new versions (app/Updates.js; the switches: RELEASE in app/config.js)
   // The extras of src/extras are loaded when their switch is on — as the game runs when it goes on later;
   // one that goes off again is only undone by loading the page again.
-  const EXTRA = ['slide', 'pond', 'boats', 'hill', 'crack', 'hollow', 'waves', 'lava', 'hive', 'flip', 'spiral', 'cars', 'golf', 'ages', 'raft', 'walls', 'sneak', 'mine', 'coaster', 'sanctuary', 'guide', 'caves', 'stats'];
+  const EXTRA = ['slide', 'pond', 'boats', 'hill', 'crack', 'hollow', 'waves', 'lava', 'hive', 'flip', 'spiral', 'cars', 'golf', 'ages', 'raft', 'walls', 'sneak', 'mine', 'coaster', 'sanctuary', 'guide', 'caves', 'stats', 'weapons'];
   // (the games among them — each says, while one of its runs is on, which run: app.slideRide(), app.pondRun()…;
   // the seven with a gate are plugged in the same way, by src/extras/plug.js: app.wavesRun(), app.lavaRun()…)
   const LAB_GAMES = {
