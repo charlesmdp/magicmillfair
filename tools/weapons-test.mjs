@@ -370,6 +370,10 @@ try {
   await sleep(2500);
   const quietNow = (await alice.page.evaluate(() => window.__sent.length)) === sent;
   check('C again puts it away: no sight, nothing in her hand in Bob\'s browser, and nothing more travels', a.toy === -1 && !a.sight && !!gone && quietNow);
+  // (the pop, the bonk, the zap, the tink on a bubble: made by code, in each browser that is near — counted there)
+  const ears = (v) => v.page.evaluate(() => { const a = window.__mmf, w = a.extras.weapons; return { sound: !!(a.audio && a.audio.live && a.audio.ctx && a.audio.ctx.state === 'running'), made: w.sounds, mute: w.mute }; });
+  const heardA = await ears(alice), heardB = await ears(bob);
+  check('the toys are heard: each browser made their sounds as the shots went off and landed, and none failed', heardA.sound && heardB.sound ? heardA.made >= 8 && heardB.made >= 8 && !heardA.mute && !heardB.mute : !heardA.mute && !heardB.mute, heardA.sound && heardB.sound ? `${heardA.made} in Alice's, ${heardB.made} in Bob's` : 'no sound in these browsers: only that nothing failed');
   await alice.context.close();
 
   // ---------------------------------------------------------------- a phone-sized page, with a finger

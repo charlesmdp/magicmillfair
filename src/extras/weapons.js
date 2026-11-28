@@ -170,9 +170,9 @@ export function attach(app) {
   const seen = new Map(); // visitor → what they said of their toy: { toy, shield, at, fired, kick, model… }
   let clock = 0, wasDead = !!player.dead, mine = null, pending = null, told = { toy: 0, shield: false, at: -99 }, said = { why: '', at: -99 }, sightOn = false;
   // (what the checks and the pictures read and drive; `onlyArmed`: the rule of the duel, as it is here; `pace`: how
-  // fast the shots drawn here fly — a picture slows them down to catch one in the air)
+  // fast the shots drawn here fly — a picture slows them down to catch one in the air; `sounds`: how many were made)
   const api = {
-    toys: TOYS, rules: RULES, onlyArmed: ONLY_ARMED, pace: 1, log: [], heard: seen, group,
+    toys: TOYS, rules: RULES, onlyArmed: ONLY_ARMED, pace: 1, log: [], heard: seen, group, sounds: 0, mute: false,
     get toy() { return S.toy; }, get shield() { return S.shield; }, get loaded() { return clock >= S.ready; }, get down() { return !!mine; },
   };
   const note = (what, o) => { api.log.push({ what, ...o }); if (api.log.length > 40) api.log.shift(); };
@@ -190,7 +190,8 @@ export function attach(app) {
     const v = loud * Math.max(0, 1 - Math.hypot(x - player.pos.x, z - player.pos.z) / 60);
     if (v < 0.03) return;
     fx.volume = v; fx.rate = rnd(0.94, 1.06);
-    try { recipe(fx, a.ctx.currentTime + 0.005); } catch { /* no sound: the toy is seen all the same */ }
+    // (a sound that cannot be made is said once, and the toy is seen all the same)
+    try { recipe(fx, a.ctx.currentTime + 0.005); api.sounds++; } catch (err) { if (!api.mute) { api.mute = true; console.error('[toys] sound:', err); } }
   };
   const spark = (o) => world.sparks?._spawn?.(o);
 
