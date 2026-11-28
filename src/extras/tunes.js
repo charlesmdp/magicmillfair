@@ -39,6 +39,13 @@ const or = (v, secs, span) => (Number.isFinite(v) ? sat(v) : sat(secs / span));
 // `mod: [n, r]`: a part that plays only in the bars whose number leaves r when divided by n (a run into every
 // fourth bar line, a cymbal at the head of every eighth). `room` (a tune): how much of it goes to the room behind
 // the game's music (its two echoes: Music.send) — none unless said.
+// For a tune sung in a great room (the Sanctuary's), two more things, which no other tune asks for:
+//   hall: { seconds, wet, dry(state) } — a room of its own behind the tune: a tail of so many seconds (a
+//        reverberation made once, in numbers: a convolver), `wet` how much goes into it, `dry(state)` how much
+//        is heard straight (little from far away: the tail is what reaches the door);
+//   choir: n — a standing line sung by n throats a shade apart (`spread`, cents) with one vibrato between them,
+//        through the formants of a vowel (`vowels`: one letter of 'aoeui' a note, in turn), and a breath
+//        (`breath`: how loud) before each phrase, wherever the line comes back after a rest.
 
 /** Every tune: by the id of its game. */
 export const TUNES = {
@@ -382,35 +389,68 @@ export const TUNES = {
   },
 
   /**
-   * The Sanctuary (a place, not a game: src/extras/sanctuary.js plays it for who walks in): a chant, as monks sing
-   * one in a great empty nave — men's voices alone, one line, no beat to count, in the first mode on G. The tenors
-   * have it from the door on; the basses take it an octave under them as one walks in; under the dome a second
-   * choir joins a shade out of tune with the first (many throats, not one), a few voices follow a fifth above as
-   * the old organum did, and a note is held under it all. Each phrase rises to its reciting note, turns round it and
-   * comes down to rest; the last one is an amen. Nothing here is borrowed: the tune was written for this hall.
-   * Its heat is how far inside one stands; so is how loud it is; the room behind it is the hall's.
+   * The Sanctuary (a place, not a game: src/extras/sanctuary.js plays it for who walks in): a chant for men's
+   * voices under the rock, in the first mode on G, slow, with no beat to count — each phrase dies away in the hall
+   * before the next begins, and the silences are part of it. Three choirs, each of three throats a shade apart
+   * singing vowels (formants), who breathe before they sing: the tenors have the chant; the baritones answer them
+   * across the hall, then sing with them in sixths and fifths at the cadences; the basses hold the tonic under them
+   * (an ison) and once have a phrase of their own, low, after a far bell has struck once. Under it all, a note one
+   * feels more than hears. From the door one hears the tenors, far, mostly the tail of the hall; walking in, the
+   * others join, and under the dome it is all there, near. Nothing here is borrowed: written for this hall.
    */
   sanctuary: {
-    bpm: 66, beats: 8, room: 0.5,
+    bpm: 54, beats: 8,
+    hall: { seconds: 5.5, wet: 0.7, dry: (st) => 0.22 + 0.68 * sat((st?.inside ?? 0) * 1.3) },
     chords: 'Gm Gm Gm Gm Gm Gm Gm Gm Gm Gm Gm Gm Gm Gm Gm Gm',
-    theme: 'g3:2 a3 c4 d4:2 d4 e4 | d4 c4 d4:2 c4 bb3 a3:2 | a3 c4 d4 f4 e4:2 d4 c4 | d4:2 c4 a3 bb3 a3 g3:2 | '
-      + 'd4:2 d4 e4 f4:2 e4 d4 | e4 d4 c4 d4 d4:4 | f4 g4 f4 e4 d4:2 c4 d4 | c4 bb3 a3 g3 a3 g3:3 | '
-      + 'g3:2 f3 g3 a3:2 g3 f3 | g3 a3 bb3 a3 g3:4 | a3 c4 d4:2 e4 d4 c4 d4 | f4:2 e4 d4 e4 d4 c4:2 | '
-      + 'd4 e4 d4 c4 bb3 a3 c4:2 | bb3 a3 g3:2 f3 g3 a3:2 | g3 a3 bb3 a3 g3 f3 g3:2 | a3 g3 f3 g3 g3:4',
+    // (the tenors: the chant; they rest while they are answered)
+    theme: 'r:2 g3:2 a3 bb3 c4:2 | d4:4 c4 bb3 a3:2 | r:8 | r:8 | r:2 d4:2 e4 f4 g4:2 | f4:2 e4 d4 d4:4 | c4:2 d4:2 bb3:2 a3:2 | g3:6 r:2 | '
+      + 'r:8 | r:8 | r:2 a3:2 c4:2 d4:2 | f4:3 e4 d4:2 c4:2 | d4:6 r:2 | r:2 bb3:2 c4 bb3 a3:2 | g3:2 a3:2 bb3:2 a3:2 | g3:6 r:2',
     parts: [
-      { line: 'theme', wave: 'reed', standing: true, lp: 900, glide: 0.06, vel: 0.2, every: 2, gate: 0.97, attack: 0.14, release: 0.3 },
-      { line: 'theme', shift: -12, wave: 'reed', standing: true, lp: 520, glide: 0.07, vel: 0.22, from: 0.15, every: 2, gate: 0.97, attack: 0.16, release: 0.32, cents: -7 },
-      { line: 'theme', wave: 'principal', standing: true, lp: 1100, glide: 0.08, vel: 0.1, from: 0.4, every: 2, gate: 0.97, attack: 0.18, release: 0.3, cents: 11 },
-      { pattern: '1:8', root: 36, wave: 'bourdon', vel: 0.05, from: 0.55, gate: 0.99, attack: 0.9, release: 0.3 },
-      { line: 'theme', shift: -12, wave: 'principal', standing: true, lp: 700, glide: 0.09, vel: 0.09, from: 0.7, every: 2, gate: 0.97, attack: 0.2, release: 0.32, cents: 9 },
-      { line: 'theme', shift: 7, wave: 'flute', standing: true, lp: 1300, glide: 0.08, vel: 0.045, from: 0.85, every: 4, gate: 0.97, attack: 0.2, release: 0.3, cents: -5 },
+      { line: 'theme', wave: 'reed', standing: true, choir: 3, spread: 9, vibrato: 10, vowels: 'aoeaouaeo', breath: 0.05, lp: 420, glide: 0.07, vel: 0.42, every: 2, gate: 0.97, attack: 0.18, release: 0.45 },
+      // (the baritones: the answer, then the cadences with the tenors)
+      { line: 'r:8 | r:8 | r:2 d3:2 f3 e3 d3:2 | c3:2 bb2:2 a2:2 g2:2 | r:8 | r:8 | f3:2 f3:2 d3:2 d3:2 | d3:6 r:2 | '
+          + 'r:8 | r:8 | r:8 | a3:3 g3 f3:2 e3:2 | f3:6 r:2 | r:2 g3:2 a3 g3 f3:2 | d3:2 c3:2 d3:2 f3:2 | d3:6 r:2',
+        wave: 'reed', standing: true, choir: 3, spread: 8, vibrato: 9, vowels: 'oaeoua', breath: 0.045, lp: 380, glide: 0.08, vel: 0.38, from: 0.3, every: 2, gate: 0.97, attack: 0.2, release: 0.45, cents: -4 },
+      // (the basses: the ison under the tenors, and their own low phrase after the bell)
+      { line: 'r:8 | r:8 | r:8 | r:8 | g2:8 | g2:8 | f2:4 d2:4 | g2:6 r:2 | r:2 d2:2 f2 g2 a2:2 | bb2:2 a2 g2 f2:2 g2:2 | g2:8 | d2:8 | d2:6 r:2 | r:8 | g2:2 f2:2 d2:2 d2:2 | g2:6 r:2',
+        wave: 'reed', standing: true, choir: 3, spread: 7, vibrato: 7, vowels: 'ouoaou', breath: 0.04, lp: 300, glide: 0.1, vel: 0.46, from: 0.45, every: 2, gate: 0.98, attack: 0.25, release: 0.5, cents: 3 },
+      // (the note one feels: the tonic two octaves down, where the basses hold theirs)
+      { line: 'r:8 | r:8 | r:8 | r:8 | g1:8 | g1:8 | g1:8 | g1:6 r:2 | r:8 | r:8 | g1:8 | d2:8 | d2:6 r:2 | r:8 | g1:8 | g1:6 r:2',
+        wave: 'bourdon', standing: true, lp: 170, glide: 0.3, vel: 0.2, from: 0.55, every: 2, gate: 0.98, attack: 1.2, release: 1.5 },
+      // (a low bell, far off, once a turn: as the first cadence dies)
+      { line: 'r:64 g2:8 r:56', wave: 'chime', vel: 0.12, from: 0.35, gate: 0.99, attack: 0.004, sustain: 0, decay: 2.2, release: 2 },
     ],
     heat: (st) => sat(st?.inside ?? 0),
-    level: (st) => sat(0.2 + 0.5 * sat((st?.inside ?? 0) * 1.6)),
+    level: (st) => sat(0.32 + 0.68 * sat((st?.inside ?? 0) * 1.5)),
   },
 };
 
 // ---------------------------------------------------------------------------------------------- the score
+
+/** The first three formants of the vowels a man sings (Hz): a choir's line goes through those of its vowel. */
+const VOWELS = { a: [700, 1150, 2500], o: [460, 820, 2450], u: [330, 700, 2400], e: [520, 1650, 2450], i: [300, 2100, 2900] };
+/** A room in numbers: two channels of noise that die away in `seconds` (60 dB), darker as they die. Made once a context. */
+const halls = new WeakMap();
+function hallOf(ctx, seconds) {
+  let byLength = halls.get(ctx);
+  if (!byLength) halls.set(ctx, (byLength = new Map()));
+  if (byLength.has(seconds)) return byLength.get(seconds);
+  const rate = ctx.sampleRate, n = Math.ceil(seconds * rate), buf = ctx.createBuffer(2, n, rate), pre = Math.floor(0.022 * rate);
+  let seed = 977;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647 - 0.5; };
+  for (let c = 0; c < 2; c++) {
+    const d = buf.getChannelData(c);
+    let y = 0;
+    for (let i = pre; i < n; i++) {
+      const t = (i - pre) / rate, k = 0.75 * Math.exp(-t / (seconds * 0.22)) + 0.06; // (the stone gives back less and less of the high)
+      y += k * (rnd() - y);
+      d[i] = y * Math.exp((-6.9 * t) / seconds) * Math.min(1, t / 0.06 + 0.25);
+    }
+    for (const [ms, v] of [[11, 0.5], [19, 0.36], [31, 0.3], [47, 0.22], [71, 0.16]]) d[Math.floor(((ms + c * 3) * rate) / 1000)] += v * (c ? -1 : 1); // (the first walls)
+  }
+  byLength.set(seconds, buf);
+  return buf;
+}
 
 const DEGREE = { 1: 0, 2: 2, 4: 5, 5: 7, 6: 9, 7: 10, 8: 12, 12: 19 };
 /** The semitones of a degree over the root of a chord of this kind. */
@@ -484,6 +524,7 @@ export function tunePlayer(app) {
   let b = 0, t = null, bar = -1; // the beat written up to, the audio time it falls on (null: not started), the last bar line
   let on = [];
   let kit = null, lines = [], nodes = []; // the drums, the players that never stop (by part), and every node made for them
+  let dry = null, breath = null, sung = null, rest = []; // (a tune sung in a hall: what is heard straight, the breath, the vowel of each note, where each line last stopped)
 
   /**
    * What a tune written as an orchestra needs besides notes: a little of the room behind the game's music, its
@@ -493,9 +534,22 @@ export function tunePlayer(app) {
    */
   const build = (a) => {
     const ctx = a.ctx, m = a.music;
-    kit = null; lines = []; nodes = [];
+    kit = null; lines = []; nodes = []; dry = null; breath = null; rest = [];
     const gain = (v, to) => { const g = ctx.createGain(); g.gain.value = v; g.connect(to); nodes.push(g); return g; };
+    if (tune.hall) {
+      // (its own room: straight to the music, and into the tail)
+      try {
+        dry = gain(1, a.musicBus); bus.connect(dry);
+        const cv = ctx.createConvolver();
+        cv.buffer = hallOf(ctx, tune.hall.seconds); cv.connect(a.musicBus); nodes.push(cv);
+        bus.connect(gain(tune.hall.wet ?? 0.5, cv));
+      } catch { if (!dry) bus.connect(a.musicBus); }
+    }
     try { if (tune.room && m.send) bus.connect(gain(tune.room, m.send)); } catch { /* no room: dry */ }
+    if (sc.parts.some((p) => p.breath)) {
+      // (one loop of noise, through the shape of a breath, struck before a phrase)
+      try { const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(); src.buffer = m.bank.get('white'); src.loop = true; f.type = 'bandpass'; f.frequency.value = 1300; f.Q.value = 0.7; breath = gain(0, bus); src.connect(f); f.connect(breath); src.start(); nodes.push(src, f); } catch { breath = null; }
+    }
     try {
       if (sc.parts.some((p) => p.kit) && m.bank?.get && ctx.createBufferSource && ctx.createBiquadFilter && ctx.createOscillator) {
         const rate = ctx.sampleRate, noise = ctx.createBufferSource(), drum = ctx.createOscillator();
@@ -513,6 +567,7 @@ export function tunePlayer(app) {
     } catch { kit = null; }
     sc.parts.forEach((p, i) => {
       if (!p.standing) return;
+      if (p.choir) { try { lines[i] = choir(ctx, m, p, gain); } catch { lines[i] = null; } return; }
       try {
         const o = ctx.createOscillator(), g = ctx.createGain();
         if (WAVES[p.wave]) m.shapes.dress(o, p.wave); else o.type = p.wave;
@@ -525,6 +580,29 @@ export function tunePlayer(app) {
         lines[i] = { o, g };
       } catch { lines[i] = null; }
     });
+  };
+  /**
+   * A line sung by a choir: `p.choir` throats a shade apart, one vibrato for them all, through a body (what is low
+   * in a voice) and three formants (its vowel) into one envelope. Answers as a standing player does, and more.
+   */
+  const choir = (ctx, m, p, gain) => {
+    const g = gain(0, bus), mix = ctx.createGain(), n = p.choir, os = [], forms = [];
+    mix.gain.value = 1 / n; nodes.push(mix);
+    const filter = (type, hz, q, level) => { const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = hz; f.Q.value = q; mix.connect(f); f.connect(gain(level, g)); nodes.push(f); return f; };
+    filter('lowpass', p.lp || 380, 0.5, 0.55);
+    const v0 = VOWELS[(p.vowels || 'a')[0]] || VOWELS.a;
+    for (let k = 0; k < 3; k++) forms.push(filter('bandpass', v0[k], [5, 8, 11][k], [2.2, 1.5, 0.8][k]));
+    const lfo = ctx.createOscillator(), depth = ctx.createGain();
+    depth.gain.value = p.vibrato ?? 9; lfo.frequency.value = 4.7 + 0.4 * (Math.abs(p.cents || 0) % 3); lfo.connect(depth); lfo.start(); nodes.push(lfo, depth);
+    for (let k = 0; k < n; k++) {
+      const o = ctx.createOscillator();
+      if (WAVES[p.wave]) m.shapes.dress(o, p.wave); else o.type = p.wave;
+      o.detune.value = (p.cents || 0) + (k - (n - 1) / 2) * (p.spread ?? 8);
+      depth.connect(o.detune); o.connect(mix); o.start();
+      nodes.push(o); os.push(o);
+    }
+    const frequency = { setTargetAtTime: (v, t, c) => os.forEach((o) => o.frequency.setTargetAtTime(v, t, c)), setValueAtTime: (v, t) => os.forEach((o) => o.frequency.setValueAtTime(v, t)) };
+    return { o: { frequency }, g, forms };
   };
   /** One hit of the kit at `when` (the climb's own drums: Music.js). */
   const hit = (a, which, when, v) => {
@@ -572,8 +650,8 @@ export function tunePlayer(app) {
       g.gain.cancelScheduledValues?.(now);
       g.gain.setTargetAtTime(0, now, FADE);
       // (…and, once it has faded, what was made for its drums and its standing players is stopped and let go)
-      setTimeout(() => { try { g.disconnect(); } catch { /* already gone */ } for (const n of made) { try { n.stop?.(); } catch { /* not started, or stopped */ } try { n.disconnect(); } catch { /* gone */ } } }, 600);
-      bus = null; kit = null; lines = []; nodes = [];
+      setTimeout(() => { try { g.disconnect(); } catch { /* already gone */ } for (const n of made) { try { n.stop?.(); } catch { /* not started, or stopped */ } try { n.disconnect(); } catch { /* gone */ } } }, tune?.hall ? 600 + tune.hall.seconds * 1000 : 600); // (the tail of a hall rings out first)
+      bus = null; kit = null; lines = []; nodes = []; dry = null; breath = null;
     }
   };
 
@@ -599,6 +677,13 @@ export function tunePlayer(app) {
           // (a player that never stops: re-tuned and struck)
           const l = lines[e.part];
           if (l) { if (p.glide) l.o.frequency.setTargetAtTime(e.hz, when, p.glide); else l.o.frequency.setValueAtTime(e.hz, when); l.g.gain.setTargetAtTime(p.vel * (0.85 + 0.15 * heat), when, p.attack ?? 0.004); l.g.gain.setTargetAtTime(0, when + Math.max(0.02, len), p.release ?? 0.04); }
+          if (l?.forms) {
+            // (a choir: the vowel of this note; a breath first, where the line comes back after a rest)
+            const v = VOWELS[sung?.get(e)] || VOWELS.a;
+            l.forms.forEach((f, k) => f.frequency.setTargetAtTime(v[k], when - 0.05, 0.07));
+            if (breath && p.breath && !(rest[e.part] > at - 1.5)) { breath.gain.setTargetAtTime(p.breath * (0.7 + 0.3 * heat), when - 0.42, 0.07); breath.gain.setTargetAtTime(0, when - 0.12, 0.09); }
+            rest[e.part] = at + e.len;
+          }
         } else m.tone(bus, e.wave, e.hz, when, len, p.vel * (0.85 + 0.15 * heat), p.attack ?? 0.01, p.sustain ?? 1, p.decay ?? 0, p.release ?? 0.05, p.cents || 0);
       }
     }
@@ -615,6 +700,9 @@ export function tunePlayer(app) {
       if (!TUNES[id]) return;
       tune = TUNES[id]; run = r || null; rules = R; t = null; on = [];
       try { sc = score(tune); } catch { tune = null; return; }
+      // (the vowels of the choirs: one a note, in turn, as each line is written)
+      sung = null;
+      if (sc.parts.some((p) => p.choir)) { sung = new Map(); const count = []; for (const e of sc.events) { const p = sc.parts[e.part]; if (!p.choir) continue; const vs = (p.vowels || 'a').replace(/\s/g, ''), k = (count[e.part] = (count[e.part] ?? -1) + 1); sung.set(e, vs[k % vs.length]); } }
       began = typeof performance !== 'undefined' ? performance.now() : Date.now();
       try { const a = sound(); if (a?.music.shapes?.warm) a.music.shapes.warm([...new Set(sc.events.map((e) => e.wave))].filter((w) => WAVES[w])); } catch { /* no matter */ }
     },
@@ -624,7 +712,7 @@ export function tunePlayer(app) {
         const a = sound();
         if (!a) return;
         if (!(a.levels.music > 0) || a.muted || (!a.offline && a.ctx.state && a.ctx.state !== 'running')) { if (ducking || bus) release(); t = null; return; }
-        if (!bus) { bus = a.ctx.createGain(); bus.gain.value = 1; bus.connect(a.musicBus); build(a); }
+        if (!bus) { bus = a.ctx.createGain(); bus.gain.value = 1; if (!tune.hall) bus.connect(a.musicBus); build(a); }
         const now = a.ctx.currentTime;
         duck(a, now);
         const secs = ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - began) / 1000;
@@ -632,6 +720,7 @@ export function tunePlayer(app) {
         try { heat = sat(tune.heat ? tune.heat(run?.state, secs, rules) : 0); } catch { heat = sat(secs / 120); }
         // (a tune may say how loud it is, from the same state: the music of a place, nearer or further)
         if (tune.level) { try { bus.gain.setTargetAtTime(sat(tune.level(run?.state, secs, rules)), now, 0.35); } catch { /* as it was */ } }
+        if (dry && tune.hall?.dry) { try { dry.gain.setTargetAtTime(sat(tune.hall.dry(run?.state)), now, 0.5); } catch { /* as it was */ } }
         write(a, heat);
       } catch { /* the music never stops a game */ }
     },
