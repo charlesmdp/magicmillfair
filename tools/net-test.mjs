@@ -25,8 +25,8 @@ import { rankSponsors, placeWords } from '../src/app/thanks.js';
 import { describe as describeItem, forLife, publicPrices, PRICES } from '../server/catalog.js';
 import { visit, localDay } from '../server/routes.js';
 import { cleanTalk, oneSentence, PERSONAS, REPLY_MAX, REPLY_WORDS } from '../server/npc.js';
-import { wardrobeFrom, fitLook, fitKit, fitColor, mayLight, HAT_IDS, FIREWORK } from '../server/wardrobe.js';
-import { ITEMS, PASS as GAME_PASS, packKit } from '../server/items.js';
+import { wardrobeFrom, fitLook, fitKit, fitColor, mayLight, HAT_IDS, FIREWORK, WARDROBE_BITS } from '../server/wardrobe.js';
+import { ITEMS, PASS as GAME_PASS, PAINTS, KIT_MAX, HAT_BITS, packKit, unpackKit, hatOf, withHat } from '../server/items.js';
 import { __make as gameOf, replay, agrees } from '../server/replay.js';
 import { sessionOf, packLog, rngOf } from '../src/world/zones/games/core.js';
 import { flightOf, flightLog } from '../src/world/zones/games/WingRules.js';
@@ -1386,6 +1386,21 @@ async function testShop({ port }) {
     await watcher.wait((m) => m.t === 'admin');
     const free = await until(() => wa.msgs.filter((m) => m.t === 'u').flatMap((m) => m.s).filter((r) => r[0] === watcher.id).pop()?.[6] === look, 6000);
     check('wardrobe: what is given, or bought, shows as soon as the page says so ({t:\'own\'}: the relay asks the notebook again); an administrator may wear anything', !!crowned && !!free, { crowned, free });
+    // a hat and a paint that came after the first fifteen — the fifth bit of the hat, a kit over 255 —: Ann is
+    // given a traffic cone and the marble, both say they wear them, and only she is seen in them
+    {
+      const CONE = withHat(0, HAT_IDS.indexOf('cone')), MARBLE = packKit({ paint: PAINTS.indexOf('marble') });
+      await post('/api/gift', { device: ann, item: 'hat:cone' }, { authorization: `Bearer ${ADMIN_KEY}` });
+      await post('/api/gift', { device: ann, item: 'paint:marble' }, { authorization: `Bearer ${ADMIN_KEY}` });
+      wa.send({ t: 'own' });
+      wa.send({ t: 'hello', name: 'Ann', color: 20, v: 2, dev: ann, k: MARBLE }); wb.send({ t: 'hello', name: 'Bob', color: 20, v: 2, dev: bob, k: MARBLE });
+      wa.send({ t: 's', p: [1, 1, 2, 0], a: 0, f: CONE }); wb.send({ t: 's', p: [2, 1, 2, 0], a: 0, f: CONE });
+      const row = (c) => watcher.msgs.filter((m) => m.t === 'u').flatMap((m) => m.s).filter((r) => r[0] === c.id).pop();
+      const shown = await until(() => watcher.msgs.filter((m) => m.t === 'join' && m.id === wa.id).pop()?.k === MARBLE && row(wa)?.[6] === CONE && row(wb)?.[3] === 2, 6000);
+      const bobCards = watcher.msgs.filter((m) => m.t === 'join' && m.id === wb.id).map((m) => m.k), bobLook = row(wb)?.[6];
+      check('wardrobe: a hat and a paint of after the first fifteen travel and show — the fifth bit of the hat, a kit over 255 — for who has them, and for nobody else',
+        CONE === (0x4000 | (13 & 7) << 1 | 0x1000) && MARBLE === 257 && shown && bobLook === 0 && bobCards.every((k) => k === undefined), { CONE, MARBLE, shown, bobLook, bobCards });
+    }
     for (const c of [watcher, wa, wb]) c.ws.close();
     // (the rules themselves)
     const now = 1_000_000_000_000, none = { m: 0, t: 0 }, w = (items, pass) => { const g = wardrobeFrom(items, pass, now - 10 * 86_400_000, now); return { m: g.m, t: now + g.left }; };
@@ -1401,6 +1416,19 @@ async function testShop({ port }) {
       && fitColor(20, none) === 4 && fitColor(20, w([], true)) === 20 && fitColor(7, none) === 7 && fitColor(31, undefined) === 31
       && !mayLight(none) && mayLight(w(['fireworks'])) && mayLight(true) && fresh.left === 24 * 3600_000 && old.left === 0,
       { hats, HAT_IDS, fresh, old });
+    // (more than fifteen of each: what was widened, and that nothing of before moved)
+    const all = w([...HAT_IDS.slice(1).map((h) => `hat:${h}`), ...PAINTS.slice(1).map((p) => `paint:${p}`), 'jetpack', 'jetlite', 'fireworks', 'trail:stardust', 'trail:confetti', 'trail:bubbles', 'trail:fallout', 'pet:pup'], true);
+    const oldRead = (f) => ((f >> 1) & 7) | (((f >> 12) & 1) << 3); // (how a browser of before the fifth bit reads a hat)
+    check('wardrobe: eighteen hats and eighteen paints — the hat has a fifth bit, the paint two more, every number of before means what it meant, a browser of before finds no hat and no paint where it knows none, each is sold, shows for who has it and for nobody else, and a wardrobe still fits in a number',
+      HAT_IDS.length === 19 && PAINTS.length === 19 && WARDROBE_BITS === 46 && Number.isSafeInteger(all.m) && all.m < 2 ** WARDROBE_BITS
+      && HAT_IDS.every((h, i) => hatOf(withHat(0xffff & ~HAT_BITS, i)) === i && (withHat(0, i) & ~HAT_BITS) === 0 && (i > 15 || withHat(0, i) === (((i & 7) << 1) | (((i >> 3) & 1) << 12))) && (i < 13 || oldRead(withHat(0, i)) > 12) && (!i || ITEMS.some((it) => it.id === `hat:${h}` && it.group === 'hats')))
+      && PAINTS.every((p, i) => unpackKit(packKit({ paint: i, trail: 3, pet: 1 })).paint === i && packKit({ paint: i, trail: 7, pet: 1 }) <= KIT_MAX && (i > 15 ? packKit({ paint: i }) > 255 : packKit({ paint: i }) === i) && (!i || ITEMS.some((it) => it.id === `paint:${p}` && it.group === 'paint' && it.price >= 700 && it.price <= 1900)))
+      && [...Array(256).keys()].every((k) => { const u = unpackKit(k); return u.paint === (k & 15) && u.trail === ((k >> 4) & 7) && u.pet === (k >> 7) && packKit(u) === k; })
+      && HAT_IDS.slice(1).every((h, i) => fitLook(withHat(16, i + 1), w([`hat:${h}`]), now) === withHat(0, i + 1) && fitLook(withHat(32, i + 1), none, now) === 32 && fitLook(withHat(0, i + 1), w([], true), now) === withHat(0, i + 1) && fitLook(withHat(0, i + 1), all, now) === withHat(0, i + 1))
+      && PAINTS.slice(1).every((p, i) => fitKit(packKit({ paint: i + 1, trail: 1 }), w([`paint:${p}`])) === packKit({ paint: i + 1 }) && fitKit(packKit({ paint: i + 1 }), w([], true)) === 0 && fitKit(packKit({ paint: i + 1, trail: 4, pet: 1 }), all) === packKit({ paint: i + 1, trail: 4, pet: 1 }))
+      && fitLook(withHat(0, 25), all, now) === 0 && fitKit(packKit({ paint: 40 }), all) === 0 && fitLook(0x8000 | CROWN, w(['hat:crown']), now) === (0x8000 | CROWN)
+      && w(['hat:crown', 'paint:gold', 'jetpack']).m === 1 + 2 ** 8 + 2 ** 15 && w([], true).m === 2 ** 30 && w(['hat:cone']).m === 2 ** 36 && w(['hat:cone', 'hat:cone', 'paint:sunset']).m === 2 ** 36 + 2 ** 45,
+      { bits: WARDROBE_BITS, all: all.m, read: [13, 14, 15, 16, 17, 18].map((i) => oldRead(withHat(0, i))) });
   }
   // the Game Pass: by the month. Whoever holds it is lent every hat and the light jetpack; Stripe's word ends it.
   {
