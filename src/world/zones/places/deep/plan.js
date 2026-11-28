@@ -11,8 +11,10 @@
 // Its own frame: u runs out to sea through the mouth, w across (the strand is on the +w side), y is up (m over the sea).
 export const DEEP = {
   name: "The Diver's Rest",
-  at: { x: 202, z: 58 }, // the middle of the rock: in the south-east of the bay, on a bed seven and a half metres down
-  yaw: 0.3, // the way its mouth looks, radians from east (+x) towards south (+z): out to sea, away from the beaches and the pier
+  at: { x: 202, z: 58 }, // the middle of the rock: in the south-east of the bay, on a bed seven metres down and more
+  // the way its mouth looks, radians from east (+x) towards south (+z): south-south-east — away from the beaches and
+  // the pier, into the sun, and along the edge of the open sea, not at it (the water before the arch is not the shark's)
+  yaw: 1.2,
   r: 15, // nothing of it is further from its middle than that (m) …
   low: -8.8, high: 9.2, // … nor lower, nor higher
   mouth: { u: 11.4, y: -6.2, w: 0.2 }, // the middle of the arch
