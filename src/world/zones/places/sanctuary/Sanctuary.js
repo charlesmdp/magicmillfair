@@ -10,8 +10,9 @@ import * as THREE from 'three';
 import { Parts } from '../../../props/MeshBuilder.js';
 import { LAYER } from '../../../../render/Shadows.js';
 import { surfaceMaterial } from '../../../../render/SurfaceMaterial.js';
-import { PLAN as P, toWorld, armPoint, FRONT, LANDING, STAIR_END, STEP, floorAt, inside, DOOR, walls } from './plan.js';
+import { PLAN as P, toWorld, armPoint, FRONT, FACE, LANDING, STAIR_END, STEP, COURT, courtFloor, floorAt, inside, DOOR, walls } from './plan.js';
 import { furnish } from './chapels.js';
+import { carve, cutGround, clearGround, hallArea } from './cliff.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -23,30 +24,35 @@ const ARMS = [0, HALF, Math.PI, -HALF];
 export const A = (a, u, y, v) => { const [x, z] = armPoint(a, u, v); return V(x, y, z); };
 const TOP = P.cornice + P.drum; // where the dome springs
 export const APEX = TOP + P.R; // the eye of the dome, over the floor
-const EAVES = P.spring + P.W + 1.4, RIDGE = EAVES + 2.8, RO = P.R + P.T, WO = P.W + P.T, DEEP = -9;
+const EAVES = P.spring + P.W + 1.4, RIDGE = EAVES + 2.8, RO = P.R + P.T, WO = P.W + P.T, DEEP = -9, C = P.court;
 
 // ---- the stone and its light
 export const STONE = [0.86, 0.8, 0.69], CREAM = [0.95, 0.9, 0.8], ROSE = [0.8, 0.66, 0.58], SLATE = [0.5, 0.53, 0.58], GOLD = [1.0, 0.76, 0.3];
 const OUT = [0.4, 0.338, 0.24], TRIM = [0.5, 0.44, 0.335], BLUSH = [0.43, 0.3, 0.225], ROOF = [0.15, 0.185, 0.24], DOME = [0.5, 0.41, 0.25], DARK = [0.03, 0.025, 0.02];
 /** How bright the painted light is shown (the game's eye is wide open: a half is nearly white). */
 const EXPOSE = 0.4;
-/** The glass at the end of each arm: the same lamp for the three chapels (and the rose over the doors). */
-const LAMPS = ARMS.map((a) => { const [x, z] = armPoint(a, 0, a === 0 ? P.chord - 0.6 : P.chord + P.W - 1.2); return { x, y: a === 0 ? 10 : 6.2, z, k: a === 0 ? 0.6 : 0.95, reach: 8.5 }; });
+/**
+ * The glass at the end of each arm: the rock is behind it, so the builders set a lamp behind each window — the
+ * same lamp for the three chapels (and for the rose over the doors).
+ */
+const LAMPS = ARMS.map((a) => { const [x, z] = armPoint(a, 0, a === 0 ? P.chord - 0.6 : P.chord + P.W - 1.2); return { x, y: a === 0 ? 10 : 6.2, z, k: a === 0 ? 0.45 : 0.85, reach: 7 }; });
+/** The two lamps that hang from the vault of each arm. */
+const HANG = ARMS.flatMap((a) => [13.4, 17.6].map((v) => { const [x, z] = armPoint(a, 0, v); return { x, y: 6.3, z }; }));
 /** The light that falls on a point of the inside whose face looks the way `n` says: [r, g, b]. */
 export function lightAt(p, n) {
-  let r = 0.2, g = 0.2, b = 0.23; // (what is left in the shade: cool)
-  // (the eye of the dome and the windows of the drum: white, from above)
-  let dx = -p.x, dy = APEX - 2 - p.y, dz = -p.z, d = Math.hypot(dx, dy, dz) || 1;
-  let w = ((0.35 + 0.65 * Math.max(0, (n.x * dx + n.y * dy + n.z * dz) / d)) * 1.2) / (1 + (d / 20) ** 2);
-  r += w; g += 0.96 * w; b += 0.86 * w;
+  let r = 0.075, g = 0.068, b = 0.07; // (what is left in the shade: the rock keeps it dark)
+  const from = (x, y, z, k, reach, wrap = 0.25) => { const dx = x - p.x, dy = y - p.y, dz = z - p.z, d = Math.hypot(dx, dy, dz) || 1; return ((wrap + (1 - wrap) * Math.max(0, (n.x * dx + n.y * dy + n.z * dz) / d)) * k) / (1 + (d / reach) ** 2); };
+  // (the day comes down through the eye of the dome alone — the windows of the drum look into the rock: cool, from above)
+  let w = from(0, APEX + 2, 0, 1.05, 13, 0.2);
+  r += 0.9 * w; g += 0.93 * w; b += 0.97 * w;
   // (the pool of light on the floor, under the eye)
-  if (n.y > 0.9 && p.y < 1.5) { const pool = clamp(1 - (Math.hypot(p.x, p.z) - 2.0) / 3.4, 0, 1); r += 0.8 * pool; g += 0.72 * pool; b += 0.52 * pool; }
-  // (the coloured glass at the end of each arm: gold)
-  for (const L of LAMPS) {
-    dx = L.x - p.x; dy = L.y - p.y; dz = L.z - p.z; d = Math.hypot(dx, dy, dz) || 1;
-    w = ((0.3 + 0.7 * Math.max(0, (n.x * dx + n.y * dy + n.z * dz) / d)) * L.k) / (1 + (d / L.reach) ** 2);
-    r += w; g += 0.78 * w; b += 0.46 * w;
-  }
+  if (n.y > 0.9 && p.y < 1.5) { const pool = clamp(1 - (Math.hypot(p.x, p.z) - 2.0) / 3.4, 0, 1); r += 0.85 * pool; g += 0.8 * pool; b += 0.66 * pool; }
+  // (the coloured glass at the end of each arm, lit from behind: gold)
+  for (const L of LAMPS) { w = from(L.x, L.y, L.z, L.k, L.reach, 0.3); r += w; g += 0.76 * w; b += 0.42 * w; }
+  // (the lamps hanging in the arms: warm, near)
+  for (const L of HANG) { w = from(L.x, L.y, L.z, 0.42, 3.4, 0.4); r += w; g += 0.7 * w; b += 0.36 * w; }
+  // (the day through the doors, down the arm of the doors)
+  if (p.z > 5 && Math.abs(p.x) < P.W + 0.5) { w = from(0, 3.2, P.chord + 2, 0.55, 5.5, 0.3); r += 0.86 * w; g += 0.9 * w; b += w; }
   return [r, g, b];
 }
 /** How a face of the inside is painted: its stone under its light. */
@@ -227,51 +233,16 @@ export class Sanctuary {
 
     // ================================================================ outside
     const courses = (top) => [DEEP, 0.55, 0.55 + EPS, ...span(1.3, top, Math.round((top - 1.3) / 0.76))], foot = (j) => (j < 2 ? 0.3 : 0);
-    // ---- the round middle: its wall up to the dome, and the dome
-    const drumTop = TOP + 1.2;
-    // (where an arm joins it, it only stands over the roof of the arm: one sees from the arm into the middle)
-    const aj = Math.asin(WO / RO), roofAt = (u) => EAVES - 0.1 + (RIDGE - EAVES) * (1 - Math.abs(u) / (WO + 0.4)), round = [...span(0, TAU, 48)];
-    for (const a of ARMS) for (const s of [-1, 1]) { const t = (((a + s * aj) % TAU) + TAU) % TAU; round.push(t - EPS, t + EPS); }
-    round.sort((p, q) => p - q);
-    const overArm = (t) => { for (const a of ARMS) { const d = Math.atan2(Math.sin(t - a), Math.cos(t - a)); if (Math.abs(d) < aj - EPS / 2) return roofAt(RO * Math.sin(d)); } return null; };
-    surf(out, round, courses(drumTop), (t, y, i, j) => { const lift = overArm(t), r = RO + (lift === null ? foot(j) : 0); return V(r * Math.sin(t), lift === null ? y : Math.max(y, lift), r * Math.cos(t)); }, { want: away, base: OUT, paint: plain, key: 50 });
-    ring(out, [[RO, drumTop - 0.5], [RO + 0.45, drumTop - 0.15], [RO + 0.45, drumTop + 0.15], [RO - 0.3, drumTop + 0.3]], 48, away, { base: TRIM, paint: plain });
-    const RD = RO - 0.25, capY = drumTop + 0.3 + RD * Math.sin(Math.acos((P.oculus + 0.9) / RD));
-    surf(out, span(0, TAU, 48), span(0, Math.acos((P.oculus + 0.9) / RD), 12), (t, f) => V(RD * Math.cos(f) * Math.sin(t), drumTop + 0.3 + RD * Math.sin(f), RD * Math.cos(f) * Math.cos(t)), { want: away, base: DOME, paint: plain, bond: false, jitter: 0.03, shade: 0.02, key: 51 });
-    for (let k = 0; k < 16; k++) { const t0 = ((k + 0.5) / 16) * TAU, w = 0.3 / RD; surf(out, [t0 - w, t0 + w], span(0, Math.acos((P.oculus + 0.9) / RD), 12), (t, f) => V((RD + 0.16) * Math.cos(f) * Math.sin(t), drumTop + 0.3 + (RD + 0.16) * Math.sin(f), (RD + 0.16) * Math.cos(f) * Math.cos(t)), { want: away, base: TRIM, paint: plain, bond: false, jitter: 0.02, shade: 0 }); }
-    // (the lantern over its eye: a ring of little arches, a cap, a ball of gold)
+    // (all of it is under the rock but its front, in the court, and the lantern over the eye of the dome, which
+    // comes out on the slope above: what is under the ground is not built)
+    const ground = (lx, lz) => { const [x, z] = toWorld(lx, lz); return world.data.heightAt(x, z) - P.floor; };
+    // ---- the lantern over the eye: out of the grass of the slope, on a drum as high as the ground asks
+    const drumTop = TOP + 1.2, RD = RO - 0.25, eyeTop = drumTop + 0.3 + RD * Math.sin(Math.acos((P.oculus + 0.9) / RD));
+    const rim = span(0, TAU, 12).map((t) => ground(4.2 * Math.sin(t), 4.2 * Math.cos(t))), capY = Math.max(eyeTop, (Math.min(...rim) + Math.max(...rim)) / 2 + 0.5);
+    ring(out, [[P.oculus + 1.1, eyeTop - 3], [P.oculus + 1.1, capY - 0.3]], 16, away, { base: OUT, paint: plain });
     ring(out, [[P.oculus + 1.1, capY - 0.3], [P.oculus + 1.1, capY + 0.5], [P.oculus + 0.75, capY + 0.6], [P.oculus + 0.75, capY + 2.3], [P.oculus + 1.2, capY + 2.5], [P.oculus + 1.2, capY + 2.8], [P.oculus * 0.55, capY + 4.0], [0.16, capY + 4.9], [0.1, capY + 5.6]], 16, away, { base: TRIM, paint: plain });
     for (let k = 0; k < 8; k++) { const t = (k / 8) * TAU, r = P.oculus + 0.78; lancet(shine, V(r * Math.sin(t), capY + 0.85, r * Math.cos(t)), V(Math.cos(t), 0, -Math.sin(t)), V(0, 1, 0), 0.8, 0.9, away, k, 0.5); }
     out.tint(0.95, 0.62, 0.12, 1).place(0, capY + 5.9, 0).lathe([[0.01, -0.42], [0.3, -0.3], [0.42, 0], [0.3, 0.3], [0.01, 0.42]], 10).pop();
-    // (the windows of the drum, seen from outside)
-    for (let k = 0; k < 16; k++) { const t = (k / 16) * TAU, r = RO + 0.03; lancet(shine, V(r * Math.sin(t), P.cornice + 1.9, r * Math.cos(t)), V(Math.cos(t), 0, -Math.sin(t)), V(0, 1, 0), 1.1, 1.9, away, k, 0.4); }
-
-    // ---- the four arms: walls, buttresses, roofs; the half circles of the chapels
-    ARMS.forEach((a, n) => {
-      const F = (x, y, z) => A(a, x, y, z), off = (m) => { const v = m.x * Math.sin(a) + m.z * Math.cos(a); return m.clone().sub(A(a, 0, m.y - 6, v)); };
-      const v0 = Math.sqrt(RO * RO - WO * WO) - 0.6, v1 = a === 0 ? FRONT : P.chord, ys = courses(EAVES);
-      for (const s of [-1, 1]) {
-        surf(out, span(v0, v1, 8), ys, (v, y, i, j) => F(s * (WO + foot(j)), y, v), { want: off, base: OUT, paint: plain, key: 60 + n * 2 + s });
-        // (two buttresses a side, stepped)
-        for (const v of [v0 + 3.4, v1 - 1.4 - (a === 0 ? 5.4 : 0)]) {
-          slab(out, F, s * WO, DEEP, v - 0.75, s * (WO + 1.5), 5.2, v + 0.75, OUT, { faces: s < 0 ? 'xzZ' : 'XzZ', paint: plain });
-          slab(out, F, s * WO, 5.2, v - 0.65, s * (WO + 1.0), 9.6, v + 0.65, OUT, { faces: s < 0 ? 'xzZ' : 'XzZ', paint: plain });
-          for (const [y0, y1, d0, d1, hw] of [[5.2, 5.9, 1.5, 1.0, 0.75], [9.6, 10.5, 1.0, 0.0, 0.65]]) face(out, F(s * (WO + d0), y0, v - hw), F(s * (WO + d0), y0, v + hw), F(s * (WO + d1), y1, v + hw), F(s * (WO + d1), y1, v - hw), V(0, 1, 0), OUT, plain, [0.93, 0.93, 0.93, 0.93]);
-        }
-        for (const v of a === 0 ? [12.6] : [12.6, 16.9]) lancet(shine, F(s * (WO + 0.03), 2.2, v), F(0, 0, -s).sub(F(0, 0, 0)), V(0, 1, 0), 1.2, 3.3, off, n * 7 + s + Math.round(v), 0.42);
-        // (the roof: slabs of stone)
-        surf(out, span(v0 - 3, v1 + (a === 0 ? -0.2 : 0), 8), [0, 0.5, 1], (v, t) => F(s * (WO + 0.4) * (1 - t), EAVES + (RIDGE - EAVES) * t - 0.1, v), { want: V(0, 1, 0), base: ROOF, paint: plain, jitter: 0.07, key: 70 + n });
-        // (a cornice under the eaves)
-        slab(out, F, s * WO, EAVES - 0.5, v0, s * (WO + 0.3), EAVES, v1, TRIM, { faces: s < 0 ? 'xy' : 'Xy', paint: plain });
-      }
-      if (a === 0) return;
-      surf(out, span(0, Math.PI, 16), ys, (bb, y, i, j) => F((WO + foot(j)) * Math.cos(bb), y, P.chord + (WO + foot(j)) * Math.sin(bb)), { want: (m) => m.clone().sub(F(0, m.y - 6, P.chord)), base: OUT, paint: plain, key: 80 + n });
-      surf(out, span(0, Math.PI, 16), [0, 0.5, 1], (bb, t) => F((WO + 0.4) * (1 - t) * Math.cos(bb), EAVES - 0.1 + (RIDGE - EAVES) * t, P.chord + (WO + 0.4) * (1 - t) * Math.sin(bb)), { want: V(0, 1, 0), base: ROOF, paint: plain, jitter: 0.07, key: 90 + n });
-      surf(out, span(0, Math.PI, 16), [EAVES - 0.5, EAVES], (bb, y) => F((WO + 0.3) * Math.cos(bb), y, P.chord + (WO + 0.3) * Math.sin(bb)), { want: (m) => m.clone().sub(F(0, m.y - 6, P.chord)), base: TRIM, paint: plain, bond: false, jitter: 0.02 });
-      // (its windows, seen from outside)
-      for (const bb of [Math.PI * 0.2, Math.PI * 0.8]) { const r = WO + 0.04, o = F(r * Math.cos(bb), 1.9, P.chord + r * Math.sin(bb)), x = F(-Math.sin(bb), 0, Math.cos(bb)); lancet(shine, o, x, V(0, 1, 0), 1.3, 3.5, (m) => m.clone().sub(F(0, m.y, P.chord)), n * 5 + Math.round(bb * 3), 0.42); }
-    });
-
     // ---- the front: the gable with the doorway and the rose, the two towers, the stair
     const gable = (u) => EAVES + 0.9 + (RIDGE - EAVES) * (1 - Math.abs(u) / WO);
     const acrossOut = [...span(-WO, -D.half - 0.5 - EPS, 4), ...span(-D.half - 0.5 + EPS, D.half + 0.5 - EPS, 12), ...span(D.half + 0.5 + EPS, WO, 4)];
@@ -355,6 +326,14 @@ export class Sanctuary {
       shine.tint(1.35, 1.05, 0.55, 1).place(x, y + 2.8, z).lathe([[0.01, -0.3], [0.2, -0.22], [0.3, 0], [0.2, 0.22], [0.01, 0.3]], 8).pop();
     }
 
+    // ================================================================ the cliff round it
+    // (the court cut into the rock before the front: its walls of rough rock, its floor; the ground is cut away
+    // there — and nowhere else —, what grew on it goes)
+    carve({ rock: mk(outP, 'rock'), stone: out, face, plain, ground, TRIM, OUT });
+    const low = Math.min(COURT, ...span(-C.half, C.half, 16).map((x) => courtFloor(x, C.mouth, ground)));
+    this.holes = cutGround(world, low);
+    this.uprooted = clearGround(world);
+
     // ================================================================ into the world
     const outer = outP.toMeshes(mats, { name: 'sanctuary-out', layers: [LAYER.STATIC_CASTER] });
     this.inner = inP.toMeshes(mats, { name: 'sanctuary-in', layers: [] });
@@ -365,9 +344,13 @@ export class Sanctuary {
 
     // ---- where one walks, and what stops one
     const col = world.collision;
-    col.addPlatform({ heightAt: floorAt, clearance: 1.2 });
+    const heightAt = (x, z) => floorAt(x, z, (gx, gz) => world.data.heightAt(gx, gz));
+    col.addPlatform({ heightAt, clearance: 1.2 });
+    // (under the rock one walks on its floor, as in a cave: not on the slope above it)
+    this.area = hallArea(world);
+    col.addArea(this.area);
     const put = ([lx, lz, hw, hl, yaw], y0, y1) => { const [x, z] = toWorld(lx, lz); col.addBox(x, z, hw, hl, yaw + P.yaw, y0, y1); };
-    for (const b of walls()) put(b);
+    for (const b of walls()) put(b, P.floor + COURT - 2, P.floor + (b[5] ?? 14));
     for (const b of [...solid, ...columns]) put(b, P.floor - 1, P.floor + 4);
     return this;
   }
