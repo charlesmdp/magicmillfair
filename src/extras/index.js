@@ -31,6 +31,7 @@ export const EXTRAS = {
   plane: { name: 'A plane in the sky — it crosses every few minutes, and whoever looks at it is told what their robot thinks of it', load: () => import('./plane.js') },
   caves: { name: 'The caves are safe places: nearby chat only', load: () => import('./caves.js') },
   stats: { name: 'The game in figures: counters, the page /opendata', load: () => import('./stats.js') },
+  dive: { name: 'Diving — one goes under where the water is deep, and somewhere under the sea a cave is to be found', load: () => import('./dive.js') },
 };
 
 /** Switches on what `on` says ({ id: true }); returns what was built, by id. One that fails leaves the others alone. */
