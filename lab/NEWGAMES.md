@@ -254,3 +254,49 @@ the arch, comes up in the chamber, walks the strand, and swims back out and up; 
 each other, who is in the cave is not named through its rock; a picture of each screen). Pictures:
 `node tools/game-shots.mjs dive mouth=209.4,-5.5,81.3,15.5,-2` (the free camera goes under the water while the
 switch is on).
+
+### The Velvet Gasket, a hidden cabaret of robots (`bar`)
+
+Asked for on 28 November 2026: "un bar de strip tease pour robots où faut payer avec des fleurs (vu qu'elles
+servaient à rien), avec de l'alcooil, mets le dans une grotte, caché". A joke, and a clean one: what comes off on
+its stage is hardware. Not a game: a place to find. Switch `bar` (`RELEASE`), **off as delivered**: with it off
+nothing of it is loaded, built or drawn — no cave, no hole in the ground, no robot, the boulders as they were.
+
+**Where.** A cave of its own under the southern slopes, **its mouth at (-65, 177.8)**, facing north, sixty metres
+south-east of the Old Tree: from the mill, walk south past the Great Pond to the Old Tree, then on to the south-east,
+to the foot of the rock face, where a slab of fallen rock stands between two boulders. The mouth is behind the slab;
+a small red lantern over it is lit only for who comes within 22 m. Not on the map (its place is `hidden` and added
+after the map is made), no sign, and Barnaby does not speak of it. The gallery runs due south (x = -65): a low
+passage, the door at z = 185.6, the room from z = 188 to 209, its floor at 33.3, ten metres under the grass.
+
+**Inside.** A doorman, Hinge, behind his hatch: the cover is three flowers (the bouquet in hand, spent from its last
+flowers as the plaques and the golden dog spend one); without them he says where flowers grow. Then a low vaulted
+room in red and gold: a counter (the barman, Sump, the bottles of "Alcooil", the card of drinks on a slate, a
+red sign), three round tables with four robots of the house sitting at them and four free chairs, three stools — one
+sits on any — and a little stage with its curtain, footlights and a night sky. The show goes by the server's clock
+(everybody in the room sees the same moment): a number of 84 s, then 36 s of pause, for ever — a drum roll, Miss
+Peony Piston dances with two fans of feathers and takes off her hat, a shoulder plate, her chest panel (cogs), her
+back plate (her key), and on the last roll her shell opens and a smaller robot steps out, dances and bows. E (or the
+prompt, on a phone) by the stage throws a flower: she spins, the room cheers. At the counter a glass costs a flower:
+the robot raises it (a "cheer" emote, which the others see), says "hic!" now and then, and for a minute the world
+sways a little (1.5° at the most; not at all for who asked their device for less motion); three a night. Its tune
+(`TUNES.bar`: a slow swung cabaret in D minor, brushes, a walking bass, a muted horn once the curtain is up) is
+heard only in the cave, faintly behind the door. With the extra `caves` on, it is a safe place as every cave is
+("Nearby" chat).
+
+**How.** `src/extras/bar.js` plugs it in from outside: the cave is the game's own machinery used while the game
+runs — `buildCave` of Caves.js for the gallery, `collision.addArea` for where one walks, `terrain.setHoles` for the
+hole at the mouth (added to those already cut) —, the props of the world are left alone but for two boulders of the
+valley (props/Rocks.js) that stood in the mouth: one is taken away, one pushed up the slope, with what stops one.
+`src/world/zones/places/bar/`: `plan.js` (numbers and words alone: where, the card, the lines, the show), `Bar.js`
+(what is seen; its light painted into the vertices), `Star.js` (the star and what comes off her). No file of the
+game is changed. What it weighs: its chunk is 41 KB (17 KB packed); 53 meshes and 38,000 triangles, drawn only
+within 48 m of the mouth.
+
+Its checks: `node tools/bar-test.mjs` (24: the plan — the number and its steps, how a bouquet is spent —, then in
+the running game: off, nothing; on, the cave dug, its boulders cleared, a walk round the slab and under the ground to
+the door, the doorman refusing none and two flowers and taking three of six, a glass and its minute of sway, three
+glasses and no more, a flower on the stage, the curtain down keeping it, the number step by step, the tune and the
+"Nearby" chat inside, and everything stopped once out). Pictures (the free camera is kept over the ground: a shot
+lets it go under): `node tools/game-shots.mjs bar room=at:-65,193,180 'go=js:__mmf.free.groundAt=()=>-1e9'
+counter=-63.4,34.9,195.6,-90,8`.
