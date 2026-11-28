@@ -103,8 +103,8 @@ inside `BOUNDS` (`src/world/layout/layout.js`). **Built since**: War Through the
 west meadow at (-259, -19), its gate at (-240, -13), just south of the cars' table; Wild River — a headland of
 its own in the sea against the northern cliffs (x 258…524, z -511…-351), its gate on the north beach at
 (51.5, -116.5), 21 m from the slide's; Robots Can See You — a quay in the south of the bay (x 74…138,
-z 60…90), its gate on the south beach at (60, 80); the Sanctuary — at (-189, -124), a dome and two towers up to
-y 50 or so. **Being built as this is written** (not in this branch yet): Run the Walls — a ruin on a rock in the
+z 60…90), its gate on the south beach at (60, 80); the Sanctuary — dug into the cliff, its middle at (-224.5, -182), its court
+opening on the meadow at about (-205, -150), the tops of its towers and the lantern of its eye out on the slope. **Being built as this is written** (not in this branch yet): Run the Walls — a ruin on a rock in the
 sea off the south beach, at (258, 100); Little Mine Train — a station at (-263, -60) and a line of 1,100 m in
 and over the north-west mountains (x -438…-212, z -263…-27, y 31…105). The mountains beyond — north of
 z -250, south of z 250, west of x -290, up to ±500 — are ground nobody walks: a ride may go there. The sea is
@@ -188,12 +188,31 @@ Lifts between the ranges give the eyes a rest and the view. Keep it over ground 
 and a synagogue, with a very deep gospel music." One great hall under a dome, cut into or built against the
 rock, reached on foot: a façade one sees from far, tall doors, and inside three chapels of equal dignity round
 the middle — an apse with an altar, a rose window and benches; a prayer hall with its niche, its pulpit of
-steps, carpets and a lattice of stars; an ark with its scrolls, a reading desk, a lamp of seven branches. Light
-comes down from the dome and through coloured glass (painted into the vertices and with a few glowing panes: no
-new kind of light). No game there: one walks in, looks, sits. The symbols are drawn with care and none above
-another. `src/world/zones/places/Temple.js` and `Caves.js` show how a place one walks into is built (floors as
-platforms, an inside under the ground). Its music is written afterwards (the deep choir): leave the place where
-it is heard (`sanctuary.inside(x, y, z)`).
+steps, carpets and a lattice of stars; an ark with its scrolls, a reading desk, a lamp of seven branches. No
+game there: one walks in, looks, sits. The symbols are drawn with care and none above another. Switch
+`sanctuary` (`RELEASE`), off as delivered: with it off nothing of it is loaded, built or shown, and the cliff is
+whole.
+
+On 28 November 2026 the owner asked for it "more in the cliff, almost troglodyte (not all of it)": it was moved
+68 m back into the cliff that closes the west meadow in the north (`plan.js`: middle at (-224.5, -182), yaw
+0.549, floor 23.6 m) — 3.7 m of rock at the least over every vault and over the dome, 10 m and more over most
+of it. Its front stands in a court cut square into the rock (27 m wide, 22 m deep, open to the sky): the stair
+(now eight steps), the doors, the rose, the two towers, whose tops rise over the edge of the cut; the eye of the
+dome comes out on the slope above as a little lantern in the grass. How (`sanctuary/cliff.js`): the terrain is
+cut away in three boxes (`Terrain.setHoles`, with the holes of the caves) and its shadow pass too (a depth
+material of the terrain that knows these boxes alone, so the court is in the sun and the caves are untouched);
+the cut is lined with rough rock of its own that turns over the edge into the ground; the floor of the court is
+flags laid out to the meadow; the trees, boulders, grass and small plants of the cut-away ground are taken away;
+the trunks on the slope over the hall stop nobody under them; and the hall with its court is an area of the
+collision like a cave (`hallArea`: its floor, its roof, the light on whoever stands there) — so one walks on its
+floor and not on the slope above, and the camera stays under its vaults. Being "in a cave" there has what it
+has in the caves: nearby chat only (the extra `caves`), no jetpack, a dimmer light on the robots, the echo of
+one's steps. Inside, the light is the rock's: day through the eye of the dome alone (its shaft), the coloured
+glass lit from behind, the lamps that hang in the arms, the day of the doors down the arm of the doors (painted
+into the vertices, as before: no new kind of light). What is under the rock of its outside is not built any
+more (32,000 triangles in all). Pictures: `tools/game-shots.mjs sanctuary` (inside, the free camera keeps over
+the ground of the map: give it `world.collision.groundAt` first, see the report of 28 Nov). Checks:
+`node tools/sanctuary-test.mjs` (22).
 
 ### A plane in the sky (`plane`)
 
