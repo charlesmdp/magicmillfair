@@ -13,6 +13,9 @@
 //   GET  /api/admin                           → { ok, owner, boards }   (with an administrator's key: Authorization: Bearer …)
 //   GET | DELETE /api/admins                  the administrators the owner and the others have named (admins.js)
 //   GET  /api/visitors                        where the visitors come from, for the administrators (visitors.js)
+//   GET  /api/people                          the owner alone: everybody who has an account (people.js)
+//   GET | POST /api/mails                     the owner alone: the e-mails the fair sends — their words, their switches,
+//                                             what left lately (mails.js, which is also the door every e-mail leaves by)
 //   GET | POST | DELETE /api/bans             the administrator's list of who is kept out (see below)
 //   GET | POST /api/account                   an account to keep what was bought and earned (accounts.js)
 //
@@ -45,6 +48,8 @@ import { localDay, visit } from './visits.js';
 import { readRelease, releaseNews, releaseRoute } from './release.js';
 import { doorRoute } from './door.js';
 import { chatLogRoute } from './chatlog.js';
+import { peopleRoute } from './people.js';
+import { mailDoor, mailsRoute } from './mails.js';
 import { banned, addBan, bansRoute, anyQuiet, keptOut } from './bans.js';
 import { statsRoute } from './stats.js';
 import { BOARDS as GAME_NAMES, PRICES } from './catalog.js';
@@ -86,6 +91,8 @@ function newEra(ctx) {
 
 export async function route(req, ctx) {
   const { method, path, query, body, client } = req, now = ctx.now();
+  // (every e-mail leaves by one door, whoever sends it: its switch, the owner's words, the list of what left — mails.js)
+  mailDoor(ctx);
   const limited = (name) => !allowed(ctx.limiter, name, client, now);
   const busy = out(429, { error: 'Too many requests.' }, { 'Retry-After': '60' });
 
@@ -130,6 +137,13 @@ export async function route(req, ctx) {
     if (method !== 'GET' && method !== 'HEAD') return out(405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD' });
     return out(200, await visitorsReport(ctx.store, now));
   }
+
+  // the owner's alone: everybody who has an account (people.js); the e-mails the fair sends — their words, their
+  // switches, what left lately (mails.js)
+  const people = await peopleRoute(req, ctx);
+  if (people) return people;
+  const mails = await mailsRoute(req, ctx);
+  if (mails) return mails;
 
   // who is kept out — by address, by browser, by account; told so, or in silence (bans.js)
   const kept = await bansRoute(req, ctx);
